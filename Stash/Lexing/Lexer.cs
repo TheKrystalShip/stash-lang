@@ -1,0 +1,629 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.Frozen;
+using System.Text;
+using Stash.Common;
+
+namespace Stash.Lexing;
+
+/// <summary>
+/// Scans Stash source code and produces a flat list of <see cref="Token"/>s for the
+/// <see cref="Stash.Parsing.Parser"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The lexer uses a <em>two-pointer scanning approach</em>: <see cref="_start"/> marks the
+/// first character of the token currently being built, while <see cref="_current"/> is the
+/// read head that advances through the source. When a complete token is recognized the
+/// substring <c>_source[_start.._current]</c> becomes the token's lexeme.
+/// </para>
+/// <para>
+/// <strong>Error recovery strategy:</strong> when the lexer encounters an invalid character
+/// or unterminated construct (string, block comment, etc.) it records a human-readable error
+/// message in <see cref="Errors"/> and continues scanning. This allows all lexical errors in
+/// a file to be reported in a single pass rather than stopping at the first one.
+/// </para>
+/// </remarks>
+public class Lexer
+{
+    /// <summary>The complete source text to be tokenized.</summary>
+    private readonly string _source;
+
+    /// <summary>The file path or display name used in error messages (e.g. <c>"&lt;stdin&gt;"</c>).</summary>
+    private readonly string _file;
+
+    /// <summary>Accumulates tokens as they are recognized during scanning.</summary>
+    private readonly List<Token> _tokens = new();
+
+    /// <summary>Accumulates human-readable error messages encountered during scanning.</summary>
+    private readonly List<string> _errors = new();
+
+    /// <summary>
+    /// Index into <see cref="_source"/> marking the first character of the token currently
+    /// being scanned. Reset at the beginning of each <see cref="ScanToken"/> call.
+    /// </summary>
+    private int _start;
+
+    /// <summary>
+    /// Index into <see cref="_source"/> of the next character to be consumed (the read head).
+    /// Always satisfies <c>_start &lt;= _current &lt;= _source.Length</c>.
+    /// </summary>
+    private int _current;
+
+    /// <summary>The 1-based line number of the character at <see cref="_current"/>.</summary>
+    private int _line = 1;
+
+    /// <summary>The 1-based column number of the character at <see cref="_current"/>.</summary>
+    private int _column = 1;
+
+    /// <summary>The 1-based line number captured at <see cref="_start"/> when a new token begins.</summary>
+    private int _startLine;
+
+    /// <summary>The 1-based column number captured at <see cref="_start"/> when a new token begins.</summary>
+    private int _startColumn;
+
+    /// <summary>
+    /// Maps reserved word strings to their corresponding <see cref="TokenType"/> values.
+    /// </summary>
+    /// <remarks>
+    /// A <see cref="FrozenDictionary{TKey, TValue}"/> is used because the keyword set is
+    /// fixed at compile time and never changes. Compared to a regular
+    /// <see cref="Dictionary{TKey, TValue}"/>, <see cref="FrozenDictionary{TKey, TValue}"/>
+    /// provides O(1) lookup with lower per-lookup overhead and is allocated once at startup
+    /// as a static field shared across all <see cref="Lexer"/> instances.
+    /// </remarks>
+    private static readonly FrozenDictionary<string, TokenType> _keywords =
+        new Dictionary<string, TokenType>
+        {
+            ["let"] = TokenType.Let,
+            ["const"] = TokenType.Const,
+            ["fn"] = TokenType.Fn,
+            ["struct"] = TokenType.Struct,
+            ["enum"] = TokenType.Enum,
+            ["if"] = TokenType.If,
+            ["else"] = TokenType.Else,
+            ["for"] = TokenType.For,
+            ["in"] = TokenType.In,
+            ["while"] = TokenType.While,
+            ["return"] = TokenType.Return,
+            ["break"] = TokenType.Break,
+            ["continue"] = TokenType.Continue,
+            ["true"] = TokenType.True,
+            ["false"] = TokenType.False,
+            ["null"] = TokenType.Null,
+            ["try"] = TokenType.Try,
+            ["import"] = TokenType.Import,
+            ["from"] = TokenType.From,
+        }.ToFrozenDictionary();
+
+    /// <summary>
+    /// Gets the list of error messages accumulated during scanning.
+    /// </summary>
+    /// <remarks>
+    /// Callers should check this list after <see cref="ScanTokens"/> returns. A non-empty
+    /// list means the source contained lexical errors, but the returned token stream is
+    /// still usable for best-effort parsing.
+    /// </remarks>
+    public List<string> Errors => _errors;
+
+    /// <summary>
+    /// Initializes a new <see cref="Lexer"/> for the given source text.
+    /// </summary>
+    /// <param name="source">The complete source code to tokenize.</param>
+    /// <param name="file">
+    /// A file path or display name included in error messages. Defaults to
+    /// <c>"&lt;stdin&gt;"</c> for interactive/REPL input.
+    /// </param>
+    public Lexer(string source, string file = "<stdin>")
+    {
+        _source = source;
+        _file = file;
+    }
+
+    /// <summary>
+    /// Scans the entire source and returns the resulting list of tokens, terminated by an
+    /// <see cref="TokenType.Eof"/> token.
+    /// </summary>
+    /// <returns>
+    /// A list of <see cref="Token"/>s. The final token is always
+    /// <see cref="TokenType.Eof"/>.
+    /// </returns>
+    public List<Token> ScanTokens()
+    {
+        SkipShebang();
+
+        while (!IsAtEnd)
+        {
+            _start = _current;
+            _startLine = _line;
+            _startColumn = _column;
+            ScanToken();
+        }
+
+        _tokens.Add(new Token(TokenType.Eof, "", null,
+            new SourceSpan(_file, _line, _column, _line, _column)));
+        return _tokens;
+    }
+
+    /// <summary>
+    /// Skips a Unix shebang line (<c>#!/usr/bin/env stash</c>) if present at the very start
+    /// of the source.
+    /// </summary>
+    /// <remarks>
+    /// Shebang support allows Stash scripts to be executed directly on Unix-like systems
+    /// (e.g. <c>chmod +x script.stash &amp;&amp; ./script.stash</c>). The shebang line is
+    /// silently consumed and no token is emitted for it.
+    /// </remarks>
+    private void SkipShebang()
+    {
+        if (_current + 1 < _source.Length && _source[_current] == '#' && _source[_current + 1] == '!')
+        {
+            while (!IsAtEnd && _source[_current] != '\n')
+            {
+                _current++;
+                _column++;
+            }
+            if (!IsAtEnd)
+            {
+                _current++;
+                _line++;
+                _column = 1;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads the next character(s) from the source and emits the appropriate token, skipping
+    /// whitespace and comments.
+    /// </summary>
+    /// <remarks>
+    /// This method is the core dispatch of the lexer. It consumes one character via
+    /// <see cref="Advance"/>, then uses a <c>switch</c> to decide whether the character
+    /// starts a single-character token, a two-character operator (peeking ahead with
+    /// <see cref="Match"/>), a comment, a string literal, a number, or an identifier/keyword.
+    /// Unrecognized characters are recorded as errors.
+    /// </remarks>
+    private void ScanToken()
+    {
+        char c = Advance();
+        switch (c)
+        {
+            case '(': AddToken(TokenType.LeftParen); break;
+            case ')': AddToken(TokenType.RightParen); break;
+            case '{': AddToken(TokenType.LeftBrace); break;
+            case '}': AddToken(TokenType.RightBrace); break;
+            case '[': AddToken(TokenType.LeftBracket); break;
+            case ']': AddToken(TokenType.RightBracket); break;
+            case ',': AddToken(TokenType.Comma); break;
+            case '.': AddToken(TokenType.Dot); break;
+            case ';': AddToken(TokenType.Semicolon); break;
+            case ':': AddToken(TokenType.Colon); break;
+            case '%': AddToken(TokenType.Percent); break;
+            case '$': AddToken(TokenType.Dollar); break;
+
+            case '+':
+                AddToken(Match('+') ? TokenType.PlusPlus : TokenType.Plus);
+                break;
+            case '-':
+                AddToken(Match('-') ? TokenType.MinusMinus : TokenType.Minus);
+                break;
+            case '*':
+                AddToken(TokenType.Star);
+                break;
+            case '/':
+                if (Match('/'))
+                {
+                    SingleLineComment();
+                }
+                else if (Match('*'))
+                {
+                    MultiLineComment();
+                }
+                else
+                {
+                    AddToken(TokenType.Slash);
+                }
+
+                break;
+            case '!':
+                AddToken(Match('=') ? TokenType.BangEqual : TokenType.Bang);
+                break;
+            case '=':
+                AddToken(Match('=') ? TokenType.EqualEqual : TokenType.Equal);
+                break;
+            case '<':
+                AddToken(Match('=') ? TokenType.LessEqual : TokenType.Less);
+                break;
+            case '>':
+                AddToken(Match('=') ? TokenType.GreaterEqual : TokenType.Greater);
+                break;
+            case '&':
+                if (Match('&'))
+                {
+                    AddToken(TokenType.AmpersandAmpersand);
+                }
+                else
+                {
+                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unexpected character '&'.");
+                }
+
+                break;
+            case '|':
+                AddToken(Match('|') ? TokenType.PipePipe : TokenType.Pipe);
+                break;
+            case '?':
+                AddToken(Match('?') ? TokenType.QuestionQuestion : TokenType.QuestionMark);
+                break;
+
+            case ' ':
+            case '\r':
+            case '\t':
+                break;
+            case '\n':
+                _line++;
+                _column = 1;
+                break;
+
+            case '"':
+                ScanString();
+                break;
+
+            default:
+                if (IsDigit(c))
+                {
+                    ScanNumber();
+                }
+                else if (IsAlpha(c))
+                {
+                    ScanIdentifier();
+                }
+                else
+                {
+                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unexpected character '{c}'.");
+                }
+
+                break;
+        }
+    }
+
+    /// <summary>
+    /// Consumes a single-line comment (everything from <c>//</c> to the end of the line).
+    /// No token is emitted.
+    /// </summary>
+    private void SingleLineComment()
+    {
+        while (!IsAtEnd && _source[_current] != '\n')
+        {
+            _current++;
+            _column++;
+        }
+    }
+
+    /// <summary>
+    /// Consumes a block comment delimited by <c>/* ... */</c>, supporting arbitrary nesting.
+    /// No token is emitted.
+    /// </summary>
+    /// <remarks>
+    /// Unlike C/C++ block comments, Stash block comments nest. This means you can wrap a
+    /// region that already contains block comments inside another <c>/* ... */</c> pair
+    /// without breaking the lexer — a practical convenience when temporarily commenting out
+    /// large sections of code. A depth counter tracks nesting; an unterminated comment (depth
+    /// still positive at EOF) is reported as an error.
+    /// </remarks>
+    private void MultiLineComment()
+    {
+        int depth = 1;
+        while (!IsAtEnd && depth > 0)
+        {
+            if (_source[_current] == '/' && _current + 1 < _source.Length && _source[_current + 1] == '*')
+            {
+                depth++;
+                _current += 2;
+                _column += 2;
+            }
+            else if (_source[_current] == '*' && _current + 1 < _source.Length && _source[_current + 1] == '/')
+            {
+                depth--;
+                _current += 2;
+                _column += 2;
+            }
+            else if (_source[_current] == '\n')
+            {
+                _current++;
+                _line++;
+                _column = 1;
+            }
+            else
+            {
+                _current++;
+                _column++;
+            }
+        }
+
+        if (depth > 0)
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated block comment.");
+        }
+    }
+
+    /// <summary>
+    /// Scans a double-quoted string literal, processing escape sequences and producing a
+    /// <see cref="TokenType.StringLiteral"/> token.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// The lexer supports multi-line strings (newlines inside quotes are preserved) and the
+    /// following escape sequences: <c>\\</c>, <c>\"</c>, <c>\n</c>, <c>\t</c>, <c>\r</c>,
+    /// <c>\0</c>. Invalid escape sequences are reported as errors but scanning continues so
+    /// the rest of the string (and file) can still be analyzed.
+    /// </para>
+    /// <para>
+    /// The token's <see cref="Token.Lexeme"/> includes the surrounding quotes, while its
+    /// <see cref="Token.Literal"/> holds the processed string content.
+    /// </para>
+    /// </remarks>
+    private void ScanString()
+    {
+        var sb = new StringBuilder();
+        while (!IsAtEnd && _source[_current] != '"')
+        {
+            if (_source[_current] == '\n')
+            {
+                _line++;
+                _column = 1;
+                sb.Append(_source[_current]);
+                _current++;
+            }
+            else if (_source[_current] == '\\')
+            {
+                _current++;
+                _column++;
+                if (IsAtEnd)
+                {
+                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated string.");
+                    return;
+                }
+                char escaped = _source[_current];
+                _current++;
+                _column++;
+                switch (escaped)
+                {
+                    case '\\': sb.Append('\\'); break;
+                    case '"': sb.Append('"'); break;
+                    case 'n': sb.Append('\n'); break;
+                    case 't': sb.Append('\t'); break;
+                    case 'r': sb.Append('\r'); break;
+                    case '0': sb.Append('\0'); break;
+                    default:
+                        _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
+                        sb.Append(escaped);
+                        break;
+                }
+            }
+            else
+            {
+                sb.Append(_source[_current]);
+                _current++;
+                _column++;
+            }
+        }
+
+        if (IsAtEnd)
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated string.");
+            return;
+        }
+
+        // Consume the closing "
+        _current++;
+        _column++;
+
+        string lexeme = _source[_start.._current];
+        AddToken(TokenType.StringLiteral, sb.ToString(), lexeme);
+    }
+
+    /// <summary>
+    /// Scans an integer or floating-point numeric literal and emits either an
+    /// <see cref="TokenType.IntegerLiteral"/> or <see cref="TokenType.FloatLiteral"/> token.
+    /// </summary>
+    /// <remarks>
+    /// A number is classified as a float only if it contains a decimal point followed by at
+    /// least one digit (e.g. <c>3.14</c>). A trailing dot without digits (e.g. <c>3.</c>)
+    /// is treated as the integer <c>3</c> followed by a <see cref="TokenType.Dot"/> token.
+    /// Integer literals that exceed <see cref="long.MaxValue"/> are reported as errors.
+    /// All parsing uses <see cref="System.Globalization.CultureInfo.InvariantCulture"/> to
+    /// ensure locale-independent behavior.
+    /// </remarks>
+    private void ScanNumber()
+    {
+        while (!IsAtEnd && IsDigit(_source[_current]))
+        {
+            _current++;
+            _column++;
+        }
+
+        if (!IsAtEnd && _source[_current] == '.' && _current + 1 < _source.Length && IsDigit(_source[_current + 1]))
+        {
+            // Consume the '.'
+            _current++;
+            _column++;
+            while (!IsAtEnd && IsDigit(_source[_current]))
+            {
+                _current++;
+                _column++;
+            }
+
+            string lexeme = _source[_start.._current];
+            double value = double.Parse(lexeme, System.Globalization.CultureInfo.InvariantCulture);
+            AddToken(TokenType.FloatLiteral, value, lexeme);
+        }
+        else
+        {
+            string lexeme = _source[_start.._current];
+            if (long.TryParse(lexeme, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
+            {
+                AddToken(TokenType.IntegerLiteral, value, lexeme);
+            }
+            else
+            {
+                _errors.Add($"[{_file} {_startLine}:{_startColumn}] Integer literal '{lexeme}' is too large.");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Scans an identifier or keyword starting at the current position. If the identifier
+    /// matches a reserved word in <see cref="_keywords"/>, the corresponding keyword token
+    /// type is used; otherwise an <see cref="TokenType.Identifier"/> token is emitted.
+    /// </summary>
+    /// <remarks>
+    /// Identifier lexemes that are not keywords are interned via
+    /// <see cref="string.Intern(string)"/>. Because the same variable or function name
+    /// typically appears many times throughout a program, interning ensures all occurrences
+    /// share a single <see cref="string"/> instance, reducing memory pressure. Keywords are
+    /// not interned because their lexemes are already string literals in the
+    /// <see cref="_keywords"/> dictionary.
+    /// </remarks>
+    private void ScanIdentifier()
+    {
+        while (!IsAtEnd && IsAlphaNumeric(_source[_current]))
+        {
+            _current++;
+            _column++;
+        }
+
+        string text = _source[_start.._current];
+        if (_keywords.TryGetValue(text, out TokenType type))
+        {
+            object? literal = type switch
+            {
+                TokenType.True => true,
+                TokenType.False => false,
+                _ => null,
+            };
+            AddToken(type, literal, text);
+        }
+        else
+        {
+            AddToken(TokenType.Identifier, null, string.Intern(text));
+        }
+    }
+
+    /// <summary>
+    /// Consumes the character at <see cref="_current"/> and advances the read head by one position.
+    /// </summary>
+    /// <returns>The character that was consumed.</returns>
+    private char Advance()
+    {
+        char c = _source[_current];
+        _current++;
+        _column++;
+        return c;
+    }
+
+    /// <summary>
+    /// Returns the character at the current read-head position without consuming it.
+    /// </summary>
+    /// <returns>The current character, or <c>'\0'</c> if at the end of the source.</returns>
+    private char Peek()
+    {
+        if (IsAtEnd)
+        {
+            return '\0';
+        }
+
+        return _source[_current];
+    }
+
+    /// <summary>
+    /// Returns the character one position ahead of the current read head without consuming it.
+    /// </summary>
+    /// <returns>The next character, or <c>'\0'</c> if there are fewer than two characters remaining.</returns>
+    private char PeekNext()
+    {
+        if (_current + 1 >= _source.Length)
+        {
+            return '\0';
+        }
+
+        return _source[_current + 1];
+    }
+
+    /// <summary>
+    /// Conditionally consumes the current character if it matches <paramref name="expected"/>.
+    /// Used for recognizing two-character operators (e.g. <c>==</c>, <c>!=</c>).
+    /// </summary>
+    /// <param name="expected">The character to match against.</param>
+    /// <returns>
+    /// <see langword="true"/> if the current character matched and was consumed;
+    /// <see langword="false"/> otherwise.
+    /// </returns>
+    private bool Match(char expected)
+    {
+        if (IsAtEnd)
+        {
+            return false;
+        }
+
+        if (_source[_current] != expected)
+        {
+            return false;
+        }
+
+        _current++;
+        _column++;
+        return true;
+    }
+
+    /// <summary>
+    /// Gets a value indicating whether the read head has reached or passed the end of the source text.
+    /// </summary>
+    private bool IsAtEnd => _current >= _source.Length;
+
+    /// <summary>
+    /// Determines whether <paramref name="c"/> is an ASCII digit (<c>0</c>–<c>9</c>).
+    /// </summary>
+    /// <param name="c">The character to test.</param>
+    /// <returns><see langword="true"/> if <paramref name="c"/> is a digit.</returns>
+    private static bool IsDigit(char c) => c >= '0' && c <= '9';
+
+    /// <summary>
+    /// Determines whether <paramref name="c"/> is an ASCII letter or underscore, which are
+    /// valid starting characters for identifiers and keywords.
+    /// </summary>
+    /// <param name="c">The character to test.</param>
+    /// <returns><see langword="true"/> if <paramref name="c"/> is <c>a</c>–<c>z</c>, <c>A</c>–<c>Z</c>, or <c>_</c>.</returns>
+    private static bool IsAlpha(char c) => (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_';
+
+    /// <summary>
+    /// Determines whether <paramref name="c"/> is valid in the non-initial position of an
+    /// identifier (letter, digit, or underscore).
+    /// </summary>
+    /// <param name="c">The character to test.</param>
+    /// <returns><see langword="true"/> if <paramref name="c"/> is alphanumeric or <c>_</c>.</returns>
+    private static bool IsAlphaNumeric(char c) => IsAlpha(c) || IsDigit(c);
+
+    /// <summary>
+    /// Creates a token whose lexeme is the substring <c>_source[_start.._current]</c> and
+    /// whose <see cref="Token.Literal"/> is <see langword="null"/>.
+    /// </summary>
+    /// <param name="type">The <see cref="TokenType"/> of the token to emit.</param>
+    private void AddToken(TokenType type)
+    {
+        string lexeme = _source[_start.._current];
+        _tokens.Add(new Token(type, lexeme, null,
+            new SourceSpan(_file, _startLine, _startColumn, _line, _column - 1)));
+    }
+
+    /// <summary>
+    /// Creates a token with an explicit literal value and lexeme string.
+    /// </summary>
+    /// <param name="type">The <see cref="TokenType"/> of the token to emit.</param>
+    /// <param name="literal">The parsed runtime value (e.g. a <see cref="long"/>, <see cref="double"/>, or <see cref="string"/>), or <see langword="null"/>.</param>
+    /// <param name="lexeme">The raw source text for this token.</param>
+    private void AddToken(TokenType type, object? literal, string lexeme)
+    {
+        _tokens.Add(new Token(type, lexeme, literal,
+            new SourceSpan(_file, _startLine, _startColumn, _line, _column - 1)));
+    }
+}
