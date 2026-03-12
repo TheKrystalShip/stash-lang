@@ -223,6 +223,63 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
     }
 
+    public object? VisitUpdateExpr(UpdateExpr expr)
+    {
+        object? oldValue = expr.Operand.Accept(this);
+
+        if (oldValue is not long && oldValue is not double)
+        {
+            throw new RuntimeError("Operand of '++' or '--' must be a number.", expr.Operator.Span);
+        }
+
+        object newValue;
+        if (expr.Operator.Type == TokenType.PlusPlus)
+        {
+            newValue = oldValue is long l ? (object)(l + 1) : (object)((double)oldValue + 1.0);
+        }
+        else
+        {
+            newValue = oldValue is long l ? (object)(l - 1) : (object)((double)oldValue - 1.0);
+        }
+
+        // Write back
+        if (expr.Operand is IdentifierExpr id)
+        {
+            _environment.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+        }
+        else if (expr.Operand is DotExpr dot)
+        {
+            object? obj = dot.Object.Accept(this);
+            if (obj is StashInstance instance)
+            {
+                instance.SetField(dot.Name.Lexeme, newValue, dot.Name.Span);
+            }
+            else
+            {
+                throw new RuntimeError("Only struct instances have fields.", dot.Name.Span);
+            }
+        }
+        else if (expr.Operand is IndexExpr idx)
+        {
+            object? collection = idx.Object.Accept(this);
+            object? index = idx.Index.Accept(this);
+            if (collection is List<object?> list && index is long i)
+            {
+                list[(int)i] = newValue;
+            }
+            else
+            {
+                throw new RuntimeError("Invalid target for increment/decrement.", expr.Operator.Span);
+            }
+        }
+        else
+        {
+            throw new RuntimeError("Invalid target for increment/decrement.", expr.Operator.Span);
+        }
+
+        return expr.IsPrefix ? newValue : oldValue;
+    }
+
     /// <summary>
     /// Visits a binary expression and evaluates it according to the operator type.
     /// </summary>
@@ -461,7 +518,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             var elements = new System.Text.StringBuilder("[");
             for (int i = 0; i < list.Count; i++)
             {
-                if (i > 0) elements.Append(", ");
+                if (i > 0)
+                {
+                    elements.Append(", ");
+                }
+
                 elements.Append(Stringify(list[i]));
             }
             elements.Append(']');

@@ -305,11 +305,31 @@ public class CliDebugger : IDebugger
 
     private static string FormatValue(object? value)
     {
-        if (value is null) return "null";
-        if (value is bool b) return b ? "true" : "false";
-        if (value is string s) return $"\"{s}\"";
-        if (value is long l) return l.ToString();
-        if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        if (value is null)
+        {
+            return "null";
+        }
+
+        if (value is bool b)
+        {
+            return b ? "true" : "false";
+        }
+
+        if (value is string s)
+        {
+            return $"\"{s}\"";
+        }
+
+        if (value is long l)
+        {
+            return l.ToString();
+        }
+
+        if (value is double d)
+        {
+            return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
         if (value is List<object?> list)
         {
             var elements = list.Select(FormatValue);

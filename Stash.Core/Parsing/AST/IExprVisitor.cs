@@ -147,4 +147,11 @@ public interface IExprVisitor<T>
     /// <param name="expr">The null-coalescing expression node to visit.</param>
     /// <returns>The left value if non-null; otherwise the evaluated right value.</returns>
     T VisitNullCoalesceExpr(NullCoalesceExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="UpdateExpr"/> node (prefix or postfix <c>++</c>/<c>--</c> operators).
+    /// </summary>
+    /// <param name="expr">The update expression node to visit.</param>
+    /// <returns>The value before mutation for postfix; the value after mutation for prefix.</returns>
+    T VisitUpdateExpr(UpdateExpr expr);
 }

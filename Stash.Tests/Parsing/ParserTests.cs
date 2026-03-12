@@ -1221,4 +1221,153 @@ public class ParserTests
         var parser = ParseProgramWithParser("import { } from \"utils.stash\";");
         Assert.NotEmpty(parser.Errors);
     }
+
+    // --- Update Expression (++/--) Tests ---
+
+    [Fact]
+    public void Parse_PrefixIncrement_ReturnsUpdateExprWithIsPrefix()
+    {
+        var stmts = ParseProgram("++x;");
+        var exprStmt = Assert.IsType<ExprStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(exprStmt.Expression);
+        Assert.Equal(TokenType.PlusPlus, update.Operator.Type);
+        Assert.True(update.IsPrefix);
+        var operand = Assert.IsType<IdentifierExpr>(update.Operand);
+        Assert.Equal("x", operand.Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_PostfixIncrement_ReturnsUpdateExprWithoutIsPrefix()
+    {
+        var stmts = ParseProgram("x++;");
+        var exprStmt = Assert.IsType<ExprStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(exprStmt.Expression);
+        Assert.Equal(TokenType.PlusPlus, update.Operator.Type);
+        Assert.False(update.IsPrefix);
+        var operand = Assert.IsType<IdentifierExpr>(update.Operand);
+        Assert.Equal("x", operand.Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_PrefixDecrement_ReturnsUpdateExprWithIsPrefix()
+    {
+        var stmts = ParseProgram("--x;");
+        var exprStmt = Assert.IsType<ExprStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(exprStmt.Expression);
+        Assert.Equal(TokenType.MinusMinus, update.Operator.Type);
+        Assert.True(update.IsPrefix);
+    }
+
+    [Fact]
+    public void Parse_PostfixDecrement_ReturnsUpdateExprWithoutIsPrefix()
+    {
+        var stmts = ParseProgram("x--;");
+        var exprStmt = Assert.IsType<ExprStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(exprStmt.Expression);
+        Assert.Equal(TokenType.MinusMinus, update.Operator.Type);
+        Assert.False(update.IsPrefix);
+    }
+
+    [Fact]
+    public void Parse_PostfixIncrement_OnDotExpr()
+    {
+        var stmts = ParseProgram("obj.x++;");
+        var exprStmt = Assert.IsType<ExprStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(exprStmt.Expression);
+        Assert.False(update.IsPrefix);
+        Assert.IsType<DotExpr>(update.Operand);
+    }
+
+    [Fact]
+    public void Parse_PostfixIncrement_OnIndexExpr()
+    {
+        var stmts = ParseProgram("arr[0]++;");
+        var exprStmt = Assert.IsType<ExprStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(exprStmt.Expression);
+        Assert.False(update.IsPrefix);
+        Assert.IsType<IndexExpr>(update.Operand);
+    }
+
+    [Fact]
+    public void Parse_PrefixIncrement_InExpression()
+    {
+        // let result = ++x; — prefix in an assignment
+        var stmts = ParseProgram("let result = ++x;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(varDecl.Initializer!);
+        Assert.True(update.IsPrefix);
+        Assert.Equal(TokenType.PlusPlus, update.Operator.Type);
+    }
+
+    [Fact]
+    public void Parse_PostfixIncrement_InExpression()
+    {
+        // let result = x++; — postfix in right-hand side of assignment
+        var stmts = ParseProgram("let result = x++;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var update = Assert.IsType<UpdateExpr>(varDecl.Initializer!);
+        Assert.False(update.IsPrefix);
+    }
+
+    // --- Operator Precedence Tests ---
+
+    [Fact]
+    public void Parse_Precedence_UnaryBindsTighterThanFactor()
+    {
+        // -2 * 3 should parse as (-2) * 3, not -(2 * 3)
+        var result = ParseExpr("-2 * 3");
+        var binary = Assert.IsType<BinaryExpr>(result);
+        Assert.Equal(TokenType.Star, binary.Operator.Type);
+        Assert.IsType<UnaryExpr>(binary.Left);
+    }
+
+    [Fact]
+    public void Parse_Precedence_ComparisonLowerThanTerm()
+    {
+        // 1 + 2 < 4 should parse as (1 + 2) < 4
+        var result = ParseExpr("1 + 2 < 4");
+        var binary = Assert.IsType<BinaryExpr>(result);
+        Assert.Equal(TokenType.Less, binary.Operator.Type);
+        Assert.IsType<BinaryExpr>(binary.Left); // 1 + 2
+    }
+
+    [Fact]
+    public void Parse_Precedence_EqualityLowerThanComparison()
+    {
+        // 1 < 2 == true should parse as (1 < 2) == true
+        var result = ParseExpr("1 < 2 == true");
+        var binary = Assert.IsType<BinaryExpr>(result);
+        Assert.Equal(TokenType.EqualEqual, binary.Operator.Type);
+        Assert.IsType<BinaryExpr>(binary.Left); // 1 < 2
+    }
+
+    [Fact]
+    public void Parse_Precedence_TernaryLowerThanNullCoalesce()
+    {
+        // true ? null ?? 42 : 0 — ?? binds tighter inside ternary branch
+        var result = ParseExpr("true ? null ?? 42 : 0");
+        var ternary = Assert.IsType<TernaryExpr>(result);
+        Assert.IsType<NullCoalesceExpr>(ternary.ThenBranch);
+    }
+
+    [Fact]
+    public void Parse_Precedence_PostfixHigherThanPrefix()
+    {
+        // -x++ should parse as -(x++), not (-x)++
+        var stmts = ParseProgram("let r = -x++;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var unary = Assert.IsType<UnaryExpr>(varDecl.Initializer!);
+        Assert.Equal(TokenType.Minus, unary.Operator.Type);
+        Assert.IsType<UpdateExpr>(unary.Right);
+    }
+
+    // --- From keyword as identifier ---
+
+    [Fact]
+    public void Parse_FromAsVariableName()
+    {
+        // 'from' is a hard reserved keyword; using it as a variable name is a parse error
+        var parser = ParseProgramWithParser("let from = 42;");
+        Assert.NotEmpty(parser.Errors);
+    }
 }

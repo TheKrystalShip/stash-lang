@@ -2197,4 +2197,364 @@ public class InterpreterTests
         // try (try expr ?? default1) ?? default2
         Assert.Equal(42L, Run("let result = try toInt(\"42\") ?? 0;"));
     }
+
+    // --- Increment/Decrement (++/--) Tests ---
+
+    [Fact]
+    public void PrefixIncrement_IncrementsAndReturnsNewValue()
+    {
+        Assert.Equal(6L, Run("let x = 5; let result = ++x;"));
+    }
+
+    [Fact]
+    public void PostfixIncrement_IncrementsAndReturnsOldValue()
+    {
+        Assert.Equal(5L, Run("let x = 5; let result = x++;"));
+    }
+
+    [Fact]
+    public void PrefixDecrement_DecrementsAndReturnsNewValue()
+    {
+        Assert.Equal(4L, Run("let x = 5; let result = --x;"));
+    }
+
+    [Fact]
+    public void PostfixDecrement_DecrementsAndReturnsOldValue()
+    {
+        Assert.Equal(5L, Run("let x = 5; let result = x--;"));
+    }
+
+    [Fact]
+    public void PostfixIncrement_MutatesVariable()
+    {
+        Assert.Equal(6L, Run("let x = 5; x++; let result = x;"));
+    }
+
+    [Fact]
+    public void PostfixDecrement_MutatesVariable()
+    {
+        Assert.Equal(4L, Run("let x = 5; x--; let result = x;"));
+    }
+
+    [Fact]
+    public void PrefixIncrement_MutatesVariable()
+    {
+        Assert.Equal(6L, Run("let x = 5; ++x; let result = x;"));
+    }
+
+    [Fact]
+    public void PrefixDecrement_MutatesVariable()
+    {
+        Assert.Equal(4L, Run("let x = 5; --x; let result = x;"));
+    }
+
+    [Fact]
+    public void Increment_OnFloat_Works()
+    {
+        var result = Run("let x = 3.14; ++x; let result = x;");
+        Assert.IsType<double>(result);
+        Assert.Equal(4.14, (double)result!, precision: 10);
+    }
+
+    [Fact]
+    public void Decrement_OnFloat_Works()
+    {
+        var result = Run("let x = 3.14; --x; let result = x;");
+        Assert.IsType<double>(result);
+        Assert.Equal(2.14, (double)result!, precision: 10);
+    }
+
+    [Fact]
+    public void Increment_OnNonNumeric_ThrowsRuntimeError()
+    {
+        RunExpectingError("let x = \"hello\"; x++;");
+    }
+
+    [Fact]
+    public void Decrement_OnNonNumeric_ThrowsRuntimeError()
+    {
+        RunExpectingError("let x = true; x--;");
+    }
+
+    [Fact]
+    public void Increment_OnNull_ThrowsRuntimeError()
+    {
+        RunExpectingError("let x = null; x++;");
+    }
+
+    [Fact]
+    public void PrefixIncrement_OnStructField()
+    {
+        Assert.Equal(11L, Run("struct S { v } let s = S { v: 10 }; ++s.v; let result = s.v;"));
+    }
+
+    [Fact]
+    public void PostfixIncrement_OnStructField_ReturnsOldValue()
+    {
+        Assert.Equal(10L, Run("struct S { v } let s = S { v: 10 }; let result = s.v++;"));
+    }
+
+    [Fact]
+    public void PostfixIncrement_OnStructField_MutatesField()
+    {
+        Assert.Equal(11L, Run("struct S { v } let s = S { v: 10 }; s.v++; let result = s.v;"));
+    }
+
+    [Fact]
+    public void PrefixIncrement_OnArrayElement()
+    {
+        Assert.Equal(11L, Run("let arr = [10, 20]; ++arr[0]; let result = arr[0];"));
+    }
+
+    [Fact]
+    public void PostfixIncrement_OnArrayElement_ReturnsOldValue()
+    {
+        Assert.Equal(10L, Run("let arr = [10, 20]; let result = arr[0]++;"));
+    }
+
+    [Fact]
+    public void PostfixIncrement_OnArrayElement_MutatesElement()
+    {
+        Assert.Equal(11L, Run("let arr = [10, 20]; arr[0]++; let result = arr[0];"));
+    }
+
+    [Fact]
+    public void Increment_InWhileLoop()
+    {
+        // Classic counter loop pattern
+        Assert.Equal(5L, Run("let i = 0; while (i < 5) { i++; } let result = i;"));
+    }
+
+    [Fact]
+    public void Increment_InExpression()
+    {
+        // x++ returns 5 (old value), ++y returns 6 (new value) → 5 + 6 = 11
+        Assert.Equal(11L, Run("let x = 5; let y = 5; let result = x++ + ++y;"));
+    }
+
+    [Fact]
+    public void MultipleIncrements_Sequential()
+    {
+        Assert.Equal(8L, Run("let x = 5; x++; x++; x++; let result = x;"));
+    }
+
+    // --- Operator Precedence End-to-End ---
+
+    [Fact]
+    public void Precedence_MultiplicationBeforeTerm()
+    {
+        // Already tested, but verify subtraction too: 10 - 2 * 3 = 4
+        Assert.Equal(4L, Eval("10 - 2 * 3"));
+    }
+
+    [Fact]
+    public void Precedence_ComparisonAfterTerm()
+    {
+        Assert.Equal(true, Eval("1 + 2 < 4"));
+    }
+
+    [Fact]
+    public void Precedence_EqualityAfterComparison()
+    {
+        Assert.Equal(true, Eval("1 < 2 == true"));
+    }
+
+    [Fact]
+    public void Precedence_AndBeforeOr()
+    {
+        // false || true && true → false || (true && true) → true
+        Assert.Equal(true, Eval("false || true && true"));
+    }
+
+    [Fact]
+    public void Precedence_NullCoalesceBeforeTernary()
+    {
+        // true ? null ?? 42 : 0 → ternary picks then-branch, then ?? resolves to 42
+        Assert.Equal(42L, Eval("true ? null ?? 42 : 0"));
+    }
+
+    // --- Return without value ---
+
+    [Fact]
+    public void Function_ReturnWithoutValue_ReturnsNull()
+    {
+        Assert.Null(Run("fn f() { return; } let result = f();"));
+    }
+
+    [Fact]
+    public void Function_MultipleReturnPaths()
+    {
+        // Function with early return on one branch, implicit null on other
+        Assert.Equal(42L, Run("fn f(x) { if (x) { return 42; } } let result = f(true);"));
+    }
+
+    [Fact]
+    public void Function_MultipleReturnPaths_ImplicitNull()
+    {
+        Assert.Null(Run("fn f(x) { if (x) { return 42; } } let result = f(false);"));
+    }
+
+    // --- Division and modulo with negatives ---
+
+    [Fact]
+    public void IntegerDivision_NegativeDividend()
+    {
+        // -10 / 3 — truncation toward zero
+        var result = Eval("-10 / 3");
+        Assert.IsType<long>(result);
+        Assert.Equal(-3L, result);
+    }
+
+    [Fact]
+    public void IntegerModulo_NegativeDividend()
+    {
+        // -10 % 3 — C# behavior: sign follows dividend
+        var result = Eval("-10 % 3");
+        Assert.IsType<long>(result);
+        Assert.Equal(-1L, result);
+    }
+
+    [Fact]
+    public void IntegerModulo_NegativeDivisor()
+    {
+        var result = Eval("10 % -3");
+        Assert.IsType<long>(result);
+        Assert.Equal(1L, result);
+    }
+
+    // --- Truthiness edge cases ---
+
+    [Fact]
+    public void Truthiness_EmptyArrayIsTruthy()
+    {
+        Assert.Equal(true, Run("let result = [] ? true : false;"));
+    }
+
+    [Fact]
+    public void Truthiness_StructInstanceIsTruthy()
+    {
+        Assert.Equal(true, Run("struct S { x } let s = S { x: 1 }; let result = s ? true : false;"));
+    }
+
+    // --- Mixed type comparisons ---
+
+    [Fact]
+    public void Comparison_MixedIntFloat_LessThan()
+    {
+        Assert.Equal(true, Eval("3 < 3.5"));
+    }
+
+    [Fact]
+    public void Comparison_MixedIntFloat_GreaterThan()
+    {
+        Assert.Equal(true, Eval("4 > 3.5"));
+    }
+
+    [Fact]
+    public void Comparison_MixedIntFloat_LessEqual()
+    {
+        Assert.Equal(true, Eval("3 <= 3.0"));
+    }
+
+    [Fact]
+    public void Comparison_MixedIntFloat_GreaterEqual()
+    {
+        Assert.Equal(true, Eval("3 >= 2.5"));
+    }
+
+    // --- String indexing edge cases ---
+
+    [Fact]
+    public void StringIndex_NegativeIndex_Throws()
+    {
+        RunExpectingError("let s = \"hello\"; let result = s[-1];");
+    }
+
+    // --- Const in inner scope ---
+
+    [Fact]
+    public void ConstDecl_InBlock_CanBeRead()
+    {
+        Assert.Equal(42L, Run("let result = 0; { const X = 42; result = X; }"));
+    }
+
+    [Fact]
+    public void ConstDecl_InBlock_CannotReassign()
+    {
+        RunExpectingError("{ const X = 42; X = 99; }");
+    }
+
+    // --- Chained assignment as expression ---
+
+    [Fact]
+    public void ChainedAssignment()
+    {
+        Assert.Equal(5L, Run("let x = 0; let y = 0; x = y = 5; let result = x;"));
+    }
+
+    [Fact]
+    public void ChainedAssignment_BothUpdated()
+    {
+        Assert.Equal(5L, Run("let x = 0; let y = 0; x = y = 5; let result = y;"));
+    }
+
+    // --- First-class functions ---
+
+    [Fact]
+    public void Function_StoredInVariable()
+    {
+        Assert.Equal(10L, Run("fn double(x) { return x * 2; } let f = double; let result = f(5);"));
+    }
+
+    [Fact]
+    public void Function_PassedAsArgument()
+    {
+        Assert.Equal(6L, Run(@"
+            fn apply(f, x) { return f(x); }
+            fn triple(x) { return x * 3; }
+            let result = apply(triple, 2);
+        "));
+    }
+
+    // --- for-in non-iterable types ---
+
+    [Fact]
+    public void ForIn_Boolean_ThrowsRuntimeError()
+    {
+        RunExpectingError("for (let x in true) { }");
+    }
+
+    [Fact]
+    public void ForIn_Null_ThrowsRuntimeError()
+    {
+        RunExpectingError("for (let x in null) { }");
+    }
+
+    [Fact]
+    public void ForIn_Float_ThrowsRuntimeError()
+    {
+        RunExpectingError("for (let x in 3.14) { }");
+    }
+
+    // --- Import mutability ---
+
+    [Fact]
+    public void Import_LetVariable_CanBeRead()
+    {
+        // Create a module with a let variable and import it
+        string modulePath = Path.Combine(Path.GetTempPath(), "stash_test_import_let_" + Guid.NewGuid().ToString("N") + ".stash");
+        File.WriteAllText(modulePath, "let counter = 42;");
+        try
+        {
+            var result = RunWithFile(
+                $"import {{ counter }} from \"{modulePath}\"; let result = counter;",
+                Path.Combine(Path.GetTempPath(), "main.stash")
+            );
+            Assert.Equal(42L, result);
+        }
+        finally
+        {
+            File.Delete(modulePath);
+        }
+    }
 }

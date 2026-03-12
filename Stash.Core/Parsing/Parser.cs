@@ -298,7 +298,10 @@ public class Parser
 
         Consume(TokenType.RightBrace, "Expected '}' after import names.");
         if (names.Count == 0)
+        {
             Error(Previous(), "Expected at least one name to import.");
+        }
+
         Consume(TokenType.From, "Expected 'from' after import names.");
         Token path = Consume(TokenType.StringLiteral, "Expected module path string after 'from'.");
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
@@ -748,6 +751,13 @@ public class Parser
             return new TryExpr(expression, MakeSpan(tryToken.Span, expression.Span));
         }
 
+        if (Match(TokenType.PlusPlus, TokenType.MinusMinus))
+        {
+            Token op = Previous();
+            Expr operand = Unary();
+            return new UpdateExpr(op, operand, true, MakeSpan(op.Span, operand.Span));
+        }
+
         return Call();
     }
 
@@ -780,6 +790,11 @@ public class Parser
             {
                 Token name = Consume(TokenType.Identifier, "Expected field name after '.'.");
                 expr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span));
+            }
+            else if (Check(TokenType.PlusPlus) || Check(TokenType.MinusMinus))
+            {
+                Token op = Advance();
+                expr = new UpdateExpr(op, expr, false, MakeSpan(expr.Span, op.Span));
             }
             else
             {
