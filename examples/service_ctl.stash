@@ -1,0 +1,244 @@
+#!/usr/bin/env stash
+
+// service_ctl — manage system services from the command line
+//
+// Usage examples:
+//   service_ctl start web --port 9000 --detach
+//   service_ctl start db --env production
+//   service_ctl stop web
+//   service_ctl stop web --force
+//   service_ctl status
+//   service_ctl status --filter running
+//   service_ctl --verbose status
+//   service_ctl --help
+
+// ---------------------------------------------------------------------------
+// Argument declaration
+// ---------------------------------------------------------------------------
+
+let args = parseArgs(ArgTree {
+    name: "service_ctl",
+    version: "1.0",
+    description: "Start, stop, and inspect managed services",
+    flags: [
+        ArgDef { name: "help", short: "h", description: "Show this help message" },
+        ArgDef { name: "verbose", short: "v", description: "Print extra diagnostic output" }
+    ],
+    options: [
+        ArgDef { name: "config", short: "c", default: "/etc/svc/services.conf", description: "Path to services config file" }
+    ],
+    commands: [
+        ArgDef {
+            name: "start",
+            description: "Start a named service",
+            args: ArgTree {
+                positionals: [ArgDef { name: "service", required: true, description: "Service name to start" }],
+                flags: [ArgDef { name: "detach", short: "d", description: "Run in the background (detached)" }],
+                options: [
+                    ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Override listen port" },
+                    ArgDef { name: "env", short: "e", default: "development", description: "Runtime environment" }
+                ]
+            }
+        },
+        ArgDef {
+            name: "stop",
+            description: "Stop a running service",
+            args: ArgTree {
+                positionals: [ArgDef { name: "service", required: true, description: "Service name to stop" }],
+                flags: [ArgDef { name: "force", short: "f", description: "Force-kill the process (SIGKILL)" }],
+                options: [ArgDef { name: "timeout", short: "t", type: "int", default: 10, description: "Seconds to wait before giving up" }]
+            }
+        },
+        ArgDef {
+            name: "status",
+            description: "Show status of all (or one) service",
+            args: ArgTree {
+                positionals: [ArgDef { name: "service", description: "Service name (omit for all)" }],
+                options: [ArgDef { name: "filter", description: "Filter by state: running, stopped" }]
+            }
+        }
+    ]
+});
+
+// ---------------------------------------------------------------------------
+// Domain types
+// ---------------------------------------------------------------------------
+
+enum ServiceState {
+    Running,
+    Stopped,
+    Unknown
+}
+
+struct ServiceInfo {
+    name,
+    pid,
+    port,
+    state,
+    uptime
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+fn state_label(state) {
+    if (state == ServiceState.Running) {
+        return "RUNNING";
+    } else if (state == ServiceState.Stopped) {
+        return "STOPPED";
+    } else {
+        return "UNKNOWN";
+    }
+}
+
+fn log_verbose(msg) {
+    // Only emit the message when --verbose was passed
+    if (args.verbose) {
+        println($"[verbose] {msg}");
+    }
+}
+
+fn probe_service(name) {
+    // Use pgrep to detect whether a process is running
+    let result = $(pgrep -x {name});
+    if (result.exitCode == 0) {
+        let pid = result.stdout;
+        return ServiceInfo {
+            name: name,
+            pid: pid,
+            port: 0,
+            state: ServiceState.Running,
+            uptime: "unknown"
+        };
+    }
+    return ServiceInfo {
+        name: name,
+        pid: null,
+        port: 0,
+        state: ServiceState.Stopped,
+        uptime: "-"
+    };
+}
+
+fn print_service_row(info) {
+    let label = state_label(info.state);
+    let pid_str = info.pid ?? "-";
+    println($"  {info.name:<12} [{label}]   pid={pid_str}");
+}
+
+// ---------------------------------------------------------------------------
+// Subcommand handlers
+// ---------------------------------------------------------------------------
+
+fn cmd_start() {
+    let svc  = args.start.service;
+    let port = args.start.port;
+    let env  = args.start.env;
+    let bg   = args.start.detach;
+
+    println($"Starting service '{svc}' on port {port} (env={env})...");
+    log_verbose($"Config file: {args.config}");
+
+    // Check if already running
+    let info = probe_service(svc);
+    if (info.state == ServiceState.Running) {
+        println($"  '{svc}' is already running (pid={info.pid}). Aborting.");
+        return;
+    }
+
+    // Build and execute the start command
+    let start_result = $(echo "start {svc} --port {port} --env {env}");
+
+    if (start_result.exitCode != 0) {
+        println($"  Error: failed to start '{svc}': {start_result.stderr}");
+        return;
+    }
+
+    if (bg) {
+        println($"  '{svc}' launched in the background.");
+    } else {
+        println($"  '{svc}' is running in the foreground.");
+    }
+}
+
+fn cmd_stop() {
+    let svc     = args.stop.service;
+    let force   = args.stop.force;
+    let timeout = args.stop.timeout;
+
+    println($"Stopping service '{svc}'...");
+    log_verbose($"Timeout: {timeout}s, force={force}");
+
+    let info = probe_service(svc);
+    if (info.state == ServiceState.Stopped) {
+        println($"  '{svc}' is not running.");
+        return;
+    }
+
+    let signal = force ? "SIGKILL" : "SIGTERM";
+    log_verbose($"Sending {signal} to pid {info.pid}");
+
+    let stop_result = $(echo "kill -{signal} {info.pid}");
+
+    if (stop_result.exitCode == 0) {
+        println($"  '{svc}' stopped.");
+    } else {
+        println($"  Warning: stop command returned non-zero: {stop_result.stderr}");
+    }
+}
+
+fn cmd_status() {
+    let target = args.status.service;
+    let filter = args.status.filter;
+
+    // Known services (in a real script this would be read from args.config)
+    let known = ["web", "db", "cache", "worker"];
+
+    println("=== Service Status ===");
+    println("");
+
+    let shown = 0;
+
+    for (let name in known) {
+        // If a specific service was requested, skip others
+        if (target != null && name != target) {
+            continue;
+        }
+
+        let info = probe_service(name);
+
+        // Apply --filter if provided
+        if (filter == "running" && info.state != ServiceState.Running) {
+            continue;
+        }
+        if (filter == "stopped" && info.state != ServiceState.Stopped) {
+            continue;
+        }
+
+        print_service_row(info);
+        shown++;
+    }
+
+    if (shown == 0) {
+        println("  (no services match)");
+    }
+
+    println("");
+}
+
+// ---------------------------------------------------------------------------
+// Dispatch
+// ---------------------------------------------------------------------------
+
+let cmd = args.command;
+
+if (cmd == "start") {
+    cmd_start();
+} else if (cmd == "stop") {
+    cmd_stop();
+} else if (cmd == "status") {
+    cmd_status();
+} else {
+    println("No subcommand given. Use --help for usage.");
+}

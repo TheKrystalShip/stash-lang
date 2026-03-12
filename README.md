@@ -93,6 +93,9 @@ dotnet run --project Stash/
 # Run a script file
 dotnet run --project Stash/ -- script.stash
 
+# Run a script with arguments (everything after the script path is passed to the script)
+dotnet run --project Stash/ -- script.stash --verbose --port 8080 target-host
+
 # Run with the CLI debugger
 dotnet run --project Stash/ -- --debug script.stash
 ```
@@ -308,6 +311,52 @@ deploy(srv, "app.tar.gz");
 - Circular imports are detected and rejected.
 - Functions, structs, enums, variables, and constants can all be imported.
 
+### Argument Parsing
+
+Define CLI arguments declaratively using the built-in `ArgTree` and `ArgDef` structs and the `parseArgs()` function:
+
+```stash
+#!/usr/bin/env stash
+
+let args = parseArgs(ArgTree {
+    name: "deploy",
+    version: "1.0.0",
+    description: "Deployment tool",
+    flags: [
+        ArgDef { name: "help", short: "h", description: "Show help" },
+        ArgDef { name: "verbose", short: "v", description: "Enable verbose output" }
+    ],
+    options: [
+        ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Port to listen on" }
+    ],
+    positionals: [
+        ArgDef { name: "target", type: "string", required: true, description: "Target host" }
+    ],
+    commands: [
+        ArgDef {
+            name: "deploy",
+            description: "Deploy the application",
+            args: ArgTree {
+                flags: [ArgDef { name: "force", short: "f", description: "Force deploy" }],
+                options: [ArgDef { name: "timeout", type: "int", default: 30, description: "" }]
+            }
+        }
+    ]
+});
+
+// Parsed values available via args.*
+if (args.verbose) {
+    println($"Deploying to {args.target} on port {args.port}");
+}
+
+if (args.command == "deploy") {
+    println($"Force: {args.deploy.force}");
+    println($"Timeout: {args.deploy.timeout}");
+}
+```
+
+`ArgTree` and `ArgDef` are built-in struct types — no declaration needed. `parseArgs()` is a built-in function that returns a struct of parsed values. It supports **flags** (boolean switches), **options** (typed values with defaults), **positional arguments**, and **subcommands**. Flags and options accept both long (`--verbose`) and short (`-v`) forms, and options support `--key=value` syntax. A `help` flag automatically generates formatted help text. Required arguments are validated at runtime.
+
 ### Built-in Functions
 
 | Function                   | Description                                                                                                       |
@@ -325,6 +374,7 @@ deploy(srv, "app.tar.gz");
 | `lastError()`              | Last error caught by `try`, or null                                                                               |
 | `env(name)`                | Read environment variable                                                                                         |
 | `setEnv(name, value)`      | Set environment variable                                                                                          |
+| `parseArgs(tree)`         | Parse CLI arguments from an `ArgTree` definition                                                                  |
 
 ### Debugger
 

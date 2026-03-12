@@ -1,0 +1,114 @@
+#!/usr/bin/env stash
+
+// Text processing utility
+// Reads a file, filters and transforms lines, writes results
+
+fn make_counter() {
+    let count = 0;
+    fn increment() {
+        count++;
+        return count;
+    }
+    return increment;
+}
+
+fn starts_with(text, prefix) {
+    if (len(text) < len(prefix)) {
+        return false;
+    }
+    let i = 0;
+    while (i < len(prefix)) {
+        if (text[i] != prefix[i]) {
+            return false;
+        }
+        i++;
+    }
+    return true;
+}
+
+fn trim_right(text) {
+    let result = text;
+    let length = len(result);
+    while (length > 0) {
+        let last = result[length - 1];
+        if (last != " " && last != "\n" && last != "\r" && last != "\t") {
+            break;
+        }
+        length--;
+    }
+    // Rebuild string without trailing whitespace
+    let trimmed = "";
+    let i = 0;
+    while (i < length) {
+        trimmed = trimmed + result[i];
+        i++;
+    }
+    return trimmed;
+}
+
+fn is_empty(text) {
+    return len(trim_right(text)) == 0;
+}
+
+// --- Main ---
+
+let input_path = "/etc/hosts";
+let output_path = "/tmp/stash_processed.txt";
+
+// Error handling with try and ??
+let content = try readFile(input_path) ?? null;
+
+if (content == null) {
+    println($"Error: could not read {input_path}");
+    println($"Reason: {lastError()}");
+    exit(1);
+}
+
+// Split content into lines by iterating characters
+let lines = [];
+let current_line = "";
+
+for (let ch in content) {
+    if (ch == "\n") {
+        lines[len(lines)] = current_line;
+        current_line = "";
+    } else {
+        current_line = current_line + ch;
+    }
+}
+
+// Don't forget the last line if it doesn't end with newline
+if (len(current_line) > 0) {
+    lines[len(lines)] = current_line;
+}
+
+println($"Read {len(lines)} lines from {input_path}");
+
+// Filter: skip comments and empty lines
+let counter = make_counter();
+let output = "";
+
+for (let line in lines) {
+    // Skip comments
+    if (starts_with(line, "#")) {
+        continue;
+    }
+
+    // Skip empty lines
+    if (is_empty(line)) {
+        continue;
+    }
+
+    let num = counter();
+    output = output + $"{num}: {line}\n";
+}
+
+// Write processed output
+try writeFile(output_path, output);
+
+if (lastError() != null) {
+    println($"Error writing to {output_path}: {lastError()}");
+    exit(1);
+}
+
+println($"Wrote processed output to {output_path}");

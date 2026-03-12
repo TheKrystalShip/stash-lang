@@ -1,0 +1,104 @@
+#!/usr/bin/env stash
+
+// Calculator and type system demo
+// Shows off arithmetic, type coercion, and error handling
+
+fn divmod(a, b) {
+    if (b == 0) {
+        println("  Error: division by zero");
+        return null;
+    }
+    let quotient = a / b;
+    let remainder = a % b;
+    println($"  {a} / {b} = {quotient} remainder {remainder}");
+    return quotient;
+}
+
+fn show_type_promotion() {
+    println("=== Type Promotion ===");
+
+    let int_val = 10;
+    let float_val = 3.14;
+
+    println($"  int + int:     {5 + 3} ({typeof(5 + 3)})");
+    println($"  int + float:   {int_val + float_val} ({typeof(int_val + float_val)})");
+    println($"  int * float:   {int_val * float_val} ({typeof(int_val * float_val)})");
+    println($"  int / int:     {10 / 3} ({typeof(10 / 3)})");
+    println($"  float / int:   {float_val / 2} ({typeof(float_val / 2)})");
+    println("");
+}
+
+fn show_conversions() {
+    println("=== Type Conversions ===");
+
+    // Successful conversions
+    let str_num = "42";
+    let parsed = toInt(str_num);
+    println($"  toInt(\"42\")    = {parsed} ({typeof(parsed)})");
+
+    let float_str = "3.14";
+    let parsed_f = toFloat(float_str);
+    println($"  toFloat(\"3.14\") = {parsed_f} ({typeof(parsed_f)})");
+
+    let num = 255;
+    let as_str = toStr(num);
+    println($"  toStr(255)     = \"{as_str}\" ({typeof(as_str)})");
+
+    // Failed conversion with error handling
+    let bad = try toInt("hello");
+    let err = lastError();
+    println($"  toInt(\"hello\") = {bad} (error: {err})");
+    println("");
+}
+
+fn show_truthiness() {
+    println("=== Truthiness ===");
+
+    let values = [0, 1, -1, 0.0, 3.14, "", "hello", true, false, null];
+    let labels = ["0", "1", "-1", "0.0", "3.14", "\"\"", "\"hello\"", "true", "false", "null"];
+
+    let i = 0;
+    while (i < len(values)) {
+        let truthy = values[i] ? "truthy" : "falsy";
+        println($"  {labels[i]} → {truthy}");
+        i++;
+    }
+    println("");
+}
+
+fn show_equality() {
+    println("=== Strict Equality (no coercion) ===");
+    println($"  5 == 5       → {5 == 5}");
+    println($"  5 == 5.0     → {5 == 5.0}");
+    println($"  5 == \"5\"     → {5 == "5"}");
+    println($"  0 == false   → {0 == false}");
+    println($"  0 == null    → {0 == null}");
+    println($"  null == null → {null == null}");
+    println($"  \"\" == false  → {"" == false}");
+    println("");
+}
+
+fn show_increment_decrement() {
+    println("=== Increment / Decrement ===");
+
+    let x = 5;
+    println($"  let x = {x}");
+    println($"  x++ → {x++} (x is now {x})");
+    println($"  ++x → {++x} (x is now {x})");
+    println($"  x-- → {x--} (x is now {x})");
+    println($"  --x → {--x} (x is now {x})");
+    println("");
+}
+
+// --- Main ---
+
+show_type_promotion();
+show_conversions();
+show_truthiness();
+show_equality();
+show_increment_decrement();
+
+println("=== Division & Modulo ===");
+divmod(17, 5);
+divmod(100, 7);
+divmod(10, 0);

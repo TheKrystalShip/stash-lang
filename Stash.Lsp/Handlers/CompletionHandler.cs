@@ -18,7 +18,7 @@ public class CompletionHandler : CompletionHandlerBase
     {
         "let", "const", "fn", "struct", "enum", "if", "else",
         "for", "in", "while", "return", "break", "continue",
-        "true", "false", "null", "try", "import", "from"
+        "true", "false", "null", "try", "import", "from", "args"
     };
 
     private static readonly (string Name, string Detail)[] _builtIns =

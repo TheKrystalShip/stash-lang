@@ -1,0 +1,93 @@
+#!/usr/bin/env stash
+
+// Deployment script
+// Deploys an application to a set of target hosts
+
+import { LogLevel, log, banner } from "lib/utils.stash";
+
+enum DeployResult {
+    Success,
+    Failed,
+    Skipped
+}
+
+struct Target {
+    host,
+    user,
+    path
+}
+
+const MAX_RETRIES = 3;
+
+fn check_host(host) {
+    let result = $(ping -c 1 -W 2 {host});
+    return result.exitCode == 0;
+}
+
+fn deploy_to(target, package) {
+    log(LogLevel.Info, $"Deploying {package} to {target.user}@{target.host}:{target.path}");
+
+    // Check connectivity first
+    if (!check_host(target.host)) {
+        log(LogLevel.Error, $"Host {target.host} is unreachable");
+        return DeployResult.Failed;
+    }
+
+    // Retry loop
+    let attempt = 1;
+    while (attempt <= MAX_RETRIES) {
+        log(LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
+
+        // Simulate deployment (would use scp in real usage)
+        let result = $(echo "deploying {package} to {target.host}");
+
+        if (result.exitCode == 0) {
+            log(LogLevel.Info, $"  Success on attempt {attempt}");
+            return DeployResult.Success;
+        }
+
+        log(LogLevel.Warn, $"  Attempt {attempt} failed: {result.stderr}");
+        attempt++;
+    }
+
+    log(LogLevel.Error, $"  All {MAX_RETRIES} attempts failed for {target.host}");
+    return DeployResult.Failed;
+}
+
+// --- Main ---
+
+let package = "app-v2.1.0.tar.gz";
+
+banner("Deployment Start");
+println("");
+
+let targets = [
+    Target { host: "127.0.0.1", user: "deploy", path: "/opt/app" },
+    Target { host: "192.168.1.50", user: "deploy", path: "/opt/app" },
+    Target { host: "192.168.1.51", user: "deploy", path: "/opt/app" }
+];
+
+let successes = 0;
+let failures = 0;
+
+for (let target in targets) {
+    let result = deploy_to(target, package);
+
+    if (result == DeployResult.Success) {
+        successes++;
+    } else if (result == DeployResult.Failed) {
+        failures++;
+    }
+}
+
+println("");
+banner("Deployment Complete");
+println("");
+println($"  Succeeded: {successes}");
+println($"  Failed:    {failures}");
+println($"  Total:     {len(targets)}");
+
+if (failures > 0) {
+    log(LogLevel.Warn, "Some deployments failed — check logs above");
+    exit(1);
+}

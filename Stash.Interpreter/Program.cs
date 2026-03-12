@@ -33,33 +33,62 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        if (args.Length > 2)
+        if (args.Length == 0)
         {
-            Console.Error.WriteLine("Usage: stash [--debug] [script]");
+            RunRepl();
+            return;
+        }
+
+        bool debug = false;
+        string? scriptPath = null;
+        int scriptArgStart = -1;
+
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--debug" && scriptPath is null)
+            {
+                debug = true;
+            }
+            else if (scriptPath is null)
+            {
+                scriptPath = args[i];
+                scriptArgStart = i + 1;
+            }
+            else
+            {
+                break; // remaining args belong to the script
+            }
+        }
+
+        if (debug && scriptPath is null)
+        {
+            Console.Error.WriteLine("Error: --debug mode requires a script file.");
             System.Environment.Exit(64);
             return;
         }
 
-        if (args.Length == 2 && args[0] == "--debug")
+        if (scriptPath is null)
         {
-            RunFileWithDebugger(args[1]);
+            RunRepl();
+            return;
         }
-        else if (args.Length == 1 && args[0] == "--debug")
+
+        // Collect the script's arguments (everything after the script path)
+        string[] scriptArgs = scriptArgStart >= 0 && scriptArgStart < args.Length
+            ? args[scriptArgStart..]
+            : Array.Empty<string>();
+
+        if (debug)
         {
-            Console.Error.WriteLine("Error: --debug mode requires a script file.");
-            System.Environment.Exit(64);
-        }
-        else if (args.Length == 1)
-        {
-            RunFile(args[0]);
+            RunFileWithDebugger(scriptPath, scriptArgs);
         }
         else
         {
-            RunRepl();
+            RunFile(scriptPath, scriptArgs);
         }
     }
 
-    private static void RunFile(string path)
+    private static void RunFile(string path, string[] scriptArgs)
     {
         if (!System.IO.File.Exists(path))
         {
@@ -101,6 +130,7 @@ public class Program
         // Stage 3: Interpret
         var interpreter = new Interpreter();
         interpreter.CurrentFile = path;
+        interpreter.SetScriptArgs(scriptArgs);
         try
         {
             interpreter.Interpret(statements);
@@ -112,7 +142,7 @@ public class Program
         }
     }
 
-    private static void RunFileWithDebugger(string path)
+    private static void RunFileWithDebugger(string path, string[] scriptArgs)
     {
         if (!System.IO.File.Exists(path))
         {
@@ -150,6 +180,7 @@ public class Program
 
         var interpreter = new Interpreter();
         interpreter.CurrentFile = path;
+        interpreter.SetScriptArgs(scriptArgs);
 
         var debugger = new CliDebugger();
         interpreter.Debugger = debugger;
@@ -287,6 +318,12 @@ public class Program
             first == TokenType.Struct || first == TokenType.Enum || first == TokenType.Import ||
             first == TokenType.If || first == TokenType.While || first == TokenType.For ||
             first == TokenType.Return || first == TokenType.Break || first == TokenType.Continue)
+        {
+            return true;
+        }
+
+        // Check if first token is 'args' identifier (contextual keyword)
+        if (first == TokenType.Identifier && tokens[0].Lexeme == "args")
         {
             return true;
         }

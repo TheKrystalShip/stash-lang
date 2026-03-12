@@ -1,0 +1,35 @@
+// examples/lib/utils.stash
+// Shared utilities for deployment scripts
+
+enum LogLevel {
+    Info,
+    Warn,
+    Error
+}
+
+fn log(level, message) {
+    let prefix = "INFO";
+    if (level == LogLevel.Warn) {
+        prefix = "WARN";
+    } else if (level == LogLevel.Error) {
+        prefix = "ERROR";
+    }
+    println($"[{prefix}] {message}");
+}
+
+fn repeat_char(ch, count) {
+    let result = "";
+    let i = 0;
+    while (i < count) {
+        result = result + ch;
+        i++;
+    }
+    return result;
+}
+
+fn banner(text) {
+    let border = repeat_char("=", len(text) + 4);
+    println(border);
+    println($"  {text}");
+    println(border);
+}

@@ -1162,6 +1162,30 @@ public class Parser
     }
 
     /// <summary>
+    /// Checks whether the current token is an identifier with the given lexeme, without consuming it.
+    /// Used for contextual keywords like <c>args</c>, <c>flag</c>, <c>option</c>, etc.
+    /// </summary>
+    private bool CheckIdentifier(string name)
+    {
+        if (IsAtEnd) return false;
+        return Peek().Type == TokenType.Identifier && Peek().Lexeme == name;
+    }
+
+    /// <summary>
+    /// If the current token is an identifier matching <paramref name="name"/>, consumes it and returns true.
+    /// Used for contextual keywords inside <c>args</c> blocks.
+    /// </summary>
+    private bool MatchIdentifier(string name)
+    {
+        if (CheckIdentifier(name))
+        {
+            Advance();
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Discards tokens until the parser reaches a likely statement boundary,
     /// enabling recovery after a syntax error.
     /// </summary>

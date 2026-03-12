@@ -1,0 +1,71 @@
+#!/usr/bin/env stash
+
+// System information gatherer
+// Collects and displays system details using common Unix commands
+
+struct SystemInfo {
+    hostname,
+    kernel,
+    uptime,
+    cpu_count,
+    memory_total,
+    disk_usage,
+    user
+}
+
+fn run_cmd(cmd_str) {
+    // Execute a command and return trimmed stdout, or "N/A" on failure
+    let result = $({cmd_str});
+    if (result.exitCode != 0) {
+        return "N/A";
+    }
+    return result.stdout;
+}
+
+fn gather_info() {
+    return SystemInfo {
+        hostname: run_cmd("hostname"),
+        kernel: run_cmd("uname -r"),
+        uptime: run_cmd("uptime -p"),
+        cpu_count: run_cmd("nproc"),
+        memory_total: run_cmd("free -h | head -2 | tail -1 | awk '{print $2}'"),
+        disk_usage: run_cmd("df -h / | tail -1 | awk '{print $5}'"),
+        user: run_cmd("whoami")
+    };
+}
+
+// --- Main ---
+
+println("╔══════════════════════════════╗");
+println("║      System Information      ║");
+println("╚══════════════════════════════╝");
+println("");
+
+let info = gather_info();
+
+println($"  Hostname:   {info.hostname}");
+println($"  Kernel:     {info.kernel}");
+println($"  Uptime:     {info.uptime}");
+println($"  CPU Cores:  {info.cpu_count}");
+println($"  Memory:     {info.memory_total}");
+println($"  Disk Usage: {info.disk_usage} (/)");
+println($"  User:       {info.user}");
+println("");
+
+// Show environment info
+let shell = env("SHELL") ?? "unknown";
+let home = env("HOME") ?? "unknown";
+let path = env("PATH") ?? "unknown";
+
+println("  Environment:");
+println($"    SHELL: {shell}");
+println($"    HOME:  {home}");
+
+// Count PATH entries
+let path_count = 1;
+for (let ch in path) {
+    if (ch == ":") {
+        path_count++;
+    }
+}
+println($"    PATH:  {path_count} entries");
