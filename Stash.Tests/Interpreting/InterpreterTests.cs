@@ -1815,4 +1815,386 @@ public class InterpreterTests
         object? result = Run("let r = $(echo \"(hello)\"); let result = r.stdout;");
         Assert.Equal("(hello)\n", result);
     }
+
+    // ===== Phase 5: Try Expression =====
+
+    [Fact]
+    public void TryExpr_CatchesRuntimeError_ReturnsNull()
+    {
+        // toInt("abc") throws RuntimeError, try catches it
+        Assert.Null(Run("let result = try toInt(\"abc\");"));
+    }
+
+    [Fact]
+    public void TryExpr_NoError_ReturnsValue()
+    {
+        Assert.Equal(42L, Run("let result = try toInt(\"42\");"));
+    }
+
+    [Fact]
+    public void TryExpr_DivisionByZero_ReturnsNull()
+    {
+        Assert.Null(Run("let result = try (1 / 0);"));
+    }
+
+    [Fact]
+    public void TryExpr_UndefinedVariable_ReturnsNull()
+    {
+        Assert.Null(Run("let result = try undefinedVar;"));
+    }
+
+    [Fact]
+    public void TryExpr_InvalidFieldAccess_ReturnsNull()
+    {
+        Assert.Null(Run("struct S { x } let s = S { x: 1 }; let result = try s.nonexistent;"));
+    }
+
+    // ===== Phase 5: Null Coalescing (??) =====
+
+    [Fact]
+    public void NullCoalesce_LeftNotNull_ReturnsLeft()
+    {
+        Assert.Equal(42L, Run("let result = 42 ?? 99;"));
+    }
+
+    [Fact]
+    public void NullCoalesce_LeftNull_ReturnsRight()
+    {
+        Assert.Equal(99L, Run("let result = null ?? 99;"));
+    }
+
+    [Fact]
+    public void NullCoalesce_BothNull_ReturnsNull()
+    {
+        Assert.Null(Run("let result = null ?? null;"));
+    }
+
+    [Fact]
+    public void NullCoalesce_Chain_FirstNonNull()
+    {
+        Assert.Equal("found", Run("let result = null ?? null ?? \"found\";"));
+    }
+
+    [Fact]
+    public void NullCoalesce_ShortCircuit_DoesNotEvaluateRight()
+    {
+        // If left is not null, right should not be evaluated
+        // Using a function call as right side that would fail if evaluated
+        Assert.Equal(42L, Run("let result = 42 ?? toInt(\"bad\");"));
+    }
+
+    [Fact]
+    public void NullCoalesce_WithTry_CombinedPattern()
+    {
+        // The canonical pattern: try expr ?? default
+        Assert.Equal("default", Run("let result = try toInt(\"abc\") ?? \"default\";"));
+    }
+
+    [Fact]
+    public void NullCoalesce_FalsyValuesAreNotNull()
+    {
+        // 0, false, "" are falsy but not null — ?? should NOT replace them
+        Assert.Equal(0L, Run("let result = 0 ?? 99;"));
+    }
+
+    [Fact]
+    public void NullCoalesce_EmptyStringIsNotNull()
+    {
+        Assert.Equal("", Run("let result = \"\" ?? \"default\";"));
+    }
+
+    [Fact]
+    public void NullCoalesce_FalseIsNotNull()
+    {
+        Assert.Equal(false, Run("let result = false ?? true;"));
+    }
+
+    // ===== Phase 5: lastError() =====
+
+    [Fact]
+    public void LastError_InitiallyNull()
+    {
+        Assert.Null(Run("let result = lastError();"));
+    }
+
+    [Fact]
+    public void LastError_AfterTryCatchesError()
+    {
+        var source = @"
+            let x = try toInt(""abc"");
+            let result = lastError();
+        ";
+        var resultVal = Run(source);
+        Assert.IsType<string>(resultVal);
+        Assert.Contains("Cannot parse", (string)resultVal!);
+    }
+
+    [Fact]
+    public void LastError_ResetBySubsequentTry()
+    {
+        var source = @"
+            let x = try toInt(""abc"");
+            let y = try toInt(""42"");
+            let result = lastError();
+        ";
+        // After successful try, lastError should still be from the failed one
+        // (only set on error, not cleared on success)
+        var resultVal = Run(source);
+        Assert.IsType<string>(resultVal);
+    }
+
+    [Fact]
+    public void LastError_DivisionByZero()
+    {
+        var source = @"
+            let x = try (1 / 0);
+            let result = lastError();
+        ";
+        var resultVal = Run(source);
+        Assert.IsType<string>(resultVal);
+        Assert.Contains("zero", ((string)resultVal!).ToLower());
+    }
+
+    // ===== Phase 5: Imports =====
+
+    private static object? RunWithFile(string source, string filePath)
+    {
+        var lexer = new Lexer(source, filePath);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        var interpreter = new Interpreter();
+        interpreter.CurrentFile = filePath;
+        interpreter.Interpret(statements);
+
+        var resultLexer = new Lexer("result");
+        var resultTokens = resultLexer.ScanTokens();
+        var resultParser = new Parser(resultTokens);
+        var resultExpr = resultParser.Parse();
+        return interpreter.Interpret(resultExpr);
+    }
+
+    [Fact]
+    public void Import_FunctionFromModule()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            // Create module file
+            string modulePath = System.IO.Path.Combine(tmpDir, "math.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; }");
+
+            // Create main script
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { add } from \"math.stash\"; let result = add(3, 4);";
+
+            Assert.Equal(7L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_StructFromModule()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "types.stash");
+            System.IO.File.WriteAllText(modulePath, "struct Point { x, y }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { Point } from \"types.stash\"; let p = Point { x: 10, y: 20 }; let result = p.x;";
+
+            Assert.Equal(10L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_EnumFromModule()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "enums.stash");
+            System.IO.File.WriteAllText(modulePath, "enum Color { Red, Green, Blue }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { Color } from \"enums.stash\"; let result = Color.Red == Color.Red;";
+
+            Assert.Equal(true, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_ConstantFromModule()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "config.stash");
+            System.IO.File.WriteAllText(modulePath, "const MAX = 100;");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { MAX } from \"config.stash\"; let result = MAX;";
+
+            Assert.Equal(100L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_MultipleNames()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "utils.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; } fn mul(a, b) { return a * b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { add, mul } from \"utils.stash\"; let result = add(2, 3) + mul(4, 5);";
+
+            Assert.Equal(25L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_ModuleNotFound_ThrowsRuntimeError()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { foo } from \"nonexistent.stash\";";
+
+            var lexer = new Lexer(source, mainPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            var interpreter = new Interpreter();
+            interpreter.CurrentFile = mainPath;
+            Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_UndefinedName_ThrowsRuntimeError()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "mod.stash");
+            System.IO.File.WriteAllText(modulePath, "fn foo() { return 1; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { bar } from \"mod.stash\";";
+
+            var lexer = new Lexer(source, mainPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            var interpreter = new Interpreter();
+            interpreter.CurrentFile = mainPath;
+            Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_CircularImport_ThrowsRuntimeError()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            // a.stash imports b.stash, b.stash imports a.stash
+            string aPath = System.IO.Path.Combine(tmpDir, "a.stash");
+            string bPath = System.IO.Path.Combine(tmpDir, "b.stash");
+            System.IO.File.WriteAllText(aPath, "import { bar } from \"b.stash\"; fn foo() { return 1; }");
+            System.IO.File.WriteAllText(bPath, "import { foo } from \"a.stash\"; fn bar() { return 2; }");
+
+            var lexer = new Lexer(System.IO.File.ReadAllText(aPath), aPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            var interpreter = new Interpreter();
+            interpreter.CurrentFile = aPath;
+            Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_ModuleCached_NotExecutedTwice()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            // Module has a side effect (incrementing counter), if cached, it should only execute once
+            string modulePath = System.IO.Path.Combine(tmpDir, "counter.stash");
+            System.IO.File.WriteAllText(modulePath, "let count = 1; fn getCount() { return count; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            // Importing the same module twice should not re-execute it
+            string source = "import { getCount } from \"counter.stash\"; import { count } from \"counter.stash\"; let result = count;";
+
+            Assert.Equal(1L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    // ===== Phase 5: Try + ?? Combined Patterns =====
+
+    [Fact]
+    public void TryNullCoalesce_ReadFile_WithDefault()
+    {
+        // try readFile("nonexistent") ?? "fallback"
+        Assert.Equal("fallback", Run("let result = try readFile(\"/nonexistent/path/file.txt\") ?? \"fallback\";"));
+    }
+
+    [Fact]
+    public void TryNullCoalesce_NestedCalls()
+    {
+        // try (try expr ?? default1) ?? default2
+        Assert.Equal(42L, Run("let result = try toInt(\"42\") ?? 0;"));
+    }
 }

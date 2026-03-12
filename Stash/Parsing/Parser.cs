@@ -26,6 +26,7 @@ using Stash.Parsing.AST;
 ///   <item><description><see cref="Expression"/> — entry point, delegates to <see cref="Assignment"/></description></item>
 ///   <item><description><see cref="Assignment"/> — <c>=</c> (right-associative)</description></item>
 ///   <item><description><see cref="Ternary"/> — <c>? :</c> (right-associative)</description></item>
+///   <item><description><see cref="NullCoalesce"/> — <c>??</c> (left-associative)</description></item>
 ///   <item><description><see cref="Pipe"/> — <c>|</c> (left-associative, command chaining)</description></item>
 ///   <item><description><see cref="Or"/> — <c>||</c></description></item>
 ///   <item><description><see cref="And"/> — <c>&amp;&amp;</c></description></item>
@@ -33,7 +34,7 @@ using Stash.Parsing.AST;
 ///   <item><description><see cref="Comparison"/> — <c>&lt; &gt; &lt;= &gt;=</c></description></item>
 ///   <item><description><see cref="Term"/> — <c>+ -</c></description></item>
 ///   <item><description><see cref="Factor"/> — <c>* / %</c></description></item>
-///   <item><description><see cref="Unary"/> — prefix <c>! -</c></description></item>
+///   <item><description><see cref="Unary"/> — prefix <c>! - try</c></description></item>
 ///   <item><description><see cref="Call"/> — function calls <c>callee(args)</c></description></item>
 ///   <item><description><see cref="Primary"/> — literals, identifiers, grouping <c>( )</c></description></item>
 /// </list>
@@ -166,6 +167,11 @@ public class Parser
                 return EnumDeclaration();
             }
 
+            if (Match(TokenType.Import))
+            {
+                return ImportDeclaration();
+            }
+
             return Statement();
         }
         catch (ParseError)
@@ -270,6 +276,34 @@ public class Parser
 
         Token close = Consume(TokenType.RightBrace, "Expected '}' after enum members.");
         return new EnumDeclStmt(name, members, MakeSpan(enumToken.Span, close.Span));
+    }
+
+    /// <summary>
+    /// Parses an import declaration: <c>import { name1, name2 } from "path";</c>.
+    /// The <c>import</c> token has already been consumed.
+    /// </summary>
+    private Stmt ImportDeclaration()
+    {
+        Token importToken = Previous();
+        Consume(TokenType.LeftBrace, "Expected '{' after 'import'.");
+
+        List<Token> names = new();
+        if (!Check(TokenType.RightBrace))
+        {
+            do
+            {
+                names.Add(Consume(TokenType.Identifier, "Expected name to import."));
+            } while (Match(TokenType.Comma));
+        }
+
+        Consume(TokenType.RightBrace, "Expected '}' after import names.");
+        if (names.Count == 0)
+            Error(Previous(), "Expected at least one name to import.");
+        Consume(TokenType.From, "Expected 'from' after import names.");
+        Token path = Consume(TokenType.StringLiteral, "Expected module path string after 'from'.");
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
+
+        return new ImportStmt(names, path, MakeSpan(importToken.Span, semi.Span));
     }
 
     /// <summary>
@@ -513,7 +547,7 @@ public class Parser
     /// </remarks>
     private Expr Ternary()
     {
-        Expr expr = Pipe();
+        Expr expr = NullCoalesce();
 
         if (Match(TokenType.QuestionMark))
         {
@@ -522,6 +556,23 @@ public class Parser
             Expr elseBranch = Expression();
             SourceSpan span = MakeSpan(expr.Span, elseBranch.Span);
             return new TernaryExpr(expr, thenBranch, elseBranch, span);
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Parses a null-coalescing expression: <c>left ?? right</c>.
+    /// Left-associative: <c>a ?? b ?? c</c> → <c>(a ?? b) ?? c</c>.
+    /// </summary>
+    private Expr NullCoalesce()
+    {
+        Expr expr = Pipe();
+
+        while (Match(TokenType.QuestionQuestion))
+        {
+            Expr right = Pipe();
+            expr = new NullCoalesceExpr(expr, right, MakeSpan(expr.Span, right.Span));
         }
 
         return expr;
@@ -688,6 +739,13 @@ public class Parser
             Token op = Previous();
             Expr right = Unary();
             return new UnaryExpr(op, right, MakeSpan(op.Span, right.Span));
+        }
+
+        if (Match(TokenType.Try))
+        {
+            Token tryToken = Previous();
+            Expr expression = Unary();
+            return new TryExpr(expression, MakeSpan(tryToken.Span, expression.Span));
         }
 
         return Call();
@@ -1109,6 +1167,7 @@ public class Parser
                 case TokenType.Fn:
                 case TokenType.Struct:
                 case TokenType.Enum:
+                case TokenType.Import:
                 case TokenType.If:
                 case TokenType.While:
                 case TokenType.For:

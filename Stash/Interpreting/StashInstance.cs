@@ -1,6 +1,7 @@
 namespace Stash.Interpreting;
 
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using Stash.Common;
 
 /// <summary>
@@ -36,6 +37,11 @@ public class StashInstance
 
         _fields[name] = value;
     }
+
+    /// <summary>
+    /// Gets all fields of this instance for debugging/inspection.
+    /// </summary>
+    public IReadOnlyDictionary<string, object?> GetFields() => _fields;
 
     public override string ToString()
     {

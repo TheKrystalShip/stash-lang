@@ -1085,4 +1085,140 @@ public class ParserTests
         var result = ParseExpr("$(cmd1) | $(cmd2)");
         Assert.IsType<PipeExpr>(result);
     }
+
+    // ===== Phase 5: Try Expression =====
+
+    [Fact]
+    public void Parse_TryExpression_ReturnsTryExpr()
+    {
+        var result = ParseExpr("try 42");
+        var tryExpr = Assert.IsType<TryExpr>(result);
+        var literal = Assert.IsType<LiteralExpr>(tryExpr.Expression);
+        Assert.Equal(42L, literal.Value);
+    }
+
+    [Fact]
+    public void Parse_TryExpression_WithFunctionCall()
+    {
+        var result = ParseExpr("try readFile(\"test.txt\")");
+        var tryExpr = Assert.IsType<TryExpr>(result);
+        Assert.IsType<CallExpr>(tryExpr.Expression);
+    }
+
+    [Fact]
+    public void Parse_TryExpression_NestedWithNullCoalesce()
+    {
+        var result = ParseExpr("try readFile(\"test.txt\") ?? \"default\"");
+        // ?? has lower precedence than try, so this should be: (try readFile("test.txt")) ?? "default"
+        var nullCoalesce = Assert.IsType<NullCoalesceExpr>(result);
+        var tryExpr = Assert.IsType<TryExpr>(nullCoalesce.Left);
+        Assert.IsType<CallExpr>(tryExpr.Expression);
+        var right = Assert.IsType<LiteralExpr>(nullCoalesce.Right);
+        Assert.Equal("default", right.Value);
+    }
+
+    [Fact]
+    public void Parse_TryExpression_WithUnaryNegation()
+    {
+        var result = ParseExpr("try -42");
+        var tryExpr = Assert.IsType<TryExpr>(result);
+        var unary = Assert.IsType<UnaryExpr>(tryExpr.Expression);
+        Assert.Equal(TokenType.Minus, unary.Operator.Type);
+    }
+
+    // ===== Phase 5: Null Coalescing (??) =====
+
+    [Fact]
+    public void Parse_NullCoalescing_ReturnsNullCoalesceExpr()
+    {
+        var result = ParseExpr("null ?? 42");
+        var nc = Assert.IsType<NullCoalesceExpr>(result);
+        Assert.IsType<LiteralExpr>(nc.Left);
+        var right = Assert.IsType<LiteralExpr>(nc.Right);
+        Assert.Equal(42L, right.Value);
+    }
+
+    [Fact]
+    public void Parse_NullCoalescing_LeftAssociative()
+    {
+        // a ?? b ?? c → (a ?? b) ?? c
+        var result = ParseExpr("null ?? null ?? 42");
+        var outer = Assert.IsType<NullCoalesceExpr>(result);
+        var inner = Assert.IsType<NullCoalesceExpr>(outer.Left);
+        Assert.IsType<LiteralExpr>(inner.Left);
+        Assert.IsType<LiteralExpr>(inner.Right);
+        var right = Assert.IsType<LiteralExpr>(outer.Right);
+        Assert.Equal(42L, right.Value);
+    }
+
+    [Fact]
+    public void Parse_NullCoalescing_LowerThanTernary()
+    {
+        // a ?? b is lower precedence than pipe, so a ?? b comes before ternary
+        // true ? null ?? 42 : 0 → true ? (null ?? 42) : 0
+        var result = ParseExpr("true ? null ?? 42 : 0");
+        var ternary = Assert.IsType<TernaryExpr>(result);
+        var thenBranch = Assert.IsType<NullCoalesceExpr>(ternary.ThenBranch);
+        Assert.IsType<LiteralExpr>(thenBranch.Left);
+    }
+
+    [Fact]
+    public void Parse_NullCoalescing_WithVariables()
+    {
+        var result = ParseExpr("x ?? y");
+        var nc = Assert.IsType<NullCoalesceExpr>(result);
+        Assert.IsType<IdentifierExpr>(nc.Left);
+        Assert.IsType<IdentifierExpr>(nc.Right);
+    }
+
+    // ===== Phase 5: Import Declaration =====
+
+    [Fact]
+    public void Parse_ImportDecl_SingleName()
+    {
+        var stmts = ParseProgram("import { deploy } from \"utils.stash\";");
+        var importStmt = Assert.IsType<ImportStmt>(Assert.Single(stmts));
+        Assert.Single(importStmt.Names);
+        Assert.Equal("deploy", importStmt.Names[0].Lexeme);
+        Assert.Equal("utils.stash", importStmt.Path.Literal);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_MultipleNames()
+    {
+        var stmts = ParseProgram("import { deploy, Server, Status } from \"utils.stash\";");
+        var importStmt = Assert.IsType<ImportStmt>(Assert.Single(stmts));
+        Assert.Equal(3, importStmt.Names.Count);
+        Assert.Equal("deploy", importStmt.Names[0].Lexeme);
+        Assert.Equal("Server", importStmt.Names[1].Lexeme);
+        Assert.Equal("Status", importStmt.Names[2].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_MissingSemicolon_ReportsError()
+    {
+        var parser = ParseProgramWithParser("import { deploy } from \"utils.stash\"");
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_MissingFrom_ReportsError()
+    {
+        var parser = ParseProgramWithParser("import { deploy } \"utils.stash\";");
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_MissingPath_ReportsError()
+    {
+        var parser = ParseProgramWithParser("import { deploy } from ;");
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_EmptyNames_ReportsError()
+    {
+        var parser = ParseProgramWithParser("import { } from \"utils.stash\";");
+        Assert.NotEmpty(parser.Errors);
+    }
 }

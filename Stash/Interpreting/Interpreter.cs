@@ -4,7 +4,10 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using Stash.Common;
+using Stash.Debugging;
 using Stash.Lexing;
+using Stash.Parsing;
 using Stash.Parsing.AST;
 
 /// <summary>
@@ -57,6 +60,36 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private readonly Environment _globals;
     private Environment _environment;
     private string? _pendingStdin;
+    private string? _lastError;
+    private readonly Dictionary<string, Environment> _moduleCache = new();
+    private readonly HashSet<string> _importStack = new();
+    private string? _currentFile;
+    private readonly List<CallFrame> _callStack = new();
+    private IDebugger? _debugger;
+
+    /// <summary>
+    /// Gets or sets the current file path being executed.
+    /// Used for resolving relative import paths.
+    /// </summary>
+    public string? CurrentFile
+    {
+        get => _currentFile;
+        set => _currentFile = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the debugger. When set, debug hooks are invoked during execution.
+    /// </summary>
+    public IDebugger? Debugger
+    {
+        get => _debugger;
+        set => _debugger = value;
+    }
+
+    /// <summary>
+    /// Gets the current call stack as a read-only list.
+    /// </summary>
+    public IReadOnlyList<CallFrame> CallStack => _callStack;
 
     public Interpreter()
     {
@@ -92,20 +125,27 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
         catch (BreakException)
         {
-            throw new RuntimeError("'break' used outside of a loop.");
+            var err = new RuntimeError("'break' used outside of a loop.");
+            _debugger?.OnError(err, _callStack);
+            throw err;
         }
         catch (ContinueException)
         {
-            throw new RuntimeError("'continue' used outside of a loop.");
+            var err = new RuntimeError("'continue' used outside of a loop.");
+            _debugger?.OnError(err, _callStack);
+            throw err;
         }
         catch (ReturnException)
         {
-            throw new RuntimeError("'return' used outside of a function.");
+            var err = new RuntimeError("'return' used outside of a function.");
+            _debugger?.OnError(err, _callStack);
+            throw err;
         }
     }
 
     private void Execute(Stmt stmt)
     {
+        _debugger?.OnBeforeExecute(stmt.Span, _environment);
         stmt.Accept(this);
     }
 
@@ -283,6 +323,41 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         return IsTruthy(condition)
             ? expr.ThenBranch.Accept(this)
             : expr.ElseBranch.Accept(this);
+    }
+
+    /// <summary>
+    /// Visits a try expression (<c>try expr</c>), catching any <see cref="RuntimeError"/> and
+    /// returning <c>null</c> in that case. The error message is stored in <see cref="_lastError"/>.
+    /// </summary>
+    /// <param name="expr">The <see cref="TryExpr"/> to evaluate.</param>
+    /// <returns>The result of the inner expression, or <c>null</c> if a RuntimeError was caught.</returns>
+    public object? VisitTryExpr(TryExpr expr)
+    {
+        try
+        {
+            return expr.Expression.Accept(this);
+        }
+        catch (RuntimeError e)
+        {
+            _lastError = e.Message;
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Visits a null-coalescing expression (<c>left ?? right</c>).
+    /// Returns <c>left</c> if it is not null; otherwise evaluates and returns <c>right</c>.
+    /// </summary>
+    /// <param name="expr">The <see cref="NullCoalesceExpr"/> to evaluate.</param>
+    /// <returns>The left value if non-null; otherwise the right value.</returns>
+    public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
+    {
+        object? left = expr.Left.Accept(this);
+        if (left is not null)
+        {
+            return left;
+        }
+        return expr.Right.Accept(this);
     }
 
     /// <summary>
@@ -669,7 +744,35 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 expr.Paren.Span);
         }
 
-        return function.Call(this, arguments);
+        string functionName = callee is StashFunction sf ? sf.ToString() : callee.ToString() ?? "<unknown>";
+        if (functionName.StartsWith("<fn ") && functionName.EndsWith(">"))
+        {
+            functionName = functionName.Substring(4, functionName.Length - 5);
+        }
+        else if (functionName.StartsWith("<built-in fn ") && functionName.EndsWith(">"))
+        {
+            functionName = functionName.Substring(13, functionName.Length - 14);
+        }
+
+        var callFrame = new CallFrame
+        {
+            FunctionName = functionName,
+            CallSite = expr.Span,
+            LocalScope = _environment
+        };
+        _callStack.Add(callFrame);
+        _debugger?.OnFunctionEnter(functionName, expr.Span, _environment);
+
+        try
+        {
+            object? result = function.Call(this, arguments);
+            return result;
+        }
+        finally
+        {
+            _callStack.RemoveAt(_callStack.Count - 1);
+            _debugger?.OnFunctionExit(functionName);
+        }
     }
 
     public void ExecuteBlock(List<Stmt> statements, Environment environment)
@@ -844,6 +947,116 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         var enumDef = new StashEnum(stmt.Name.Lexeme, members);
         _environment.Define(stmt.Name.Lexeme, enumDef);
         return null;
+    }
+
+    public object? VisitImportStmt(ImportStmt stmt)
+    {
+        string modulePath = (string)stmt.Path.Literal!;
+        string resolvedPath = ResolveModulePath(modulePath, stmt.Path.Span);
+
+        // Check for circular imports
+        if (_importStack.Contains(resolvedPath))
+        {
+            throw new RuntimeError(
+                $"Circular import detected: '{modulePath}' is already being imported.",
+                stmt.Span);
+        }
+
+        // Get or load the module
+        Environment moduleEnv = LoadModule(resolvedPath, stmt.Path.Span);
+
+        // Bind imported names into the current scope
+        foreach (Token name in stmt.Names)
+        {
+            object? value = moduleEnv.Get(name.Lexeme, name.Span);
+            _environment.Define(name.Lexeme, value);
+        }
+
+        return null;
+    }
+
+    private string ResolveModulePath(string modulePath, SourceSpan span)
+    {
+        string basePath;
+        if (_currentFile is not null)
+        {
+            basePath = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(_currentFile))!;
+        }
+        else
+        {
+            basePath = System.IO.Directory.GetCurrentDirectory();
+        }
+
+        string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, modulePath));
+
+        if (!System.IO.File.Exists(fullPath))
+        {
+            throw new RuntimeError($"Cannot find module '{modulePath}'.", span);
+        }
+
+        return fullPath;
+    }
+
+    private Environment LoadModule(string resolvedPath, SourceSpan span)
+    {
+        if (_moduleCache.TryGetValue(resolvedPath, out Environment? cached))
+        {
+            return cached;
+        }
+
+        string source;
+        try
+        {
+            source = System.IO.File.ReadAllText(resolvedPath);
+        }
+        catch (System.IO.IOException e)
+        {
+            throw new RuntimeError($"Cannot read module '{resolvedPath}': {e.Message}", span);
+        }
+
+        // Lex
+        var lexer = new Lexer(source, resolvedPath);
+        var tokens = lexer.ScanTokens();
+        if (lexer.Errors.Count > 0)
+        {
+            throw new RuntimeError($"Lex errors in module '{resolvedPath}': {lexer.Errors[0]}", span);
+        }
+
+        // Parse
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        if (parser.Errors.Count > 0)
+        {
+            throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", span);
+        }
+
+        // Execute in isolated environment
+        var moduleEnv = new Environment(_globals);
+
+        // Save current state
+        Environment previousEnv = _environment;
+        string? previousFile = _currentFile;
+
+        try
+        {
+            _importStack.Add(resolvedPath);
+            _currentFile = resolvedPath;
+            _environment = moduleEnv;
+
+            foreach (Stmt statement in statements)
+            {
+                Execute(statement);
+            }
+
+            _moduleCache[resolvedPath] = moduleEnv;
+            return moduleEnv;
+        }
+        finally
+        {
+            _environment = previousEnv;
+            _currentFile = previousFile;
+            _importStack.Remove(resolvedPath);
+        }
     }
 
     public object? VisitStructInitExpr(StructInitExpr expr)
@@ -1369,6 +1582,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
             System.Environment.SetEnvironmentVariable(name, value);
             return null;
+        }));
+
+        _globals.Define("lastError", new BuiltInFunction("lastError", 0, (interpreter, args) =>
+        {
+            return interpreter._lastError;
         }));
     }
 

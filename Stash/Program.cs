@@ -1,17 +1,19 @@
 ﻿// ============================================================================
-// Stash REPL — Phase 2 (Statements & Variables)
+// Stash — Phase 5 (Script File Execution + REPL)
 //
-// A Read-Eval-Print Loop that processes input through three pipeline stages:
+// Entry point supporting two modes:
 //
+//   stash                → REPL mode
+//   stash <script.stash> → execute script file
+//
+// Processing pipeline (both modes):
 //   1. Lex:       Source text → token list       (Lexer)
 //   2. Parse:     Token list  → AST              (Parser)
 //   3. Interpret: AST         → execution        (Interpreter)
 //
-// The REPL supports two modes:
-//   - Statement mode: input containing ';' or '{' is parsed as a program
-//     (list of statements) and executed.
-//   - Expression mode: input without statement markers is parsed as a single
-//     expression and its value is printed.
+// The REPL also supports two sub-modes:
+//   - Statement mode: input containing ';' or '{' is parsed as a program.
+//   - Expression mode: input is parsed as a single expression and printed.
 //
 // Each stage can fail independently. Errors go to stderr, results to stdout.
 // The loop exits on "exit" or EOF (Ctrl+D).
@@ -19,6 +21,7 @@
 
 using System;
 using System.Collections.Generic;
+using Stash.Debugging;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -30,8 +33,145 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        Console.WriteLine("Stash v0.2 — Phase 2 REPL");
-        Console.WriteLine("Type statements or expressions, or 'exit' to quit.");
+        if (args.Length > 2)
+        {
+            Console.Error.WriteLine("Usage: stash [--debug] [script]");
+            System.Environment.Exit(64);
+            return;
+        }
+
+        if (args.Length == 2 && args[0] == "--debug")
+        {
+            RunFileWithDebugger(args[1]);
+        }
+        else if (args.Length == 1 && args[0] == "--debug")
+        {
+            Console.Error.WriteLine("Error: --debug mode requires a script file.");
+            System.Environment.Exit(64);
+        }
+        else if (args.Length == 1)
+        {
+            RunFile(args[0]);
+        }
+        else
+        {
+            RunRepl();
+        }
+    }
+
+    private static void RunFile(string path)
+    {
+        if (!System.IO.File.Exists(path))
+        {
+            Console.Error.WriteLine($"Error: file not found: {path}");
+            System.Environment.Exit(66);
+            return;
+        }
+
+        string source = System.IO.File.ReadAllText(path);
+
+        // Stage 1: Lex — pass filename so SourceSpan references the actual file
+        var lexer = new Lexer(source, path);
+        List<Token> tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
+        {
+            foreach (string error in lexer.Errors)
+            {
+                Console.Error.WriteLine($"[lex error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        // Stage 2: Parse
+        var parser = new Parser(tokens);
+        List<Stmt> statements = parser.ParseProgram();
+
+        if (parser.Errors.Count > 0)
+        {
+            foreach (string error in parser.Errors)
+            {
+                Console.Error.WriteLine($"[parse error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        // Stage 3: Interpret
+        var interpreter = new Interpreter();
+        interpreter.CurrentFile = path;
+        try
+        {
+            interpreter.Interpret(statements);
+        }
+        catch (RuntimeError ex)
+        {
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+        }
+    }
+
+    private static void RunFileWithDebugger(string path)
+    {
+        if (!System.IO.File.Exists(path))
+        {
+            Console.Error.WriteLine($"Error: file not found: {path}");
+            System.Environment.Exit(66);
+            return;
+        }
+
+        string source = System.IO.File.ReadAllText(path);
+        var lexer = new Lexer(source, path);
+        List<Token> tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
+        {
+            foreach (string error in lexer.Errors)
+            {
+                Console.Error.WriteLine($"[lex error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        var parser = new Parser(tokens);
+        List<Stmt> statements = parser.ParseProgram();
+
+        if (parser.Errors.Count > 0)
+        {
+            foreach (string error in parser.Errors)
+            {
+                Console.Error.WriteLine($"[parse error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        var interpreter = new Interpreter();
+        interpreter.CurrentFile = path;
+
+        var debugger = new CliDebugger();
+        interpreter.Debugger = debugger;
+        debugger.SetCallStack(interpreter.CallStack);
+        debugger.Initialize();
+
+        try
+        {
+            interpreter.Interpret(statements);
+        }
+        catch (RuntimeError ex)
+        {
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+        }
+
+        Console.WriteLine("Script execution completed.");
+    }
+
+    private static void RunRepl()
+    {
+        Console.WriteLine("Stash v0.5 — Type statements or expressions, or 'exit' to quit.");
 
         // A single Interpreter instance is reused across all REPL iterations.
         // The interpreter holds a variable environment that persists across lines,
@@ -55,7 +195,7 @@ public class Program
             }
 
             // --- Stage 1: Lex ---
-            var lexer = new Lexer(line);
+            var lexer = new Lexer(line, "<stdin>");
             List<Token> tokens = lexer.ScanTokens();
 
             if (lexer.Errors.Count > 0)
@@ -144,6 +284,7 @@ public class Program
         // Check first token for statement-starting keywords.
         TokenType first = tokens[0].Type;
         if (first == TokenType.Let || first == TokenType.Const || first == TokenType.Fn ||
+            first == TokenType.Struct || first == TokenType.Enum || first == TokenType.Import ||
             first == TokenType.If || first == TokenType.While || first == TokenType.For ||
             first == TokenType.Return || first == TokenType.Break || first == TokenType.Continue)
         {

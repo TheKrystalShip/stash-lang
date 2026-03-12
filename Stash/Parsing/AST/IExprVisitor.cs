@@ -131,4 +131,20 @@ public interface IExprVisitor<T>
     /// <param name="expr">The pipe expression node to visit.</param>
     /// <returns>The result of executing the piped command chain.</returns>
     T VisitPipeExpr(PipeExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="TryExpr"/> node (prefix <c>try expr</c>).
+    /// If the inner expression throws a <c>RuntimeError</c>, the result is <c>null</c>.
+    /// </summary>
+    /// <param name="expr">The try expression node to visit.</param>
+    /// <returns>The result of the inner expression, or <c>null</c> if it threw a RuntimeError.</returns>
+    T VisitTryExpr(TryExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="NullCoalesceExpr"/> node (<c>left ?? right</c>).
+    /// Returns <c>left</c> if it is not null, otherwise evaluates and returns <c>right</c>.
+    /// </summary>
+    /// <param name="expr">The null-coalescing expression node to visit.</param>
+    /// <returns>The left value if non-null; otherwise the evaluated right value.</returns>
+    T VisitNullCoalesceExpr(NullCoalesceExpr expr);
 }
