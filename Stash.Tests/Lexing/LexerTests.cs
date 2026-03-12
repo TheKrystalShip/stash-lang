@@ -518,4 +518,174 @@ public class LexerTests
         Assert.Single(tokens);
         Assert.Equal(TokenType.Eof, tokens[0].Type);
     }
+
+    // ── 22. String interpolation ────────────────────────────────────────
+
+    [Fact]
+    public void ScanTokens_PrefixedInterpolation_ProducesInterpolatedStringToken()
+    {
+        var tokens = Scan("$\"Hello {name}\"");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+        Assert.Equal(TokenType.Eof, tokens[1].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_EmbeddedInterpolation_ProducesInterpolatedStringToken()
+    {
+        var tokens = Scan("\"Hello ${name}\"");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+        Assert.Equal(TokenType.Eof, tokens[1].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_RegularStringWithoutInterpolation_ProducesStringLiteral()
+    {
+        var tokens = Scan("\"hello world\"");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+        Assert.Equal("hello world", tokens[0].Literal);
+    }
+
+    [Fact]
+    public void ScanTokens_DollarAlone_ProducesDollarToken()
+    {
+        var tokens = Scan("$ + 1");
+
+        Assert.Equal(TokenType.Dollar, tokens[0].Type);
+        Assert.Equal("$", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_PrefixedInterpolation_LiteralIsListWithCorrectParts()
+    {
+        var tokens = Scan("$\"Hello {name}\"");
+
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(2, parts.Count);
+        Assert.Equal("Hello ", parts[0]);
+        var exprTokens = Assert.IsType<List<Token>>(parts[1]);
+        Assert.Single(exprTokens);
+        Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
+        Assert.Equal("name", exprTokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_EmbeddedInterpolation_LiteralIsListWithCorrectParts()
+    {
+        var tokens = Scan("\"Hello ${name}\"");
+
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(2, parts.Count);
+        Assert.Equal("Hello ", parts[0]);
+        var exprTokens = Assert.IsType<List<Token>>(parts[1]);
+        Assert.Single(exprTokens);
+        Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
+        Assert.Equal("name", exprTokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_MultipleInterpolationExpressions()
+    {
+        var tokens = Scan("$\"{a} and {b}\"");
+
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(3, parts.Count);
+        Assert.IsType<List<Token>>(parts[0]); // a
+        Assert.Equal(" and ", parts[1]);
+        Assert.IsType<List<Token>>(parts[2]); // b
+    }
+
+    [Fact]
+    public void ScanTokens_EscapedBrace_DoesNotTriggerInterpolation()
+    {
+        var tokens = Scan("$\"Hello \\{name}\"");
+
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        // \{ produces literal '{', so text is "Hello {name}"
+        Assert.Single(parts);
+        Assert.Equal("Hello {name}", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_EscapedDollar_DoesNotTriggerInterpolation()
+    {
+        // \$ inside a regular string avoids triggering ${...}
+        var tokens = Scan("\"Hello \\${name}\"");
+
+        // \$ is treated as literal $, so no interpolation
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_NestedStringLiteralInsideInterpolation()
+    {
+        var tokens = Scan("$\"{\"hi\"}\"");
+
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        var exprTokens = Assert.IsType<List<Token>>(parts[0]);
+        Assert.Equal(TokenType.StringLiteral, exprTokens[0].Type);
+        Assert.Equal("hi", exprTokens[0].Literal);
+    }
+
+    [Fact]
+    public void ScanTokens_EmptyInterpolationExpression_ProducesError()
+    {
+        var lexer = CreateLexer("$\"Hello {}\"");
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+        Assert.Contains(lexer.Errors, e => e.Contains("Empty interpolation expression"));
+    }
+
+    [Fact]
+    public void ScanTokens_UnterminatedInterpolationExpression_ProducesError()
+    {
+        var lexer = CreateLexer("$\"Hello {name");
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Fact]
+    public void ScanTokens_AdjacentInterpolations()
+    {
+        var tokens = Scan("$\"{a}{b}\"");
+
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(2, parts.Count);
+        Assert.IsType<List<Token>>(parts[0]); // a
+        Assert.IsType<List<Token>>(parts[1]); // b
+    }
+
+    [Fact]
+    public void ScanTokens_TextOnlyInterpolatedString_NoExpressions()
+    {
+        // $"plain text" should still be InterpolatedString with just a text part
+        var tokens = Scan("$\"plain text\"");
+
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("plain text", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_ExpressionOnlyInterpolatedString_NoText()
+    {
+        var tokens = Scan("$\"{x}\"");
+
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        var exprTokens = Assert.IsType<List<Token>>(parts[0]);
+        Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
+        Assert.Equal("x", exprTokens[0].Lexeme);
+    }
 }

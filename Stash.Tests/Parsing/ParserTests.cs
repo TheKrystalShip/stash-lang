@@ -928,4 +928,92 @@ public class ParserTests
         Assert.Equal("Color", obj.Name.Lexeme);
         Assert.Equal("Red", dot.Name.Lexeme);
     }
+
+    // ── String interpolation ─────────────────────────────────────
+
+    [Fact]
+    public void Parse_PrefixedInterpolation_ReturnsInterpolatedStringExpr()
+    {
+        var result = ParseExpr("$\"hello {x}\"");
+        Assert.IsType<InterpolatedStringExpr>(result);
+    }
+
+    [Fact]
+    public void Parse_EmbeddedInterpolation_ReturnsInterpolatedStringExpr()
+    {
+        var result = ParseExpr("\"hello ${x}\"");
+        Assert.IsType<InterpolatedStringExpr>(result);
+    }
+
+    [Fact]
+    public void Parse_InterpolatedString_HasCorrectNumberOfParts()
+    {
+        var result = ParseExpr("$\"hello {x} world\"");
+        var interp = Assert.IsType<InterpolatedStringExpr>(result);
+        // "hello " + x + " world" = 3 parts
+        Assert.Equal(3, interp.Parts.Count);
+    }
+
+    [Fact]
+    public void Parse_InterpolatedString_TextPartsAreLiteralExpr()
+    {
+        var result = ParseExpr("$\"hello {x} world\"");
+        var interp = Assert.IsType<InterpolatedStringExpr>(result);
+
+        var textPart1 = Assert.IsType<LiteralExpr>(interp.Parts[0]);
+        Assert.Equal("hello ", textPart1.Value);
+
+        var textPart2 = Assert.IsType<LiteralExpr>(interp.Parts[2]);
+        Assert.Equal(" world", textPart2.Value);
+    }
+
+    [Fact]
+    public void Parse_InterpolatedString_ExprPartIsIdentifierExpr()
+    {
+        var result = ParseExpr("$\"hello {x}\"");
+        var interp = Assert.IsType<InterpolatedStringExpr>(result);
+
+        var exprPart = Assert.IsType<IdentifierExpr>(interp.Parts[1]);
+        Assert.Equal("x", exprPart.Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_InterpolatedString_ComplexExpressionPart()
+    {
+        var result = ParseExpr("$\"{a + b}\"");
+        var interp = Assert.IsType<InterpolatedStringExpr>(result);
+
+        Assert.Single(interp.Parts);
+        var binary = Assert.IsType<BinaryExpr>(interp.Parts[0]);
+        Assert.Equal(TokenType.Plus, binary.Operator.Type);
+        var left = Assert.IsType<IdentifierExpr>(binary.Left);
+        Assert.Equal("a", left.Name.Lexeme);
+        var right = Assert.IsType<IdentifierExpr>(binary.Right);
+        Assert.Equal("b", right.Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_InterpolatedString_MultipleExpressions()
+    {
+        var result = ParseExpr("$\"{a} and {b}\"");
+        var interp = Assert.IsType<InterpolatedStringExpr>(result);
+
+        // a + " and " + b = 3 parts
+        Assert.Equal(3, interp.Parts.Count);
+        Assert.IsType<IdentifierExpr>(interp.Parts[0]);
+        var text = Assert.IsType<LiteralExpr>(interp.Parts[1]);
+        Assert.Equal(" and ", text.Value);
+        Assert.IsType<IdentifierExpr>(interp.Parts[2]);
+    }
+
+    [Fact]
+    public void Parse_InterpolatedString_NoExpression_StillParsesAsInterpolatedStringExpr()
+    {
+        var result = ParseExpr("$\"plain text\"");
+        var interp = Assert.IsType<InterpolatedStringExpr>(result);
+
+        Assert.Single(interp.Parts);
+        var text = Assert.IsType<LiteralExpr>(interp.Parts[0]);
+        Assert.Equal("plain text", text.Value);
+    }
 }

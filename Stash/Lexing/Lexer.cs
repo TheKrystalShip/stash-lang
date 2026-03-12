@@ -200,7 +200,16 @@ public class Lexer
             case ';': AddToken(TokenType.Semicolon); break;
             case ':': AddToken(TokenType.Colon); break;
             case '%': AddToken(TokenType.Percent); break;
-            case '$': AddToken(TokenType.Dollar); break;
+            case '$':
+                if (Match('"'))
+                {
+                    ScanInterpolatedString(prefixed: true);
+                }
+                else
+                {
+                    AddToken(TokenType.Dollar);
+                }
+                break;
 
             case '+':
                 AddToken(Match('+') ? TokenType.PlusPlus : TokenType.Plus);
@@ -365,6 +374,28 @@ public class Lexer
     /// </remarks>
     private void ScanString()
     {
+        // Check if this regular string contains ${...} interpolation markers.
+        // If so, delegate to ScanInterpolatedString instead.
+        int scanAhead = _current;
+        while (scanAhead < _source.Length && _source[scanAhead] != '"')
+        {
+            if (_source[scanAhead] == '\\' && scanAhead + 1 < _source.Length)
+            {
+                scanAhead += 2; // skip escape sequence
+            }
+            else if (_source[scanAhead] == '$' && scanAhead + 1 < _source.Length && _source[scanAhead + 1] == '{')
+            {
+                // Contains ${...} — scan as interpolated string
+                ScanInterpolatedString(prefixed: false);
+                return;
+            }
+            else
+            {
+                scanAhead++;
+            }
+        }
+
+        // No interpolation found — scan as a plain string.
         var sb = new StringBuilder();
         while (!IsAtEnd && _source[_current] != '"')
         {
@@ -421,6 +452,230 @@ public class Lexer
 
         string lexeme = _source[_start.._current];
         AddToken(TokenType.StringLiteral, sb.ToString(), lexeme);
+    }
+
+    /// <summary>
+    /// Scans an interpolated string and produces an <see cref="TokenType.InterpolatedString"/> token.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Supports two syntaxes:
+    /// <list type="bullet">
+    ///   <item><description><c>$"Hello {name}"</c> — prefixed form, interpolation markers are <c>{</c>...<c>}</c></description></item>
+    ///   <item><description><c>"Hello ${name}"</c> — embedded form, interpolation markers are <c>${</c>...<c>}</c></description></item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// The token's <see cref="Token.Literal"/> is a <c>List&lt;object&gt;</c> where each element is
+    /// either a <see cref="string"/> (text segment) or a <c>List&lt;Token&gt;</c> (the tokens of an
+    /// interpolated expression, without a trailing EOF). The parser converts these into an
+    /// <see cref="Stash.Parsing.AST.InterpolatedStringExpr"/>.
+    /// </para>
+    /// </remarks>
+    /// <param name="prefixed">
+    /// <c>true</c> for <c>$"..."</c> syntax (interpolation with bare <c>{</c>);
+    /// <c>false</c> for <c>"...${...}..."</c> syntax (interpolation with <c>${</c>).
+    /// </param>
+    private void ScanInterpolatedString(bool prefixed)
+    {
+        var parts = new List<object>(); // string or List<Token>
+        var textSegment = new StringBuilder();
+
+        while (!IsAtEnd && _source[_current] != '"')
+        {
+            if (_source[_current] == '\n')
+            {
+                _line++;
+                _column = 1;
+                textSegment.Append(_source[_current]);
+                _current++;
+            }
+            else if (_source[_current] == '\\')
+            {
+                _current++;
+                _column++;
+                if (IsAtEnd)
+                {
+                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated interpolated string.");
+                    return;
+                }
+                char escaped = _source[_current];
+                _current++;
+                _column++;
+                switch (escaped)
+                {
+                    case '\\': textSegment.Append('\\'); break;
+                    case '"': textSegment.Append('"'); break;
+                    case 'n': textSegment.Append('\n'); break;
+                    case 't': textSegment.Append('\t'); break;
+                    case 'r': textSegment.Append('\r'); break;
+                    case '0': textSegment.Append('\0'); break;
+                    case '{': textSegment.Append('{'); break;
+                    case '$': textSegment.Append('$'); break;
+                    default:
+                        _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
+                        textSegment.Append(escaped);
+                        break;
+                }
+            }
+            else if (prefixed && _source[_current] == '{')
+            {
+                // Prefixed form: $"...{expr}..."
+                if (textSegment.Length > 0)
+                {
+                    parts.Add(textSegment.ToString());
+                    textSegment.Clear();
+                }
+                _current++; // consume '{'
+                _column++;
+                ScanInterpolatedExpression(parts);
+            }
+            else if (!prefixed && _source[_current] == '$' && _current + 1 < _source.Length && _source[_current + 1] == '{')
+            {
+                // Embedded form: "...${expr}..."
+                if (textSegment.Length > 0)
+                {
+                    parts.Add(textSegment.ToString());
+                    textSegment.Clear();
+                }
+                _current += 2; // consume '${'
+                _column += 2;
+                ScanInterpolatedExpression(parts);
+            }
+            else
+            {
+                textSegment.Append(_source[_current]);
+                _current++;
+                _column++;
+            }
+        }
+
+        if (IsAtEnd)
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated interpolated string.");
+            return;
+        }
+
+        // Add any trailing text segment
+        if (textSegment.Length > 0)
+        {
+            parts.Add(textSegment.ToString());
+        }
+
+        // Consume the closing "
+        _current++;
+        _column++;
+
+        string lexeme = _source[_start.._current];
+        AddToken(TokenType.InterpolatedString, parts, lexeme);
+    }
+
+    /// <summary>
+    /// Scans the expression inside an interpolation marker (<c>{...}</c>) within an
+    /// interpolated string. The opening brace has already been consumed.
+    /// </summary>
+    /// <remarks>
+    /// Creates a nested <see cref="Lexer"/> would be complex, so instead this method
+    /// collects the raw expression text (respecting nested braces, strings, etc.),
+    /// then lexes it separately and appends the resulting token list to <paramref name="parts"/>.
+    /// </remarks>
+    /// <param name="parts">The parts list to append the expression tokens to.</param>
+    private void ScanInterpolatedExpression(List<object> parts)
+    {
+        int exprStart = _current;
+        int depth = 1;
+        int exprStartLine = _line;
+        int exprStartColumn = _column;
+
+        while (!IsAtEnd && depth > 0)
+        {
+            char c = _source[_current];
+            if (c == '{')
+            {
+                depth++;
+            }
+            else if (c == '}')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    break;
+                }
+            }
+            else if (c == '"')
+            {
+                // Skip over string literals inside the expression
+                _current++;
+                _column++;
+                while (!IsAtEnd && _source[_current] != '"')
+                {
+                    if (_source[_current] == '\\' && _current + 1 < _source.Length)
+                    {
+                        _current += 2;
+                        _column += 2;
+                    }
+                    else if (_source[_current] == '\n')
+                    {
+                        _current++;
+                        _line++;
+                        _column = 1;
+                    }
+                    else
+                    {
+                        _current++;
+                        _column++;
+                    }
+                }
+                // The closing " will be consumed by the advance below
+            }
+            else if (c == '\n')
+            {
+                _line++;
+                _column = 0; // will be incremented to 1 below
+            }
+
+            _current++;
+            _column++;
+        }
+
+        if (IsAtEnd)
+        {
+            _errors.Add($"[{_file} {exprStartLine}:{exprStartColumn}] Unterminated interpolation expression.");
+            return;
+        }
+
+        string exprText = _source[exprStart.._current];
+
+        // Consume the closing '}'
+        _current++;
+        _column++;
+
+        if (string.IsNullOrWhiteSpace(exprText))
+        {
+            _errors.Add($"[{_file} {exprStartLine}:{exprStartColumn}] Empty interpolation expression.");
+            return;
+        }
+
+        // Lex the expression text
+        var innerLexer = new Lexer(exprText, _file);
+        List<Token> innerTokens = innerLexer.ScanTokens();
+
+        if (innerLexer.Errors.Count > 0)
+        {
+            foreach (string error in innerLexer.Errors)
+            {
+                _errors.Add(error);
+            }
+            return;
+        }
+
+        // Remove the trailing EOF token — the parser expects raw expression tokens
+        if (innerTokens.Count > 0 && innerTokens[^1].Type == TokenType.Eof)
+        {
+            innerTokens.RemoveAt(innerTokens.Count - 1);
+        }
+
+        parts.Add(innerTokens);
     }
 
     /// <summary>

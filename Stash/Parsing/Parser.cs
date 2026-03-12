@@ -753,6 +753,12 @@ public class Parser
             return new LiteralExpr(token.Literal, token.Span);
         }
 
+        if (Match(TokenType.InterpolatedString))
+        {
+            Token token = Previous();
+            return ParseInterpolatedString(token);
+        }
+
         if (Match(TokenType.True))
         {
             return new LiteralExpr(true, Previous().Span);
@@ -839,6 +845,54 @@ public class Parser
         }
 
         throw Error(Peek(), "Expected expression.");
+    }
+
+    // ── Interpolated string parsing ──────────────────────────────
+
+    /// <summary>
+    /// Converts an <see cref="TokenType.InterpolatedString"/> token into an
+    /// <see cref="InterpolatedStringExpr"/> AST node.
+    /// </summary>
+    /// <remarks>
+    /// The token's <see cref="Token.Literal"/> is a <c>List&lt;object&gt;</c> where each element
+    /// is either a <see cref="string"/> (literal text segment) or a <c>List&lt;Token&gt;</c>
+    /// (expression tokens). Each expression token list is parsed by a nested <see cref="Parser"/>.
+    /// </remarks>
+    /// <param name="token">The interpolated string token to parse.</param>
+    /// <returns>An <see cref="InterpolatedStringExpr"/> containing the parsed parts.</returns>
+    private Expr ParseInterpolatedString(Token token)
+    {
+        var parts = (List<object>)token.Literal!;
+        var exprParts = new List<Expr>();
+
+        foreach (object part in parts)
+        {
+            if (part is string text)
+            {
+                exprParts.Add(new LiteralExpr(text, token.Span));
+            }
+            else if (part is List<Token> innerTokens)
+            {
+                // Add an EOF token so the nested parser can detect end of input.
+                var tokensWithEof = new List<Token>(innerTokens);
+                tokensWithEof.Add(new Token(TokenType.Eof, "", null, token.Span));
+
+                var innerParser = new Parser(tokensWithEof);
+                Expr expr = innerParser.Parse();
+
+                if (innerParser.Errors.Count > 0)
+                {
+                    foreach (string error in innerParser.Errors)
+                    {
+                        Errors.Add(error);
+                    }
+                }
+
+                exprParts.Add(expr);
+            }
+        }
+
+        return new InterpolatedStringExpr(exprParts, token.Span);
     }
 
     // ── Helper methods ────────────────────────────────────────────

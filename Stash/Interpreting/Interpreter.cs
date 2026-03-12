@@ -918,6 +918,23 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         return value;
     }
 
+    /// <summary>
+    /// Visits an interpolated string expression by evaluating each part, converting it to
+    /// a string, and concatenating the results.
+    /// </summary>
+    /// <param name="expr">The <see cref="InterpolatedStringExpr"/> to evaluate.</param>
+    /// <returns>The concatenated string result.</returns>
+    public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (Expr part in expr.Parts)
+        {
+            object? value = part.Accept(this);
+            sb.Append(Stringify(value));
+        }
+        return sb.ToString();
+    }
+
     public object? VisitReturnStmt(ReturnStmt stmt)
     {
         object? value = null;

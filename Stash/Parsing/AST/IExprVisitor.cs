@@ -110,4 +110,11 @@ public interface IExprVisitor<T>
     /// <param name="expr">The dot assignment expression node to visit.</param>
     /// <returns>The result of the field assignment.</returns>
     T VisitDotAssignExpr(DotAssignExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="InterpolatedStringExpr"/> node (string interpolation).
+    /// </summary>
+    /// <param name="expr">The interpolated string expression node to visit.</param>
+    /// <returns>The result of evaluating and concatenating the interpolated parts.</returns>
+    T VisitInterpolatedStringExpr(InterpolatedStringExpr expr);
 }

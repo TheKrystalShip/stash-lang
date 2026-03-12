@@ -1447,4 +1447,97 @@ public class InterpreterTests
     {
         RunExpectingError("struct P { x, y } let p = P { x: 1, x: 2 };");
     }
+
+    // ===== String Interpolation =====
+
+    [Fact]
+    public void Interpolation_NoExpressions_ReturnsPlainString()
+    {
+        Assert.Equal("hello", Eval("$\"hello\""));
+    }
+
+    [Fact]
+    public void Interpolation_SimpleVariable()
+    {
+        Assert.Equal("hi Alice", Run("let name = \"Alice\"; let result = $\"hi {name}\";"));
+    }
+
+    [Fact]
+    public void Interpolation_ArithmeticExpression()
+    {
+        Assert.Equal("sum is 7", Eval("$\"sum is {3 + 4}\""));
+    }
+
+    [Fact]
+    public void Interpolation_MultipleExpressions()
+    {
+        Assert.Equal("1 and 2", Eval("$\"{1} and {2}\""));
+    }
+
+    [Fact]
+    public void Interpolation_NullValue()
+    {
+        Assert.Equal("value is null", Run("let x = null; let result = $\"value is {x}\";"));
+    }
+
+    [Fact]
+    public void Interpolation_BooleanValue()
+    {
+        Assert.Equal("it is true", Eval("$\"it is {true}\""));
+    }
+
+    [Fact]
+    public void Interpolation_IntegerValue()
+    {
+        Assert.Equal("count: 42", Eval("$\"count: {42}\""));
+    }
+
+    [Fact]
+    public void Interpolation_FloatValue()
+    {
+        Assert.Equal("pi: 3.14", Eval("$\"pi: {3.14}\""));
+    }
+
+    [Fact]
+    public void Interpolation_EmbeddedForm()
+    {
+        Assert.Equal("hello world", Run("let x = \"world\"; let result = \"hello ${x}\";"));
+    }
+
+    [Fact]
+    public void Interpolation_PrefixedForm()
+    {
+        Assert.Equal("hello world", Run("let x = \"world\"; let result = $\"hello {x}\";"));
+    }
+
+    [Fact]
+    public void Interpolation_NestedStringConcat()
+    {
+        Assert.Equal("val: ab", Eval("$\"val: {\"a\" + \"b\"}\""));
+    }
+
+    [Fact]
+    public void Interpolation_TernaryExpression()
+    {
+        Assert.Equal("yes", Eval("$\"{true ? \"yes\" : \"no\"}\""));
+    }
+
+    [Fact]
+    public void Interpolation_FunctionCall()
+    {
+        var source = "fn greet() { return \"hi\"; } let result = $\"{greet()}\";";
+        Assert.Equal("hi", Run(source));
+    }
+
+    [Fact]
+    public void Interpolation_EscapedBraces()
+    {
+        Assert.Equal("literal {brace}", Eval("$\"literal \\{brace}\""));
+    }
+
+    [Fact]
+    public void Interpolation_AdjacentWithNoText()
+    {
+        Assert.Equal("12", Eval("$\"{1}{2}\""));
+    }
 }
