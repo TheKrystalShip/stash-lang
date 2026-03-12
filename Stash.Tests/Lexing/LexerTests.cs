@@ -688,4 +688,154 @@ public class LexerTests
         Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
         Assert.Equal("x", exprTokens[0].Lexeme);
     }
+
+    // ── Phase 4: Command Literal Tokens ──────────────────────────────────
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_SimpleCommand()
+    {
+        var tokens = Scan("$(echo hello)");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal("$(echo hello)", tokens[0].Lexeme);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo hello", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_WithInterpolation()
+    {
+        var tokens = Scan("$(echo {name})");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(2, parts.Count);
+        Assert.Equal("echo ", parts[0]);
+        var exprTokens = Assert.IsType<List<Token>>(parts[1]);
+        Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
+        Assert.Equal("name", exprTokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_MultipleInterpolations()
+    {
+        var tokens = Scan("$(grep {pattern} {file})");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        // "grep " + pattern + " " + file + ""
+        Assert.True(parts.Count >= 4);
+        Assert.Equal("grep ", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_NestedParens()
+    {
+        var tokens = Scan("$(echo (nested) text)");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo (nested) text", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_Unterminated_ReportsError()
+    {
+        var lexer = CreateLexer("$(echo hello");
+        lexer.ScanTokens();
+        Assert.NotEmpty(lexer.Errors);
+        Assert.Contains("Unterminated command literal", lexer.Errors[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_Empty()
+    {
+        var tokens = Scan("$()");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Empty(parts);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_WithExpressionInterpolation()
+    {
+        var tokens = Scan("$(echo {a + b})");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.True(parts.Count >= 2);
+        // Should have expression tokens for "a + b"
+        bool hasExprTokens = false;
+        foreach (var part in parts)
+        {
+            if (part is List<Token> t && t.Count >= 3)
+            {
+                hasExprTokens = true;
+            }
+        }
+        Assert.True(hasExprTokens);
+    }
+
+    [Fact]
+    public void ScanTokens_DollarAlone_StillProducesDollarToken()
+    {
+        // Ensure $(...) doesn't break the plain $ token
+        var tokens = Scan("$");
+        Assert.Equal(TokenType.Dollar, tokens[0].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_DollarQuote_StillProducesInterpolatedString()
+    {
+        // Ensure $"..." still works (no regression)
+        var tokens = Scan("$\"hello\"");
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_FollowedByPipe()
+    {
+        var tokens = Scan("$(echo hello) | $(cat)");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Pipe, tokens[1].Type);
+        Assert.Equal(TokenType.CommandLiteral, tokens[2].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_MultiLineCommand()
+    {
+        var tokens = Scan("$(echo\nhello)");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo\nhello", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_QuotedParensDoNotAffectDepth()
+    {
+        var tokens = Scan("$(echo \"(hello)\")");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo \"(hello)\"", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_SingleQuotedParensDoNotAffectDepth()
+    {
+        var tokens = Scan("$(echo ')')");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo ')'", parts[0]);
+    }
 }

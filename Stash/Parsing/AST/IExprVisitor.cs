@@ -117,4 +117,18 @@ public interface IExprVisitor<T>
     /// <param name="expr">The interpolated string expression node to visit.</param>
     /// <returns>The result of evaluating and concatenating the interpolated parts.</returns>
     T VisitInterpolatedStringExpr(InterpolatedStringExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="CommandExpr"/> node (command literal <c>$(...)</c>).
+    /// </summary>
+    /// <param name="expr">The command expression node to visit.</param>
+    /// <returns>The result of executing the command.</returns>
+    T VisitCommandExpr(CommandExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="PipeExpr"/> node (pipe chain <c>$(cmd1) | $(cmd2)</c>).
+    /// </summary>
+    /// <param name="expr">The pipe expression node to visit.</param>
+    /// <returns>The result of executing the piped command chain.</returns>
+    T VisitPipeExpr(PipeExpr expr);
 }

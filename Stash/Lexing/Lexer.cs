@@ -205,6 +205,10 @@ public class Lexer
                 {
                     ScanInterpolatedString(prefixed: true);
                 }
+                else if (Match('('))
+                {
+                    ScanCommandLiteral();
+                }
                 else
                 {
                     AddToken(TokenType.Dollar);
@@ -568,6 +572,125 @@ public class Lexer
 
         string lexeme = _source[_start.._current];
         AddToken(TokenType.InterpolatedString, parts, lexeme);
+    }
+
+    /// <summary>
+    /// Scans a command literal <c>$(...)</c>. The opening <c>$(</c> has already been consumed.
+    /// </summary>
+    /// <remarks>
+    /// Content is treated as raw shell command text. Interpolation markers <c>{expr}</c>
+    /// embed Stash expressions. Parentheses are tracked for nesting so that subshells or
+    /// grouped commands work correctly.
+    /// </remarks>
+    private void ScanCommandLiteral()
+    {
+        var parts = new List<object>(); // string or List<Token>
+        var textSegment = new StringBuilder();
+        int depth = 1;
+
+        while (!IsAtEnd && depth > 0)
+        {
+            char c = _source[_current];
+
+            if (c == '(')
+            {
+                depth++;
+                textSegment.Append(c);
+                _current++;
+                _column++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    break;
+                }
+                textSegment.Append(c);
+                _current++;
+                _column++;
+            }
+            else if (c == '"' || c == '\'')
+            {
+                // Skip over quoted strings so parentheses inside them
+                // don't affect nesting depth.
+                char quote = c;
+                textSegment.Append(c);
+                _current++;
+                _column++;
+                while (!IsAtEnd && _source[_current] != quote)
+                {
+                    if (_source[_current] == '\\' && _current + 1 < _source.Length)
+                    {
+                        textSegment.Append(_source[_current]);
+                        textSegment.Append(_source[_current + 1]);
+                        _current += 2;
+                        _column += 2;
+                    }
+                    else
+                    {
+                        if (_source[_current] == '\n')
+                        {
+                            _line++;
+                            _column = 0;
+                        }
+                        textSegment.Append(_source[_current]);
+                        _current++;
+                        _column++;
+                    }
+                }
+                if (!IsAtEnd)
+                {
+                    textSegment.Append(_source[_current]); // closing quote
+                    _current++;
+                    _column++;
+                }
+            }
+            else if (c == '{')
+            {
+                // Start interpolation: flush accumulated text
+                if (textSegment.Length > 0)
+                {
+                    parts.Add(textSegment.ToString());
+                    textSegment.Clear();
+                }
+                _current++; // consume '{'
+                _column++;
+                ScanInterpolatedExpression(parts);
+            }
+            else if (c == '\n')
+            {
+                textSegment.Append(c);
+                _current++;
+                _line++;
+                _column = 1;
+            }
+            else
+            {
+                textSegment.Append(c);
+                _current++;
+                _column++;
+            }
+        }
+
+        if (depth > 0)
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated command literal.");
+            return;
+        }
+
+        // Flush any remaining text
+        if (textSegment.Length > 0)
+        {
+            parts.Add(textSegment.ToString());
+        }
+
+        // Consume the closing ')'
+        _current++;
+        _column++;
+
+        string lexeme = _source[_start.._current];
+        AddToken(TokenType.CommandLiteral, parts, lexeme);
     }
 
     /// <summary>

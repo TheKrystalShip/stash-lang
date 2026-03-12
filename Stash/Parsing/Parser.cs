@@ -26,6 +26,7 @@ using Stash.Parsing.AST;
 ///   <item><description><see cref="Expression"/> — entry point, delegates to <see cref="Assignment"/></description></item>
 ///   <item><description><see cref="Assignment"/> — <c>=</c> (right-associative)</description></item>
 ///   <item><description><see cref="Ternary"/> — <c>? :</c> (right-associative)</description></item>
+///   <item><description><see cref="Pipe"/> — <c>|</c> (left-associative, command chaining)</description></item>
 ///   <item><description><see cref="Or"/> — <c>||</c></description></item>
 ///   <item><description><see cref="And"/> — <c>&amp;&amp;</c></description></item>
 ///   <item><description><see cref="Equality"/> — <c>== !=</c></description></item>
@@ -512,7 +513,7 @@ public class Parser
     /// </remarks>
     private Expr Ternary()
     {
-        Expr expr = Or();
+        Expr expr = Pipe();
 
         if (Match(TokenType.QuestionMark))
         {
@@ -521,6 +522,24 @@ public class Parser
             Expr elseBranch = Expression();
             SourceSpan span = MakeSpan(expr.Span, elseBranch.Span);
             return new TernaryExpr(expr, thenBranch, elseBranch, span);
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Parses a pipe expression: <c>$(cmd1) | $(cmd2)</c>.
+    /// Pipe chains process stdout → stdin, left-associative.
+    /// </summary>
+    private Expr Pipe()
+    {
+        Expr expr = Or();
+
+        while (Match(TokenType.Pipe))
+        {
+            Token op = Previous();
+            Expr right = Or();
+            expr = new PipeExpr(expr, right, MakeSpan(expr.Span, right.Span));
         }
 
         return expr;
@@ -759,6 +778,12 @@ public class Parser
             return ParseInterpolatedString(token);
         }
 
+        if (Match(TokenType.CommandLiteral))
+        {
+            Token token = Previous();
+            return ParseCommandLiteral(token);
+        }
+
         if (Match(TokenType.True))
         {
             return new LiteralExpr(true, Previous().Span);
@@ -893,6 +918,48 @@ public class Parser
         }
 
         return new InterpolatedStringExpr(exprParts, token.Span);
+    }
+
+    // ── Command literal parsing ──────────────────────────────────
+
+    /// <summary>
+    /// Converts a <see cref="TokenType.CommandLiteral"/> token into a
+    /// <see cref="CommandExpr"/> AST node.
+    /// </summary>
+    /// <param name="token">The command literal token to parse.</param>
+    /// <returns>A <see cref="CommandExpr"/> containing the parsed parts.</returns>
+    private Expr ParseCommandLiteral(Token token)
+    {
+        var parts = (List<object>)token.Literal!;
+        var exprParts = new List<Expr>();
+
+        foreach (object part in parts)
+        {
+            if (part is string text)
+            {
+                exprParts.Add(new LiteralExpr(text, token.Span));
+            }
+            else if (part is List<Token> innerTokens)
+            {
+                var tokensWithEof = new List<Token>(innerTokens);
+                tokensWithEof.Add(new Token(TokenType.Eof, "", null, token.Span));
+
+                var innerParser = new Parser(tokensWithEof);
+                Expr expr = innerParser.Parse();
+
+                if (innerParser.Errors.Count > 0)
+                {
+                    foreach (string error in innerParser.Errors)
+                    {
+                        Errors.Add(error);
+                    }
+                }
+
+                exprParts.Add(expr);
+            }
+        }
+
+        return new CommandExpr(exprParts, token.Span);
     }
 
     // ── Helper methods ────────────────────────────────────────────

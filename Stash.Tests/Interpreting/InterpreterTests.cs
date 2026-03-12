@@ -1540,4 +1540,279 @@ public class InterpreterTests
     {
         Assert.Equal("12", Eval("$\"{1}{2}\""));
     }
+
+    // ===== Phase 4: Command Execution =====
+
+    [Fact]
+    public void Command_BasicEcho_StdoutCaptured()
+    {
+        var result = Run("let r = $(echo hello); let result = r.stdout;");
+        Assert.IsType<string>(result);
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Command_ExitCodeSuccess()
+    {
+        Assert.Equal(0L, Run("let r = $(true); let result = r.exitCode;"));
+    }
+
+    [Fact]
+    public void Command_ExitCodeFailure()
+    {
+        var result = Run("let r = $(false); let result = r.exitCode;");
+        Assert.IsType<long>(result);
+        Assert.NotEqual(0L, result);
+    }
+
+    [Fact]
+    public void Command_StderrCaptured()
+    {
+        var result = Run("let r = $(echo error >&2); let result = r.stderr;");
+        Assert.IsType<string>(result);
+        Assert.Contains("error", (string)result!);
+    }
+
+    [Fact]
+    public void Command_ResultIsStashInstance()
+    {
+        var source = @"let result = $(echo hi);";
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        var interpreter = new Interpreter();
+        interpreter.Interpret(statements);
+
+        var resultLexer = new Lexer("result");
+        var resultTokens = resultLexer.ScanTokens();
+        var resultParser = new Parser(resultTokens);
+        var resultExpr = resultParser.Parse();
+        var result = interpreter.Interpret(resultExpr);
+
+        Assert.IsType<StashInstance>(result);
+    }
+
+    [Fact]
+    public void Command_WithInterpolation_VariableSubstituted()
+    {
+        var result = Run("let x = \"world\"; let r = $(echo {x}); let result = r.stdout;");
+        Assert.Contains("world", (string)result!);
+    }
+
+    [Fact]
+    public void Command_WithExpressionInterpolation()
+    {
+        var result = Run("let a = 2; let b = 3; let r = $(echo {a + b}); let result = r.stdout;");
+        Assert.Contains("5", (string)result!);
+    }
+
+    [Fact]
+    public void Command_TypeofResult()
+    {
+        Assert.Equal("struct", Run("let r = $(echo hi); let result = typeof(r);"));
+    }
+
+    [Fact]
+    public void Command_StdoutFieldAccess()
+    {
+        var result = Run("let result = $(echo hello).stdout;");
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Command_ExitCodeFieldAccess()
+    {
+        Assert.Equal(0L, Run("let result = $(true).exitCode;"));
+    }
+
+    // ===== Phase 4: Pipe Operator =====
+
+    [Fact]
+    public void Pipe_BasicChain_StdoutPiped()
+    {
+        var result = Run("let r = $(echo hello) | $(cat); let result = r.stdout;");
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_ShortCircuitOnFailure()
+    {
+        var result = Run("let r = $(false) | $(echo should not run); let result = r.exitCode;");
+        Assert.NotEqual(0L, result);
+    }
+
+    [Fact]
+    public void Pipe_ThreeCommands()
+    {
+        var result = Run("let r = $(echo hello) | $(cat) | $(cat); let result = r.stdout;");
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_GrepFilter()
+    {
+        // echo two lines, grep for one
+        var result = Run(@"let r = $(printf ""hello\nworld"") | $(grep world); let result = r.stdout;");
+        Assert.Contains("world", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_LeftSideNotCommand_ThrowsError()
+    {
+        RunExpectingError("let x = 42; let r = x | $(cat);");
+    }
+
+    // ===== Phase 4: readFile / writeFile Built-ins =====
+
+    [Fact]
+    public void ReadFile_ReadsContent()
+    {
+        string tmpFile = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllText(tmpFile, "test content");
+            var result = Run($"let result = readFile(\"{tmpFile.Replace("\\", "\\\\")}\");");
+            Assert.Equal("test content", result);
+        }
+        finally
+        {
+            System.IO.File.Delete(tmpFile);
+        }
+    }
+
+    [Fact]
+    public void ReadFile_NonExistentFile_ThrowsError()
+    {
+        RunExpectingError("readFile(\"/nonexistent/file/path/xyz.txt\");");
+    }
+
+    [Fact]
+    public void ReadFile_NonStringArg_ThrowsError()
+    {
+        RunExpectingError("readFile(42);");
+    }
+
+    [Fact]
+    public void WriteFile_WritesContent()
+    {
+        string tmpFile = System.IO.Path.GetTempFileName();
+        try
+        {
+            Run($"writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"hello world\"); let result = 1;");
+            Assert.Equal("hello world", System.IO.File.ReadAllText(tmpFile));
+        }
+        finally
+        {
+            System.IO.File.Delete(tmpFile);
+        }
+    }
+
+    [Fact]
+    public void WriteFile_NonStringPath_ThrowsError()
+    {
+        RunExpectingError("writeFile(42, \"content\");");
+    }
+
+    [Fact]
+    public void WriteFile_NonStringContent_ThrowsError()
+    {
+        RunExpectingError("writeFile(\"/tmp/test\", 42);");
+    }
+
+    [Fact]
+    public void WriteFile_ReadFile_Roundtrip()
+    {
+        string tmpFile = System.IO.Path.GetTempFileName();
+        try
+        {
+            var result = Run($"writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"roundtrip data\"); let result = readFile(\"{tmpFile.Replace("\\", "\\\\")}\");");
+            Assert.Equal("roundtrip data", result);
+        }
+        finally
+        {
+            System.IO.File.Delete(tmpFile);
+        }
+    }
+
+    // ===== Phase 4: env / setEnv Built-ins =====
+
+    [Fact]
+    public void Env_ReadsExistingVariable()
+    {
+        // PATH should be set on any system
+        var result = Run("let result = env(\"PATH\");");
+        Assert.IsType<string>(result);
+        Assert.NotNull(result);
+        Assert.True(((string)result!).Length > 0);
+    }
+
+    [Fact]
+    public void Env_NonExistentVariable_ReturnsNull()
+    {
+        Assert.Null(Run("let result = env(\"STASH_NONEXISTENT_VAR_XYZ_12345\");"));
+    }
+
+    [Fact]
+    public void Env_NonStringArg_ThrowsError()
+    {
+        RunExpectingError("env(42);");
+    }
+
+    [Fact]
+    public void SetEnv_SetsVariable()
+    {
+        var result = Run("setEnv(\"STASH_TEST_VAR\", \"test_value\"); let result = env(\"STASH_TEST_VAR\");");
+        Assert.Equal("test_value", result);
+    }
+
+    [Fact]
+    public void SetEnv_NonStringName_ThrowsError()
+    {
+        RunExpectingError("setEnv(42, \"value\");");
+    }
+
+    [Fact]
+    public void SetEnv_NonStringValue_ThrowsError()
+    {
+        RunExpectingError("setEnv(\"name\", 42);");
+    }
+
+    // ===== Phase 4: exit Built-in =====
+
+    [Fact]
+    public void Exit_NonIntegerArg_ThrowsError()
+    {
+        RunExpectingError("exit(\"not a number\");");
+    }
+
+    // Note: exit(0) cannot be tested directly as it terminates the process
+
+    // ===== Phase 4: typeof for new types =====
+
+    [Fact]
+    public void Typeof_CommandResult_ReturnsStruct()
+    {
+        Assert.Equal("struct", Run("let result = typeof($(echo hi));"));
+    }
+
+    [Fact]
+    public void Typeof_BuiltInFunction_ReturnsFunction()
+    {
+        Assert.Equal("function", Run("let result = typeof(println);"));
+    }
+
+    [Fact]
+    public void CommandExecution_EmptyCommand_ThrowsRuntimeError()
+    {
+        RunExpectingError("let r = $( );");
+    }
+
+    [Fact]
+    public void CommandExecution_QuotedParensDoNotBreakLexing()
+    {
+        // Parentheses inside quotes must not affect the nesting depth.
+        object? result = Run("let r = $(echo \"(hello)\"); let result = r.stdout;");
+        Assert.Equal("(hello)\n", result);
+    }
 }

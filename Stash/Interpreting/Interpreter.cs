@@ -3,6 +3,7 @@ namespace Stash.Interpreting;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading.Tasks;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 
@@ -55,6 +56,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 {
     private readonly Environment _globals;
     private Environment _environment;
+    private string? _pendingStdin;
 
     public Interpreter()
     {
@@ -935,6 +937,131 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Evaluates a <see cref="CommandExpr"/> by building the command string from its parts,
+    /// executing it via the system shell, and returning a <see cref="StashInstance"/> with
+    /// <c>stdout</c>, <c>stderr</c>, and <c>exitCode</c> fields.
+    /// </summary>
+    /// <param name="expr">The command expression to evaluate.</param>
+    /// <returns>A <see cref="StashInstance"/> representing the command result.</returns>
+    public object? VisitCommandExpr(CommandExpr expr)
+    {
+        var commandBuilder = new System.Text.StringBuilder();
+        foreach (Expr part in expr.Parts)
+        {
+            object? value = part.Accept(this);
+            commandBuilder.Append(Stringify(value));
+        }
+
+        string command = commandBuilder.ToString().Trim();
+
+        if (string.IsNullOrEmpty(command))
+        {
+            throw new RuntimeError("Command cannot be empty.", expr.Span);
+        }
+
+        string stdout;
+        string stderr;
+        int exitCode;
+
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "/bin/sh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = _pendingStdin is not null,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add(command);
+
+            using var process = Process.Start(psi);
+            if (process is null)
+            {
+                throw new RuntimeError("Failed to start process.", expr.Span);
+            }
+
+            if (_pendingStdin is not null)
+            {
+                process.StandardInput.Write(_pendingStdin);
+                process.StandardInput.Close();
+                _pendingStdin = null;
+            }
+
+            // Read stdout and stderr concurrently to avoid deadlock
+            // when either stream's buffer fills.
+            var stdoutTask = Task.Run(() => process.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => process.StandardError.ReadToEnd());
+            Task.WaitAll(stdoutTask, stderrTask);
+            stdout = stdoutTask.Result;
+            stderr = stderrTask.Result;
+
+            process.WaitForExit();
+            exitCode = process.ExitCode;
+        }
+        catch (RuntimeError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Command execution failed: {ex.Message}", expr.Span);
+        }
+
+        var fields = new Dictionary<string, object?>
+        {
+            ["stdout"] = stdout,
+            ["stderr"] = stderr,
+            ["exitCode"] = (long)exitCode
+        };
+
+        return new StashInstance("CommandResult", fields);
+    }
+
+    /// <summary>
+    /// Evaluates a pipe expression by chaining stdout of the left command to stdin of the right.
+    /// Short-circuits on non-zero exit code.
+    /// </summary>
+    public object? VisitPipeExpr(PipeExpr expr)
+    {
+        object? leftResult = expr.Left.Accept(this);
+
+        if (leftResult is not StashInstance leftCmd || leftCmd.TypeName != "CommandResult")
+        {
+            throw new RuntimeError("Left side of pipe must be a command expression.", expr.Span);
+        }
+
+        object? exitCodeVal = leftCmd.GetField("exitCode", expr.Span);
+        if (exitCodeVal is long exitCode && exitCode != 0)
+        {
+            return leftResult;
+        }
+
+        object? stdoutVal = leftCmd.GetField("stdout", expr.Span);
+        string stdinForRight = stdoutVal as string ?? "";
+
+        _pendingStdin = stdinForRight;
+
+        try
+        {
+            object? rightResult = expr.Right.Accept(this);
+
+            if (rightResult is not StashInstance rightCmd || rightCmd.TypeName != "CommandResult")
+            {
+                throw new RuntimeError("Right side of pipe must be a command expression.", expr.Span);
+            }
+
+            return rightResult;
+        }
+        finally
+        {
+            _pendingStdin = null;
+        }
+    }
+
     public object? VisitReturnStmt(ReturnStmt stmt)
     {
         object? value = null;
@@ -1164,6 +1291,84 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 throw new RuntimeError($"Cannot parse '{s}' as float.");
             }
             throw new RuntimeError("Argument to 'toFloat' must be a number or string.");
+        }));
+
+        _globals.Define("readFile", new BuiltInFunction("readFile", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'readFile' must be a string.");
+            }
+
+            try
+            {
+                return System.IO.File.ReadAllText(path);
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError($"Cannot read file '{path}': {e.Message}");
+            }
+        }));
+
+        _globals.Define("writeFile", new BuiltInFunction("writeFile", 2, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("First argument to 'writeFile' must be a string.");
+            }
+
+            if (args[1] is not string content)
+            {
+                throw new RuntimeError("Second argument to 'writeFile' must be a string.");
+            }
+
+            try
+            {
+                System.IO.File.WriteAllText(path, content);
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError($"Cannot write file '{path}': {e.Message}");
+            }
+
+            return null;
+        }));
+
+        _globals.Define("exit", new BuiltInFunction("exit", 1, (_, args) =>
+        {
+            if (args[0] is not long code)
+            {
+                throw new RuntimeError("Argument to 'exit' must be an integer.");
+            }
+
+            System.Environment.Exit((int)code);
+            return null;
+        }));
+
+        _globals.Define("env", new BuiltInFunction("env", 1, (_, args) =>
+        {
+            if (args[0] is not string name)
+            {
+                throw new RuntimeError("Argument to 'env' must be a string.");
+            }
+
+            return System.Environment.GetEnvironmentVariable(name);
+        }));
+
+        _globals.Define("setEnv", new BuiltInFunction("setEnv", 2, (_, args) =>
+        {
+            if (args[0] is not string name)
+            {
+                throw new RuntimeError("First argument to 'setEnv' must be a string.");
+            }
+
+            if (args[1] is not string value)
+            {
+                throw new RuntimeError("Second argument to 'setEnv' must be a string.");
+            }
+
+            System.Environment.SetEnvironmentVariable(name, value);
+            return null;
         }));
     }
 
