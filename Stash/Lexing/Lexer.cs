@@ -185,6 +185,7 @@ public class Lexer
     /// </remarks>
     private void ScanToken()
     {
+        // let test = 123;
         char c = Advance();
         switch (c)
         {

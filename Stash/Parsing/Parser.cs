@@ -8,16 +8,23 @@ using Stash.Parsing.AST;
 
 /// <summary>
 /// A recursive-descent parser that transforms a flat list of <see cref="Token"/>s (produced by
-/// the <see cref="Lexer"/>) into an expression AST rooted at <see cref="Expr"/>.
+/// the <see cref="Lexer"/>) into an AST of statements and expressions.
 /// </summary>
 /// <remarks>
 /// <para>
-/// Each precedence level is encoded as its own method, with lower-precedence methods calling
-/// higher-precedence ones. This naturally produces correct operator precedence without an
-/// explicit precedence table. The full chain (lowest → highest) is:
+/// A program is a list of <see cref="Stmt"/> nodes. The top-level grammar is:
+/// <c>program → declaration* EOF</c>. Declarations include variable (<c>let</c>),
+/// constant (<c>const</c>), and function (<c>fn</c>) declarations, as well as
+/// general statements (expression statements, if, while, for-in, return, break, continue,
+/// and blocks).
+/// </para>
+/// <para>
+/// Each expression precedence level is encoded as its own method, with lower-precedence
+/// methods calling higher-precedence ones. The full chain (lowest → highest) is:
 /// </para>
 /// <list type="number">
-///   <item><description><see cref="Expression"/> — entry point, delegates to <see cref="Ternary"/></description></item>
+///   <item><description><see cref="Expression"/> — entry point, delegates to <see cref="Assignment"/></description></item>
+///   <item><description><see cref="Assignment"/> — <c>=</c> (right-associative)</description></item>
 ///   <item><description><see cref="Ternary"/> — <c>? :</c> (right-associative)</description></item>
 ///   <item><description><see cref="Or"/> — <c>||</c></description></item>
 ///   <item><description><see cref="And"/> — <c>&amp;&amp;</c></description></item>
@@ -26,6 +33,7 @@ using Stash.Parsing.AST;
 ///   <item><description><see cref="Term"/> — <c>+ -</c></description></item>
 ///   <item><description><see cref="Factor"/> — <c>* / %</c></description></item>
 ///   <item><description><see cref="Unary"/> — prefix <c>! -</c></description></item>
+///   <item><description><see cref="Call"/> — function calls <c>callee(args)</c></description></item>
 ///   <item><description><see cref="Primary"/> — literals, identifiers, grouping <c>( )</c></description></item>
 /// </list>
 /// <para>
@@ -38,8 +46,8 @@ using Stash.Parsing.AST;
 /// Error recovery uses a private <see cref="ParseError"/> exception for control flow.
 /// When the parser encounters an unexpected token it records a human-readable message in
 /// <see cref="Errors"/> and throws <see cref="ParseError"/>, which is caught in
-/// <see cref="Parse"/> to prevent cascading errors. A <c>null</c> literal is returned as
-/// a safe fallback AST node.
+/// <see cref="Declaration"/> to prevent cascading errors. The <see cref="Synchronize"/>
+/// method discards tokens until a likely statement boundary is found.
 /// </para>
 /// </remarks>
 public class Parser
@@ -74,17 +82,39 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses the token stream into a single expression AST.
+    /// Parses the token stream into a list of statements (a full program).
     /// </summary>
     /// <returns>
-    /// The root <see cref="Expr"/> of the parsed AST. On parse failure, returns a
-    /// <see cref="LiteralExpr"/> with a <c>null</c> value as a safe fallback.
+    /// A list of <see cref="Stmt"/> nodes representing the program.
+    /// Statements that fail to parse are skipped (error recovery via <see cref="Synchronize"/>).
     /// </returns>
     /// <remarks>
     /// Any syntax errors encountered are recorded in <see cref="Errors"/>.
     /// The caller should check <see cref="Errors"/> after calling this method to determine
     /// whether parsing succeeded.
     /// </remarks>
+    public List<Stmt> ParseProgram()
+    {
+        List<Stmt> statements = new();
+        while (!IsAtEnd)
+        {
+            Stmt? stmt = Declaration();
+            if (stmt is not null)
+            {
+                statements.Add(stmt);
+            }
+        }
+        return statements;
+    }
+
+    /// <summary>
+    /// Parses the token stream into a single expression AST.
+    /// Retained for backward compatibility with existing expression-level tests.
+    /// </summary>
+    /// <returns>
+    /// The root <see cref="Expr"/> of the parsed AST. On parse failure, returns a
+    /// <see cref="LiteralExpr"/> with a <c>null</c> value as a safe fallback.
+    /// </returns>
     public Expr Parse()
     {
         try
@@ -97,16 +127,375 @@ public class Parser
         }
     }
 
+    // ── Declaration / Statement parsing ────────────────────────────
+
+    /// <summary>
+    /// Parses a declaration or falls back to a statement.
+    /// Catches <see cref="ParseError"/> and synchronizes to recover.
+    /// </summary>
+    /// <returns>
+    /// The parsed <see cref="Stmt"/>, or <c>null</c> if error recovery was triggered.
+    /// </returns>
+    private Stmt? Declaration()
+    {
+        try
+        {
+            if (Match(TokenType.Let))
+            {
+                return VarDeclaration();
+            }
+
+            if (Match(TokenType.Const))
+            {
+                return ConstDeclaration();
+            }
+
+            if (Match(TokenType.Fn))
+            {
+                return FnDeclaration();
+            }
+
+            if (Match(TokenType.Struct))
+            {
+                return StructDeclaration();
+            }
+
+            if (Match(TokenType.Enum))
+            {
+                return EnumDeclaration();
+            }
+
+            return Statement();
+        }
+        catch (ParseError)
+        {
+            Synchronize();
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Parses a variable declaration: <c>let name = expr;</c> or <c>let name;</c>.
+    /// The <c>let</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="VarDeclStmt"/>.</returns>
+    private Stmt VarDeclaration()
+    {
+        Token letToken = Previous();
+        Token name = Consume(TokenType.Identifier, "Expected variable name.");
+        Expr? initializer = null;
+        if (Match(TokenType.Equal))
+        {
+            initializer = Expression();
+        }
+
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after variable declaration.");
+        return new VarDeclStmt(name, initializer, MakeSpan(letToken.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a constant declaration: <c>const NAME = expr;</c>.
+    /// The <c>const</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="ConstDeclStmt"/>.</returns>
+    private Stmt ConstDeclaration()
+    {
+        Token constToken = Previous();
+        Token name = Consume(TokenType.Identifier, "Expected constant name.");
+        Consume(TokenType.Equal, "Expected '=' after constant name (constants must be initialized).");
+        Expr initializer = Expression();
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after constant declaration.");
+        return new ConstDeclStmt(name, initializer, MakeSpan(constToken.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a function declaration: <c>fn name(params) { body }</c>.
+    /// The <c>fn</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="FnDeclStmt"/>.</returns>
+    private Stmt FnDeclaration()
+    {
+        Token fnToken = Previous();
+        Token name = Consume(TokenType.Identifier, "Expected function name.");
+        Consume(TokenType.LeftParen, "Expected '(' after function name.");
+
+        List<Token> parameters = new();
+        if (!Check(TokenType.RightParen))
+        {
+            do
+            {
+                parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
+            } while (Match(TokenType.Comma));
+        }
+
+        Consume(TokenType.RightParen, "Expected ')' after parameters.");
+        BlockStmt body = ParseBlock();
+        return new FnDeclStmt(name, parameters, body, MakeSpan(fnToken.Span, body.Span));
+    }
+
+    private Stmt StructDeclaration()
+    {
+        Token structToken = Previous();
+        Token name = Consume(TokenType.Identifier, "Expected struct name.");
+        Consume(TokenType.LeftBrace, "Expected '{' after struct name.");
+
+        List<Token> fields = new();
+        if (!Check(TokenType.RightBrace))
+        {
+            do
+            {
+                fields.Add(Consume(TokenType.Identifier, "Expected field name."));
+            } while (Match(TokenType.Comma));
+        }
+
+        Token close = Consume(TokenType.RightBrace, "Expected '}' after struct fields.");
+        return new StructDeclStmt(name, fields, MakeSpan(structToken.Span, close.Span));
+    }
+
+    private Stmt EnumDeclaration()
+    {
+        Token enumToken = Previous();
+        Token name = Consume(TokenType.Identifier, "Expected enum name.");
+        Consume(TokenType.LeftBrace, "Expected '{' after enum name.");
+
+        List<Token> members = new();
+        if (!Check(TokenType.RightBrace))
+        {
+            do
+            {
+                members.Add(Consume(TokenType.Identifier, "Expected enum member name."));
+            } while (Match(TokenType.Comma));
+        }
+
+        Token close = Consume(TokenType.RightBrace, "Expected '}' after enum members.");
+        return new EnumDeclStmt(name, members, MakeSpan(enumToken.Span, close.Span));
+    }
+
+    /// <summary>
+    /// Dispatches to the appropriate statement parser based on the current token.
+    /// </summary>
+    /// <returns>The parsed <see cref="Stmt"/>.</returns>
+    private Stmt Statement()
+    {
+        if (Match(TokenType.If))
+        {
+            return IfStatement();
+        }
+
+        if (Match(TokenType.While))
+        {
+            return WhileStatement();
+        }
+
+        if (Match(TokenType.For))
+        {
+            return ForInStatement();
+        }
+
+        if (Match(TokenType.Return))
+        {
+            return ReturnStatement();
+        }
+
+        if (Match(TokenType.Break))
+        {
+            return BreakStatement();
+        }
+
+        if (Match(TokenType.Continue))
+        {
+            return ContinueStatement();
+        }
+
+        if (Check(TokenType.LeftBrace))
+        {
+            return ParseBlock();
+        }
+
+        return ExpressionStatement();
+    }
+
+    /// <summary>
+    /// Parses a block: <c>{ declarations... }</c>.
+    /// </summary>
+    /// <returns>A <see cref="BlockStmt"/> containing the enclosed declarations.</returns>
+    private BlockStmt ParseBlock()
+    {
+        Token open = Consume(TokenType.LeftBrace, "Expected '{' before block.");
+        List<Stmt> statements = new();
+        while (!Check(TokenType.RightBrace) && !IsAtEnd)
+        {
+            Stmt? stmt = Declaration();
+            if (stmt is not null)
+            {
+                statements.Add(stmt);
+            }
+        }
+        Token close = Consume(TokenType.RightBrace, "Expected '}' after block.");
+        return new BlockStmt(statements, MakeSpan(open.Span, close.Span));
+    }
+
+    /// <summary>
+    /// Parses an if statement: <c>if (cond) { ... } else { ... }</c>.
+    /// The <c>if</c> token has already been consumed.
+    /// </summary>
+    /// <returns>An <see cref="IfStmt"/>.</returns>
+    private Stmt IfStatement()
+    {
+        Token ifToken = Previous();
+        Consume(TokenType.LeftParen, "Expected '(' after 'if'.");
+        Expr condition = Expression();
+        Consume(TokenType.RightParen, "Expected ')' after if condition.");
+        Stmt thenBranch = ParseBlock();
+        Stmt? elseBranch = null;
+        if (Match(TokenType.Else))
+        {
+            if (Check(TokenType.If))
+            {
+                Match(TokenType.If);
+                elseBranch = IfStatement();
+            }
+            else
+            {
+                elseBranch = ParseBlock();
+            }
+        }
+        SourceSpan endSpan = elseBranch?.Span ?? thenBranch.Span;
+        return new IfStmt(condition, thenBranch, elseBranch, MakeSpan(ifToken.Span, endSpan));
+    }
+
+    /// <summary>
+    /// Parses a while statement: <c>while (cond) { ... }</c>.
+    /// The <c>while</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="WhileStmt"/>.</returns>
+    private Stmt WhileStatement()
+    {
+        Token whileToken = Previous();
+        Consume(TokenType.LeftParen, "Expected '(' after 'while'.");
+        Expr condition = Expression();
+        Consume(TokenType.RightParen, "Expected ')' after while condition.");
+        BlockStmt body = ParseBlock();
+        return new WhileStmt(condition, body, MakeSpan(whileToken.Span, body.Span));
+    }
+
+    /// <summary>
+    /// Parses a for-in statement: <c>for (let name in iterable) { ... }</c>.
+    /// The <c>for</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="ForInStmt"/>.</returns>
+    private Stmt ForInStatement()
+    {
+        Token forToken = Previous();
+        Consume(TokenType.LeftParen, "Expected '(' after 'for'.");
+        Consume(TokenType.Let, "Expected 'let' after '(' in for-in loop.");
+        Token varName = Consume(TokenType.Identifier, "Expected variable name in for-in loop.");
+        Consume(TokenType.In, "Expected 'in' after variable name in for-in loop.");
+        Expr iterable = Expression();
+        Consume(TokenType.RightParen, "Expected ')' after for-in clause.");
+        BlockStmt body = ParseBlock();
+        return new ForInStmt(varName, iterable, body, MakeSpan(forToken.Span, body.Span));
+    }
+
+    /// <summary>
+    /// Parses a return statement: <c>return expr;</c> or <c>return;</c>.
+    /// The <c>return</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="ReturnStmt"/>.</returns>
+    private Stmt ReturnStatement()
+    {
+        Token keyword = Previous();
+        Expr? value = null;
+        if (!Check(TokenType.Semicolon))
+        {
+            value = Expression();
+        }
+
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after return value.");
+        return new ReturnStmt(value, MakeSpan(keyword.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a break statement: <c>break;</c>.
+    /// The <c>break</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="BreakStmt"/>.</returns>
+    private Stmt BreakStatement()
+    {
+        Token keyword = Previous();
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after 'break'.");
+        return new BreakStmt(MakeSpan(keyword.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a continue statement: <c>continue;</c>.
+    /// The <c>continue</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="ContinueStmt"/>.</returns>
+    private Stmt ContinueStatement()
+    {
+        Token keyword = Previous();
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after 'continue'.");
+        return new ContinueStmt(MakeSpan(keyword.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses an expression statement: <c>expr;</c>.
+    /// </summary>
+    /// <returns>An <see cref="ExprStmt"/>.</returns>
+    private Stmt ExpressionStatement()
+    {
+        Expr expr = Expression();
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after expression.");
+        return new ExprStmt(expr, MakeSpan(expr.Span, semi.Span));
+    }
+
     // ── Precedence levels (lowest → highest) ──────────────────────
 
     /// <summary>
     /// Parses an expression at the lowest precedence level.
-    /// Currently delegates directly to <see cref="Ternary"/>.
+    /// Delegates to <see cref="Assignment"/>.
     /// </summary>
     /// <returns>The parsed expression.</returns>
     private Expr Expression()
     {
-        return Ternary();
+        return Assignment();
+    }
+
+    /// <summary>
+    /// Parses an assignment expression: <c>name = value</c>.
+    /// Assignment is right-associative.
+    /// </summary>
+    /// <returns>
+    /// An <see cref="AssignExpr"/> if the left-hand side is an identifier followed by <c>=</c>,
+    /// otherwise the result of <see cref="Ternary"/>.
+    /// </returns>
+    private Expr Assignment()
+    {
+        Expr expr = Ternary();
+
+        if (Match(TokenType.Equal))
+        {
+            Token equals = Previous();
+            Expr value = Assignment();
+
+            if (expr is IdentifierExpr id)
+            {
+                return new AssignExpr(id.Name, value, MakeSpan(id.Span, value.Span));
+            }
+            else if (expr is IndexExpr indexExpr)
+            {
+                return new IndexAssignExpr(indexExpr.Object, indexExpr.Index, value, indexExpr.BracketSpan, MakeSpan(indexExpr.Span, value.Span));
+            }
+            else if (expr is DotExpr dotExpr)
+            {
+                return new DotAssignExpr(dotExpr.Object, dotExpr.Name, value, MakeSpan(dotExpr.Span, value.Span));
+            }
+
+            Error(equals, "Invalid assignment target.");
+        }
+
+        return expr;
     }
 
     /// <summary>
@@ -268,7 +657,7 @@ public class Parser
     /// </summary>
     /// <returns>
     /// A <see cref="UnaryExpr"/> if a prefix operator is found; otherwise falls through
-    /// to <see cref="Primary"/>.
+    /// to <see cref="Call"/>.
     /// </returns>
     /// <remarks>
     /// Unary is right-recursive — calling itself allows chaining like <c>!!x</c> or <c>--x</c>.
@@ -282,7 +671,66 @@ public class Parser
             return new UnaryExpr(op, right, MakeSpan(op.Span, right.Span));
         }
 
-        return Primary();
+        return Call();
+    }
+
+    /// <summary>
+    /// Parses function call expressions: <c>callee(arg1, arg2, ...)</c>.
+    /// Handles chained calls like <c>a()()</c>.
+    /// </summary>
+    /// <returns>
+    /// A <see cref="CallExpr"/> if a <c>(</c> follows the primary expression,
+    /// otherwise the primary expression itself.
+    /// </returns>
+    private Expr Call()
+    {
+        Expr expr = Primary();
+
+        while (true)
+        {
+            if (Match(TokenType.LeftParen))
+            {
+                expr = FinishCall(expr);
+            }
+            else if (Match(TokenType.LeftBracket))
+            {
+                Token bracket = Previous();
+                Expr index = Expression();
+                Token close = Consume(TokenType.RightBracket, "Expected ']' after index.");
+                expr = new IndexExpr(expr, index, bracket.Span, MakeSpan(expr.Span, close.Span));
+            }
+            else if (Match(TokenType.Dot))
+            {
+                Token name = Consume(TokenType.Identifier, "Expected field name after '.'.");
+                expr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span));
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Parses the argument list and closing paren of a function call.
+    /// </summary>
+    /// <param name="callee">The expression being called.</param>
+    /// <returns>A <see cref="CallExpr"/> wrapping the callee and its arguments.</returns>
+    private Expr FinishCall(Expr callee)
+    {
+        List<Expr> arguments = new();
+        if (!Check(TokenType.RightParen))
+        {
+            do
+            {
+                arguments.Add(Expression());
+            } while (Match(TokenType.Comma));
+        }
+
+        Token paren = Consume(TokenType.RightParen, "Expected ')' after arguments.");
+        return new CallExpr(callee, paren, arguments, MakeSpan(callee.Span, paren.Span));
     }
 
     /// <summary>
@@ -320,9 +768,65 @@ public class Parser
             return new LiteralExpr(null, Previous().Span);
         }
 
+        if (Match(TokenType.LeftBracket))
+        {
+            Token open = Previous();
+            List<Expr> elements = new();
+            if (!Check(TokenType.RightBracket))
+            {
+                do
+                {
+                    elements.Add(Expression());
+                } while (Match(TokenType.Comma));
+            }
+            Token close = Consume(TokenType.RightBracket, "Expected ']' after array elements.");
+            return new ArrayExpr(elements, MakeSpan(open.Span, close.Span));
+        }
+
         if (Match(TokenType.Identifier))
         {
             Token name = Previous();
+
+            // Check for struct instantiation: Name { field: value, ... }
+            if (Check(TokenType.LeftBrace))
+            {
+                // Save position to backtrack if it's not a struct init
+                int savedPosition = _current;
+
+                Advance(); // consume '{'
+
+                // It's a struct init if we see: Identifier ':'
+                if (Check(TokenType.Identifier))
+                {
+                    int peekAhead = _current;
+                    if (peekAhead + 1 < _tokens.Count && _tokens[peekAhead + 1].Type == TokenType.Colon)
+                    {
+                        // This is a struct init: Name { field: value, ... }
+                        List<(Token Field, Expr Value)> fieldValues = new();
+                        do
+                        {
+                            Token field = Consume(TokenType.Identifier, "Expected field name.");
+                            Consume(TokenType.Colon, "Expected ':' after field name.");
+                            Expr value = Expression();
+                            fieldValues.Add((field, value));
+                        } while (Match(TokenType.Comma));
+
+                        Token close = Consume(TokenType.RightBrace, "Expected '}' after struct fields.");
+                        return new StructInitExpr(name, fieldValues, MakeSpan(name.Span, close.Span));
+                    }
+                }
+
+                // Also handle empty struct init: Name { }
+                if (Check(TokenType.RightBrace))
+                {
+                    Token close = Advance();
+                    return new StructInitExpr(name, new List<(Token, Expr)>(), MakeSpan(name.Span, close.Span));
+                }
+
+                // Not a struct init — backtrack
+                _current = savedPosition;
+            }
+
             return new IdentifierExpr(name, name.Span);
         }
 
@@ -464,12 +968,45 @@ public class Parser
     }
 
     /// <summary>
+    /// Discards tokens until the parser reaches a likely statement boundary,
+    /// enabling recovery after a syntax error.
+    /// </summary>
+    private void Synchronize()
+    {
+        Advance();
+        while (!IsAtEnd)
+        {
+            if (Previous().Type == TokenType.Semicolon)
+            {
+                return;
+            }
+
+            switch (Peek().Type)
+            {
+                case TokenType.Let:
+                case TokenType.Const:
+                case TokenType.Fn:
+                case TokenType.Struct:
+                case TokenType.Enum:
+                case TokenType.If:
+                case TokenType.While:
+                case TokenType.For:
+                case TokenType.Return:
+                case TokenType.Break:
+                case TokenType.Continue:
+                    return;
+            }
+            Advance();
+        }
+    }
+
+    /// <summary>
     /// A private sentinel exception used purely for control flow during error recovery.
     /// </summary>
     /// <remarks>
     /// When the parser encounters an unexpected token, it throws <see cref="ParseError"/>
-    /// to unwind the recursive-descent call stack back to <see cref="Parse"/>, which
-    /// catches it and returns a <c>null</c> literal as a fallback AST node. This approach
+    /// to unwind the recursive-descent call stack back to <see cref="Declaration"/>, which
+    /// catches it and calls <see cref="Synchronize"/> to recover. This approach
     /// avoids cascading errors from a single syntax mistake.
     /// </remarks>
     private class ParseError : Exception { }

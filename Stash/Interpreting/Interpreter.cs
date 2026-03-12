@@ -1,6 +1,8 @@
 namespace Stash.Interpreting;
 
 using System;
+using System.Collections.Generic;
+using System.Diagnostics;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 
@@ -49,8 +51,18 @@ using Stash.Parsing.AST;
 /// string. This matches the Stash spec's type coercion rules for the <c>+</c> operator.
 /// </para>
 /// </remarks>
-public class Interpreter : IExprVisitor<object?>
+public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 {
+    private readonly Environment _globals;
+    private Environment _environment;
+
+    public Interpreter()
+    {
+        _globals = new Environment();
+        _environment = _globals;
+        DefineBuiltIns();
+    }
+
     /// <summary>
     /// Evaluates a parsed expression AST and returns the resulting runtime value.
     /// </summary>
@@ -67,6 +79,34 @@ public class Interpreter : IExprVisitor<object?>
         return expression.Accept(this);
     }
 
+    public void Interpret(List<Stmt> statements)
+    {
+        try
+        {
+            foreach (Stmt statement in statements)
+            {
+                Execute(statement);
+            }
+        }
+        catch (BreakException)
+        {
+            throw new RuntimeError("'break' used outside of a loop.");
+        }
+        catch (ContinueException)
+        {
+            throw new RuntimeError("'continue' used outside of a loop.");
+        }
+        catch (ReturnException)
+        {
+            throw new RuntimeError("'return' used outside of a function.");
+        }
+    }
+
+    private void Execute(Stmt stmt)
+    {
+        stmt.Accept(this);
+    }
+
     /// <summary>
     /// Visits a literal expression node and returns its compile-time value directly.
     /// </summary>
@@ -78,19 +118,16 @@ public class Interpreter : IExprVisitor<object?>
     }
 
     /// <summary>
-    /// Visits an identifier expression node. Currently always throws because there is no
-    /// variable environment in Phase 1.
+    /// Visits an identifier expression node, looking up the variable's value in the environment chain.
     /// </summary>
     /// <param name="expr">An <see cref="IdentifierExpr"/> referencing a variable by name.</param>
-    /// <returns>Never returns — always throws.</returns>
+    /// <returns>The current value of the variable.</returns>
     /// <exception cref="RuntimeError">
-    /// Always thrown with the undefined variable's name and source location. Variable lookup
-    /// will be implemented in Phase 2 when <c>let</c>/<c>const</c> declarations and an
-    /// <c>Environment</c> chain are added.
+    /// Thrown if the variable is not defined in any enclosing scope.
     /// </exception>
     public object? VisitIdentifierExpr(IdentifierExpr expr)
     {
-        throw new RuntimeError($"Undefined variable '{expr.Name.Lexeme}'.", expr.Span);
+        return _environment.Get(expr.Name.Lexeme, expr.Span);
     }
 
     /// <summary>
@@ -320,6 +357,38 @@ public class Interpreter : IExprVisitor<object?>
         if (value is double d)
         {
             return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (value is StashInstance instance)
+        {
+            return instance.ToString();
+        }
+
+        if (value is StashStruct structDef)
+        {
+            return structDef.ToString();
+        }
+
+        if (value is StashEnumValue enumVal)
+        {
+            return enumVal.ToString();
+        }
+
+        if (value is StashEnum enumType)
+        {
+            return enumType.ToString();
+        }
+
+        if (value is List<object?> list)
+        {
+            var elements = new System.Text.StringBuilder("[");
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (i > 0) elements.Append(", ");
+                elements.Append(Stringify(list[i]));
+            }
+            elements.Append(']');
+            return elements.ToString();
         }
 
         return value.ToString()!;
@@ -568,4 +637,538 @@ public class Interpreter : IExprVisitor<object?>
     /// </param>
     /// <returns>The value as a <see cref="double"/>.</returns>
     private static double ToDouble(object? value) => value is long i ? (double)i : (double)value!;
+
+    public object? VisitAssignExpr(AssignExpr expr)
+    {
+        object? value = expr.Value.Accept(this);
+        _environment.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+        return value;
+    }
+
+    public object? VisitCallExpr(CallExpr expr)
+    {
+        object? callee = expr.Callee.Accept(this);
+
+        List<object?> arguments = new();
+        foreach (Expr argument in expr.Arguments)
+        {
+            arguments.Add(argument.Accept(this));
+        }
+
+        if (callee is not IStashCallable function)
+        {
+            throw new RuntimeError("Can only call functions.", expr.Paren.Span);
+        }
+
+        if (arguments.Count != function.Arity)
+        {
+            throw new RuntimeError(
+                $"Expected {function.Arity} arguments but got {arguments.Count}.",
+                expr.Paren.Span);
+        }
+
+        return function.Call(this, arguments);
+    }
+
+    public void ExecuteBlock(List<Stmt> statements, Environment environment)
+    {
+        Environment previous = _environment;
+        try
+        {
+            _environment = environment;
+            foreach (Stmt statement in statements)
+            {
+                Execute(statement);
+            }
+        }
+        finally
+        {
+            _environment = previous;
+        }
+    }
+
+    public object? VisitExprStmt(ExprStmt stmt)
+    {
+        stmt.Expression.Accept(this);
+        return null;
+    }
+
+    public object? VisitVarDeclStmt(VarDeclStmt stmt)
+    {
+        object? value = null;
+        if (stmt.Initializer is not null)
+        {
+            value = stmt.Initializer.Accept(this);
+        }
+
+        _environment.Define(stmt.Name.Lexeme, value);
+        return null;
+    }
+
+    public object? VisitConstDeclStmt(ConstDeclStmt stmt)
+    {
+        object? value = stmt.Initializer.Accept(this);
+        _environment.DefineConstant(stmt.Name.Lexeme, value);
+        return null;
+    }
+
+    public object? VisitBlockStmt(BlockStmt stmt)
+    {
+        ExecuteBlock(stmt.Statements, new Environment(_environment));
+        return null;
+    }
+
+    public object? VisitIfStmt(IfStmt stmt)
+    {
+        if (IsTruthy(stmt.Condition.Accept(this)))
+        {
+            Execute(stmt.ThenBranch);
+        }
+        else if (stmt.ElseBranch is not null)
+        {
+            Execute(stmt.ElseBranch);
+        }
+
+        return null;
+    }
+
+    public object? VisitWhileStmt(WhileStmt stmt)
+    {
+        while (IsTruthy(stmt.Condition.Accept(this)))
+        {
+            try
+            {
+                Execute(stmt.Body);
+            }
+            catch (BreakException)
+            {
+                break;
+            }
+            catch (ContinueException)
+            {
+                // Continue to next loop iteration
+            }
+        }
+
+        return null;
+    }
+
+    public object? VisitForInStmt(ForInStmt stmt)
+    {
+        object? iterable = stmt.Iterable.Accept(this);
+
+        IEnumerable<object?> items;
+        if (iterable is List<object?> list)
+        {
+            items = list;
+        }
+        else if (iterable is string str)
+        {
+            items = StringToChars(str);
+        }
+        else
+        {
+            throw new RuntimeError("Can only iterate over arrays and strings.", stmt.Iterable.Span);
+        }
+
+        foreach (object? item in items)
+        {
+            var loopEnv = new Environment(_environment);
+            loopEnv.Define(stmt.VariableName.Lexeme, item);
+
+            try
+            {
+                ExecuteBlock(stmt.Body.Statements, loopEnv);
+            }
+            catch (BreakException)
+            {
+                break;
+            }
+            catch (ContinueException)
+            {
+                // Continue to next iteration
+            }
+        }
+
+        return null;
+    }
+
+    private static IEnumerable<object?> StringToChars(string str)
+    {
+        foreach (char c in str)
+        {
+            yield return c.ToString();
+        }
+    }
+
+    public object? VisitBreakStmt(BreakStmt stmt)
+    {
+        throw new BreakException();
+    }
+
+    public object? VisitContinueStmt(ContinueStmt stmt)
+    {
+        throw new ContinueException();
+    }
+
+    public object? VisitFnDeclStmt(FnDeclStmt stmt)
+    {
+        var function = new StashFunction(stmt, _environment);
+        _environment.Define(stmt.Name.Lexeme, function);
+        return null;
+    }
+
+    public object? VisitStructDeclStmt(StructDeclStmt stmt)
+    {
+        var fields = new List<string>();
+        foreach (var field in stmt.Fields)
+        {
+            fields.Add(field.Lexeme);
+        }
+
+        var structDef = new StashStruct(stmt.Name.Lexeme, fields);
+        _environment.Define(stmt.Name.Lexeme, structDef);
+        return null;
+    }
+
+    public object? VisitEnumDeclStmt(EnumDeclStmt stmt)
+    {
+        var members = new List<string>();
+        foreach (var member in stmt.Members)
+        {
+            members.Add(member.Lexeme);
+        }
+
+        var enumDef = new StashEnum(stmt.Name.Lexeme, members);
+        _environment.Define(stmt.Name.Lexeme, enumDef);
+        return null;
+    }
+
+    public object? VisitStructInitExpr(StructInitExpr expr)
+    {
+        object? structDef = _environment.Get(expr.Name.Lexeme, expr.Span);
+
+        if (structDef is not StashStruct template)
+        {
+            throw new RuntimeError($"'{expr.Name.Lexeme}' is not a struct.", expr.Name.Span);
+        }
+
+        var fieldValues = new Dictionary<string, object?>();
+
+        // Initialize all fields to null
+        foreach (string field in template.Fields)
+        {
+            fieldValues[field] = null;
+        }
+
+        // Set provided field values
+        var seenFields = new HashSet<string>();
+        foreach (var (fieldToken, valueExpr) in expr.FieldValues)
+        {
+            string fieldName = fieldToken.Lexeme;
+            if (!fieldValues.ContainsKey(fieldName))
+            {
+                throw new RuntimeError($"Unknown field '{fieldName}' for struct '{template.Name}'.", fieldToken.Span);
+            }
+
+            if (!seenFields.Add(fieldName))
+            {
+                throw new RuntimeError($"Duplicate field '{fieldName}' in struct initializer.", fieldToken.Span);
+            }
+
+            fieldValues[fieldName] = valueExpr.Accept(this);
+        }
+
+        return new StashInstance(template.Name, fieldValues);
+    }
+
+    public object? VisitDotExpr(DotExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+
+        if (obj is StashInstance instance)
+        {
+            return instance.GetField(expr.Name.Lexeme, expr.Name.Span);
+        }
+
+        if (obj is StashEnum enumDef)
+        {
+            StashEnumValue? value = enumDef.GetMember(expr.Name.Lexeme);
+            if (value is null)
+            {
+                throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{expr.Name.Lexeme}'.", expr.Name.Span);
+            }
+            return value;
+        }
+
+        throw new RuntimeError("Only struct instances and enums have members.", expr.Name.Span);
+    }
+
+    public object? VisitDotAssignExpr(DotAssignExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+
+        if (obj is not StashInstance instance)
+        {
+            throw new RuntimeError("Only struct instances have fields.", expr.Name.Span);
+        }
+
+        object? value = expr.Value.Accept(this);
+        instance.SetField(expr.Name.Lexeme, value, expr.Name.Span);
+        return value;
+    }
+
+    public object? VisitReturnStmt(ReturnStmt stmt)
+    {
+        object? value = null;
+        if (stmt.Value is not null)
+        {
+            value = stmt.Value.Accept(this);
+        }
+
+        throw new ReturnException(value);
+    }
+
+    public object? VisitArrayExpr(ArrayExpr expr)
+    {
+        var elements = new List<object?>();
+        foreach (Expr element in expr.Elements)
+        {
+            elements.Add(element.Accept(this));
+        }
+        return elements;
+    }
+
+    public object? VisitIndexExpr(IndexExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+        object? index = expr.Index.Accept(this);
+
+        if (obj is List<object?> list)
+        {
+            if (index is not long i)
+            {
+                throw new RuntimeError("Array index must be an integer.", expr.BracketSpan);
+            }
+
+            if (i < 0 || i >= list.Count)
+            {
+                throw new RuntimeError($"Array index {i} out of bounds (length {list.Count}).", expr.BracketSpan);
+            }
+
+            return list[(int)i];
+        }
+
+        if (obj is string str)
+        {
+            if (index is not long i)
+            {
+                throw new RuntimeError("String index must be an integer.", expr.BracketSpan);
+            }
+
+            if (i < 0 || i >= str.Length)
+            {
+                throw new RuntimeError($"String index {i} out of bounds (length {str.Length}).", expr.BracketSpan);
+            }
+
+            return str[(int)i].ToString();
+        }
+
+        throw new RuntimeError("Only arrays and strings can be indexed.", expr.BracketSpan);
+    }
+
+    public object? VisitIndexAssignExpr(IndexAssignExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+        object? index = expr.Index.Accept(this);
+        object? value = expr.Value.Accept(this);
+
+        if (obj is not List<object?> list)
+        {
+            throw new RuntimeError("Only arrays can be assigned to by index.", expr.BracketSpan);
+        }
+
+        if (index is not long i)
+        {
+            throw new RuntimeError("Array index must be an integer.", expr.BracketSpan);
+        }
+
+        if (i < 0 || i >= list.Count)
+        {
+            throw new RuntimeError($"Array index {i} out of bounds (length {list.Count}).", expr.BracketSpan);
+        }
+
+        list[(int)i] = value;
+        return value;
+    }
+
+    private void DefineBuiltIns()
+    {
+        _globals.Define("println", new BuiltInFunction("println", 1, (_, args) =>
+        {
+            Console.WriteLine(Stringify(args[0]));
+            return null;
+        }));
+
+        _globals.Define("print", new BuiltInFunction("print", 1, (_, args) =>
+        {
+            Console.Write(Stringify(args[0]));
+            return null;
+        }));
+
+        _globals.Define("typeof", new BuiltInFunction("typeof", 1, (_, args) =>
+        {
+            object? val = args[0];
+            if (val is null)
+            {
+                return "null";
+            }
+
+            if (val is long)
+            {
+                return "int";
+            }
+
+            if (val is double)
+            {
+                return "float";
+            }
+
+            if (val is string)
+            {
+                return "string";
+            }
+
+            if (val is bool)
+            {
+                return "bool";
+            }
+
+            if (val is List<object?>)
+            {
+                return "array";
+            }
+
+            if (val is StashInstance)
+            {
+                return "struct";
+            }
+
+            if (val is StashStruct)
+            {
+                return "struct";
+            }
+
+            if (val is StashEnumValue)
+            {
+                return "enum";
+            }
+
+            if (val is StashEnum)
+            {
+                return "enum";
+            }
+
+            if (val is IStashCallable)
+            {
+                return "function";
+            }
+
+            return "unknown";
+        }));
+
+        _globals.Define("len", new BuiltInFunction("len", 1, (_, args) =>
+        {
+            object? val = args[0];
+            if (val is string s)
+            {
+                return (long)s.Length;
+            }
+
+            if (val is List<object?> list)
+            {
+                return (long)list.Count;
+            }
+
+            throw new RuntimeError("Argument to 'len' must be a string or array.");
+        }));
+
+        _globals.Define("toStr", new BuiltInFunction("toStr", 1, (_, args) =>
+        {
+            return Stringify(args[0]);
+        }));
+
+        _globals.Define("toInt", new BuiltInFunction("toInt", 1, (_, args) =>
+        {
+            object? val = args[0];
+            if (val is long l)
+            {
+                return l;
+            }
+
+            if (val is double d)
+            {
+                return (long)d;
+            }
+
+            if (val is string s)
+            {
+                if (long.TryParse(s, out long result))
+                {
+                    return result;
+                }
+
+                throw new RuntimeError($"Cannot parse '{s}' as integer.");
+            }
+            throw new RuntimeError("Argument to 'toInt' must be a number or string.");
+        }));
+
+        _globals.Define("toFloat", new BuiltInFunction("toFloat", 1, (_, args) =>
+        {
+            object? val = args[0];
+            if (val is double d)
+            {
+                return d;
+            }
+
+            if (val is long l)
+            {
+                return (double)l;
+            }
+
+            if (val is string s)
+            {
+                if (double.TryParse(s, System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out double result))
+                {
+                    return result;
+                }
+
+                throw new RuntimeError($"Cannot parse '{s}' as float.");
+            }
+            throw new RuntimeError("Argument to 'toFloat' must be a number or string.");
+        }));
+    }
+
+    private class BuiltInFunction : IStashCallable
+    {
+        private readonly string _name;
+        private readonly Func<Interpreter, List<object?>, object?> _body;
+
+        public int Arity { get; }
+
+        public BuiltInFunction(string name, int arity, Func<Interpreter, List<object?>, object?> body)
+        {
+            _name = name;
+            Arity = arity;
+            _body = body;
+        }
+
+        public object? Call(Interpreter interpreter, List<object?> arguments)
+        {
+            return _body(interpreter, arguments);
+        }
+
+        public override string ToString() => $"<built-in fn {_name}>";
+    }
 }

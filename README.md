@@ -15,18 +15,8 @@ dotnet build Stash/
 dotnet run --project Stash/
 
 # Or after building
-./Stash/bin/Debug/net10.0/stash
+./Stash/bin/Debug/net10.0/Stash
 ```
-
-## Status
-
-**Phase 1 — Foundation** (Complete)
-- Lexer with full token scanning
-- Recursive descent parser for expressions
-- Tree-walk interpreter
-- Interactive REPL
-
-See [Stash — Language Specification.md](docs/Stash%20%E2%80%94%20Language%20Specification.md) for the full language design.
 
 ## License
 

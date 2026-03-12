@@ -1,0 +1,133 @@
+namespace Stash.Interpreting;
+
+using System;
+using System.Collections.Generic;
+
+/// <summary>
+/// Stores variable bindings for a lexical scope. Each environment has an optional
+/// reference to an enclosing (parent) environment, forming a scope chain.
+/// </summary>
+public class Environment
+{
+    private readonly Dictionary<string, object?> _values = new();
+    private readonly HashSet<string> _constants = new();
+
+    /// <summary>
+    /// The enclosing (parent) scope, or <c>null</c> for the global scope.
+    /// </summary>
+    public Environment? Enclosing { get; }
+
+    /// <summary>
+    /// Creates a new global environment (no enclosing scope).
+    /// </summary>
+    public Environment()
+    {
+        Enclosing = null;
+    }
+
+    /// <summary>
+    /// Creates a new environment enclosed by the given parent scope.
+    /// </summary>
+    public Environment(Environment enclosing)
+    {
+        Enclosing = enclosing;
+    }
+
+    /// <summary>
+    /// Defines a new variable in this scope.
+    /// </summary>
+    public void Define(string name, object? value)
+    {
+        _values[name] = value;
+        _constants.Remove(name);
+    }
+
+    /// <summary>
+    /// Defines a new constant in this scope. Constants cannot be reassigned.
+    /// </summary>
+    public void DefineConstant(string name, object? value)
+    {
+        _values[name] = value;
+        _constants.Add(name);
+    }
+
+    /// <summary>
+    /// Looks up a variable by name, walking up the scope chain.
+    /// </summary>
+    public object? Get(string name, Common.SourceSpan? span = null)
+    {
+        if (_values.TryGetValue(name, out object? value))
+        {
+            return value;
+        }
+
+        if (Enclosing is not null)
+        {
+            return Enclosing.Get(name, span);
+        }
+
+        throw new RuntimeError($"Undefined variable '{name}'.", span);
+    }
+
+    /// <summary>
+    /// Assigns a value to an existing variable, walking up the scope chain.
+    /// Throws if the variable is a constant or undefined.
+    /// </summary>
+    public void Assign(string name, object? value, Common.SourceSpan? span = null)
+    {
+        if (_values.ContainsKey(name))
+        {
+            if (_constants.Contains(name))
+            {
+                throw new RuntimeError($"Cannot reassign constant '{name}'.", span);
+            }
+
+            _values[name] = value;
+            return;
+        }
+
+        if (Enclosing is not null)
+        {
+            Enclosing.Assign(name, value, span);
+            return;
+        }
+
+        throw new RuntimeError($"Undefined variable '{name}'.", span);
+    }
+
+    /// <summary>
+    /// Gets a variable from the ancestor environment at the given distance.
+    /// Used by the resolver for O(1) variable lookup.
+    /// </summary>
+    public object? GetAt(int distance, string name)
+    {
+        return Ancestor(distance)._values[name];
+    }
+
+    /// <summary>
+    /// Assigns a value in the ancestor environment at the given distance.
+    /// </summary>
+    public void AssignAt(int distance, string name, object? value, Common.SourceSpan? span = null)
+    {
+        var env = Ancestor(distance);
+
+        if (env._constants.Contains(name))
+        {
+            throw new RuntimeError($"Cannot reassign constant '{name}'.", span);
+        }
+
+        env._values[name] = value;
+    }
+
+    private Environment Ancestor(int distance)
+    {
+        Environment env = this;
+
+        for (int i = 0; i < distance; i++)
+        {
+            env = env.Enclosing!;
+        }
+
+        return env;
+    }
+}

@@ -54,4 +54,60 @@ public interface IExprVisitor<T>
     /// <param name="expr">The ternary expression node to visit.</param>
     /// <returns>The result of evaluating the selected branch.</returns>
     T VisitTernaryExpr(TernaryExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="AssignExpr"/> node (variable assignment <c>x = value</c>).
+    /// </summary>
+    /// <param name="expr">The assignment expression node to visit.</param>
+    /// <returns>The result of processing the assignment.</returns>
+    T VisitAssignExpr(AssignExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="CallExpr"/> node (function call <c>callee(args)</c>).
+    /// </summary>
+    /// <param name="expr">The call expression node to visit.</param>
+    /// <returns>The result of invoking the callee.</returns>
+    T VisitCallExpr(CallExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="ArrayExpr"/> node (array literal <c>[a, b, c]</c>).
+    /// </summary>
+    /// <param name="expr">The array expression node to visit.</param>
+    /// <returns>The result of evaluating the array literal.</returns>
+    T VisitArrayExpr(ArrayExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="IndexExpr"/> node (index access <c>arr[i]</c>).
+    /// </summary>
+    /// <param name="expr">The index expression node to visit.</param>
+    /// <returns>The result of the index access.</returns>
+    T VisitIndexExpr(IndexExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="IndexAssignExpr"/> node (index assignment <c>arr[i] = val</c>).
+    /// </summary>
+    /// <param name="expr">The index assignment expression node to visit.</param>
+    /// <returns>The result of the index assignment.</returns>
+    T VisitIndexAssignExpr(IndexAssignExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="StructInitExpr"/> node (struct instantiation <c>Name { field: value }</c>).
+    /// </summary>
+    /// <param name="expr">The struct instantiation expression node to visit.</param>
+    /// <returns>The result of creating the struct instance.</returns>
+    T VisitStructInitExpr(StructInitExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="DotExpr"/> node (dot access <c>obj.field</c>).
+    /// </summary>
+    /// <param name="expr">The dot expression node to visit.</param>
+    /// <returns>The result of accessing the field or member.</returns>
+    T VisitDotExpr(DotExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="DotAssignExpr"/> node (dot assignment <c>obj.field = value</c>).
+    /// </summary>
+    /// <param name="expr">The dot assignment expression node to visit.</param>
+    /// <returns>The result of the field assignment.</returns>
+    T VisitDotAssignExpr(DotAssignExpr expr);
 }

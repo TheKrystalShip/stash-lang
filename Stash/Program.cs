@@ -1,23 +1,20 @@
 ﻿// ============================================================================
-// Stash REPL — Phase 1 (Expression Evaluator)
+// Stash REPL — Phase 2 (Statements & Variables)
 //
-// A simple Read-Eval-Print Loop that processes one line at a time through
-// three pipeline stages:
+// A Read-Eval-Print Loop that processes input through three pipeline stages:
 //
 //   1. Lex:       Source text → token list       (Lexer)
 //   2. Parse:     Token list  → AST              (Parser)
-//   3. Interpret: AST         → runtime value    (Interpreter)
+//   3. Interpret: AST         → execution        (Interpreter)
 //
-// Each stage can fail independently. If lexing produces errors, parsing is
-// skipped for that input. If parsing produces errors, interpretation is
-// skipped. This keeps the REPL resilient — a bad input line never crashes
-// the session.
+// The REPL supports two modes:
+//   - Statement mode: input containing ';' or '{' is parsed as a program
+//     (list of statements) and executed.
+//   - Expression mode: input without statement markers is parsed as a single
+//     expression and its value is printed.
 //
-// Results are printed to stdout; lex/parse/runtime errors go to stderr so
-// they can be separated in piped/scripted usage.
-//
-// The loop exits on either the "exit" command or Ctrl+D (EOF), which causes
-// Console.ReadLine() to return null.
+// Each stage can fail independently. Errors go to stderr, results to stdout.
+// The loop exits on "exit" or EOF (Ctrl+D).
 // ============================================================================
 
 using System;
@@ -33,19 +30,12 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        // The REPL loop is implemented at the bottom of this file, after the test classes.
-        // The tests are defined here in Program.cs to avoid circular dependencies between
-        // Stash and Stash.Tests projects. In a larger codebase, we would likely want to
-        // split these into separate files, but for this small project it's simpler to keep
-        // them together.
-
-        Console.WriteLine("Stash v0.1 — Phase 1 REPL");
-        Console.WriteLine("Type an expression to evaluate, or 'exit' to quit.");
+        Console.WriteLine("Stash v0.2 — Phase 2 REPL");
+        Console.WriteLine("Type statements or expressions, or 'exit' to quit.");
 
         // A single Interpreter instance is reused across all REPL iterations.
-        // In Phase 1 this has no observable effect (the interpreter is stateless),
-        // but in Phase 2 and beyond the interpreter will hold a variable environment
-        // that persists across lines, so reusing the instance is essential.
+        // The interpreter holds a variable environment that persists across lines,
+        // so reusing the instance is essential.
         var interpreter = new Interpreter();
 
         while (true)
@@ -65,9 +55,6 @@ public class Program
             }
 
             // --- Stage 1: Lex ---
-            // Convert the raw source line into a list of tokens. If the lexer
-            // encounters invalid characters or malformed literals, it records
-            // errors and we skip to the next prompt.
             var lexer = new Lexer(line);
             List<Token> tokens = lexer.ScanTokens();
 
@@ -81,43 +68,109 @@ public class Program
                 continue;
             }
 
-            // --- Stage 2: Parse ---
-            // Build an expression AST from the token stream. Parse errors
-            // (e.g., mismatched parentheses, unexpected tokens) are collected
-            // and reported without throwing.
-            var parser = new Parser(tokens);
-            Expr expr = parser.Parse();
+            // Determine whether the input looks like statements or a bare expression.
+            // If it contains a semicolon, brace, or starts with a keyword that begins
+            // a statement/declaration, parse as a program; otherwise parse as expression.
+            bool isStatementMode = LooksLikeStatements(tokens);
 
-            if (parser.Errors.Count > 0)
+            if (isStatementMode)
             {
-                foreach (string error in parser.Errors)
+                // --- Statement mode ---
+                var parser = new Parser(tokens);
+                List<Stmt> statements = parser.ParseProgram();
+
+                if (parser.Errors.Count > 0)
                 {
-                    Console.Error.WriteLine($"[parse error] {error}");
+                    foreach (string error in parser.Errors)
+                    {
+                        Console.Error.WriteLine($"[parse error] {error}");
+                    }
+
+                    continue;
                 }
 
-                continue;
-            }
-
-            // --- Stage 3: Interpret ---
-            // Walk the AST and compute a runtime value. RuntimeError exceptions
-            // are caught and displayed with source-location info when available.
-            try
-            {
-                object? result = interpreter.Interpret(expr);
-                Console.WriteLine(interpreter.Stringify(result));
-            }
-            catch (RuntimeError ex)
-            {
-                if (ex.Span is not null)
+                try
                 {
-                    Console.Error.WriteLine($"[runtime error at {ex.Span.StartLine}:{ex.Span.StartColumn}] {ex.Message}");
+                    interpreter.Interpret(statements);
                 }
-                else
+                catch (RuntimeError ex)
                 {
-                    Console.Error.WriteLine($"[runtime error] {ex.Message}");
+                    PrintRuntimeError(ex);
+                }
+            }
+            else
+            {
+                // --- Expression mode (backward-compatible) ---
+                var parser = new Parser(tokens);
+                Expr expr = parser.Parse();
+
+                if (parser.Errors.Count > 0)
+                {
+                    foreach (string error in parser.Errors)
+                    {
+                        Console.Error.WriteLine($"[parse error] {error}");
+                    }
+
+                    continue;
+                }
+
+                try
+                {
+                    object? result = interpreter.Interpret(expr);
+                    if (result is not null)
+                    {
+                        Console.WriteLine(interpreter.Stringify(result));
+                    }
+                }
+                catch (RuntimeError ex)
+                {
+                    PrintRuntimeError(ex);
                 }
             }
         }
+    }
 
+    /// <summary>
+    /// Determines whether the token stream looks like it contains statements
+    /// (as opposed to a bare expression).
+    /// </summary>
+    private static bool LooksLikeStatements(List<Token> tokens)
+    {
+        if (tokens.Count == 0)
+        {
+            return false;
+        }
+
+        // Check first token for statement-starting keywords.
+        TokenType first = tokens[0].Type;
+        if (first == TokenType.Let || first == TokenType.Const || first == TokenType.Fn ||
+            first == TokenType.If || first == TokenType.While || first == TokenType.For ||
+            first == TokenType.Return || first == TokenType.Break || first == TokenType.Continue)
+        {
+            return true;
+        }
+
+        // Check for semicolons or braces anywhere in the token list.
+        foreach (Token token in tokens)
+        {
+            if (token.Type == TokenType.Semicolon || token.Type == TokenType.LeftBrace)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static void PrintRuntimeError(RuntimeError ex)
+    {
+        if (ex.Span is not null)
+        {
+            Console.Error.WriteLine($"[runtime error at {ex.Span.StartLine}:{ex.Span.StartColumn}] {ex.Message}");
+        }
+        else
+        {
+            Console.Error.WriteLine($"[runtime error] {ex.Message}");
+        }
     }
 }

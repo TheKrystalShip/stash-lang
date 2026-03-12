@@ -160,10 +160,10 @@ let servers = [
   Server { host: "10.0.0.2", port: 22, status: Status.Unknown }
 ];
 
+let payload = "app.tar.gz";
+
 // For-in loop
 for (let srv in servers) {
-  let payload = "app.tar.gz";
-
   // Conditional
   if (deploy(srv, payload)) {
     println("Deployed to " + srv.host);

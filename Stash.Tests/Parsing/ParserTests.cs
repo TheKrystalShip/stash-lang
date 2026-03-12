@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -425,5 +426,506 @@ public class ParserTests
 
         var right = Assert.IsType<LiteralExpr>(equality.Right);
         Assert.Equal(7L, right.Value);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Phase 2 — Statement / Program-level tests
+    // ───────────────────────────────────────────────────────────────
+
+    private static List<Stmt> ParseProgram(string source)
+    {
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        return parser.ParseProgram();
+    }
+
+    private static Parser ParseProgramWithParser(string source)
+    {
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        parser.ParseProgram();
+        return parser;
+    }
+
+    // 1. Variable Declarations
+
+    [Fact]
+    public void Parse_VarDecl_WithInitializer()
+    {
+        var stmts = ParseProgram("let x = 42;");
+        var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("x", varDecl.Name.Lexeme);
+        var init = Assert.IsType<LiteralExpr>(varDecl.Initializer);
+        Assert.Equal(42L, init.Value);
+    }
+
+    [Fact]
+    public void Parse_VarDecl_WithoutInitializer()
+    {
+        var stmts = ParseProgram("let x;");
+        var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("x", varDecl.Name.Lexeme);
+        Assert.Null(varDecl.Initializer);
+    }
+
+    [Fact]
+    public void Parse_ConstDecl()
+    {
+        var stmts = ParseProgram("const MAX = 100;");
+        var constDecl = Assert.IsType<ConstDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("MAX", constDecl.Name.Lexeme);
+        var init = Assert.IsType<LiteralExpr>(constDecl.Initializer);
+        Assert.Equal(100L, init.Value);
+    }
+
+    [Fact]
+    public void Parse_ConstDecl_RequiresInitializer()
+    {
+        var parser = ParseProgramWithParser("const X;");
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    // 2. Assignment
+
+    [Fact]
+    public void Parse_Assignment()
+    {
+        var stmts = ParseProgram("x = 5;");
+        var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+        var assign = Assert.IsType<AssignExpr>(exprStmt.Expression);
+        Assert.Equal("x", assign.Name.Lexeme);
+        var value = Assert.IsType<LiteralExpr>(assign.Value);
+        Assert.Equal(5L, value.Value);
+    }
+
+    [Fact]
+    public void Parse_Assignment_RightAssociative()
+    {
+        var stmts = ParseProgram("x = y = 5;");
+        var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+        var outer = Assert.IsType<AssignExpr>(exprStmt.Expression);
+        Assert.Equal("x", outer.Name.Lexeme);
+        var inner = Assert.IsType<AssignExpr>(outer.Value);
+        Assert.Equal("y", inner.Name.Lexeme);
+        var value = Assert.IsType<LiteralExpr>(inner.Value);
+        Assert.Equal(5L, value.Value);
+    }
+
+    [Fact]
+    public void Parse_Assignment_InvalidTarget()
+    {
+        var parser = ParseProgramWithParser("1 + 2 = 3;");
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    // 3. Block
+
+    [Fact]
+    public void Parse_Block_Empty()
+    {
+        var stmts = ParseProgram("{ }");
+        var block = Assert.IsType<BlockStmt>(Assert.Single(stmts));
+        Assert.Empty(block.Statements);
+    }
+
+    [Fact]
+    public void Parse_Block_MultipleStatements()
+    {
+        var stmts = ParseProgram("{ let x = 1; let y = 2; }");
+        var block = Assert.IsType<BlockStmt>(Assert.Single(stmts));
+        Assert.Equal(2, block.Statements.Count);
+        Assert.IsType<VarDeclStmt>(block.Statements[0]);
+        Assert.IsType<VarDeclStmt>(block.Statements[1]);
+    }
+
+    // 4. If/Else
+
+    [Fact]
+    public void Parse_If_NoElse()
+    {
+        var stmts = ParseProgram("if (true) { let x = 1; }");
+        var ifStmt = Assert.IsType<IfStmt>(Assert.Single(stmts));
+        var condition = Assert.IsType<LiteralExpr>(ifStmt.Condition);
+        Assert.Equal(true, condition.Value);
+        Assert.IsType<BlockStmt>(ifStmt.ThenBranch);
+        Assert.Null(ifStmt.ElseBranch);
+    }
+
+    [Fact]
+    public void Parse_If_WithElse()
+    {
+        var stmts = ParseProgram("if (true) { let x = 1; } else { let y = 2; }");
+        var ifStmt = Assert.IsType<IfStmt>(Assert.Single(stmts));
+        Assert.IsType<BlockStmt>(ifStmt.ThenBranch);
+        Assert.NotNull(ifStmt.ElseBranch);
+        Assert.IsType<BlockStmt>(ifStmt.ElseBranch);
+    }
+
+    [Fact]
+    public void Parse_If_ElseIf()
+    {
+        var stmts = ParseProgram("if (true) { } else if (false) { }");
+        var ifStmt = Assert.IsType<IfStmt>(Assert.Single(stmts));
+        Assert.NotNull(ifStmt.ElseBranch);
+        Assert.IsType<IfStmt>(ifStmt.ElseBranch);
+    }
+
+    // 5. While Loop
+
+    [Fact]
+    public void Parse_While()
+    {
+        var stmts = ParseProgram("while (true) { break; }");
+        var whileStmt = Assert.IsType<WhileStmt>(Assert.Single(stmts));
+        var condition = Assert.IsType<LiteralExpr>(whileStmt.Condition);
+        Assert.Equal(true, condition.Value);
+        var body = Assert.IsType<BlockStmt>(whileStmt.Body);
+        Assert.IsType<BreakStmt>(Assert.Single(body.Statements));
+    }
+
+    // 6. For-In Loop
+
+    [Fact]
+    public void Parse_ForIn()
+    {
+        var stmts = ParseProgram("for (let x in items) { }");
+        var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
+        Assert.Equal("x", forIn.VariableName.Lexeme);
+        var iterable = Assert.IsType<IdentifierExpr>(forIn.Iterable);
+        Assert.Equal("items", iterable.Name.Lexeme);
+        Assert.IsType<BlockStmt>(forIn.Body);
+    }
+
+    // 7. Functions
+
+    [Fact]
+    public void Parse_FnDecl_NoParams()
+    {
+        var stmts = ParseProgram("fn greet() { }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("greet", fn.Name.Lexeme);
+        Assert.Empty(fn.Parameters);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_WithParams()
+    {
+        var stmts = ParseProgram("fn add(a, b) { return a + b; }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("add", fn.Name.Lexeme);
+        Assert.Equal(2, fn.Parameters.Count);
+        Assert.Equal("a", fn.Parameters[0].Lexeme);
+        Assert.Equal("b", fn.Parameters[1].Lexeme);
+        Assert.IsType<ReturnStmt>(fn.Body.Statements[0]);
+    }
+
+    [Fact]
+    public void Parse_CallExpr_NoArgs()
+    {
+        var result = ParseExpr("greet()");
+        var call = Assert.IsType<CallExpr>(result);
+        var callee = Assert.IsType<IdentifierExpr>(call.Callee);
+        Assert.Equal("greet", callee.Name.Lexeme);
+        Assert.Empty(call.Arguments);
+    }
+
+    [Fact]
+    public void Parse_CallExpr_WithArgs()
+    {
+        var result = ParseExpr("add(1, 2)");
+        var call = Assert.IsType<CallExpr>(result);
+        Assert.Equal(2, call.Arguments.Count);
+    }
+
+    // 8. Return/Break/Continue
+
+    [Fact]
+    public void Parse_Return_WithValue()
+    {
+        var stmts = ParseProgram("fn f() { return 42; }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        var ret = Assert.IsType<ReturnStmt>(Assert.Single(fn.Body.Statements));
+        var value = Assert.IsType<LiteralExpr>(ret.Value);
+        Assert.Equal(42L, value.Value);
+    }
+
+    [Fact]
+    public void Parse_Return_WithoutValue()
+    {
+        var stmts = ParseProgram("fn f() { return; }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        var ret = Assert.IsType<ReturnStmt>(Assert.Single(fn.Body.Statements));
+        Assert.Null(ret.Value);
+    }
+
+    [Fact]
+    public void Parse_Break()
+    {
+        var stmts = ParseProgram("while (true) { break; }");
+        var whileStmt = Assert.IsType<WhileStmt>(Assert.Single(stmts));
+        var body = Assert.IsType<BlockStmt>(whileStmt.Body);
+        Assert.IsType<BreakStmt>(Assert.Single(body.Statements));
+    }
+
+    [Fact]
+    public void Parse_Continue()
+    {
+        var stmts = ParseProgram("while (true) { continue; }");
+        var whileStmt = Assert.IsType<WhileStmt>(Assert.Single(stmts));
+        var body = Assert.IsType<BlockStmt>(whileStmt.Body);
+        Assert.IsType<ContinueStmt>(Assert.Single(body.Statements));
+    }
+
+    // 9. Error Recovery
+
+    [Fact]
+    public void Parse_ErrorRecovery_ContinuesParsing()
+    {
+        var lexer = new Lexer("let = 5; let y = 10;");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        Assert.NotEmpty(parser.Errors);
+        Assert.True(stmts.Count >= 1, "Parser should recover and parse at least one valid statement");
+    }
+
+    [Fact]
+    public void Parse_MissingSemicolon_ReportsError()
+    {
+        var parser = ParseProgramWithParser("let x = 5");
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    // 10. Expression Statement
+
+    [Fact]
+    public void Parse_ExpressionStatement()
+    {
+        var stmts = ParseProgram("42;");
+        var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+        var literal = Assert.IsType<LiteralExpr>(exprStmt.Expression);
+        Assert.Equal(42L, literal.Value);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Phase 3 — Arrays, Structs, Enums
+    // ───────────────────────────────────────────────────────────────
+
+    // 11. Array Expressions
+
+    [Fact]
+    public void Parse_ArrayLiteral_Empty()
+    {
+        var result = ParseExpr("[]");
+        var arr = Assert.IsType<ArrayExpr>(result);
+        Assert.Empty(arr.Elements);
+    }
+
+    [Fact]
+    public void Parse_ArrayLiteral_SingleElement()
+    {
+        var result = ParseExpr("[42]");
+        var arr = Assert.IsType<ArrayExpr>(result);
+        Assert.Single(arr.Elements);
+        var elem = Assert.IsType<LiteralExpr>(arr.Elements[0]);
+        Assert.Equal(42L, elem.Value);
+    }
+
+    [Fact]
+    public void Parse_ArrayLiteral_MultipleElements()
+    {
+        var result = ParseExpr("[1, 2, 3]");
+        var arr = Assert.IsType<ArrayExpr>(result);
+        Assert.Equal(3, arr.Elements.Count);
+        var e0 = Assert.IsType<LiteralExpr>(arr.Elements[0]);
+        Assert.Equal(1L, e0.Value);
+        var e1 = Assert.IsType<LiteralExpr>(arr.Elements[1]);
+        Assert.Equal(2L, e1.Value);
+        var e2 = Assert.IsType<LiteralExpr>(arr.Elements[2]);
+        Assert.Equal(3L, e2.Value);
+    }
+
+    [Fact]
+    public void Parse_ArrayIndex()
+    {
+        var result = ParseExpr("arr[0]");
+        var index = Assert.IsType<IndexExpr>(result);
+        var obj = Assert.IsType<IdentifierExpr>(index.Object);
+        Assert.Equal("arr", obj.Name.Lexeme);
+        var idx = Assert.IsType<LiteralExpr>(index.Index);
+        Assert.Equal(0L, idx.Value);
+    }
+
+    [Fact]
+    public void Parse_ArrayIndexAssign()
+    {
+        var stmts = ParseProgram("arr[0] = 42;");
+        var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+        var assign = Assert.IsType<IndexAssignExpr>(exprStmt.Expression);
+        var obj = Assert.IsType<IdentifierExpr>(assign.Object);
+        Assert.Equal("arr", obj.Name.Lexeme);
+        var idx = Assert.IsType<LiteralExpr>(assign.Index);
+        Assert.Equal(0L, idx.Value);
+        var val = Assert.IsType<LiteralExpr>(assign.Value);
+        Assert.Equal(42L, val.Value);
+    }
+
+    [Fact]
+    public void Parse_NestedArrayIndex()
+    {
+        var result = ParseExpr("arr[0][1]");
+        var outer = Assert.IsType<IndexExpr>(result);
+        var inner = Assert.IsType<IndexExpr>(outer.Object);
+        var obj = Assert.IsType<IdentifierExpr>(inner.Object);
+        Assert.Equal("arr", obj.Name.Lexeme);
+        var idx0 = Assert.IsType<LiteralExpr>(inner.Index);
+        Assert.Equal(0L, idx0.Value);
+        var idx1 = Assert.IsType<LiteralExpr>(outer.Index);
+        Assert.Equal(1L, idx1.Value);
+    }
+
+    [Fact]
+    public void Parse_ArrayLiteral_MixedTypes()
+    {
+        var result = ParseExpr("[1, \"hello\", true]");
+        var arr = Assert.IsType<ArrayExpr>(result);
+        Assert.Equal(3, arr.Elements.Count);
+        var e0 = Assert.IsType<LiteralExpr>(arr.Elements[0]);
+        Assert.Equal(1L, e0.Value);
+        var e1 = Assert.IsType<LiteralExpr>(arr.Elements[1]);
+        Assert.Equal("hello", e1.Value);
+        var e2 = Assert.IsType<LiteralExpr>(arr.Elements[2]);
+        Assert.Equal(true, e2.Value);
+    }
+
+    // 12. Struct Declarations
+
+    [Fact]
+    public void Parse_StructDecl()
+    {
+        var stmts = ParseProgram("struct Point { x, y }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("Point", structDecl.Name.Lexeme);
+        Assert.Equal(2, structDecl.Fields.Count);
+        Assert.Equal("x", structDecl.Fields[0].Lexeme);
+        Assert.Equal("y", structDecl.Fields[1].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_SingleField()
+    {
+        var stmts = ParseProgram("struct W { value }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("W", structDecl.Name.Lexeme);
+        Assert.Single(structDecl.Fields);
+        Assert.Equal("value", structDecl.Fields[0].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructInit()
+    {
+        var result = ParseExpr("Point { x: 1, y: 2 }");
+        var init = Assert.IsType<StructInitExpr>(result);
+        Assert.Equal("Point", init.Name.Lexeme);
+        Assert.Equal(2, init.FieldValues.Count);
+        Assert.Equal("x", init.FieldValues[0].Field.Lexeme);
+        var v0 = Assert.IsType<LiteralExpr>(init.FieldValues[0].Value);
+        Assert.Equal(1L, v0.Value);
+        Assert.Equal("y", init.FieldValues[1].Field.Lexeme);
+        var v1 = Assert.IsType<LiteralExpr>(init.FieldValues[1].Value);
+        Assert.Equal(2L, v1.Value);
+    }
+
+    [Fact]
+    public void Parse_StructInit_Empty()
+    {
+        var result = ParseExpr("Point {}");
+        var init = Assert.IsType<StructInitExpr>(result);
+        Assert.Equal("Point", init.Name.Lexeme);
+        Assert.Empty(init.FieldValues);
+    }
+
+    [Fact]
+    public void Parse_DotExpr()
+    {
+        var result = ParseExpr("obj.field");
+        var dot = Assert.IsType<DotExpr>(result);
+        var obj = Assert.IsType<IdentifierExpr>(dot.Object);
+        Assert.Equal("obj", obj.Name.Lexeme);
+        Assert.Equal("field", dot.Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_DotAssign()
+    {
+        var stmts = ParseProgram("obj.field = 42;");
+        var exprStmt = Assert.IsType<ExprStmt>(Assert.Single(stmts));
+        var dotAssign = Assert.IsType<DotAssignExpr>(exprStmt.Expression);
+        var obj = Assert.IsType<IdentifierExpr>(dotAssign.Object);
+        Assert.Equal("obj", obj.Name.Lexeme);
+        Assert.Equal("field", dotAssign.Name.Lexeme);
+        var val = Assert.IsType<LiteralExpr>(dotAssign.Value);
+        Assert.Equal(42L, val.Value);
+    }
+
+    [Fact]
+    public void Parse_ChainedDot()
+    {
+        var result = ParseExpr("a.b.c");
+        var outer = Assert.IsType<DotExpr>(result);
+        Assert.Equal("c", outer.Name.Lexeme);
+        var inner = Assert.IsType<DotExpr>(outer.Object);
+        Assert.Equal("b", inner.Name.Lexeme);
+        var obj = Assert.IsType<IdentifierExpr>(inner.Object);
+        Assert.Equal("a", obj.Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_DotAndIndex()
+    {
+        var result = ParseExpr("arr[0].x");
+        var dot = Assert.IsType<DotExpr>(result);
+        Assert.Equal("x", dot.Name.Lexeme);
+        var index = Assert.IsType<IndexExpr>(dot.Object);
+        var obj = Assert.IsType<IdentifierExpr>(index.Object);
+        Assert.Equal("arr", obj.Name.Lexeme);
+        var idx = Assert.IsType<LiteralExpr>(index.Index);
+        Assert.Equal(0L, idx.Value);
+    }
+
+    // 13. Enum Declarations
+
+    [Fact]
+    public void Parse_EnumDecl()
+    {
+        var stmts = ParseProgram("enum Color { Red, Green, Blue }");
+        var enumDecl = Assert.IsType<EnumDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("Color", enumDecl.Name.Lexeme);
+        Assert.Equal(3, enumDecl.Members.Count);
+        Assert.Equal("Red", enumDecl.Members[0].Lexeme);
+        Assert.Equal("Green", enumDecl.Members[1].Lexeme);
+        Assert.Equal("Blue", enumDecl.Members[2].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_EnumDecl_SingleMember()
+    {
+        var stmts = ParseProgram("enum S { A }");
+        var enumDecl = Assert.IsType<EnumDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("S", enumDecl.Name.Lexeme);
+        Assert.Single(enumDecl.Members);
+        Assert.Equal("A", enumDecl.Members[0].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_EnumMemberAccess()
+    {
+        var result = ParseExpr("Color.Red");
+        var dot = Assert.IsType<DotExpr>(result);
+        var obj = Assert.IsType<IdentifierExpr>(dot.Object);
+        Assert.Equal("Color", obj.Name.Lexeme);
+        Assert.Equal("Red", dot.Name.Lexeme);
     }
 }
