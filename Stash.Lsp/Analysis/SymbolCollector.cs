@@ -7,9 +7,11 @@ using Stash.Parsing.AST;
 public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 {
     private Scope _currentScope = null!;
+    private readonly List<ReferenceInfo> _references = new();
 
     public ScopeTree Collect(List<Stmt> statements)
     {
+        _references.Clear();
         var file = statements.Count > 0 ? statements[0].Span.File : "";
         var globalSpan = new SourceSpan(file, 1, 1, int.MaxValue, int.MaxValue);
         var globalScope = new Scope(ScopeKind.Global, null, globalSpan);
@@ -20,7 +22,31 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             stmt.Accept(this);
         }
 
-        return new ScopeTree(globalScope);
+        return new ScopeTree(globalScope, _references);
+    }
+
+    private void RecordReference(string name, SourceSpan span, ReferenceKind kind)
+    {
+        var resolved = FindSymbolInScopeChain(name, span.StartLine, span.StartColumn);
+        _references.Add(new ReferenceInfo(name, span, kind, resolved));
+    }
+
+    private SymbolInfo? FindSymbolInScopeChain(string name, int line, int column)
+    {
+        var scope = _currentScope;
+        while (scope != null)
+        {
+            for (int i = scope.Symbols.Count - 1; i >= 0; i--)
+            {
+                var sym = scope.Symbols[i];
+                if (sym.Name == name && (sym.Span.StartLine < line || (sym.Span.StartLine == line && sym.Span.StartColumn <= column)))
+                {
+                    return sym;
+                }
+            }
+            scope = scope.Parent;
+        }
+        return null;
     }
 
     private void PushScope(ScopeKind kind, SourceSpan span)
@@ -199,7 +225,12 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     // Expression visitors — just recurse, we don't collect declarations from expressions
 
     public object? VisitLiteralExpr(LiteralExpr expr) => null;
-    public object? VisitIdentifierExpr(IdentifierExpr expr) => null;
+
+    public object? VisitIdentifierExpr(IdentifierExpr expr)
+    {
+        RecordReference(expr.Name.Lexeme, expr.Span, ReferenceKind.Read);
+        return null;
+    }
 
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
@@ -209,7 +240,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
-        expr.Operand.Accept(this);
+        if (expr.Operand is IdentifierExpr id)
+        {
+            RecordReference(id.Name.Lexeme, id.Span, ReferenceKind.Write);
+        }
+        else
+        {
+            expr.Operand.Accept(this);
+        }
         return null;
     }
 
@@ -236,18 +274,25 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitAssignExpr(AssignExpr expr)
     {
+        RecordReference(expr.Name.Lexeme, expr.Name.Span, ReferenceKind.Write);
         expr.Value.Accept(this);
         return null;
     }
 
     public object? VisitCallExpr(CallExpr expr)
     {
-        expr.Callee.Accept(this);
+        if (expr.Callee is IdentifierExpr id)
+        {
+            RecordReference(id.Name.Lexeme, id.Span, ReferenceKind.Call);
+        }
+        else
+        {
+            expr.Callee.Accept(this);
+        }
         foreach (var arg in expr.Arguments)
         {
             arg.Accept(this);
         }
-
         return null;
     }
 
@@ -278,11 +323,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
+        RecordReference(expr.Name.Lexeme, expr.Name.Span, ReferenceKind.TypeUse);
         foreach (var (_, value) in expr.FieldValues)
         {
             value.Accept(this);
         }
-
         return null;
     }
 
@@ -309,7 +354,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
-    public object? VisitCommandExpr(CommandExpr expr) => null;
+    public object? VisitCommandExpr(CommandExpr expr)
+    {
+        foreach (var part in expr.Parts)
+        {
+            part.Accept(this);
+        }
+        return null;
+    }
 
     public object? VisitPipeExpr(PipeExpr expr)
     {

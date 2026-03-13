@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Analysis;
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Common;
@@ -7,10 +8,12 @@ using Stash.Common;
 public class ScopeTree
 {
     public Scope GlobalScope { get; }
+    public IReadOnlyList<ReferenceInfo> References { get; }
 
-    public ScopeTree(Scope globalScope)
+    public ScopeTree(Scope globalScope, IEnumerable<ReferenceInfo>? references = null)
     {
         GlobalScope = globalScope;
+        References = references?.ToList() ?? new List<ReferenceInfo>();
     }
 
     /// <summary>
@@ -163,6 +166,53 @@ public class ScopeTree
                 yield return (sym, childSymbols);
             }
         }
+    }
+
+    /// <summary>
+    /// Finds all references to a symbol identified by name at the given position.
+    /// First resolves the declaration, then finds all references that resolve to the same declaration.
+    /// Also includes the declaration itself.
+    /// </summary>
+    public IReadOnlyList<ReferenceInfo> FindReferences(string name, int line, int column)
+    {
+        var definition = FindDefinition(name, line, column);
+        if (definition == null)
+            return Array.Empty<ReferenceInfo>();
+
+        var result = new List<ReferenceInfo>();
+
+        // Include the declaration itself as a reference
+        result.Add(new ReferenceInfo(definition.Name, definition.Span, ReferenceKind.Write, definition));
+
+        // Find all references that resolve to this specific declaration
+        foreach (var reference in References)
+        {
+            if (reference.ResolvedSymbol == definition)
+            {
+                result.Add(reference);
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Gets all unresolved references (identifiers used but not declared).
+    /// Excludes known built-in names.
+    /// </summary>
+    public IReadOnlyList<ReferenceInfo> GetUnresolvedReferences(HashSet<string>? knownNames = null)
+    {
+        var result = new List<ReferenceInfo>();
+        foreach (var reference in References)
+        {
+            if (reference.ResolvedSymbol == null)
+            {
+                if (knownNames != null && knownNames.Contains(reference.Name))
+                    continue;
+                result.Add(reference);
+            }
+        }
+        return result;
     }
 
     private static bool ContainsPosition(SourceSpan span, int line, int column)

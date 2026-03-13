@@ -101,6 +101,25 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             diagnostics.Add(ParseErrorToDiagnostic(error, DiagnosticSeverity.Error));
         }
 
+        foreach (var semantic in result.SemanticDiagnostics)
+        {
+            diagnostics.Add(new Diagnostic
+            {
+                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
+                    new Position(semantic.Span.StartLine - 1, semantic.Span.StartColumn - 1),
+                    new Position(semantic.Span.EndLine - 1, semantic.Span.EndColumn - 1)),
+                Severity = semantic.Level switch
+                {
+                    Analysis.DiagnosticLevel.Error => DiagnosticSeverity.Error,
+                    Analysis.DiagnosticLevel.Warning => DiagnosticSeverity.Warning,
+                    Analysis.DiagnosticLevel.Information => DiagnosticSeverity.Information,
+                    _ => DiagnosticSeverity.Warning
+                },
+                Source = "stash",
+                Message = semantic.Message
+            });
+        }
+
         _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
         {
             Uri = DocumentUri.From(uri),

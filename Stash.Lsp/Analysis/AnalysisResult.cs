@@ -11,14 +11,17 @@ public class AnalysisResult
     public List<string> LexErrors { get; }
     public List<string> ParseErrors { get; }
     public ScopeTree Symbols { get; }
+    public List<SemanticDiagnostic> SemanticDiagnostics { get; }
 
     public AnalysisResult(List<Token> tokens, List<Stmt> statements,
-        List<string> lexErrors, List<string> parseErrors, ScopeTree symbols)
+        List<string> lexErrors, List<string> parseErrors, ScopeTree symbols,
+        List<SemanticDiagnostic> semanticDiagnostics)
     {
         Tokens = tokens;
         Statements = statements;
         LexErrors = lexErrors;
         ParseErrors = parseErrors;
         Symbols = symbols;
+        SemanticDiagnostics = semanticDiagnostics;
     }
 }

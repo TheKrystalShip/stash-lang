@@ -26,7 +26,10 @@ public class AnalysisEngine
         var symbolCollector = new SymbolCollector();
         var symbols = symbolCollector.Collect(statements);
 
-        var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors, symbols);
+        var validator = new SemanticValidator(symbols);
+        var semanticDiagnostics = validator.Validate(statements);
+
+        var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors, symbols, semanticDiagnostics);
         _cache[uri] = result;
         return result;
     }

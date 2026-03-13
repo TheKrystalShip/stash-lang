@@ -30,6 +30,8 @@ public static class StashLanguageServer
                 .WithHandler<HoverHandler>()
                 .WithHandler<DefinitionHandler>()
                 .WithHandler<CompletionHandler>()
+                .WithHandler<ReferencesHandler>()
+                .WithHandler<DocumentHighlightHandler>()
                 .OnInitialize((server, request, cancellationToken) =>
                 {
                     return Task.CompletedTask;
