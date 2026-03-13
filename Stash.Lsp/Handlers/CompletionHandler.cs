@@ -227,8 +227,23 @@ public class CompletionHandler : CompletionHandlerBase
             return new CompletionList(items);
         }
 
-        // Check if prefix is a struct or enum — look up its type via ScopeTree
+        // Check if prefix is a namespace import alias
         var result = _analysis.GetCachedResult(uri);
+        if (result != null && result.NamespaceImports.TryGetValue(prefix, out var moduleInfo))
+        {
+            foreach (var sym in moduleInfo.Symbols.GetTopLevel())
+            {
+                items.Add(new CompletionItem
+                {
+                    Label = sym.Name,
+                    Kind = MapCompletionKind(sym.Kind),
+                    Detail = sym.Detail
+                });
+            }
+            return new CompletionList(items);
+        }
+
+        // Check if prefix is a struct or enum — look up its type via ScopeTree
         if (result != null)
         {
             var symbols = result.Symbols.GetVisibleSymbols(1, 1);

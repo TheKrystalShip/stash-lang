@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Analysis;
 
+using System;
 using Stash.Common;
 
 public enum SymbolKind
@@ -25,8 +26,9 @@ public class SymbolInfo
     public string? Detail { get; }
     public string? ParentName { get; }
     public string? TypeHint { get; }
+    public Uri? SourceUri { get; }
 
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null)
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null)
     {
         Name = name;
         Kind = kind;
@@ -35,5 +37,6 @@ public class SymbolInfo
         Detail = detail;
         ParentName = parentName;
         TypeHint = typeHint;
+        SourceUri = sourceUri;
     }
 }

@@ -15,11 +15,13 @@ public class AnalysisResult
     public List<DiagnosticError> StructuredParseErrors { get; }
     public ScopeTree Symbols { get; }
     public List<SemanticDiagnostic> SemanticDiagnostics { get; }
+    public Dictionary<string, ImportResolver.ModuleInfo> NamespaceImports { get; }
 
     public AnalysisResult(List<Token> tokens, List<Stmt> statements,
         List<string> lexErrors, List<string> parseErrors,
         List<DiagnosticError> structuredLexErrors, List<DiagnosticError> structuredParseErrors,
-        ScopeTree symbols, List<SemanticDiagnostic> semanticDiagnostics)
+        ScopeTree symbols, List<SemanticDiagnostic> semanticDiagnostics,
+        Dictionary<string, ImportResolver.ModuleInfo>? namespaceImports = null)
     {
         Tokens = tokens;
         Statements = statements;
@@ -29,5 +31,6 @@ public class AnalysisResult
         StructuredParseErrors = structuredParseErrors;
         Symbols = symbols;
         SemanticDiagnostics = semanticDiagnostics;
+        NamespaceImports = namespaceImports ?? new Dictionary<string, ImportResolver.ModuleInfo>();
     }
 }

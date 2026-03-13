@@ -136,6 +136,12 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     private void AnalyzeAndPublishDiagnostics(Uri uri, string text)
     {
+        // Invalidate this file's module cache so importers get fresh data
+        if (uri.IsFile)
+        {
+            _analysis.InvalidateModule(uri.LocalPath);
+        }
+
         var result = _analysis.Analyze(uri, text);
         var diagnostics = new System.Collections.Generic.List<Diagnostic>();
 

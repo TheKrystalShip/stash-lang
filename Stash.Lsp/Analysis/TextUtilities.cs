@@ -36,4 +36,42 @@ public static class TextUtilities
 
         return lineText[start..(end + 1)];
     }
+
+    /// <summary>
+    /// Finds the identifier before a dot at the cursor position.
+    /// Given "utils.log", with cursor on "log", returns "utils".
+    /// </summary>
+    /// <param name="line">The text line.</param>
+    /// <param name="col">0-based cursor column (position of the first character of the word after the dot).</param>
+    /// <returns>The prefix identifier, or null if there's no dot-access pattern.</returns>
+    public static string? FindDotPrefix(string line, int col)
+    {
+        // Walk backwards from cursor to find the start of the current word
+        int wordStart = col;
+        while (wordStart > 0 && (char.IsLetterOrDigit(line[wordStart - 1]) || line[wordStart - 1] == '_'))
+        {
+            wordStart--;
+        }
+
+        // Check if there's a dot before the word
+        if (wordStart <= 0 || line[wordStart - 1] != '.')
+        {
+            return null;
+        }
+
+        // Find the prefix before the dot
+        int dotPos = wordStart - 1;
+        int prefixStart = dotPos;
+        while (prefixStart > 0 && (char.IsLetterOrDigit(line[prefixStart - 1]) || line[prefixStart - 1] == '_'))
+        {
+            prefixStart--;
+        }
+
+        if (prefixStart >= dotPos)
+        {
+            return null;
+        }
+
+        return line.Substring(prefixStart, dotPos - prefixStart);
+    }
 }
