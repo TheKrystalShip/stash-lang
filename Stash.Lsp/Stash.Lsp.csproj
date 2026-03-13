@@ -10,6 +10,7 @@
     <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
     <InvariantGlobalization>true</InvariantGlobalization>
     <DebugType>embedded</DebugType>
+    <PublishAot>false</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>
