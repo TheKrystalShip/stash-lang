@@ -260,7 +260,12 @@ public class Lexer
                 AddToken(Match('=') ? TokenType.BangEqual : TokenType.Bang);
                 break;
             case '=':
-                AddToken(Match('=') ? TokenType.EqualEqual : TokenType.Equal);
+                if (Match('='))
+                    AddToken(TokenType.EqualEqual);
+                else if (Match('>'))
+                    AddToken(TokenType.FatArrow);
+                else
+                    AddToken(TokenType.Equal);
                 break;
             case '<':
                 AddToken(Match('=') ? TokenType.LessEqual : TokenType.Less);

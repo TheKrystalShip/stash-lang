@@ -1,0 +1,267 @@
+#!/usr/bin/env stash
+
+/*
+ * Lambda / Arrow Function Demo
+ * ----------------------------
+ * Showcases all variations of lambda syntax,
+ * closures, higher-order functions, and
+ * functional programming patterns in Stash.
+ */
+
+// ─── 1. Basic Syntax ────────────────────────────────────────────
+
+io.println("=== Basic Lambda Syntax ===");
+
+// Expression body — implicit return
+let double = (x) => x * 2;
+let add = (a, b) => a + b;
+let greet = () => "hello, lambda!";
+
+io.println($"  double(5)    = {double(5)}");
+io.println($"  add(3, 7)    = {add(3, 7)}");
+io.println($"  greet()      = {greet()}");
+
+// Block body — explicit return
+let abs = (x) => {
+    if (x < 0) {
+        return -x;
+    }
+    return x;
+};
+
+io.println($"  abs(-42)     = {abs(-42)}");
+io.println($"  abs(7)       = {abs(7)}");
+
+// Type annotations on parameters
+let multiply = (a: int, b: int) => a * b;
+io.println($"  multiply(6, 7) = {multiply(6, 7)}");
+io.println("");
+
+// ─── 2. Closures ────────────────────────────────────────────────
+
+io.println("=== Closures ===");
+
+// Lambda captures enclosing variable
+let base_salary = 50000;
+let with_bonus = (bonus) => base_salary + bonus;
+io.println($"  base = {base_salary}, with_bonus(10000) = {with_bonus(10000)}");
+
+// Factory pattern — function returns a lambda that closes over its argument
+fn make_multiplier(factor: int) {
+    return (x) => x * factor;
+}
+
+let triple = make_multiplier(3);
+let quadruple = make_multiplier(4);
+io.println($"  triple(10)    = {triple(10)}");
+io.println($"  quadruple(10) = {quadruple(10)}");
+io.println("");
+
+// ─── 3. Mutable Closures (Stateful Lambdas) ────────────────────
+
+io.println("=== Mutable Closures ===");
+
+fn make_counter(start: int) {
+    let count = start;
+    let next = () => {
+        count = count + 1;
+        return count;
+    };
+    let reset = () => {
+        count = start;
+        return count;
+    };
+    return [next, reset];
+}
+
+let counter = make_counter(0);
+let next = counter[0];
+let reset = counter[1];
+
+io.print("  counting: ");
+let i = 0;
+while (i < 5) {
+    io.print($"{next()} ");
+    i++;
+}
+io.println("");
+io.println($"  reset: {reset()}");
+io.println($"  next:  {next()}");
+io.println("");
+
+// ─── 4. Higher-Order Functions ──────────────────────────────────
+
+io.println("=== Higher-Order Functions ===");
+
+// reduce — fold array into a single value
+fn reduce(arr, f, initial) {
+    let acc = initial;
+    for (let item in arr) {
+        acc = f(acc, item);
+    }
+    return acc;
+}
+
+// for_each — apply a function to every element
+fn for_each(arr, f) {
+    for (let item in arr) {
+        f(item);
+    }
+}
+
+// any — check if any element satisfies predicate
+fn any(arr, predicate) {
+    for (let item in arr) {
+        if (predicate(item)) { return true; }
+    }
+    return false;
+}
+
+// all — check if all elements satisfy predicate
+fn all(arr, predicate) {
+    for (let item in arr) {
+        if (!predicate(item)) { return false; }
+    }
+    return true;
+}
+
+// count — count elements matching a predicate
+fn count(arr, predicate) {
+    return reduce(arr, (acc, x) => predicate(x) ? acc + 1 : acc, 0);
+}
+
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+let sum = reduce(numbers, (acc, x) => acc + x, 0);
+io.println($"  sum(1..10)         = {sum}");
+
+let product = reduce([1, 2, 3, 4, 5], (acc, x) => acc * x, 1);
+io.println($"  product(1..5)      = {product}");
+
+let max_val = reduce(numbers, (a, b) => a > b ? a : b, 0);
+io.println($"  max(1..10)         = {max_val}");
+
+let even_count = count(numbers, (x) => x % 2 == 0);
+io.println($"  count(even)        = {even_count}");
+
+io.println($"  any(>5)            = {any(numbers, (x) => x > 5)}");
+io.println($"  all(>0)            = {all(numbers, (x) => x > 0)}");
+io.println($"  all(>5)            = {all(numbers, (x) => x > 5)}");
+
+io.print("  for_each(squared): ");
+for_each(numbers, (x) => io.print($"{x * x} "));
+io.println("");
+io.println("");
+
+// ─── 5. Inline Lambdas ─────────────────────────────────────────
+
+io.println("=== Inline Lambdas ===");
+
+fn apply(f, x) {
+    return f(x);
+}
+
+io.println($"  square(9)   = {apply((x) => x * x, 9)}");
+io.println($"  negate(42)  = {apply((x) => -x, 42)}");
+io.println($"  is_even(7)  = {apply((x) => x % 2 == 0, 7)}");
+io.println("");
+
+// ─── 6. Nested Lambdas (Currying) ──────────────────────────────
+
+io.println("=== Currying via Nested Lambdas ===");
+
+// Curried add: add(a)(b) => a + b
+let curried_add = (a) => (b) => a + b;
+let add10 = curried_add(10);
+let add100 = curried_add(100);
+
+io.println($"  add10(5)    = {add10(5)}");
+io.println($"  add100(5)   = {add100(5)}");
+io.println($"  inline      = {curried_add(3)(4)}");
+
+// Three-level nesting
+let volume = (l) => (w) => (h) => l * w * h;
+io.println($"  volume(2)(3)(4) = {volume(2)(3)(4)}");
+io.println("");
+
+// ─── 7. Lambdas in Data Structures ─────────────────────────────
+
+io.println("=== Lambdas in Data Structures ===");
+
+let ops = [
+    (x) => x + 1,
+    (x) => x * 2,
+    (x) => x * x,
+    (x) => -x
+];
+
+let labels = ["inc", "dbl", "sqr", "neg"];
+let val = 5;
+
+i = 0;
+while (i < len(ops)) {
+    io.println($"  {labels[i]}({val}) = {ops[i](val)}");
+    i++;
+}
+io.println("");
+
+// ─── 8. Composition ────────────────────────────────────────────
+
+io.println("=== Function Composition ===");
+
+fn compose(f, g) {
+    return (x) => f(g(x));
+}
+
+let inc = (x) => x + 1;
+let dbl = (x) => x * 2;
+
+let inc_then_dbl = compose(dbl, inc);   // dbl(inc(x))
+let dbl_then_inc = compose(inc, dbl);   // inc(dbl(x))
+
+io.println($"  inc then dbl: (5+1)*2 = {inc_then_dbl(5)}");
+io.println($"  dbl then inc: (5*2)+1 = {dbl_then_inc(5)}");
+
+// Chain multiple transforms
+let transform = compose(compose(dbl, inc), (x) => x * x);  // dbl(inc(x*x))
+io.println($"  x² → +1 → ×2: x=3 → {transform(3)}");
+io.println("");
+
+// ─── 9. Ternary in Expression Body ─────────────────────────────
+
+io.println("=== Conditional Lambdas ===");
+
+let classify = (n) => n > 0 ? "positive" : n < 0 ? "negative" : "zero";
+let clamp = (x, lo, hi) => x < lo ? lo : x > hi ? hi : x;
+let max = (a, b) => a > b ? a : b;
+
+io.println($"  classify(5)    = {classify(5)}");
+io.println($"  classify(-3)   = {classify(-3)}");
+io.println($"  classify(0)    = {classify(0)}");
+io.println($"  clamp(15,0,10) = {clamp(15, 0, 10)}");
+io.println($"  max(42, 17)    = {max(42, 17)}");
+io.println("");
+
+// ─── 10. Real-World Pattern: Accumulation Pipeline ─────────────
+
+io.println("=== Pipeline Processing ===");
+
+let data = [12, 5, 27, 3, 19, 8, 41, 15, 6, 33];
+
+io.print("  data:          ");
+for_each(data, (n) => io.print($"{n} "));
+io.println("");
+
+// Sum only values above 10, doubled
+let pipeline_result = reduce(data, (acc, x) => x > 10 ? acc + x * 2 : acc, 0);
+io.println($"  filter(>10) → map(*2) → sum = {pipeline_result}");
+
+// Find the biggest element via reduce
+let biggest = reduce(data, (a, b) => a > b ? a : b, 0);
+io.println($"  biggest:       {biggest}");
+
+// Count items matching several criteria
+io.println($"  count(>10):    {count(data, (x) => x > 10)}");
+io.println($"  count(even):   {count(data, (x) => x % 2 == 0)}");
+io.println($"  any(>40):      {any(data, (x) => x > 40)}");
+io.println($"  all(>0):       {all(data, (x) => x > 0)}");

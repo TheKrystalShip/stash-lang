@@ -91,11 +91,3 @@ if (failures > 0) {
     utils.log(utils.LogLevel.Error, "Some deployments failed — check logs above");
     process.exit(1);
 }
-
-fn testFn() {
-    io.println("Printing from inside testFn");
-}
-
-let function: function = testFn;
-
-function();

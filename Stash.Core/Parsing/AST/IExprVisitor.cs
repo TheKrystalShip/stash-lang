@@ -154,4 +154,11 @@ public interface IExprVisitor<T>
     /// <param name="expr">The update expression node to visit.</param>
     /// <returns>The value before mutation for postfix; the value after mutation for prefix.</returns>
     T VisitUpdateExpr(UpdateExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="LambdaExpr"/> node (arrow function <c>(params) =&gt; body</c>).
+    /// </summary>
+    /// <param name="expr">The lambda expression node to visit.</param>
+    /// <returns>The result of processing the lambda expression.</returns>
+    T VisitLambdaExpr(LambdaExpr expr);
 }

@@ -1024,12 +1024,116 @@ public class Parser
         if (Match(TokenType.LeftParen))
         {
             Token open = Previous();
+
+            // Check if this is a lambda: (params) => ...
+            if (IsLambdaStart())
+            {
+                return ParseLambda(open);
+            }
+
             Expr expr = Expression();
             Token close = Consume(TokenType.RightParen, "Expected ')' after expression.");
             return new GroupingExpr(expr, MakeSpan(open.Span, close.Span));
         }
 
         throw Error(Peek(), "Expected expression.");
+    }
+
+    /// <summary>
+    /// Checks whether the current token stream starting after an opening <c>(</c>
+    /// matches the pattern for a lambda parameter list followed by <c>=&gt;</c>.
+    /// Does not consume any tokens — saves and restores <see cref="_current"/>.
+    /// </summary>
+    private bool IsLambdaStart()
+    {
+        int saved = _current;
+
+        try
+        {
+            // () => ...
+            if (Check(TokenType.RightParen))
+            {
+                Advance(); // skip ')'
+                return Check(TokenType.FatArrow);
+            }
+
+            // Try to match: identifier [: type] (, identifier [: type])* ) =>
+            while (true)
+            {
+                if (!Check(TokenType.Identifier))
+                    return false;
+
+                Advance(); // skip identifier
+
+                // Optional type annotation: : Type
+                if (Check(TokenType.Colon))
+                {
+                    Advance(); // skip ':'
+                    if (!Check(TokenType.Identifier))
+                        return false;
+                    Advance(); // skip type name
+                }
+
+                if (Check(TokenType.Comma))
+                {
+                    Advance(); // skip ','
+                    continue;
+                }
+
+                if (Check(TokenType.RightParen))
+                {
+                    Advance(); // skip ')'
+                    return Check(TokenType.FatArrow);
+                }
+
+                return false;
+            }
+        }
+        finally
+        {
+            _current = saved;
+        }
+    }
+
+    /// <summary>
+    /// Parses a lambda expression after the opening <c>(</c> has been consumed and
+    /// <see cref="IsLambdaStart"/> has confirmed this is a lambda.
+    /// Supports both expression bodies <c>(x) =&gt; x + 1</c> and block bodies <c>(x) =&gt; { ... }</c>.
+    /// </summary>
+    private Expr ParseLambda(Token open)
+    {
+        List<Token> parameters = new();
+        List<Token?> parameterTypes = new();
+
+        if (!Check(TokenType.RightParen))
+        {
+            do
+            {
+                parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
+                Token? paramType = null;
+                if (Match(TokenType.Colon))
+                {
+                    paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                }
+                parameterTypes.Add(paramType);
+            } while (Match(TokenType.Comma));
+        }
+
+        Consume(TokenType.RightParen, "Expected ')' after lambda parameters.");
+        Consume(TokenType.FatArrow, "Expected '=>' after lambda parameters.");
+
+        // Block body: (params) => { ... }
+        if (Check(TokenType.LeftBrace))
+        {
+            BlockStmt block = ParseBlock();
+            return new LambdaExpr(parameters, parameterTypes, null, block,
+                                  MakeSpan(open.Span, block.Span));
+        }
+
+        // Expression body: (params) => expr
+        Expr body = Assignment();
+        return new LambdaExpr(parameters, parameterTypes, body, null,
+                              MakeSpan(open.Span, body.Span));
     }
 
     // ── Interpolated string parsing ──────────────────────────────

@@ -104,6 +104,9 @@ public enum TokenType
     /// <summary>The <c>-&gt;</c> operator. Used for function return type annotations.</summary>
     Arrow,
 
+    /// <summary>The <c>=&gt;</c> operator. Used for lambda/arrow function expressions.</summary>
+    FatArrow,
+
     /// <summary>The <c>=</c> operator. Assignment — binds a value to a variable.</summary>
     Equal,
 

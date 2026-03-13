@@ -430,6 +430,31 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitLambdaExpr(LambdaExpr expr)
+    {
+        foreach (var paramType in expr.ParameterTypes)
+        {
+            if (paramType != null)
+            {
+                ValidateTypeHint(paramType);
+            }
+        }
+
+        _functionDepth++;
+
+        if (expr.ExpressionBody != null)
+        {
+            expr.ExpressionBody.Accept(this);
+        }
+        else if (expr.BlockBody != null)
+        {
+            expr.BlockBody.Accept(this);
+        }
+
+        _functionDepth--;
+        return null;
+    }
+
     // Helper to count parameters from detail string "fn name(a, b)" or "fn name()"
     private static int CountParameters(string detail)
     {

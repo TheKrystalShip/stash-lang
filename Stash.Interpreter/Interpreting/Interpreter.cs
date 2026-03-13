@@ -867,6 +867,24 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
     }
 
+    /// <summary>
+    /// Evaluates an expression in the given environment, then restores the previous environment.
+    /// Used by <see cref="StashLambda"/> for expression-body lambdas.
+    /// </summary>
+    public object? EvaluateInEnvironment(Expr expr, Environment environment)
+    {
+        Environment previous = _environment;
+        try
+        {
+            _environment = environment;
+            return expr.Accept(this);
+        }
+        finally
+        {
+            _environment = previous;
+        }
+    }
+
     public object? VisitExprStmt(ExprStmt stmt)
     {
         stmt.Expression.Accept(this);
@@ -996,6 +1014,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         var function = new StashFunction(stmt, _environment);
         _environment.Define(stmt.Name.Lexeme, function);
         return null;
+    }
+
+    public object? VisitLambdaExpr(LambdaExpr expr)
+    {
+        return new StashLambda(expr, _environment);
     }
 
     public object? VisitStructDeclStmt(StructDeclStmt stmt)

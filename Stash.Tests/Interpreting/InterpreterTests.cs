@@ -3191,4 +3191,84 @@ public class InterpreterTests
     {
         RunExpectingError("let result = conv.missing();");
     }
+
+    // ── Lambda / Arrow function tests ───────────────────────────────
+
+    [Fact]
+    public void Lambda_ExpressionBody_ReturnsValue()
+    {
+        Assert.Equal(6L, Run("let double = (x) => x * 2; let result = double(3);"));
+    }
+
+    [Fact]
+    public void Lambda_BlockBody_ReturnsValue()
+    {
+        Assert.Equal(6L, Run("let double = (x) => { return x * 2; }; let result = double(3);"));
+    }
+
+    [Fact]
+    public void Lambda_NoParams_ReturnsValue()
+    {
+        Assert.Equal(42L, Run("let f = () => 42; let result = f();"));
+    }
+
+    [Fact]
+    public void Lambda_MultipleParams_ReturnsValue()
+    {
+        Assert.Equal(10L, Run("let add = (a, b) => a + b; let result = add(3, 7);"));
+    }
+
+    [Fact]
+    public void Lambda_Closure_CapturesEnvironment()
+    {
+        Assert.Equal(15L, Run("let x = 10; let addX = (y) => x + y; let result = addX(5);"));
+    }
+
+    [Fact]
+    public void Lambda_PassedAsArgument()
+    {
+        Assert.Equal(9L, Run("fn apply(f, x) { return f(x); } let result = apply((x) => x * x, 3);"));
+    }
+
+    [Fact]
+    public void Lambda_ReturnedFromFunction()
+    {
+        Assert.Equal(8L, Run("fn makeMultiplier(m) { return (x) => x * m; } let triple = makeMultiplier(4); let result = triple(2);"));
+    }
+
+    [Fact]
+    public void Lambda_BlockBody_ImplicitNullReturn()
+    {
+        Assert.Null(Run("let f = () => { let x = 1; }; let result = f();"));
+    }
+
+    [Fact]
+    public void Lambda_ExpressionBody_TernaryExpression()
+    {
+        Assert.Equal("yes", Run("let check = (x) => x > 0 ? \"yes\" : \"no\"; let result = check(5);"));
+    }
+
+    [Fact]
+    public void Lambda_NestedLambda()
+    {
+        Assert.Equal(7L, Run("let add = (a) => (b) => a + b; let add3 = add(3); let result = add3(4);"));
+    }
+
+    [Fact]
+    public void Lambda_InArrayElement()
+    {
+        Assert.Equal(4L, Run("let ops = [(x) => x + 1, (x) => x * 2]; let result = ops[1](2);"));
+    }
+
+    [Fact]
+    public void Lambda_MutatesClosure()
+    {
+        Assert.Equal(3L, Run("fn makeCounter() { let count = 0; return () => { count = count + 1; return count; }; } let counter = makeCounter(); counter(); counter(); let result = counter();"));
+    }
+
+    [Fact]
+    public void Lambda_GroupingStillWorks()
+    {
+        Assert.Equal(9L, Run("let result = (1 + 2) * 3;"));
+    }
 }

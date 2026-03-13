@@ -437,4 +437,33 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         expr.Right.Accept(this);
         return null;
     }
+
+    public object? VisitLambdaExpr(LambdaExpr expr)
+    {
+        var bodySpan = expr.ExpressionBody?.Span ?? expr.BlockBody!.Span;
+        PushScope(ScopeKind.Function, bodySpan);
+
+        for (int i = 0; i < expr.Parameters.Count; i++)
+        {
+            var param = expr.Parameters[i];
+            var paramType = i < expr.ParameterTypes.Count ? expr.ParameterTypes[i]?.Lexeme : null;
+            var paramDetail = paramType != null ? $"parameter: {paramType}" : "parameter";
+            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: "<lambda>", typeHint: paramType));
+        }
+
+        if (expr.ExpressionBody != null)
+        {
+            expr.ExpressionBody.Accept(this);
+        }
+        else if (expr.BlockBody != null)
+        {
+            foreach (var s in expr.BlockBody.Statements)
+            {
+                s.Accept(this);
+            }
+        }
+
+        PopScope();
+        return null;
+    }
 }

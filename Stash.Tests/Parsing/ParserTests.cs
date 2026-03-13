@@ -1582,4 +1582,71 @@ public class ParserTests
         Assert.NotNull(fnDecl.ReturnType);
         Assert.Equal("Server", fnDecl.ReturnType!.Lexeme);
     }
+
+    // ── Lambda parsing tests ────────────────────────────────────────
+
+    [Fact]
+    public void Lambda_ExpressionBody_ParsesAsLambdaExpr()
+    {
+        var stmts = ParseProgram("let f = (x) => x + 1;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var lambda = Assert.IsType<LambdaExpr>(varDecl.Initializer);
+        Assert.Single(lambda.Parameters);
+        Assert.Equal("x", lambda.Parameters[0].Lexeme);
+        Assert.NotNull(lambda.ExpressionBody);
+        Assert.Null(lambda.BlockBody);
+    }
+
+    [Fact]
+    public void Lambda_BlockBody_ParsesAsLambdaExpr()
+    {
+        var stmts = ParseProgram("let f = (x) => { return x + 1; };");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var lambda = Assert.IsType<LambdaExpr>(varDecl.Initializer);
+        Assert.Single(lambda.Parameters);
+        Assert.Equal("x", lambda.Parameters[0].Lexeme);
+        Assert.Null(lambda.ExpressionBody);
+        Assert.NotNull(lambda.BlockBody);
+    }
+
+    [Fact]
+    public void Lambda_NoParameters_ParsesCorrectly()
+    {
+        var stmts = ParseProgram("let f = () => 42;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var lambda = Assert.IsType<LambdaExpr>(varDecl.Initializer);
+        Assert.Empty(lambda.Parameters);
+        Assert.NotNull(lambda.ExpressionBody);
+    }
+
+    [Fact]
+    public void Lambda_MultipleParameters_ParsesCorrectly()
+    {
+        var stmts = ParseProgram("let f = (a, b, c) => a + b + c;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var lambda = Assert.IsType<LambdaExpr>(varDecl.Initializer);
+        Assert.Equal(3, lambda.Parameters.Count);
+        Assert.Equal("a", lambda.Parameters[0].Lexeme);
+        Assert.Equal("b", lambda.Parameters[1].Lexeme);
+        Assert.Equal("c", lambda.Parameters[2].Lexeme);
+    }
+
+    [Fact]
+    public void Lambda_WithTypeAnnotations_ParsesCorrectly()
+    {
+        var stmts = ParseProgram("let f = (x: int, y: string) => x;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        var lambda = Assert.IsType<LambdaExpr>(varDecl.Initializer);
+        Assert.Equal(2, lambda.Parameters.Count);
+        Assert.Equal("int", lambda.ParameterTypes[0]?.Lexeme);
+        Assert.Equal("string", lambda.ParameterTypes[1]?.Lexeme);
+    }
+
+    [Fact]
+    public void Grouping_StillWorks_AfterLambdaSupport()
+    {
+        var stmts = ParseProgram("let x = (1 + 2) * 3;");
+        var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
+        Assert.IsType<BinaryExpr>(varDecl.Initializer);
+    }
 }

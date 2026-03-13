@@ -35,3 +35,8 @@ fn banner(text) {
     io.println($"  {text}");
     io.println(border);
 }
+
+fn callFunctionRef(functionRef: function) {
+    log(LogLevel.Info, "This is a function reference example.");
+    functionRef();
+}
