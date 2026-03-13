@@ -16,12 +16,14 @@ public class SemanticDiagnostic
     public string Message { get; }
     public DiagnosticLevel Level { get; }
     public SourceSpan Span { get; }
+    public bool IsUnnecessary { get; }
 
-    public SemanticDiagnostic(string message, DiagnosticLevel level, SourceSpan span)
+    public SemanticDiagnostic(string message, DiagnosticLevel level, SourceSpan span, bool isUnnecessary = false)
     {
         Message = message;
         Level = level;
         Span = span;
+        IsUnnecessary = isUnnecessary;
     }
 }
 
@@ -51,10 +53,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         _loopDepth = 0;
         _functionDepth = 0;
 
-        foreach (var stmt in statements)
-        {
-            stmt.Accept(this);
-        }
+        CheckUnreachableStatements(statements);
 
         var unresolved = _scopeTree.GetUnresolvedReferences(_builtInNames);
         foreach (var reference in unresolved)
@@ -73,10 +72,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
         _functionDepth++;
-        foreach (var s in stmt.Body.Statements)
-        {
-            s.Accept(this);
-        }
+        CheckUnreachableStatements(stmt.Body.Statements);
         _functionDepth--;
         return null;
     }
@@ -150,11 +146,56 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitBlockStmt(BlockStmt stmt)
     {
-        foreach (var s in stmt.Statements)
-        {
-            s.Accept(this);
-        }
+        CheckUnreachableStatements(stmt.Statements);
         return null;
+    }
+
+    private static bool IsTerminatingStatement(Stmt stmt)
+    {
+        if (stmt is ReturnStmt || stmt is BreakStmt || stmt is ContinueStmt)
+        {
+            return true;
+        }
+
+        // process.exit(...) call
+        if (stmt is ExprStmt exprStmt && exprStmt.Expression is CallExpr call &&
+            call.Callee is DotExpr dot &&
+            dot.Object is IdentifierExpr obj && obj.Name.Lexeme == "process" &&
+            dot.Name.Lexeme == "exit")
+        {
+            return true;
+        }
+
+        return false;
+    }
+
+    private void CheckUnreachableStatements(List<Stmt> statements)
+    {
+        bool reachable = true;
+        Stmt? terminatingStmt = null;
+
+        foreach (var stmt in statements)
+        {
+            if (!reachable)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    "Unreachable code detected.",
+                    DiagnosticLevel.Information,
+                    stmt.Span,
+                    isUnnecessary: true));
+                // Still visit for other diagnostics (e.g., nested errors)
+                stmt.Accept(this);
+                continue;
+            }
+
+            stmt.Accept(this);
+
+            if (IsTerminatingStatement(stmt))
+            {
+                reachable = false;
+                terminatingStmt = stmt;
+            }
+        }
     }
 
     public object? VisitIfStmt(IfStmt stmt)

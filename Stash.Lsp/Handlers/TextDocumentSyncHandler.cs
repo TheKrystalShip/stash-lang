@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Handlers;
 
 using System;
+using System.Collections.Concurrent;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -19,6 +20,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly DocumentManager _documents;
     private readonly AnalysisEngine _analysis;
     private readonly ILanguageServerFacade _server;
+    private readonly ConcurrentDictionary<Uri, CancellationTokenSource> _pendingAnalysis = new();
+    private const int DebounceDelayMs = 150;
 
     public TextDocumentSyncHandler(DocumentManager documents, AnalysisEngine analysis, ILanguageServerFacade server)
     {
@@ -45,15 +48,15 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     public override Task<Unit> Handle(DidChangeTextDocumentParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
-        var text = request.ContentChanges.LastOrDefault()?.Text;
+        var version = request.TextDocument.Version ?? 0;
+
+        var text = _documents.ApplyIncrementalChanges(uri, version, request.ContentChanges);
         if (text == null)
         {
             return Unit.Task;
         }
 
-        var version = request.TextDocument.Version ?? 0;
-        _documents.Update(uri, text, version);
-        AnalyzeAndPublishDiagnostics(uri, text);
+        ScheduleDebouncedAnalysis(uri);
 
         return Unit.Task;
     }
@@ -61,6 +64,14 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     public override Task<Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
+
+        // Cancel any pending debounced analysis
+        if (_pendingAnalysis.TryRemove(uri, out var pending))
+        {
+            _ = pending.CancelAsync();
+            pending.Dispose();
+        }
+
         _documents.Close(uri);
 
         // Clear diagnostics for closed document
@@ -83,9 +94,45 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         new()
         {
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash")),
-            Change = TextDocumentSyncKind.Full,
+            Change = TextDocumentSyncKind.Incremental,
             Save = new BooleanOr<SaveOptions>(new SaveOptions { IncludeText = false })
         };
+
+    private void ScheduleDebouncedAnalysis(Uri uri)
+    {
+        // Cancel any previously scheduled analysis for this document
+        if (_pendingAnalysis.TryRemove(uri, out var previous))
+        {
+            _ = previous.CancelAsync();
+            previous.Dispose();
+        }
+
+        var cts = new CancellationTokenSource();
+        _pendingAnalysis[uri] = cts;
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await Task.Delay(DebounceDelayMs, cts.Token);
+
+                // After the delay, get the latest text and analyze
+                var text = _documents.GetText(uri);
+                if (text != null && !cts.Token.IsCancellationRequested)
+                {
+                    AnalyzeAndPublishDiagnostics(uri, text);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Debounce was cancelled by a newer change — expected
+            }
+            finally
+            {
+                _pendingAnalysis.TryRemove(uri, out _);
+            }
+        });
+    }
 
     private void AnalyzeAndPublishDiagnostics(Uri uri, string text)
     {
@@ -133,7 +180,10 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
                     _ => DiagnosticSeverity.Warning
                 },
                 Source = "stash",
-                Message = semantic.Message
+                Message = semantic.Message,
+                Tags = semantic.IsUnnecessary
+                    ? new Container<DiagnosticTag>(DiagnosticTag.Unnecessary)
+                    : null
             });
         }
 

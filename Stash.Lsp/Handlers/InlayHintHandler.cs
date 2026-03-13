@@ -61,12 +61,16 @@ public class InlayHintHandler : InlayHintsHandlerBase
     {
         var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
+        {
             return Task.FromResult<InlayHintContainer?>(null);
+        }
 
         var hints = new List<InlayHint>();
 
         foreach (var stmt in result.Statements)
+        {
             CollectFromStmt(stmt, hints, result);
+        }
 
         return Task.FromResult<InlayHintContainer?>(hints.Count == 0 ? null : new InlayHintContainer(hints));
     }
@@ -97,7 +101,10 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 CollectFromExpr(ifStmt.Condition, hints, result);
                 CollectFromStmt(ifStmt.ThenBranch, hints, result);
                 if (ifStmt.ElseBranch != null)
+                {
                     CollectFromStmt(ifStmt.ElseBranch, hints, result);
+                }
+
                 break;
             case WhileStmt whileStmt:
                 CollectFromExpr(whileStmt.Condition, hints, result);
@@ -109,7 +116,10 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 break;
             case BlockStmt block:
                 foreach (var s in block.Statements)
+                {
                     CollectFromStmt(s, hints, result);
+                }
+
                 break;
         }
     }
@@ -122,7 +132,10 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 ProcessCallExpr(call, hints, result);
                 CollectFromExpr(call.Callee, hints, result);
                 foreach (var arg in call.Arguments)
+                {
                     CollectFromExpr(arg, hints, result);
+                }
+
                 break;
             case BinaryExpr binary:
                 CollectFromExpr(binary.Left, hints, result);
@@ -155,7 +168,10 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 break;
             case ArrayExpr array:
                 foreach (var element in array.Elements)
+                {
                     CollectFromExpr(element, hints, result);
+                }
+
                 break;
             case TernaryExpr ternary:
                 CollectFromExpr(ternary.Condition, hints, result);
@@ -167,7 +183,10 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 break;
             case InterpolatedStringExpr interpolated:
                 foreach (var part in interpolated.Parts)
+                {
                     CollectFromExpr(part, hints, result);
+                }
+
                 break;
             case PipeExpr pipe:
                 CollectFromExpr(pipe.Left, hints, result);
@@ -179,7 +198,10 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 break;
             case StructInitExpr structInit:
                 foreach (var field in structInit.FieldValues)
+                {
                     CollectFromExpr(field.Value, hints, result);
+                }
+
                 break;
             // IdentifierExpr, LiteralExpr, CommandExpr: no children to recurse
         }
@@ -188,29 +210,41 @@ public class InlayHintHandler : InlayHintsHandlerBase
     private void ProcessCallExpr(CallExpr call, List<InlayHint> hints, AnalysisResult result)
     {
         if (call.Arguments.Count == 0)
+        {
             return;
+        }
 
         var funcName = GetFunctionName(call.Callee);
         if (funcName == null)
+        {
             return;
+        }
 
         string[]? paramNames = null;
 
         if (_builtInParams.TryGetValue(funcName, out var builtIn))
+        {
             paramNames = builtIn;
+        }
         else if (_namespacedParams.TryGetValue(funcName, out var nsBuiltIn))
+        {
             paramNames = nsBuiltIn;
+        }
         else
         {
             var callSpan = call.Span;
             var simpleName = funcName.Contains('.') ? funcName[(funcName.LastIndexOf('.') + 1)..] : funcName;
             var definition = result.Symbols.FindDefinition(simpleName, callSpan.StartLine, callSpan.StartColumn);
             if (definition != null && definition.Kind == Analysis.SymbolKind.Function && definition.Detail != null)
+            {
                 paramNames = ExtractParamNames(definition.Detail);
+            }
         }
 
         if (paramNames == null || paramNames.Length == 0 || paramNames.Length != call.Arguments.Count)
+        {
             return;
+        }
 
         for (int i = 0; i < call.Arguments.Count; i++)
         {
@@ -218,7 +252,9 @@ public class InlayHintHandler : InlayHintsHandlerBase
             var paramName = paramNames[i];
 
             if (arg is IdentifierExpr id && id.Name.Lexeme == paramName)
+            {
                 continue;
+            }
 
             var argSpan = arg.Span;
             hints.Add(new InlayHint
@@ -233,9 +269,15 @@ public class InlayHintHandler : InlayHintsHandlerBase
     private static string? GetFunctionName(Expr callee)
     {
         if (callee is IdentifierExpr id)
+        {
             return id.Name.Lexeme;
+        }
+
         if (callee is DotExpr dot && dot.Object is IdentifierExpr obj)
+        {
             return $"{obj.Name.Lexeme}.{dot.Name.Lexeme}";
+        }
+
         return null;
     }
 
@@ -244,15 +286,21 @@ public class InlayHintHandler : InlayHintsHandlerBase
         var openParen = detail.IndexOf('(');
         var closeParen = detail.IndexOf(')');
         if (openParen < 0 || closeParen < 0 || closeParen <= openParen + 1)
+        {
             return Array.Empty<string>();
+        }
 
         var inside = detail[(openParen + 1)..closeParen].Trim();
         if (string.IsNullOrEmpty(inside))
+        {
             return Array.Empty<string>();
+        }
 
         var parts = inside.Split(',');
         for (int i = 0; i < parts.Length; i++)
+        {
             parts[i] = parts[i].Trim();
+        }
 
         return parts;
     }

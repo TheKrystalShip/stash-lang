@@ -38,7 +38,9 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
         var uri = request.TextDocument.Uri.ToUri();
         var result = _analysis.GetCachedResult(uri);
         if (result == null)
+        {
             return Task.FromResult<DocumentLinkContainer?>(null);
+        }
 
         var links = new List<DocumentLink>();
         var documentDir = uri.IsFile ? Path.GetDirectoryName(uri.LocalPath) : null;
@@ -64,7 +66,9 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
         // The path token's Literal is the string value (without quotes)
         var importPath = pathToken.Literal as string;
         if (string.IsNullOrEmpty(importPath))
+        {
             return;
+        }
 
         // Resolve relative to the document's directory
         string? resolvedPath = null;

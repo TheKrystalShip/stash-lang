@@ -251,4 +251,95 @@ public class LspFeaturesRound4Tests
         var result = FullAnalyze(source);
         Assert.DoesNotContain(result.SemanticDiagnostics, d => d.Message.Contains("RUNTIME") && d.Message.Contains("not defined"));
     }
+
+    // ──────────────────────────────────────────────────────────
+    // 4. Unreachable Code Detection Tests
+    // ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void UnreachableCode_AfterProcessExit_FlaggedAsUnnecessary()
+    {
+        var source = "process.exit(1);\nio.println(\"unreachable\");";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Single(unreachable);
+        Assert.Contains("Unreachable", unreachable[0].Message);
+        Assert.Equal(2, unreachable[0].Span.StartLine);
+    }
+
+    [Fact]
+    public void UnreachableCode_AfterReturn_FlaggedAsUnnecessary()
+    {
+        var source = "fn test() {\n  return;\n  io.println(\"unreachable\");\n}";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Single(unreachable);
+        Assert.Equal(3, unreachable[0].Span.StartLine);
+    }
+
+    [Fact]
+    public void UnreachableCode_AfterBreak_FlaggedAsUnnecessary()
+    {
+        var source = "while (true) {\n  break;\n  io.println(\"unreachable\");\n}";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Single(unreachable);
+        Assert.Equal(3, unreachable[0].Span.StartLine);
+    }
+
+    [Fact]
+    public void UnreachableCode_AfterContinue_FlaggedAsUnnecessary()
+    {
+        var source = "while (true) {\n  continue;\n  io.println(\"unreachable\");\n}";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Single(unreachable);
+        Assert.Equal(3, unreachable[0].Span.StartLine);
+    }
+
+    [Fact]
+    public void UnreachableCode_NoTerminator_NothingFlagged()
+    {
+        var source = "let x = 1;\nio.println(x);";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Empty(unreachable);
+    }
+
+    [Fact]
+    public void UnreachableCode_ProcessExitInsideIfBlock_OnlyAffectsThatBlock()
+    {
+        // process.exit() inside an if-block should only gray out subsequent statements in that block,
+        // not statements after the if-block
+        var source = "if (true) {\n  process.exit(1);\n  io.println(\"unreachable\");\n}\nio.println(\"reachable\");";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Single(unreachable);
+        Assert.Equal(3, unreachable[0].Span.StartLine);
+    }
+
+    [Fact]
+    public void UnreachableCode_MultipleStatementsAfterExit_AllFlagged()
+    {
+        var source = "fn deploy() {\n  process.exit(1);\n  io.println(\"a\");\n  io.println(\"b\");\n  io.println(\"c\");\n}";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Equal(3, unreachable.Count);
+        Assert.Equal(3, unreachable[0].Span.StartLine);
+        Assert.Equal(4, unreachable[1].Span.StartLine);
+        Assert.Equal(5, unreachable[2].Span.StartLine);
+    }
+
+    [Fact]
+    public void UnreachableCode_DeployStashPattern_ConstAfterExitInBlock()
+    {
+        // This mirrors the deploy.stash pattern: process.exit() inside an if block
+        // The io.println after the exit should be grayed out, the code after the if should NOT
+        var source = "const DEST = \"/usr/bin\";\nfn deploy() {\n  if (true) {\n    process.exit(1);\n    io.println(\"dead\");\n  }\n  io.println(\"alive\");\n}";
+        var result = FullAnalyze(source);
+        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        Assert.Single(unreachable);
+        Assert.Contains("Unreachable", unreachable[0].Message);
+        Assert.Equal(5, unreachable[0].Span.StartLine); // the "dead" line
+    }
 }

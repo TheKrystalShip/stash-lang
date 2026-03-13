@@ -35,7 +35,10 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
         foreach (var uri in _documents.GetOpenDocumentUris())
         {
             var result = _analysis.GetCachedResult(uri);
-            if (result == null) continue;
+            if (result == null)
+            {
+                continue;
+            }
 
             var documentUri = DocumentUri.From(uri);
 
@@ -44,12 +47,16 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
                 // Skip loop variables and parameters for workspace-level search
                 if (sym.Kind == Analysis.SymbolKind.LoopVariable ||
                     sym.Kind == Analysis.SymbolKind.Parameter)
+                {
                     continue;
+                }
 
                 // Filter by query (case-insensitive substring match)
                 if (query.Length > 0 &&
                     sym.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0)
+                {
                     continue;
+                }
 
                 symbols.Add(new WorkspaceSymbol
                 {

@@ -32,7 +32,9 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
     {
         var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
+        {
             return Task.FromResult<Container<SelectionRange>?>(null);
+        }
 
         var ranges = new List<SelectionRange>();
 
@@ -60,7 +62,9 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
             foreach (var span in containingSpans)
             {
                 if (unique.Count == 0 || !SpansEqual(unique[^1], span))
+                {
                     unique.Add(span);
+                }
             }
 
             // Build the chain from innermost to outermost
@@ -85,7 +89,11 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
 
     private static void CollectContainingSpans(Stmt stmt, int line, int col, List<SourceSpan> spans)
     {
-        if (!Contains(stmt.Span, line, col)) return;
+        if (!Contains(stmt.Span, line, col))
+        {
+            return;
+        }
+
         spans.Add(stmt.Span);
 
         switch (stmt)
@@ -95,13 +103,19 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
                 break;
             case BlockStmt block:
                 foreach (var s in block.Statements)
+                {
                     CollectContainingSpans(s, line, col, spans);
+                }
+
                 break;
             case IfStmt ifStmt:
                 CollectContainingSpansExpr(ifStmt.Condition, line, col, spans);
                 CollectContainingSpans(ifStmt.ThenBranch, line, col, spans);
                 if (ifStmt.ElseBranch != null)
+                {
                     CollectContainingSpans(ifStmt.ElseBranch, line, col, spans);
+                }
+
                 break;
             case WhileStmt whileStmt:
                 CollectContainingSpansExpr(whileStmt.Condition, line, col, spans);
@@ -116,21 +130,31 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
                 break;
             case VarDeclStmt varDecl:
                 if (varDecl.Initializer != null)
+                {
                     CollectContainingSpansExpr(varDecl.Initializer, line, col, spans);
+                }
+
                 break;
             case ConstDeclStmt constDecl:
                 CollectContainingSpansExpr(constDecl.Initializer, line, col, spans);
                 break;
             case ReturnStmt returnStmt:
                 if (returnStmt.Value != null)
+                {
                     CollectContainingSpansExpr(returnStmt.Value, line, col, spans);
+                }
+
                 break;
         }
     }
 
     private static void CollectContainingSpansExpr(Expr expr, int line, int col, List<SourceSpan> spans)
     {
-        if (!Contains(expr.Span, line, col)) return;
+        if (!Contains(expr.Span, line, col))
+        {
+            return;
+        }
+
         spans.Add(expr.Span);
 
         switch (expr)
@@ -148,7 +172,10 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
             case CallExpr call:
                 CollectContainingSpansExpr(call.Callee, line, col, spans);
                 foreach (var arg in call.Arguments)
+                {
                     CollectContainingSpansExpr(arg, line, col, spans);
+                }
+
                 break;
             case AssignExpr assign:
                 CollectContainingSpansExpr(assign.Value, line, col, spans);
@@ -176,11 +203,17 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
                 break;
             case ArrayExpr array:
                 foreach (var element in array.Elements)
+                {
                     CollectContainingSpansExpr(element, line, col, spans);
+                }
+
                 break;
             case InterpolatedStringExpr interp:
                 foreach (var part in interp.Parts)
+                {
                     CollectContainingSpansExpr(part, line, col, spans);
+                }
+
                 break;
             case TryExpr tryExpr:
                 CollectContainingSpansExpr(tryExpr.Expression, line, col, spans);
@@ -198,7 +231,10 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
                 break;
             case StructInitExpr structInit:
                 foreach (var (_, value) in structInit.FieldValues)
+                {
                     CollectContainingSpansExpr(value, line, col, spans);
+                }
+
                 break;
             // LiteralExpr, IdentifierExpr, CommandExpr — leaf nodes, no children to recurse into
         }
@@ -206,9 +242,21 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
 
     private static bool Contains(SourceSpan span, int line, int col)
     {
-        if (line < span.StartLine || line > span.EndLine) return false;
-        if (line == span.StartLine && col < span.StartColumn) return false;
-        if (line == span.EndLine && col > span.EndColumn) return false;
+        if (line < span.StartLine || line > span.EndLine)
+        {
+            return false;
+        }
+
+        if (line == span.StartLine && col < span.StartColumn)
+        {
+            return false;
+        }
+
+        if (line == span.EndLine && col > span.EndColumn)
+        {
+            return false;
+        }
+
         return true;
     }
 
