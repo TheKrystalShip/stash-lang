@@ -40,6 +40,8 @@ public static class StashLanguageServer
                 .WithHandler<DocumentLinkHandler>()
                 .WithHandler<CodeActionHandler>()
                 .WithHandler<WorkspaceSymbolHandler>()
+                .WithHandler<InlayHintHandler>()
+                .WithHandler<CodeLensHandler>()
                 .OnInitialize((server, request, cancellationToken) =>
                 {
                     return Task.CompletedTask;

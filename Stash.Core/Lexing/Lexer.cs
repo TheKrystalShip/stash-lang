@@ -51,10 +51,10 @@ public class Lexer
     private int _current;
 
     /// <summary>The 1-based line number of the character at <see cref="_current"/>.</summary>
-    private int _line = 1;
+    private int _line;
 
     /// <summary>The 1-based column number of the character at <see cref="_current"/>.</summary>
-    private int _column = 1;
+    private int _column;
 
     /// <summary>The 1-based line number captured at <see cref="_start"/> when a new token begins.</summary>
     private int _startLine;
@@ -118,10 +118,12 @@ public class Lexer
     /// A file path or display name included in error messages. Defaults to
     /// <c>"&lt;stdin&gt;"</c> for interactive/REPL input.
     /// </param>
-    public Lexer(string source, string file = "<stdin>")
+    public Lexer(string source, string file = "<stdin>", int startLine = 1, int startColumn = 1)
     {
         _source = source;
         _file = file;
+        _line = startLine;
+        _column = startColumn;
     }
 
     /// <summary>
@@ -820,7 +822,7 @@ public class Lexer
         }
 
         // Lex the expression text
-        var innerLexer = new Lexer(exprText, _file);
+        var innerLexer = new Lexer(exprText, _file, exprStartLine, exprStartColumn);
         List<Token> innerTokens = innerLexer.ScanTokens();
 
         if (innerLexer.Errors.Count > 0)
