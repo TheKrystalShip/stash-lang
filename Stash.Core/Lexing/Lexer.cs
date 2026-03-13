@@ -107,6 +107,9 @@ public class Lexer
     /// </remarks>
     public List<string> Errors => _errors;
 
+    private readonly List<DiagnosticError> _structuredErrors = new();
+    public List<DiagnosticError> StructuredErrors => _structuredErrors;
+
     /// <summary>
     /// Initializes a new <see cref="Lexer"/> for the given source text.
     /// </summary>
@@ -260,6 +263,9 @@ public class Lexer
                 else
                 {
                     _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unexpected character '&'.");
+                    _structuredErrors.Add(new DiagnosticError(
+                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                        "Unexpected character '&'."));
                 }
 
                 break;
@@ -295,6 +301,9 @@ public class Lexer
                 else
                 {
                     _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unexpected character '{c}'.");
+                    _structuredErrors.Add(new DiagnosticError(
+                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                        $"Unexpected character '{c}'."));
                 }
 
                 break;
@@ -358,6 +367,9 @@ public class Lexer
         if (depth > 0)
         {
             _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated block comment.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unterminated block comment."));
         }
     }
 
@@ -418,6 +430,9 @@ public class Lexer
                 if (IsAtEnd)
                 {
                     _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated string.");
+                    _structuredErrors.Add(new DiagnosticError(
+                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                        "Unterminated string."));
                     return;
                 }
                 char escaped = _source[_current];
@@ -433,6 +448,9 @@ public class Lexer
                     case '0': sb.Append('\0'); break;
                     default:
                         _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
+                        _structuredErrors.Add(new DiagnosticError(
+                            new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
+                            $"Invalid escape sequence '\\{escaped}'."));
                         sb.Append(escaped);
                         break;
                 }
@@ -448,6 +466,9 @@ public class Lexer
         if (IsAtEnd)
         {
             _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated string.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unterminated string."));
             return;
         }
 
@@ -502,6 +523,9 @@ public class Lexer
                 if (IsAtEnd)
                 {
                     _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated interpolated string.");
+                    _structuredErrors.Add(new DiagnosticError(
+                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                        "Unterminated interpolated string."));
                     return;
                 }
                 char escaped = _source[_current];
@@ -519,6 +543,9 @@ public class Lexer
                     case '$': textSegment.Append('$'); break;
                     default:
                         _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
+                        _structuredErrors.Add(new DiagnosticError(
+                            new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
+                            $"Invalid escape sequence '\\{escaped}'."));
                         textSegment.Append(escaped);
                         break;
                 }
@@ -558,6 +585,9 @@ public class Lexer
         if (IsAtEnd)
         {
             _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated interpolated string.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unterminated interpolated string."));
             return;
         }
 
@@ -677,6 +707,9 @@ public class Lexer
         if (depth > 0)
         {
             _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated command literal.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unterminated command literal."));
             return;
         }
 
@@ -765,6 +798,9 @@ public class Lexer
         if (IsAtEnd)
         {
             _errors.Add($"[{_file} {exprStartLine}:{exprStartColumn}] Unterminated interpolation expression.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, exprStartLine, exprStartColumn, exprStartLine, exprStartColumn),
+                "Unterminated interpolation expression."));
             return;
         }
 
@@ -777,6 +813,9 @@ public class Lexer
         if (string.IsNullOrWhiteSpace(exprText))
         {
             _errors.Add($"[{_file} {exprStartLine}:{exprStartColumn}] Empty interpolation expression.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, exprStartLine, exprStartColumn, exprStartLine, exprStartColumn),
+                "Empty interpolation expression."));
             return;
         }
 
@@ -790,6 +829,7 @@ public class Lexer
             {
                 _errors.Add(error);
             }
+            _structuredErrors.AddRange(innerLexer.StructuredErrors);
             return;
         }
 
@@ -847,6 +887,9 @@ public class Lexer
             else
             {
                 _errors.Add($"[{_file} {_startLine}:{_startColumn}] Integer literal '{lexeme}' is too large.");
+                _structuredErrors.Add(new DiagnosticError(
+                    new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                    $"Integer literal '{lexeme}' is too large."));
             }
         }
     }

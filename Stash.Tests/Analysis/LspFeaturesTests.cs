@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -29,7 +30,7 @@ public class LspFeaturesTests
         var tree = collector.Collect(stmts);
         var validator = new SemanticValidator(tree);
         var diagnostics = validator.Validate(stmts);
-        return new AnalysisResult(tokens, stmts, new List<string>(), new List<string>(), tree, diagnostics);
+        return new AnalysisResult(tokens, stmts, new List<string>(), new List<string>(), new List<DiagnosticError>(), new List<DiagnosticError>(), tree, diagnostics);
     }
 
     // ──────────────────────────────────────────────────────────

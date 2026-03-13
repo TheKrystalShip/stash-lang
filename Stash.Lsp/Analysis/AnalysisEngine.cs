@@ -29,7 +29,8 @@ public class AnalysisEngine
         var validator = new SemanticValidator(symbols);
         var semanticDiagnostics = validator.Validate(statements);
 
-        var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors, symbols, semanticDiagnostics);
+        var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors,
+            lexer.StructuredErrors, parser.StructuredErrors, symbols, semanticDiagnostics);
         _cache[uri] = result;
         return result;
     }

@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
+using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 
@@ -10,17 +11,22 @@ public class AnalysisResult
     public List<Stmt> Statements { get; }
     public List<string> LexErrors { get; }
     public List<string> ParseErrors { get; }
+    public List<DiagnosticError> StructuredLexErrors { get; }
+    public List<DiagnosticError> StructuredParseErrors { get; }
     public ScopeTree Symbols { get; }
     public List<SemanticDiagnostic> SemanticDiagnostics { get; }
 
     public AnalysisResult(List<Token> tokens, List<Stmt> statements,
-        List<string> lexErrors, List<string> parseErrors, ScopeTree symbols,
-        List<SemanticDiagnostic> semanticDiagnostics)
+        List<string> lexErrors, List<string> parseErrors,
+        List<DiagnosticError> structuredLexErrors, List<DiagnosticError> structuredParseErrors,
+        ScopeTree symbols, List<SemanticDiagnostic> semanticDiagnostics)
     {
         Tokens = tokens;
         Statements = statements;
         LexErrors = lexErrors;
         ParseErrors = parseErrors;
+        StructuredLexErrors = structuredLexErrors;
+        StructuredParseErrors = structuredParseErrors;
         Symbols = symbols;
         SemanticDiagnostics = semanticDiagnostics;
     }

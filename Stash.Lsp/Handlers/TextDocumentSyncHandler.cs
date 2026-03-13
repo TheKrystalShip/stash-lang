@@ -11,6 +11,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
+using Stash.Common;
 using Stash.Lsp.Analysis;
 
 public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
@@ -91,14 +92,30 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         var result = _analysis.Analyze(uri, text);
         var diagnostics = new System.Collections.Generic.List<Diagnostic>();
 
-        foreach (var error in result.LexErrors)
+        foreach (var error in result.StructuredLexErrors)
         {
-            diagnostics.Add(ParseErrorToDiagnostic(error, DiagnosticSeverity.Error));
+            diagnostics.Add(new Diagnostic
+            {
+                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
+                    new Position(error.Span.StartLine - 1, error.Span.StartColumn - 1),
+                    new Position(error.Span.EndLine - 1, error.Span.EndColumn - 1)),
+                Severity = DiagnosticSeverity.Error,
+                Source = "stash",
+                Message = error.Message
+            });
         }
 
-        foreach (var error in result.ParseErrors)
+        foreach (var error in result.StructuredParseErrors)
         {
-            diagnostics.Add(ParseErrorToDiagnostic(error, DiagnosticSeverity.Error));
+            diagnostics.Add(new Diagnostic
+            {
+                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
+                    new Position(error.Span.StartLine - 1, error.Span.StartColumn - 1),
+                    new Position(error.Span.EndLine - 1, error.Span.EndColumn - 1)),
+                Severity = DiagnosticSeverity.Error,
+                Source = "stash",
+                Message = error.Message
+            });
         }
 
         foreach (var semantic in result.SemanticDiagnostics)
@@ -125,45 +142,5 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             Uri = DocumentUri.From(uri),
             Diagnostics = new Container<Diagnostic>(diagnostics)
         });
-    }
-
-    private static Diagnostic ParseErrorToDiagnostic(string error, DiagnosticSeverity severity)
-    {
-        // Errors format: [FILE LINE:COLUMN] MESSAGE
-        // Try to extract line and column
-        int line = 0, col = 0;
-        var message = error;
-
-        var closeBracket = error.IndexOf(']');
-        if (closeBracket > 0)
-        {
-            message = error[(closeBracket + 2)..];
-            var inside = error[1..closeBracket];
-            // "FILE LINE:COLUMN"
-            var lastSpace = inside.LastIndexOf(' ');
-            if (lastSpace > 0)
-            {
-                var lineCol = inside[(lastSpace + 1)..];
-                var parts = lineCol.Split(':');
-                if (parts.Length == 2 &&
-                    int.TryParse(parts[0], out var parsedLine) &&
-                    int.TryParse(parts[1], out var parsedCol))
-                {
-                    line = Math.Max(0, parsedLine - 1); // Convert to 0-based
-                    col = Math.Max(0, parsedCol - 1);
-                }
-            }
-        }
-
-        return new Diagnostic
-        {
-            Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                new Position(line, col),
-                new Position(line, col + 1)
-            ),
-            Severity = severity,
-            Source = "stash",
-            Message = message
-        };
     }
 }

@@ -36,6 +36,10 @@ public static class StashLanguageServer
                 .WithHandler<SignatureHelpHandler>()
                 .WithHandler<SemanticTokensHandler>()
                 .WithHandler<FoldingRangeHandler>()
+                .WithHandler<SelectionRangeHandler>()
+                .WithHandler<DocumentLinkHandler>()
+                .WithHandler<CodeActionHandler>()
+                .WithHandler<WorkspaceSymbolHandler>()
                 .OnInitialize((server, request, cancellationToken) =>
                 {
                     return Task.CompletedTask;

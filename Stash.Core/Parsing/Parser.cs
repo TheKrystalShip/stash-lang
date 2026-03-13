@@ -70,6 +70,7 @@ public class Parser
     /// Each entry includes the file name, line, column, and a description of the problem.
     /// </summary>
     public List<string> Errors { get; } = new();
+    public List<DiagnosticError> StructuredErrors { get; } = new();
 
     /// <summary>
     /// Creates a new <see cref="Parser"/> for the given token stream.
@@ -1194,6 +1195,7 @@ public class Parser
 
         string error = $"[{token.Span.File} {token.Span.StartLine}:{token.Span.StartColumn}] Error {location}: {message}";
         Errors.Add(error);
+        StructuredErrors.Add(new DiagnosticError(token.Span, $"Error {location}: {message}"));
         return new ParseError();
     }
 
