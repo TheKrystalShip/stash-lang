@@ -1,7 +1,6 @@
 namespace Stash.Interpreting;
 
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using Stash.Common;
 
 /// <summary>

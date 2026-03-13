@@ -14,44 +14,6 @@ public class InlayHintHandler : InlayHintsHandlerBase
 {
     private readonly AnalysisEngine _analysis;
 
-    private static readonly Dictionary<string, string[]> _builtInParams = new()
-    {
-        ["typeof"] = new[] { "value" },
-        ["len"] = new[] { "value" },
-        ["lastError"] = Array.Empty<string>(),
-        ["parseArgs"] = new[] { "tree" },
-    };
-
-    private static readonly Dictionary<string, string[]> _namespacedParams = new()
-    {
-        ["io.println"] = new[] { "value" },
-        ["io.print"] = new[] { "value" },
-        ["conv.toStr"] = new[] { "value" },
-        ["conv.toInt"] = new[] { "value" },
-        ["conv.toFloat"] = new[] { "value" },
-        ["env.get"] = new[] { "name" },
-        ["env.set"] = new[] { "name", "value" },
-        ["process.exit"] = new[] { "code" },
-        ["fs.readFile"] = new[] { "path" },
-        ["fs.writeFile"] = new[] { "path", "content" },
-        ["fs.exists"] = new[] { "path" },
-        ["fs.dirExists"] = new[] { "path" },
-        ["fs.pathExists"] = new[] { "path" },
-        ["fs.createDir"] = new[] { "path" },
-        ["fs.delete"] = new[] { "path" },
-        ["fs.copy"] = new[] { "src", "dst" },
-        ["fs.move"] = new[] { "src", "dst" },
-        ["fs.size"] = new[] { "path" },
-        ["fs.listDir"] = new[] { "path" },
-        ["fs.appendFile"] = new[] { "path", "content" },
-        ["path.abs"] = new[] { "path" },
-        ["path.dir"] = new[] { "path" },
-        ["path.base"] = new[] { "path" },
-        ["path.ext"] = new[] { "path" },
-        ["path.join"] = new[] { "a", "b" },
-        ["path.name"] = new[] { "path" },
-    };
-
     public InlayHintHandler(AnalysisEngine analysis)
     {
         _analysis = analysis;
@@ -222,22 +184,22 @@ public class InlayHintHandler : InlayHintsHandlerBase
 
         string[]? paramNames = null;
 
-        if (_builtInParams.TryGetValue(funcName, out var builtIn))
+        if (BuiltInRegistry.TryGetFunction(funcName, out var builtInFn))
         {
-            paramNames = builtIn;
+            paramNames = builtInFn.ParamNames;
         }
-        else if (_namespacedParams.TryGetValue(funcName, out var nsBuiltIn))
+        else if (BuiltInRegistry.TryGetNamespaceFunction(funcName, out var nsFn))
         {
-            paramNames = nsBuiltIn;
+            paramNames = nsFn.ParamNames;
         }
         else
         {
             var callSpan = call.Span;
             var simpleName = funcName.Contains('.') ? funcName[(funcName.LastIndexOf('.') + 1)..] : funcName;
             var definition = result.Symbols.FindDefinition(simpleName, callSpan.StartLine, callSpan.StartColumn);
-            if (definition != null && definition.Kind == Analysis.SymbolKind.Function && definition.Detail != null)
+            if (definition != null && definition.Kind == Analysis.SymbolKind.Function)
             {
-                paramNames = ExtractParamNames(definition.Detail);
+                paramNames = definition.ParameterNames ?? ExtractParamNames(definition.Detail ?? "");
             }
         }
 

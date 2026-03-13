@@ -3,6 +3,7 @@ namespace Stash.Lsp.Handlers;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -43,8 +44,52 @@ public class CodeLensHandler : CodeLensHandlerBase
                 continue;
             }
 
+            // Skip built-in symbols (line 0) — they have no source location
+            if (sym.Span.StartLine == 0)
+            {
+                continue;
+            }
+
             var references = result.Symbols.FindReferences(sym.Name, sym.Span.StartLine, sym.Span.StartColumn);
-            var refCount = references.Count - 1;
+
+            var lspRange = sym.Span.ToLspRange();
+            var refLocations = new JArray();
+            foreach (var r in references)
+            {
+                if (r.Span == sym.Span)
+                {
+                    continue;
+                }
+
+                var refRange = r.Span.ToLspRange();
+                refLocations.Add(JObject.FromObject(new
+                {
+                    uri = request.TextDocument.Uri.ToString(),
+                    range = new
+                    {
+                        start = new { line = refRange.Start.Line, character = refRange.Start.Character },
+                        end = new { line = refRange.End.Line, character = refRange.End.Character }
+                    }
+                }));
+            }
+
+            // Add cross-file references from files that import this module
+            var crossFileRefs = _analysis.FindCrossFileReferences(request.TextDocument.Uri.ToUri(), sym.Name);
+            foreach (var (refUri, refSpan) in crossFileRefs)
+            {
+                var refRange = refSpan.ToLspRange();
+                refLocations.Add(JObject.FromObject(new
+                {
+                    uri = refUri.ToString(),
+                    range = new
+                    {
+                        start = new { line = refRange.Start.Line, character = refRange.Start.Character },
+                        end = new { line = refRange.End.Line, character = refRange.End.Character }
+                    }
+                }));
+            }
+
+            var refCount = references.Count - 1 + crossFileRefs.Count;
 
             var title = refCount switch
             {
@@ -55,13 +100,17 @@ public class CodeLensHandler : CodeLensHandlerBase
 
             lenses.Add(new CodeLens
             {
-                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                    new Position(sym.Span.StartLine - 1, sym.Span.StartColumn - 1),
-                    new Position(sym.Span.EndLine - 1, sym.Span.EndColumn - 1)),
+                Range = lspRange,
                 Command = new Command
                 {
                     Title = title,
-                    Name = ""
+                    Name = "editor.action.showReferences",
+                    Arguments = new JArray
+                    {
+                        request.TextDocument.Uri.ToString(),
+                        JObject.FromObject(new { line = lspRange.Start.Line, character = lspRange.Start.Character }),
+                        refLocations
+                    }
                 }
             });
         }

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;

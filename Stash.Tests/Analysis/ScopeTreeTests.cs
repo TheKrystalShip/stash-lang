@@ -1,4 +1,3 @@
-using System.Linq;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Lsp.Analysis;

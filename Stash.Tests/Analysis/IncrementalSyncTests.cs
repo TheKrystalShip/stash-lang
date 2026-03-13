@@ -1,6 +1,4 @@
-using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.Reflection;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;

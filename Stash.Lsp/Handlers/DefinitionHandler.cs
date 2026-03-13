@@ -22,48 +22,31 @@ public class DefinitionHandler : DefinitionHandlerBase
 
     public override Task<LocationOrLocationLinks?> Handle(DefinitionParams request, CancellationToken cancellationToken)
     {
-        var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
-        if (result == null)
+        var uri = request.TextDocument.Uri.ToUri();
+        var text = _documents.GetText(uri);
+        var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
+        if (ctx == null)
         {
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
-        var text = _documents.GetText(request.TextDocument.Uri.ToUri());
-        if (text == null)
-        {
-            return Task.FromResult<LocationOrLocationLinks?>(null);
-        }
-
-        var word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
-        if (word == null)
-        {
-            return Task.FromResult<LocationOrLocationLinks?>(null);
-        }
-
+        var (result, word) = ctx.Value;
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
         var symbol = result.Symbols.FindDefinition(word, line, col);
 
         if (symbol == null)
         {
-            // Check if this might be a member of a namespace import (e.g., utils.log → look for "log" in utils module)
-            var currentLine = text.Split('\n')[request.Position.Line];
-            var dotPrefix = TextUtilities.FindDotPrefix(currentLine, (int)request.Position.Character);
-            if (dotPrefix != null && result.NamespaceImports.TryGetValue(dotPrefix, out var moduleInfo))
+            var nsMember = result.ResolveNamespaceMember(text!, (int)request.Position.Line, (int)request.Position.Character, word);
+            if (nsMember != null)
             {
-                var memberSymbol = moduleInfo.Symbols.GetTopLevel().FirstOrDefault(s => s.Name == word);
-                if (memberSymbol != null)
+                var (memberSymbol, moduleInfo) = nsMember.Value;
+                var memberLocation = new Location
                 {
-                    var memberLocation = new Location
-                    {
-                        Uri = DocumentUri.From(moduleInfo.Uri),
-                        Range = new Range(
-                            new Position(memberSymbol.Span.StartLine - 1, memberSymbol.Span.StartColumn - 1),
-                            new Position(memberSymbol.Span.EndLine - 1, memberSymbol.Span.EndColumn - 1)
-                        )
-                    };
-                    return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(memberLocation));
-                }
+                    Uri = DocumentUri.From(moduleInfo.Uri),
+                    Range = memberSymbol.Span.ToLspRange()
+                };
+                return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(memberLocation));
             }
 
             return Task.FromResult<LocationOrLocationLinks?>(null);
@@ -81,10 +64,7 @@ public class DefinitionHandler : DefinitionHandlerBase
                     var importedLocation = new Location
                     {
                         Uri = DocumentUri.From(symbol.SourceUri),
-                        Range = new Range(
-                            new Position(originalSymbol.Span.StartLine - 1, originalSymbol.Span.StartColumn - 1),
-                            new Position(originalSymbol.Span.EndLine - 1, originalSymbol.Span.EndColumn - 1)
-                        )
+                        Range = originalSymbol.Span.ToLspRange()
                     };
                     return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(importedLocation));
                 }
@@ -102,10 +82,7 @@ public class DefinitionHandler : DefinitionHandlerBase
         var location = new Location
         {
             Uri = request.TextDocument.Uri,
-            Range = new Range(
-                new Position(symbol.Span.StartLine - 1, symbol.Span.StartColumn - 1),
-                new Position(symbol.Span.EndLine - 1, symbol.Span.EndColumn - 1)
-            )
+            Range = symbol.Span.ToLspRange()
         };
 
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(location));

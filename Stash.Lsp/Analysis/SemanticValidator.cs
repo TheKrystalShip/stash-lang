@@ -35,20 +35,9 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private int _loopDepth;
     private int _functionDepth;
 
-    private static readonly HashSet<string> _builtInNames = new()
-    {
-        "typeof", "len", "lastError", "parseArgs", "args",
-        "io", "fs", "env", "path", "conv", "process",
-        "true", "false", "null",
-        "println", "print", "readLine",
-        "CommandResult", "ArgTree", "ArgDef"
-    };
+    private static readonly HashSet<string> _builtInNames = BuiltInRegistry.KnownNames;
 
-    private static readonly HashSet<string> _validBuiltInTypes = new()
-    {
-        "string", "int", "float", "bool", "null", "array",
-        "function", "namespace"
-    };
+    private static readonly HashSet<string> _validBuiltInTypes = BuiltInRegistry.ValidTypes;
 
     public SemanticValidator(ScopeTree scopeTree)
     {
@@ -79,14 +68,23 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     private void ValidateTypeHint(Token? typeHint)
     {
-        if (typeHint == null) return;
+        if (typeHint == null)
+        {
+            return;
+        }
 
         var typeName = typeHint.Lexeme;
 
-        if (_validBuiltInTypes.Contains(typeName)) return;
+        if (_validBuiltInTypes.Contains(typeName))
+        {
+            return;
+        }
 
         var definition = _scopeTree.FindDefinition(typeName, typeHint.Span.StartLine, typeHint.Span.StartColumn);
-        if (definition != null && (definition.Kind == SymbolKind.Struct || definition.Kind == SymbolKind.Enum)) return;
+        if (definition != null && (definition.Kind == SymbolKind.Struct || definition.Kind == SymbolKind.Enum))
+        {
+            return;
+        }
 
         _diagnostics.Add(new SemanticDiagnostic(
             $"Unknown type '{typeName}'.",
@@ -283,9 +281,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             var line = id.Span.StartLine;
             var col = id.Span.StartColumn;
             var definition = _scopeTree.FindDefinition(id.Name.Lexeme, line, col);
-            if (definition != null && definition.Kind == SymbolKind.Function && definition.Detail != null)
+            if (definition != null && definition.Kind == SymbolKind.Function)
             {
-                var paramCount = CountParameters(definition.Detail);
+                var paramCount = definition.ParameterNames != null
+                    ? definition.ParameterNames.Length
+                    : CountParameters(definition.Detail ?? "");
                 if (paramCount >= 0 && expr.Arguments.Count != paramCount)
                 {
                     _diagnostics.Add(new SemanticDiagnostic(

@@ -16,7 +16,10 @@ public class ImportResolverTests
         var modulePath = Path.Combine(tempDir, moduleRelativePath);
         var moduleDir = Path.GetDirectoryName(modulePath)!;
         if (!Directory.Exists(moduleDir))
+        {
             Directory.CreateDirectory(moduleDir);
+        }
+
         File.WriteAllText(modulePath, moduleSource);
 
         var mainPath = Path.Combine(tempDir, "main.stash");
@@ -28,7 +31,9 @@ public class ImportResolverTests
     private static void CleanupTempDir(string tempDir)
     {
         if (Directory.Exists(tempDir))
+        {
             Directory.Delete(tempDir, true);
+        }
     }
 
     private static (List<Stmt> Statements, string FilePath) ParseSource(string source, string filePath)
@@ -37,6 +42,27 @@ public class ImportResolverTests
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         return (parser.ParseProgram(), filePath);
+    }
+
+    private static ImportResolver.ModuleInfo TestParseModule(string absolutePath)
+    {
+        var uri = new Uri(absolutePath);
+        var source = System.IO.File.ReadAllText(absolutePath);
+
+        var lexer = new Stash.Lexing.Lexer(source, absolutePath);
+        var tokens = lexer.ScanTokens();
+
+        var parser = new Stash.Parsing.Parser(tokens);
+        var statements = parser.ParseProgram();
+
+        var collector = new SymbolCollector { IncludeBuiltIns = false };
+        var scopeTree = collector.Collect(statements);
+
+        var errors = new System.Collections.Generic.List<Stash.Common.DiagnosticError>();
+        errors.AddRange(lexer.StructuredErrors);
+        errors.AddRange(parser.StructuredErrors);
+
+        return new ImportResolver.ModuleInfo(uri, absolutePath, scopeTree, errors);
     }
 
     // ──────────────────────────────────────────────────────────
@@ -54,7 +80,7 @@ public class ImportResolverTests
         {
             var resolver = new ImportResolver();
             var (stmts, _) = ParseSource("import { greet } from \"module.stash\";", mainUri.LocalPath);
-            var resolution = resolver.ResolveImports(mainUri, stmts);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
 
             Assert.Empty(resolution.Diagnostics);
             var greet = resolution.ResolvedSymbols.FirstOrDefault(s => s.Name == "greet");
@@ -79,7 +105,7 @@ public class ImportResolverTests
         {
             var resolver = new ImportResolver();
             var (stmts, _) = ParseSource("import { nonexistent } from \"module.stash\";", mainUri.LocalPath);
-            var resolution = resolver.ResolveImports(mainUri, stmts);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
 
             Assert.Contains(resolution.Diagnostics, d => d.Message.Contains("does not export 'nonexistent'"));
         }
@@ -102,7 +128,7 @@ public class ImportResolverTests
         {
             var resolver = new ImportResolver();
             var (stmts, _) = ParseSource("import { foo } from \"nofile.stash\";", mainPath);
-            var resolution = resolver.ResolveImports(mainUri, stmts);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
 
             Assert.Contains(resolution.Diagnostics, d => d.Message.Contains("Cannot find module"));
         }
@@ -123,7 +149,7 @@ public class ImportResolverTests
         {
             var resolver = new ImportResolver();
             var (stmts, _) = ParseSource("import \"module.stash\" as utils;", mainUri.LocalPath);
-            var resolution = resolver.ResolveImports(mainUri, stmts);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
 
             Assert.Empty(resolution.Diagnostics);
             Assert.True(resolution.NamespaceImports.ContainsKey("utils"));
@@ -148,7 +174,7 @@ public class ImportResolverTests
         {
             var resolver = new ImportResolver();
             var (stmts, _) = ParseSource("import \"nofile.stash\" as x;", mainPath);
-            var resolution = resolver.ResolveImports(mainUri, stmts);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
 
             Assert.Contains(resolution.Diagnostics, d =>
                 d.Level == DiagnosticLevel.Error && d.Message.Contains("Cannot find module"));
@@ -170,7 +196,7 @@ public class ImportResolverTests
         {
             var resolver = new ImportResolver();
             var (stmts, _) = ParseSource("import { Server } from \"module.stash\";", mainUri.LocalPath);
-            var resolution = resolver.ResolveImports(mainUri, stmts);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
 
             Assert.Empty(resolution.Diagnostics);
             Assert.Contains(resolution.ResolvedSymbols, s => s.Name == "Server" && s.Kind == SymbolKind.Struct);
@@ -194,7 +220,7 @@ public class ImportResolverTests
         {
             var resolver = new ImportResolver();
             var (stmts, _) = ParseSource("import { Color } from \"module.stash\";", mainUri.LocalPath);
-            var resolution = resolver.ResolveImports(mainUri, stmts);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
 
             Assert.Empty(resolution.Diagnostics);
             Assert.Contains(resolution.ResolvedSymbols, s => s.Name == "Color" && s.Kind == SymbolKind.Enum);
@@ -221,14 +247,14 @@ public class ImportResolverTests
             var src = "import { helper } from \"module.stash\";";
 
             var (stmts1, _) = ParseSource(src, mainUri.LocalPath);
-            resolver.ResolveImports(mainUri, stmts1);
+            resolver.ResolveImports(mainUri, stmts1, TestParseModule);
 
             var modulePath = Path.Combine(Path.GetDirectoryName(mainUri.LocalPath)!, "module.stash");
             var first = resolver.GetModule(modulePath);
             Assert.NotNull(first);
 
             var (stmts2, _) = ParseSource(src, mainUri.LocalPath);
-            resolver.ResolveImports(mainUri, stmts2);
+            resolver.ResolveImports(mainUri, stmts2, TestParseModule);
 
             var second = resolver.GetModule(modulePath);
             Assert.NotNull(second);
@@ -255,7 +281,7 @@ public class ImportResolverTests
             var modulePath = Path.Combine(Path.GetDirectoryName(mainUri.LocalPath)!, "module.stash");
 
             var (stmts1, _) = ParseSource(src, mainUri.LocalPath);
-            resolver.ResolveImports(mainUri, stmts1);
+            resolver.ResolveImports(mainUri, stmts1, TestParseModule);
 
             var firstModule = resolver.GetModule(modulePath);
             Assert.NotNull(firstModule);
@@ -263,7 +289,7 @@ public class ImportResolverTests
             resolver.InvalidateCache(modulePath);
 
             var (stmts2, _) = ParseSource(src, mainUri.LocalPath);
-            resolver.ResolveImports(mainUri, stmts2);
+            resolver.ResolveImports(mainUri, stmts2, TestParseModule);
 
             var secondModule = resolver.GetModule(modulePath);
             Assert.NotNull(secondModule);

@@ -1,7 +1,6 @@
 namespace Stash.Lsp.Handlers;
 
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -73,7 +72,7 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
             {
                 current = new SelectionRange
                 {
-                    Range = SpanToRange(unique[i]),
+                    Range = unique[i].ToLspRange(),
                     Parent = current!
                 };
             }
@@ -270,9 +269,4 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
         a.StartLine == b.StartLine && a.StartColumn == b.StartColumn &&
         a.EndLine == b.EndLine && a.EndColumn == b.EndColumn;
 
-    private static OmniSharp.Extensions.LanguageServer.Protocol.Models.Range SpanToRange(SourceSpan span) =>
-        new(
-            new Position(span.StartLine - 1, span.StartColumn - 1),
-            new Position(span.EndLine - 1, span.EndColumn - 1)
-        );
 }

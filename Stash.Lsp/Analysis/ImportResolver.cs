@@ -6,8 +6,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using Stash.Common;
-using Stash.Lexing;
-using Stash.Parsing;
 using Stash.Parsing.AST;
 
 /// <summary>
@@ -19,6 +17,10 @@ public class ImportResolver
     // Cache of parsed module symbols, keyed by absolute file path
     private readonly ConcurrentDictionary<string, ModuleInfo> _moduleCache = new();
     private readonly HashSet<string> _loadingModules = new();
+    // Map from imported file path → set of document URIs that import it
+    private readonly ConcurrentDictionary<string, HashSet<Uri>> _dependents = new();
+
+    public delegate ModuleInfo ModuleParser(string absolutePath);
 
     /// <summary>
     /// Represents the exported symbols from a parsed module file.
@@ -66,8 +68,9 @@ public class ImportResolver
     /// </summary>
     /// <param name="documentUri">URI of the document being analyzed.</param>
     /// <param name="statements">The parsed AST statements of the document.</param>
+    /// <param name="parseModule">Delegate used to parse a module file.</param>
     /// <returns>Import resolution results.</returns>
-    public ImportResolution ResolveImports(Uri documentUri, List<Stmt> statements)
+    public ImportResolution ResolveImports(Uri documentUri, List<Stmt> statements, ModuleParser parseModule)
     {
         var resolution = new ImportResolution();
         var documentDir = documentUri.IsFile ? Path.GetDirectoryName(documentUri.LocalPath) : null;
@@ -82,10 +85,10 @@ public class ImportResolver
             switch (stmt)
             {
                 case ImportStmt importStmt:
-                    ResolveSelectiveImport(importStmt, documentDir, resolution);
+                    ResolveSelectiveImport(importStmt, documentDir, resolution, parseModule, documentUri);
                     break;
                 case ImportAsStmt importAsStmt:
-                    ResolveNamespaceImport(importAsStmt, documentDir, resolution);
+                    ResolveNamespaceImport(importAsStmt, documentDir, resolution, parseModule, documentUri);
                     break;
             }
         }
@@ -112,7 +115,7 @@ public class ImportResolver
     /// <summary>
     /// Resolves a selective import: import { name1, name2 } from "path.stash";
     /// </summary>
-    private void ResolveSelectiveImport(ImportStmt stmt, string documentDir, ImportResolution resolution)
+    private void ResolveSelectiveImport(ImportStmt stmt, string documentDir, ImportResolution resolution, ModuleParser parseModule, Uri documentUri)
     {
         var importPath = stmt.Path.Literal as string;
         if (string.IsNullOrEmpty(importPath))
@@ -131,7 +134,8 @@ public class ImportResolver
             return;
         }
 
-        var moduleInfo = LoadModule(absolutePath);
+        TrackDependency(absolutePath, documentUri);
+        var moduleInfo = LoadModule(absolutePath, parseModule);
 
         // For each imported name, check if it exists in the module's top-level exports
         foreach (var nameToken in stmt.Names)
@@ -186,7 +190,7 @@ public class ImportResolver
     /// <summary>
     /// Resolves a namespace import: import "path.stash" as alias;
     /// </summary>
-    private void ResolveNamespaceImport(ImportAsStmt stmt, string documentDir, ImportResolution resolution)
+    private void ResolveNamespaceImport(ImportAsStmt stmt, string documentDir, ImportResolution resolution, ModuleParser parseModule, Uri documentUri)
     {
         var importPath = stmt.Path.Literal as string;
         if (string.IsNullOrEmpty(importPath))
@@ -205,14 +209,39 @@ public class ImportResolver
             return;
         }
 
-        var moduleInfo = LoadModule(absolutePath);
+        TrackDependency(absolutePath, documentUri);
+        var moduleInfo = LoadModule(absolutePath, parseModule);
         resolution.NamespaceImports[stmt.Alias.Lexeme] = moduleInfo;
+    }
+
+    private void TrackDependency(string importedPath, Uri importerUri)
+    {
+        var dependents = _dependents.GetOrAdd(importedPath, _ => new HashSet<Uri>());
+        lock (dependents)
+        {
+            dependents.Add(importerUri);
+        }
+    }
+
+    /// <summary>
+    /// Returns all document URIs that import the given file path.
+    /// </summary>
+    public IReadOnlyCollection<Uri> GetDependents(string absolutePath)
+    {
+        if (_dependents.TryGetValue(absolutePath, out var dependents))
+        {
+            lock (dependents)
+            {
+                return dependents.ToArray();
+            }
+        }
+        return Array.Empty<Uri>();
     }
 
     /// <summary>
     /// Loads and parses a module file, caching the result.
     /// </summary>
-    private ModuleInfo LoadModule(string absolutePath)
+    private ModuleInfo LoadModule(string absolutePath, ModuleParser parseModule)
     {
         if (_moduleCache.TryGetValue(absolutePath, out var cached))
         {
@@ -226,35 +255,18 @@ public class ImportResolver
             return new ModuleInfo(new Uri(absolutePath), absolutePath, new ScopeTree(emptyScope), new List<DiagnosticError>());
         }
 
-        var uri = new Uri(absolutePath);
-        var errors = new List<DiagnosticError>();
-
         try
         {
-            var source = File.ReadAllText(absolutePath);
-
-            var lexer = new Lexer(source, absolutePath);
-            var tokens = lexer.ScanTokens();
-
-            var parser = new Parser(tokens);
-            var statements = parser.ParseProgram();
-
-            var collector = new SymbolCollector { IncludeBuiltIns = false };
-            var scopeTree = collector.Collect(statements);
-
-            errors.AddRange(lexer.StructuredErrors);
-            errors.AddRange(parser.StructuredErrors);
-
-            var moduleInfo = new ModuleInfo(uri, absolutePath, scopeTree, errors);
+            var moduleInfo = parseModule(absolutePath);
             _moduleCache[absolutePath] = moduleInfo;
             return moduleInfo;
         }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
-            // Return empty module info for files that can't be read
+            var uri = new Uri(absolutePath);
             var emptyScope = new Scope(ScopeKind.Global, null, new SourceSpan(absolutePath, 1, 1, 1, 1));
             var emptyTree = new ScopeTree(emptyScope);
-            var moduleInfo = new ModuleInfo(uri, absolutePath, emptyTree, errors);
+            var moduleInfo = new ModuleInfo(uri, absolutePath, emptyTree, new List<DiagnosticError>());
             _moduleCache[absolutePath] = moduleInfo;
             return moduleInfo;
         }

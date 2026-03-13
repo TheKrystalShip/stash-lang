@@ -2,7 +2,6 @@ namespace Stash.Lsp.Handlers;
 
 using System;
 using System.Collections.Concurrent;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -12,7 +11,6 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
-using Stash.Common;
 using Stash.Lsp.Analysis;
 
 public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
@@ -143,15 +141,52 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         }
 
         var result = _analysis.Analyze(uri, text);
+        var diagnostics = BuildDiagnostics(result);
+
+        _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
+        {
+            Uri = DocumentUri.From(uri),
+            Diagnostics = new Container<Diagnostic>(diagnostics)
+        });
+
+        // Re-analyze open files that import this file so they get updated diagnostics
+        if (uri.IsFile)
+        {
+            foreach (var depUri in _analysis.GetDependents(uri.LocalPath))
+            {
+                if (depUri == uri)
+                {
+                    continue;
+                }
+
+                var depText = _documents.GetText(depUri);
+                if (depText == null)
+                {
+                    continue;
+                }
+
+                _analysis.InvalidateModule(depUri.IsFile ? depUri.LocalPath : depUri.ToString());
+                var depResult = _analysis.Analyze(depUri, depText);
+                var depDiagnostics = BuildDiagnostics(depResult);
+
+                _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
+                {
+                    Uri = DocumentUri.From(depUri),
+                    Diagnostics = new Container<Diagnostic>(depDiagnostics)
+                });
+            }
+        }
+    }
+
+    private static System.Collections.Generic.List<Diagnostic> BuildDiagnostics(AnalysisResult result)
+    {
         var diagnostics = new System.Collections.Generic.List<Diagnostic>();
 
         foreach (var error in result.StructuredLexErrors)
         {
             diagnostics.Add(new Diagnostic
             {
-                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                    new Position(error.Span.StartLine - 1, error.Span.StartColumn - 1),
-                    new Position(error.Span.EndLine - 1, error.Span.EndColumn - 1)),
+                Range = error.Span.ToLspRange(),
                 Severity = DiagnosticSeverity.Error,
                 Source = "stash",
                 Message = error.Message
@@ -162,9 +197,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         {
             diagnostics.Add(new Diagnostic
             {
-                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                    new Position(error.Span.StartLine - 1, error.Span.StartColumn - 1),
-                    new Position(error.Span.EndLine - 1, error.Span.EndColumn - 1)),
+                Range = error.Span.ToLspRange(),
                 Severity = DiagnosticSeverity.Error,
                 Source = "stash",
                 Message = error.Message
@@ -175,9 +208,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         {
             diagnostics.Add(new Diagnostic
             {
-                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                    new Position(semantic.Span.StartLine - 1, semantic.Span.StartColumn - 1),
-                    new Position(semantic.Span.EndLine - 1, semantic.Span.EndColumn - 1)),
+                Range = semantic.Span.ToLspRange(),
                 Severity = semantic.Level switch
                 {
                     Analysis.DiagnosticLevel.Error => DiagnosticSeverity.Error,
@@ -193,10 +224,6 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             });
         }
 
-        _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
-        {
-            Uri = DocumentUri.From(uri),
-            Diagnostics = new Container<Diagnostic>(diagnostics)
-        });
+        return diagnostics;
     }
 }

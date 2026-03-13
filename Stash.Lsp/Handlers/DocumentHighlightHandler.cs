@@ -20,23 +20,14 @@ public class DocumentHighlightHandler : DocumentHighlightHandlerBase
 
     public override Task<DocumentHighlightContainer?> Handle(DocumentHighlightParams request, CancellationToken cancellationToken)
     {
-        var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
-        if (result == null)
+        var uri = request.TextDocument.Uri.ToUri();
+        var text = _documents.GetText(uri);
+        var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
+        if (ctx == null)
         {
             return Task.FromResult<DocumentHighlightContainer?>(null);
         }
-
-        var text = _documents.GetText(request.TextDocument.Uri.ToUri());
-        if (text == null)
-        {
-            return Task.FromResult<DocumentHighlightContainer?>(null);
-        }
-
-        var word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
-        if (word == null)
-        {
-            return Task.FromResult<DocumentHighlightContainer?>(null);
-        }
+        var (result, word) = ctx.Value;
 
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
@@ -52,9 +43,7 @@ public class DocumentHighlightHandler : DocumentHighlightHandlerBase
         {
             highlights.Add(new DocumentHighlight
             {
-                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                    new Position(reference.Span.StartLine - 1, reference.Span.StartColumn - 1),
-                    new Position(reference.Span.EndLine - 1, reference.Span.EndColumn - 1)),
+                Range = reference.Span.ToLspRange(),
                 Kind = reference.Kind == ReferenceKind.Write
                     ? DocumentHighlightKind.Write
                     : DocumentHighlightKind.Read

@@ -1,6 +1,5 @@
 namespace Stash.Lsp.Handlers;
 
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -21,44 +20,38 @@ public class HoverHandler : HoverHandlerBase
 
     public override Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken)
     {
-        var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
-        if (result == null) return Task.FromResult<Hover?>(null);
+        var uri = request.TextDocument.Uri.ToUri();
+        var text = _documents.GetText(uri);
+        var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
+        if (ctx == null)
+        {
+            return Task.FromResult<Hover?>(null);
+        }
 
+        var (result, word) = ctx.Value;
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
-
-        var text = _documents.GetText(request.TextDocument.Uri.ToUri());
-        if (text == null) return Task.FromResult<Hover?>(null);
-
-        string? word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
-        if (word == null) return Task.FromResult<Hover?>(null);
 
         var symbol = result.Symbols.FindDefinition(word, line, col);
 
         // If not found directly, try namespace member access
         if (symbol == null)
         {
-            var lines = text.Split('\n');
-            if (request.Position.Line < lines.Length)
+            var nsMember = result.ResolveNamespaceMember(text!, (int)request.Position.Line, (int)request.Position.Character, word);
+            if (nsMember != null)
             {
-                var currentLine = lines[request.Position.Line];
-                var dotPrefix = TextUtilities.FindDotPrefix(currentLine, (int)request.Position.Character);
-                if (dotPrefix != null && result.NamespaceImports.TryGetValue(dotPrefix, out var moduleInfo))
+                var (nsSym, _) = nsMember.Value;
+                var lines2 = text!.Split('\n');
+                var dotPrefix = TextUtilities.FindDotPrefix(lines2[(int)request.Position.Line], (int)request.Position.Character);
+                var markdown = $"```stash\n{nsSym.Detail ?? nsSym.Name}\n```\n*{nsSym.Kind}* — from `{dotPrefix}`";
+                return Task.FromResult<Hover?>(new Hover
                 {
-                    symbol = moduleInfo.Symbols.GetTopLevel().FirstOrDefault(s => s.Name == word);
-                    if (symbol != null)
+                    Contents = new MarkedStringsOrMarkupContent(new MarkupContent
                     {
-                        var markdown = $"```stash\n{symbol.Detail ?? symbol.Name}\n```\n*{symbol.Kind}* — from `{dotPrefix}`";
-                        return Task.FromResult<Hover?>(new Hover
-                        {
-                            Contents = new MarkedStringsOrMarkupContent(new MarkupContent
-                            {
-                                Kind = MarkupKind.Markdown,
-                                Value = markdown
-                            })
-                        });
-                    }
-                }
+                        Kind = MarkupKind.Markdown,
+                        Value = markdown
+                    })
+                });
             }
             return Task.FromResult<Hover?>(null);
         }

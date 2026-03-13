@@ -1,5 +1,4 @@
 using Stash.Lexing;
-using Stash.Common;
 
 namespace Stash.Tests.Lexing;
 

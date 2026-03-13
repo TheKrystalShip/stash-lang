@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
@@ -32,5 +33,37 @@ public class AnalysisResult
         Symbols = symbols;
         SemanticDiagnostics = semanticDiagnostics;
         NamespaceImports = namespaceImports ?? new Dictionary<string, ImportResolver.ModuleInfo>();
+    }
+
+    /// <summary>
+    /// Resolves a namespace member by looking up the dot prefix in imported namespaces.
+    /// Returns the matching symbol from the imported module, or null.
+    /// </summary>
+    public (SymbolInfo Symbol, ImportResolver.ModuleInfo Module)? ResolveNamespaceMember(string text, int lspLine, int lspCharacter, string memberName)
+    {
+        var lines = text.Split('\n');
+        if (lspLine >= lines.Length)
+        {
+            return null;
+        }
+
+        var prefix = TextUtilities.FindDotPrefix(lines[lspLine], lspCharacter);
+        if (prefix == null)
+        {
+            return null;
+        }
+
+        if (!NamespaceImports.TryGetValue(prefix, out var moduleInfo))
+        {
+            return null;
+        }
+
+        var symbol = moduleInfo.Symbols.GetTopLevel().FirstOrDefault(s => s.Name == memberName);
+        if (symbol == null)
+        {
+            return null;
+        }
+
+        return (symbol, moduleInfo);
     }
 }

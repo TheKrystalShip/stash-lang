@@ -38,8 +38,8 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
                 continue;
             }
 
-            Range range = SpanToRange(sym.FullSpan ?? sym.Span);
-            Range selectionRange = SpanToRange(sym.Span);
+            Range range = (sym.FullSpan ?? sym.Span).ToLspRange();
+            Range selectionRange = sym.Span.ToLspRange();
 
             DocumentSymbol docSymbol = new()
             {
@@ -59,8 +59,8 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
                         {
                             Name = child.Name,
                             Kind = MapSymbolKind(child.Kind),
-                            Range = SpanToRange(child.FullSpan ?? child.Span),
-                            SelectionRange = SpanToRange(child.Span),
+                            Range = (child.FullSpan ?? child.Span).ToLspRange(),
+                            SelectionRange = child.Span.ToLspRange(),
                             Detail = child.Detail
                         }))
                 };
@@ -79,12 +79,6 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
         {
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
-
-    private static Range SpanToRange(Common.SourceSpan span) =>
-        new(
-            new Position(span.StartLine - 1, span.StartColumn - 1),
-            new Position(span.EndLine - 1, span.EndColumn - 1)
-        );
 
     private static LspSymbolKind MapSymbolKind(Analysis.SymbolKind kind) => kind switch
     {

@@ -2,6 +2,7 @@ namespace Stash.Lsp.Handlers;
 
 using System.Threading;
 using System.Threading.Tasks;
+using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -20,23 +21,14 @@ public class ReferencesHandler : ReferencesHandlerBase
 
     public override Task<LocationContainer?> Handle(ReferenceParams request, CancellationToken cancellationToken)
     {
-        var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
-        if (result == null)
+        var uri = request.TextDocument.Uri.ToUri();
+        var text = _documents.GetText(uri);
+        var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
+        if (ctx == null)
         {
             return Task.FromResult<LocationContainer?>(null);
         }
-
-        var text = _documents.GetText(request.TextDocument.Uri.ToUri());
-        if (text == null)
-        {
-            return Task.FromResult<LocationContainer?>(null);
-        }
-
-        var word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
-        if (word == null)
-        {
-            return Task.FromResult<LocationContainer?>(null);
-        }
+        var (result, word) = ctx.Value;
 
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
@@ -53,9 +45,18 @@ public class ReferencesHandler : ReferencesHandlerBase
             locations.Add(new Location
             {
                 Uri = request.TextDocument.Uri,
-                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                    new Position(reference.Span.StartLine - 1, reference.Span.StartColumn - 1),
-                    new Position(reference.Span.EndLine - 1, reference.Span.EndColumn - 1))
+                Range = reference.Span.ToLspRange()
+            });
+        }
+
+        // Add cross-file references from files that import this module
+        var crossFileRefs = _analysis.FindCrossFileReferences(uri, word);
+        foreach (var (refUri, refSpan) in crossFileRefs)
+        {
+            locations.Add(new Location
+            {
+                Uri = DocumentUri.From(refUri),
+                Range = refSpan.ToLspRange()
             });
         }
 

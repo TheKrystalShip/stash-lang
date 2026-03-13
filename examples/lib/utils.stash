@@ -17,7 +17,7 @@ fn log(level, message) {
     io.println($"[{prefix}] {message}");
 }
 
-fn repeat_char(ch, count) {
+fn repeat_char(ch: string, count: int) -> string {
     let result = "";
     let i = 0;
     while (i < count) {

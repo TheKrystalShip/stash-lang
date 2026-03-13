@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 using Stash.Parsing.AST;
 
@@ -33,78 +34,27 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     private void RegisterBuiltIns(string file)
     {
-        // Use line 0 so built-ins are "before" any user code
         var span = new SourceSpan(file, 0, 0, 0, 0);
 
-        // ── Built-in Structs ──
-
-        AddBuiltInStruct(span, "CommandResult", new (string, string?)[]
+        foreach (var s in BuiltInRegistry.Structs)
         {
-            ("stdout", "string"),
-            ("stderr", "string"),
-            ("exitCode", "int"),
-        });
-
-        AddBuiltInStruct(span, "ArgTree", new (string, string?)[]
-        {
-            ("name", "string"),
-            ("version", "string"),
-            ("description", "string"),
-            ("flags", "array"),
-            ("options", "array"),
-            ("commands", "array"),
-            ("positionals", "array"),
-        });
-
-        AddBuiltInStruct(span, "ArgDef", new[]
-        {
-            ("name", "string"),
-            ("short", "string"),
-            ("type", "string"),
-            ("default", (string?)null),
-            ("description", "string"),
-            ("required", "bool"),
-            ("args", "ArgTree"),
-        });
-
-        // ── Built-in Global Functions ──
-
-        AddBuiltInFunction(span, "typeof", "fn typeof(value) -> string", "string");
-        AddBuiltInFunction(span, "len", "fn len(value) -> int", "int");
-        AddBuiltInFunction(span, "lastError", "fn lastError() -> string", "string");
-        AddBuiltInFunction(span, "parseArgs", "fn parseArgs(tree: ArgTree) -> Args", "Args");
-
-        // ── Built-in Namespaces ──
-
-        _currentScope.AddSymbol(new SymbolInfo("io", SymbolKind.Namespace, span, detail: "namespace io"));
-        _currentScope.AddSymbol(new SymbolInfo("conv", SymbolKind.Namespace, span, detail: "namespace conv"));
-        _currentScope.AddSymbol(new SymbolInfo("env", SymbolKind.Namespace, span, detail: "namespace env"));
-        _currentScope.AddSymbol(new SymbolInfo("process", SymbolKind.Namespace, span, detail: "namespace process"));
-        _currentScope.AddSymbol(new SymbolInfo("fs", SymbolKind.Namespace, span, detail: "namespace fs"));
-        _currentScope.AddSymbol(new SymbolInfo("path", SymbolKind.Namespace, span, detail: "namespace path"));
-    }
-
-    private void AddBuiltInStruct(SourceSpan span, string name, (string FieldName, string? FieldType)[] fields)
-    {
-        var fieldParts = new List<string>();
-        foreach (var (fieldName, fieldType) in fields)
-        {
-            fieldParts.Add(fieldType != null ? $"{fieldName}: {fieldType}" : fieldName);
+            _currentScope.AddSymbol(new SymbolInfo(s.Name, SymbolKind.Struct, span, span, s.Detail));
+            foreach (var f in s.Fields)
+            {
+                var fieldDetail = f.Type != null ? $"field of {s.Name}: {f.Type}" : $"field of {s.Name}";
+                _currentScope.AddSymbol(new SymbolInfo(f.Name, SymbolKind.Field, span, detail: fieldDetail, parentName: s.Name, typeHint: f.Type));
+            }
         }
-        var detail = $"struct {name} {{ {string.Join(", ", fieldParts)} }}";
 
-        _currentScope.AddSymbol(new SymbolInfo(name, SymbolKind.Struct, span, span, detail));
-
-        foreach (var (fieldName, fieldType) in fields)
+        foreach (var fn in BuiltInRegistry.Functions)
         {
-            var fieldDetail = fieldType != null ? $"field of {name}: {fieldType}" : $"field of {name}";
-            _currentScope.AddSymbol(new SymbolInfo(fieldName, SymbolKind.Field, span, detail: fieldDetail, parentName: name, typeHint: fieldType));
+            _currentScope.AddSymbol(new SymbolInfo(fn.Name, SymbolKind.Function, span, span, fn.Detail, typeHint: fn.ReturnType, parameterNames: fn.ParamNames));
         }
-    }
 
-    private void AddBuiltInFunction(SourceSpan span, string name, string detail, string? returnType)
-    {
-        _currentScope.AddSymbol(new SymbolInfo(name, SymbolKind.Function, span, span, detail, typeHint: returnType));
+        foreach (var ns in BuiltInRegistry.NamespaceNames)
+        {
+            _currentScope.AddSymbol(new SymbolInfo(ns, SymbolKind.Namespace, span, detail: $"namespace {ns}"));
+        }
     }
 
     private void RecordReference(string name, SourceSpan span, ReferenceKind kind)
@@ -161,9 +111,10 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         }
 
         var returnTypeStr = stmt.ReturnType?.Lexeme;
+        var paramNames = stmt.Parameters.Select(p => p.Lexeme).ToArray();
 
         // Function name goes into the parent (current) scope
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames));
 
         // Parameters and body statements share the function scope
         PushScope(ScopeKind.Function, stmt.Body.Span);

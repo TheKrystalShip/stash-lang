@@ -14,45 +14,6 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
 
-    // Built-in function signatures
-    private static readonly Dictionary<string, (string Label, string[] Params)> _builtInSignatures = new()
-    {
-        ["typeof"] = ("fn typeof(value) -> string", new[] { "value" }),
-        ["len"] = ("fn len(value) -> int", new[] { "value" }),
-        ["lastError"] = ("fn lastError() -> string", Array.Empty<string>()),
-        ["parseArgs"] = ("fn parseArgs(tree: ArgTree) -> Args", new[] { "tree" }),
-    };
-
-    private static readonly Dictionary<string, (string Label, string[] Params)> _namespacedSignatures = new()
-    {
-        ["io.println"] = ("fn io.println(value)", new[] { "value" }),
-        ["io.print"] = ("fn io.print(value)", new[] { "value" }),
-        ["conv.toStr"] = ("fn conv.toStr(value) -> string", new[] { "value" }),
-        ["conv.toInt"] = ("fn conv.toInt(value) -> int", new[] { "value" }),
-        ["conv.toFloat"] = ("fn conv.toFloat(value) -> float", new[] { "value" }),
-        ["env.get"] = ("fn env.get(name: string) -> string", new[] { "name" }),
-        ["env.set"] = ("fn env.set(name: string, value: string)", new[] { "name", "value" }),
-        ["process.exit"] = ("fn process.exit(code: int)", new[] { "code" }),
-        ["fs.readFile"] = ("fn fs.readFile(path: string) -> string", new[] { "path" }),
-        ["fs.writeFile"] = ("fn fs.writeFile(path: string, content: string)", new[] { "path", "content" }),
-        ["fs.exists"] = ("fn fs.exists(path: string) -> bool", new[] { "path" }),
-        ["fs.dirExists"] = ("fn fs.dirExists(path: string) -> bool", new[] { "path" }),
-        ["fs.pathExists"] = ("fn fs.pathExists(path: string) -> bool", new[] { "path" }),
-        ["fs.createDir"] = ("fn fs.createDir(path: string)", new[] { "path" }),
-        ["fs.delete"] = ("fn fs.delete(path: string)", new[] { "path" }),
-        ["fs.copy"] = ("fn fs.copy(src: string, dst: string)", new[] { "src", "dst" }),
-        ["fs.move"] = ("fn fs.move(src: string, dst: string)", new[] { "src", "dst" }),
-        ["fs.size"] = ("fn fs.size(path: string) -> int", new[] { "path" }),
-        ["fs.listDir"] = ("fn fs.listDir(path: string) -> array", new[] { "path" }),
-        ["fs.appendFile"] = ("fn fs.appendFile(path: string, content: string)", new[] { "path", "content" }),
-        ["path.abs"] = ("fn path.abs(path: string) -> string", new[] { "path" }),
-        ["path.dir"] = ("fn path.dir(path: string) -> string", new[] { "path" }),
-        ["path.base"] = ("fn path.base(path: string) -> string", new[] { "path" }),
-        ["path.ext"] = ("fn path.ext(path: string) -> string", new[] { "path" }),
-        ["path.join"] = ("fn path.join(a: string, b: string) -> string", new[] { "a", "b" }),
-        ["path.name"] = ("fn path.name(path: string) -> string", new[] { "path" }),
-    };
-
     public SignatureHelpHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
@@ -87,14 +48,14 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         }
 
         // Try built-in signatures first
-        if (_builtInSignatures.TryGetValue(functionName, out var builtIn))
+        if (BuiltInRegistry.TryGetFunction(functionName, out var builtInFn))
         {
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtIn.Label, builtIn.Params, activeParam));
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, builtInFn.ParamNames, activeParam));
         }
 
-        if (_namespacedSignatures.TryGetValue(functionName, out var nsBuiltIn))
+        if (BuiltInRegistry.TryGetNamespaceFunction(functionName, out var nsFn))
         {
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsBuiltIn.Label, nsBuiltIn.Params, activeParam));
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, nsFn.ParamNames, activeParam));
         }
 
         // Try user-defined functions
@@ -109,7 +70,7 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
 
             if (definition != null && definition.Kind == Analysis.SymbolKind.Function && definition.Detail != null)
             {
-                var paramNames = ExtractParamNames(definition.Detail);
+                var paramNames = definition.ParameterNames ?? ExtractParamNames(definition.Detail);
                 return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(definition.Detail, paramNames, activeParam));
             }
         }

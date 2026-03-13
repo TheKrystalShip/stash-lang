@@ -1,6 +1,5 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Parsing.AST;
 using Stash.Interpreting;
 
 namespace Stash.Tests.Interpreting;

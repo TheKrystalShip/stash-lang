@@ -72,10 +72,7 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
                     Location = new Location
                     {
                         Uri = documentUri,
-                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-                            new Position(sym.Span.StartLine - 1, sym.Span.StartColumn - 1),
-                            new Position(sym.Span.EndLine - 1, sym.Span.EndColumn - 1)
-                        )
+                        Range = sym.Span.ToLspRange()
                     }
                 });
             }

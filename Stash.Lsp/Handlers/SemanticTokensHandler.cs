@@ -1,6 +1,5 @@
 namespace Stash.Lsp.Handlers;
 
-using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -29,16 +28,6 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     // Token modifier bit flags
     private const int ModifierDeclaration = 1 << 0;
     private const int ModifierReadonly = 1 << 1;
-
-    private static readonly HashSet<string> _builtInFunctions = new()
-    {
-        "typeof", "len", "lastError", "parseArgs", "println", "print", "readLine"
-    };
-
-    private static readonly HashSet<string> _builtInNamespaces = new()
-    {
-        "io", "fs", "env", "path", "conv", "process"
-    };
 
     public SemanticTokensHandler(AnalysisEngine analysis)
     {
@@ -130,11 +119,11 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         else
         {
             // Unresolved — try built-in names
-            if (_builtInFunctions.Contains(name))
+            if (BuiltInRegistry.IsBuiltInFunction(name))
             {
                 builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
             }
-            else if (_builtInNamespaces.Contains(name))
+            else if (BuiltInRegistry.IsBuiltInNamespace(name))
             {
                 builder.Push(line, col, length, TokenTypeNamespace, 0);
             }

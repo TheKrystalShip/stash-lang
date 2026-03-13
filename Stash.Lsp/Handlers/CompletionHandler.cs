@@ -16,51 +16,6 @@ public class CompletionHandler : CompletionHandlerBase
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
 
-    private static readonly string[] _keywords =
-    {
-        "let", "const", "fn", "struct", "enum", "if", "else",
-        "for", "in", "while", "return", "break", "continue",
-        "true", "false", "null", "try", "import", "from", "as", "args"
-    };
-
-    private static readonly (string Name, string Detail)[] _builtIns =
-    {
-        ("typeof", "fn typeof(value) -> string"),
-        ("len", "fn len(value) -> int"),
-        ("lastError", "fn lastError() -> string"),
-        ("parseArgs", "fn parseArgs(tree: ArgTree) -> Args"),
-    };
-
-    private static readonly (string Namespace, string Name, string Detail)[] _namespacedBuiltIns =
-    {
-        ("io", "println", "fn io.println(value)"),
-        ("io", "print", "fn io.print(value)"),
-        ("conv", "toStr", "fn conv.toStr(value) -> string"),
-        ("conv", "toInt", "fn conv.toInt(value) -> int"),
-        ("conv", "toFloat", "fn conv.toFloat(value) -> float"),
-        ("env", "get", "fn env.get(name: string) -> string"),
-        ("env", "set", "fn env.set(name: string, value: string)"),
-        ("process", "exit", "fn process.exit(code: int)"),
-        ("fs", "readFile", "fn fs.readFile(path: string) -> string"),
-        ("fs", "writeFile", "fn fs.writeFile(path: string, content: string)"),
-        ("fs", "exists", "fn fs.exists(path: string) -> bool"),
-        ("fs", "dirExists", "fn fs.dirExists(path: string) -> bool"),
-        ("fs", "pathExists", "fn fs.pathExists(path: string) -> bool"),
-        ("fs", "createDir", "fn fs.createDir(path: string)"),
-        ("fs", "delete", "fn fs.delete(path: string)"),
-        ("fs", "copy", "fn fs.copy(src: string, dst: string)"),
-        ("fs", "move", "fn fs.move(src: string, dst: string)"),
-        ("fs", "size", "fn fs.size(path: string) -> int"),
-        ("fs", "listDir", "fn fs.listDir(path: string) -> array"),
-        ("fs", "appendFile", "fn fs.appendFile(path: string, content: string)"),
-        ("path", "abs", "fn path.abs(path: string) -> string"),
-        ("path", "dir", "fn path.dir(path: string) -> string"),
-        ("path", "base", "fn path.base(path: string) -> string"),
-        ("path", "ext", "fn path.ext(path: string) -> string"),
-        ("path", "join", "fn path.join(a: string, b: string) -> string"),
-        ("path", "name", "fn path.name(path: string) -> string"),
-    };
-
     public CompletionHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
@@ -109,7 +64,7 @@ public class CompletionHandler : CompletionHandlerBase
         var items = new List<CompletionItem>();
 
         // Keywords
-        foreach (var kw in _keywords)
+        foreach (var kw in BuiltInRegistry.Keywords)
         {
             items.Add(new CompletionItem
             {
@@ -120,29 +75,25 @@ public class CompletionHandler : CompletionHandlerBase
         }
 
         // Built-in functions
-        foreach (var (name, detail) in _builtIns)
+        foreach (var fn in BuiltInRegistry.Functions)
         {
             items.Add(new CompletionItem
             {
-                Label = name,
+                Label = fn.Name,
                 Kind = LspCompletionItemKind.Function,
-                Detail = detail
+                Detail = fn.Detail
             });
         }
 
         // Built-in namespaces
-        var seenNamespaces = new HashSet<string>();
-        foreach (var (ns, name, detail) in _namespacedBuiltIns)
+        foreach (var ns in BuiltInRegistry.NamespaceNames)
         {
-            if (seenNamespaces.Add(ns))
+            items.Add(new CompletionItem
             {
-                items.Add(new CompletionItem
-                {
-                    Label = ns,
-                    Kind = LspCompletionItemKind.Module,
-                    Detail = $"namespace {ns}"
-                });
-            }
+                Label = ns,
+                Kind = LspCompletionItemKind.Module,
+                Detail = $"namespace {ns}"
+            });
         }
 
         // Symbols from analysis — scoped to cursor position
@@ -212,16 +163,15 @@ public class CompletionHandler : CompletionHandlerBase
         var items = new List<CompletionItem>();
 
         // Check if it's a known built-in namespace
-        var nsMembers = _namespacedBuiltIns.Where(b => b.Namespace == prefix).ToArray();
-        if (nsMembers.Length > 0)
+        if (BuiltInRegistry.IsBuiltInNamespace(prefix))
         {
-            foreach (var (_, name, detail) in nsMembers)
+            foreach (var fn in BuiltInRegistry.GetNamespaceMembers(prefix))
             {
                 items.Add(new CompletionItem
                 {
-                    Label = name,
+                    Label = fn.Name,
                     Kind = LspCompletionItemKind.Function,
-                    Detail = detail
+                    Detail = fn.Detail
                 });
             }
             return new CompletionList(items);

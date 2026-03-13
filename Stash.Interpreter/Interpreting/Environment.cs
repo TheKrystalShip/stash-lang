@@ -1,6 +1,5 @@
 namespace Stash.Interpreting;
 
-using System;
 using System.Collections.Generic;
 
 /// <summary>

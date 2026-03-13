@@ -83,10 +83,7 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
 
         // The token span covers the string literal including quotes; map to 0-based LSP positions
         var span = pathToken.Span;
-        var range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
-            new Position(span.StartLine - 1, span.StartColumn - 1),
-            new Position(span.EndLine - 1, span.EndColumn - 1)
-        );
+        var range = span.ToLspRange();
 
         var link = new DocumentLink
         {
