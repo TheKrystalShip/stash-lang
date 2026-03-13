@@ -105,12 +105,14 @@ public class CompletionHandler : CompletionHandlerBase
             }
         }
 
-        // Symbols from analysis
+        // Symbols from analysis — scoped to cursor position
         var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result != null)
         {
+            var line = request.Position.Line + 1;
+            var col = request.Position.Character + 1;
             var seen = new HashSet<string>();
-            foreach (var sym in result.Symbols.All)
+            foreach (var sym in result.Symbols.GetVisibleSymbols(line, col))
             {
                 if (!seen.Add(sym.Name))
                 {

@@ -10,10 +10,10 @@ public class AnalysisResult
     public List<Stmt> Statements { get; }
     public List<string> LexErrors { get; }
     public List<string> ParseErrors { get; }
-    public SymbolTable Symbols { get; }
+    public ScopeTree Symbols { get; }
 
     public AnalysisResult(List<Token> tokens, List<Stmt> statements,
-        List<string> lexErrors, List<string> parseErrors, SymbolTable symbols)
+        List<string> lexErrors, List<string> parseErrors, ScopeTree symbols)
     {
         Tokens = tokens;
         Statements = statements;

@@ -37,15 +37,14 @@ public class HoverHandler : HoverHandlerBase
         }
 
         // Find the identifier at the cursor position
-        string? word = FindWordAtPosition(text, request.Position.Line, request.Position.Character);
+        string? word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
         if (word == null)
         {
             return Task.FromResult<Hover?>(null);
         }
 
         // Look up in symbol table
-        var span = new Stash.Common.SourceSpan("", line, col, line, col);
-        var symbol = result.Symbols.FindDefinition(word, span);
+        var symbol = result.Symbols.FindDefinition(word, line, col);
         if (symbol == null)
         {
             return Task.FromResult<Hover?>(null);
@@ -70,38 +69,5 @@ public class HoverHandler : HoverHandlerBase
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
 
-    private static string? FindWordAtPosition(string text, int line, int character)
-    {
-        var lines = text.Split('\n');
-        if (line < 0 || line >= lines.Length)
-        {
-            return null;
-        }
-
-        var lineText = lines[line];
-        if (character < 0 || character >= lineText.Length)
-        {
-            return null;
-        }
-
-        var c = lineText[character];
-        if (!char.IsLetterOrDigit(c) && c != '_')
-        {
-            return null;
-        }
-
-        int start = character;
-        while (start > 0 && (char.IsLetterOrDigit(lineText[start - 1]) || lineText[start - 1] == '_'))
-        {
-            start--;
-        }
-
-        int end = character;
-        while (end < lineText.Length - 1 && (char.IsLetterOrDigit(lineText[end + 1]) || lineText[end + 1] == '_'))
-        {
-            end++;
-        }
-
-        return lineText[start..(end + 1)];
-    }
 }
+

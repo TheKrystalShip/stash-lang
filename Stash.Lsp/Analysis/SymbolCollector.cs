@@ -1,20 +1,37 @@
 namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
+using Stash.Common;
 using Stash.Parsing.AST;
 
 public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 {
-    private readonly SymbolTable _table = new();
+    private Scope _currentScope = null!;
 
-    public SymbolTable Collect(List<Stmt> statements)
+    public ScopeTree Collect(List<Stmt> statements)
     {
+        var file = statements.Count > 0 ? statements[0].Span.File : "";
+        var globalSpan = new SourceSpan(file, 1, 1, int.MaxValue, int.MaxValue);
+        var globalScope = new Scope(ScopeKind.Global, null, globalSpan);
+        _currentScope = globalScope;
+
         foreach (var stmt in statements)
         {
             stmt.Accept(this);
         }
 
-        return _table;
+        return new ScopeTree(globalScope);
+    }
+
+    private void PushScope(ScopeKind kind, SourceSpan span)
+    {
+        var scope = new Scope(kind, _currentScope, span);
+        _currentScope = scope;
+    }
+
+    private void PopScope()
+    {
+        _currentScope = _currentScope.Parent!;
     }
 
     // Statement visitors
@@ -29,14 +46,22 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
         var detail = $"fn {stmt.Name.Lexeme}({string.Join(", ", paramNames)})";
 
-        _table.Add(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail));
+        // Function name goes into the parent (current) scope
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail));
 
+        // Parameters and body statements share the function scope
+        PushScope(ScopeKind.Function, stmt.Body.Span);
         foreach (var param in stmt.Parameters)
         {
-            _table.Add(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: $"parameter of {stmt.Name.Lexeme}"));
+            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: $"parameter of {stmt.Name.Lexeme}", parentName: stmt.Name.Lexeme));
         }
 
-        stmt.Body.Accept(this);
+        foreach (var s in stmt.Body.Statements)
+        {
+            s.Accept(this);
+        }
+
+        PopScope();
         return null;
     }
 
@@ -50,11 +75,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
         var detail = $"struct {stmt.Name.Lexeme} {{ {string.Join(", ", fieldNames)} }}";
 
-        _table.Add(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Struct, stmt.Name.Span, stmt.Span, detail));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Struct, stmt.Name.Span, stmt.Span, detail));
 
         foreach (var field in stmt.Fields)
         {
-            _table.Add(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: $"field of {stmt.Name.Lexeme}"));
+            _currentScope.AddSymbol(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: $"field of {stmt.Name.Lexeme}", parentName: stmt.Name.Lexeme));
         }
 
         return null;
@@ -70,11 +95,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
         var detail = $"enum {stmt.Name.Lexeme} {{ {string.Join(", ", memberNames)} }}";
 
-        _table.Add(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Enum, stmt.Name.Span, stmt.Span, detail));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Enum, stmt.Name.Span, stmt.Span, detail));
 
         foreach (var member in stmt.Members)
         {
-            _table.Add(new SymbolInfo(member.Lexeme, SymbolKind.EnumMember, member.Span, detail: $"member of {stmt.Name.Lexeme}"));
+            _currentScope.AddSymbol(new SymbolInfo(member.Lexeme, SymbolKind.EnumMember, member.Span, detail: $"member of {stmt.Name.Lexeme}", parentName: stmt.Name.Lexeme));
         }
 
         return null;
@@ -82,25 +107,27 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
-        _table.Add(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, $"let {stmt.Name.Lexeme}"));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, $"let {stmt.Name.Lexeme}"));
         stmt.Initializer?.Accept(this);
         return null;
     }
 
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
-        _table.Add(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, $"const {stmt.Name.Lexeme}"));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, $"const {stmt.Name.Lexeme}"));
         stmt.Initializer.Accept(this);
         return null;
     }
 
     public object? VisitBlockStmt(BlockStmt stmt)
     {
+        PushScope(ScopeKind.Block, stmt.Span);
         foreach (var s in stmt.Statements)
         {
             s.Accept(this);
         }
 
+        PopScope();
         return null;
     }
 
@@ -115,15 +142,27 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitWhileStmt(WhileStmt stmt)
     {
         stmt.Condition.Accept(this);
-        stmt.Body.Accept(this);
+        PushScope(ScopeKind.Loop, stmt.Body.Span);
+        foreach (var s in stmt.Body.Statements)
+        {
+            s.Accept(this);
+        }
+
+        PopScope();
         return null;
     }
 
     public object? VisitForInStmt(ForInStmt stmt)
     {
-        _table.Add(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: "loop variable"));
         stmt.Iterable.Accept(this);
-        stmt.Body.Accept(this);
+        PushScope(ScopeKind.Loop, stmt.Body.Span);
+        _currentScope.AddSymbol(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: "loop variable"));
+        foreach (var s in stmt.Body.Statements)
+        {
+            s.Accept(this);
+        }
+
+        PopScope();
         return null;
     }
 
@@ -146,14 +185,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         foreach (var name in stmt.Names)
         {
-            _table.Add(new SymbolInfo(name.Lexeme, SymbolKind.Variable, name.Span, detail: $"imported from {stmt.Path.Lexeme}"));
+            _currentScope.AddSymbol(new SymbolInfo(name.Lexeme, SymbolKind.Variable, name.Span, detail: $"imported from {stmt.Path.Lexeme}"));
         }
         return null;
     }
 
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
-        _table.Add(new SymbolInfo(stmt.Alias.Lexeme, SymbolKind.Namespace, stmt.Alias.Span, detail: $"namespace from {stmt.Path.Lexeme}"));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Alias.Lexeme, SymbolKind.Namespace, stmt.Alias.Span, detail: $"namespace from {stmt.Path.Lexeme}"));
         return null;
     }
 

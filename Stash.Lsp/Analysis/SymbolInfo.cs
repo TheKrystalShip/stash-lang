@@ -23,13 +23,15 @@ public class SymbolInfo
     public SourceSpan Span { get; }
     public SourceSpan? FullSpan { get; }
     public string? Detail { get; }
+    public string? ParentName { get; }
 
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null)
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null)
     {
         Name = name;
         Kind = kind;
         Span = span;
         FullSpan = fullSpan;
         Detail = detail;
+        ParentName = parentName;
     }
 }

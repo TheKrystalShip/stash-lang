@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Handlers;
 
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -21,26 +22,46 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
     public override Task<SymbolInformationOrDocumentSymbolContainer?> Handle(
         DocumentSymbolParams request, CancellationToken cancellationToken)
     {
-        var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
+        AnalysisResult? result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
         {
             return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(null);
         }
 
-        var symbols = result.Symbols.GetTopLevel().Select(sym =>
-        {
-            var range = SpanToRange(sym.FullSpan ?? sym.Span);
-            var selectionRange = SpanToRange(sym.Span);
+        var symbols = new List<SymbolInformationOrDocumentSymbol>();
 
-            return new SymbolInformationOrDocumentSymbol(new DocumentSymbol
+        foreach (var (sym, children) in result.Symbols.GetHierarchicalSymbols())
+        {
+            Range range = SpanToRange(sym.FullSpan ?? sym.Span);
+            Range selectionRange = SpanToRange(sym.Span);
+
+            DocumentSymbol docSymbol = new()
             {
                 Name = sym.Name,
                 Kind = MapSymbolKind(sym.Kind),
                 Range = range,
                 SelectionRange = selectionRange,
                 Detail = sym.Detail
-            });
-        }).ToList();
+            };
+
+            if (children.Count > 0)
+            {
+                docSymbol = docSymbol with
+                {
+                    Children = new Container<DocumentSymbol>(
+                        children.Select(child => new DocumentSymbol
+                        {
+                            Name = child.Name,
+                            Kind = MapSymbolKind(child.Kind),
+                            Range = SpanToRange(child.FullSpan ?? child.Span),
+                            SelectionRange = SpanToRange(child.Span),
+                            Detail = child.Detail
+                        }))
+                };
+            }
+
+            symbols.Add(new SymbolInformationOrDocumentSymbol(docSymbol));
+        }
 
         return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(
             new SymbolInformationOrDocumentSymbolContainer(symbols));
@@ -53,7 +74,7 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
 
-    private static OmniSharp.Extensions.LanguageServer.Protocol.Models.Range SpanToRange(Stash.Common.SourceSpan span) =>
+    private static Range SpanToRange(Common.SourceSpan span) =>
         new(
             new Position(span.StartLine - 1, span.StartColumn - 1),
             new Position(span.EndLine - 1, span.EndColumn - 1)

@@ -32,7 +32,7 @@ public class DefinitionHandler : DefinitionHandlerBase
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
-        var word = FindWordAtPosition(text, request.Position.Line, request.Position.Character);
+        var word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
         if (word == null)
         {
             return Task.FromResult<LocationOrLocationLinks?>(null);
@@ -40,8 +40,7 @@ public class DefinitionHandler : DefinitionHandlerBase
 
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
-        var atSpan = new Stash.Common.SourceSpan("", line, col, line, col);
-        var symbol = result.Symbols.FindDefinition(word, atSpan);
+        var symbol = result.Symbols.FindDefinition(word, line, col);
 
         if (symbol == null)
         {
@@ -67,38 +66,5 @@ public class DefinitionHandler : DefinitionHandlerBase
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
 
-    private static string? FindWordAtPosition(string text, int line, int character)
-    {
-        var lines = text.Split('\n');
-        if (line < 0 || line >= lines.Length)
-        {
-            return null;
-        }
-
-        var lineText = lines[line];
-        if (character < 0 || character >= lineText.Length)
-        {
-            return null;
-        }
-
-        var c = lineText[character];
-        if (!char.IsLetterOrDigit(c) && c != '_')
-        {
-            return null;
-        }
-
-        int start = character;
-        while (start > 0 && (char.IsLetterOrDigit(lineText[start - 1]) || lineText[start - 1] == '_'))
-        {
-            start--;
-        }
-
-        int end = character;
-        while (end < lineText.Length - 1 && (char.IsLetterOrDigit(lineText[end + 1]) || lineText[end + 1] == '_'))
-        {
-            end++;
-        }
-
-        return lineText[start..(end + 1)];
-    }
 }
+
