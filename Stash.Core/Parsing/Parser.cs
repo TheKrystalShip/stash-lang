@@ -1219,7 +1219,11 @@ public class Parser
     /// </summary>
     private bool CheckIdentifier(string name)
     {
-        if (IsAtEnd) return false;
+        if (IsAtEnd)
+        {
+            return false;
+        }
+
         return Peek().Type == TokenType.Identifier && Peek().Lexeme == name;
     }
 

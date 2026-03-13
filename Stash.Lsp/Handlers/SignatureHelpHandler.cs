@@ -63,7 +63,9 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
     {
         var text = _documents.GetText(request.TextDocument.Uri.ToUri());
         if (text == null)
+        {
             return Task.FromResult<SignatureHelp?>(null);
+        }
 
         var lines = text.Split('\n');
         var cursorLine = request.Position.Line;
@@ -80,7 +82,9 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         // Scan backwards to find enclosing function call
         var (functionName, activeParam) = FindCallContext(text, offset);
         if (functionName == null)
+        {
             return Task.FromResult<SignatureHelp?>(null);
+        }
 
         // Try built-in signatures first
         if (_builtInSignatures.TryGetValue(functionName, out var builtIn))
@@ -146,15 +150,21 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         }
 
         if (parenPos < 0)
+        {
             return (null, 0);
+        }
 
         // Extract function name before the paren
         int end = parenPos - 1;
         while (end >= 0 && text[end] == ' ')
+        {
             end--;
+        }
 
         if (end < 0)
+        {
             return (null, 0);
+        }
 
         int start = end;
         // Walk back through identifier chars and dots (for namespace.function)
@@ -165,7 +175,9 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
 
         var name = text[start..(end + 1)];
         if (string.IsNullOrWhiteSpace(name))
+        {
             return (null, 0);
+        }
 
         return (name, commaCount);
     }
@@ -198,15 +210,21 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         var openParen = detail.IndexOf('(');
         var closeParen = detail.IndexOf(')');
         if (openParen < 0 || closeParen < 0 || closeParen <= openParen + 1)
+        {
             return Array.Empty<string>();
+        }
 
         var inside = detail[(openParen + 1)..closeParen].Trim();
         if (string.IsNullOrEmpty(inside))
+        {
             return Array.Empty<string>();
+        }
 
         var parts = inside.Split(',');
         for (int i = 0; i < parts.Length; i++)
+        {
             parts[i] = parts[i].Trim();
+        }
 
         return parts;
     }

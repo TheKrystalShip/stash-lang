@@ -23,7 +23,11 @@ public class StashNamespace
 
     public object? GetMember(string name, SourceSpan? span)
     {
-        if (_members.TryGetValue(name, out var value)) return value;
+        if (_members.TryGetValue(name, out var value))
+        {
+            return value;
+        }
+
         throw new RuntimeError($"Namespace '{Name}' has no member '{name}'.", span);
     }
 

@@ -263,7 +263,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitArrayExpr(ArrayExpr expr)
     {
-        foreach (var el in expr.Elements) el.Accept(this);
+        foreach (var el in expr.Elements)
+        {
+            el.Accept(this);
+        }
+
         return null;
     }
 
@@ -284,7 +288,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
-        foreach (var (_, value) in expr.FieldValues) value.Accept(this);
+        foreach (var (_, value) in expr.FieldValues)
+        {
+            value.Accept(this);
+        }
+
         return null;
     }
 
@@ -303,7 +311,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
     {
-        foreach (var part in expr.Parts) part.Accept(this);
+        foreach (var part in expr.Parts)
+        {
+            part.Accept(this);
+        }
+
         return null;
     }
 
@@ -342,11 +354,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         var openParen = detail.IndexOf('(');
         var closeParen = detail.IndexOf(')');
         if (openParen < 0 || closeParen < 0 || closeParen <= openParen)
+        {
             return -1;
+        }
 
         var inside = detail[(openParen + 1)..closeParen].Trim();
         if (string.IsNullOrEmpty(inside))
+        {
             return 0;
+        }
 
         return inside.Split(',').Length;
     }

@@ -35,7 +35,9 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
         var uri = request.TextDocument.Uri.ToUri();
         var result = _analysis.GetCachedResult(uri);
         if (result == null)
+        {
             return Task.FromResult<Container<FoldingRange>?>(null);
+        }
 
         var ranges = new List<FoldingRange>();
 
@@ -77,7 +79,9 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
                 {
                     AddRegion(ranges, thenBlock.Span, FoldingRangeKind.Region);
                     foreach (var s in thenBlock.Statements)
+                    {
                         CollectFoldingRanges(s, ranges);
+                    }
                 }
                 else
                 {
@@ -90,7 +94,9 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
                     {
                         AddRegion(ranges, elseBlock.Span, FoldingRangeKind.Region);
                         foreach (var s in elseBlock.Statements)
+                        {
                             CollectFoldingRanges(s, ranges);
+                        }
                     }
                     else
                     {
@@ -112,7 +118,10 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
             case BlockStmt block:
                 AddRegion(ranges, block.Span, FoldingRangeKind.Region);
                 foreach (var s in block.Statements)
+                {
                     CollectFoldingRanges(s, ranges);
+                }
+
                 break;
 
             default:
@@ -125,7 +134,9 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
     {
         // Only fold multi-line regions
         if (span.EndLine <= span.StartLine)
+        {
             return;
+        }
 
         ranges.Add(new FoldingRange
         {
@@ -151,7 +162,10 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
             {
                 int startLine = i;
                 while (i < lines.Length && !lines[i].Contains("*/"))
+                {
                     i++;
+                }
+
                 if (i > startLine)
                 {
                     ranges.Add(new FoldingRange
@@ -170,7 +184,10 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
             {
                 int startLine = i;
                 while (i < lines.Length && lines[i].TrimStart().StartsWith("//"))
+                {
                     i++;
+                }
+
                 if (i - startLine > 1) // Only fold 2+ consecutive line comments
                 {
                     ranges.Add(new FoldingRange

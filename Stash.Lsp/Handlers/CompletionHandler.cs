@@ -79,19 +79,25 @@ public class CompletionHandler : CompletionHandlerBase
         {
             var lines = text.Split('\n');
             if (line < lines.Length)
+            {
                 currentLine = lines[line];
+            }
         }
 
         // Suppress completions inside strings
         if (currentLine != null && IsInsideString(currentLine, col))
+        {
             return Task.FromResult(new CompletionList());
+        }
 
         // Dot completion: suggest only members of the prefix
         if (currentLine != null && col > 0 && col <= currentLine.Length)
         {
             var prefix = GetDotPrefix(currentLine, col);
             if (prefix != null)
+            {
                 return Task.FromResult(HandleDotCompletion(prefix, uri));
+            }
         }
 
         // Default: full completion list
@@ -147,7 +153,9 @@ public class CompletionHandler : CompletionHandlerBase
             foreach (var sym in result.Symbols.GetVisibleSymbols(line, col))
             {
                 if (!seen.Add(sym.Name))
+                {
                     continue;
+                }
 
                 items.Add(new CompletionItem
                 {
@@ -167,7 +175,9 @@ public class CompletionHandler : CompletionHandlerBase
         for (int i = 0; i < col && i < line.Length; i++)
         {
             if (line[i] == '"' && (i == 0 || line[i - 1] != '\\'))
+            {
                 quoteCount++;
+            }
         }
         return quoteCount % 2 != 0;
     }
@@ -176,16 +186,23 @@ public class CompletionHandler : CompletionHandlerBase
     {
         // col is 0-based cursor position; the dot is at col-1
         if (col < 2 || col - 1 >= line.Length || line[col - 1] != '.')
+        {
             return null;
+        }
 
         // Walk backwards from col-2 to find identifier
         int end = col - 2;
         while (end >= 0 && (char.IsLetterOrDigit(line[end]) || line[end] == '_'))
+        {
             end--;
+        }
+
         end++;
 
         if (end >= col - 1)
+        {
             return null; // empty prefix
+        }
 
         return line.Substring(end, col - 1 - end);
     }

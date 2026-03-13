@@ -2642,7 +2642,11 @@ public class InterpreterTests
             string source = $"fs.writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"hello world\"); let result = fs.readFile(\"{tmpFile.Replace("\\", "\\\\")}\");";
             Assert.Equal("hello world", Run(source));
         }
-        finally { if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile); }
+        finally { if (System.IO.File.Exists(tmpFile))
+            {
+                System.IO.File.Delete(tmpFile);
+            }
+        }
     }
 
     [Fact]
@@ -2655,7 +2659,11 @@ public class InterpreterTests
             string source = $"fs.writeFile(\"{escaped}\", \"hello\"); fs.appendFile(\"{escaped}\", \" world\"); let result = fs.readFile(\"{escaped}\");";
             Assert.Equal("hello world", Run(source));
         }
-        finally { if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile); }
+        finally { if (System.IO.File.Exists(tmpFile))
+            {
+                System.IO.File.Delete(tmpFile);
+            }
+        }
     }
 
     [Fact]
@@ -2667,7 +2675,11 @@ public class InterpreterTests
             string source = $"fs.createDir(\"{tmpDir.Replace("\\", "\\\\")}\"); let result = fs.dirExists(\"{tmpDir.Replace("\\", "\\\\")}\");";
             Assert.Equal(true, Run(source));
         }
-        finally { if (System.IO.Directory.Exists(tmpDir)) System.IO.Directory.Delete(tmpDir, true); }
+        finally { if (System.IO.Directory.Exists(tmpDir))
+            {
+                System.IO.Directory.Delete(tmpDir, true);
+            }
+        }
     }
 
     [Fact]
@@ -2708,8 +2720,15 @@ public class InterpreterTests
         }
         finally
         {
-            if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile);
-            if (System.IO.File.Exists(copyFile)) System.IO.File.Delete(copyFile);
+            if (System.IO.File.Exists(tmpFile))
+            {
+                System.IO.File.Delete(tmpFile);
+            }
+
+            if (System.IO.File.Exists(copyFile))
+            {
+                System.IO.File.Delete(copyFile);
+            }
         }
     }
 
@@ -2729,8 +2748,15 @@ public class InterpreterTests
         }
         finally
         {
-            if (System.IO.File.Exists(srcFile)) System.IO.File.Delete(srcFile);
-            if (System.IO.File.Exists(dstFile)) System.IO.File.Delete(dstFile);
+            if (System.IO.File.Exists(srcFile))
+            {
+                System.IO.File.Delete(srcFile);
+            }
+
+            if (System.IO.File.Exists(dstFile))
+            {
+                System.IO.File.Delete(dstFile);
+            }
         }
     }
 
@@ -2744,7 +2770,11 @@ public class InterpreterTests
             string source = $"let result = fs.size(\"{tmpFile.Replace("\\", "\\\\")}\");";
             Assert.Equal(5L, Run(source));
         }
-        finally { if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile); }
+        finally { if (System.IO.File.Exists(tmpFile))
+            {
+                System.IO.File.Delete(tmpFile);
+            }
+        }
     }
 
     [Fact]

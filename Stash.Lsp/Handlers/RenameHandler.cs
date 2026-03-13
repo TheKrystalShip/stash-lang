@@ -24,22 +24,30 @@ public class RenameHandler : RenameHandlerBase
     {
         var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
+        {
             return Task.FromResult<WorkspaceEdit?>(null);
+        }
 
         var text = _documents.GetText(request.TextDocument.Uri.ToUri());
         if (text == null)
+        {
             return Task.FromResult<WorkspaceEdit?>(null);
+        }
 
         var word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
         if (word == null)
+        {
             return Task.FromResult<WorkspaceEdit?>(null);
+        }
 
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
         var references = result.Symbols.FindReferences(word, line, col);
 
         if (references.Count == 0)
+        {
             return Task.FromResult<WorkspaceEdit?>(null);
+        }
 
         var edits = new List<TextEdit>();
         foreach (var reference in references)

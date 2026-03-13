@@ -1107,9 +1107,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         if (type == "bool")
         {
             if (value == "true" || value == "1" || value == "yes")
+            {
                 return true;
+            }
+
             if (value == "false" || value == "0" || value == "no")
+            {
                 return false;
+            }
+
             throw new RuntimeError($"Cannot parse '{value}' as bool for argument '{argName}'.");
         }
 
@@ -1210,7 +1216,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             string name = GetArgDefName(flag);
             flagsByLong[$"--{name}"] = flag;
             string? shortName = flag.GetField("short", null) as string;
-            if (shortName is not null) flagsByShort[$"-{shortName}"] = flag;
+            if (shortName is not null)
+            {
+                flagsByShort[$"-{shortName}"] = flag;
+            }
         }
         foreach (var optObj in optionDefs)
         {
@@ -1218,7 +1227,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             string name = GetArgDefName(opt);
             optionsByLong[$"--{name}"] = opt;
             string? shortName = opt.GetField("short", null) as string;
-            if (shortName is not null) optionsByShort[$"-{shortName}"] = opt;
+            if (shortName is not null)
+            {
+                optionsByShort[$"-{shortName}"] = opt;
+            }
         }
         foreach (var cmdObj in commandDefs)
         {
@@ -1264,7 +1276,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                     string n = GetArgDefName(fd);
                     cfl[$"--{n}"] = fd;
                     string? s = fd.GetField("short", null) as string;
-                    if (s is not null) cfs[$"-{s}"] = fd;
+                    if (s is not null)
+                    {
+                        cfs[$"-{s}"] = fd;
+                    }
                 }
                 foreach (var o in subOpts)
                 {
@@ -1272,7 +1287,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                     string n = GetArgDefName(od);
                     col[$"--{n}"] = od;
                     string? s = od.GetField("short", null) as string;
-                    if (s is not null) cos[$"-{s}"] = od;
+                    if (s is not null)
+                    {
+                        cos[$"-{s}"] = od;
+                    }
                 }
                 foreach (var p in subPos)
                 {
@@ -1325,7 +1343,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                     {
                         i++;
                         if (i >= _scriptArgs.Length)
+                        {
                             throw new RuntimeError($"Option '{arg}' requires a value.");
+                        }
+
                         val = _scriptArgs[i];
                     }
                     string? optType = cmdOpt.GetField("type", null) as string;
@@ -1340,7 +1361,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                     {
                         i++;
                         if (i >= _scriptArgs.Length)
+                        {
                             throw new RuntimeError($"Option '{arg}' requires a value.");
+                        }
+
                         val = _scriptArgs[i];
                     }
                     string? optType = cmdOpt.GetField("type", null) as string;
@@ -1384,7 +1408,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 {
                     i++;
                     if (i >= _scriptArgs.Length)
+                    {
                         throw new RuntimeError($"Option '{arg}' requires a value.");
+                    }
+
                     val = _scriptArgs[i];
                 }
                 string? optType = topOpt.GetField("type", null) as string;
@@ -1399,7 +1426,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 {
                     i++;
                     if (i >= _scriptArgs.Length)
+                    {
                         throw new RuntimeError($"Option '{arg}' requires a value.");
+                    }
+
                     val = _scriptArgs[i];
                 }
                 string? optType = topOpt.GetField("type", null) as string;
@@ -1548,7 +1578,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             sb.Append(scriptName);
             if (version is not null)
+            {
                 sb.Append($" v{version}");
+            }
+
             sb.AppendLine();
         }
 
@@ -1567,18 +1600,28 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         sb.Append("  ");
         sb.Append(scriptName ?? "script");
         if (commandDefs.Count > 0)
+        {
             sb.Append(" [command]");
+        }
+
         if (optionDefs.Count > 0 || flagDefs.Count > 0)
+        {
             sb.Append(" [options]");
+        }
+
         foreach (var posObj in positionalDefs)
         {
             var pos = (StashInstance)posObj!;
             string posName = (string)pos.GetField("name", null)!;
             bool required = pos.GetField("required", null) is true;
             if (required)
+            {
                 sb.Append($" <{posName}>");
+            }
             else
+            {
                 sb.Append($" [{posName}]");
+            }
         }
         sb.AppendLine();
         sb.AppendLine();
@@ -1592,7 +1635,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             {
                 var cmd = (StashInstance)cmdObj!;
                 string cmdName = (string)cmd.GetField("name", null)!;
-                if (cmdName.Length > maxCmdLen) maxCmdLen = cmdName.Length;
+                if (cmdName.Length > maxCmdLen)
+                {
+                    maxCmdLen = cmdName.Length;
+                }
             }
             foreach (var cmdObj in commandDefs)
             {
@@ -1600,7 +1646,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 string cmdName = (string)cmd.GetField("name", null)!;
                 string? cmdDesc = cmd.GetField("description", null) as string;
                 sb.Append($"  {cmdName.PadRight(maxCmdLen + 2)}");
-                if (cmdDesc is not null) sb.Append(cmdDesc);
+                if (cmdDesc is not null)
+                {
+                    sb.Append(cmdDesc);
+                }
+
                 sb.AppendLine();
             }
             sb.AppendLine();
@@ -1617,7 +1667,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 string posName = (string)pos.GetField("name", null)!;
                 bool required = pos.GetField("required", null) is true;
                 string label = required ? $"<{posName}>" : $"[{posName}]";
-                if (label.Length > maxPosLen) maxPosLen = label.Length;
+                if (label.Length > maxPosLen)
+                {
+                    maxPosLen = label.Length;
+                }
             }
             foreach (var posObj in positionalDefs)
             {
@@ -1628,8 +1681,16 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 object? posDefault = pos.GetField("default", null);
                 string label = required ? $"<{posName}>" : $"[{posName}]";
                 sb.Append($"  {label.PadRight(maxPosLen + 2)}");
-                if (posDesc is not null) sb.Append(posDesc);
-                if (posDefault is not null) sb.Append($" (default: {Stringify(posDefault)})");
+                if (posDesc is not null)
+                {
+                    sb.Append(posDesc);
+                }
+
+                if (posDefault is not null)
+                {
+                    sb.Append($" (default: {Stringify(posDefault)})");
+                }
+
                 sb.AppendLine();
             }
             sb.AppendLine();
@@ -1649,9 +1710,14 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 string? flagDesc = flag.GetField("description", null) as string;
                 string left;
                 if (shortName is not null)
+                {
                     left = $"-{shortName}, --{flagName}";
+                }
                 else
+                {
                     left = $"    --{flagName}";
+                }
+
                 optLines.Add((left, flagDesc));
             }
 
@@ -1668,28 +1734,44 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 string typeHint = optType is not null ? $" <{optType}>" : " <value>";
                 string left;
                 if (shortName is not null)
+                {
                     left = $"-{shortName}, --{optName}{typeHint}";
+                }
                 else
+                {
                     left = $"    --{optName}{typeHint}";
+                }
 
                 string? right = optDesc;
                 if (required)
+                {
                     right = (right ?? "") + " (required)";
+                }
                 else if (optDefault is not null)
+                {
                     right = (right ?? "") + $" (default: {Stringify(optDefault)})";
+                }
+
                 optLines.Add((left, right));
             }
 
             int maxLeft = 0;
             foreach (var (left, _) in optLines)
             {
-                if (left.Length > maxLeft) maxLeft = left.Length;
+                if (left.Length > maxLeft)
+                {
+                    maxLeft = left.Length;
+                }
             }
 
             foreach (var (left, right) in optLines)
             {
                 sb.Append($"  {left.PadRight(maxLeft + 2)}");
-                if (right is not null) sb.Append(right);
+                if (right is not null)
+                {
+                    sb.Append(right);
+                }
+
                 sb.AppendLine();
             }
             sb.AppendLine();
@@ -1701,14 +1783,19 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             var cmd = (StashInstance)cmdObj!;
             string cmdName = (string)cmd.GetField("name", null)!;
             var subTree = cmd.GetField("args", null) as StashInstance;
-            if (subTree is null) continue;
+            if (subTree is null)
+            {
+                continue;
+            }
 
             var subFlags = subTree.GetField("flags", null) as List<object?> ?? new();
             var subOpts = subTree.GetField("options", null) as List<object?> ?? new();
             var subPos = subTree.GetField("positionals", null) as List<object?> ?? new();
 
             if (subFlags.Count == 0 && subOpts.Count == 0 && subPos.Count == 0)
+            {
                 continue;
+            }
 
             sb.AppendLine($"COMMAND '{cmdName}':");
 
@@ -1722,7 +1809,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                     string? posDesc = pos.GetField("description", null) as string;
                     string label = required ? $"<{posName}>" : $"[{posName}]";
                     sb.Append($"  {label,-20}");
-                    if (posDesc is not null) sb.Append(posDesc);
+                    if (posDesc is not null)
+                    {
+                        sb.Append(posDesc);
+                    }
+
                     sb.AppendLine();
                 }
             }
@@ -1736,9 +1827,14 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 string? flagDesc = flag.GetField("description", null) as string;
                 string left;
                 if (shortName is not null)
+                {
                     left = $"-{shortName}, --{flagName}";
+                }
                 else
+                {
                     left = $"    --{flagName}";
+                }
+
                 cmdOptLines.Add((left, flagDesc));
             }
             foreach (var optObj in subOpts)
@@ -1753,14 +1849,24 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 string typeHint = optType is not null ? $" <{optType}>" : " <value>";
                 string left;
                 if (shortName is not null)
+                {
                     left = $"-{shortName}, --{optName}{typeHint}";
+                }
                 else
+                {
                     left = $"    --{optName}{typeHint}";
+                }
+
                 string? right = optDesc;
                 if (required)
+                {
                     right = (right ?? "") + " (required)";
+                }
                 else if (optDefault is not null)
+                {
                     right = (right ?? "") + $" (default: {Stringify(optDefault)})";
+                }
+
                 cmdOptLines.Add((left, right));
             }
 
@@ -1769,12 +1875,19 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 int maxLeft = 0;
                 foreach (var (left, _) in cmdOptLines)
                 {
-                    if (left.Length > maxLeft) maxLeft = left.Length;
+                    if (left.Length > maxLeft)
+                    {
+                        maxLeft = left.Length;
+                    }
                 }
                 foreach (var (left, right) in cmdOptLines)
                 {
                     sb.Append($"  {left.PadRight(maxLeft + 2)}");
-                    if (right is not null) sb.Append(right);
+                    if (right is not null)
+                    {
+                        sb.Append(right);
+                    }
+
                     sb.AppendLine();
                 }
             }
@@ -2417,7 +2530,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("readFile", new BuiltInFunction("fs.readFile", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.readFile' must be a string.");
+            }
+
             try { return System.IO.File.ReadAllText(path); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
         }));
@@ -2425,9 +2541,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("writeFile", new BuiltInFunction("fs.writeFile", 2, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("First argument to 'fs.writeFile' must be a string.");
+            }
+
             if (args[1] is not string content)
+            {
                 throw new RuntimeError("Second argument to 'fs.writeFile' must be a string.");
+            }
+
             try { System.IO.File.WriteAllText(path, content); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot write file '{path}': {e.Message}"); }
             return null;
@@ -2436,28 +2558,40 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("exists", new BuiltInFunction("fs.exists", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.exists' must be a string.");
+            }
+
             return System.IO.File.Exists(path);
         }));
 
         fs.Define("dirExists", new BuiltInFunction("fs.dirExists", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.dirExists' must be a string.");
+            }
+
             return System.IO.Directory.Exists(path);
         }));
 
         fs.Define("pathExists", new BuiltInFunction("fs.pathExists", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.pathExists' must be a string.");
+            }
+
             return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
         }));
 
         fs.Define("createDir", new BuiltInFunction("fs.createDir", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.createDir' must be a string.");
+            }
+
             try { System.IO.Directory.CreateDirectory(path); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create directory '{path}': {e.Message}"); }
             return null;
@@ -2466,15 +2600,24 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("delete", new BuiltInFunction("fs.delete", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.delete' must be a string.");
+            }
+
             try
             {
                 if (System.IO.File.Exists(path))
+                {
                     System.IO.File.Delete(path);
+                }
                 else if (System.IO.Directory.Exists(path))
+                {
                     System.IO.Directory.Delete(path, true);
+                }
                 else
+                {
                     throw new RuntimeError($"Path does not exist: '{path}'.");
+                }
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot delete '{path}': {e.Message}"); }
             return null;
@@ -2483,9 +2626,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("copy", new BuiltInFunction("fs.copy", 2, (_, args) =>
         {
             if (args[0] is not string src)
+            {
                 throw new RuntimeError("First argument to 'fs.copy' must be a string.");
+            }
+
             if (args[1] is not string dst)
+            {
                 throw new RuntimeError("Second argument to 'fs.copy' must be a string.");
+            }
+
             try { System.IO.File.Copy(src, dst, overwrite: true); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot copy '{src}' to '{dst}': {e.Message}"); }
             return null;
@@ -2494,9 +2643,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("move", new BuiltInFunction("fs.move", 2, (_, args) =>
         {
             if (args[0] is not string src)
+            {
                 throw new RuntimeError("First argument to 'fs.move' must be a string.");
+            }
+
             if (args[1] is not string dst)
+            {
                 throw new RuntimeError("Second argument to 'fs.move' must be a string.");
+            }
+
             try { System.IO.File.Move(src, dst, overwrite: true); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot move '{src}' to '{dst}': {e.Message}"); }
             return null;
@@ -2505,7 +2660,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("size", new BuiltInFunction("fs.size", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.size' must be a string.");
+            }
+
             try { return new System.IO.FileInfo(path).Length; }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}"); }
         }));
@@ -2513,13 +2671,19 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("listDir", new BuiltInFunction("fs.listDir", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.listDir' must be a string.");
+            }
+
             try
             {
                 var entries = System.IO.Directory.GetFileSystemEntries(path);
                 var result = new List<object?>();
                 foreach (var entry in entries)
+                {
                     result.Add(entry);
+                }
+
                 return result;
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot list directory '{path}': {e.Message}"); }
@@ -2528,9 +2692,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         fs.Define("appendFile", new BuiltInFunction("fs.appendFile", 2, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("First argument to 'fs.appendFile' must be a string.");
+            }
+
             if (args[1] is not string content)
+            {
                 throw new RuntimeError("Second argument to 'fs.appendFile' must be a string.");
+            }
+
             try { System.IO.File.AppendAllText(path, content); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot append to file '{path}': {e.Message}"); }
             return null;
@@ -2544,44 +2714,65 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         pathNs.Define("abs", new BuiltInFunction("path.abs", 1, (_, args) =>
         {
             if (args[0] is not string p)
+            {
                 throw new RuntimeError("Argument to 'path.abs' must be a string.");
+            }
+
             return System.IO.Path.GetFullPath(p);
         }));
 
         pathNs.Define("dir", new BuiltInFunction("path.dir", 1, (_, args) =>
         {
             if (args[0] is not string p)
+            {
                 throw new RuntimeError("Argument to 'path.dir' must be a string.");
+            }
+
             return System.IO.Path.GetDirectoryName(p) ?? "";
         }));
 
         pathNs.Define("base", new BuiltInFunction("path.base", 1, (_, args) =>
         {
             if (args[0] is not string p)
+            {
                 throw new RuntimeError("Argument to 'path.base' must be a string.");
+            }
+
             return System.IO.Path.GetFileName(p);
         }));
 
         pathNs.Define("ext", new BuiltInFunction("path.ext", 1, (_, args) =>
         {
             if (args[0] is not string p)
+            {
                 throw new RuntimeError("Argument to 'path.ext' must be a string.");
+            }
+
             return System.IO.Path.GetExtension(p);
         }));
 
         pathNs.Define("join", new BuiltInFunction("path.join", 2, (_, args) =>
         {
             if (args[0] is not string a)
+            {
                 throw new RuntimeError("First argument to 'path.join' must be a string.");
+            }
+
             if (args[1] is not string b)
+            {
                 throw new RuntimeError("Second argument to 'path.join' must be a string.");
+            }
+
             return System.IO.Path.Combine(a, b);
         }));
 
         pathNs.Define("name", new BuiltInFunction("path.name", 1, (_, args) =>
         {
             if (args[0] is not string p)
+            {
                 throw new RuntimeError("Argument to 'path.name' must be a string.");
+            }
+
             return System.IO.Path.GetFileNameWithoutExtension(p);
         }));
 

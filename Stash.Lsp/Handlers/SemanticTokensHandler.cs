@@ -77,12 +77,16 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     {
         var result = _analysis.GetCachedResult(identifier.TextDocument.Uri.ToUri());
         if (result == null)
+        {
             return Task.CompletedTask;
+        }
 
         foreach (var token in result.Tokens)
         {
             if (token.Type == TokenType.Eof)
+            {
                 continue;
+            }
 
             var line = token.Span.StartLine - 1;   // convert to 0-based
             var col = token.Span.StartColumn - 1;

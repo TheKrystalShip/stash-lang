@@ -22,22 +22,30 @@ public class ReferencesHandler : ReferencesHandlerBase
     {
         var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
+        {
             return Task.FromResult<LocationContainer?>(null);
+        }
 
         var text = _documents.GetText(request.TextDocument.Uri.ToUri());
         if (text == null)
+        {
             return Task.FromResult<LocationContainer?>(null);
+        }
 
         var word = TextUtilities.FindWordAtPosition(text, request.Position.Line, request.Position.Character);
         if (word == null)
+        {
             return Task.FromResult<LocationContainer?>(null);
+        }
 
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
         var references = result.Symbols.FindReferences(word, line, col);
 
         if (references.Count == 0)
+        {
             return Task.FromResult<LocationContainer?>(null);
+        }
 
         var locations = new System.Collections.Generic.List<Location>();
         foreach (var reference in references)

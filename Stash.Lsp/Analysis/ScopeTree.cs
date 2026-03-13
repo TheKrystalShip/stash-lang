@@ -177,7 +177,9 @@ public class ScopeTree
     {
         var definition = FindDefinition(name, line, column);
         if (definition == null)
+        {
             return Array.Empty<ReferenceInfo>();
+        }
 
         var result = new List<ReferenceInfo>();
 
@@ -208,7 +210,10 @@ public class ScopeTree
             if (reference.ResolvedSymbol == null)
             {
                 if (knownNames != null && knownNames.Contains(reference.Name))
+                {
                     continue;
+                }
+
                 result.Add(reference);
             }
         }
@@ -218,31 +223,55 @@ public class ScopeTree
     private static bool ContainsPosition(SourceSpan span, int line, int column)
     {
         if (line < span.StartLine || line > span.EndLine)
+        {
             return false;
+        }
+
         if (line == span.StartLine && column < span.StartColumn)
+        {
             return false;
+        }
+
         if (line == span.EndLine && column > span.EndColumn)
+        {
             return false;
+        }
+
         return true;
     }
 
     private static bool ContainsSpan(SourceSpan outer, SourceSpan inner)
     {
         if (inner.StartLine < outer.StartLine || inner.EndLine > outer.EndLine)
+        {
             return false;
+        }
+
         if (inner.StartLine == outer.StartLine && inner.StartColumn < outer.StartColumn)
+        {
             return false;
+        }
+
         if (inner.EndLine == outer.EndLine && inner.EndColumn > outer.EndColumn)
+        {
             return false;
+        }
+
         return true;
     }
 
     private static bool IsBeforeOrAt(SourceSpan declaration, int line, int column)
     {
         if (declaration.StartLine < line)
+        {
             return true;
+        }
+
         if (declaration.StartLine == line && declaration.StartColumn <= column)
+        {
             return true;
+        }
+
         return false;
     }
 }

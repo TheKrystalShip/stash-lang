@@ -208,11 +208,11 @@ public class Program
         // The interpreter holds a variable environment that persists across lines,
         // so reusing the instance is essential.
         var interpreter = new Interpreter();
+        var editor = new LineEditor();
 
         while (true)
         {
-            Console.Write("stash> ");
-            string? line = Console.ReadLine();
+            string? line = editor.ReadLine("stash> ");
 
             // null means EOF (Ctrl+D on Unix, Ctrl+Z+Enter on Windows).
             if (line is null || line == "exit")
