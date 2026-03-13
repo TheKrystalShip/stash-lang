@@ -104,7 +104,7 @@ public class CodeLensHandler : CodeLensHandlerBase
                 Command = new Command
                 {
                     Title = title,
-                    Name = "editor.action.showReferences",
+                    Name = "stash.showReferences",
                     Arguments = new JArray
                     {
                         request.TextDocument.Uri.ToString(),
