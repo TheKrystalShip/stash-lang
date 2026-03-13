@@ -101,6 +101,9 @@ public enum TokenType
     /// <summary>The <c>--</c> operator. Decrement operator for numeric values.</summary>
     MinusMinus,
 
+    /// <summary>The <c>-&gt;</c> operator. Used for function return type annotations.</summary>
+    Arrow,
+
     /// <summary>The <c>=</c> operator. Assignment — binds a value to a variable.</summary>
     Equal,
 

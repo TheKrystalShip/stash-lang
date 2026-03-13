@@ -11,11 +11,13 @@ public class StructDeclStmt : Stmt
 {
     public Token Name { get; }
     public List<Token> Fields { get; }
+    public List<Token?> FieldTypes { get; }
 
-    public StructDeclStmt(Token name, List<Token> fields, SourceSpan span) : base(span)
+    public StructDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, SourceSpan span) : base(span)
     {
         Name = name;
         Fields = fields;
+        FieldTypes = fieldTypes;
     }
 
     public override T Accept<T>(IStmtVisitor<T> visitor) => visitor.VisitStructDeclStmt(this);

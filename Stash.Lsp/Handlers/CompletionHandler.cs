@@ -25,40 +25,40 @@ public class CompletionHandler : CompletionHandlerBase
 
     private static readonly (string Name, string Detail)[] _builtIns =
     {
-        ("typeof", "typeof(value) → string"),
-        ("len", "len(value) → int"),
-        ("lastError", "lastError() → string | null"),
-        ("parseArgs", "parseArgs(argTree) → args"),
+        ("typeof", "fn typeof(value) -> string"),
+        ("len", "fn len(value) -> int"),
+        ("lastError", "fn lastError() -> string"),
+        ("parseArgs", "fn parseArgs(tree: ArgTree) -> Args"),
     };
 
     private static readonly (string Namespace, string Name, string Detail)[] _namespacedBuiltIns =
     {
-        ("io", "println", "io.println(value)"),
-        ("io", "print", "io.print(value)"),
-        ("conv", "toStr", "conv.toStr(value) → string"),
-        ("conv", "toInt", "conv.toInt(value) → int"),
-        ("conv", "toFloat", "conv.toFloat(value) → float"),
-        ("env", "get", "env.get(name) → string | null"),
-        ("env", "set", "env.set(name, value)"),
-        ("process", "exit", "process.exit(code)"),
-        ("fs", "readFile", "fs.readFile(path) → string"),
-        ("fs", "writeFile", "fs.writeFile(path, content)"),
-        ("fs", "exists", "fs.exists(path) → bool"),
-        ("fs", "dirExists", "fs.dirExists(path) → bool"),
-        ("fs", "pathExists", "fs.pathExists(path) → bool"),
-        ("fs", "createDir", "fs.createDir(path)"),
-        ("fs", "delete", "fs.delete(path)"),
-        ("fs", "copy", "fs.copy(src, dst)"),
-        ("fs", "move", "fs.move(src, dst)"),
-        ("fs", "size", "fs.size(path) → int"),
-        ("fs", "listDir", "fs.listDir(path) → array"),
-        ("fs", "appendFile", "fs.appendFile(path, content)"),
-        ("path", "abs", "path.abs(path) → string"),
-        ("path", "dir", "path.dir(path) → string"),
-        ("path", "base", "path.base(path) → string"),
-        ("path", "ext", "path.ext(path) → string"),
-        ("path", "join", "path.join(a, b) → string"),
-        ("path", "name", "path.name(path) → string"),
+        ("io", "println", "fn io.println(value)"),
+        ("io", "print", "fn io.print(value)"),
+        ("conv", "toStr", "fn conv.toStr(value) -> string"),
+        ("conv", "toInt", "fn conv.toInt(value) -> int"),
+        ("conv", "toFloat", "fn conv.toFloat(value) -> float"),
+        ("env", "get", "fn env.get(name: string) -> string"),
+        ("env", "set", "fn env.set(name: string, value: string)"),
+        ("process", "exit", "fn process.exit(code: int)"),
+        ("fs", "readFile", "fn fs.readFile(path: string) -> string"),
+        ("fs", "writeFile", "fn fs.writeFile(path: string, content: string)"),
+        ("fs", "exists", "fn fs.exists(path: string) -> bool"),
+        ("fs", "dirExists", "fn fs.dirExists(path: string) -> bool"),
+        ("fs", "pathExists", "fn fs.pathExists(path: string) -> bool"),
+        ("fs", "createDir", "fn fs.createDir(path: string)"),
+        ("fs", "delete", "fn fs.delete(path: string)"),
+        ("fs", "copy", "fn fs.copy(src: string, dst: string)"),
+        ("fs", "move", "fn fs.move(src: string, dst: string)"),
+        ("fs", "size", "fn fs.size(path: string) -> int"),
+        ("fs", "listDir", "fn fs.listDir(path: string) -> array"),
+        ("fs", "appendFile", "fn fs.appendFile(path: string, content: string)"),
+        ("path", "abs", "fn path.abs(path: string) -> string"),
+        ("path", "dir", "fn path.dir(path: string) -> string"),
+        ("path", "base", "fn path.base(path: string) -> string"),
+        ("path", "ext", "fn path.ext(path: string) -> string"),
+        ("path", "join", "fn path.join(a: string, b: string) -> string"),
+        ("path", "name", "fn path.name(path: string) -> string"),
     };
 
     public CompletionHandler(AnalysisEngine analysis, DocumentManager documents)
@@ -233,6 +233,36 @@ public class CompletionHandler : CompletionHandlerBase
         {
             var symbols = result.Symbols.GetVisibleSymbols(1, 1);
             var prefixDef = symbols.FirstOrDefault(s => s.Name == prefix);
+
+            // If prefix is a variable/parameter with a type hint, resolve to that struct's fields
+            var structName = prefix;
+            if (prefixDef != null && prefixDef.TypeHint != null &&
+                (prefixDef.Kind == Analysis.SymbolKind.Variable ||
+                 prefixDef.Kind == Analysis.SymbolKind.Constant ||
+                 prefixDef.Kind == Analysis.SymbolKind.Parameter ||
+                 prefixDef.Kind == Analysis.SymbolKind.LoopVariable))
+            {
+                structName = prefixDef.TypeHint;
+            }
+
+            if (prefixDef == null || prefixDef.Kind != Analysis.SymbolKind.Struct)
+            {
+                // Check if the resolved structName matches a struct definition
+                var structDef = symbols.FirstOrDefault(s => s.Name == structName && s.Kind == Analysis.SymbolKind.Struct);
+                if (structDef != null)
+                {
+                    foreach (var sym in symbols.Where(s => s.ParentName == structName && s.Kind == Analysis.SymbolKind.Field))
+                    {
+                        items.Add(new CompletionItem
+                        {
+                            Label = sym.Name,
+                            Kind = LspCompletionItemKind.Field,
+                            Detail = sym.Detail
+                        });
+                    }
+                }
+            }
+
             if (prefixDef != null && prefixDef.Kind == Analysis.SymbolKind.Struct)
             {
                 foreach (var sym in symbols.Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.Field))

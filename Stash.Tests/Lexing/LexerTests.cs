@@ -847,4 +847,52 @@ public class LexerTests
         Assert.Equal(TokenType.As, tokens[0].Type);
         Assert.Equal("as", tokens[0].Lexeme);
     }
+
+    // ── Arrow Token ────────────────────────────────────────────────────
+
+    [Fact]
+    public void ScanTokens_Arrow_ProducesArrowToken()
+    {
+        var tokens = Scan("->");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.Arrow, tokens[0].Type);
+        Assert.Equal("->", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_MinusAlone_StillProducesMinus()
+    {
+        var tokens = Scan("- x");
+
+        Assert.Equal(TokenType.Minus, tokens[0].Type);
+        Assert.Equal("-", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_Decrement_StillProducesMinusMinus()
+    {
+        var tokens = Scan("--");
+
+        Assert.Equal(TokenType.MinusMinus, tokens[0].Type);
+        Assert.Equal("--", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_ArrowInContext_ProducesCorrectTokens()
+    {
+        var tokens = Scan("fn add(a, b) -> int { }");
+
+        Assert.Equal(TokenType.Fn, tokens[0].Type);
+        Assert.Equal(TokenType.Identifier, tokens[1].Type); // add
+        Assert.Equal(TokenType.LeftParen, tokens[2].Type);
+        Assert.Equal(TokenType.Identifier, tokens[3].Type); // a
+        Assert.Equal(TokenType.Comma, tokens[4].Type);
+        Assert.Equal(TokenType.Identifier, tokens[5].Type); // b
+        Assert.Equal(TokenType.RightParen, tokens[6].Type);
+        Assert.Equal(TokenType.Arrow, tokens[7].Type);
+        Assert.Equal(TokenType.Identifier, tokens[8].Type); // int
+        Assert.Equal(TokenType.LeftBrace, tokens[9].Type);
+        Assert.Equal(TokenType.RightBrace, tokens[10].Type);
+    }
 }

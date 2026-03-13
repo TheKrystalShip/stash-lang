@@ -17,40 +17,40 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
     // Built-in function signatures
     private static readonly Dictionary<string, (string Label, string[] Params)> _builtInSignatures = new()
     {
-        ["typeof"] = ("typeof(value) → string", new[] { "value" }),
-        ["len"] = ("len(value) → int", new[] { "value" }),
-        ["lastError"] = ("lastError() → string | null", Array.Empty<string>()),
-        ["parseArgs"] = ("parseArgs(argTree) → args", new[] { "argTree" }),
+        ["typeof"] = ("fn typeof(value) -> string", new[] { "value" }),
+        ["len"] = ("fn len(value) -> int", new[] { "value" }),
+        ["lastError"] = ("fn lastError() -> string", Array.Empty<string>()),
+        ["parseArgs"] = ("fn parseArgs(tree: ArgTree) -> Args", new[] { "tree" }),
     };
 
     private static readonly Dictionary<string, (string Label, string[] Params)> _namespacedSignatures = new()
     {
-        ["io.println"] = ("io.println(value)", new[] { "value" }),
-        ["io.print"] = ("io.print(value)", new[] { "value" }),
-        ["conv.toStr"] = ("conv.toStr(value) → string", new[] { "value" }),
-        ["conv.toInt"] = ("conv.toInt(value) → int", new[] { "value" }),
-        ["conv.toFloat"] = ("conv.toFloat(value) → float", new[] { "value" }),
-        ["env.get"] = ("env.get(name) → string | null", new[] { "name" }),
-        ["env.set"] = ("env.set(name, value)", new[] { "name", "value" }),
-        ["process.exit"] = ("process.exit(code)", new[] { "code" }),
-        ["fs.readFile"] = ("fs.readFile(path) → string", new[] { "path" }),
-        ["fs.writeFile"] = ("fs.writeFile(path, content)", new[] { "path", "content" }),
-        ["fs.exists"] = ("fs.exists(path) → bool", new[] { "path" }),
-        ["fs.dirExists"] = ("fs.dirExists(path) → bool", new[] { "path" }),
-        ["fs.pathExists"] = ("fs.pathExists(path) → bool", new[] { "path" }),
-        ["fs.createDir"] = ("fs.createDir(path)", new[] { "path" }),
-        ["fs.delete"] = ("fs.delete(path)", new[] { "path" }),
-        ["fs.copy"] = ("fs.copy(src, dst)", new[] { "src", "dst" }),
-        ["fs.move"] = ("fs.move(src, dst)", new[] { "src", "dst" }),
-        ["fs.size"] = ("fs.size(path) → int", new[] { "path" }),
-        ["fs.listDir"] = ("fs.listDir(path) → array", new[] { "path" }),
-        ["fs.appendFile"] = ("fs.appendFile(path, content)", new[] { "path", "content" }),
-        ["path.abs"] = ("path.abs(path) → string", new[] { "path" }),
-        ["path.dir"] = ("path.dir(path) → string", new[] { "path" }),
-        ["path.base"] = ("path.base(path) → string", new[] { "path" }),
-        ["path.ext"] = ("path.ext(path) → string", new[] { "path" }),
-        ["path.join"] = ("path.join(a, b) → string", new[] { "a", "b" }),
-        ["path.name"] = ("path.name(path) → string", new[] { "path" }),
+        ["io.println"] = ("fn io.println(value)", new[] { "value" }),
+        ["io.print"] = ("fn io.print(value)", new[] { "value" }),
+        ["conv.toStr"] = ("fn conv.toStr(value) -> string", new[] { "value" }),
+        ["conv.toInt"] = ("fn conv.toInt(value) -> int", new[] { "value" }),
+        ["conv.toFloat"] = ("fn conv.toFloat(value) -> float", new[] { "value" }),
+        ["env.get"] = ("fn env.get(name: string) -> string", new[] { "name" }),
+        ["env.set"] = ("fn env.set(name: string, value: string)", new[] { "name", "value" }),
+        ["process.exit"] = ("fn process.exit(code: int)", new[] { "code" }),
+        ["fs.readFile"] = ("fn fs.readFile(path: string) -> string", new[] { "path" }),
+        ["fs.writeFile"] = ("fn fs.writeFile(path: string, content: string)", new[] { "path", "content" }),
+        ["fs.exists"] = ("fn fs.exists(path: string) -> bool", new[] { "path" }),
+        ["fs.dirExists"] = ("fn fs.dirExists(path: string) -> bool", new[] { "path" }),
+        ["fs.pathExists"] = ("fn fs.pathExists(path: string) -> bool", new[] { "path" }),
+        ["fs.createDir"] = ("fn fs.createDir(path: string)", new[] { "path" }),
+        ["fs.delete"] = ("fn fs.delete(path: string)", new[] { "path" }),
+        ["fs.copy"] = ("fn fs.copy(src: string, dst: string)", new[] { "src", "dst" }),
+        ["fs.move"] = ("fn fs.move(src: string, dst: string)", new[] { "src", "dst" }),
+        ["fs.size"] = ("fn fs.size(path: string) -> int", new[] { "path" }),
+        ["fs.listDir"] = ("fn fs.listDir(path: string) -> array", new[] { "path" }),
+        ["fs.appendFile"] = ("fn fs.appendFile(path: string, content: string)", new[] { "path", "content" }),
+        ["path.abs"] = ("fn path.abs(path: string) -> string", new[] { "path" }),
+        ["path.dir"] = ("fn path.dir(path: string) -> string", new[] { "path" }),
+        ["path.base"] = ("fn path.base(path: string) -> string", new[] { "path" }),
+        ["path.ext"] = ("fn path.ext(path: string) -> string", new[] { "path" }),
+        ["path.join"] = ("fn path.join(a: string, b: string) -> string", new[] { "a", "b" }),
+        ["path.name"] = ("fn path.name(path: string) -> string", new[] { "path" }),
     };
 
     public SignatureHelpHandler(AnalysisEngine analysis, DocumentManager documents)
@@ -206,7 +206,7 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
 
     private static string[] ExtractParamNames(string detail)
     {
-        // detail format: "fn name(a, b)" or "fn name()"
+        // detail format: "fn name(a, b)" or "fn name(a: int, b: int) -> int"
         var openParen = detail.IndexOf('(');
         var closeParen = detail.IndexOf(')');
         if (openParen < 0 || closeParen < 0 || closeParen <= openParen + 1)
@@ -223,7 +223,14 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         var parts = inside.Split(',');
         for (int i = 0; i < parts.Length; i++)
         {
-            parts[i] = parts[i].Trim();
+            var part = parts[i].Trim();
+            // Strip type annotation (e.g., "a: int" → "a")
+            var colonIdx = part.IndexOf(':');
+            if (colonIdx >= 0)
+            {
+                part = part[..colonIdx].Trim();
+            }
+            parts[i] = part;
         }
 
         return parts;

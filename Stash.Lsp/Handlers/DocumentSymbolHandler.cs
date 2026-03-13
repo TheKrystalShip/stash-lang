@@ -32,6 +32,12 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
 
         foreach (var (sym, children) in result.Symbols.GetHierarchicalSymbols())
         {
+            // Skip synthetic built-in symbols (registered at line 0)
+            if (sym.Span.StartLine == 0)
+            {
+                continue;
+            }
+
             Range range = SpanToRange(sym.FullSpan ?? sym.Span);
             Range selectionRange = SpanToRange(sym.Span);
 

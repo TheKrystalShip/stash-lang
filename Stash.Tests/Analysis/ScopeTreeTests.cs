@@ -7,13 +7,13 @@ namespace Stash.Tests.Analysis;
 
 public class ScopeTreeTests
 {
-    private static ScopeTree Analyze(string source)
+    private static ScopeTree Analyze(string source, bool includeBuiltIns = false)
     {
         var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
+        var collector = new SymbolCollector { IncludeBuiltIns = includeBuiltIns };
         return collector.Collect(stmts);
     }
 
@@ -409,5 +409,66 @@ fn foo() { return 1; }
         // since IsBeforeOrAt checks position
         var def = tree.FindDefinition("foo", 2, 9);
         Assert.Null(def);
+    }
+
+    [Fact]
+    public void BuiltIns_CommandResultStruct_HasTypedFields()
+    {
+        var tree = Analyze("", includeBuiltIns: true);
+        var syms = tree.GlobalScope.Symbols;
+
+        Assert.Contains(syms, s => s.Name == "CommandResult" && s.Kind == SymbolKind.Struct);
+        Assert.Contains(syms, s => s.Name == "stdout" && s.Kind == SymbolKind.Field && s.TypeHint == "string");
+        Assert.Contains(syms, s => s.Name == "stderr" && s.Kind == SymbolKind.Field && s.TypeHint == "string");
+        Assert.Contains(syms, s => s.Name == "exitCode" && s.Kind == SymbolKind.Field && s.TypeHint == "int");
+    }
+
+    [Fact]
+    public void BuiltIns_GlobalFunctions_HaveReturnTypes()
+    {
+        var tree = Analyze("", includeBuiltIns: true);
+        var syms = tree.GlobalScope.Symbols;
+
+        var typeofSym = syms.First(s => s.Name == "typeof" && s.Kind == SymbolKind.Function);
+        Assert.Equal("string", typeofSym.TypeHint);
+
+        var lenSym = syms.First(s => s.Name == "len" && s.Kind == SymbolKind.Function);
+        Assert.Equal("int", lenSym.TypeHint);
+    }
+
+    [Fact]
+    public void BuiltIns_Namespaces_RegisteredInGlobalScope()
+    {
+        var tree = Analyze("", includeBuiltIns: true);
+        var syms = tree.GlobalScope.Symbols;
+
+        Assert.Contains(syms, s => s.Name == "io" && s.Kind == SymbolKind.Namespace);
+        Assert.Contains(syms, s => s.Name == "fs" && s.Kind == SymbolKind.Namespace);
+        Assert.Contains(syms, s => s.Name == "env" && s.Kind == SymbolKind.Namespace);
+        Assert.Contains(syms, s => s.Name == "conv" && s.Kind == SymbolKind.Namespace);
+        Assert.Contains(syms, s => s.Name == "process" && s.Kind == SymbolKind.Namespace);
+        Assert.Contains(syms, s => s.Name == "path" && s.Kind == SymbolKind.Namespace);
+    }
+
+    [Fact]
+    public void BuiltIns_VisibleAlongsideUserCode()
+    {
+        var tree = Analyze("let x = 1;", includeBuiltIns: true);
+        var visible = tree.GetVisibleSymbols(1, 15).ToList();
+
+        Assert.Contains(visible, s => s.Name == "x");
+        Assert.Contains(visible, s => s.Name == "typeof");
+        Assert.Contains(visible, s => s.Name == "CommandResult");
+    }
+
+    [Fact]
+    public void BuiltIns_ArgTreeStruct_HasTypedFields()
+    {
+        var tree = Analyze("", includeBuiltIns: true);
+        var syms = tree.GlobalScope.Symbols;
+
+        Assert.Contains(syms, s => s.Name == "ArgTree" && s.Kind == SymbolKind.Struct);
+        Assert.Contains(syms, s => s.Name == "name" && s.Kind == SymbolKind.Field && s.ParentName == "ArgTree" && s.TypeHint == "string");
+        Assert.Contains(syms, s => s.Name == "flags" && s.Kind == SymbolKind.Field && s.ParentName == "ArgTree" && s.TypeHint == "array");
     }
 }

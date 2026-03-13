@@ -225,7 +225,19 @@ public class Lexer
                 AddToken(Match('+') ? TokenType.PlusPlus : TokenType.Plus);
                 break;
             case '-':
-                AddToken(Match('-') ? TokenType.MinusMinus : TokenType.Minus);
+                if (Match('-'))
+                {
+                    AddToken(TokenType.MinusMinus);
+                }
+                else if (Match('>'))
+                {
+                    AddToken(TokenType.Arrow);
+                }
+                else
+                {
+                    AddToken(TokenType.Minus);
+                }
+
                 break;
             case '*':
                 AddToken(TokenType.Star);

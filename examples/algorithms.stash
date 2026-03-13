@@ -9,14 +9,14 @@
 
 // --- Recursion ---
 
-fn factorial(n) {
+fn factorial(n: int) -> int {
     if (n <= 1) {
         return 1;
     }
     return n * factorial(n - 1);
 }
 
-fn fibonacci(n) {
+fn fibonacci(n: int) -> int {
     if (n <= 0) { return 0; }
     if (n == 1) { return 1; }
     return fibonacci(n - 1) + fibonacci(n - 2);
@@ -27,7 +27,7 @@ io.println($"  factorial(5) = {factorial(5)}");
 io.println($"  factorial(10) = {factorial(10)}");
 
 io.print("  fibonacci(0..10) = ");
-let i = 0;
+let i: int = 0;
 while (i <= 10) {
     io.print($"{fibonacci(i)}");
     if (i < 10) {
@@ -35,22 +35,23 @@ while (i <= 10) {
     }
     i++;
 }
+
 io.println("");
 io.println("");
 
 // --- Sorting (bubble sort, shows >, >=, binary subtraction) ---
 
-fn bubble_sort(arr) {
-    let n = len(arr);
-    let swapped = true;
+fn bubble_sort(arr: array) -> array {
+    let n: int = len(arr);
+    let swapped: bool = true;
 
     while (swapped) {
         swapped = false;
-        let j = 0;
+        let j: int = 0;
         while (j < n - 1) {
             if (arr[j] > arr[j + 1]) {
                 // Swap
-                let temp = arr[j];
+                let temp: int = arr[j];
                 arr[j] = arr[j + 1];
                 arr[j + 1] = temp;
                 swapped = true;
@@ -63,10 +64,10 @@ fn bubble_sort(arr) {
 }
 
 io.println("=== Bubble Sort ===");
-let nums = [64, 34, 25, 12, 22, 11, 90];
+let nums: array = [64, 34, 25, 12, 22, 11, 90];
 
 io.print("  Before: ");
-for (let n in nums) {
+for (let n: int in nums) {
     io.print($"{n} ");
 }
 io.println("");
@@ -74,7 +75,7 @@ io.println("");
 bubble_sort(nums);
 
 io.print("  After:  ");
-for (let n in nums) {
+for (let n: int in nums) {
     io.print($"{n} ");
 }
 io.println("");
@@ -82,9 +83,9 @@ io.println("");
 
 // --- Max/Min with >= ---
 
-fn find_max(arr) {
-    let max = arr[0];
-    let i = 1;
+fn find_max(arr: array) -> int {
+    let max: int = arr[0];
+    let i: int = 1;
     while (i < len(arr)) {
         if (arr[i] >= max) {
             max = arr[i];
@@ -94,9 +95,9 @@ fn find_max(arr) {
     return max;
 }
 
-fn find_min(arr) {
-    let min = arr[0];
-    let i = 1;
+fn find_min(arr: array) -> int {
+    let min: int = arr[0];
+    let i: int = 1;
     while (i < len(arr)) {
         if (arr[i] <= min) {
             min = arr[i];
@@ -106,8 +107,8 @@ fn find_min(arr) {
     return min;
 }
 
-let sorted = [11, 12, 22, 25, 34, 64, 90];
-let range = find_max(sorted) - find_min(sorted);
+let sorted: array = [11, 12, 22, 25, 34, 64, 90];
+let range: int = find_max(sorted) - find_min(sorted);
 io.println("=== Array Stats ===");
 io.println($"  Min:   {find_min(sorted)}");
 io.println($"  Max:   {find_max(sorted)}");
@@ -117,7 +118,7 @@ io.println("");
 // --- Pipes (Stash pipe operator) ---
 
 io.println("=== Pipes ===");
-let result = $(echo "hello world stash language") | $(tr " " "\n") | $(sort);
+let result: CommandResult = $(echo "hello world stash language") | $(tr " " "\n") | $(sort);
 io.println($"  Pipe result ({typeof(result)}):");
 io.println($"  stdout: {result.stdout}");
 io.println($"  exit code: {result.exitCode}");

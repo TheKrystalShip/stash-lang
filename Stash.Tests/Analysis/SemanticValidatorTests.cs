@@ -170,4 +170,150 @@ public class SemanticValidatorTests
 
         Assert.Empty(diagnostics);
     }
+
+    // ── Type Hints ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void TypeHintedVarDecl_ProducesNoErrors()
+    {
+        var diagnostics = Validate("let name: string = \"Alice\";");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void TypeHintedConstDecl_ProducesNoErrors()
+    {
+        var diagnostics = Validate("const PI: float = 3.14;");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void TypeHintedFnDecl_ProducesNoErrors()
+    {
+        var diagnostics = Validate("fn add(a: int, b: int) -> int { return a; }");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void TypeHintedStructDecl_ProducesNoErrors()
+    {
+        var diagnostics = Validate("struct Server { host: string, port: int }");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void TypeHintedForIn_ProducesNoErrors()
+    {
+        var diagnostics = Validate("let names = [\"a\"]; for (let item: string in names) { }");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void MixedTypeHints_ProducesNoErrors()
+    {
+        var source = @"
+            struct Config { name: string, value }
+            let cfg: Config = null;
+            const MAX: int = 100;
+            fn process(item: string, count) -> bool {
+                return true;
+            }
+        ";
+        var diagnostics = Validate(source);
+        Assert.Empty(diagnostics);
+    }
+
+    // ── Type Hint Validation ───────────────────────────────────────────
+
+    [Fact]
+    public void UnknownTypeHint_VarDecl_ReportsWarning()
+    {
+        var diagnostics = Validate("let x: arrary = [];");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Unknown type 'arrary'.") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UnknownTypeHint_ConstDecl_ReportsWarning()
+    {
+        var diagnostics = Validate("const X: integr = 1;");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Unknown type 'integr'.") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UnknownTypeHint_FnParam_ReportsWarning()
+    {
+        var diagnostics = Validate("fn add(a: intt, b: int) -> int { return a; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Unknown type 'intt'.") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UnknownTypeHint_FnReturn_ReportsWarning()
+    {
+        var diagnostics = Validate("fn greet() -> strng { return \"hi\"; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Unknown type 'strng'.") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UnknownTypeHint_StructField_ReportsWarning()
+    {
+        var diagnostics = Validate("struct Point { x: flot, y: float }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Unknown type 'flot'.") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UnknownTypeHint_ForIn_ReportsWarning()
+    {
+        var diagnostics = Validate("let items = [1]; for (let item: strig in items) { }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Unknown type 'strig'.") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void ValidBuiltInTypes_NoWarnings()
+    {
+        var source = @"
+            let a: string = """";
+            let b: int = 1;
+            let c: float = 1.0;
+            let d: bool = true;
+            let e: null = null;
+            let f: array = [];
+        ";
+        var diagnostics = Validate(source);
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Unknown type"));
+    }
+
+    [Fact]
+    public void UserDefinedStruct_AsTypeHint_NoWarning()
+    {
+        var diagnostics = Validate("struct Point { x, y }\nlet p: Point = null;");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Unknown type"));
+    }
+
+    [Fact]
+    public void UserDefinedEnum_AsTypeHint_NoWarning()
+    {
+        var diagnostics = Validate("enum Color { Red, Green, Blue }\nlet c: Color = null;");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Unknown type"));
+    }
+
+    [Fact]
+    public void MultipleUnknownTypes_ReportsAll()
+    {
+        var diagnostics = Validate("fn process(a: foo, b: bar) -> baz { return null; }");
+        Assert.Contains(diagnostics, d => d.Message.Contains("Unknown type 'foo'."));
+        Assert.Contains(diagnostics, d => d.Message.Contains("Unknown type 'bar'."));
+        Assert.Contains(diagnostics, d => d.Message.Contains("Unknown type 'baz'."));
+    }
 }

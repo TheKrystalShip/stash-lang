@@ -51,6 +51,12 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
                     continue;
                 }
 
+                // Skip synthetic built-in symbols (registered at line 0)
+                if (sym.Span.StartLine == 0)
+                {
+                    continue;
+                }
+
                 // Filter by query (case-insensitive substring match)
                 if (query.Length > 0 &&
                     sym.Name.IndexOf(query, StringComparison.OrdinalIgnoreCase) < 0)

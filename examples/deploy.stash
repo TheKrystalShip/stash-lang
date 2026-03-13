@@ -12,19 +12,19 @@ enum DeployResult {
 }
 
 struct Target {
-    host,
-    user,
-    path
+    host: string,
+    user: string,
+    path: string
 }
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES: int = 3;
 
-fn check_host(host) {
+fn check_host(host: string) -> bool {
     let result = $(ping -c 1 -W 2 {host});
     return result.exitCode == 0;
 }
 
-fn deploy_to(target, package) {
+fn deploy_to(target: Target, package: string) -> DeployResult {
     utils.log(utils.LogLevel.Info, $"Deploying {package} to {target.user}@{target.host}:{target.path}");
 
     // Check connectivity first
@@ -34,7 +34,7 @@ fn deploy_to(target, package) {
     }
 
     // Retry loop
-    let attempt = 1;
+    let attempt: int = 1;
     while (attempt <= MAX_RETRIES) {
         utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
 
@@ -61,17 +61,17 @@ let package = "app-v2.1.0.tar.gz";
 utils.banner("Deployment Start");
 io.println("");
 
-let targets = [
+let targets: array = [
     Target { host: "127.0.0.1", user: "deploy", path: "/opt/app" },
     Target { host: "192.168.1.50", user: "deploy", path: "/opt/app" },
     Target { host: "192.168.1.51", user: "deploy", path: "/opt/app" }
 ];
 
-let successes = 0;
-let failures = 0;
+let successes: int = 0;
+let failures: int = 0;
 
-for (let target in targets) {
-    let result = deploy_to(target, package);
+for (let target: Target in targets) {
+    let result: DeployResult = deploy_to(target, package);
 
     if (result == DeployResult.Success) {
         successes++;

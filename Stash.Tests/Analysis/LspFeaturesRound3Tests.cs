@@ -16,7 +16,7 @@ public class LspFeaturesRound3Tests
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
+        var collector = new SymbolCollector { IncludeBuiltIns = false };
         return collector.Collect(stmts);
     }
 

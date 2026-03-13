@@ -24,8 +24,9 @@ public class SymbolInfo
     public SourceSpan? FullSpan { get; }
     public string? Detail { get; }
     public string? ParentName { get; }
+    public string? TypeHint { get; }
 
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null)
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null)
     {
         Name = name;
         Kind = kind;
@@ -33,5 +34,6 @@ public class SymbolInfo
         FullSpan = fullSpan;
         Detail = detail;
         ParentName = parentName;
+        TypeHint = typeHint;
     }
 }

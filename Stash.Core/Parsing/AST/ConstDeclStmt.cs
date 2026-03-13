@@ -9,11 +9,13 @@ using Stash.Lexing;
 public class ConstDeclStmt : Stmt
 {
     public Token Name { get; }
+    public Token? TypeHint { get; }
     public Expr Initializer { get; }
 
-    public ConstDeclStmt(Token name, Expr initializer, SourceSpan span) : base(span)
+    public ConstDeclStmt(Token name, Token? typeHint, Expr initializer, SourceSpan span) : base(span)
     {
         Name = name;
+        TypeHint = typeHint;
         Initializer = initializer;
     }
 

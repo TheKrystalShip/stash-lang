@@ -191,6 +191,11 @@ public class Parser
     {
         Token letToken = Previous();
         Token name = Consume(TokenType.Identifier, "Expected variable name.");
+        Token? typeHint = null;
+        if (Match(TokenType.Colon))
+        {
+            typeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+        }
         Expr? initializer = null;
         if (Match(TokenType.Equal))
         {
@@ -198,7 +203,7 @@ public class Parser
         }
 
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after variable declaration.");
-        return new VarDeclStmt(name, initializer, MakeSpan(letToken.Span, semi.Span));
+        return new VarDeclStmt(name, typeHint, initializer, MakeSpan(letToken.Span, semi.Span));
     }
 
     /// <summary>
@@ -210,10 +215,15 @@ public class Parser
     {
         Token constToken = Previous();
         Token name = Consume(TokenType.Identifier, "Expected constant name.");
+        Token? typeHint = null;
+        if (Match(TokenType.Colon))
+        {
+            typeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+        }
         Consume(TokenType.Equal, "Expected '=' after constant name (constants must be initialized).");
         Expr initializer = Expression();
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after constant declaration.");
-        return new ConstDeclStmt(name, initializer, MakeSpan(constToken.Span, semi.Span));
+        return new ConstDeclStmt(name, typeHint, initializer, MakeSpan(constToken.Span, semi.Span));
     }
 
     /// <summary>
@@ -228,17 +238,29 @@ public class Parser
         Consume(TokenType.LeftParen, "Expected '(' after function name.");
 
         List<Token> parameters = new();
+        List<Token?> parameterTypes = new();
         if (!Check(TokenType.RightParen))
         {
             do
             {
                 parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
+                Token? paramType = null;
+                if (Match(TokenType.Colon))
+                {
+                    paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                }
+                parameterTypes.Add(paramType);
             } while (Match(TokenType.Comma));
         }
 
         Consume(TokenType.RightParen, "Expected ')' after parameters.");
+        Token? returnType = null;
+        if (Match(TokenType.Arrow))
+        {
+            returnType = Consume(TokenType.Identifier, "Expected return type after '->'.");
+        }
         BlockStmt body = ParseBlock();
-        return new FnDeclStmt(name, parameters, body, MakeSpan(fnToken.Span, body.Span));
+        return new FnDeclStmt(name, parameters, parameterTypes, returnType, body, MakeSpan(fnToken.Span, body.Span));
     }
 
     private Stmt StructDeclaration()
@@ -248,16 +270,23 @@ public class Parser
         Consume(TokenType.LeftBrace, "Expected '{' after struct name.");
 
         List<Token> fields = new();
+        List<Token?> fieldTypes = new();
         if (!Check(TokenType.RightBrace))
         {
             do
             {
                 fields.Add(Consume(TokenType.Identifier, "Expected field name."));
+                Token? fieldType = null;
+                if (Match(TokenType.Colon))
+                {
+                    fieldType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                }
+                fieldTypes.Add(fieldType);
             } while (Match(TokenType.Comma));
         }
 
         Token close = Consume(TokenType.RightBrace, "Expected '}' after struct fields.");
-        return new StructDeclStmt(name, fields, MakeSpan(structToken.Span, close.Span));
+        return new StructDeclStmt(name, fields, fieldTypes, MakeSpan(structToken.Span, close.Span));
     }
 
     private Stmt EnumDeclaration()
@@ -441,11 +470,16 @@ public class Parser
         Consume(TokenType.LeftParen, "Expected '(' after 'for'.");
         Consume(TokenType.Let, "Expected 'let' after '(' in for-in loop.");
         Token varName = Consume(TokenType.Identifier, "Expected variable name in for-in loop.");
+        Token? typeHint = null;
+        if (Match(TokenType.Colon))
+        {
+            typeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+        }
         Consume(TokenType.In, "Expected 'in' after variable name in for-in loop.");
         Expr iterable = Expression();
         Consume(TokenType.RightParen, "Expected ')' after for-in clause.");
         BlockStmt body = ParseBlock();
-        return new ForInStmt(varName, iterable, body, MakeSpan(forToken.Span, body.Span));
+        return new ForInStmt(varName, typeHint, iterable, body, MakeSpan(forToken.Span, body.Span));
     }
 
     /// <summary>

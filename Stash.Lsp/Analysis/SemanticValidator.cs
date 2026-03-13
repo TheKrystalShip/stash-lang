@@ -2,6 +2,7 @@ namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
 using Stash.Common;
+using Stash.Lexing;
 using Stash.Parsing.AST;
 
 public enum DiagnosticLevel
@@ -39,7 +40,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         "typeof", "len", "lastError", "parseArgs", "args",
         "io", "fs", "env", "path", "conv", "process",
         "true", "false", "null",
-        "println", "print", "readLine"
+        "println", "print", "readLine",
+        "CommandResult", "ArgTree", "ArgDef"
+    };
+
+    private static readonly HashSet<string> _validBuiltInTypes = new()
+    {
+        "string", "int", "float", "bool", "null", "array",
+        "function", "namespace"
     };
 
     public SemanticValidator(ScopeTree scopeTree)
@@ -69,8 +77,31 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     // Statement visitors
 
+    private void ValidateTypeHint(Token? typeHint)
+    {
+        if (typeHint == null) return;
+
+        var typeName = typeHint.Lexeme;
+
+        if (_validBuiltInTypes.Contains(typeName)) return;
+
+        var definition = _scopeTree.FindDefinition(typeName, typeHint.Span.StartLine, typeHint.Span.StartColumn);
+        if (definition != null && (definition.Kind == SymbolKind.Struct || definition.Kind == SymbolKind.Enum)) return;
+
+        _diagnostics.Add(new SemanticDiagnostic(
+            $"Unknown type '{typeName}'.",
+            DiagnosticLevel.Warning,
+            typeHint.Span));
+    }
+
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
+        foreach (var paramType in stmt.ParameterTypes)
+        {
+            ValidateTypeHint(paramType);
+        }
+        ValidateTypeHint(stmt.ReturnType);
+
         _functionDepth++;
         CheckUnreachableStatements(stmt.Body.Statements);
         _functionDepth--;
@@ -88,6 +119,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitForInStmt(ForInStmt stmt)
     {
+        ValidateTypeHint(stmt.TypeHint);
         stmt.Iterable.Accept(this);
         _loopDepth++;
         stmt.Body.Accept(this);
@@ -134,12 +166,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
+        ValidateTypeHint(stmt.TypeHint);
         stmt.Initializer?.Accept(this);
         return null;
     }
 
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
+        ValidateTypeHint(stmt.TypeHint);
         stmt.Initializer.Accept(this);
         return null;
     }
@@ -212,7 +246,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
-    public object? VisitStructDeclStmt(StructDeclStmt stmt) => null;
+    public object? VisitStructDeclStmt(StructDeclStmt stmt)
+    {
+        foreach (var fieldType in stmt.FieldTypes)
+        {
+            ValidateTypeHint(fieldType);
+        }
+        return null;
+    }
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt) => null;
     public object? VisitImportStmt(ImportStmt stmt) => null;
     public object? VisitImportAsStmt(ImportAsStmt stmt) => null;

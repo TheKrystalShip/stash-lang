@@ -19,7 +19,7 @@ public class InlayHintHandler : InlayHintsHandlerBase
         ["typeof"] = new[] { "value" },
         ["len"] = new[] { "value" },
         ["lastError"] = Array.Empty<string>(),
-        ["parseArgs"] = new[] { "argTree" },
+        ["parseArgs"] = new[] { "tree" },
     };
 
     private static readonly Dictionary<string, string[]> _namespacedParams = new()
@@ -299,7 +299,14 @@ public class InlayHintHandler : InlayHintsHandlerBase
         var parts = inside.Split(',');
         for (int i = 0; i < parts.Length; i++)
         {
-            parts[i] = parts[i].Trim();
+            var part = parts[i].Trim();
+            // Strip type annotation (e.g., "a: int" → "a")
+            var colonIdx = part.IndexOf(':');
+            if (colonIdx >= 0)
+            {
+                part = part[..colonIdx].Trim();
+            }
+            parts[i] = part;
         }
 
         return parts;

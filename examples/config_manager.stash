@@ -11,16 +11,16 @@ struct Config {
     timeout
 }
 
-fn env_or(name, fallback) {
+fn env_or(name: string, fallback: string) -> string{
     return env.get(name) ?? fallback;
 }
 
-fn env_int(name, fallback) {
-    let raw = env.get(name);
+fn env_int(name: string, fallback: int) -> int {
+    let raw: string = env.get(name);
     if (raw == null) {
         return fallback;
     }
-    let parsed = try conv.toInt(raw);
+    let parsed: int = try conv.toInt(raw);
     if (parsed == null) {
         io.println($"Warning: {name}='{raw}' is not a valid integer, using default {fallback}");
         return fallback;
@@ -28,24 +28,24 @@ fn env_int(name, fallback) {
     return parsed;
 }
 
-fn env_bool(name, fallback) {
-    let raw = env.get(name);
+fn env_bool(name: string, fallback: bool) -> bool {
+    let raw: string = env.get(name);
     if (raw == null) {
         return fallback;
     }
     return raw == "true" || raw == "1" || raw == "yes";
 }
 
-fn env_float(name, fallback) {
-    let raw = env.get(name);
+fn env_float(name: string, fallback: float) -> float {
+    let raw: string = env.get(name);
     if (raw == null) {
         return fallback;
     }
-    let parsed = try conv.toFloat(raw);
+    let parsed: float = try conv.toFloat(raw);
     return parsed ?? fallback;
 }
 
-fn load_config() {
+fn load_config() -> Config {
     return Config {
         app_name: env_or("APP_NAME", "stash-app"),
         port: env_int("APP_PORT", 8080),
@@ -55,7 +55,7 @@ fn load_config() {
     };
 }
 
-fn print_config(config) {
+fn print_config(config: Config) {
     io.println("=== Application Configuration ===");
     io.println($"  App Name:    {config.app_name}");
     io.println($"  Port:        {config.port}");
@@ -65,9 +65,9 @@ fn print_config(config) {
     io.println("");
 }
 
-fn describe_value(value) {
-    let type = typeof(value);
-    let str = conv.toStr(value);
+fn describe_value(value: any) -> string {
+    let type: string = typeof(value);
+    let str: string = conv.toStr(value);
     return $"{str} ({type})";
 }
 
@@ -77,7 +77,7 @@ fn describe_value(value) {
 io.println("Loading configuration from environment...");
 io.println("");
 
-let config = load_config();
+let config: Config = load_config();
 print_config(config);
 
 // Demonstrate environment variable manipulation
@@ -85,7 +85,7 @@ io.println("Setting APP_PORT=3000 and APP_DEBUG=true...");
 env.set("APP_PORT", "3000");
 env.set("APP_DEBUG", "true");
 
-let updated = load_config();
+let updated: Config = load_config();
 print_config(updated);
 
 // Show type information

@@ -9,12 +9,14 @@ using Stash.Lexing;
 public class ForInStmt : Stmt
 {
     public Token VariableName { get; }
+    public Token? TypeHint { get; }
     public Expr Iterable { get; }
     public BlockStmt Body { get; }
 
-    public ForInStmt(Token variableName, Expr iterable, BlockStmt body, SourceSpan span) : base(span)
+    public ForInStmt(Token variableName, Token? typeHint, Expr iterable, BlockStmt body, SourceSpan span) : base(span)
     {
         VariableName = variableName;
+        TypeHint = typeHint;
         Iterable = iterable;
         Body = body;
     }

@@ -1399,4 +1399,188 @@ public class ParserTests
         Assert.IsType<ImportAsStmt>(stmts[0]);
         Assert.IsType<ImportStmt>(stmts[1]);
     }
+
+    // ── Type Hints ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parse_VarDecl_WithTypeHint()
+    {
+        var stmts = ParseProgram("let name: string = \"Alice\";");
+        var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("name", varDecl.Name.Lexeme);
+        Assert.NotNull(varDecl.TypeHint);
+        Assert.Equal("string", varDecl.TypeHint!.Lexeme);
+        var init = Assert.IsType<LiteralExpr>(varDecl.Initializer);
+        Assert.Equal("Alice", init.Value);
+    }
+
+    [Fact]
+    public void Parse_VarDecl_WithTypeHintNoInitializer()
+    {
+        var stmts = ParseProgram("let count: int;");
+        var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("count", varDecl.Name.Lexeme);
+        Assert.NotNull(varDecl.TypeHint);
+        Assert.Equal("int", varDecl.TypeHint!.Lexeme);
+        Assert.Null(varDecl.Initializer);
+    }
+
+    [Fact]
+    public void Parse_VarDecl_WithoutTypeHint_TypeHintIsNull()
+    {
+        var stmts = ParseProgram("let x = 42;");
+        var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.Null(varDecl.TypeHint);
+    }
+
+    [Fact]
+    public void Parse_ConstDecl_WithTypeHint()
+    {
+        var stmts = ParseProgram("const PI: float = 3.14;");
+        var constDecl = Assert.IsType<ConstDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("PI", constDecl.Name.Lexeme);
+        Assert.NotNull(constDecl.TypeHint);
+        Assert.Equal("float", constDecl.TypeHint!.Lexeme);
+        var init = Assert.IsType<LiteralExpr>(constDecl.Initializer);
+        Assert.Equal(3.14, init.Value);
+    }
+
+    [Fact]
+    public void Parse_ConstDecl_WithoutTypeHint_TypeHintIsNull()
+    {
+        var stmts = ParseProgram("const X = 1;");
+        var constDecl = Assert.IsType<ConstDeclStmt>(Assert.Single(stmts));
+        Assert.Null(constDecl.TypeHint);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_WithParameterTypes()
+    {
+        var stmts = ParseProgram("fn add(a: int, b: int) { }");
+        var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("add", fnDecl.Name.Lexeme);
+        Assert.Equal(2, fnDecl.Parameters.Count);
+        Assert.Equal(2, fnDecl.ParameterTypes.Count);
+        Assert.Equal("int", fnDecl.ParameterTypes[0]!.Lexeme);
+        Assert.Equal("int", fnDecl.ParameterTypes[1]!.Lexeme);
+        Assert.Null(fnDecl.ReturnType);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_WithReturnType()
+    {
+        var stmts = ParseProgram("fn add(a, b) -> int { }");
+        var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("add", fnDecl.Name.Lexeme);
+        Assert.NotNull(fnDecl.ReturnType);
+        Assert.Equal("int", fnDecl.ReturnType!.Lexeme);
+        Assert.Null(fnDecl.ParameterTypes[0]);
+        Assert.Null(fnDecl.ParameterTypes[1]);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_WithFullTypeAnnotations()
+    {
+        var stmts = ParseProgram("fn add(a: int, b: int) -> int { return a; }");
+        var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("int", fnDecl.ParameterTypes[0]!.Lexeme);
+        Assert.Equal("int", fnDecl.ParameterTypes[1]!.Lexeme);
+        Assert.Equal("int", fnDecl.ReturnType!.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_WithoutTypeAnnotations_AllNull()
+    {
+        var stmts = ParseProgram("fn greet(name) { }");
+        var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Single(fnDecl.Parameters);
+        Assert.Single(fnDecl.ParameterTypes);
+        Assert.Null(fnDecl.ParameterTypes[0]);
+        Assert.Null(fnDecl.ReturnType);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_MixedTypedAndUntypedParams()
+    {
+        var stmts = ParseProgram("fn mixed(a: int, b) { }");
+        var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("int", fnDecl.ParameterTypes[0]!.Lexeme);
+        Assert.Null(fnDecl.ParameterTypes[1]);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_NoParams_EmptyParameterTypes()
+    {
+        var stmts = ParseProgram("fn noop() { }");
+        var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Empty(fnDecl.Parameters);
+        Assert.Empty(fnDecl.ParameterTypes);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_WithFieldTypes()
+    {
+        var stmts = ParseProgram("struct Server { host: string, port: int }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("Server", structDecl.Name.Lexeme);
+        Assert.Equal(2, structDecl.Fields.Count);
+        Assert.Equal(2, structDecl.FieldTypes.Count);
+        Assert.Equal("string", structDecl.FieldTypes[0]!.Lexeme);
+        Assert.Equal("int", structDecl.FieldTypes[1]!.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_WithoutFieldTypes_AllNull()
+    {
+        var stmts = ParseProgram("struct Point { x, y }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal(2, structDecl.FieldTypes.Count);
+        Assert.Null(structDecl.FieldTypes[0]);
+        Assert.Null(structDecl.FieldTypes[1]);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_MixedTypedAndUntypedFields()
+    {
+        var stmts = ParseProgram("struct Config { name: string, value }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("string", structDecl.FieldTypes[0]!.Lexeme);
+        Assert.Null(structDecl.FieldTypes[1]);
+    }
+
+    [Fact]
+    public void Parse_ForIn_WithTypeHint()
+    {
+        var stmts = ParseProgram("for (let item: string in names) { }");
+        var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
+        Assert.Equal("item", forIn.VariableName.Lexeme);
+        Assert.NotNull(forIn.TypeHint);
+        Assert.Equal("string", forIn.TypeHint!.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_ForIn_WithoutTypeHint_TypeHintIsNull()
+    {
+        var stmts = ParseProgram("for (let item in names) { }");
+        var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
+        Assert.Null(forIn.TypeHint);
+    }
+
+    [Fact]
+    public void Parse_VarDecl_WithUserDefinedType()
+    {
+        var stmts = ParseProgram("let server: Server = null;");
+        var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(varDecl.TypeHint);
+        Assert.Equal("Server", varDecl.TypeHint!.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_WithUserDefinedReturnType()
+    {
+        var stmts = ParseProgram("fn create() -> Server { }");
+        var fnDecl = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.NotNull(fnDecl.ReturnType);
+        Assert.Equal("Server", fnDecl.ReturnType!.Lexeme);
+    }
 }

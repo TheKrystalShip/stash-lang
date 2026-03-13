@@ -3,13 +3,13 @@
 // Calculator and type system demo
 // Shows off arithmetic, type coercion, and error handling
 
-fn divmod(a, b) {
+fn divmod(a: int, b: int) -> int {
     if (b == 0) {
         io.println("  Error: division by zero");
         return null;
     }
-    let quotient = a / b;
-    let remainder = a % b;
+    let quotient: int = a / b;
+    let remainder: int = a % b;
     io.println($"  {a} / {b} = {quotient} remainder {remainder}");
     return quotient;
 }
@@ -17,8 +17,8 @@ fn divmod(a, b) {
 fn show_type_promotion() {
     io.println("=== Type Promotion ===");
 
-    let int_val = 10;
-    let float_val = 3.14;
+    let int_val: int = 10;
+    let float_val: float = 3.14;
 
     io.println($"  int + int:     {5 + 3} ({typeof(5 + 3)})");
     io.println($"  int + float:   {int_val + float_val} ({typeof(int_val + float_val)})");
@@ -32,21 +32,21 @@ fn show_conversions() {
     io.println("=== Type Conversions ===");
 
     // Successful conversions
-    let str_num = "42";
-    let parsed = conv.toInt(str_num);
+    let str_num: string = "42";
+    let parsed: int = conv.toInt(str_num);
     io.println($"  conv.toInt(\"42\")    = {parsed} ({typeof(parsed)})");
 
-    let float_str = "3.14";
-    let parsed_f = conv.toFloat(float_str);
+    let float_str: string = "3.14";
+    let parsed_f: float = conv.toFloat(float_str);
     io.println($"  conv.toFloat(\"3.14\") = {parsed_f} ({typeof(parsed_f)})");
 
-    let num = 255;
-    let as_str = conv.toStr(num);
+    let num: int = 255;
+    let as_str: string = conv.toStr(num);
     io.println($"  conv.toStr(255)     = \"{as_str}\" ({typeof(as_str)})");
 
     // Failed conversion with error handling
-    let bad = try conv.toInt("hello");
-    let err = lastError();
+    let bad: int = try conv.toInt("hello");
+    let err: string = lastError();
     io.println($"  conv.toInt(\"hello\") = {bad} (error: {err})");
     io.println("");
 }
@@ -54,12 +54,12 @@ fn show_conversions() {
 fn show_truthiness() {
     io.println("=== Truthiness ===");
 
-    let values = [0, 1, -1, 0.0, 3.14, "", "hello", true, false, null];
-    let labels = ["0", "1", "-1", "0.0", "3.14", "\"\"", "\"hello\"", "true", "false", "null"];
+    let values: array = [0, 1, -1, 0.0, 3.14, "", "hello", true, false, null];
+    let labels: array = ["0", "1", "-1", "0.0", "3.14", "\"\"", "\"hello\"", "true", "false", "null"];
 
-    let i = 0;
+    let i: int = 0;
     while (i < len(values)) {
-        let truthy = values[i] ? "truthy" : "falsy";
+        let truthy: string = values[i] ? "truthy" : "falsy";
         io.println($"  {labels[i]} → {truthy}");
         i++;
     }

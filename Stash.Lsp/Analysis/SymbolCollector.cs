@@ -8,6 +8,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 {
     private Scope _currentScope = null!;
     private readonly List<ReferenceInfo> _references = new();
+    public bool IncludeBuiltIns { get; set; } = true;
 
     public ScopeTree Collect(List<Stmt> statements)
     {
@@ -17,12 +18,93 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         var globalScope = new Scope(ScopeKind.Global, null, globalSpan);
         _currentScope = globalScope;
 
+        if (IncludeBuiltIns)
+        {
+            RegisterBuiltIns(file);
+        }
+
         foreach (var stmt in statements)
         {
             stmt.Accept(this);
         }
 
         return new ScopeTree(globalScope, _references);
+    }
+
+    private void RegisterBuiltIns(string file)
+    {
+        // Use line 0 so built-ins are "before" any user code
+        var span = new SourceSpan(file, 0, 0, 0, 0);
+
+        // ── Built-in Structs ──
+
+        AddBuiltInStruct(span, "CommandResult", new (string, string?)[]
+        {
+            ("stdout", "string"),
+            ("stderr", "string"),
+            ("exitCode", "int"),
+        });
+
+        AddBuiltInStruct(span, "ArgTree", new (string, string?)[]
+        {
+            ("name", "string"),
+            ("version", "string"),
+            ("description", "string"),
+            ("flags", "array"),
+            ("options", "array"),
+            ("commands", "array"),
+            ("positionals", "array"),
+        });
+
+        AddBuiltInStruct(span, "ArgDef", new[]
+        {
+            ("name", "string"),
+            ("short", "string"),
+            ("type", "string"),
+            ("default", (string?)null),
+            ("description", "string"),
+            ("required", "bool"),
+            ("args", "ArgTree"),
+        });
+
+        // ── Built-in Global Functions ──
+
+        AddBuiltInFunction(span, "typeof", "fn typeof(value) -> string", "string");
+        AddBuiltInFunction(span, "len", "fn len(value) -> int", "int");
+        AddBuiltInFunction(span, "lastError", "fn lastError() -> string", "string");
+        AddBuiltInFunction(span, "parseArgs", "fn parseArgs(tree: ArgTree) -> Args", "Args");
+
+        // ── Built-in Namespaces ──
+
+        _currentScope.AddSymbol(new SymbolInfo("io", SymbolKind.Namespace, span, detail: "namespace io"));
+        _currentScope.AddSymbol(new SymbolInfo("conv", SymbolKind.Namespace, span, detail: "namespace conv"));
+        _currentScope.AddSymbol(new SymbolInfo("env", SymbolKind.Namespace, span, detail: "namespace env"));
+        _currentScope.AddSymbol(new SymbolInfo("process", SymbolKind.Namespace, span, detail: "namespace process"));
+        _currentScope.AddSymbol(new SymbolInfo("fs", SymbolKind.Namespace, span, detail: "namespace fs"));
+        _currentScope.AddSymbol(new SymbolInfo("path", SymbolKind.Namespace, span, detail: "namespace path"));
+    }
+
+    private void AddBuiltInStruct(SourceSpan span, string name, (string FieldName, string? FieldType)[] fields)
+    {
+        var fieldParts = new List<string>();
+        foreach (var (fieldName, fieldType) in fields)
+        {
+            fieldParts.Add(fieldType != null ? $"{fieldName}: {fieldType}" : fieldName);
+        }
+        var detail = $"struct {name} {{ {string.Join(", ", fieldParts)} }}";
+
+        _currentScope.AddSymbol(new SymbolInfo(name, SymbolKind.Struct, span, span, detail));
+
+        foreach (var (fieldName, fieldType) in fields)
+        {
+            var fieldDetail = fieldType != null ? $"field of {name}: {fieldType}" : $"field of {name}";
+            _currentScope.AddSymbol(new SymbolInfo(fieldName, SymbolKind.Field, span, detail: fieldDetail, parentName: name, typeHint: fieldType));
+        }
+    }
+
+    private void AddBuiltInFunction(SourceSpan span, string name, string detail, string? returnType)
+    {
+        _currentScope.AddSymbol(new SymbolInfo(name, SymbolKind.Function, span, span, detail, typeHint: returnType));
     }
 
     private void RecordReference(string name, SourceSpan span, ReferenceKind kind)
@@ -64,22 +146,33 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
-        var paramNames = new List<string>();
-        foreach (var p in stmt.Parameters)
+        var paramParts = new List<string>();
+        for (int i = 0; i < stmt.Parameters.Count; i++)
         {
-            paramNames.Add(p.Lexeme);
+            var paramName = stmt.Parameters[i].Lexeme;
+            var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.Lexeme : null;
+            paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
         }
 
-        var detail = $"fn {stmt.Name.Lexeme}({string.Join(", ", paramNames)})";
+        var detail = $"fn {stmt.Name.Lexeme}({string.Join(", ", paramParts)})";
+        if (stmt.ReturnType != null)
+        {
+            detail += $" -> {stmt.ReturnType.Lexeme}";
+        }
+
+        var returnTypeStr = stmt.ReturnType?.Lexeme;
 
         // Function name goes into the parent (current) scope
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr));
 
         // Parameters and body statements share the function scope
         PushScope(ScopeKind.Function, stmt.Body.Span);
-        foreach (var param in stmt.Parameters)
+        for (int i = 0; i < stmt.Parameters.Count; i++)
         {
-            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: $"parameter of {stmt.Name.Lexeme}", parentName: stmt.Name.Lexeme));
+            var param = stmt.Parameters[i];
+            var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.Lexeme : null;
+            var paramDetail = paramType != null ? $"parameter of {stmt.Name.Lexeme}: {paramType}" : $"parameter of {stmt.Name.Lexeme}";
+            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: stmt.Name.Lexeme, typeHint: paramType));
         }
 
         foreach (var s in stmt.Body.Statements)
@@ -93,19 +186,24 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitStructDeclStmt(StructDeclStmt stmt)
     {
-        var fieldNames = new List<string>();
-        foreach (var f in stmt.Fields)
+        var fieldParts = new List<string>();
+        for (int i = 0; i < stmt.Fields.Count; i++)
         {
-            fieldNames.Add(f.Lexeme);
+            var fieldName = stmt.Fields[i].Lexeme;
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            fieldParts.Add(fieldType != null ? $"{fieldName}: {fieldType}" : fieldName);
         }
 
-        var detail = $"struct {stmt.Name.Lexeme} {{ {string.Join(", ", fieldNames)} }}";
+        var detail = $"struct {stmt.Name.Lexeme} {{ {string.Join(", ", fieldParts)} }}";
 
         _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Struct, stmt.Name.Span, stmt.Span, detail));
 
-        foreach (var field in stmt.Fields)
+        for (int i = 0; i < stmt.Fields.Count; i++)
         {
-            _currentScope.AddSymbol(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: $"field of {stmt.Name.Lexeme}", parentName: stmt.Name.Lexeme));
+            var field = stmt.Fields[i];
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            var fieldDetail = fieldType != null ? $"field of {stmt.Name.Lexeme}: {fieldType}" : $"field of {stmt.Name.Lexeme}";
+            _currentScope.AddSymbol(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: fieldDetail, parentName: stmt.Name.Lexeme, typeHint: fieldType));
         }
 
         return null;
@@ -133,14 +231,18 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, $"let {stmt.Name.Lexeme}"));
+        var typeStr = stmt.TypeHint?.Lexeme;
+        var detail = typeStr != null ? $"let {stmt.Name.Lexeme}: {typeStr}" : $"let {stmt.Name.Lexeme}";
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr));
         stmt.Initializer?.Accept(this);
         return null;
     }
 
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, $"const {stmt.Name.Lexeme}"));
+        var typeStr = stmt.TypeHint?.Lexeme;
+        var detail = typeStr != null ? $"const {stmt.Name.Lexeme}: {typeStr}" : $"const {stmt.Name.Lexeme}";
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr));
         stmt.Initializer.Accept(this);
         return null;
     }
@@ -182,7 +284,9 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         stmt.Iterable.Accept(this);
         PushScope(ScopeKind.Loop, stmt.Body.Span);
-        _currentScope.AddSymbol(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: "loop variable"));
+        var typeStr = stmt.TypeHint?.Lexeme;
+        var detail = typeStr != null ? $"loop variable: {typeStr}" : "loop variable";
+        _currentScope.AddSymbol(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: detail, typeHint: typeStr));
         foreach (var s in stmt.Body.Statements)
         {
             s.Accept(this);
