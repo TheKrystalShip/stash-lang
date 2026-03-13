@@ -41,8 +41,8 @@ let servers = [
     Server { name: "db-1", host: "192.168.1.200", port: 5432, status: Status.Unknown }
 ];
 
-println("=== Server Health Check ===");
-println("");
+io.println("=== Server Health Check ===");
+io.println("");
 
 let online_count = 0;
 let total = len(servers);
@@ -51,12 +51,12 @@ for (let srv in servers) {
     srv.status = check_server(srv);
 
     let label = status_label(srv.status);
-    println($"  [{label}] {srv.name} ({srv.host}:{srv.port})");
+    io.println($"  [{label}] {srv.name} ({srv.host}:{srv.port})");
 
     if (srv.status == Status.Online) {
         online_count++;
     }
 }
 
-println("");
-println($"{online_count}/{total} servers online");
+io.println("");
+io.println($"{online_count}/{total} servers online");

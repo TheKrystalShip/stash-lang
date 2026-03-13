@@ -14,7 +14,7 @@ fn log(level, message) {
     } else if (level == LogLevel.Error) {
         prefix = "ERROR";
     }
-    println($"[{prefix}] {message}");
+    io.println($"[{prefix}] {message}");
 }
 
 fn repeat_char(ch, count) {
@@ -29,7 +29,7 @@ fn repeat_char(ch, count) {
 
 fn banner(text) {
     let border = repeat_char("=", len(text) + 4);
-    println(border);
-    println($"  {text}");
-    println(border);
+    io.println(border);
+    io.println($"  {text}");
+    io.println(border);
 }

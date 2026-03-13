@@ -94,6 +94,7 @@ public class Lexer
             ["try"] = TokenType.Try,
             ["import"] = TokenType.Import,
             ["from"] = TokenType.From,
+            ["as"] = TokenType.As,
         }.ToFrozenDictionary();
 
     /// <summary>

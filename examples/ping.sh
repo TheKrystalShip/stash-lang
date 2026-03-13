@@ -5,7 +5,7 @@ localAddress="192.168.1.127"
 
 declare -a servers=("$DEFAULT_ADDRESS" "$localAddress")
 
-function ping_address() {
+function pingAddress() {
     local address="$1"
     local output
     output=$(ping -c 1 "$address" 2>&1)
@@ -18,6 +18,6 @@ function ping_address() {
     fi
 }
 
-for server in "${servers[@]}"; do
-    ping_address "$server"
+for address in "${servers[@]}"; do
+    pingAddress "$address"
 done

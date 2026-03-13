@@ -767,43 +767,43 @@ public class InterpreterTests
     [Fact]
     public void BuiltIn_ToStr_Int()
     {
-        Assert.Equal("42", Run("let result = toStr(42);"));
+        Assert.Equal("42", Run("let result = conv.toStr(42);"));
     }
 
     [Fact]
     public void BuiltIn_ToStr_Null()
     {
-        Assert.Equal("null", Run("let result = toStr(null);"));
+        Assert.Equal("null", Run("let result = conv.toStr(null);"));
     }
 
     [Fact]
     public void BuiltIn_ToInt_ValidString()
     {
-        Assert.Equal(42L, Run("let result = toInt(\"42\");"));
+        Assert.Equal(42L, Run("let result = conv.toInt(\"42\");"));
     }
 
     [Fact]
     public void BuiltIn_ToInt_InvalidString_ThrowsError()
     {
-        RunExpectingError("let x = toInt(\"abc\");");
+        RunExpectingError("let x = conv.toInt(\"abc\");");
     }
 
     [Fact]
     public void BuiltIn_ToInt_FromFloat()
     {
-        Assert.Equal(3L, Run("let result = toInt(3.7);"));
+        Assert.Equal(3L, Run("let result = conv.toInt(3.7);"));
     }
 
     [Fact]
     public void BuiltIn_ToFloat_FromInt()
     {
-        Assert.Equal(42.0, Run("let result = toFloat(42);"));
+        Assert.Equal(42.0, Run("let result = conv.toFloat(42);"));
     }
 
     [Fact]
     public void BuiltIn_ToFloat_FromString()
     {
-        Assert.Equal(3.14, Run("let result = toFloat(\"3.14\");"));
+        Assert.Equal(3.14, Run("let result = conv.toFloat(\"3.14\");"));
     }
 
     [Fact]
@@ -1090,25 +1090,25 @@ public class InterpreterTests
     [Fact]
     public void ArrayStringify()
     {
-        Assert.Equal("[1, 2, 3]", Run("let result = toStr([1, 2, 3]);"));
+        Assert.Equal("[1, 2, 3]", Run("let result = conv.toStr([1, 2, 3]);"));
     }
 
     [Fact]
     public void ArrayStringify_Nested()
     {
-        Assert.Equal("[[1, 2], [3]]", Run("let result = toStr([[1, 2], [3]]);"));
+        Assert.Equal("[[1, 2], [3]]", Run("let result = conv.toStr([[1, 2], [3]]);"));
     }
 
     [Fact]
     public void ArrayStringify_Empty()
     {
-        Assert.Equal("[]", Run("let result = toStr([]);"));
+        Assert.Equal("[]", Run("let result = conv.toStr([]);"));
     }
 
     [Fact]
     public void ArrayStringify_MixedTypes()
     {
-        Assert.Equal("[1, hello, true, null]", Run("let result = toStr([1, \"hello\", true, null]);"));
+        Assert.Equal("[1, hello, true, null]", Run("let result = conv.toStr([1, \"hello\", true, null]);"));
     }
 
     // Array passed to function
@@ -1252,7 +1252,7 @@ public class InterpreterTests
     [Fact]
     public void StructToStr()
     {
-        var result = Run("struct P { x } let p = P { x: 1 }; let result = toStr(p);");
+        var result = Run("struct P { x } let p = P { x: 1 }; let result = conv.toStr(p);");
         Assert.Contains("P instance", Assert.IsType<string>(result));
     }
 
@@ -1309,13 +1309,13 @@ public class InterpreterTests
     [Fact]
     public void EnumDecl_Basic()
     {
-        Assert.Equal("Color.Red", Run("enum Color { Red, Green, Blue } let result = toStr(Color.Red);"));
+        Assert.Equal("Color.Red", Run("enum Color { Red, Green, Blue } let result = conv.toStr(Color.Red);"));
     }
 
     [Fact]
     public void EnumDecl_Assignment()
     {
-        Assert.Equal("Status.Active", Run("enum Status { Active, Inactive } let s = Status.Active; let result = toStr(s);"));
+        Assert.Equal("Status.Active", Run("enum Status { Active, Inactive } let s = Status.Active; let result = conv.toStr(s);"));
     }
 
     // Enum equality
@@ -1672,7 +1672,7 @@ public class InterpreterTests
         try
         {
             System.IO.File.WriteAllText(tmpFile, "test content");
-            var result = Run($"let result = readFile(\"{tmpFile.Replace("\\", "\\\\")}\");");
+            var result = Run($"let result = fs.readFile(\"{tmpFile.Replace("\\", "\\\\")}\");");
             Assert.Equal("test content", result);
         }
         finally
@@ -1684,13 +1684,13 @@ public class InterpreterTests
     [Fact]
     public void ReadFile_NonExistentFile_ThrowsError()
     {
-        RunExpectingError("readFile(\"/nonexistent/file/path/xyz.txt\");");
+        RunExpectingError("fs.readFile(\"/nonexistent/file/path/xyz.txt\");");
     }
 
     [Fact]
     public void ReadFile_NonStringArg_ThrowsError()
     {
-        RunExpectingError("readFile(42);");
+        RunExpectingError("fs.readFile(42);");
     }
 
     [Fact]
@@ -1699,7 +1699,7 @@ public class InterpreterTests
         string tmpFile = System.IO.Path.GetTempFileName();
         try
         {
-            Run($"writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"hello world\"); let result = 1;");
+            Run($"fs.writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"hello world\"); let result = 1;");
             Assert.Equal("hello world", System.IO.File.ReadAllText(tmpFile));
         }
         finally
@@ -1711,13 +1711,13 @@ public class InterpreterTests
     [Fact]
     public void WriteFile_NonStringPath_ThrowsError()
     {
-        RunExpectingError("writeFile(42, \"content\");");
+        RunExpectingError("fs.writeFile(42, \"content\");");
     }
 
     [Fact]
     public void WriteFile_NonStringContent_ThrowsError()
     {
-        RunExpectingError("writeFile(\"/tmp/test\", 42);");
+        RunExpectingError("fs.writeFile(\"/tmp/test\", 42);");
     }
 
     [Fact]
@@ -1726,7 +1726,7 @@ public class InterpreterTests
         string tmpFile = System.IO.Path.GetTempFileName();
         try
         {
-            var result = Run($"writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"roundtrip data\"); let result = readFile(\"{tmpFile.Replace("\\", "\\\\")}\");");
+            var result = Run($"fs.writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"roundtrip data\"); let result = fs.readFile(\"{tmpFile.Replace("\\", "\\\\")}\");");
             Assert.Equal("roundtrip data", result);
         }
         finally
@@ -1741,7 +1741,7 @@ public class InterpreterTests
     public void Env_ReadsExistingVariable()
     {
         // PATH should be set on any system
-        var result = Run("let result = env(\"PATH\");");
+        var result = Run("let result = env.get(\"PATH\");");
         Assert.IsType<string>(result);
         Assert.NotNull(result);
         Assert.True(((string)result!).Length > 0);
@@ -1750,32 +1750,32 @@ public class InterpreterTests
     [Fact]
     public void Env_NonExistentVariable_ReturnsNull()
     {
-        Assert.Null(Run("let result = env(\"STASH_NONEXISTENT_VAR_XYZ_12345\");"));
+        Assert.Null(Run("let result = env.get(\"STASH_NONEXISTENT_VAR_XYZ_12345\");"));
     }
 
     [Fact]
     public void Env_NonStringArg_ThrowsError()
     {
-        RunExpectingError("env(42);");
+        RunExpectingError("env.get(42);");
     }
 
     [Fact]
     public void SetEnv_SetsVariable()
     {
-        var result = Run("setEnv(\"STASH_TEST_VAR\", \"test_value\"); let result = env(\"STASH_TEST_VAR\");");
+        var result = Run("env.set(\"STASH_TEST_VAR\", \"test_value\"); let result = env.get(\"STASH_TEST_VAR\");");
         Assert.Equal("test_value", result);
     }
 
     [Fact]
     public void SetEnv_NonStringName_ThrowsError()
     {
-        RunExpectingError("setEnv(42, \"value\");");
+        RunExpectingError("env.set(42, \"value\");");
     }
 
     [Fact]
     public void SetEnv_NonStringValue_ThrowsError()
     {
-        RunExpectingError("setEnv(\"name\", 42);");
+        RunExpectingError("env.set(\"name\", 42);");
     }
 
     // ===== Phase 4: exit Built-in =====
@@ -1783,7 +1783,7 @@ public class InterpreterTests
     [Fact]
     public void Exit_NonIntegerArg_ThrowsError()
     {
-        RunExpectingError("exit(\"not a number\");");
+        RunExpectingError("process.exit(\"not a number\");");
     }
 
     // Note: exit(0) cannot be tested directly as it terminates the process
@@ -1799,7 +1799,7 @@ public class InterpreterTests
     [Fact]
     public void Typeof_BuiltInFunction_ReturnsFunction()
     {
-        Assert.Equal("function", Run("let result = typeof(println);"));
+        Assert.Equal("function", Run("let result = typeof(io.println);"));
     }
 
     [Fact]
@@ -1822,13 +1822,13 @@ public class InterpreterTests
     public void TryExpr_CatchesRuntimeError_ReturnsNull()
     {
         // toInt("abc") throws RuntimeError, try catches it
-        Assert.Null(Run("let result = try toInt(\"abc\");"));
+        Assert.Null(Run("let result = try conv.toInt(\"abc\");"));
     }
 
     [Fact]
     public void TryExpr_NoError_ReturnsValue()
     {
-        Assert.Equal(42L, Run("let result = try toInt(\"42\");"));
+        Assert.Equal(42L, Run("let result = try conv.toInt(\"42\");"));
     }
 
     [Fact]
@@ -1880,14 +1880,14 @@ public class InterpreterTests
     {
         // If left is not null, right should not be evaluated
         // Using a function call as right side that would fail if evaluated
-        Assert.Equal(42L, Run("let result = 42 ?? toInt(\"bad\");"));
+        Assert.Equal(42L, Run("let result = 42 ?? conv.toInt(\"bad\");"));
     }
 
     [Fact]
     public void NullCoalesce_WithTry_CombinedPattern()
     {
         // The canonical pattern: try expr ?? default
-        Assert.Equal("default", Run("let result = try toInt(\"abc\") ?? \"default\";"));
+        Assert.Equal("default", Run("let result = try conv.toInt(\"abc\") ?? \"default\";"));
     }
 
     [Fact]
@@ -1921,7 +1921,7 @@ public class InterpreterTests
     public void LastError_AfterTryCatchesError()
     {
         var source = @"
-            let x = try toInt(""abc"");
+            let x = try conv.toInt(""abc"");
             let result = lastError();
         ";
         var resultVal = Run(source);
@@ -1933,8 +1933,8 @@ public class InterpreterTests
     public void LastError_ResetBySubsequentTry()
     {
         var source = @"
-            let x = try toInt(""abc"");
-            let y = try toInt(""42"");
+            let x = try conv.toInt(""abc"");
+            let y = try conv.toInt(""42"");
             let result = lastError();
         ";
         // After successful try, lastError should still be from the failed one
@@ -2188,14 +2188,14 @@ public class InterpreterTests
     public void TryNullCoalesce_ReadFile_WithDefault()
     {
         // try readFile("nonexistent") ?? "fallback"
-        Assert.Equal("fallback", Run("let result = try readFile(\"/nonexistent/path/file.txt\") ?? \"fallback\";"));
+        Assert.Equal("fallback", Run("let result = try fs.readFile(\"/nonexistent/path/file.txt\") ?? \"fallback\";"));
     }
 
     [Fact]
     public void TryNullCoalesce_NestedCalls()
     {
         // try (try expr ?? default1) ?? default2
-        Assert.Equal(42L, Run("let result = try toInt(\"42\") ?? 0;"));
+        Assert.Equal(42L, Run("let result = try conv.toInt(\"42\") ?? 0;"));
     }
 
     // --- Increment/Decrement (++/--) Tests ---
@@ -2556,5 +2556,610 @@ public class InterpreterTests
         {
             File.Delete(modulePath);
         }
+    }
+
+    // ===== Phase 6: Namespaces =====
+
+    // -- fs namespace --
+
+    [Fact]
+    public void Fs_Exists_TrueForExistingFile()
+    {
+        string tmpFile = System.IO.Path.GetTempFileName();
+        try
+        {
+            string source = $"let result = fs.exists(\"{tmpFile.Replace("\\", "\\\\")}\");";
+            Assert.Equal(true, Run(source));
+        }
+        finally { System.IO.File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void Fs_Exists_FalseForNonExistent()
+    {
+        string source = "let result = fs.exists(\"/tmp/stash_nonexistent_file_xyz_12345\");";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void Fs_DirExists_TrueForExistingDir()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string source = $"let result = fs.dirExists(\"{tmpDir.Replace("\\", "\\\\")}\");";
+            Assert.Equal(true, Run(source));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void Fs_DirExists_FalseForNonExistent()
+    {
+        string source = "let result = fs.dirExists(\"/tmp/stash_nonexistent_dir_xyz_12345\");";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void Fs_PathExists_TrueForFile()
+    {
+        string tmpFile = System.IO.Path.GetTempFileName();
+        try
+        {
+            string source = $"let result = fs.pathExists(\"{tmpFile.Replace("\\", "\\\\")}\");";
+            Assert.Equal(true, Run(source));
+        }
+        finally { System.IO.File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void Fs_PathExists_TrueForDir()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string source = $"let result = fs.pathExists(\"{tmpDir.Replace("\\", "\\\\")}\");";
+            Assert.Equal(true, Run(source));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void Fs_PathExists_FalseForNonExistent()
+    {
+        string source = "let result = fs.pathExists(\"/tmp/stash_nonexistent_xyz_12345\");";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void Fs_WriteFile_And_ReadFile_Roundtrip()
+    {
+        string tmpFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            string source = $"fs.writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"hello world\"); let result = fs.readFile(\"{tmpFile.Replace("\\", "\\\\")}\");";
+            Assert.Equal("hello world", Run(source));
+        }
+        finally { if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void Fs_AppendFile()
+    {
+        string tmpFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            string escaped = tmpFile.Replace("\\", "\\\\");
+            string source = $"fs.writeFile(\"{escaped}\", \"hello\"); fs.appendFile(\"{escaped}\", \" world\"); let result = fs.readFile(\"{escaped}\");";
+            Assert.Equal("hello world", Run(source));
+        }
+        finally { if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void Fs_CreateDir()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        try
+        {
+            string source = $"fs.createDir(\"{tmpDir.Replace("\\", "\\\\")}\"); let result = fs.dirExists(\"{tmpDir.Replace("\\", "\\\\")}\");";
+            Assert.Equal(true, Run(source));
+        }
+        finally { if (System.IO.Directory.Exists(tmpDir)) System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void Fs_Delete_File()
+    {
+        string tmpFile = System.IO.Path.GetTempFileName();
+        string escaped = tmpFile.Replace("\\", "\\\\");
+        string source = $"fs.delete(\"{escaped}\"); let result = fs.exists(\"{escaped}\");";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void Fs_Delete_Directory()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        string escaped = tmpDir.Replace("\\", "\\\\");
+        string source = $"fs.delete(\"{escaped}\"); let result = fs.dirExists(\"{escaped}\");";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void Fs_Delete_NonExistent_Throws()
+    {
+        RunExpectingError("fs.delete(\"/tmp/stash_nonexistent_xyz_12345\");");
+    }
+
+    [Fact]
+    public void Fs_Copy()
+    {
+        string tmpFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_src_" + System.Guid.NewGuid().ToString("N") + ".txt");
+        string copyFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_dst_" + System.Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            System.IO.File.WriteAllText(tmpFile, "copy me");
+            string source = $"fs.copy(\"{tmpFile.Replace("\\", "\\\\")}\", \"{copyFile.Replace("\\", "\\\\")}\"); let result = fs.readFile(\"{copyFile.Replace("\\", "\\\\")}\");";
+            Assert.Equal("copy me", Run(source));
+        }
+        finally
+        {
+            if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile);
+            if (System.IO.File.Exists(copyFile)) System.IO.File.Delete(copyFile);
+        }
+    }
+
+    [Fact]
+    public void Fs_Move()
+    {
+        string srcFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_src_" + System.Guid.NewGuid().ToString("N") + ".txt");
+        string dstFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_dst_" + System.Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            System.IO.File.WriteAllText(srcFile, "move me");
+            string srcEsc = srcFile.Replace("\\", "\\\\");
+            string dstEsc = dstFile.Replace("\\", "\\\\");
+            string source = $"fs.move(\"{srcEsc}\", \"{dstEsc}\"); let result = fs.readFile(\"{dstEsc}\");";
+            Assert.Equal("move me", Run(source));
+            Assert.False(System.IO.File.Exists(srcFile));
+        }
+        finally
+        {
+            if (System.IO.File.Exists(srcFile)) System.IO.File.Delete(srcFile);
+            if (System.IO.File.Exists(dstFile)) System.IO.File.Delete(dstFile);
+        }
+    }
+
+    [Fact]
+    public void Fs_Size()
+    {
+        string tmpFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N") + ".txt");
+        try
+        {
+            System.IO.File.WriteAllText(tmpFile, "12345");
+            string source = $"let result = fs.size(\"{tmpFile.Replace("\\", "\\\\")}\");";
+            Assert.Equal(5L, Run(source));
+        }
+        finally { if (System.IO.File.Exists(tmpFile)) System.IO.File.Delete(tmpFile); }
+    }
+
+    [Fact]
+    public void Fs_ListDir()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "a.txt"), "");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "b.txt"), "");
+            string source = $"let result = len(fs.listDir(\"{tmpDir.Replace("\\", "\\\\")}\"));";
+            Assert.Equal(2L, Run(source));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void Fs_ReadFile_NonExistent_Throws()
+    {
+        RunExpectingError("fs.readFile(\"/tmp/stash_nonexistent_xyz_12345\");");
+    }
+
+    [Fact]
+    public void Fs_ReadFile_NonStringArg_Throws()
+    {
+        RunExpectingError("let result = fs.readFile(42);");
+    }
+
+    // -- path namespace --
+
+    [Fact]
+    public void Path_Dir()
+    {
+        string source = "let result = path.dir(\"/home/user/file.txt\");";
+        Assert.Equal("/home/user", Run(source));
+    }
+
+    [Fact]
+    public void Path_Base()
+    {
+        string source = "let result = path.base(\"/home/user/file.txt\");";
+        Assert.Equal("file.txt", Run(source));
+    }
+
+    [Fact]
+    public void Path_Ext()
+    {
+        string source = "let result = path.ext(\"/home/user/file.txt\");";
+        Assert.Equal(".txt", Run(source));
+    }
+
+    [Fact]
+    public void Path_Name()
+    {
+        string source = "let result = path.name(\"/home/user/file.txt\");";
+        Assert.Equal("file", Run(source));
+    }
+
+    [Fact]
+    public void Path_Join()
+    {
+        string source = "let result = path.join(\"/home/user\", \"file.txt\");";
+        Assert.Equal(System.IO.Path.Combine("/home/user", "file.txt"), Run(source));
+    }
+
+    [Fact]
+    public void Path_Abs()
+    {
+        string source = "let result = path.abs(\".\");";
+        var absResult = Run(source);
+        Assert.IsType<string>(absResult);
+        Assert.True(((string)absResult!).Length > 1);
+    }
+
+    // -- Namespace general behavior --
+
+    [Fact]
+    public void Namespace_Typeof_ReturnsNamespace()
+    {
+        string source = "let result = typeof(fs);";
+        Assert.Equal("namespace", Run(source));
+    }
+
+    [Fact]
+    public void Namespace_Typeof_PathNamespace()
+    {
+        string source = "let result = typeof(path);";
+        Assert.Equal("namespace", Run(source));
+    }
+
+    [Fact]
+    public void Namespace_AssignToMember_Throws()
+    {
+        RunExpectingError("fs.exists = 42;");
+    }
+
+    [Fact]
+    public void Namespace_NonExistentMember_Throws()
+    {
+        RunExpectingError("let result = fs.nonExistentFunction();");
+    }
+
+    // -- import-as --
+
+    [Fact]
+    public void ImportAs_FunctionAccess()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "math.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"math.stash\" as math; let result = math.add(3, 4);";
+
+            Assert.Equal(7L, RunWithFile(source, mainPath));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_ConstantAccess()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "config.stash");
+            System.IO.File.WriteAllText(modulePath, "const MAX = 100;");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"config.stash\" as cfg; let result = cfg.MAX;";
+
+            Assert.Equal(100L, RunWithFile(source, mainPath));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_EnumAccess()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "colors.stash");
+            System.IO.File.WriteAllText(modulePath, "enum Color { Red, Green, Blue }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"colors.stash\" as colors; let result = colors.Color.Red == colors.Color.Red;";
+
+            Assert.Equal(true, RunWithFile(source, mainPath));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_StructAccess()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "types.stash");
+            System.IO.File.WriteAllText(modulePath, "struct Point { x, y }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"types.stash\" as t; let p = t.Point { x: 10, y: 20 }; let result = p.x;";
+
+            Assert.Equal(10L, RunWithFile(source, mainPath));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_MultipleFunctions()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "utils.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; } fn mul(a, b) { return a * b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"utils.stash\" as u; let result = u.add(2, 3) + u.mul(4, 5);";
+
+            Assert.Equal(25L, RunWithFile(source, mainPath));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_TypeofReturnsNamespace()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "mod.stash");
+            System.IO.File.WriteAllText(modulePath, "fn foo() { return 1; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"mod.stash\" as m; let result = typeof(m);";
+
+            Assert.Equal("namespace", RunWithFile(source, mainPath));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_AssignToNamespaceMember_Throws()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "mod.stash");
+            System.IO.File.WriteAllText(modulePath, "let x = 1;");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"mod.stash\" as m; m.x = 42;";
+
+            var lexer = new Lexer(source, mainPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            var interpreter = new Interpreter();
+            interpreter.CurrentFile = mainPath;
+            Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_NonExistentModule_Throws()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"nonexistent.stash\" as m;";
+
+            var lexer = new Lexer(source, mainPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            var interpreter = new Interpreter();
+            interpreter.CurrentFile = mainPath;
+            Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    [Fact]
+    public void ImportAs_NonExistentMemberAccess_Throws()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "mod.stash");
+            System.IO.File.WriteAllText(modulePath, "fn foo() { return 1; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import \"mod.stash\" as m; let result = m.bar();";
+
+            var lexer = new Lexer(source, mainPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            var interpreter = new Interpreter();
+            interpreter.CurrentFile = mainPath;
+            Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        }
+        finally { System.IO.Directory.Delete(tmpDir, true); }
+    }
+
+    // -- io, conv, env, process namespaces --
+
+    [Fact]
+    public void IoNamespace_Typeof()
+    {
+        Assert.Equal("namespace", Run("let result = typeof(io);"));
+    }
+
+    [Fact]
+    public void ConvNamespace_Typeof()
+    {
+        Assert.Equal("namespace", Run("let result = typeof(conv);"));
+    }
+
+    [Fact]
+    public void EnvNamespace_Typeof()
+    {
+        Assert.Equal("namespace", Run("let result = typeof(env);"));
+    }
+
+    [Fact]
+    public void ProcessNamespace_Typeof()
+    {
+        Assert.Equal("namespace", Run("let result = typeof(process);"));
+    }
+
+    [Fact]
+    public void ConvNamespace_ToStr_Int()
+    {
+        Assert.Equal("42", Run("let result = conv.toStr(42);"));
+    }
+
+    [Fact]
+    public void ConvNamespace_ToStr_Null()
+    {
+        Assert.Equal("null", Run("let result = conv.toStr(null);"));
+    }
+
+    [Fact]
+    public void ConvNamespace_ToInt_String()
+    {
+        Assert.Equal(42L, Run("let result = conv.toInt(\"42\");"));
+    }
+
+    [Fact]
+    public void ConvNamespace_ToInt_Float()
+    {
+        Assert.Equal(3L, Run("let result = conv.toInt(3.7);"));
+    }
+
+    [Fact]
+    public void ConvNamespace_ToInt_InvalidString_Throws()
+    {
+        RunExpectingError("let result = conv.toInt(\"abc\");");
+    }
+
+    [Fact]
+    public void ConvNamespace_ToFloat_Int()
+    {
+        Assert.Equal(42.0, Run("let result = conv.toFloat(42);"));
+    }
+
+    [Fact]
+    public void ConvNamespace_ToFloat_String()
+    {
+        Assert.Equal(3.14, Run("let result = conv.toFloat(\"3.14\");"));
+    }
+
+    [Fact]
+    public void EnvNamespace_Get_ExistingVar()
+    {
+        var result = Run("let result = env.get(\"PATH\");");
+        Assert.NotNull(result);
+        Assert.IsType<string>(result);
+    }
+
+    [Fact]
+    public void EnvNamespace_Get_NonExistent()
+    {
+        Assert.Null(Run("let result = env.get(\"STASH_NONEXISTENT_VAR_XYZ_12345\");"));
+    }
+
+    [Fact]
+    public void EnvNamespace_Get_NonStringArg_Throws()
+    {
+        RunExpectingError("env.get(42);");
+    }
+
+    [Fact]
+    public void EnvNamespace_Set_And_Get()
+    {
+        Assert.Equal("test_value", Run("env.set(\"STASH_TEST_NS_VAR\", \"test_value\"); let result = env.get(\"STASH_TEST_NS_VAR\");"));
+    }
+
+    [Fact]
+    public void EnvNamespace_Set_NonStringName_Throws()
+    {
+        RunExpectingError("env.set(42, \"value\");");
+    }
+
+    [Fact]
+    public void EnvNamespace_Set_NonStringValue_Throws()
+    {
+        RunExpectingError("env.set(\"name\", 42);");
+    }
+
+    [Fact]
+    public void ProcessNamespace_Exit_NonInteger_Throws()
+    {
+        RunExpectingError("process.exit(\"not a number\");");
+    }
+
+    [Fact]
+    public void Namespace_AssignToIoMember_Throws()
+    {
+        RunExpectingError("io.println = 42;");
+    }
+
+    [Fact]
+    public void Namespace_AssignToConvMember_Throws()
+    {
+        RunExpectingError("conv.toStr = 42;");
+    }
+
+    [Fact]
+    public void Namespace_NonExistentMember_OnIo_Throws()
+    {
+        RunExpectingError("let result = io.missing();");
+    }
+
+    [Fact]
+    public void Namespace_NonExistentMember_OnConv_Throws()
+    {
+        RunExpectingError("let result = conv.missing();");
     }
 }

@@ -1370,4 +1370,33 @@ public class ParserTests
         var parser = ParseProgramWithParser("let from = 42;");
         Assert.NotEmpty(parser.Errors);
     }
+
+    // ===== Namespace: import-as =====
+
+    [Fact]
+    public void Parse_ImportAs_Basic()
+    {
+        var stmts = ParseProgram("import \"utils.stash\" as utils;");
+        var importAs = Assert.IsType<ImportAsStmt>(Assert.Single(stmts));
+        Assert.Equal("utils.stash", importAs.Path.Literal);
+        Assert.Equal("utils", importAs.Alias.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_ImportAs_WithOtherStatements()
+    {
+        var stmts = ParseProgram("import \"lib.stash\" as lib; let x = 1;");
+        Assert.Equal(2, stmts.Count);
+        Assert.IsType<ImportAsStmt>(stmts[0]);
+        Assert.IsType<VarDeclStmt>(stmts[1]);
+    }
+
+    [Fact]
+    public void Parse_ImportAs_CoexistsWithNamedImport()
+    {
+        var stmts = ParseProgram("import \"a.stash\" as a; import { foo } from \"b.stash\";");
+        Assert.Equal(2, stmts.Count);
+        Assert.IsType<ImportAsStmt>(stmts[0]);
+        Assert.IsType<ImportStmt>(stmts[1]);
+    }
 }

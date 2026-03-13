@@ -838,4 +838,13 @@ public class LexerTests
         Assert.Single(parts);
         Assert.Equal("echo ')'", parts[0]);
     }
+
+    [Fact]
+    public void ScanTokens_AsKeyword_ProducesAsToken()
+    {
+        var tokens = Scan("as");
+        Assert.Equal(2, tokens.Count); // As + EOF
+        Assert.Equal(TokenType.As, tokens[0].Type);
+        Assert.Equal("as", tokens[0].Lexeme);
+    }
 }

@@ -70,6 +70,7 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
         Analysis.SymbolKind.Field => LspSymbolKind.Field,
         Analysis.SymbolKind.Parameter => LspSymbolKind.Variable,
         Analysis.SymbolKind.LoopVariable => LspSymbolKind.Variable,
+        Analysis.SymbolKind.Namespace => LspSymbolKind.Namespace,
         _ => LspSymbolKind.Variable
     };
 }

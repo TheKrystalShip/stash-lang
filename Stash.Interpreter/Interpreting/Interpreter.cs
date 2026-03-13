@@ -522,6 +522,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             return enumType.ToString();
         }
 
+        if (value is StashNamespace ns)
+        {
+            return ns.ToString();
+        }
+
         if (value is List<object?> list)
         {
             var elements = new System.Text.StringBuilder("[");
@@ -1042,6 +1047,33 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             _environment.Define(name.Lexeme, value);
         }
 
+        return null;
+    }
+
+    public object? VisitImportAsStmt(ImportAsStmt stmt)
+    {
+        string modulePath = (string)stmt.Path.Literal!;
+        string resolvedPath = ResolveModulePath(modulePath, stmt.Path.Span);
+
+        // Check for circular imports
+        if (_importStack.Contains(resolvedPath))
+        {
+            throw new RuntimeError(
+                $"Circular import detected: '{modulePath}' is already being imported.",
+                stmt.Span);
+        }
+
+        // Get or load the module
+        Environment moduleEnv = LoadModule(resolvedPath, stmt.Path.Span);
+
+        // Wrap all module-level bindings in a namespace
+        var ns = new StashNamespace(stmt.Alias.Lexeme);
+        foreach (var (name, value) in moduleEnv.GetAllBindings())
+        {
+            ns.Define(name, value);
+        }
+
+        _environment.Define(stmt.Alias.Lexeme, ns);
         return null;
     }
 
@@ -1838,7 +1870,9 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
-        object? structDef = _environment.Get(expr.Name.Lexeme, expr.Span);
+        object? structDef = expr.Target is not null
+            ? expr.Target.Accept(this)
+            : _environment.Get(expr.Name.Lexeme, expr.Span);
 
         if (structDef is not StashStruct template)
         {
@@ -1893,12 +1927,22 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             return value;
         }
 
-        throw new RuntimeError("Only struct instances and enums have members.", expr.Name.Span);
+        if (obj is StashNamespace ns)
+        {
+            return ns.GetMember(expr.Name.Lexeme, expr.Name.Span);
+        }
+
+        throw new RuntimeError("Only struct instances, enums, and namespaces have members.", expr.Name.Span);
     }
 
     public object? VisitDotAssignExpr(DotAssignExpr expr)
     {
         object? obj = expr.Object.Accept(this);
+
+        if (obj is StashNamespace)
+        {
+            throw new RuntimeError("Cannot assign to namespace members.", expr.Name.Span);
+        }
 
         if (obj is not StashInstance instance)
         {
@@ -2138,18 +2182,6 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private void DefineBuiltIns()
     {
-        _globals.Define("println", new BuiltInFunction("println", 1, (_, args) =>
-        {
-            Console.WriteLine(Stringify(args[0]));
-            return null;
-        }));
-
-        _globals.Define("print", new BuiltInFunction("print", 1, (_, args) =>
-        {
-            Console.Write(Stringify(args[0]));
-            return null;
-        }));
-
         _globals.Define("typeof", new BuiltInFunction("typeof", 1, (_, args) =>
         {
             object? val = args[0];
@@ -2203,6 +2235,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 return "enum";
             }
 
+            if (val is StashNamespace)
+            {
+                return "namespace";
+            }
+
             if (val is IStashCallable)
             {
                 return "function";
@@ -2227,12 +2264,54 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             throw new RuntimeError("Argument to 'len' must be a string or array.");
         }));
 
-        _globals.Define("toStr", new BuiltInFunction("toStr", 1, (_, args) =>
+        _globals.Define("lastError", new BuiltInFunction("lastError", 0, (interpreter, args) =>
+        {
+            return interpreter._lastError;
+        }));
+
+        // Built-in structs for argument parsing
+        _globals.Define("ArgTree", new StashStruct("ArgTree", new List<string>
+        {
+            "name", "version", "description", "flags", "options", "commands", "positionals"
+        }));
+
+        _globals.Define("ArgDef", new StashStruct("ArgDef", new List<string>
+        {
+            "name", "short", "type", "default", "description", "required", "args"
+        }));
+
+        // parseArgs built-in function
+        _globals.Define("parseArgs", new BuiltInFunction("parseArgs", 1, (interpreter, fnArgs) =>
+        {
+            return interpreter.ExecuteParseArgs(fnArgs[0]);
+        }));
+
+        // ── io namespace ─────────────────────────────────────────────────
+        var io = new StashNamespace("io");
+
+        io.Define("println", new BuiltInFunction("io.println", 1, (_, args) =>
+        {
+            Console.WriteLine(Stringify(args[0]));
+            return null;
+        }));
+
+        io.Define("print", new BuiltInFunction("io.print", 1, (_, args) =>
+        {
+            Console.Write(Stringify(args[0]));
+            return null;
+        }));
+
+        _globals.Define("io", io);
+
+        // ── conv namespace ───────────────────────────────────────────────
+        var conv = new StashNamespace("conv");
+
+        conv.Define("toStr", new BuiltInFunction("conv.toStr", 1, (_, args) =>
         {
             return Stringify(args[0]);
         }));
 
-        _globals.Define("toInt", new BuiltInFunction("toInt", 1, (_, args) =>
+        conv.Define("toInt", new BuiltInFunction("conv.toInt", 1, (_, args) =>
         {
             object? val = args[0];
             if (val is long l)
@@ -2254,10 +2333,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
                 throw new RuntimeError($"Cannot parse '{s}' as integer.");
             }
-            throw new RuntimeError("Argument to 'toInt' must be a number or string.");
+            throw new RuntimeError("Argument to 'conv.toInt' must be a number or string.");
         }));
 
-        _globals.Define("toFloat", new BuiltInFunction("toFloat", 1, (_, args) =>
+        conv.Define("toFloat", new BuiltInFunction("conv.toFloat", 1, (_, args) =>
         {
             object? val = args[0];
             if (val is double d)
@@ -2280,108 +2359,233 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
                 throw new RuntimeError($"Cannot parse '{s}' as float.");
             }
-            throw new RuntimeError("Argument to 'toFloat' must be a number or string.");
+            throw new RuntimeError("Argument to 'conv.toFloat' must be a number or string.");
         }));
 
-        _globals.Define("readFile", new BuiltInFunction("readFile", 1, (_, args) =>
-        {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'readFile' must be a string.");
-            }
+        _globals.Define("conv", conv);
 
-            try
-            {
-                return System.IO.File.ReadAllText(path);
-            }
-            catch (System.IO.IOException e)
-            {
-                throw new RuntimeError($"Cannot read file '{path}': {e.Message}");
-            }
-        }));
+        // ── env namespace ────────────────────────────────────────────────
+        var envNs = new StashNamespace("env");
 
-        _globals.Define("writeFile", new BuiltInFunction("writeFile", 2, (_, args) =>
-        {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("First argument to 'writeFile' must be a string.");
-            }
-
-            if (args[1] is not string content)
-            {
-                throw new RuntimeError("Second argument to 'writeFile' must be a string.");
-            }
-
-            try
-            {
-                System.IO.File.WriteAllText(path, content);
-            }
-            catch (System.IO.IOException e)
-            {
-                throw new RuntimeError($"Cannot write file '{path}': {e.Message}");
-            }
-
-            return null;
-        }));
-
-        _globals.Define("exit", new BuiltInFunction("exit", 1, (_, args) =>
-        {
-            if (args[0] is not long code)
-            {
-                throw new RuntimeError("Argument to 'exit' must be an integer.");
-            }
-
-            System.Environment.Exit((int)code);
-            return null;
-        }));
-
-        _globals.Define("env", new BuiltInFunction("env", 1, (_, args) =>
+        envNs.Define("get", new BuiltInFunction("env.get", 1, (_, args) =>
         {
             if (args[0] is not string name)
             {
-                throw new RuntimeError("Argument to 'env' must be a string.");
+                throw new RuntimeError("Argument to 'env.get' must be a string.");
             }
 
             return System.Environment.GetEnvironmentVariable(name);
         }));
 
-        _globals.Define("setEnv", new BuiltInFunction("setEnv", 2, (_, args) =>
+        envNs.Define("set", new BuiltInFunction("env.set", 2, (_, args) =>
         {
             if (args[0] is not string name)
             {
-                throw new RuntimeError("First argument to 'setEnv' must be a string.");
+                throw new RuntimeError("First argument to 'env.set' must be a string.");
             }
 
             if (args[1] is not string value)
             {
-                throw new RuntimeError("Second argument to 'setEnv' must be a string.");
+                throw new RuntimeError("Second argument to 'env.set' must be a string.");
             }
 
             System.Environment.SetEnvironmentVariable(name, value);
             return null;
         }));
 
-        _globals.Define("lastError", new BuiltInFunction("lastError", 0, (interpreter, args) =>
+        _globals.Define("env", envNs);
+
+        // ── process namespace ────────────────────────────────────────────
+        var process = new StashNamespace("process");
+
+        process.Define("exit", new BuiltInFunction("process.exit", 1, (_, args) =>
         {
-            return interpreter._lastError;
+            if (args[0] is not long code)
+            {
+                throw new RuntimeError("Argument to 'process.exit' must be an integer.");
+            }
+
+            System.Environment.Exit((int)code);
+            return null;
         }));
 
-        // Built-in structs for argument parsing
-        _globals.Define("ArgTree", new StashStruct("ArgTree", new List<string>
+        _globals.Define("process", process);
+
+        // ── fs namespace ─────────────────────────────────────────────────
+        var fs = new StashNamespace("fs");
+
+        fs.Define("readFile", new BuiltInFunction("fs.readFile", 1, (_, args) =>
         {
-            "name", "version", "description", "flags", "options", "commands", "positionals"
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.readFile' must be a string.");
+            try { return System.IO.File.ReadAllText(path); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
         }));
 
-        _globals.Define("ArgDef", new StashStruct("ArgDef", new List<string>
+        fs.Define("writeFile", new BuiltInFunction("fs.writeFile", 2, (_, args) =>
         {
-            "name", "short", "type", "default", "description", "required", "args"
+            if (args[0] is not string path)
+                throw new RuntimeError("First argument to 'fs.writeFile' must be a string.");
+            if (args[1] is not string content)
+                throw new RuntimeError("Second argument to 'fs.writeFile' must be a string.");
+            try { System.IO.File.WriteAllText(path, content); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot write file '{path}': {e.Message}"); }
+            return null;
         }));
 
-        // parseArgs built-in function
-        _globals.Define("parseArgs", new BuiltInFunction("parseArgs", 1, (interpreter, fnArgs) =>
+        fs.Define("exists", new BuiltInFunction("fs.exists", 1, (_, args) =>
         {
-            return interpreter.ExecuteParseArgs(fnArgs[0]);
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.exists' must be a string.");
+            return System.IO.File.Exists(path);
         }));
+
+        fs.Define("dirExists", new BuiltInFunction("fs.dirExists", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.dirExists' must be a string.");
+            return System.IO.Directory.Exists(path);
+        }));
+
+        fs.Define("pathExists", new BuiltInFunction("fs.pathExists", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.pathExists' must be a string.");
+            return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
+        }));
+
+        fs.Define("createDir", new BuiltInFunction("fs.createDir", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.createDir' must be a string.");
+            try { System.IO.Directory.CreateDirectory(path); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create directory '{path}': {e.Message}"); }
+            return null;
+        }));
+
+        fs.Define("delete", new BuiltInFunction("fs.delete", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.delete' must be a string.");
+            try
+            {
+                if (System.IO.File.Exists(path))
+                    System.IO.File.Delete(path);
+                else if (System.IO.Directory.Exists(path))
+                    System.IO.Directory.Delete(path, true);
+                else
+                    throw new RuntimeError($"Path does not exist: '{path}'.");
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot delete '{path}': {e.Message}"); }
+            return null;
+        }));
+
+        fs.Define("copy", new BuiltInFunction("fs.copy", 2, (_, args) =>
+        {
+            if (args[0] is not string src)
+                throw new RuntimeError("First argument to 'fs.copy' must be a string.");
+            if (args[1] is not string dst)
+                throw new RuntimeError("Second argument to 'fs.copy' must be a string.");
+            try { System.IO.File.Copy(src, dst, overwrite: true); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot copy '{src}' to '{dst}': {e.Message}"); }
+            return null;
+        }));
+
+        fs.Define("move", new BuiltInFunction("fs.move", 2, (_, args) =>
+        {
+            if (args[0] is not string src)
+                throw new RuntimeError("First argument to 'fs.move' must be a string.");
+            if (args[1] is not string dst)
+                throw new RuntimeError("Second argument to 'fs.move' must be a string.");
+            try { System.IO.File.Move(src, dst, overwrite: true); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot move '{src}' to '{dst}': {e.Message}"); }
+            return null;
+        }));
+
+        fs.Define("size", new BuiltInFunction("fs.size", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.size' must be a string.");
+            try { return new System.IO.FileInfo(path).Length; }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}"); }
+        }));
+
+        fs.Define("listDir", new BuiltInFunction("fs.listDir", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.listDir' must be a string.");
+            try
+            {
+                var entries = System.IO.Directory.GetFileSystemEntries(path);
+                var result = new List<object?>();
+                foreach (var entry in entries)
+                    result.Add(entry);
+                return result;
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot list directory '{path}': {e.Message}"); }
+        }));
+
+        fs.Define("appendFile", new BuiltInFunction("fs.appendFile", 2, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("First argument to 'fs.appendFile' must be a string.");
+            if (args[1] is not string content)
+                throw new RuntimeError("Second argument to 'fs.appendFile' must be a string.");
+            try { System.IO.File.AppendAllText(path, content); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot append to file '{path}': {e.Message}"); }
+            return null;
+        }));
+
+        _globals.Define("fs", fs);
+
+        // ── path namespace ───────────────────────────────────────────────
+        var pathNs = new StashNamespace("path");
+
+        pathNs.Define("abs", new BuiltInFunction("path.abs", 1, (_, args) =>
+        {
+            if (args[0] is not string p)
+                throw new RuntimeError("Argument to 'path.abs' must be a string.");
+            return System.IO.Path.GetFullPath(p);
+        }));
+
+        pathNs.Define("dir", new BuiltInFunction("path.dir", 1, (_, args) =>
+        {
+            if (args[0] is not string p)
+                throw new RuntimeError("Argument to 'path.dir' must be a string.");
+            return System.IO.Path.GetDirectoryName(p) ?? "";
+        }));
+
+        pathNs.Define("base", new BuiltInFunction("path.base", 1, (_, args) =>
+        {
+            if (args[0] is not string p)
+                throw new RuntimeError("Argument to 'path.base' must be a string.");
+            return System.IO.Path.GetFileName(p);
+        }));
+
+        pathNs.Define("ext", new BuiltInFunction("path.ext", 1, (_, args) =>
+        {
+            if (args[0] is not string p)
+                throw new RuntimeError("Argument to 'path.ext' must be a string.");
+            return System.IO.Path.GetExtension(p);
+        }));
+
+        pathNs.Define("join", new BuiltInFunction("path.join", 2, (_, args) =>
+        {
+            if (args[0] is not string a)
+                throw new RuntimeError("First argument to 'path.join' must be a string.");
+            if (args[1] is not string b)
+                throw new RuntimeError("Second argument to 'path.join' must be a string.");
+            return System.IO.Path.Combine(a, b);
+        }));
+
+        pathNs.Define("name", new BuiltInFunction("path.name", 1, (_, args) =>
+        {
+            if (args[0] is not string p)
+                throw new RuntimeError("Argument to 'path.name' must be a string.");
+            return System.IO.Path.GetFileNameWithoutExtension(p);
+        }));
+
+        _globals.Define("path", pathNs);
     }
 
     private class BuiltInFunction : IStashCallable

@@ -3,7 +3,7 @@
 // Deployment script
 // Deploys an application to a set of target hosts
 
-import { LogLevel, log, banner } from "lib/utils.stash";
+import "lib/utils.stash" as utils;
 
 enum DeployResult {
     Success,
@@ -25,32 +25,32 @@ fn check_host(host) {
 }
 
 fn deploy_to(target, package) {
-    log(LogLevel.Info, $"Deploying {package} to {target.user}@{target.host}:{target.path}");
+    utils.log(utils.LogLevel.Info, $"Deploying {package} to {target.user}@{target.host}:{target.path}");
 
     // Check connectivity first
     if (!check_host(target.host)) {
-        log(LogLevel.Error, $"Host {target.host} is unreachable");
+        utils.log(utils.LogLevel.Error, $"Host {target.host} is unreachable");
         return DeployResult.Failed;
     }
 
     // Retry loop
     let attempt = 1;
     while (attempt <= MAX_RETRIES) {
-        log(LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
+        utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
 
         // Simulate deployment (would use scp in real usage)
         let result = $(echo "deploying {package} to {target.host}");
 
         if (result.exitCode == 0) {
-            log(LogLevel.Info, $"  Success on attempt {attempt}");
+            utils.log(utils.LogLevel.Info, $"  Success on attempt {attempt}");
             return DeployResult.Success;
         }
 
-        log(LogLevel.Warn, $"  Attempt {attempt} failed: {result.stderr}");
+        utils.log(utils.LogLevel.Warn, $"  Attempt {attempt} failed: {result.stderr}");
         attempt++;
     }
 
-    log(LogLevel.Error, $"  All {MAX_RETRIES} attempts failed for {target.host}");
+    utils.log(utils.LogLevel.Error, $"  All {MAX_RETRIES} attempts failed for {target.host}");
     return DeployResult.Failed;
 }
 
@@ -58,8 +58,8 @@ fn deploy_to(target, package) {
 
 let package = "app-v2.1.0.tar.gz";
 
-banner("Deployment Start");
-println("");
+utils.banner("Deployment Start");
+io.println("");
 
 let targets = [
     Target { host: "127.0.0.1", user: "deploy", path: "/opt/app" },
@@ -80,14 +80,14 @@ for (let target in targets) {
     }
 }
 
-println("");
-banner("Deployment Complete");
-println("");
-println($"  Succeeded: {successes}");
-println($"  Failed:    {failures}");
-println($"  Total:     {len(targets)}");
+io.println("");
+utils.banner("Deployment Complete");
+io.println("");
+io.println($"  Succeeded: {successes}");
+io.println($"  Failed:    {failures}");
+io.println($"  Total:     {len(targets)}");
 
 if (failures > 0) {
-    log(LogLevel.Warn, "Some deployments failed — check logs above");
-    exit(1);
+    utils.log(utils.LogLevel.Error, "Some deployments failed — check logs above");
+    process.exit(1);
 }

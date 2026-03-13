@@ -22,21 +22,21 @@ fn fibonacci(n) {
     return fibonacci(n - 1) + fibonacci(n - 2);
 }
 
-println("=== Recursion ===");
-println($"  factorial(5) = {factorial(5)}");
-println($"  factorial(10) = {factorial(10)}");
+io.println("=== Recursion ===");
+io.println($"  factorial(5) = {factorial(5)}");
+io.println($"  factorial(10) = {factorial(10)}");
 
-print("  fibonacci(0..10) = ");
+io.print("  fibonacci(0..10) = ");
 let i = 0;
 while (i <= 10) {
-    print($"{fibonacci(i)}");
+    io.print($"{fibonacci(i)}");
     if (i < 10) {
-        print(", ");
+        io.print(", ");
     }
     i++;
 }
-println("");
-println("");
+io.println("");
+io.println("");
 
 // --- Sorting (bubble sort, shows >, >=, binary subtraction) ---
 
@@ -62,23 +62,23 @@ fn bubble_sort(arr) {
     return arr;
 }
 
-println("=== Bubble Sort ===");
+io.println("=== Bubble Sort ===");
 let nums = [64, 34, 25, 12, 22, 11, 90];
 
-print("  Before: ");
+io.print("  Before: ");
 for (let n in nums) {
-    print($"{n} ");
+    io.print($"{n} ");
 }
-println("");
+io.println("");
 
 bubble_sort(nums);
 
-print("  After:  ");
+io.print("  After:  ");
 for (let n in nums) {
-    print($"{n} ");
+    io.print($"{n} ");
 }
-println("");
-println("");
+io.println("");
+io.println("");
 
 // --- Max/Min with >= ---
 
@@ -108,16 +108,16 @@ fn find_min(arr) {
 
 let sorted = [11, 12, 22, 25, 34, 64, 90];
 let range = find_max(sorted) - find_min(sorted);
-println("=== Array Stats ===");
-println($"  Min:   {find_min(sorted)}");
-println($"  Max:   {find_max(sorted)}");
-println($"  Range: {range}");
-println("");
+io.println("=== Array Stats ===");
+io.println($"  Min:   {find_min(sorted)}");
+io.println($"  Max:   {find_max(sorted)}");
+io.println($"  Range: {range}");
+io.println("");
 
 // --- Pipes (Stash pipe operator) ---
 
-println("=== Pipes ===");
+io.println("=== Pipes ===");
 let result = $(echo "hello world stash language") | $(tr " " "\n") | $(sort);
-println($"  Pipe result ({typeof(result)}):");
-println($"  stdout: {result.stdout}");
-println($"  exit code: {result.exitCode}");
+io.println($"  Pipe result ({typeof(result)}):");
+io.println($"  stdout: {result.stdout}");
+io.println($"  exit code: {result.exitCode}");

@@ -5,16 +5,16 @@ let localAddress = "192.168.1.127";
 
 let servers = [ DEFAULT_ADDRESS, localAddress ];
 
-fn ping_address(address) {
+fn pingAddress(address) {
   let result = $(ping -c 1 {address});
 
-  println($"Exit code for ping at address {address}: {result.exitCode}");
+  io.println($"Exit code for ping at address {address}: {result.exitCode}");
 
   if (result.exitCode != 0) {
-    println(result.stderr);
+    io.println(result.stderr);
   }
 }
 
 for (let address in servers) {
-  ping_address(address);
+  pingAddress(address);
 }

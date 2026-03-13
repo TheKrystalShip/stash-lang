@@ -12,24 +12,24 @@ struct Config {
 }
 
 fn env_or(name, fallback) {
-    return env(name) ?? fallback;
+    return env.get(name) ?? fallback;
 }
 
 fn env_int(name, fallback) {
-    let raw = env(name);
+    let raw = env.get(name);
     if (raw == null) {
         return fallback;
     }
-    let parsed = try toInt(raw);
+    let parsed = try conv.toInt(raw);
     if (parsed == null) {
-        println($"Warning: {name}='{raw}' is not a valid integer, using default {fallback}");
+        io.println($"Warning: {name}='{raw}' is not a valid integer, using default {fallback}");
         return fallback;
     }
     return parsed;
 }
 
 fn env_bool(name, fallback) {
-    let raw = env(name);
+    let raw = env.get(name);
     if (raw == null) {
         return fallback;
     }
@@ -37,11 +37,11 @@ fn env_bool(name, fallback) {
 }
 
 fn env_float(name, fallback) {
-    let raw = env(name);
+    let raw = env.get(name);
     if (raw == null) {
         return fallback;
     }
-    let parsed = try toFloat(raw);
+    let parsed = try conv.toFloat(raw);
     return parsed ?? fallback;
 }
 
@@ -56,42 +56,42 @@ fn load_config() {
 }
 
 fn print_config(config) {
-    println("=== Application Configuration ===");
-    println($"  App Name:    {config.app_name}");
-    println($"  Port:        {config.port}");
-    println($"  Debug:       {config.debug}");
-    println($"  Max Retries: {config.max_retries}");
-    println($"  Timeout:     {config.timeout}s");
-    println("");
+    io.println("=== Application Configuration ===");
+    io.println($"  App Name:    {config.app_name}");
+    io.println($"  Port:        {config.port}");
+    io.println($"  Debug:       {config.debug}");
+    io.println($"  Max Retries: {config.max_retries}");
+    io.println($"  Timeout:     {config.timeout}s");
+    io.println("");
 }
 
 fn describe_value(value) {
     let type = typeof(value);
-    let str = toStr(value);
+    let str = conv.toStr(value);
     return $"{str} ({type})";
 }
 
 // --- Main ---
 
 // Show defaults
-println("Loading configuration from environment...");
-println("");
+io.println("Loading configuration from environment...");
+io.println("");
 
 let config = load_config();
 print_config(config);
 
 // Demonstrate environment variable manipulation
-println("Setting APP_PORT=3000 and APP_DEBUG=true...");
-setEnv("APP_PORT", "3000");
-setEnv("APP_DEBUG", "true");
+io.println("Setting APP_PORT=3000 and APP_DEBUG=true...");
+env.set("APP_PORT", "3000");
+env.set("APP_DEBUG", "true");
 
 let updated = load_config();
 print_config(updated);
 
 // Show type information
-println("=== Type Inspection ===");
-println($"  app_name:    {describe_value(updated.app_name)}");
-println($"  port:        {describe_value(updated.port)}");
-println($"  debug:       {describe_value(updated.debug)}");
-println($"  max_retries: {describe_value(updated.max_retries)}");
-println($"  timeout:     {describe_value(updated.timeout)}");
+io.println("=== Type Inspection ===");
+io.println($"  app_name:    {describe_value(updated.app_name)}");
+io.println($"  port:        {describe_value(updated.port)}");
+io.println($"  debug:       {describe_value(updated.debug)}");
+io.println($"  max_retries: {describe_value(updated.max_retries)}");
+io.println($"  timeout:     {describe_value(updated.timeout)}");

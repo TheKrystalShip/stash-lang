@@ -12,7 +12,8 @@ public enum SymbolKind
     Enum,
     EnumMember,
     Field,
-    LoopVariable
+    LoopVariable,
+    Namespace
 }
 
 public class SymbolInfo

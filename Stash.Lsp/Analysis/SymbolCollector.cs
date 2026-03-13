@@ -151,6 +151,12 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitImportAsStmt(ImportAsStmt stmt)
+    {
+        _table.Add(new SymbolInfo(stmt.Alias.Lexeme, SymbolKind.Namespace, stmt.Alias.Span, detail: $"namespace from {stmt.Path.Lexeme}"));
+        return null;
+    }
+
     // Expression visitors — just recurse, we don't collect declarations from expressions
 
     public object? VisitLiteralExpr(LiteralExpr expr) => null;

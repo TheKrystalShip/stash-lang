@@ -23,7 +23,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [5b. Enums](#5b-enums) · [6b. Shebang Support](#6b-shebang-support) · [7b. Error Handling](#7b-error-handling) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [5b. Enums](#5b-enums) · [6b. Shebang Support](#6b-shebang-support) · [7b. Error Handling](#7b-error-handling) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
 
 ---
 
@@ -137,7 +137,7 @@ struct Server {
 const DEFAULT_ADDRESS = "192.168.1.10";
 
 // Try expression
-let serverAddress = try readFile("/path/to/addressFile") ?? DEFAULT_ADDRESS;
+let serverAddress = try fs.readFile("/path/to/addressFile") ?? DEFAULT_ADDRESS;
 
 // Struct type variables
 let srv = Server { host: serverAddress, port: 22, status: Status.Unknown };
@@ -166,9 +166,9 @@ let payload = "app.tar.gz";
 for (let srv in servers) {
   // Conditional
   if (deploy(srv, payload)) {
-    println("Deployed to " + srv.host);
+    io.println("Deployed to " + srv.host);
   } else {
-    println($"Error deploying {payload} to {srv.host}");
+    io.println($"Error deploying {payload} to {srv.host}");
   }
 }
 
@@ -283,7 +283,7 @@ enum Color {
 let current = Status.Active;
 
 if (current == Status.Pending) {
-    println("Still waiting...");
+    io.println("Still waiting...");
 }
 ```
 
@@ -299,7 +299,7 @@ An enum value is stored as a pair: `(typeName, memberName)`. Dot access on the e
 
 - **Enum with associated values:** `enum Result { Ok(value), Err(message) }` — algebraic data types.
 - **Iteration:** `for (let s in Status) { ... }` — iterating over all members.
-- **String conversion:** `toStr(Status.Active)` → `"Active"`.
+- **String conversion:** `conv.toStr(Status.Active)` → `"Active"`.
 
 ---
 
@@ -313,9 +313,9 @@ Commands are executed via **command literals** — a dedicated syntax that makes
 
 ```c
 let result = $(ls -la);
-println(result.stdout);      // captured standard output
-println(result.stderr);      // captured standard error
-println(result.exitCode);    // process exit code
+io.println(result.stdout);      // captured standard output
+io.println(result.stderr);      // captured standard error
+io.println(result.exitCode);    // process exit code
 ```
 
 `$(...)` is **always raw mode**. When the lexer encounters `$(`, it enters "command mode" and collects everything as raw text until the matching `)`. The content is not parsed as a Stash expression — it is treated as a shell command.
@@ -397,7 +397,7 @@ Stash scripts can start with a shebang line for direct execution on Unix systems
 #!/usr/bin/env stash
 
 let name = "world";
-println("Hello, " + name);
+io.println("Hello, " + name);
 ```
 
 ### Implementation
@@ -462,7 +462,7 @@ The `??` operator returns the left operand if it is not `null`, otherwise return
 
 ```c
 let name = inputName ?? "default";
-let config = try readFile("/etc/app.conf") ?? "fallback config";
+let config = try fs.readFile("/etc/app.conf") ?? "fallback config";
 ```
 
 This is the same semantics as C#'s `??` operator. The right operand is only evaluated if the left operand is `null` (short-circuit evaluation).
@@ -483,13 +483,13 @@ By default, runtime errors **crash the script** with a stack trace. This is the 
 
 ```c
 // Without try — script crashes if file doesn't exist
-let content = readFile("/etc/missing.conf");
+let content = fs.readFile("/etc/missing.conf");
 
 // With try — error becomes null
-let content = try readFile("/etc/missing.conf");
+let content = try fs.readFile("/etc/missing.conf");
 
 // With try + ?? — error becomes a default value
-let content = try readFile("/etc/missing.conf") ?? "default config";
+let content = try fs.readFile("/etc/missing.conf") ?? "default config";
 ```
 
 ### Error Details
@@ -497,9 +497,9 @@ let content = try readFile("/etc/missing.conf") ?? "default config";
 When you need to know _what_ went wrong, the `lastError()` built-in returns the **most recent** error message as a string (or `null` if no error occurred):
 
 ```c
-let data = try toInt("abc");
+let data = try conv.toInt("abc");
 if (data == null) {
-    println(lastError());  // "Cannot parse 'abc' as integer"
+    io.println(lastError());  // "Cannot parse 'abc' as integer"
 }
 ```
 
@@ -512,7 +512,7 @@ Shell command results already carry structured error information via `exitCode` 
 ```c
 let result = $(ping -c 1 {host});
 if (result.exitCode != 0) {
-    println("Host unreachable: " + result.stderr);
+    io.println("Host unreachable: " + result.stderr);
 }
 ```
 
@@ -536,7 +536,7 @@ if (result.exitCode != 0) {
 
 ```c
 fn greet(name) {
-    println("Hello, " + name);
+    io.println("Hello, " + name);
 }
 
 fn add(a, b) {
@@ -550,7 +550,7 @@ Functions that do not execute a `return` statement implicitly return `null`:
 
 ```c
 fn greet(name) {
-    println("Hello, " + name);
+    io.println("Hello, " + name);
 }
 
 let result = greet("world");  // result is null
@@ -571,29 +571,82 @@ fn makeCounter() {
 }
 
 let counter = makeCounter();
-println(counter()); // 1
-println(counter()); // 2
+io.println(counter()); // 1
+io.println(counter()); // 2
 ```
 
 ### Built-in Functions
 
-| Function                   | Description                          |
-| -------------------------- | ------------------------------------ |
-| `println(val)`             | Print value followed by newline      |
-| `print(val)`               | Print value without newline          |
-| `typeof(val)`              | Return the type of a value as string |
-| `len(val)`                 | Length of a string or array          |
-| `toStr(val)`               | Convert value to string              |
-| `toInt(val)`               | Parse string to integer              |
-| `toFloat(val)`             | Parse string to float                |
-| `readFile(path)`           | Read file contents as string         |
-| `writeFile(path, content)` | Write string to file                 |
-| `exit(code)`               | Terminate the script with exit code  |
-| `lastError()`              | Last error message (string) or null  |
-| `env(name)`                | Read environment variable (future)   |
-| `setEnv(name, value)`      | Set environment variable (future)    |
+| Function       | Description                          |
+| -------------- | ------------------------------------ |
+| `typeof(val)`  | Return the type of a value as string |
+| `len(val)`     | Length of a string or array          |
+| `lastError()`  | Last error message (string) or null  |
+| `parseArgs(t)` | Parse command-line arguments         |
 
-Functions marked _(future)_ are planned for Phase 4 (Shell Integration) but not in the initial implementation.
+All other built-in functions are organized into namespaces (see below).
+
+### Built-in Namespaces
+
+Stash organizes built-in functions into **namespaces** accessed via dot notation. A small set of fundamental functions remain global (see above); everything else lives in a namespace.
+
+#### `io` — Standard I/O
+
+| Function           | Description                     |
+| ------------------ | ------------------------------- |
+| `io.println(val)`  | Print value followed by newline |
+| `io.print(val)`    | Print value without newline     |
+
+#### `conv` — Type Conversion
+
+| Function            | Description              |
+| ------------------- | ------------------------ |
+| `conv.toStr(val)`   | Convert value to string  |
+| `conv.toInt(val)`   | Parse string to integer  |
+| `conv.toFloat(val)` | Parse string to float    |
+
+#### `env` — Environment Variables
+
+| Function               | Description                               |
+| ---------------------- | ----------------------------------------- |
+| `env.get(name)`        | Read environment variable (null if unset) |
+| `env.set(name, value)` | Set environment variable                  |
+
+#### `process` — Process Control
+
+| Function             | Description                         |
+| -------------------- | ----------------------------------- |
+| `process.exit(code)` | Terminate the script with exit code |
+
+#### `fs` — File System Operations
+
+| Function                         | Description                                      |
+| -------------------------------- | ------------------------------------------------ |
+| `fs.readFile(path)`              | Read file contents as string                     |
+| `fs.writeFile(path, content)`    | Write string to file (creates or overwrites)     |
+| `fs.appendFile(path, content)`   | Append string to file                            |
+| `fs.exists(path)`                | Check if a file exists (returns boolean)         |
+| `fs.dirExists(path)`             | Check if a directory exists (returns boolean)    |
+| `fs.pathExists(path)`            | Check if a file or directory exists              |
+| `fs.createDir(path)`             | Create a directory (including parents)           |
+| `fs.delete(path)`                | Delete a file or directory (recursive)           |
+| `fs.copy(src, dst)`              | Copy a file (overwrites destination)             |
+| `fs.move(src, dst)`              | Move/rename a file (overwrites destination)      |
+| `fs.size(path)`                  | Get file size in bytes                           |
+| `fs.listDir(path)`               | List entries in a directory (returns array)      |
+
+#### `path` — Path Manipulation
+
+| Function                         | Description                                      |
+| -------------------------------- | ------------------------------------------------ |
+| `path.abs(p)`                    | Get absolute path                                |
+| `path.dir(p)`                    | Get directory portion of path                    |
+| `path.base(p)`                   | Get filename with extension                      |
+| `path.name(p)`                   | Get filename without extension                   |
+| `path.ext(p)`                    | Get file extension (including `.`)               |
+| `path.join(a, b)`                | Join two path segments                           |
+
+Namespace members are accessed with dot notation: `fs.exists("/etc/hosts")`. Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
 Standard library to be expanded as needed.
 
@@ -607,7 +660,7 @@ Standard library to be expanded as needed.
 let x = 10;           // global scope
 {
     let y = 20;        // block scope
-    println(x + y);    // x is visible here (30)
+    io.println(x + y);    // x is visible here (30)
 }
 // y is NOT visible here
 ```
@@ -630,6 +683,8 @@ Stash supports **selective imports** — you can import specific declarations fr
 
 ### Syntax
 
+**Selective import** — import specific names into the current scope:
+
 ```c
 import { deploy, Server } from "utils.stash";
 import { Status } from "enums.stash";
@@ -640,6 +695,20 @@ deploy(srv, "app.tar.gz");
 ```
 
 Only the names listed in `{ ... }` are made available in the importing script's scope. Other declarations in the imported file are not visible.
+
+**Namespace import** — import an entire module as a namespace:
+
+```c
+import "utils.stash" as utils;
+import "enums.stash" as enums;
+
+// Access via dot notation
+let srv = utils.Server { host: "10.0.0.1", port: 22, status: Status.Active };
+utils.deploy(srv, "app.tar.gz");
+let status = enums.Status.Active;
+```
+
+All top-level declarations from the module are wrapped in a `StashNamespace` object and bound to the given alias. Members are accessed with dot notation. The alias is a regular value — `typeof(utils)` returns `"namespace"`.
 
 ### Semantics
 
@@ -681,8 +750,179 @@ This is checked during the resolve/import phase, not at runtime.
 ### Future Extensions (Not in v1)
 
 - **Wildcard imports:** `import * from "utils.stash";` — imports everything (bash-style, for convenience).
-- **Aliased imports:** `import { deploy as remoteDeploy } from "utils.stash";` — rename on import.
+- **Per-name aliased imports:** `import { deploy as remoteDeploy } from "utils.stash";` — rename individual names on import.
 - **Relative path shortcuts:** `import { util } from "./lib/";` — directory-based module resolution.
+
+---
+
+## 9c. Argument Declarations
+
+Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus a **`parseArgs()`** function for declarative CLI argument parsing. Instead of manually parsing `argv`, scripts construct an `ArgTree` describing expected flags, options, positional arguments, and subcommands, then call `parseArgs()` to get a struct of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
+
+### Built-in Structs
+
+`ArgTree` and `ArgDef` are pre-defined by the interpreter — scripts use them directly without declaring them.
+
+#### `ArgTree` Fields
+
+| Field         | Type              | Description                                                      |
+| ------------- | ----------------- | ---------------------------------------------------------------- |
+| `name`        | string (optional) | Script name (used in help text and usage line)                   |
+| `version`     | string (optional) | Version string (used with auto `--version` flag)                 |
+| `description` | string            | Script description (required, can be `""`)                       |
+| `flags`       | array (optional)  | Array of `ArgDef` entries for boolean switches                   |
+| `options`     | array (optional)  | Array of `ArgDef` entries for value-taking options               |
+| `commands`    | array (optional)  | Array of `ArgDef` entries for subcommands                        |
+| `positionals` | array (optional)  | Array of `ArgDef` entries for positional arguments               |
+
+#### `ArgDef` Fields
+
+| Field         | Type               | Description                                                                |
+| ------------- | ------------------ | -------------------------------------------------------------------------- |
+| `name`        | string (required)  | Long name of the argument                                                  |
+| `short`       | string (optional)  | Single-character short form                                                |
+| `type`        | string (optional)  | Type for coercion: `"string"`, `"int"`, `"float"`, `"bool"`               |
+| `default`     | any (optional)     | Default value (any expression)                                             |
+| `description` | string             | Description for help text (required, can be `""`)                          |
+| `required`    | bool (optional)    | Whether the argument must be provided (default: `false`)                   |
+| `args`        | ArgTree (optional) | Nested `ArgTree` for subcommand flags/options/positionals                  |
+
+### Syntax
+
+```c
+let args = parseArgs(ArgTree {
+    name: "deploy",
+    version: "1.0.0",
+    description: "A deployment tool",
+    flags: [
+        ArgDef { name: "help", short: "h", description: "Show help" },
+        ArgDef { name: "verbose", short: "v", description: "Enable verbose output" }
+    ],
+    options: [
+        ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Port to listen on" }
+    ],
+    positionals: [
+        ArgDef { name: "target", type: "string", required: true, description: "Target host" }
+    ],
+    commands: [
+        ArgDef {
+            name: "deploy",
+            description: "Deploy the application",
+            args: ArgTree {
+                flags: [ArgDef { name: "force", short: "f", description: "Force deployment" }],
+                options: [ArgDef { name: "timeout", type: "int", default: 30, description: "Timeout in seconds" }]
+            }
+        }
+    ]
+});
+```
+
+`parseArgs()` returns a `StashInstance` bound to the variable; all parsed values are accessed via dot notation.
+
+### Flags
+
+Flags are boolean switches that default to `false` and become `true` when present. Each flag is an `ArgDef` in the `flags` array.
+
+Usage: `--name` or `-short`
+
+**Special flags:**
+- A flag named `help` will automatically print formatted help text and exit when `--help` or its short form is passed.
+- A flag named `version` will automatically print the `version` metadata value and exit when `--version` is passed (requires `version` to be set on the `ArgTree`).
+
+### Options
+
+Options take a value and support type coercion. Each option is an `ArgDef` in the `options` array.
+
+Usage: `--name value`, `-s value`, or `--name=value`
+
+**Type coercion:**
+
+| Type     | Stash Type | Accepted Values                                              |
+| -------- | ---------- | ------------------------------------------------------------ |
+| `string` | string     | Any string (default if no `type` specified)                  |
+| `int`    | int (long) | Integer strings (e.g., `"42"`, `"-1"`)                       |
+| `float`  | float      | Decimal strings (e.g., `"3.14"`)                             |
+| `bool`   | bool       | `"true"`, `"false"`, `"1"`, `"0"`, `"yes"`, `"no"`          |
+
+A runtime error is raised if the value cannot be parsed as the specified type.
+
+### Positional Arguments
+
+Positional arguments are captured in declaration order. Non-flag, non-option, non-command arguments fill positionals sequentially. Each positional is an `ArgDef` in the `positionals` array.
+
+Usage: `./script.stash myhost` — the first non-flag, non-option argument fills the first positional.
+
+### Subcommands
+
+`ArgDef` entries in the `commands` array define named subcommands. An `args` field on the `ArgDef` provides an `ArgTree` describing the subcommand's own flags, options, and positionals.
+
+When a subcommand is matched, `args.command` is set to the command name as a string, and `args.<commandName>` contains the subcommand's parsed values:
+
+```c
+if (args.command == "deploy") {
+    io.println(args.deploy.force);    // bool
+    io.println(args.deploy.timeout);  // int
+}
+```
+
+### Accessing Parsed Values
+
+All parsed values are accessible via dot notation on the variable returned by `parseArgs()`:
+
+```c
+let args = parseArgs(ArgTree {
+    flags:     [ArgDef { name: "verbose", short: "v", description: "" }],
+    options:   [ArgDef { name: "port", type: "int", default: 8080, description: "" }],
+    positionals: [ArgDef { name: "file", required: true, description: "" }]
+});
+
+io.println(args.verbose);    // false (or true if --verbose was passed)
+io.println(args.port);       // 8080 (or user-provided value)
+io.println(args.file);       // first positional argument value
+io.println(args.command);    // name of matched subcommand, or null
+io.println(args.deploy.force); // subcommand flag value
+```
+
+### Validation & Error Handling
+
+`parseArgs()` performs automatic validation:
+
+- **Required options/positionals:** A runtime error is raised if a required argument is not provided.
+- **Unknown arguments:** A runtime error is raised for unrecognized flags or options.
+- **Type coercion failures:** A runtime error is raised if a value cannot be parsed as the declared type.
+- **Missing option values:** A runtime error is raised if an option flag is provided without a corresponding value (e.g., `--port` at the end of the argument list).
+
+### Auto-Generated Help
+
+When a `help` flag is defined and triggered, the interpreter automatically generates formatted help text:
+
+```
+my-tool v1.0.0
+A deployment tool
+
+USAGE:
+  my-tool [command] [options] <target>
+
+COMMANDS:
+  deploy    Deploy the application
+  rollback  Rollback the deployment
+
+ARGUMENTS:
+  <target>  Target host (required)
+
+OPTIONS:
+  -v, --verbose        Enable verbose output
+  -p, --port <int>     Port to listen on (default: 8080)
+  -h, --help           Show help
+
+COMMAND 'deploy':
+  -f, --force          Force deployment
+      --timeout <int>  Timeout in seconds (default: 30)
+```
+
+### Implementation
+
+`parseArgs()` is a built-in function and `ArgTree`/`ArgDef` are built-in struct types pre-defined by the interpreter. At runtime, `parseArgs()` receives an `ArgTree` instance, processes the script's command-line arguments (`_scriptArgs`), performs type coercion, validates required arguments, and returns a `StashInstance` of type `"Args"` with all parsed values bound as fields.
 
 ---
 
@@ -710,7 +950,7 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`
 
 Contextual keywords: `from` (only reserved after `import`, can be used as a variable name elsewhere)
 
@@ -765,6 +1005,7 @@ Identifiers: user-defined names
 - `StructDeclStmt` — `struct Name { fields }`
 - `EnumDeclStmt` — `enum Name { Member1, Member2 }`
 - `ImportStmt` — `import { name1, name2 } from "file.stash";`
+- `ImportAsStmt` — `import "file.stash" as name;`
 
 All AST nodes carry a `SourceSpan` for debugging (see Section 11).
 
@@ -934,8 +1175,8 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 | ---- | ---------------------- | ----------------------------------------------------------------------------- |
 | 4.1  | Command literals `$()` | Lexer command mode (always raw + interpolation), `System.Diagnostics.Process` |
 | 4.2  | Pipe operator          | Chaining process stdout → stdin                                               |
-| 4.3  | File I/O built-ins     | `readFile`, `writeFile`                                                       |
-| 4.4  | Environment variables  | `env("PATH")`, `setEnv("KEY", "val")`                                         |
+| 4.3  | File I/O built-ins     | `fs.readFile`, `fs.writeFile`                                                 |
+| 4.4  | Environment variables  | `env.get("PATH")`, `env.set("KEY", "val")`                                    |
 
 **Milestone:** A script that SSHs into a server, checks a service, and reports status.
 
@@ -998,6 +1239,7 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 - [x] ~~Null handling~~ → `??` null-coalescing operator included (see Section 7)
 - [x] ~~Shebang support~~ → Yes. Lexer skips `#!` lines (see Section 6b)
 - [x] ~~Module/import system~~ → Selective imports: `import { a, b } from "file.stash";` (see Section 9b)
+- [x] ~~Argument parsing~~ → Declarative `args` block with flags, options, positionals, subcommands (see Section 9c)
 
 ## Appendix B — Grammar (Draft, EBNF)
 
@@ -1011,7 +1253,8 @@ structDecl     → "struct" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
 enumDecl       → "enum" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
 fnDecl         → "fn" IDENTIFIER "(" parameters? ")" block ;
 varDecl        → "let" IDENTIFIER "=" expression ";" ;
-importDecl     → "import" "{" IDENTIFIER ("," IDENTIFIER)* "}" "from" STRING ";" ;
+importDecl     → "import" "{" IDENTIFIER ("," IDENTIFIER)* "}" "from" STRING ";"
+               | "import" STRING "as" IDENTIFIER ";" ;
 
 statement      → exprStmt | ifStmt | whileStmt | forStmt | returnStmt | breakStmt | continueStmt | block ;
 
@@ -1043,8 +1286,7 @@ call           → primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expressio
 primary        → NUMBER | STRING | INTERPOLATED_STRING | "true" | "false" | "null"
                | IDENTIFIER | "(" expression ")"
                | "[" (expression ("," expression)*)? "]"
-               | IDENTIFIER "{" (IDENTIFIER ":" expression ("," IDENTIFIER ":" expression)*)? "}"
-               | IDENTIFIER "." IDENTIFIER
+               | (call ".")? IDENTIFIER "{" (IDENTIFIER ":" expression ("," IDENTIFIER ":" expression)*)? "}"
                | "$(" COMMAND_TEXT ")" ;
 
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;

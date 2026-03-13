@@ -56,12 +56,12 @@ let input_path = "/etc/hosts";
 let output_path = "/tmp/stash_processed.txt";
 
 // Error handling with try and ??
-let content = try readFile(input_path) ?? null;
+let content = try fs.readFile(input_path) ?? null;
 
 if (content == null) {
-    println($"Error: could not read {input_path}");
-    println($"Reason: {lastError()}");
-    exit(1);
+    io.println($"Error: could not read {input_path}");
+    io.println($"Reason: {lastError()}");
+    process.exit(1);
 }
 
 // Split content into lines by iterating characters
@@ -82,7 +82,7 @@ if (len(current_line) > 0) {
     lines[len(lines)] = current_line;
 }
 
-println($"Read {len(lines)} lines from {input_path}");
+io.println($"Read {len(lines)} lines from {input_path}");
 
 // Filter: skip comments and empty lines
 let counter = make_counter();
@@ -104,11 +104,11 @@ for (let line in lines) {
 }
 
 // Write processed output
-try writeFile(output_path, output);
+try fs.writeFile(output_path, output);
 
 if (lastError() != null) {
-    println($"Error writing to {output_path}: {lastError()}");
-    exit(1);
+    io.println($"Error writing to {output_path}: {lastError()}");
+    process.exit(1);
 }
 
-println($"Wrote processed output to {output_path}");
+io.println($"Wrote processed output to {output_path}");

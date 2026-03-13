@@ -1,0 +1,160 @@
+#!/usr/bin/env stash
+
+// ============================================================
+//  namespaces.stash — Demonstrates Stash namespace capabilities
+// ============================================================
+
+// --- Built-in Namespaces: fs & path ---
+
+// The fs namespace provides file system operations.
+// The path namespace provides path manipulation utilities.
+
+fn demo_fs_and_path() {
+    io.println("=== Built-in Namespaces ===");
+
+    // Create a temp working directory
+    let workDir = path.join("/tmp", "stash_ns_demo");
+    fs.createDir(workDir);
+    io.println($"Created working directory: {workDir}");
+
+    // Write a file
+    let filePath = path.join(workDir, "hello.txt");
+    fs.writeFile(filePath, "Hello from Stash namespaces!\n");
+    io.println($"Wrote: {filePath}");
+
+    // Append to the file
+    fs.appendFile(filePath, "This line was appended.\n");
+
+    // Read it back
+    let content = fs.readFile(filePath);
+    io.println($"Content:\n{content}");
+
+    // Inspect with path utilities
+    io.println($"  Directory : {path.dir(filePath)}");
+    io.println($"  Base name : {path.base(filePath)}");
+    io.println($"  Name only : {path.name(filePath)}");
+    io.println($"  Extension : {path.ext(filePath)}");
+    io.println($"  Absolute  : {path.abs(filePath)}");
+
+    // File metadata
+    io.println($"  Size      : {fs.size(filePath)} bytes");
+    io.println($"  Exists    : {fs.exists(filePath)}");
+
+    // Copy and move
+    let copyPath = path.join(workDir, "hello_copy.txt");
+    fs.copy(filePath, copyPath);
+    io.println($"Copied to: {copyPath}");
+
+    let movedPath = path.join(workDir, "hello_moved.txt");
+    fs.move(copyPath, movedPath);
+    io.println($"Moved to: {movedPath}");
+
+    // List directory contents
+    let entries = fs.listDir(workDir);
+    io.println($"\nFiles in {workDir}:");
+    for (let entry in entries) {
+        io.println($"  - {path.base(entry)}");
+    }
+
+    // Clean up
+    fs.delete(workDir);
+    io.println($"\nCleaned up {workDir}");
+    io.println($"  Still exists? {fs.pathExists(workDir)}");
+}
+
+// --- Module Namespaces: import ... as ---
+
+// You can also import any Stash module as a namespace.
+// All top-level declarations become namespace members.
+//
+// Example (if lib/utils.stash exports functions):
+//
+//   import "lib/utils.stash" as utils;
+//   utils.greet("world");
+//
+// Or access structs through the namespace:
+//
+//   import "lib/utils.stash" as utils;
+//   let cfg = utils.Config { host: "localhost", port: 8080 };
+//
+// Namespaces are first-class values:
+//
+//   io.println(typeof(fs));     // "namespace"
+//   io.println(typeof(utils));  // "namespace"
+
+// --- Namespace introspection ---
+
+fn demo_introspection() {
+    io.println("\n=== Namespace Introspection ===");
+    io.println($"typeof(io)      = {typeof(io)}");
+    io.println($"typeof(conv)    = {typeof(conv)}");
+    io.println($"typeof(env)     = {typeof(env)}");
+    io.println($"typeof(process) = {typeof(process)}");
+    io.println($"typeof(fs)      = {typeof(fs)}");
+    io.println($"typeof(path)    = {typeof(path)}");
+
+    // Namespaces are read-only — assigning to a member is an error:
+    //   fs.exists = 42;  // RuntimeError: Cannot assign to namespace members.
+
+    // Accessing a non-existent member is also an error:
+    //   fs.foobar();     // RuntimeError: Namespace 'fs' has no member 'foobar'.
+}
+
+// --- Practical example: safe file backup ---
+
+fn backup_file(src) {
+    if (!fs.exists(src)) {
+        io.println($"Error: source file '{src}' not found.");
+        return null;
+    }
+
+    let dir = path.dir(src);
+    let name = path.name(src);
+    let ext = path.ext(src);
+    let backupPath = path.join(dir, $"{name}.bak{ext}");
+
+    fs.copy(src, backupPath);
+    io.println($"Backed up '{path.base(src)}' -> '{path.base(backupPath)}'");
+    return backupPath;
+}
+
+fn demo_backup() {
+    io.println("\n=== Practical: File Backup ===");
+
+    let tmpFile = "/tmp/stash_ns_important.conf";
+    fs.writeFile(tmpFile, "key=value\nport=8080\n");
+
+    let backed = backup_file(tmpFile);
+    if (backed != null) {
+        io.println($"Backup contents: {fs.readFile(backed)}");
+        fs.delete(backed);
+    }
+    fs.delete(tmpFile);
+}
+
+// --- conv & env demo ---
+
+fn demo_conv_and_env() {
+    io.println("\n=== conv & env Namespaces ===");
+
+    // Type conversions
+    let n = conv.toInt("42");
+    let f = conv.toFloat("3.14");
+    let s = conv.toStr(n);
+    io.println($"conv.toInt(\"42\")   = {n}");
+    io.println($"conv.toFloat(\"3.14\") = {f}");
+    io.println($"conv.toStr(42)     = {s}");
+
+    // Environment variables
+    let home = env.get("HOME") ?? env.get("USERPROFILE") ?? "(unknown)";
+    io.println($"Home directory: {home}");
+}
+
+// --- Main ---
+
+demo_fs_and_path();
+demo_introspection();
+demo_backup();
+demo_conv_and_env();
+
+io.println("\nDone!");

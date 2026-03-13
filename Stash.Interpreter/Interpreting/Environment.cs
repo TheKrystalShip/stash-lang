@@ -130,4 +130,9 @@ public class Environment
 
         return env;
     }
+
+    /// <summary>
+    /// Gets all bindings defined in this scope (does not include parent scopes).
+    /// </summary>
+    public IEnumerable<KeyValuePair<string, object?>> GetAllBindings() => _values;
 }

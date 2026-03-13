@@ -18,24 +18,45 @@ public class CompletionHandler : CompletionHandlerBase
     {
         "let", "const", "fn", "struct", "enum", "if", "else",
         "for", "in", "while", "return", "break", "continue",
-        "true", "false", "null", "try", "import", "from", "args"
+        "true", "false", "null", "try", "import", "from", "as", "args"
     };
 
     private static readonly (string Name, string Detail)[] _builtIns =
     {
-        ("println", "println(value)"),
-        ("print", "print(value)"),
         ("typeof", "typeof(value) → string"),
         ("len", "len(value) → int"),
-        ("toStr", "toStr(value) → string"),
-        ("toInt", "toInt(value) → int"),
-        ("toFloat", "toFloat(value) → float"),
-        ("readFile", "readFile(path) → string"),
-        ("writeFile", "writeFile(path, content)"),
-        ("exit", "exit(code)"),
         ("lastError", "lastError() → string | null"),
-        ("env", "env(name) → string | null"),
-        ("setEnv", "setEnv(name, value)"),
+        ("parseArgs", "parseArgs(argTree) → args"),
+    };
+
+    private static readonly (string Namespace, string Name, string Detail)[] _namespacedBuiltIns =
+    {
+        ("io", "println", "io.println(value)"),
+        ("io", "print", "io.print(value)"),
+        ("conv", "toStr", "conv.toStr(value) → string"),
+        ("conv", "toInt", "conv.toInt(value) → int"),
+        ("conv", "toFloat", "conv.toFloat(value) → float"),
+        ("env", "get", "env.get(name) → string | null"),
+        ("env", "set", "env.set(name, value)"),
+        ("process", "exit", "process.exit(code)"),
+        ("fs", "readFile", "fs.readFile(path) → string"),
+        ("fs", "writeFile", "fs.writeFile(path, content)"),
+        ("fs", "exists", "fs.exists(path) → bool"),
+        ("fs", "dirExists", "fs.dirExists(path) → bool"),
+        ("fs", "pathExists", "fs.pathExists(path) → bool"),
+        ("fs", "createDir", "fs.createDir(path)"),
+        ("fs", "delete", "fs.delete(path)"),
+        ("fs", "copy", "fs.copy(src, dst)"),
+        ("fs", "move", "fs.move(src, dst)"),
+        ("fs", "size", "fs.size(path) → int"),
+        ("fs", "listDir", "fs.listDir(path) → array"),
+        ("fs", "appendFile", "fs.appendFile(path, content)"),
+        ("path", "abs", "path.abs(path) → string"),
+        ("path", "dir", "path.dir(path) → string"),
+        ("path", "base", "path.base(path) → string"),
+        ("path", "ext", "path.ext(path) → string"),
+        ("path", "join", "path.join(a, b) → string"),
+        ("path", "name", "path.name(path) → string"),
     };
 
     public CompletionHandler(AnalysisEngine analysis)
@@ -67,6 +88,21 @@ public class CompletionHandler : CompletionHandlerBase
                 Kind = LspCompletionItemKind.Function,
                 Detail = detail
             });
+        }
+
+        // Built-in namespaces
+        var seenNamespaces = new HashSet<string>();
+        foreach (var (ns, name, detail) in _namespacedBuiltIns)
+        {
+            if (seenNamespaces.Add(ns))
+            {
+                items.Add(new CompletionItem
+                {
+                    Label = ns,
+                    Kind = LspCompletionItemKind.Module,
+                    Detail = $"namespace {ns}"
+                });
+            }
         }
 
         // Symbols from analysis
@@ -118,6 +154,7 @@ public class CompletionHandler : CompletionHandlerBase
         Analysis.SymbolKind.Field => LspCompletionItemKind.Field,
         Analysis.SymbolKind.Parameter => LspCompletionItemKind.Variable,
         Analysis.SymbolKind.LoopVariable => LspCompletionItemKind.Variable,
+        Analysis.SymbolKind.Namespace => LspCompletionItemKind.Module,
         _ => LspCompletionItemKind.Text
     };
 }

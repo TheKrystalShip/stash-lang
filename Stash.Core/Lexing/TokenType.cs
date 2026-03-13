@@ -180,6 +180,9 @@ public enum TokenType
     /// <summary>The <c>from</c> keyword. Specifies the module path in an import statement.</summary>
     From,
 
+    /// <summary>The <c>as</c> keyword. Aliases an import to a namespace name.</summary>
+    As,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

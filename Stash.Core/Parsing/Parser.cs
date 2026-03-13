@@ -285,7 +285,19 @@ public class Parser
     private Stmt ImportDeclaration()
     {
         Token importToken = Previous();
-        Consume(TokenType.LeftBrace, "Expected '{' after 'import'.");
+
+        // import "path" as name;
+        if (Check(TokenType.StringLiteral))
+        {
+            Token path = Consume(TokenType.StringLiteral, "Expected module path string.");
+            Consume(TokenType.As, "Expected 'as' after module path.");
+            Token alias = Consume(TokenType.Identifier, "Expected namespace name after 'as'.");
+            Token semi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
+            return new ImportAsStmt(path, alias, MakeSpan(importToken.Span, semi.Span));
+        }
+
+        // import { name1, name2 } from "path";
+        Consume(TokenType.LeftBrace, "Expected '{' or module path after 'import'.");
 
         List<Token> names = new();
         if (!Check(TokenType.RightBrace))
@@ -303,10 +315,10 @@ public class Parser
         }
 
         Consume(TokenType.From, "Expected 'from' after import names.");
-        Token path = Consume(TokenType.StringLiteral, "Expected module path string after 'from'.");
-        Token semi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
+        Token fromPath = Consume(TokenType.StringLiteral, "Expected module path string after 'from'.");
+        Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
 
-        return new ImportStmt(names, path, MakeSpan(importToken.Span, semi.Span));
+        return new ImportStmt(names, fromPath, MakeSpan(importToken.Span, finalSemi.Span));
     }
 
     /// <summary>
@@ -789,7 +801,47 @@ public class Parser
             else if (Match(TokenType.Dot))
             {
                 Token name = Consume(TokenType.Identifier, "Expected field name after '.'.");
-                expr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span));
+                Expr dotExpr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span));
+
+                // Check for namespaced struct init: ns.StructName { field: value, ... }
+                if (Check(TokenType.LeftBrace))
+                {
+                    int savedPosition = _current;
+                    Advance(); // consume '{'
+
+                    if (Check(TokenType.Identifier))
+                    {
+                        int peekAhead = _current;
+                        if (peekAhead + 1 < _tokens.Count && _tokens[peekAhead + 1].Type == TokenType.Colon)
+                        {
+                            List<(Token Field, Expr Value)> fieldValues = new();
+                            do
+                            {
+                                Token field = Consume(TokenType.Identifier, "Expected field name.");
+                                Consume(TokenType.Colon, "Expected ':' after field name.");
+                                Expr value = Expression();
+                                fieldValues.Add((field, value));
+                            } while (Match(TokenType.Comma));
+
+                            Token close = Consume(TokenType.RightBrace, "Expected '}' after struct fields.");
+                            expr = new StructInitExpr(name, dotExpr, fieldValues, MakeSpan(expr.Span, close.Span));
+                            continue;
+                        }
+                    }
+
+                    // Also handle empty struct init: ns.StructName { }
+                    if (Check(TokenType.RightBrace))
+                    {
+                        Token close = Advance();
+                        expr = new StructInitExpr(name, dotExpr, new List<(Token, Expr)>(), MakeSpan(expr.Span, close.Span));
+                        continue;
+                    }
+
+                    // Not a struct init — backtrack
+                    _current = savedPosition;
+                }
+
+                expr = dotExpr;
             }
             else if (Check(TokenType.PlusPlus) || Check(TokenType.MinusMinus))
             {

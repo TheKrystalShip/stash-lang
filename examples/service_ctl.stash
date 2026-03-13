@@ -29,30 +29,23 @@ let args = parseArgs(ArgTree {
     ],
     commands: [
         ArgDef {
-            name: "start",
-            description: "Start a named service",
-            args: ArgTree {
+            name: "start", description: "Start a named service", args: ArgTree {
                 positionals: [ArgDef { name: "service", required: true, description: "Service name to start" }],
                 flags: [ArgDef { name: "detach", short: "d", description: "Run in the background (detached)" }],
                 options: [
                     ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Override listen port" },
                     ArgDef { name: "env", short: "e", default: "development", description: "Runtime environment" }
-                ]
-            }
+                ]}
         },
         ArgDef {
-            name: "stop",
-            description: "Stop a running service",
-            args: ArgTree {
+            name: "stop", description: "Stop a running service", args: ArgTree {
                 positionals: [ArgDef { name: "service", required: true, description: "Service name to stop" }],
                 flags: [ArgDef { name: "force", short: "f", description: "Force-kill the process (SIGKILL)" }],
                 options: [ArgDef { name: "timeout", short: "t", type: "int", default: 10, description: "Seconds to wait before giving up" }]
             }
         },
         ArgDef {
-            name: "status",
-            description: "Show status of all (or one) service",
-            args: ArgTree {
+            name: "status", description: "Show status of all (or one) service", args: ArgTree {
                 positionals: [ArgDef { name: "service", description: "Service name (omit for all)" }],
                 options: [ArgDef { name: "filter", description: "Filter by state: running, stopped" }]
             }
@@ -95,7 +88,7 @@ fn state_label(state) {
 fn log_verbose(msg) {
     // Only emit the message when --verbose was passed
     if (args.verbose) {
-        println($"[verbose] {msg}");
+        io.println($"[verbose] {msg}");
     }
 }
 
@@ -124,7 +117,7 @@ fn probe_service(name) {
 fn print_service_row(info) {
     let label = state_label(info.state);
     let pid_str = info.pid ?? "-";
-    println($"  {info.name:<12} [{label}]   pid={pid_str}");
+    io.println($"  {info.name:<12} [{label}]   pid={pid_str}");
 }
 
 // ---------------------------------------------------------------------------
@@ -137,13 +130,13 @@ fn cmd_start() {
     let env  = args.start.env;
     let bg   = args.start.detach;
 
-    println($"Starting service '{svc}' on port {port} (env={env})...");
+    io.println($"Starting service '{svc}' on port {port} (env={env})...");
     log_verbose($"Config file: {args.config}");
 
     // Check if already running
     let info = probe_service(svc);
     if (info.state == ServiceState.Running) {
-        println($"  '{svc}' is already running (pid={info.pid}). Aborting.");
+        io.println($"  '{svc}' is already running (pid={info.pid}). Aborting.");
         return;
     }
 
@@ -151,14 +144,14 @@ fn cmd_start() {
     let start_result = $(echo "start {svc} --port {port} --env {env}");
 
     if (start_result.exitCode != 0) {
-        println($"  Error: failed to start '{svc}': {start_result.stderr}");
+        io.println($"  Error: failed to start '{svc}': {start_result.stderr}");
         return;
     }
 
     if (bg) {
-        println($"  '{svc}' launched in the background.");
+        io.println($"  '{svc}' launched in the background.");
     } else {
-        println($"  '{svc}' is running in the foreground.");
+        io.println($"  '{svc}' is running in the foreground.");
     }
 }
 
@@ -167,12 +160,12 @@ fn cmd_stop() {
     let force   = args.stop.force;
     let timeout = args.stop.timeout;
 
-    println($"Stopping service '{svc}'...");
+    io.println($"Stopping service '{svc}'...");
     log_verbose($"Timeout: {timeout}s, force={force}");
 
     let info = probe_service(svc);
     if (info.state == ServiceState.Stopped) {
-        println($"  '{svc}' is not running.");
+        io.println($"  '{svc}' is not running.");
         return;
     }
 
@@ -182,9 +175,9 @@ fn cmd_stop() {
     let stop_result = $(echo "kill -{signal} {info.pid}");
 
     if (stop_result.exitCode == 0) {
-        println($"  '{svc}' stopped.");
+        io.println($"  '{svc}' stopped.");
     } else {
-        println($"  Warning: stop command returned non-zero: {stop_result.stderr}");
+        io.println($"  Warning: stop command returned non-zero: {stop_result.stderr}");
     }
 }
 
@@ -195,8 +188,8 @@ fn cmd_status() {
     // Known services (in a real script this would be read from args.config)
     let known = ["web", "db", "cache", "worker"];
 
-    println("=== Service Status ===");
-    println("");
+    io.println("=== Service Status ===");
+    io.println("");
 
     let shown = 0;
 
@@ -221,10 +214,10 @@ fn cmd_status() {
     }
 
     if (shown == 0) {
-        println("  (no services match)");
+        io.println("  (no services match)");
     }
 
-    println("");
+    io.println("");
 }
 
 // ---------------------------------------------------------------------------
@@ -240,5 +233,5 @@ if (cmd == "start") {
 } else if (cmd == "status") {
     cmd_status();
 } else {
-    println("No subcommand given. Use --help for usage.");
+    io.println("No subcommand given. Use --help for usage.");
 }

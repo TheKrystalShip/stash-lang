@@ -19,4 +19,5 @@ public interface IStmtVisitor<T>
     T VisitStructDeclStmt(StructDeclStmt stmt);
     T VisitEnumDeclStmt(EnumDeclStmt stmt);
     T VisitImportStmt(ImportStmt stmt);
+    T VisitImportAsStmt(ImportAsStmt stmt);
 }

@@ -36,30 +36,30 @@ fn gather_info() {
 
 // --- Main ---
 
-println("╔══════════════════════════════╗");
-println("║      System Information      ║");
-println("╚══════════════════════════════╝");
-println("");
+io.println("╔══════════════════════════════╗");
+io.println("║      System Information      ║");
+io.println("╚══════════════════════════════╝");
+io.println("");
 
 let info = gather_info();
 
-println($"  Hostname:   {info.hostname}");
-println($"  Kernel:     {info.kernel}");
-println($"  Uptime:     {info.uptime}");
-println($"  CPU Cores:  {info.cpu_count}");
-println($"  Memory:     {info.memory_total}");
-println($"  Disk Usage: {info.disk_usage} (/)");
-println($"  User:       {info.user}");
-println("");
+io.println($"  Hostname:   {info.hostname}");
+io.println($"  Kernel:     {info.kernel}");
+io.println($"  Uptime:     {info.uptime}");
+io.println($"  CPU Cores:  {info.cpu_count}");
+io.println($"  Memory:     {info.memory_total}");
+io.println($"  Disk Usage: {info.disk_usage} (/)");
+io.println($"  User:       {info.user}");
+io.println("");
 
 // Show environment info
-let shell = env("SHELL") ?? "unknown";
-let home = env("HOME") ?? "unknown";
-let path = env("PATH") ?? "unknown";
+let shell = env.get("SHELL") ?? "unknown";
+let home = env.get("HOME") ?? "unknown";
+let path = env.get("PATH") ?? "unknown";
 
-println("  Environment:");
-println($"    SHELL: {shell}");
-println($"    HOME:  {home}");
+io.println("  Environment:");
+io.println($"    SHELL: {shell}");
+io.println($"    HOME:  {home}");
 
 // Count PATH entries
 let path_count = 1;
@@ -68,4 +68,4 @@ for (let ch in path) {
         path_count++;
     }
 }
-println($"    PATH:  {path_count} entries");
+io.println($"    PATH:  {path_count} entries");
