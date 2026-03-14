@@ -1,6 +1,7 @@
 namespace Stash.Interpreting.BuiltIns;
 
 using System.Collections.Generic;
+using Stash.Interpreting.Types;
 
 /// <summary>
 /// Registers global built-in functions and types.

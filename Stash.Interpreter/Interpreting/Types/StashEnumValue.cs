@@ -1,4 +1,4 @@
-namespace Stash.Interpreting;
+namespace Stash.Interpreting.Types;
 
 /// <summary>
 /// Represents a specific enum member value — identified by its type name and member name.

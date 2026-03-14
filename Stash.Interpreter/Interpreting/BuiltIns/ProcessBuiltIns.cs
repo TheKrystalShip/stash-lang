@@ -3,6 +3,7 @@ namespace Stash.Interpreting.BuiltIns;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using Stash.Interpreting.Types;
 
 /// <summary>
 /// Registers the 'process' namespace built-in functions.

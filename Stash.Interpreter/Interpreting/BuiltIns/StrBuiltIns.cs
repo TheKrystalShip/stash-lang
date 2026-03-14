@@ -3,6 +3,7 @@ namespace Stash.Interpreting.BuiltIns;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Interpreting.Types;
 
 /// <summary>
 /// Registers the 'str' namespace built-in functions.

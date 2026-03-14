@@ -6,6 +6,7 @@ using System.Linq;
 using Stash.Common;
 using StashEnv = Stash.Interpreting.Environment;
 using Stash.Interpreting;
+using Stash.Interpreting.Types;
 
 /// <summary>
 /// An interactive command-line debugger for Stash scripts.

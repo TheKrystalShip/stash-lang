@@ -1,6 +1,6 @@
-namespace Stash.Interpreting.BuiltIns;
+using Stash.Interpreting.Types;
 
-using System.Collections.Generic;
+namespace Stash.Interpreting.BuiltIns;
 
 /// <summary>
 /// Registers the 'path' namespace built-in functions.

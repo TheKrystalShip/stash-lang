@@ -2,6 +2,7 @@ namespace Stash.Interpreting;
 
 using System;
 using System.Collections.Generic;
+using Stash.Interpreting.Types;
 
 internal sealed class ArgumentParser
 {

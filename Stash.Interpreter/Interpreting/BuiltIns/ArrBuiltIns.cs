@@ -2,6 +2,7 @@ namespace Stash.Interpreting.BuiltIns;
 
 using System;
 using System.Collections.Generic;
+using Stash.Interpreting.Types;
 
 /// <summary>
 /// Registers the 'arr' namespace built-in functions.
