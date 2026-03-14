@@ -45,7 +45,10 @@ public class StashFormatter
         for (int i = 0; i < tokens.Count; i++)
         {
             var token = tokens[i];
-            if (token.Type == TokenType.Eof) break;
+            if (token.Type == TokenType.Eof)
+            {
+                break;
+            }
 
             var context = contextStack.Count > 0 ? contextStack.Peek() : FormatterContext.TopLevel;
 
@@ -56,7 +59,10 @@ public class StashFormatter
                 {
                     indentLevel = Math.Max(0, indentLevel - 1);
                 }
-                if (contextStack.Count > 1) contextStack.Pop();
+                if (contextStack.Count > 1)
+                {
+                    contextStack.Pop();
+                }
             }
 
             // Determine and apply whitespace
@@ -143,26 +149,59 @@ public class StashFormatter
             }
             else if (token.Type is TokenType.RightParen or TokenType.RightBracket)
             {
-                if (contextStack.Count > 1) contextStack.Pop();
+                if (contextStack.Count > 1)
+                {
+                    contextStack.Pop();
+                }
             }
 
             // Track pending keyword for context
-            if (token.Type is TokenType.Enum) pendingKeyword = "enum";
-            else if (token.Type is TokenType.Struct) pendingKeyword = "struct";
-            else if (token.Type is TokenType.Fn) pendingKeyword = "fn";
-            else if (token.Type is TokenType.If) pendingKeyword = "if";
-            else if (token.Type is TokenType.Else) pendingKeyword = "else";
-            else if (token.Type is TokenType.While) pendingKeyword = "while";
-            else if (token.Type is TokenType.For) pendingKeyword = "for";
-            else if (token.Type is TokenType.Semicolon) pendingKeyword = null;
+            if (token.Type is TokenType.Enum)
+            {
+                pendingKeyword = "enum";
+            }
+            else if (token.Type is TokenType.Struct)
+            {
+                pendingKeyword = "struct";
+            }
+            else if (token.Type is TokenType.Fn)
+            {
+                pendingKeyword = "fn";
+            }
+            else if (token.Type is TokenType.If)
+            {
+                pendingKeyword = "if";
+            }
+            else if (token.Type is TokenType.Else)
+            {
+                pendingKeyword = "else";
+            }
+            else if (token.Type is TokenType.While)
+            {
+                pendingKeyword = "while";
+            }
+            else if (token.Type is TokenType.For)
+            {
+                pendingKeyword = "for";
+            }
+            else if (token.Type is TokenType.Semicolon)
+            {
+                pendingKeyword = null;
+            }
 
             // Track ternary ? for colon spacing
             if (token.Type == TokenType.QuestionMark)
+            {
                 ternaryDepth++;
+            }
             else if (token.Type == TokenType.Colon && ternaryDepth > 0)
+            {
                 ternaryDepth--;
+            }
             else if (token.Type is TokenType.Semicolon or TokenType.LeftBrace or TokenType.RightBrace)
+            {
                 ternaryDepth = 0;
+            }
 
             prevClosedInline = token.Type == TokenType.RightBrace && context == FormatterContext.StructInit;
             prevType = token.Type;
@@ -176,154 +215,228 @@ public class StashFormatter
     {
         // Rule 1: No previous token
         if (prev is null)
+        {
             return Whitespace.None;
+        }
 
         // Rule 2: prev == Shebang
         if (prev == TokenType.Shebang)
+        {
             return Whitespace.BlankLine;
+        }
 
         // Rule 3: prev == SingleLineComment && cur == SingleLineComment
         if (prev == TokenType.SingleLineComment && cur == TokenType.SingleLineComment)
+        {
             return Whitespace.NewLine;
+        }
 
         // Rule 4: prev == SingleLineComment
         if (prev == TokenType.SingleLineComment)
+        {
             return indentLevel == 0 ? Whitespace.BlankLine : Whitespace.NewLine;
+        }
 
         // Rule 5: prev == BlockComment
         if (prev == TokenType.BlockComment)
+        {
             return Whitespace.NewLine;
+        }
 
         // Rule 6: prev == RightBrace && cur == Else
         if (prev == TokenType.RightBrace && cur == TokenType.Else)
+        {
             return Whitespace.Space;
+        }
 
         // Rule 6.5: cur == Semicolon — never whitespace before semicolons
         if (cur == TokenType.Semicolon)
+        {
             return Whitespace.None;
+        }
 
         // Rule 7: prev == LeftBrace && cur == RightBrace (empty block/struct init)
         if (prev == TokenType.LeftBrace && cur == TokenType.RightBrace)
+        {
             return context == FormatterContext.StructInit ? Whitespace.None : Whitespace.NewLine;
+        }
 
         // Rule 8: prev == LeftBrace
         if (prev == TokenType.LeftBrace)
+        {
             return context == FormatterContext.StructInit ? Whitespace.None : Whitespace.NewLine;
+        }
 
         // Rule 9: cur == RightBrace
         if (cur == TokenType.RightBrace)
+        {
             return context == FormatterContext.StructInit ? Whitespace.None : Whitespace.NewLine;
+        }
 
         // Rule 10: prev == RightBrace && indentLevel == 0
         if (prev == TokenType.RightBrace && indentLevel == 0 && !prevClosedInline)
+        {
             return Whitespace.BlankLine;
+        }
 
         // Rule 11: prev == RightBrace && cur == SingleLineComment
         if (prev == TokenType.RightBrace && cur == TokenType.SingleLineComment && !prevClosedInline)
+        {
             return Whitespace.BlankLine;
+        }
 
         // Rule 12: prev == RightBrace
         if (prev == TokenType.RightBrace && !prevClosedInline)
+        {
             return Whitespace.NewLine;
+        }
 
         // Rule 13: prev == Semicolon && indentLevel == 0 && IsTopLevelStart(cur)
         if (prev == TokenType.Semicolon && indentLevel == 0 && IsTopLevelStart(cur))
+        {
             return Whitespace.BlankLine;
+        }
 
         // Rule 14: prev == Semicolon && cur == SingleLineComment
         if (prev == TokenType.Semicolon && cur == TokenType.SingleLineComment)
+        {
             return Whitespace.BlankLine;
+        }
 
         // Rule 15: prev == Semicolon
         if (prev == TokenType.Semicolon)
+        {
             return Whitespace.NewLine;
+        }
 
         // Rule 16: prev == Comma && context is EnumBody or StructBody
         if (prev == TokenType.Comma && context is FormatterContext.EnumBody or FormatterContext.StructBody)
+        {
             return Whitespace.NewLine;
+        }
 
         // Rule 17: prev == Comma
         if (prev == TokenType.Comma)
+        {
             return Whitespace.Space;
+        }
 
         // Rule 18: cur is Semicolon, Comma, RightParen, RightBracket
         if (cur is TokenType.Semicolon or TokenType.Comma or TokenType.RightParen or TokenType.RightBracket)
+        {
             return Whitespace.None;
+        }
 
         // Rule 19: cur == Dot || prev == Dot
         if (cur == TokenType.Dot || prev == TokenType.Dot)
+        {
             return Whitespace.None;
+        }
 
         // Rule 20: cur == Colon — no space before colon (type annotations), but space for ternary
         if (cur == TokenType.Colon)
+        {
             return ternaryDepth > 0 ? Whitespace.Space : Whitespace.None;
+        }
 
         // Rule 21: prev == Colon
         if (prev == TokenType.Colon)
+        {
             return Whitespace.Space;
+        }
 
         // Rule 22: prev == LeftParen || prev == LeftBracket
         if (prev is TokenType.LeftParen or TokenType.LeftBracket)
+        {
             return Whitespace.None;
+        }
 
         // Rule 23: cur == LeftParen && prev == Identifier
         if (cur == TokenType.LeftParen && prev == TokenType.Identifier)
+        {
             return Whitespace.None;
+        }
 
         // Rule 24: cur == LeftParen && IsControlKeyword(prev)
         if (cur == TokenType.LeftParen && IsControlKeyword(prev.Value))
+        {
             return Whitespace.Space;
+        }
 
         // Rule 25: cur == LeftBracket && prev == Identifier
         if (cur == TokenType.LeftBracket && prev == TokenType.Identifier)
+        {
             return Whitespace.None;
+        }
 
         // Rule 26: prev == Bang
         if (prev == TokenType.Bang)
+        {
             return Whitespace.None;
+        }
 
         // Rule 27: Postfix ++/--: cur is PlusPlus/MinusMinus AND prev is Identifier/RightParen/RightBracket
         if (cur is TokenType.PlusPlus or TokenType.MinusMinus
             && prev is TokenType.Identifier or TokenType.RightParen or TokenType.RightBracket)
+        {
             return Whitespace.None;
+        }
 
         // Rule 28: Prefix ++/--: prev is PlusPlus/MinusMinus AND cur is Identifier/LeftParen
         if (prev is TokenType.PlusPlus or TokenType.MinusMinus
             && cur is TokenType.Identifier or TokenType.LeftParen)
+        {
             return Whitespace.None;
+        }
 
         // Rule 29: Unary minus/plus context — cur is Minus or Plus and prev is in unary context
         if ((cur == TokenType.Minus || cur == TokenType.Plus) && IsUnaryContext(prev.Value))
+        {
             return Whitespace.Space;
+        }
 
         // Rule 30: After unary minus/plus, no space before operand
         if ((prev is TokenType.Minus or TokenType.Plus) && prevWasUnaryMinusPlus)
+        {
             return Whitespace.None;
+        }
 
         // Rule 31: IsBinaryOp(cur) or IsBinaryOp(prev)
         if (IsBinaryOp(cur) || IsBinaryOp(prev.Value))
+        {
             return Whitespace.Space;
+        }
 
         // Rule 32: cur == Equal || prev == Equal
         if (cur == TokenType.Equal || prev == TokenType.Equal)
+        {
             return Whitespace.Space;
+        }
 
         // Rule 33: cur or prev is Arrow/FatArrow/QuestionQuestion
         if (cur is TokenType.Arrow or TokenType.FatArrow or TokenType.QuestionQuestion
             || prev is TokenType.Arrow or TokenType.FatArrow or TokenType.QuestionQuestion)
+        {
             return Whitespace.Space;
+        }
 
         // Rule 34: cur == QuestionMark || prev == QuestionMark
         if (cur == TokenType.QuestionMark || prev == TokenType.QuestionMark)
+        {
             return Whitespace.Space;
+        }
 
         // Rule 35: IsKeyword(prev)
         if (IsKeyword(prev.Value))
+        {
             return Whitespace.Space;
+        }
 
         // Rule 36: cur == LeftBrace
         if (cur == TokenType.LeftBrace)
+        {
             return Whitespace.Space;
+        }
 
         // Rule 37: Default
         return Whitespace.Space;

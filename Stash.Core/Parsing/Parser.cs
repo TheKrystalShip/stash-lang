@@ -698,12 +698,22 @@ public class Parser
     /// </summary>
     private bool CheckStderrRedirect()
     {
-        if (IsAtEnd) return false;
+        if (IsAtEnd)
+        {
+            return false;
+        }
+
         Token current = Peek();
         if (current.Type != TokenType.IntegerLiteral || current.Literal is not long val || val != 2)
+        {
             return false;
+        }
         // Check the token after the '2'
-        if (_current + 1 >= _tokens.Count) return false;
+        if (_current + 1 >= _tokens.Count)
+        {
+            return false;
+        }
+
         TokenType next = _tokens[_current + 1].Type;
         return next == TokenType.Greater || next == TokenType.GreaterGreater;
     }
@@ -811,10 +821,14 @@ public class Parser
             // When the left side is a command expression, > and >> are redirection, not comparison.
             bool isCommandLike = expr is CommandExpr or PipeExpr or RedirectExpr;
             if (isCommandLike && (Check(TokenType.Greater) || Check(TokenType.GreaterGreater)))
+            {
                 break;
+            }
 
             if (!Match(TokenType.Less, TokenType.Greater, TokenType.LessEqual, TokenType.GreaterEqual))
+            {
                 break;
+            }
 
             Token op = Previous();
             Expr right = Term();
@@ -1019,9 +1033,13 @@ public class Parser
             }
 
             if (!Check(TokenType.RightBrace))
+            {
                 Consume(TokenType.Comma, "Expected ',' between switch arms.");
+            }
             else
+            {
                 Match(TokenType.Comma); // optional trailing comma
+            }
         }
 
         Token closeBrace = Consume(TokenType.RightBrace, "Expected '}' after switch arms.");
@@ -1197,7 +1215,9 @@ public class Parser
             while (true)
             {
                 if (!Check(TokenType.Identifier))
+                {
                     return false;
+                }
 
                 Advance(); // skip identifier
 
@@ -1206,7 +1226,10 @@ public class Parser
                 {
                     Advance(); // skip ':'
                     if (!Check(TokenType.Identifier))
+                    {
                         return false;
+                    }
+
                     Advance(); // skip type name
                 }
 

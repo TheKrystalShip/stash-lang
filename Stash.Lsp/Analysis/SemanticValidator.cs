@@ -295,6 +295,20 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 }
             }
         }
+        else if (expr.Callee is DotExpr dot && dot.Object is IdentifierExpr nsId &&
+                 BuiltInRegistry.IsBuiltInNamespace(nsId.Name.Lexeme))
+        {
+            var qualifiedName = $"{nsId.Name.Lexeme}.{dot.Name.Lexeme}";
+            if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out var func) &&
+                !func.IsVariadic &&
+                expr.Arguments.Count != func.Parameters.Length)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    $"Expected {func.Parameters.Length} arguments but got {expr.Arguments.Count}.",
+                    DiagnosticLevel.Error,
+                    expr.Paren.Span));
+            }
+        }
         else
         {
             expr.Callee.Accept(this);

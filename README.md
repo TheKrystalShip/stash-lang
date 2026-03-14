@@ -66,7 +66,7 @@ If you have ever written Bash beyond a few lines, you know the pain. Variable qu
 **Stash sits in the gap.** It gives you:
 
 - **Shell commands as first-class citizens.** `$(ls -la)` just works. No string wrapping, no subprocess imports. Pipe chains with `|` pass stdout between processes exactly like Bash, but with short-circuit-on-failure semantics built in.
-- **Real data structures.** Structs and enums let you model your domain — servers, deploy targets, configurations — instead of juggling parallel arrays and magic strings.
+- **Real data structures.** Structs, enums, and dictionaries let you model your domain — servers, deploy targets, configurations — instead of juggling parallel arrays and magic strings.
 - **C-style syntax.** If you know C, C++, C#, Java, or JavaScript, you can read Stash immediately. Braces, semicolons, `if`/`else`/`while`/`for` — nothing surprising.
 - **Sensible error handling.** `try` expressions catch errors inline, `??` provides fallbacks, and `lastError()` gives you the details when you need them. No try/catch ceremony, no Go-style error-value tuples.
 - **Modules.** `import { deploy, Server } from "utils.stash";` — selective imports with module caching and circular dependency detection.

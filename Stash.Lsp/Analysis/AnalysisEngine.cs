@@ -132,20 +132,29 @@ public class AnalysisEngine
     public List<(Uri Uri, SourceSpan Span)> FindCrossFileReferences(Uri sourceUri, string symbolName)
     {
         var results = new List<(Uri, SourceSpan)>();
-        if (!sourceUri.IsFile) return results;
+        if (!sourceUri.IsFile)
+        {
+            return results;
+        }
 
         var dependents = _importResolver.GetDependents(sourceUri.LocalPath);
 
         foreach (var depUri in dependents)
         {
             var depResult = GetCachedResult(depUri);
-            if (depResult == null) continue;
+            if (depResult == null)
+            {
+                continue;
+            }
 
             // Case 1: Namespace import (import "file" as alias)
             // Look for alias.symbolName in tokens
             foreach (var (alias, moduleInfo) in depResult.NamespaceImports)
             {
-                if (moduleInfo.AbsolutePath != sourceUri.LocalPath) continue;
+                if (moduleInfo.AbsolutePath != sourceUri.LocalPath)
+                {
+                    continue;
+                }
 
                 var tokens = depResult.Tokens;
                 for (int i = 0; i < tokens.Count - 2; i++)
@@ -171,7 +180,11 @@ public class AnalysisEngine
                     foreach (var r in refs)
                     {
                         // Skip the import statement entry itself
-                        if (r.Span == sym.Span) continue;
+                        if (r.Span == sym.Span)
+                        {
+                            continue;
+                        }
+
                         results.Add((depUri, r.Span));
                     }
                     break;

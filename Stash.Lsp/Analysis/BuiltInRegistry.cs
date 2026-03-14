@@ -43,7 +43,7 @@ public static class BuiltInRegistry
         }
     }
 
-    public record NamespaceFunction(string Namespace, string Name, BuiltInParam[] Parameters, string? ReturnType = null)
+    public record NamespaceFunction(string Namespace, string Name, BuiltInParam[] Parameters, string? ReturnType = null, bool IsVariadic = false)
     {
         public string QualifiedName => $"{Namespace}.{Name}";
 
@@ -170,7 +170,7 @@ public static class BuiltInRegistry
         new NamespaceFunction("arr", "clear", new[] { new BuiltInParam("array", "array") }),
         new NamespaceFunction("arr", "contains", new[] { new BuiltInParam("array", "array"), new BuiltInParam("value") }, "bool"),
         new NamespaceFunction("arr", "indexOf", new[] { new BuiltInParam("array", "array"), new BuiltInParam("value") }, "int"),
-        new NamespaceFunction("arr", "slice", new[] { new BuiltInParam("array", "array"), new BuiltInParam("start", "int"), new BuiltInParam("end", "int") }, "array"),
+        new NamespaceFunction("arr", "slice", new[] { new BuiltInParam("array", "array"), new BuiltInParam("start", "int"), new BuiltInParam("end", "int") }, "array", IsVariadic: true),
         new NamespaceFunction("arr", "concat", new[] { new BuiltInParam("array1", "array"), new BuiltInParam("array2", "array") }, "array"),
         new NamespaceFunction("arr", "join", new[] { new BuiltInParam("array", "array"), new BuiltInParam("separator", "string") }, "string"),
         new NamespaceFunction("arr", "reverse", new[] { new BuiltInParam("array", "array") }),
@@ -204,15 +204,15 @@ public static class BuiltInRegistry
         new NamespaceFunction("str", "endsWith", new[] { new BuiltInParam("s", "string"), new BuiltInParam("suffix", "string") }, "bool"),
         new NamespaceFunction("str", "indexOf", new[] { new BuiltInParam("s", "string"), new BuiltInParam("substring", "string") }, "int"),
         new NamespaceFunction("str", "lastIndexOf", new[] { new BuiltInParam("s", "string"), new BuiltInParam("substring", "string") }, "int"),
-        new NamespaceFunction("str", "substring", new[] { new BuiltInParam("s", "string"), new BuiltInParam("start", "int"), new BuiltInParam("end", "int") }, "string"),
+        new NamespaceFunction("str", "substring", new[] { new BuiltInParam("s", "string"), new BuiltInParam("start", "int"), new BuiltInParam("end", "int") }, "string", IsVariadic: true),
         new NamespaceFunction("str", "replace", new[] { new BuiltInParam("s", "string"), new BuiltInParam("old", "string"), new BuiltInParam("new", "string") }, "string"),
         new NamespaceFunction("str", "replaceAll", new[] { new BuiltInParam("s", "string"), new BuiltInParam("old", "string"), new BuiltInParam("new", "string") }, "string"),
         new NamespaceFunction("str", "split", new[] { new BuiltInParam("s", "string"), new BuiltInParam("delimiter", "string") }, "array"),
         new NamespaceFunction("str", "repeat", new[] { new BuiltInParam("s", "string"), new BuiltInParam("count", "int") }, "string"),
         new NamespaceFunction("str", "reverse", new[] { new BuiltInParam("s", "string") }, "string"),
         new NamespaceFunction("str", "chars", new[] { new BuiltInParam("s", "string") }, "array"),
-        new NamespaceFunction("str", "padStart", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string"),
-        new NamespaceFunction("str", "padEnd", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string"),
+        new NamespaceFunction("str", "padStart", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string", IsVariadic: true),
+        new NamespaceFunction("str", "padEnd", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string", IsVariadic: true),
     };
 
     // ── Built-in Namespace Constants ──
@@ -249,7 +249,7 @@ public static class BuiltInRegistry
     public static readonly HashSet<string> ValidTypes = new()
     {
         "string", "int", "float", "bool", "null", "array",
-        "function", "namespace"
+        "dict", "function", "namespace"
     };
 
     // ── Known names for semantic validation (don't warn as undefined) ──

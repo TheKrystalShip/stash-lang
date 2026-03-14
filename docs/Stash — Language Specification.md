@@ -540,14 +540,14 @@ $(make build) > "stdout.txt" 2> "stderr.txt";
 
 ### Stream Selectors
 
-| Operator | Stream   | Description                           |
-| -------- | -------- | ------------------------------------- |
-| `>`      | stdout   | Write stdout to file (overwrite)      |
-| `>>`     | stdout   | Append stdout to file                 |
-| `2>`     | stderr   | Write stderr to file (overwrite)      |
-| `2>>`    | stderr   | Append stderr to file                 |
-| `&>`     | both     | Write stdout+stderr to file (overwrite) |
-| `&>>`    | both     | Append stdout+stderr to file          |
+| Operator | Stream | Description                             |
+| -------- | ------ | --------------------------------------- |
+| `>`      | stdout | Write stdout to file (overwrite)        |
+| `>>`     | stdout | Append stdout to file                   |
+| `2>`     | stderr | Write stderr to file (overwrite)        |
+| `2>>`    | stderr | Append stderr to file                   |
+| `&>`     | both   | Write stdout+stderr to file (overwrite) |
+| `&>>`    | both   | Append stdout+stderr to file            |
 
 ### Parsing
 
@@ -657,15 +657,15 @@ process.signal(server, process.SIGHUP);   // hangup
 
 `process.signal(proc, sig)` sends an arbitrary signal. The signal is specified as an integer. Common signal constants are provided on the `process` namespace:
 
-| Constant            | Value | Description                     |
-| ------------------- | ----- | ------------------------------- |
-| `process.SIGHUP`    | 1     | Hangup                          |
-| `process.SIGINT`    | 2     | Interrupt (Ctrl+C)              |
-| `process.SIGQUIT`   | 3     | Quit                            |
-| `process.SIGKILL`   | 9     | Kill (cannot be caught)         |
-| `process.SIGTERM`   | 15    | Terminate (graceful)            |
-| `process.SIGUSR1`   | 10    | User-defined signal 1           |
-| `process.SIGUSR2`   | 12    | User-defined signal 2           |
+| Constant          | Value | Description             |
+| ----------------- | ----- | ----------------------- |
+| `process.SIGHUP`  | 1     | Hangup                  |
+| `process.SIGINT`  | 2     | Interrupt (Ctrl+C)      |
+| `process.SIGQUIT` | 3     | Quit                    |
+| `process.SIGKILL` | 9     | Kill (cannot be caught) |
+| `process.SIGTERM` | 15    | Terminate (graceful)    |
+| `process.SIGUSR1` | 10    | User-defined signal 1   |
+| `process.SIGUSR2` | 12    | User-defined signal 2   |
 
 These are integer constants — `process.SIGTERM` is just `15`. Using `process.signal(proc, 15)` is equivalent.
 
@@ -694,6 +694,7 @@ process.detach(daemon);
 ```
 
 `process.detach(proc)` removes a process from the tracked process list. After detaching:
+
 - The process will **not** be killed when the script exits.
 - `process.isAlive()`, `process.kill()`, `process.signal()`, `process.wait()`, `process.read()`, and `process.write()` on the detached handle return `false`/`null` as appropriate without error.
 - The `pid` and `command` fields remain accessible on the handle.
@@ -1053,18 +1054,18 @@ Stash organizes built-in functions into **namespaces** accessed via dot notation
 
 #### `io` — Standard I/O
 
-| Function           | Description                     |
-| ------------------ | ------------------------------- |
-| `io.println(val)`  | Print value followed by newline |
-| `io.print(val)`    | Print value without newline     |
+| Function          | Description                     |
+| ----------------- | ------------------------------- |
+| `io.println(val)` | Print value followed by newline |
+| `io.print(val)`   | Print value without newline     |
 
 #### `conv` — Type Conversion
 
-| Function            | Description              |
-| ------------------- | ------------------------ |
-| `conv.toStr(val)`   | Convert value to string  |
-| `conv.toInt(val)`   | Parse string to integer  |
-| `conv.toFloat(val)` | Parse string to float    |
+| Function            | Description             |
+| ------------------- | ----------------------- |
+| `conv.toStr(val)`   | Convert value to string |
+| `conv.toInt(val)`   | Parse string to integer |
+| `conv.toFloat(val)` | Parse string to float   |
 
 #### `env` — Environment Variables
 
@@ -1075,50 +1076,50 @@ Stash organizes built-in functions into **namespaces** accessed via dot notation
 
 #### `process` — Process Control & Management
 
-| Function                            | Description                                                              |
-| ----------------------------------- | ------------------------------------------------------------------------ |
-| `process.exit(code)`                | Terminate the script with exit code                                      |
-| `process.spawn(cmd)`                | Launch a background process, returns a `Process` handle                  |
-| `process.wait(proc)`                | Block until a process exits, returns `CommandResult`                     |
-| `process.waitTimeout(proc, ms)`     | Wait with timeout; returns `CommandResult` or `null` if timed out        |
-| `process.kill(proc)`                | Send SIGTERM to a process                                                |
-| `process.isAlive(proc)`             | Check if a process is still running (returns `bool`)                     |
-| `process.signal(proc, sig)`         | Send an arbitrary signal to a process                                    |
-| `process.pid(proc)`                 | Get the OS process ID                                                    |
-| `process.detach(proc)`              | Detach a process so it survives script exit                              |
-| `process.list()`                    | List all tracked (spawned) process handles                               |
-| `process.read(proc)`                | Read available stdout from a running process (non-blocking)              |
-| `process.write(proc, data)`         | Write to a running process's stdin                                       |
+| Function                        | Description                                                       |
+| ------------------------------- | ----------------------------------------------------------------- |
+| `process.exit(code)`            | Terminate the script with exit code                               |
+| `process.spawn(cmd)`            | Launch a background process, returns a `Process` handle           |
+| `process.wait(proc)`            | Block until a process exits, returns `CommandResult`              |
+| `process.waitTimeout(proc, ms)` | Wait with timeout; returns `CommandResult` or `null` if timed out |
+| `process.kill(proc)`            | Send SIGTERM to a process                                         |
+| `process.isAlive(proc)`         | Check if a process is still running (returns `bool`)              |
+| `process.signal(proc, sig)`     | Send an arbitrary signal to a process                             |
+| `process.pid(proc)`             | Get the OS process ID                                             |
+| `process.detach(proc)`          | Detach a process so it survives script exit                       |
+| `process.list()`                | List all tracked (spawned) process handles                        |
+| `process.read(proc)`            | Read available stdout from a running process (non-blocking)       |
+| `process.write(proc, data)`     | Write to a running process's stdin                                |
 
 See [Section 6d](#6d-process-management) for full semantics, the `Process` handle, signal constants, and examples.
 
 #### `fs` — File System Operations
 
-| Function                         | Description                                      |
-| -------------------------------- | ------------------------------------------------ |
-| `fs.readFile(path)`              | Read file contents as string                     |
-| `fs.writeFile(path, content)`    | Write string to file (creates or overwrites)     |
-| `fs.appendFile(path, content)`   | Append string to file                            |
-| `fs.exists(path)`                | Check if a file exists (returns boolean)         |
-| `fs.dirExists(path)`             | Check if a directory exists (returns boolean)    |
-| `fs.pathExists(path)`            | Check if a file or directory exists              |
-| `fs.createDir(path)`             | Create a directory (including parents)           |
-| `fs.delete(path)`                | Delete a file or directory (recursive)           |
-| `fs.copy(src, dst)`              | Copy a file (overwrites destination)             |
-| `fs.move(src, dst)`              | Move/rename a file (overwrites destination)      |
-| `fs.size(path)`                  | Get file size in bytes                           |
-| `fs.listDir(path)`               | List entries in a directory (returns array)      |
+| Function                       | Description                                   |
+| ------------------------------ | --------------------------------------------- |
+| `fs.readFile(path)`            | Read file contents as string                  |
+| `fs.writeFile(path, content)`  | Write string to file (creates or overwrites)  |
+| `fs.appendFile(path, content)` | Append string to file                         |
+| `fs.exists(path)`              | Check if a file exists (returns boolean)      |
+| `fs.dirExists(path)`           | Check if a directory exists (returns boolean) |
+| `fs.pathExists(path)`          | Check if a file or directory exists           |
+| `fs.createDir(path)`           | Create a directory (including parents)        |
+| `fs.delete(path)`              | Delete a file or directory (recursive)        |
+| `fs.copy(src, dst)`            | Copy a file (overwrites destination)          |
+| `fs.move(src, dst)`            | Move/rename a file (overwrites destination)   |
+| `fs.size(path)`                | Get file size in bytes                        |
+| `fs.listDir(path)`             | List entries in a directory (returns array)   |
 
 #### `path` — Path Manipulation
 
-| Function                         | Description                                      |
-| -------------------------------- | ------------------------------------------------ |
-| `path.abs(p)`                    | Get absolute path                                |
-| `path.dir(p)`                    | Get directory portion of path                    |
-| `path.base(p)`                   | Get filename with extension                      |
-| `path.name(p)`                   | Get filename without extension                   |
-| `path.ext(p)`                    | Get file extension (including `.`)               |
-| `path.join(a, b)`                | Join two path segments                           |
+| Function          | Description                        |
+| ----------------- | ---------------------------------- |
+| `path.abs(p)`     | Get absolute path                  |
+| `path.dir(p)`     | Get directory portion of path      |
+| `path.base(p)`    | Get filename with extension        |
+| `path.name(p)`    | Get filename without extension     |
+| `path.ext(p)`     | Get file extension (including `.`) |
+| `path.join(a, b)` | Join two path segments             |
 
 #### `arr` — Array Operations
 
@@ -1126,42 +1127,42 @@ All `arr` functions take the target array as the first argument. Functions that 
 
 ##### Core Manipulation
 
-| Function                          | Description                                                       |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `arr.push(array, value)`          | Add value to end of array                                         |
-| `arr.pop(array)`                  | Remove and return last element (error if empty)                   |
-| `arr.peek(array)`                 | Return last element without removing (error if empty)             |
-| `arr.insert(array, index, value)` | Insert value at index (shifts elements right)                     |
-| `arr.removeAt(array, index)`      | Remove and return element at index                                |
-| `arr.remove(array, value)`        | Remove first occurrence of value; returns `true` if found         |
-| `arr.clear(array)`                | Remove all elements                                               |
+| Function                          | Description                                               |
+| --------------------------------- | --------------------------------------------------------- |
+| `arr.push(array, value)`          | Add value to end of array                                 |
+| `arr.pop(array)`                  | Remove and return last element (error if empty)           |
+| `arr.peek(array)`                 | Return last element without removing (error if empty)     |
+| `arr.insert(array, index, value)` | Insert value at index (shifts elements right)             |
+| `arr.removeAt(array, index)`      | Remove and return element at index                        |
+| `arr.remove(array, value)`        | Remove first occurrence of value; returns `true` if found |
+| `arr.clear(array)`                | Remove all elements                                       |
 
 ##### Searching
 
-| Function                          | Description                                                       |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `arr.contains(array, value)`      | Return `true` if value exists in array                            |
-| `arr.indexOf(array, value)`       | Return index of first occurrence, or `-1` if not found            |
+| Function                     | Description                                            |
+| ---------------------------- | ------------------------------------------------------ |
+| `arr.contains(array, value)` | Return `true` if value exists in array                 |
+| `arr.indexOf(array, value)`  | Return index of first occurrence, or `-1` if not found |
 
 ##### Transformation
 
-| Function                          | Description                                                       |
-| --------------------------------- | ----------------------------------------------------------------- |
-| `arr.slice(array, start, end)`    | Return new sub-array from start (inclusive) to end (exclusive)    |
-| `arr.concat(array1, array2)`      | Return new array combining both arrays                            |
-| `arr.join(array, separator)`      | Join elements into a string with separator                        |
-| `arr.reverse(array)`              | Reverse array in-place                                            |
-| `arr.sort(array)`                 | Sort array in-place (numbers and strings; error on mixed types)   |
+| Function                       | Description                                                     |
+| ------------------------------ | --------------------------------------------------------------- |
+| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)  |
+| `arr.concat(array1, array2)`   | Return new array combining both arrays                          |
+| `arr.join(array, separator)`   | Join elements into a string with separator                      |
+| `arr.reverse(array)`           | Reverse array in-place                                          |
+| `arr.sort(array)`              | Sort array in-place (numbers and strings; error on mixed types) |
 
 ##### Higher-Order Functions
 
-| Function                              | Description                                                   |
-| ------------------------------------- | ------------------------------------------------------------- |
-| `arr.map(array, fn)`                  | Return new array with `fn(element)` applied to each element   |
-| `arr.filter(array, fn)`              | Return new array of elements where `fn(element)` is truthy    |
-| `arr.forEach(array, fn)`             | Call `fn(element)` for each element                           |
-| `arr.find(array, fn)`                | Return first element where `fn(element)` is truthy, or `null` |
-| `arr.reduce(array, fn, initial)`     | Fold array: calls `fn(accumulator, element)` for each element |
+| Function                         | Description                                                   |
+| -------------------------------- | ------------------------------------------------------------- |
+| `arr.map(array, fn)`             | Return new array with `fn(element)` applied to each element   |
+| `arr.filter(array, fn)`          | Return new array of elements where `fn(element)` is truthy    |
+| `arr.forEach(array, fn)`         | Call `fn(element)` for each element                           |
+| `arr.find(array, fn)`            | Return first element where `fn(element)` is truthy, or `null` |
+| `arr.reduce(array, fn, initial)` | Fold array: calls `fn(accumulator, element)` for each element |
 
 ##### Examples
 
@@ -1196,20 +1197,20 @@ arr.forEach(nums, (x) => io.println(x));          // prints each element
 
 All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument.
 
-| Function                         | Description                                                          |
-| -------------------------------- | -------------------------------------------------------------------- |
-| `dict.new()`                     | Create an empty dictionary                                           |
-| `dict.get(d, key)`              | Get value for key, or `null` if not found                            |
-| `dict.set(d, key, value)`       | Set key-value pair (mutates dictionary)                              |
-| `dict.has(d, key)`              | Return `true` if key exists                                         |
-| `dict.remove(d, key)`           | Remove key; returns `true` if found                                  |
-| `dict.clear(d)`                 | Remove all entries                                                   |
-| `dict.keys(d)`                  | Return array of all keys                                             |
-| `dict.values(d)`                | Return array of all values                                           |
-| `dict.size(d)`                  | Return number of entries                                             |
-| `dict.pairs(d)`                 | Return array of Pair structs (each with `.key` and `.value` fields)   |
-| `dict.forEach(d, fn)`           | Call `fn(key, value)` for each entry                                 |
-| `dict.merge(d1, d2)`            | Return new dictionary combining both (d2 wins on key conflicts)      |
+| Function                  | Description                                                         |
+| ------------------------- | ------------------------------------------------------------------- |
+| `dict.new()`              | Create an empty dictionary                                          |
+| `dict.get(d, key)`        | Get value for key, or `null` if not found                           |
+| `dict.set(d, key, value)` | Set key-value pair (mutates dictionary)                             |
+| `dict.has(d, key)`        | Return `true` if key exists                                         |
+| `dict.remove(d, key)`     | Remove key; returns `true` if found                                 |
+| `dict.clear(d)`           | Remove all entries                                                  |
+| `dict.keys(d)`            | Return array of all keys                                            |
+| `dict.values(d)`          | Return array of all values                                          |
+| `dict.size(d)`            | Return number of entries                                            |
+| `dict.pairs(d)`           | Return array of Pair structs (each with `.key` and `.value` fields) |
+| `dict.forEach(d, fn)`     | Call `fn(key, value)` for each entry                                |
+| `dict.merge(d1, d2)`      | Return new dictionary combining both (d2 wins on key conflicts)     |
 
 ##### Index Syntax
 
@@ -1269,27 +1270,27 @@ Standard library to be expanded as needed.
 
 All `str` functions take the target string as the first argument. Strings are immutable — functions return new strings rather than modifying in place.
 
-| Function                          | Description                                                          |
-| --------------------------------- | -------------------------------------------------------------------- |
-| `str.upper(s)`                    | Convert to uppercase                                                 |
-| `str.lower(s)`                    | Convert to lowercase                                                 |
-| `str.trim(s)`                     | Remove leading and trailing whitespace                               |
-| `str.trimStart(s)`                | Remove leading whitespace                                            |
-| `str.trimEnd(s)`                  | Remove trailing whitespace                                           |
-| `str.contains(s, sub)`           | Return `true` if `s` contains `sub`                                  |
-| `str.startsWith(s, prefix)`      | Return `true` if `s` starts with `prefix`                            |
-| `str.endsWith(s, suffix)`        | Return `true` if `s` ends with `suffix`                              |
-| `str.indexOf(s, sub)`            | Return index of first occurrence of `sub`, or `-1`                   |
-| `str.lastIndexOf(s, sub)`        | Return index of last occurrence of `sub`, or `-1`                    |
-| `str.substring(s, start, end?)`  | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
-| `str.replace(s, old, new)`       | Replace first occurrence of `old` with `new`                         |
-| `str.replaceAll(s, old, new)`    | Replace all occurrences of `old` with `new`                          |
-| `str.split(s, delimiter)`        | Split string into array by `delimiter`                               |
-| `str.repeat(s, count)`           | Repeat string `count` times                                         |
-| `str.reverse(s)`                 | Reverse the string                                                   |
-| `str.chars(s)`                   | Convert to array of single-character strings                         |
-| `str.padStart(s, len, fill?)`    | Pad start to `len` characters with `fill` (default `" "`)           |
-| `str.padEnd(s, len, fill?)`      | Pad end to `len` characters with `fill` (default `" "`)             |
+| Function                        | Description                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `str.upper(s)`                  | Convert to uppercase                                                                 |
+| `str.lower(s)`                  | Convert to lowercase                                                                 |
+| `str.trim(s)`                   | Remove leading and trailing whitespace                                               |
+| `str.trimStart(s)`              | Remove leading whitespace                                                            |
+| `str.trimEnd(s)`                | Remove trailing whitespace                                                           |
+| `str.contains(s, sub)`          | Return `true` if `s` contains `sub`                                                  |
+| `str.startsWith(s, prefix)`     | Return `true` if `s` starts with `prefix`                                            |
+| `str.endsWith(s, suffix)`       | Return `true` if `s` ends with `suffix`                                              |
+| `str.indexOf(s, sub)`           | Return index of first occurrence of `sub`, or `-1`                                   |
+| `str.lastIndexOf(s, sub)`       | Return index of last occurrence of `sub`, or `-1`                                    |
+| `str.substring(s, start, end?)` | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
+| `str.replace(s, old, new)`      | Replace first occurrence of `old` with `new`                                         |
+| `str.replaceAll(s, old, new)`   | Replace all occurrences of `old` with `new`                                          |
+| `str.split(s, delimiter)`       | Split string into array by `delimiter`                                               |
+| `str.repeat(s, count)`          | Repeat string `count` times                                                          |
+| `str.reverse(s)`                | Reverse the string                                                                   |
+| `str.chars(s)`                  | Convert to array of single-character strings                                         |
+| `str.padStart(s, len, fill?)`   | Pad start to `len` characters with `fill` (default `" "`)                            |
+| `str.padEnd(s, len, fill?)`     | Pad end to `len` characters with `fill` (default `" "`)                              |
 
 ##### Examples
 
@@ -1501,27 +1502,27 @@ Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus a **`parseAr
 
 #### `ArgTree` Fields
 
-| Field         | Type              | Description                                                      |
-| ------------- | ----------------- | ---------------------------------------------------------------- |
-| `name`        | string (optional) | Script name (used in help text and usage line)                   |
-| `version`     | string (optional) | Version string (used with auto `--version` flag)                 |
-| `description` | string            | Script description (required, can be `""`)                       |
-| `flags`       | array (optional)  | Array of `ArgDef` entries for boolean switches                   |
-| `options`     | array (optional)  | Array of `ArgDef` entries for value-taking options               |
-| `commands`    | array (optional)  | Array of `ArgDef` entries for subcommands                        |
-| `positionals` | array (optional)  | Array of `ArgDef` entries for positional arguments               |
+| Field         | Type              | Description                                        |
+| ------------- | ----------------- | -------------------------------------------------- |
+| `name`        | string (optional) | Script name (used in help text and usage line)     |
+| `version`     | string (optional) | Version string (used with auto `--version` flag)   |
+| `description` | string            | Script description (required, can be `""`)         |
+| `flags`       | array (optional)  | Array of `ArgDef` entries for boolean switches     |
+| `options`     | array (optional)  | Array of `ArgDef` entries for value-taking options |
+| `commands`    | array (optional)  | Array of `ArgDef` entries for subcommands          |
+| `positionals` | array (optional)  | Array of `ArgDef` entries for positional arguments |
 
 #### `ArgDef` Fields
 
-| Field         | Type               | Description                                                                |
-| ------------- | ------------------ | -------------------------------------------------------------------------- |
-| `name`        | string (required)  | Long name of the argument                                                  |
-| `short`       | string (optional)  | Single-character short form                                                |
-| `type`        | string (optional)  | Type for coercion: `"string"`, `"int"`, `"float"`, `"bool"`               |
-| `default`     | any (optional)     | Default value (any expression)                                             |
-| `description` | string             | Description for help text (required, can be `""`)                          |
-| `required`    | bool (optional)    | Whether the argument must be provided (default: `false`)                   |
-| `args`        | ArgTree (optional) | Nested `ArgTree` for subcommand flags/options/positionals                  |
+| Field         | Type               | Description                                                 |
+| ------------- | ------------------ | ----------------------------------------------------------- |
+| `name`        | string (required)  | Long name of the argument                                   |
+| `short`       | string (optional)  | Single-character short form                                 |
+| `type`        | string (optional)  | Type for coercion: `"string"`, `"int"`, `"float"`, `"bool"` |
+| `default`     | any (optional)     | Default value (any expression)                              |
+| `description` | string             | Description for help text (required, can be `""`)           |
+| `required`    | bool (optional)    | Whether the argument must be provided (default: `false`)    |
+| `args`        | ArgTree (optional) | Nested `ArgTree` for subcommand flags/options/positionals   |
 
 ### Syntax
 
@@ -1562,6 +1563,7 @@ Flags are boolean switches that default to `false` and become `true` when presen
 Usage: `--name` or `-short`
 
 **Special flags:**
+
 - A flag named `help` will automatically print formatted help text and exit when `--help` or its short form is passed.
 - A flag named `version` will automatically print the `version` metadata value and exit when `--version` is passed (requires `version` to be set on the `ArgTree`).
 
@@ -1573,12 +1575,12 @@ Usage: `--name value`, `-s value`, or `--name=value`
 
 **Type coercion:**
 
-| Type     | Stash Type | Accepted Values                                              |
-| -------- | ---------- | ------------------------------------------------------------ |
-| `string` | string     | Any string (default if no `type` specified)                  |
-| `int`    | int (long) | Integer strings (e.g., `"42"`, `"-1"`)                       |
-| `float`  | float      | Decimal strings (e.g., `"3.14"`)                             |
-| `bool`   | bool       | `"true"`, `"false"`, `"1"`, `"0"`, `"yes"`, `"no"`          |
+| Type     | Stash Type | Accepted Values                                    |
+| -------- | ---------- | -------------------------------------------------- |
+| `string` | string     | Any string (default if no `type` specified)        |
+| `int`    | int (long) | Integer strings (e.g., `"42"`, `"-1"`)             |
+| `float`  | float      | Decimal strings (e.g., `"3.14"`)                   |
+| `bool`   | bool       | `"true"`, `"false"`, `"1"`, `"0"`, `"yes"`, `"no"` |
 
 A runtime error is raised if the value cannot be parsed as the specified type.
 

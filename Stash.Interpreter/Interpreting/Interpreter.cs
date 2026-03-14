@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Debugging;
@@ -567,11 +568,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
         if (value is StashDictionary dict)
         {
-            var sb = new System.Text.StringBuilder("{");
+            var sb = new StringBuilder("{");
             bool first = true;
             foreach (var key in dict.Keys())
             {
-                if (!first) sb.Append(", ");
+                if (!first)
+                {
+                    sb.Append(", ");
+                }
+
                 first = false;
                 sb.Append(Stringify(key));
                 sb.Append(": ");
@@ -1004,7 +1009,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
         else if (iterable is StashDictionary dict)
         {
-            items = dict.IterableKeys();
+            items = dict.IterableKeys().ToList();
         }
         else
         {
@@ -2097,11 +2102,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
         if (obj is StashEnum enumDef)
         {
-            StashEnumValue? value = enumDef.GetMember(expr.Name.Lexeme);
-            if (value is null)
-            {
-                throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{expr.Name.Lexeme}'.", expr.Name.Span);
-            }
+            StashEnumValue? value = enumDef.GetMember(expr.Name.Lexeme) ?? throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{expr.Name.Lexeme}'.", expr.Name.Span);
             return value;
         }
 
@@ -2190,12 +2191,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             psi.ArgumentList.Add("-c");
             psi.ArgumentList.Add(command);
 
-            using var process = Process.Start(psi);
-            if (process is null)
-            {
-                throw new RuntimeError("Failed to start process.", expr.Span);
-            }
-
+            using var process = Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", expr.Span);
             if (_pendingStdin is not null)
             {
                 process.StandardInput.Write(_pendingStdin);
@@ -2446,6 +2442,20 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private void DefineBuiltIns()
     {
+        DefineGlobalBuiltIns();
+        DefineIONamespace();
+        DefineConvNamespace();
+        DefineEnvNamespace();
+        DefineProcessNamespace();
+        DefineFsNamespace();
+        DefinePathNamespace();
+        DefineArrNamespace();
+        DefineDictNamespace();
+        DefineStrNamespace();
+    }
+
+    private void DefineGlobalBuiltIns()
+    {
         _globals.Define("typeof", new BuiltInFunction("typeof", 1, (_, args) =>
         {
             object? val = args[0];
@@ -2559,7 +2569,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             return interpreter.ExecuteParseArgs(fnArgs[0]);
         }));
+    }
 
+    private void DefineIONamespace()
+    {
         // ── io namespace ─────────────────────────────────────────────────
         var io = new StashNamespace("io");
 
@@ -2576,7 +2589,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("io", io);
+    }
 
+    private void DefineConvNamespace()
+    {
         // ── conv namespace ───────────────────────────────────────────────
         var conv = new StashNamespace("conv");
 
@@ -2637,7 +2653,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("conv", conv);
+    }
 
+    private void DefineEnvNamespace()
+    {
         // ── env namespace ────────────────────────────────────────────────
         var envNs = new StashNamespace("env");
 
@@ -2668,7 +2687,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("env", envNs);
+    }
 
+    private void DefineProcessNamespace()
+    {
         // ── process namespace ────────────────────────────────────────────
         var process = new StashNamespace("process");
 
@@ -2712,12 +2734,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             psi.ArgumentList.Add("-c");
             psi.ArgumentList.Add(command);
 
-            var osProcess = System.Diagnostics.Process.Start(psi);
-            if (osProcess is null)
-            {
-                throw new RuntimeError("Failed to start process.");
-            }
-
+            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to start process.");
             var fields = new Dictionary<string, object?>
             {
                 ["pid"] = (long)osProcess.Id,
@@ -2744,12 +2761,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                     return cached;
                 }
 
-                return new StashInstance("CommandResult", new Dictionary<string, object?>
-                {
-                    ["stdout"] = "",
-                    ["stderr"] = "",
-                    ["exitCode"] = (long)-1
-                });
+                return CreateCommandResult("", "", -1);
             }
 
             var osProcess = entry.OsProcess;
@@ -2758,12 +2770,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             osProcess.WaitForExit();
             Task.WaitAll(stdoutTask, stderrTask);
 
-            var result = new StashInstance("CommandResult", new Dictionary<string, object?>
-            {
-                ["stdout"] = stdoutTask.Result,
-                ["stderr"] = stderrTask.Result,
-                ["exitCode"] = (long)osProcess.ExitCode
-            });
+            var result = CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
 
             // Cache the result so subsequent wait() calls return the same data
             interp._processWaitCache[handle] = result;
@@ -2798,12 +2805,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
             Task.WaitAll(stdoutTask, stderrTask);
 
-            return new StashInstance("CommandResult", new Dictionary<string, object?>
-            {
-                ["stdout"] = stdoutTask.Result,
-                ["stderr"] = stderrTask.Result,
-                ["exitCode"] = (long)osProcess.ExitCode
-            });
+            return CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
         }));
 
         process.Define("kill", new BuiltInFunction("process.kill", 1, (interp, args) =>
@@ -2991,7 +2993,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("process", process);
+    }
 
+    private void DefineFsNamespace()
+    {
         // ── fs namespace ─────────────────────────────────────────────────
         var fs = new StashNamespace("fs");
 
@@ -3175,7 +3180,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("fs", fs);
+    }
 
+    private void DefinePathNamespace()
+    {
         // ── path namespace ───────────────────────────────────────────────
         var pathNs = new StashNamespace("path");
 
@@ -3245,14 +3253,20 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("path", pathNs);
+    }
 
+    private void DefineArrNamespace()
+    {
         // ── arr namespace ────────────────────────────────────────────────
         var arr = new StashNamespace("arr");
 
         arr.Define("push", new BuiltInFunction("arr.push", 2, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.push' must be an array.");
+            }
+
             list.Add(args[1]);
             return null;
         }));
@@ -3260,9 +3274,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("pop", new BuiltInFunction("arr.pop", 1, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.pop' must be an array.");
+            }
+
             if (list.Count == 0)
+            {
                 throw new RuntimeError("Cannot pop from an empty array.");
+            }
+
             var last = list[list.Count - 1];
             list.RemoveAt(list.Count - 1);
             return last;
@@ -3271,20 +3291,35 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("peek", new BuiltInFunction("arr.peek", 1, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.peek' must be an array.");
+            }
+
             if (list.Count == 0)
+            {
                 throw new RuntimeError("Cannot peek an empty array.");
+            }
+
             return list[list.Count - 1];
         }));
 
         arr.Define("insert", new BuiltInFunction("arr.insert", 3, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.insert' must be an array.");
+            }
+
             if (args[1] is not long idx)
+            {
                 throw new RuntimeError("Second argument to 'arr.insert' must be an integer.");
+            }
+
             if (idx < 0 || idx > list.Count)
+            {
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.");
+            }
+
             list.Insert((int)idx, args[2]);
             return null;
         }));
@@ -3292,11 +3327,20 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("removeAt", new BuiltInFunction("arr.removeAt", 2, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.removeAt' must be an array.");
+            }
+
             if (args[1] is not long idx)
+            {
                 throw new RuntimeError("Second argument to 'arr.removeAt' must be an integer.");
+            }
+
             if (idx < 0 || idx >= list.Count)
+            {
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.removeAt'.");
+            }
+
             var removed = list[(int)idx];
             list.RemoveAt((int)idx);
             return removed;
@@ -3305,7 +3349,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("remove", new BuiltInFunction("arr.remove", 2, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.remove' must be an array.");
+            }
+
             for (int i = 0; i < list.Count; i++)
             {
                 if (IsEqual(list[i], args[1]))
@@ -3320,7 +3367,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("clear", new BuiltInFunction("arr.clear", 1, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.clear' must be an array.");
+            }
+
             list.Clear();
             return null;
         }));
@@ -3328,11 +3378,16 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("contains", new BuiltInFunction("arr.contains", 2, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.contains' must be an array.");
+            }
+
             foreach (var item in list)
             {
                 if (IsEqual(item, args[1]))
+                {
                     return true;
+                }
             }
             return false;
         }));
@@ -3340,11 +3395,16 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("indexOf", new BuiltInFunction("arr.indexOf", 2, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.indexOf' must be an array.");
+            }
+
             for (int i = 0; i < list.Count; i++)
             {
                 if (IsEqual(list[i], args[1]))
+                {
                     return (long)i;
+                }
             }
             return -1L;
         }));
@@ -3352,23 +3412,42 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("slice", new BuiltInFunction("arr.slice", 3, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.slice' must be an array.");
+            }
+
             if (args[1] is not long start)
+            {
                 throw new RuntimeError("Second argument to 'arr.slice' must be an integer.");
+            }
+
             if (args[2] is not long end)
+            {
                 throw new RuntimeError("Third argument to 'arr.slice' must be an integer.");
+            }
+
             int s = (int)Math.Max(0, Math.Min(start, list.Count));
             int e = (int)Math.Max(0, Math.Min(end, list.Count));
-            if (e < s) e = s;
+            if (e < s)
+            {
+                e = s;
+            }
+
             return list.GetRange(s, e - s);
         }));
 
         arr.Define("concat", new BuiltInFunction("arr.concat", 2, (_, args) =>
         {
             if (args[0] is not List<object?> list1)
+            {
                 throw new RuntimeError("First argument to 'arr.concat' must be an array.");
+            }
+
             if (args[1] is not List<object?> list2)
+            {
                 throw new RuntimeError("Second argument to 'arr.concat' must be an array.");
+            }
+
             var result = new List<object?>(list1);
             result.AddRange(list2);
             return result;
@@ -3377,18 +3456,31 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("join", new BuiltInFunction("arr.join", 2, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.join' must be an array.");
+            }
+
             if (args[1] is not string sep)
+            {
                 throw new RuntimeError("Second argument to 'arr.join' must be a string.");
+            }
+
             var parts = new string[list.Count];
-            for (int i = 0; i < list.Count; i++) parts[i] = Stringify(list[i]);
+            for (int i = 0; i < list.Count; i++)
+            {
+                parts[i] = Stringify(list[i]);
+            }
+
             return string.Join(sep, parts);
         }));
 
         arr.Define("reverse", new BuiltInFunction("arr.reverse", 1, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.reverse' must be an array.");
+            }
+
             list.Reverse();
             return null;
         }));
@@ -3396,16 +3488,39 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("sort", new BuiltInFunction("arr.sort", 1, (_, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.sort' must be an array.");
+            }
+
             try
             {
                 list.Sort((a, b) =>
                 {
-                    if (a is long la && b is long lb) return la.CompareTo(lb);
-                    if (a is double da && b is double db) return da.CompareTo(db);
-                    if (a is long la2 && b is double db2) return ((double)la2).CompareTo(db2);
-                    if (a is double da2 && b is long lb2) return da2.CompareTo((double)lb2);
-                    if (a is string sa && b is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
+                    if (a is long la && b is long lb)
+                    {
+                        return la.CompareTo(lb);
+                    }
+
+                    if (a is double da && b is double db)
+                    {
+                        return da.CompareTo(db);
+                    }
+
+                    if (a is long la2 && b is double db2)
+                    {
+                        return ((double)la2).CompareTo(db2);
+                    }
+
+                    if (a is double da2 && b is long lb2)
+                    {
+                        return da2.CompareTo((double)lb2);
+                    }
+
+                    if (a is string sa && b is string sb)
+                    {
+                        return string.Compare(sa, sb, StringComparison.Ordinal);
+                    }
+
                     throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.");
                 });
             }
@@ -3419,26 +3534,43 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("map", new BuiltInFunction("arr.map", 2, (interp, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.map' must be an array.");
+            }
+
             if (args[1] is not IStashCallable fn)
+            {
                 throw new RuntimeError("Second argument to 'arr.map' must be a function.");
+            }
+
             var result = new List<object?>();
             foreach (var item in list)
+            {
                 result.Add(fn.Call(interp, new List<object?> { item }));
+            }
+
             return result;
         }));
 
         arr.Define("filter", new BuiltInFunction("arr.filter", 2, (interp, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.filter' must be an array.");
+            }
+
             if (args[1] is not IStashCallable fn)
+            {
                 throw new RuntimeError("Second argument to 'arr.filter' must be a function.");
+            }
+
             var result = new List<object?>();
             foreach (var item in list)
             {
                 if (IsTruthy(fn.Call(interp, new List<object?> { item })))
+                {
                     result.Add(item);
+                }
             }
             return result;
         }));
@@ -3446,24 +3578,41 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("forEach", new BuiltInFunction("arr.forEach", 2, (interp, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.forEach' must be an array.");
+            }
+
             if (args[1] is not IStashCallable fn)
+            {
                 throw new RuntimeError("Second argument to 'arr.forEach' must be a function.");
+            }
+
             foreach (var item in list)
+            {
                 fn.Call(interp, new List<object?> { item });
+            }
+
             return null;
         }));
 
         arr.Define("find", new BuiltInFunction("arr.find", 2, (interp, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.find' must be an array.");
+            }
+
             if (args[1] is not IStashCallable fn)
+            {
                 throw new RuntimeError("Second argument to 'arr.find' must be a function.");
+            }
+
             foreach (var item in list)
             {
                 if (IsTruthy(fn.Call(interp, new List<object?> { item })))
+                {
                     return item;
+                }
             }
             return null;
         }));
@@ -3471,17 +3620,29 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         arr.Define("reduce", new BuiltInFunction("arr.reduce", 3, (interp, args) =>
         {
             if (args[0] is not List<object?> list)
+            {
                 throw new RuntimeError("First argument to 'arr.reduce' must be an array.");
+            }
+
             if (args[1] is not IStashCallable fn)
+            {
                 throw new RuntimeError("Second argument to 'arr.reduce' must be a function.");
+            }
+
             var accumulator = args[2];
             foreach (var item in list)
+            {
                 accumulator = fn.Call(interp, new List<object?> { accumulator, item });
+            }
+
             return accumulator;
         }));
 
         _globals.Define("arr", arr);
+    }
 
+    private void DefineDictNamespace()
+    {
         // ── dict namespace ───────────────────────────────────────────────
         var dict = new StashNamespace("dict");
 
@@ -3493,44 +3654,55 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         dict.Define("get", new BuiltInFunction("dict.get", 2, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.get' must be a dictionary.");
-            if (args[1] is null)
-                throw new RuntimeError("Dictionary key cannot be null.");
-            return d.Get(args[1]);
+            }
+
+            var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
+            return d.Get(key);
         }));
 
         dict.Define("set", new BuiltInFunction("dict.set", 3, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.set' must be a dictionary.");
-            if (args[1] is null)
-                throw new RuntimeError("Dictionary key cannot be null.");
-            d.Set(args[1], args[2]);
+            }
+
+            var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
+            d.Set(key, args[2]);
             return null;
         }));
 
         dict.Define("has", new BuiltInFunction("dict.has", 2, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.has' must be a dictionary.");
-            if (args[1] is null)
-                throw new RuntimeError("Dictionary key cannot be null.");
-            return d.Has(args[1]);
+            }
+
+            var key = (args[1] ?? throw new RuntimeError("Dictionary key cannot be null.")) ?? throw new RuntimeError("Dictionary key cannot be null.");
+            return d.Has(key);
         }));
 
         dict.Define("remove", new BuiltInFunction("dict.remove", 2, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.remove' must be a dictionary.");
-            if (args[1] is null)
-                throw new RuntimeError("Dictionary key cannot be null.");
-            return d.Remove(args[1]);
+            }
+
+            var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
+            return d.Remove(key);
         }));
 
         dict.Define("clear", new BuiltInFunction("dict.clear", 1, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.clear' must be a dictionary.");
+            }
+
             d.Clear();
             return null;
         }));
@@ -3538,37 +3710,55 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         dict.Define("keys", new BuiltInFunction("dict.keys", 1, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.keys' must be a dictionary.");
+            }
+
             return d.Keys();
         }));
 
         dict.Define("values", new BuiltInFunction("dict.values", 1, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.values' must be a dictionary.");
+            }
+
             return d.Values();
         }));
 
         dict.Define("size", new BuiltInFunction("dict.size", 1, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.size' must be a dictionary.");
+            }
+
             return (long)d.Count;
         }));
 
         dict.Define("pairs", new BuiltInFunction("dict.pairs", 1, (_, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.pairs' must be a dictionary.");
+            }
+
             return d.Pairs();
         }));
 
         dict.Define("forEach", new BuiltInFunction("dict.forEach", 2, (interp, args) =>
         {
             if (args[0] is not StashDictionary d)
+            {
                 throw new RuntimeError("First argument to 'dict.forEach' must be a dictionary.");
+            }
+
             if (args[1] is not IStashCallable fn)
+            {
                 throw new RuntimeError("Second argument to 'dict.forEach' must be a function.");
+            }
+
             foreach (var entry in d.RawEntries())
             {
                 fn.Call(interp, new List<object?> { entry.Key, entry.Value });
@@ -3579,9 +3769,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         dict.Define("merge", new BuiltInFunction("dict.merge", 2, (_, args) =>
         {
             if (args[0] is not StashDictionary d1)
+            {
                 throw new RuntimeError("First argument to 'dict.merge' must be a dictionary.");
+            }
+
             if (args[1] is not StashDictionary d2)
+            {
                 throw new RuntimeError("Second argument to 'dict.merge' must be a dictionary.");
+            }
+
             var result = new StashDictionary();
             foreach (var entry in d1.RawEntries())
             {
@@ -3595,106 +3791,172 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("dict", dict);
+    }
 
+    private void DefineStrNamespace()
+    {
         // ── str namespace ────────────────────────────────────────────────
         var str = new StashNamespace("str");
 
         str.Define("upper", new BuiltInFunction("str.upper", 1, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.upper' must be a string.");
+            }
+
             return s.ToUpperInvariant();
         }));
 
         str.Define("lower", new BuiltInFunction("str.lower", 1, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.lower' must be a string.");
+            }
+
             return s.ToLowerInvariant();
         }));
 
         str.Define("trim", new BuiltInFunction("str.trim", 1, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.trim' must be a string.");
+            }
+
             return s.Trim();
         }));
 
         str.Define("trimStart", new BuiltInFunction("str.trimStart", 1, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.trimStart' must be a string.");
+            }
+
             return s.TrimStart();
         }));
 
         str.Define("trimEnd", new BuiltInFunction("str.trimEnd", 1, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.trimEnd' must be a string.");
+            }
+
             return s.TrimEnd();
         }));
 
         str.Define("contains", new BuiltInFunction("str.contains", 2, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.contains' must be a string.");
+            }
+
             if (args[1] is not string sub)
+            {
                 throw new RuntimeError("Second argument to 'str.contains' must be a string.");
+            }
+
             return s.Contains(sub, StringComparison.Ordinal);
         }));
 
         str.Define("startsWith", new BuiltInFunction("str.startsWith", 2, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.startsWith' must be a string.");
+            }
+
             if (args[1] is not string prefix)
+            {
                 throw new RuntimeError("Second argument to 'str.startsWith' must be a string.");
+            }
+
             return s.StartsWith(prefix, StringComparison.Ordinal);
         }));
 
         str.Define("endsWith", new BuiltInFunction("str.endsWith", 2, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.endsWith' must be a string.");
+            }
+
             if (args[1] is not string suffix)
+            {
                 throw new RuntimeError("Second argument to 'str.endsWith' must be a string.");
+            }
+
             return s.EndsWith(suffix, StringComparison.Ordinal);
         }));
 
         str.Define("indexOf", new BuiltInFunction("str.indexOf", 2, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.indexOf' must be a string.");
+            }
+
             if (args[1] is not string sub)
+            {
                 throw new RuntimeError("Second argument to 'str.indexOf' must be a string.");
+            }
+
             return (long)s.IndexOf(sub, StringComparison.Ordinal);
         }));
 
         str.Define("lastIndexOf", new BuiltInFunction("str.lastIndexOf", 2, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.lastIndexOf' must be a string.");
+            }
+
             if (args[1] is not string sub)
+            {
                 throw new RuntimeError("Second argument to 'str.lastIndexOf' must be a string.");
+            }
+
             return (long)s.LastIndexOf(sub, StringComparison.Ordinal);
         }));
 
         str.Define("substring", new BuiltInFunction("str.substring", -1, (_, args) =>
         {
             if (args.Count < 2 || args.Count > 3)
+            {
                 throw new RuntimeError("'str.substring' requires 2 or 3 arguments.");
+            }
+
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.substring' must be a string.");
+            }
+
             if (args[1] is not long start)
+            {
                 throw new RuntimeError("Second argument to 'str.substring' must be an integer.");
+            }
+
             if (start < 0 || start > s.Length)
+            {
                 throw new RuntimeError($"'str.substring' start index {start} is out of range for string of length {s.Length}.");
+            }
+
             if (args.Count == 3)
             {
                 if (args[2] is not long end)
+                {
                     throw new RuntimeError("Third argument to 'str.substring' must be an integer.");
+                }
+
                 if (end < start || end > s.Length)
+                {
                     throw new RuntimeError($"'str.substring' end index {end} is out of range.");
+                }
+
                 return s.Substring((int)start, (int)(end - start));
             }
             return s.Substring((int)start);
@@ -3703,33 +3965,61 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         str.Define("replace", new BuiltInFunction("str.replace", 3, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.replace' must be a string.");
+            }
+
             if (args[1] is not string oldStr)
+            {
                 throw new RuntimeError("Second argument to 'str.replace' must be a string.");
+            }
+
             if (args[2] is not string newStr)
+            {
                 throw new RuntimeError("Third argument to 'str.replace' must be a string.");
+            }
+
             int idx = s.IndexOf(oldStr, StringComparison.Ordinal);
-            if (idx < 0) return s;
+            if (idx < 0)
+            {
+                return s;
+            }
+
             return s.Substring(0, idx) + newStr + s.Substring(idx + oldStr.Length);
         }));
 
         str.Define("replaceAll", new BuiltInFunction("str.replaceAll", 3, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.replaceAll' must be a string.");
+            }
+
             if (args[1] is not string oldStr)
+            {
                 throw new RuntimeError("Second argument to 'str.replaceAll' must be a string.");
+            }
+
             if (args[2] is not string newStr)
+            {
                 throw new RuntimeError("Third argument to 'str.replaceAll' must be a string.");
-            return s.Replace(oldStr, newStr);
+            }
+
+            return s.Replace(oldStr, newStr, StringComparison.Ordinal);
         }));
 
         str.Define("split", new BuiltInFunction("str.split", 2, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.split' must be a string.");
+            }
+
             if (args[1] is not string delimiter)
+            {
                 throw new RuntimeError("Second argument to 'str.split' must be a string.");
+            }
+
             var parts = s.Split(new[] { delimiter }, StringSplitOptions.None);
             return parts.Select(p => (object?)p).ToList();
         }));
@@ -3737,63 +4027,48 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         str.Define("repeat", new BuiltInFunction("str.repeat", 2, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.repeat' must be a string.");
+            }
+
             if (args[1] is not long count)
+            {
                 throw new RuntimeError("Second argument to 'str.repeat' must be an integer.");
+            }
+
             if (count < 0)
+            {
                 throw new RuntimeError("'str.repeat' count must be >= 0.");
+            }
+
             return string.Concat(Enumerable.Repeat(s, (int)count));
         }));
 
         str.Define("reverse", new BuiltInFunction("str.reverse", 1, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.reverse' must be a string.");
+            }
+
             return new string(s.Reverse().ToArray());
         }));
 
         str.Define("chars", new BuiltInFunction("str.chars", 1, (_, args) =>
         {
             if (args[0] is not string s)
+            {
                 throw new RuntimeError("First argument to 'str.chars' must be a string.");
+            }
+
             return s.Select(c => (object?)c.ToString()).ToList();
         }));
 
         str.Define("padStart", new BuiltInFunction("str.padStart", -1, (_, args) =>
-        {
-            if (args.Count < 2 || args.Count > 3)
-                throw new RuntimeError("'str.padStart' requires 2 or 3 arguments.");
-            if (args[0] is not string s)
-                throw new RuntimeError("First argument to 'str.padStart' must be a string.");
-            if (args[1] is not long length)
-                throw new RuntimeError("Second argument to 'str.padStart' must be an integer.");
-            char fillChar = ' ';
-            if (args.Count == 3)
-            {
-                if (args[2] is not string fill || fill.Length != 1)
-                    throw new RuntimeError("Third argument to 'str.padStart' must be a single-character string.");
-                fillChar = fill[0];
-            }
-            return s.PadLeft((int)length, fillChar);
-        }));
+            PadString("str.padStart", args, padLeft: true)));
 
         str.Define("padEnd", new BuiltInFunction("str.padEnd", -1, (_, args) =>
-        {
-            if (args.Count < 2 || args.Count > 3)
-                throw new RuntimeError("'str.padEnd' requires 2 or 3 arguments.");
-            if (args[0] is not string s)
-                throw new RuntimeError("First argument to 'str.padEnd' must be a string.");
-            if (args[1] is not long length)
-                throw new RuntimeError("Second argument to 'str.padEnd' must be an integer.");
-            char fillChar = ' ';
-            if (args.Count == 3)
-            {
-                if (args[2] is not string fill || fill.Length != 1)
-                    throw new RuntimeError("Third argument to 'str.padEnd' must be a single-character string.");
-                fillChar = fill[0];
-            }
-            return s.PadRight((int)length, fillChar);
-        }));
+            PadString("str.padEnd", args, padLeft: false)));
 
         _globals.Define("str", str);
     }
@@ -3820,6 +4095,46 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             catch { /* Process may have already exited */ }
         }
         _trackedProcesses.Clear();
+    }
+
+    private static string PadString(string funcName, List<object?> args, bool padLeft)
+    {
+        if (args.Count < 2 || args.Count > 3)
+        {
+            throw new RuntimeError($"'{funcName}' requires 2 or 3 arguments.");
+        }
+
+        if (args[0] is not string s)
+        {
+            throw new RuntimeError($"First argument to '{funcName}' must be a string.");
+        }
+
+        if (args[1] is not long length)
+        {
+            throw new RuntimeError($"Second argument to '{funcName}' must be an integer.");
+        }
+
+        char fillChar = ' ';
+        if (args.Count == 3)
+        {
+            if (args[2] is not string fill || fill.Length != 1)
+            {
+                throw new RuntimeError($"Third argument to '{funcName}' must be a single-character string.");
+            }
+
+            fillChar = fill[0];
+        }
+        return padLeft ? s.PadLeft((int)length, fillChar) : s.PadRight((int)length, fillChar);
+    }
+
+    private static StashInstance CreateCommandResult(string stdout, string stderr, long exitCode)
+    {
+        return new StashInstance("CommandResult", new Dictionary<string, object?>
+        {
+            ["stdout"] = stdout,
+            ["stderr"] = stderr,
+            ["exitCode"] = exitCode
+        });
     }
 
     private class BuiltInFunction : IStashCallable

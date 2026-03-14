@@ -314,4 +314,42 @@ public class SemanticValidatorTests
         Assert.Contains(diagnostics, d => d.Message.Contains("Unknown type 'bar'."));
         Assert.Contains(diagnostics, d => d.Message.Contains("Unknown type 'baz'."));
     }
+
+    [Fact]
+    public void NamespaceFunctionCall_WrongArgCount_ReportsError()
+    {
+        var diagnostics = Validate(@"
+            let x = str.upper(""hello"", ""extra"");
+        ");
+        Assert.Contains(diagnostics, d => d.Message.Contains("arguments") && d.Level == DiagnosticLevel.Error);
+    }
+
+    [Fact]
+    public void NamespaceFunctionCall_CorrectArgCount_NoError()
+    {
+        var diagnostics = Validate(@"
+            let x = str.upper(""hello"");
+        ");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("arguments") && d.Level == DiagnosticLevel.Error);
+    }
+
+    [Fact]
+    public void NamespaceFunctionCall_Variadic_NoArgCountError()
+    {
+        // str.padStart is variadic (arity -1), accepts 2 or 3 args — should not get arg count error
+        var diagnostics = Validate(@"
+            let x = str.padStart(""hi"", 5);
+            let y = str.padStart(""hi"", 5, ""0"");
+        ");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("arguments") && d.Level == DiagnosticLevel.Error);
+    }
+
+    [Fact]
+    public void DictTypeAnnotation_NoUnknownTypeError()
+    {
+        var diagnostics = Validate(@"
+            let d: dict = dict.new();
+        ");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Unknown type") && d.Level == DiagnosticLevel.Warning);
+    }
 }

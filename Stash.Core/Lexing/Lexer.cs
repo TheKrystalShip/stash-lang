@@ -272,22 +272,36 @@ public class Lexer
                 break;
             case '=':
                 if (Match('='))
+                {
                     AddToken(TokenType.EqualEqual);
+                }
                 else if (Match('>'))
+                {
                     AddToken(TokenType.FatArrow);
+                }
                 else
+                {
                     AddToken(TokenType.Equal);
+                }
+
                 break;
             case '<':
                 AddToken(Match('=') ? TokenType.LessEqual : TokenType.Less);
                 break;
             case '>':
                 if (Match('='))
+                {
                     AddToken(TokenType.GreaterEqual);
+                }
                 else if (Match('>'))
+                {
                     AddToken(TokenType.GreaterGreater);
+                }
                 else
+                {
                     AddToken(TokenType.Greater);
+                }
+
                 break;
             case '&':
                 if (Match('&'))
@@ -297,9 +311,13 @@ public class Lexer
                 else if (Match('>'))
                 {
                     if (Match('>'))
+                    {
                         AddToken(TokenType.AmpersandGreaterGreater);
+                    }
                     else
+                    {
                         AddToken(TokenType.AmpersandGreater);
+                    }
                 }
                 else
                 {

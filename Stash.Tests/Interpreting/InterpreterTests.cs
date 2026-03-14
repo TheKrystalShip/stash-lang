@@ -3912,12 +3912,8 @@ public class InterpreterTests
     [Fact]
     public void Dict_Stringify_SingleEntry()
     {
-        // Just check it doesn't crash and contains the key
         var result = Run("let d = dict.new(); d[\"name\"] = \"John\"; let result = conv.toStr(d);");
-        Assert.IsType<string>(result);
-        var str = (string)result!;
-        Assert.Contains("name", str);
-        Assert.Contains("John", str);
+        Assert.Equal("{name: John}", result);
     }
 
     // Error cases
@@ -4360,5 +4356,55 @@ public class InterpreterTests
     public void StrPadEnd_NonString_Throws()
     {
         RunExpectingError("str.padEnd(123, 5);");
+    }
+
+    [Fact]
+    public void ForIn_Dict_SafeWithModification()
+    {
+        // Modifying a dict during for-in iteration should not crash
+        // because keys are snapshot'd with .ToList()
+        var result = Run(@"
+            let d = dict.new();
+            dict.set(d, ""a"", 1);
+            dict.set(d, ""b"", 2);
+            dict.set(d, ""c"", 3);
+            let result = 0;
+            for (let key in d) {
+                dict.remove(d, key);
+                result = result + 1;
+            }
+        ");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void Dict_Stringify_EmptyDict()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            let result = conv.toStr(d);
+        ");
+        Assert.Equal("{}", result);
+    }
+
+    [Fact]
+    public void Dict_Stringify_MultiplePairs()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            dict.set(d, ""a"", 1);
+            let result = conv.toStr(d);
+        ");
+        Assert.Equal("{a: 1}", result);
+    }
+
+    [Fact]
+    public void StrReplaceAll_OrdinalComparison()
+    {
+        // Ensure replaceAll uses exact ordinal matching
+        var result = Run(@"
+            let result = str.replaceAll(""aAbBaAbB"", ""aA"", ""X"");
+        ");
+        Assert.Equal("XbBXbB", result);
     }
 }

@@ -154,7 +154,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     private void ProcessCommandLiteral(SemanticTokensBuilder builder, AnalysisResult result, Token token)
     {
         if (token.Literal is not List<object> parts)
+        {
             return;
+        }
 
         // Highlight the command name (first word of the first text segment)
         bool commandNameFound = false;
@@ -167,13 +169,17 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 // Find the first word in this text segment
                 int wordStart = 0;
                 while (wordStart < text.Length && char.IsWhiteSpace(text[wordStart]))
+                {
                     wordStart++;
+                }
 
                 if (wordStart < text.Length)
                 {
                     int wordEnd = wordStart;
                     while (wordEnd < text.Length && !char.IsWhiteSpace(text[wordEnd]))
+                    {
                         wordEnd++;
+                    }
 
                     int wordLength = wordEnd - wordStart;
                     if (wordLength > 0)
@@ -197,7 +203,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 foreach (var subToken in subTokens)
                 {
                     if (subToken.Type == TokenType.Eof)
+                    {
                         continue;
+                    }
 
                     var subLine = subToken.Span.StartLine - 1;
                     var subCol = subToken.Span.StartColumn - 1;
@@ -242,7 +250,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     private void ProcessCompoundToken(SemanticTokensBuilder builder, AnalysisResult result, Token token)
     {
         if (token.Literal is not List<object> parts)
+        {
             return;
+        }
 
         foreach (var part in parts)
         {
@@ -251,7 +261,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 foreach (var subToken in subTokens)
                 {
                     if (subToken.Type == TokenType.Eof)
+                    {
                         continue;
+                    }
 
                     var subLine = subToken.Span.StartLine - 1;
                     var subCol = subToken.Span.StartColumn - 1;

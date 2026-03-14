@@ -63,7 +63,10 @@ public class StashDictionary
     {
         var keys = new List<object?>();
         foreach (var key in _entries.Keys)
+        {
             keys.Add(key);
+        }
+
         return keys;
     }
 
@@ -74,7 +77,10 @@ public class StashDictionary
     {
         var values = new List<object?>();
         foreach (var value in _entries.Values)
+        {
             values.Add(value);
+        }
+
         return values;
     }
 
@@ -106,18 +112,23 @@ public class StashDictionary
     public IEnumerable<object?> IterableKeys()
     {
         foreach (var key in _entries.Keys)
+        {
             yield return key;
+        }
     }
 
     public override string ToString()
     {
-        return "<dict>";
+        return $"<dict({Count})>";
     }
 
     private static void ValidateKey(object key)
     {
         if (key is string or long or double or bool)
+        {
             return;
+        }
+
         throw new RuntimeError($"Dictionary keys must be string, int, float, or bool. Got '{key.GetType().Name}'.");
     }
 }
