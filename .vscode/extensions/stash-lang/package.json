@@ -17,7 +17,8 @@
     "Programming Languages",
     "Snippets",
     "Formatters",
-    "Linters"
+    "Linters",
+    "Debuggers"
   ],
   "contributes": {
     "languages": [
@@ -114,13 +115,100 @@
           "type": "boolean",
           "default": true,
           "description": "Enable or disable the Stash document formatter. When disabled, Format Document will have no effect."
+        },
+        "stash.dapPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Stash DAP debug adapter binary. If empty, the extension looks for 'stash-dap' on the system PATH."
         }
       }
     },
+    "breakpoints": [
+      {
+        "language": "stash"
+      }
+    ],
     "commands": [
       {
         "command": "stash.showReferences",
         "title": "Show References"
+      }
+    ],
+    "debuggers": [
+      {
+        "type": "stash",
+        "label": "Stash Debug",
+        "languages": [
+          "stash"
+        ],
+        "configurationAttributes": {
+          "launch": {
+            "required": [
+              "program"
+            ],
+            "properties": {
+              "program": {
+                "type": "string",
+                "description": "Absolute path to the .stash script to debug.",
+                "default": "${file}"
+              },
+              "stopOnEntry": {
+                "type": "boolean",
+                "description": "Pause execution at the first statement.",
+                "default": false
+              },
+              "cwd": {
+                "type": "string",
+                "description": "Working directory for the script.",
+                "default": "${workspaceFolder}"
+              },
+              "args": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "description": "Command-line arguments passed to the script.",
+                "default": []
+              }
+            }
+          }
+        },
+        "initialConfigurations": [
+          {
+            "type": "stash",
+            "request": "launch",
+            "name": "Debug Stash Script",
+            "program": "${file}",
+            "stopOnEntry": false,
+            "cwd": "${workspaceFolder}"
+          }
+        ],
+        "configurationSnippets": [
+          {
+            "label": "Stash: Launch Script",
+            "description": "Launch and debug a Stash script",
+            "body": {
+              "type": "stash",
+              "request": "launch",
+              "name": "Debug ${1:script}",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": false,
+              "cwd": "^\"\\${workspaceFolder}\""
+            }
+          },
+          {
+            "label": "Stash: Launch with Stop on Entry",
+            "description": "Launch a Stash script and pause at the first statement",
+            "body": {
+              "type": "stash",
+              "request": "launch",
+              "name": "Debug ${1:script} (stop on entry)",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": true,
+              "cwd": "^\"\\${workspaceFolder}\""
+            }
+          }
+        ]
       }
     ]
   },

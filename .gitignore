@@ -19,7 +19,7 @@ packages/
 *.sln.iml
 
 # VS Code
-.vscode/
+# .vscode/
 
 # OS files
 .DS_Store

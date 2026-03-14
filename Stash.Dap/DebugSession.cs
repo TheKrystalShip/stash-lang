@@ -94,6 +94,12 @@ public class DebugSession : IDebugger
         public object? Value { get; init; }
 
         public string Name { get; init; } = "";
+
+        /// <summary>When true, only show built-in bindings (BuiltInFunction, StashNamespace).</summary>
+        public bool BuiltInsOnly { get; init; }
+
+        /// <summary>When true, exclude built-in bindings from this scope.</summary>
+        public bool ExcludeBuiltIns { get; init; }
     }
 
     // ── IDebugger properties ──────────────────────────────────────────────────
@@ -101,12 +107,29 @@ public class DebugSession : IDebugger
     public bool StopOnEntry => _stopOnEntry;
     public bool IsPauseRequested => _pauseRequested;
 
+    // ── Diagnostic logging ────────────────────────────────────────────────────
+
+    private static readonly string _logFile = Path.Combine(
+        System.Environment.GetEnvironmentVariable("HOME") ?? "/tmp",
+        ".stash-dap.log");
+
+    private static void Trace(string message)
+    {
+        var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
+        Console.Error.WriteLine($"[stash-dap] {message}");
+        Console.Error.Flush();
+        try { File.AppendAllText(_logFile, line + "\n"); } catch { }
+    }
+
+    public static void TraceStatic(string message) => Trace(message);
+
     // ── Public API called by DAP handlers ─────────────────────────────────────
 
     /// <summary>Stores the server reference. Must be called before Launch.</summary>
     public void SetServer(IDebugAdapterServer server)
     {
         _server = server;
+        Trace("Server reference set");
     }
 
     /// <summary>
@@ -116,7 +139,11 @@ public class DebugSession : IDebugger
     public void Launch(string scriptPath, string? workingDirectory, bool stopOnEntry, string[]? args)
     {
         if (string.IsNullOrWhiteSpace(scriptPath))
+        {
             throw new ArgumentException("Script path is required.", nameof(scriptPath));
+        }
+
+        Trace($"Launch: {scriptPath}, stopOnEntry={stopOnEntry}");
 
         _scriptPath = scriptPath;
         _workingDirectory = workingDirectory;
@@ -124,18 +151,24 @@ public class DebugSession : IDebugger
 
         _interpreter = new Interpreter();
         _interpreter.Debugger = this;
+        _interpreter.CurrentFile = scriptPath;
         if (args is { Length: > 0 })
+        {
             _interpreter.SetScriptArgs(args);
+        }
 
         _interpreterThread = new System.Threading.Thread(() =>
         {
             // Wait until the client has sent all SetBreakpoints + ConfigurationDone
             _configurationDone.Wait();
+            Trace("Interpreter thread: configuration received, starting execution");
 
             try
             {
                 if (!string.IsNullOrEmpty(_workingDirectory))
+                {
                     Directory.SetCurrentDirectory(_workingDirectory);
+                }
 
                 var source = File.ReadAllText(_scriptPath!);
                 var lexer = new Lexer(source, _scriptPath);
@@ -144,7 +177,10 @@ public class DebugSession : IDebugger
                 if (lexer.Errors.Any())
                 {
                     foreach (var err in lexer.Errors)
+                    {
                         SendOutput("stderr", err + "\n");
+                    }
+
                     return;
                 }
 
@@ -154,7 +190,10 @@ public class DebugSession : IDebugger
                 if (parser.Errors.Any())
                 {
                     foreach (var err in parser.Errors)
+                    {
                         SendOutput("stderr", err + "\n");
+                    }
+
                     return;
                 }
 
@@ -162,16 +201,19 @@ public class DebugSession : IDebugger
             }
             catch (RuntimeError ex)
             {
+                Trace($"Interpreter error: {ex.Message}");
                 SendOutput("stderr", ex.Message + "\n");
             }
             catch (OperationCanceledException) { /* Terminated via Disconnect */ }
             catch (ThreadInterruptedException) { /* Terminated via Disconnect */ }
             catch (Exception ex)
             {
+                Trace($"Interpreter error: {ex.Message}");
                 SendOutput("stderr", ex.Message + "\n");
             }
             finally
             {
+                Trace("Interpreter thread: execution complete");
                 SendTerminated();
                 SendExited(0);
             }
@@ -185,6 +227,13 @@ public class DebugSession : IDebugger
     /// <summary>Signals that client configuration is complete and execution can begin.</summary>
     public void ConfigurationDone()
     {
+        Trace($"ConfigurationDone: {_breakpoints.Count} source files with breakpoints");
+        foreach (var (file, bps) in _breakpoints)
+        {
+            Trace($"  {file}: lines {string.Join(", ", bps.Select(b => b.Line))}");
+        }
+
+        Trace("ConfigurationDone: releasing interpreter thread");
         _configurationDone.Set();
     }
 
@@ -197,9 +246,11 @@ public class DebugSession : IDebugger
         var normalized = NormalizePath(path);
         var stashBps = new List<StashBreakpoint>();
         var dapBps = new List<DapBreakpoint>();
+        var bpList = sourceBreakpoints.ToList();
+        Trace($"SetBreakpoints: {path} ({bpList.Count} breakpoints)");
         var source = new Source { Path = normalized, Name = Path.GetFileName(normalized) };
 
-        foreach (var sb in sourceBreakpoints)
+        foreach (var sb in bpList)
         {
             var bp = new StashBreakpoint(normalized, sb.Line)
             {
@@ -226,6 +277,7 @@ public class DebugSession : IDebugger
     /// <summary>Resumes execution without stepping constraints.</summary>
     public void Continue()
     {
+        Trace("Continue");
         _stepMode = StepMode.None;
         Resume();
     }
@@ -270,7 +322,10 @@ public class DebugSession : IDebugger
     public IReadOnlyList<StackFrame> GetStackTrace()
     {
         var frames = new List<StackFrame>();
-        if (_interpreter == null) return frames;
+        if (_interpreter == null)
+        {
+            return frames;
+        }
 
         var callStack = _interpreter.CallStack;
 
@@ -323,40 +378,111 @@ public class DebugSession : IDebugger
     public IReadOnlyList<Scope> GetScopes(int frameId)
     {
         var scopes = new List<Scope>();
-        if (_interpreter == null) return scopes;
+        if (_interpreter == null)
+        {
+            return scopes;
+        }
 
         var env = ResolveEnvironmentForFrame(frameId);
-        if (env == null) return scopes;
+        if (env == null)
+        {
+            return scopes;
+        }
 
         var chain = env.GetScopeChain().ToList();
         for (int i = 0; i < chain.Count; i++)
         {
+            bool isGlobalEnv = i == chain.Count - 1;
+
             var kind = (i == 0 && chain.Count == 1) ? ScopeKind.Local
-                     : i == 0                        ? ScopeKind.Local
-                     : i == chain.Count - 1          ? ScopeKind.Global
-                     :                                 ScopeKind.Closure;
+                     : i == 0 ? ScopeKind.Local
+                     : isGlobalEnv ? ScopeKind.Global
+                     : ScopeKind.Closure;
 
             var name = kind switch
             {
-                ScopeKind.Local  => "Local",
+                ScopeKind.Local => "Local",
                 ScopeKind.Global => "Global",
-                _                => "Closure",
+                _ => "Closure",
             };
 
-            long varRef;
-            lock (_variableReferences)
+            // For the global environment, split into user bindings and built-ins
+            if (isGlobalEnv)
             {
-                varRef = AllocateVariableReference(new VariableContainer { Environment = chain[i] });
-            }
+                var bindings = chain[i].GetAllBindings().ToList();
+                int userCount = 0;
+                int builtInCount = 0;
+                foreach (var (_, value) in bindings)
+                {
+                    if (IsBuiltInBinding(value))
+                    {
+                        builtInCount++;
+                    }
+                    else
+                    {
+                        userCount++;
+                    }
+                }
 
-            var debugScope = new DebugScope(kind, name, chain[i]);
-            scopes.Add(new Scope
+                // User-defined scope (excludes built-ins)
+                if (userCount > 0)
+                {
+                    long userRef;
+                    lock (_variableReferences)
+                    {
+                        userRef = AllocateVariableReference(new VariableContainer
+                        {
+                            Environment = chain[i],
+                            ExcludeBuiltIns = true,
+                        });
+                    }
+                    scopes.Add(new Scope
+                    {
+                        Name = name,
+                        VariablesReference = userRef,
+                        NamedVariables = userCount,
+                        Expensive = false,
+                    });
+                }
+
+                // Standard Library scope (built-ins only, collapsed by default)
+                if (builtInCount > 0)
+                {
+                    long builtInRef;
+                    lock (_variableReferences)
+                    {
+                        builtInRef = AllocateVariableReference(new VariableContainer
+                        {
+                            Environment = chain[i],
+                            BuiltInsOnly = true,
+                        });
+                    }
+                    scopes.Add(new Scope
+                    {
+                        Name = "Standard Library",
+                        VariablesReference = builtInRef,
+                        NamedVariables = builtInCount,
+                        Expensive = true,
+                    });
+                }
+            }
+            else
             {
-                Name = name,
-                VariablesReference = varRef,
-                NamedVariables = debugScope.VariableCount,
-                Expensive = kind == ScopeKind.Global,
-            });
+                long varRef;
+                lock (_variableReferences)
+                {
+                    varRef = AllocateVariableReference(new VariableContainer { Environment = chain[i] });
+                }
+
+                var debugScope = new DebugScope(kind, name, chain[i]);
+                scopes.Add(new Scope
+                {
+                    Name = name,
+                    VariablesReference = varRef,
+                    NamedVariables = debugScope.VariableCount,
+                    Expensive = false,
+                });
+            }
         }
 
         return scopes;
@@ -374,14 +500,30 @@ public class DebugSession : IDebugger
             _variableReferences.TryGetValue(variableReference, out container);
         }
 
-        if (container == null) return Array.Empty<Variable>();
+        if (container == null)
+        {
+            return Array.Empty<Variable>();
+        }
 
         var variables = new List<Variable>();
 
         if (container.Environment != null)
         {
             foreach (var (varName, value) in container.Environment.GetAllBindings().OrderBy(kv => kv.Key))
+            {
+                bool isBuiltIn = IsBuiltInBinding(value);
+                if (container.BuiltInsOnly && !isBuiltIn)
+                {
+                    continue;
+                }
+
+                if (container.ExcludeBuiltIns && isBuiltIn)
+                {
+                    continue;
+                }
+
                 variables.Add(FormatVariable(varName, value));
+            }
         }
         else
         {
@@ -389,17 +531,45 @@ public class DebugSession : IDebugger
             {
                 case List<object?> list:
                     for (int i = 0; i < list.Count; i++)
+                    {
                         variables.Add(FormatVariable($"[{i}]", list[i]));
+                    }
+
                     break;
 
                 case StashDictionary dict:
                     foreach (var key in dict.Keys())
+                    {
                         variables.Add(FormatVariable(RuntimeValues.Stringify(key), dict.Get(key!)));
+                    }
+
                     break;
 
                 case StashInstance instance:
                     foreach (var (fieldName, fieldValue) in instance.GetFields())
+                    {
                         variables.Add(FormatVariable(fieldName, fieldValue));
+                    }
+
+                    break;
+
+                case StashNamespace ns:
+                    foreach (var (memberName, memberValue) in ns.GetAllMembers().OrderBy(kv => kv.Key))
+                    {
+                        variables.Add(FormatVariable(memberName, memberValue));
+                    }
+
+                    break;
+
+                case StashEnum en:
+                    foreach (var memberName in en.Members)
+                    {
+                        var memberValue = en.GetMember(memberName);
+                        if (memberValue != null)
+                        {
+                            variables.Add(FormatVariable(memberName, memberValue));
+                        }
+                    }
                     break;
             }
         }
@@ -410,7 +580,11 @@ public class DebugSession : IDebugger
     /// <summary>Evaluates an expression in the context of the given frame and returns the result string.</summary>
     public string Evaluate(string expression, int? frameId)
     {
-        if (_interpreter == null) return "No interpreter";
+        Trace($"Evaluate: {expression}");
+        if (_interpreter == null)
+        {
+            return "No interpreter";
+        }
 
         var env = frameId.HasValue
             ? (ResolveEnvironmentForFrame(frameId.Value) ?? _interpreter.Globals)
@@ -423,6 +597,7 @@ public class DebugSession : IDebugger
     /// <summary>Terminates the debug session and unblocks the interpreter thread if paused.</summary>
     public void Disconnect()
     {
+        Trace("Disconnect");
         _terminated = true;
 
         lock (_variableReferences)
@@ -431,7 +606,9 @@ public class DebugSession : IDebugger
         }
 
         if (_isPaused)
+        {
             _pauseGate.Set();
+        }
 
         _interpreterThread?.Interrupt();
     }
@@ -443,15 +620,21 @@ public class DebugSession : IDebugger
         foreach (var filter in filters)
         {
             if (filter is "all" or "uncaught")
+            {
                 _breakOnAllExceptions = true;
+            }
         }
+        Trace($"SetExceptionBreakpoints: breakOnAll={_breakOnAllExceptions}");
     }
 
     // ── IDebugger implementation ───────────────────────────────────────────────
 
     public void OnBeforeExecute(SourceSpan span, StashEnv environment)
     {
-        if (_terminated) throw new OperationCanceledException("Debug session terminated.");
+        if (_terminated)
+        {
+            throw new OperationCanceledException("Debug session terminated.");
+        }
 
         _pausedAtSpan = span;
         _pausedEnvironment = environment;
@@ -484,6 +667,7 @@ public class DebugSession : IDebugger
 
         if (shouldPause)
         {
+            Trace($"Paused at {span.File}:{span.StartLine} reason={reason}");
             _isPaused = true;
             _pauseReason = reason;
             lock (_variableReferences)
@@ -556,20 +740,18 @@ public class DebugSession : IDebugger
         _pauseGate.Set();
     }
 
-    /// <summary>Sends the DAP initialized event to the client.</summary>
-    public void SendInitialized()
-    {
-        _server?.SendDebugAdapterInitialized(new InitializedEvent());
-    }
-
     private void SendOutput(string category, string text)
     {
-        if (_server == null) return;
+        if (_server == null)
+        {
+            return;
+        }
+
         var outputCategory = category switch
         {
-            "stdout"  => OutputEventCategory.StandardOutput,
-            "stderr"  => OutputEventCategory.StandardError,
-            _         => OutputEventCategory.Console,
+            "stdout" => OutputEventCategory.StandardOutput,
+            "stderr" => OutputEventCategory.StandardError,
+            _ => OutputEventCategory.Console,
         };
         _server.SendOutput(new OutputEvent { Category = outputCategory, Output = text });
     }
@@ -586,17 +768,20 @@ public class DebugSession : IDebugger
 
     private void SendStopped(PauseReason reason, string? description = null)
     {
-        if (_server == null) return;
+        if (_server == null)
+        {
+            return;
+        }
 
         var stopReason = reason switch
         {
-            PauseReason.Breakpoint       => StoppedEventReason.Breakpoint,
-            PauseReason.Step             => StoppedEventReason.Step,
-            PauseReason.Pause            => StoppedEventReason.Pause,
-            PauseReason.Exception        => StoppedEventReason.Exception,
-            PauseReason.Entry            => StoppedEventReason.Entry,
+            PauseReason.Breakpoint => StoppedEventReason.Breakpoint,
+            PauseReason.Step => StoppedEventReason.Step,
+            PauseReason.Pause => StoppedEventReason.Pause,
+            PauseReason.Exception => StoppedEventReason.Exception,
+            PauseReason.Entry => StoppedEventReason.Entry,
             PauseReason.FunctionBreakpoint => StoppedEventReason.FunctionBreakpoint,
-            _                            => StoppedEventReason.Pause,
+            _ => StoppedEventReason.Pause,
         };
 
         _server.SendStopped(new StoppedEvent
@@ -632,7 +817,11 @@ public class DebugSession : IDebugger
 
     private static Source? MakeSource(string? file)
     {
-        if (file == null) return null;
+        if (file == null)
+        {
+            return null;
+        }
+
         return new Source { Path = NormalizePath(file), Name = Path.GetFileName(file) };
     }
 
@@ -657,28 +846,39 @@ public class DebugSession : IDebugger
     /// </summary>
     private StashEnv? ResolveEnvironmentForFrame(int frameId)
     {
-        if (_interpreter == null) return null;
+        if (_interpreter == null)
+        {
+            return null;
+        }
 
         var callStack = _interpreter.CallStack;
 
         // Global/script scope when no functions are on the stack
         if (callStack.Count == 0 && frameId == 0)
+        {
             return _pausedEnvironment ?? _interpreter.Globals;
+        }
 
         // Top frame — use the active (innermost) paused environment
         if (callStack.Count > 0 && callStack[callStack.Count - 1].Id == frameId)
+        {
             return _pausedEnvironment ?? callStack[callStack.Count - 1].LocalScope;
+        }
 
         // Intermediate frames — use the environment recorded when the function was entered
         for (int i = callStack.Count - 2; i >= 0; i--)
         {
             if (callStack[i].Id == frameId)
+            {
                 return callStack[i].LocalScope;
+            }
         }
 
         // Synthetic script frame at the bottom
         if (frameId == 0)
+        {
             return _interpreter.Globals;
+        }
 
         return null;
     }
@@ -690,9 +890,16 @@ public class DebugSession : IDebugger
     /// </summary>
     private bool CheckBreakpointAtSpan(SourceSpan span, StashEnv environment)
     {
-        if (span.File == null) return false;
+        if (span.File == null)
+        {
+            return false;
+        }
+
         var normalized = NormalizePath(span.File);
-        if (!_breakpoints.TryGetValue(normalized, out var bpList)) return false;
+        if (!_breakpoints.TryGetValue(normalized, out var bpList))
+        {
+            return false;
+        }
 
         StashBreakpoint? hit = null;
         foreach (var bp in bpList)
@@ -704,20 +911,27 @@ public class DebugSession : IDebugger
             }
         }
 
-        if (hit == null) return false;
+        if (hit == null)
+        {
+            return false;
+        }
 
         // Evaluate condition expression if present
         if (hit.Condition != null && _interpreter != null)
         {
             var (condValue, condError) = _interpreter.EvaluateString(hit.Condition, environment);
             if (condError != null || !RuntimeValues.IsTruthy(condValue))
+            {
                 return false;
+            }
         }
 
         // Increment hit count; check hit condition if present
         var hitCount = hit.IncrementHitCount();
         if (hit.HitCondition != null && !EvaluateHitCondition(hit.HitCondition, hitCount))
+        {
             return false;
+        }
 
         // Logpoint: interpolate the message and send as output — do NOT pause
         if (hit.IsLogpoint)
@@ -737,20 +951,46 @@ public class DebugSession : IDebugger
     private static bool EvaluateHitCondition(string condition, int hitCount)
     {
         var c = condition.Trim();
-        if (c.StartsWith("== ") && int.TryParse(c[3..], out var eq))  return hitCount == eq;
-        if (c.StartsWith(">= ") && int.TryParse(c[3..], out var gte)) return hitCount >= gte;
-        if (c.StartsWith("> ")  && int.TryParse(c[2..], out var gt))  return hitCount > gt;
-        if (c.StartsWith("<= ") && int.TryParse(c[3..], out var lte)) return hitCount <= lte;
-        if (c.StartsWith("< ")  && int.TryParse(c[2..], out var lt))  return hitCount < lt;
+        if (c.StartsWith("== ") && int.TryParse(c[3..], out var eq))
+        {
+            return hitCount == eq;
+        }
+
+        if (c.StartsWith(">= ") && int.TryParse(c[3..], out var gte))
+        {
+            return hitCount >= gte;
+        }
+
+        if (c.StartsWith("> ") && int.TryParse(c[2..], out var gt))
+        {
+            return hitCount > gt;
+        }
+
+        if (c.StartsWith("<= ") && int.TryParse(c[3..], out var lte))
+        {
+            return hitCount <= lte;
+        }
+
+        if (c.StartsWith("< ") && int.TryParse(c[2..], out var lt))
+        {
+            return hitCount < lt;
+        }
+
         if (c.StartsWith("% "))
         {
             var parts = c[2..].Split("==", 2);
             if (parts.Length == 2
                 && int.TryParse(parts[0].Trim(), out var mod)
                 && int.TryParse(parts[1].Trim(), out var rem))
+            {
                 return hitCount % mod == rem;
+            }
         }
-        if (int.TryParse(c, out var n)) return hitCount == n;
+        if (int.TryParse(c, out var n))
+        {
+            return hitCount == n;
+        }
+
         return true;
     }
 
@@ -759,7 +999,10 @@ public class DebugSession : IDebugger
     /// </summary>
     private string InterpolateLogMessage(string template, StashEnv environment)
     {
-        if (_interpreter == null) return template;
+        if (_interpreter == null)
+        {
+            return template;
+        }
 
         var sb = new StringBuilder();
         int i = 0;
@@ -854,6 +1097,28 @@ public class DebugSession : IDebugger
                 displayValue = enumVal.ToString();
                 break;
 
+            case BuiltInFunction fn:
+                type = "function";
+                displayValue = fn.ToString();
+                break;
+
+            case StashNamespace ns:
+                type = "namespace";
+                displayValue = ns.ToString();
+                variablesReference = AllocateExpansion(name, value);
+                break;
+
+            case StashEnum en:
+                type = "enum";
+                displayValue = $"<enum {en.Name}> ({en.Members.Count} members)";
+                variablesReference = AllocateExpansion(name, value);
+                break;
+
+            case StashStruct st:
+                type = "struct";
+                displayValue = $"<struct {st.Name}> ({string.Join(", ", st.Fields)})";
+                break;
+
             default:
                 type = value.GetType().Name;
                 displayValue = RuntimeValues.Stringify(value);
@@ -868,6 +1133,12 @@ public class DebugSession : IDebugger
             VariablesReference = variablesReference,
         };
     }
+
+    /// <summary>
+    /// Returns true if the value is a language built-in (function or namespace).
+    /// Used to separate built-ins from user-defined bindings in the debug panel.
+    /// </summary>
+    private static bool IsBuiltInBinding(object? value) => value is BuiltInFunction or StashNamespace;
 
     /// <summary>
     /// Determines whether the current step mode requires pausing at this point.

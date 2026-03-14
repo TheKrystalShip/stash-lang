@@ -1,5 +1,7 @@
+using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Requests;
 
@@ -16,16 +18,28 @@ public class StashLaunchHandler : LaunchHandlerBase
 
     public override Task<LaunchResponse> Handle(LaunchRequestArguments request, CancellationToken cancellationToken)
     {
-        var json = JObject.FromObject(request);
-        var program = json["program"]?.ToString() ?? "";
-        var stopOnEntry = json["stopOnEntry"]?.Value<bool>() ?? false;
-        var cwd = json["cwd"]?.ToString();
-        var argsToken = json["args"];
-        string[]? args = argsToken != null ? argsToken.ToObject<string[]>() : null;
+        try
+        {
+            var json = JObject.FromObject(request);
+            DebugSession.TraceStatic($"Launch raw JSON: {json.ToString(Formatting.None)}");
 
-        _session.Launch(program, cwd, stopOnEntry, args);
-        _session.SendInitialized();
+            var program = json["program"]?.ToString() ?? "";
+            var stopOnEntry = json["stopOnEntry"]?.Value<bool>() ?? false;
+            var cwd = json["cwd"]?.ToString();
+            var argsToken = json["args"];
+            string[]? args = argsToken != null ? argsToken.ToObject<string[]>() : null;
 
-        return Task.FromResult(new LaunchResponse());
+            DebugSession.TraceStatic($"Launch extracted: program=\"{program}\", stopOnEntry={stopOnEntry}, cwd=\"{cwd}\", args={args?.Length ?? 0}");
+
+            _session.Launch(program, cwd, stopOnEntry, args);
+            DebugSession.TraceStatic("Launch completed");
+
+            return Task.FromResult(new LaunchResponse());
+        }
+        catch (Exception ex)
+        {
+            DebugSession.TraceStatic($"Launch FAILED: {ex}");
+            throw;
+        }
     }
 }

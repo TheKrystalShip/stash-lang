@@ -36,9 +36,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const fs = __importStar(require("fs"));
 const node_1 = require("vscode-languageclient/node");
 let client;
+let debugOutput;
 function activate(context) {
+    debugOutput = vscode.window.createOutputChannel("Stash Debug");
+    context.subscriptions.push(debugOutput);
+    debugOutput.appendLine("Stash extension activated");
     const config = vscode.workspace.getConfiguration("stash");
     const customPath = config.get("lspPath", "");
     const serverCommand = customPath || "stash-lsp";
@@ -58,8 +63,71 @@ function activate(context) {
     });
     context.subscriptions.push(showRefsDisposable);
     client.start();
+    // ── DAP Debug Adapter ─────────────────────────────────────────────────────
+    debugOutput.appendLine("Registering debug adapter descriptor factory for type 'stash'");
+    const factory = new StashDebugAdapterFactory(debugOutput);
+    const registration = vscode.debug.registerDebugAdapterDescriptorFactory("stash", factory);
+    context.subscriptions.push(registration);
 }
 function deactivate() {
     return client?.stop();
+}
+class StashDebugAdapterFactory {
+    constructor(output) {
+        this.output = output;
+    }
+    createDebugAdapterDescriptor(session, _executable) {
+        try {
+            this.output.appendLine(`createDebugAdapterDescriptor called — session: "${session.name}", type: "${session.type}"`);
+            const config = vscode.workspace.getConfiguration("stash");
+            const customPath = config.get("dapPath", "");
+            this.output.appendLine(`dapPath config value: "${customPath}"`);
+            const command = customPath || "stash-dap";
+            this.output.appendLine(`Resolved command: "${command}"`);
+            if (require("path").isAbsolute(command)) {
+                let resolvedPath;
+                try {
+                    resolvedPath = fs.realpathSync(command);
+                    this.output.appendLine(`Resolved symlink to: "${resolvedPath}"`);
+                }
+                catch (e) {
+                    const msg = `Failed to resolve symlink for "${command}": ${e}`;
+                    this.output.appendLine(msg);
+                    vscode.window.showErrorMessage(`Stash DAP: ${msg}`);
+                    return undefined;
+                }
+                const exists = fs.existsSync(resolvedPath);
+                this.output.appendLine(`File exists at resolved path: ${exists}`);
+                if (!exists) {
+                    const msg = `DAP binary not found at resolved path: "${resolvedPath}"`;
+                    this.output.appendLine(msg);
+                    vscode.window.showErrorMessage(`Stash DAP: ${msg}`);
+                    return undefined;
+                }
+                let executable = true;
+                try {
+                    fs.accessSync(resolvedPath, fs.constants.X_OK);
+                    this.output.appendLine(`File is executable: true`);
+                }
+                catch {
+                    executable = false;
+                    this.output.appendLine(`File is executable: false`);
+                    const msg = `DAP binary is not executable: "${resolvedPath}"`;
+                    vscode.window.showErrorMessage(`Stash DAP: ${msg}`);
+                    return undefined;
+                }
+                this.output.appendLine(`Launching DAP with resolved path: "${resolvedPath}"`);
+                return new vscode.DebugAdapterExecutable(resolvedPath);
+            }
+            this.output.appendLine(`Launching DAP with command: "${command}"`);
+            return new vscode.DebugAdapterExecutable(command);
+        }
+        catch (err) {
+            const msg = `Unexpected error in createDebugAdapterDescriptor: ${err}`;
+            this.output.appendLine(msg);
+            vscode.window.showErrorMessage(`Stash DAP: ${msg}`);
+            return undefined;
+        }
+    }
 }
 //# sourceMappingURL=extension.js.map
