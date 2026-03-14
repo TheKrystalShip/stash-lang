@@ -117,13 +117,17 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<NamespaceFunction> NamespaceFunctions = new[]
     {
+        // io namespace
         new NamespaceFunction("io", "println", new[] { new BuiltInParam("value") }),
         new NamespaceFunction("io", "print", new[] { new BuiltInParam("value") }),
+        // conv namespace
         new NamespaceFunction("conv", "toStr", new[] { new BuiltInParam("value") }, "string"),
         new NamespaceFunction("conv", "toInt", new[] { new BuiltInParam("value") }, "int"),
         new NamespaceFunction("conv", "toFloat", new[] { new BuiltInParam("value") }, "float"),
+        // env namespace
         new NamespaceFunction("env", "get", new[] { new BuiltInParam("name", "string") }, "string"),
         new NamespaceFunction("env", "set", new[] { new BuiltInParam("name", "string"), new BuiltInParam("value", "string") }),
+        // process namespace
         new NamespaceFunction("process", "exit", new[] { new BuiltInParam("code", "int") }),
         new NamespaceFunction("process", "spawn", new[] { new BuiltInParam("cmd", "string") }, "Process"),
         new NamespaceFunction("process", "wait", new[] { new BuiltInParam("proc", "Process") }, "CommandResult"),
@@ -136,6 +140,7 @@ public static class BuiltInRegistry
         new NamespaceFunction("process", "list", Array.Empty<BuiltInParam>(), "array"),
         new NamespaceFunction("process", "read", new[] { new BuiltInParam("proc", "Process") }, "string"),
         new NamespaceFunction("process", "write", new[] { new BuiltInParam("proc", "Process"), new BuiltInParam("data", "string") }, "bool"),
+        // file system namespace
         new NamespaceFunction("fs", "readFile", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("fs", "writeFile", new[] { new BuiltInParam("path", "string"), new BuiltInParam("content", "string") }),
         new NamespaceFunction("fs", "exists", new[] { new BuiltInParam("path", "string") }, "bool"),
@@ -148,6 +153,7 @@ public static class BuiltInRegistry
         new NamespaceFunction("fs", "size", new[] { new BuiltInParam("path", "string") }, "int"),
         new NamespaceFunction("fs", "listDir", new[] { new BuiltInParam("path", "string") }, "array"),
         new NamespaceFunction("fs", "appendFile", new[] { new BuiltInParam("path", "string"), new BuiltInParam("content", "string") }),
+        // path namespace
         new NamespaceFunction("path", "abs", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("path", "dir", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("path", "base", new[] { new BuiltInParam("path", "string") }, "string"),
@@ -174,6 +180,19 @@ public static class BuiltInRegistry
         new NamespaceFunction("arr", "forEach", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }),
         new NamespaceFunction("arr", "find", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }),
         new NamespaceFunction("arr", "reduce", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function"), new BuiltInParam("initial") }),
+        // dict namespace
+        new NamespaceFunction("dict", "new", Array.Empty<BuiltInParam>(), "dict"),
+        new NamespaceFunction("dict", "get", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("key") }),
+        new NamespaceFunction("dict", "set", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("key"), new BuiltInParam("value") }),
+        new NamespaceFunction("dict", "has", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("key") }, "bool"),
+        new NamespaceFunction("dict", "remove", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("key") }, "bool"),
+        new NamespaceFunction("dict", "clear", new[] { new BuiltInParam("dict", "dict") }),
+        new NamespaceFunction("dict", "keys", new[] { new BuiltInParam("dict", "dict") }, "array"),
+        new NamespaceFunction("dict", "values", new[] { new BuiltInParam("dict", "dict") }, "array"),
+        new NamespaceFunction("dict", "size", new[] { new BuiltInParam("dict", "dict") }, "int"),
+        new NamespaceFunction("dict", "pairs", new[] { new BuiltInParam("dict", "dict") }, "array"),
+        new NamespaceFunction("dict", "forEach", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("fn", "function") }),
+        new NamespaceFunction("dict", "merge", new[] { new BuiltInParam("dict1", "dict"), new BuiltInParam("dict2", "dict") }, "dict"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -193,7 +212,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict"
     };
 
     // ── Keywords ──

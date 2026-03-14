@@ -1,0 +1,147 @@
+#!/usr/bin/env stash
+
+// Dictionaries example
+// Demonstrates creating, querying, iterating, and merging dictionaries
+
+// --- Basic Creation and CRUD ---
+
+fn demo_basic_crud() {
+    io.println("=== Basic CRUD ===");
+
+    let user = dict.new();
+    user["name"] = "Alice";
+    user["age"] = 30;
+    user["city"] = "Berlin";
+
+    io.println($"Name:  {user["name"]}");
+    io.println($"Age:   {user["age"]}");
+    io.println($"City:  {user["city"]}");
+
+    // Update
+    user["age"] = 31;
+    io.println($"Birthday! Age is now {user["age"]}");
+
+    // has / get
+    io.println($"Has 'city'?  {dict.has(user, "city")}");
+    io.println($"Has 'email'? {dict.has(user, "email")}");
+    io.println($"Email value: {dict.get(user, "email")}");
+
+    // Remove
+    dict.remove(user, "city");
+    io.println($"After remove — has 'city'? {dict.has(user, "city")}");
+
+    io.println("");
+}
+
+// --- Metadata ---
+
+fn demo_metadata() {
+    io.println("=== Metadata ===");
+
+    let scores = dict.new();
+    scores["alice"] = 95;
+    scores["bob"]   = 87;
+    scores["carol"] = 92;
+
+    io.println($"Type:  {typeof(scores)}");
+    io.println($"len(): {len(scores)}");
+    io.println($"size:  {dict.size(scores)}");
+
+    io.println($"Keys:   {dict.keys(scores)}");
+    io.println($"Values: {dict.values(scores)}");
+
+    io.println("");
+}
+
+// --- Iteration ---
+
+fn demo_iteration() {
+    io.println("=== Iteration ===");
+
+    let capitals = dict.new();
+    capitals["France"]  = "Paris";
+    capitals["Germany"] = "Berlin";
+    capitals["Japan"]   = "Tokyo";
+    capitals["Brazil"]  = "Brasília";
+
+    // for-in iterates over keys
+    io.println("for-in loop:");
+    for (let country in capitals) {
+        io.println($"  {country} -> {capitals[country]}");
+    }
+
+    // dict.forEach
+    io.println("dict.forEach:");
+    dict.forEach(capitals, (k, v) => {
+        io.println($"  {k}: {v}");
+    });
+
+    // dict.pairs with .key / .value dot access
+    io.println("dict.pairs:");
+    for (let pair in dict.pairs(capitals)) {
+        io.println($"  {pair.key} => {pair.value}");
+    }
+
+    io.println("");
+}
+
+// --- Merging ---
+
+fn demo_merge() {
+    io.println("=== Merging ===");
+
+    let defaults = dict.new();
+    defaults["color"]   = "blue";
+    defaults["timeout"] = 30;
+    defaults["retries"] = 3;
+
+    let overrides = dict.new();
+    overrides["color"]  = "green";
+    overrides["debug"]  = true;
+
+    let config = dict.merge(defaults, overrides);
+
+    io.println("defaults + overrides (overrides win on conflicts):");
+    for (let key in config) {
+        io.println($"  {key} = {config[key]}");
+    }
+
+    io.println("");
+}
+
+// --- Practical Use Case: Word Frequency Counter ---
+
+fn word_frequency(text: string) {
+    io.println("=== Word Frequency Counter ===");
+
+    let freq = dict.new();
+    let words = str.split(text, " ");
+
+    for (let word in words) {
+        let w = str.lower(str.trim(word));
+        if (w == "") {
+            continue;
+        }
+        if (dict.has(freq, w)) {
+            freq[w] = freq[w] + 1;
+        } else {
+            freq[w] = 1;
+        }
+    }
+
+    io.println($"Unique words: {dict.size(freq)}");
+    io.println("Frequencies:");
+    for (let pair in dict.pairs(freq)) {
+        io.println($"  \"{pair.key}\": {pair.value}");
+    }
+
+    io.println("");
+}
+
+// --- Main ---
+
+demo_basic_crud();
+demo_metadata();
+demo_iteration();
+demo_merge();
+word_frequency("the quick brown fox jumps over the lazy dog the fox");

@@ -3679,4 +3679,284 @@ public class InterpreterTests
     {
         Assert.Equal("a-1-2-3", Run("let a = [1, 2, 3]; let result = arr.reduce(a, (acc, x) => acc + \"-\" + x, \"a\");"));
     }
+
+    // ── Dictionary Tests ─────────────────────────────────────────────
+
+    // dict.new
+    [Fact]
+    public void DictNew_CreatesEmptyDictionary()
+    {
+        var result = Run("let d = dict.new(); let result = d;");
+        Assert.IsType<StashDictionary>(result);
+    }
+
+    // dict.set + dict.get
+    [Fact]
+    public void DictSetGet_StringKey()
+    {
+        Assert.Equal(42L, Run("let d = dict.new(); dict.set(d, \"age\", 42); let result = dict.get(d, \"age\");"));
+    }
+
+    [Fact]
+    public void DictSetGet_IntKey()
+    {
+        Assert.Equal("hello", Run("let d = dict.new(); dict.set(d, 1, \"hello\"); let result = dict.get(d, 1);"));
+    }
+
+    [Fact]
+    public void DictGet_MissingKey_ReturnsNull()
+    {
+        Assert.Null(Run("let d = dict.new(); let result = dict.get(d, \"missing\");"));
+    }
+
+    [Fact]
+    public void DictSet_OverwritesExistingKey()
+    {
+        Assert.Equal("new", Run("let d = dict.new(); dict.set(d, \"k\", \"old\"); dict.set(d, \"k\", \"new\"); let result = dict.get(d, \"k\");"));
+    }
+
+    // Index syntax d["key"] and d["key"] = value
+    [Fact]
+    public void DictIndex_Get()
+    {
+        Assert.Equal(10L, Run("let d = dict.new(); dict.set(d, \"x\", 10); let result = d[\"x\"];"));
+    }
+
+    [Fact]
+    public void DictIndex_Set()
+    {
+        Assert.Equal(99L, Run("let d = dict.new(); d[\"x\"] = 99; let result = d[\"x\"];"));
+    }
+
+    [Fact]
+    public void DictIndex_SetAndGet_IntKey()
+    {
+        Assert.Equal("val", Run("let d = dict.new(); d[42] = \"val\"; let result = d[42];"));
+    }
+
+    [Fact]
+    public void DictIndex_MissingKey_ReturnsNull()
+    {
+        Assert.Null(Run("let d = dict.new(); let result = d[\"nope\"];"));
+    }
+
+    [Fact]
+    public void DictIndex_NullKey_Throws()
+    {
+        RunExpectingError("let d = dict.new(); d[null] = 1;");
+    }
+
+    [Fact]
+    public void DictIndex_GetNullKey_Throws()
+    {
+        RunExpectingError("let d = dict.new(); let result = d[null];");
+    }
+
+    // dict.has
+    [Fact]
+    public void DictHas_ExistingKey()
+    {
+        Assert.Equal(true, Run("let d = dict.new(); d[\"a\"] = 1; let result = dict.has(d, \"a\");"));
+    }
+
+    [Fact]
+    public void DictHas_MissingKey()
+    {
+        Assert.Equal(false, Run("let d = dict.new(); let result = dict.has(d, \"a\");"));
+    }
+
+    // dict.remove
+    [Fact]
+    public void DictRemove_ExistingKey()
+    {
+        Assert.Equal(true, Run("let d = dict.new(); d[\"a\"] = 1; let result = dict.remove(d, \"a\");"));
+    }
+
+    [Fact]
+    public void DictRemove_MissingKey()
+    {
+        Assert.Equal(false, Run("let d = dict.new(); let result = dict.remove(d, \"x\");"));
+    }
+
+    [Fact]
+    public void DictRemove_KeyNoLongerExists()
+    {
+        Assert.Equal(false, Run("let d = dict.new(); d[\"a\"] = 1; dict.remove(d, \"a\"); let result = dict.has(d, \"a\");"));
+    }
+
+    // dict.clear
+    [Fact]
+    public void DictClear_EmptiesDictionary()
+    {
+        Assert.Equal(0L, Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; dict.clear(d); let result = len(d);"));
+    }
+
+    // dict.keys
+    [Fact]
+    public void DictKeys_ReturnsAllKeys()
+    {
+        var result = Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; let result = dict.keys(d);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        Assert.Contains("a", list);
+        Assert.Contains("b", list);
+    }
+
+    // dict.values
+    [Fact]
+    public void DictValues_ReturnsAllValues()
+    {
+        var result = Run("let d = dict.new(); d[\"x\"] = 10; d[\"y\"] = 20; let result = dict.values(d);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        Assert.Contains(10L, list);
+        Assert.Contains(20L, list);
+    }
+
+    // dict.size
+    [Fact]
+    public void DictSize_ReturnsCount()
+    {
+        Assert.Equal(2L, Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; let result = dict.size(d);"));
+    }
+
+    [Fact]
+    public void DictSize_EmptyDict()
+    {
+        Assert.Equal(0L, Run("let d = dict.new(); let result = dict.size(d);"));
+    }
+
+    // dict.pairs
+    [Fact]
+    public void DictPairs_ReturnsPairStructs()
+    {
+        var result = Run("let d = dict.new(); d[\"k\"] = \"v\"; let result = dict.pairs(d);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Single(list);
+        var pair = Assert.IsType<StashInstance>(list[0]);
+        Assert.Equal("Pair", pair.TypeName);
+    }
+
+    [Fact]
+    public void DictPairs_DotAccessKey()
+    {
+        Assert.Equal("k", Run("let d = dict.new(); d[\"k\"] = \"v\"; let pairs = dict.pairs(d); let result = pairs[0].key;"));
+    }
+
+    [Fact]
+    public void DictPairs_DotAccessValue()
+    {
+        Assert.Equal("v", Run("let d = dict.new(); d[\"k\"] = \"v\"; let pairs = dict.pairs(d); let result = pairs[0].value;"));
+    }
+
+    [Fact]
+    public void DictPairs_ForInDotAccess()
+    {
+        Assert.Equal(30L, Run("let d = dict.new(); d[\"x\"] = 10; d[\"y\"] = 20; let sum = 0; for (let pair in dict.pairs(d)) { sum = sum + pair.value; } let result = sum;"));
+    }
+
+    // dict.merge
+    [Fact]
+    public void DictMerge_CombinesDictionaries()
+    {
+        Assert.Equal(3L, Run("let a = dict.new(); a[\"x\"] = 1; let b = dict.new(); b[\"y\"] = 2; b[\"z\"] = 3; let merged = dict.merge(a, b); let result = dict.size(merged);"));
+    }
+
+    [Fact]
+    public void DictMerge_SecondWinsOnConflict()
+    {
+        Assert.Equal("new", Run("let a = dict.new(); a[\"k\"] = \"old\"; let b = dict.new(); b[\"k\"] = \"new\"; let merged = dict.merge(a, b); let result = merged[\"k\"];"));
+    }
+
+    [Fact]
+    public void DictMerge_DoesNotMutateOriginals()
+    {
+        Assert.Equal(1L, Run("let a = dict.new(); a[\"x\"] = 1; let b = dict.new(); b[\"y\"] = 2; dict.merge(a, b); let result = dict.size(a);"));
+    }
+
+    // dict.forEach
+    [Fact]
+    public void DictForEach_VisitsAllEntries()
+    {
+        Assert.Equal(2L, Run("let d = dict.new(); d[\"a\"] = 10; d[\"b\"] = 20; let count = 0; dict.forEach(d, (k, v) => { count = count + 1; }); let result = count;"));
+    }
+
+    // typeof
+    [Fact]
+    public void Dict_TypeofReturnsDict()
+    {
+        Assert.Equal("dict", Run("let d = dict.new(); let result = typeof(d);"));
+    }
+
+    // len
+    [Fact]
+    public void Dict_LenReturnsCount()
+    {
+        Assert.Equal(2L, Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; let result = len(d);"));
+    }
+
+    // for-in iteration
+    [Fact]
+    public void Dict_ForIn_IteratesKeys()
+    {
+        Assert.Equal(2L, Run("let d = dict.new(); d[\"x\"] = 10; d[\"y\"] = 20; let count = 0; for (let k in d) { count = count + 1; } let result = count;"));
+    }
+
+    [Fact]
+    public void Dict_ForIn_CanAccessValues()
+    {
+        Assert.Equal(30L, Run("let d = dict.new(); d[\"x\"] = 10; d[\"y\"] = 20; let sum = 0; for (let k in d) { sum = sum + d[k]; } let result = sum;"));
+    }
+
+    // Stringify
+    [Fact]
+    public void Dict_Stringify_SingleEntry()
+    {
+        // Just check it doesn't crash and contains the key
+        var result = Run("let d = dict.new(); d[\"name\"] = \"John\"; let result = conv.toStr(d);");
+        Assert.IsType<string>(result);
+        var str = (string)result!;
+        Assert.Contains("name", str);
+        Assert.Contains("John", str);
+    }
+
+    // Error cases
+    [Fact]
+    public void DictSet_NonDict_Throws()
+    {
+        RunExpectingError("dict.set(\"hello\", \"key\", \"val\");");
+    }
+
+    [Fact]
+    public void DictGet_NonDict_Throws()
+    {
+        RunExpectingError("dict.get(42, \"key\");");
+    }
+
+    [Fact]
+    public void DictSet_NullKey_Throws()
+    {
+        RunExpectingError("let d = dict.new(); dict.set(d, null, 1);");
+    }
+
+    // Mixed value types
+    [Fact]
+    public void Dict_MixedValueTypes()
+    {
+        Assert.Equal(true, Run("let d = dict.new(); d[\"int\"] = 42; d[\"str\"] = \"hello\"; d[\"bool\"] = true; d[\"arr\"] = [1, 2]; let result = d[\"bool\"];"));
+    }
+
+    // Bool key
+    [Fact]
+    public void Dict_BoolKey()
+    {
+        Assert.Equal("yes", Run("let d = dict.new(); d[true] = \"yes\"; d[false] = \"no\"; let result = d[true];"));
+    }
+
+    // Array key should fail
+    [Fact]
+    public void Dict_ArrayKey_Throws()
+    {
+        RunExpectingError("let d = dict.new(); d[[1,2]] = \"val\";");
+    }
 }

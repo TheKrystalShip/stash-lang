@@ -564,6 +564,22 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             return elements.ToString();
         }
 
+        if (value is StashDictionary dict)
+        {
+            var sb = new System.Text.StringBuilder("{");
+            bool first = true;
+            foreach (var key in dict.Keys())
+            {
+                if (!first) sb.Append(", ");
+                first = false;
+                sb.Append(Stringify(key));
+                sb.Append(": ");
+                sb.Append(Stringify(dict.Get(key!)));
+            }
+            sb.Append('}');
+            return sb.ToString();
+        }
+
         return value.ToString()!;
     }
 
@@ -985,9 +1001,13 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             items = StringToChars(str);
         }
+        else if (iterable is StashDictionary dict)
+        {
+            items = dict.IterableKeys();
+        }
         else
         {
-            throw new RuntimeError("Can only iterate over arrays and strings.", stmt.Iterable.Span);
+            throw new RuntimeError("Can only iterate over arrays, strings, and dictionaries.", stmt.Iterable.Span);
         }
 
         foreach (object? item in items)
@@ -2374,7 +2394,17 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             return str[(int)i].ToString();
         }
 
-        throw new RuntimeError("Only arrays and strings can be indexed.", expr.BracketSpan);
+        if (obj is StashDictionary dict)
+        {
+            if (index is null)
+            {
+                throw new RuntimeError("Dictionary key cannot be null.", expr.BracketSpan);
+            }
+
+            return dict.Get(index);
+        }
+
+        throw new RuntimeError("Only arrays, strings, and dictionaries can be indexed.", expr.BracketSpan);
     }
 
     public object? VisitIndexAssignExpr(IndexAssignExpr expr)
@@ -2383,9 +2413,20 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         object? index = expr.Index.Accept(this);
         object? value = expr.Value.Accept(this);
 
+        if (obj is StashDictionary dict)
+        {
+            if (index is null)
+            {
+                throw new RuntimeError("Dictionary key cannot be null.", expr.BracketSpan);
+            }
+
+            dict.Set(index, value);
+            return value;
+        }
+
         if (obj is not List<object?> list)
         {
-            throw new RuntimeError("Only arrays can be assigned to by index.", expr.BracketSpan);
+            throw new RuntimeError("Only arrays and dictionaries can be assigned to by index.", expr.BracketSpan);
         }
 
         if (index is not long i)
@@ -2457,6 +2498,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 return "enum";
             }
 
+            if (val is StashDictionary)
+            {
+                return "dict";
+            }
+
             if (val is StashNamespace)
             {
                 return "namespace";
@@ -2483,7 +2529,12 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 return (long)list.Count;
             }
 
-            throw new RuntimeError("Argument to 'len' must be a string or array.");
+            if (val is StashDictionary dict)
+            {
+                return (long)dict.Count;
+            }
+
+            throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
         }));
 
         _globals.Define("lastError", new BuiltInFunction("lastError", 0, (interpreter, args) =>
@@ -3429,6 +3480,120 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("arr", arr);
+
+        // ── dict namespace ───────────────────────────────────────────────
+        var dict = new StashNamespace("dict");
+
+        dict.Define("new", new BuiltInFunction("dict.new", 0, (_, args) =>
+        {
+            return new StashDictionary();
+        }));
+
+        dict.Define("get", new BuiltInFunction("dict.get", 2, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.get' must be a dictionary.");
+            if (args[1] is null)
+                throw new RuntimeError("Dictionary key cannot be null.");
+            return d.Get(args[1]);
+        }));
+
+        dict.Define("set", new BuiltInFunction("dict.set", 3, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.set' must be a dictionary.");
+            if (args[1] is null)
+                throw new RuntimeError("Dictionary key cannot be null.");
+            d.Set(args[1], args[2]);
+            return null;
+        }));
+
+        dict.Define("has", new BuiltInFunction("dict.has", 2, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.has' must be a dictionary.");
+            if (args[1] is null)
+                throw new RuntimeError("Dictionary key cannot be null.");
+            return d.Has(args[1]);
+        }));
+
+        dict.Define("remove", new BuiltInFunction("dict.remove", 2, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.remove' must be a dictionary.");
+            if (args[1] is null)
+                throw new RuntimeError("Dictionary key cannot be null.");
+            return d.Remove(args[1]);
+        }));
+
+        dict.Define("clear", new BuiltInFunction("dict.clear", 1, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.clear' must be a dictionary.");
+            d.Clear();
+            return null;
+        }));
+
+        dict.Define("keys", new BuiltInFunction("dict.keys", 1, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.keys' must be a dictionary.");
+            return d.Keys();
+        }));
+
+        dict.Define("values", new BuiltInFunction("dict.values", 1, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.values' must be a dictionary.");
+            return d.Values();
+        }));
+
+        dict.Define("size", new BuiltInFunction("dict.size", 1, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.size' must be a dictionary.");
+            return (long)d.Count;
+        }));
+
+        dict.Define("pairs", new BuiltInFunction("dict.pairs", 1, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.pairs' must be a dictionary.");
+            return d.Pairs();
+        }));
+
+        dict.Define("forEach", new BuiltInFunction("dict.forEach", 2, (interp, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+                throw new RuntimeError("First argument to 'dict.forEach' must be a dictionary.");
+            if (args[1] is not IStashCallable fn)
+                throw new RuntimeError("Second argument to 'dict.forEach' must be a function.");
+            foreach (var entry in d.RawEntries())
+            {
+                fn.Call(interp, new List<object?> { entry.Key, entry.Value });
+            }
+            return null;
+        }));
+
+        dict.Define("merge", new BuiltInFunction("dict.merge", 2, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d1)
+                throw new RuntimeError("First argument to 'dict.merge' must be a dictionary.");
+            if (args[1] is not StashDictionary d2)
+                throw new RuntimeError("Second argument to 'dict.merge' must be a dictionary.");
+            var result = new StashDictionary();
+            foreach (var entry in d1.RawEntries())
+            {
+                result.Set(entry.Key, entry.Value);
+            }
+            foreach (var entry in d2.RawEntries())
+            {
+                result.Set(entry.Key, entry.Value);
+            }
+            return result;
+        }));
+
+        _globals.Define("dict", dict);
     }
 
     /// <summary>

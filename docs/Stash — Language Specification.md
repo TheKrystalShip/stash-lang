@@ -23,7 +23,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [5b. Enums](#5b-enums) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Process Management](#6d-process-management) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
+**Addenda:** [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Process Management](#6d-process-management) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
 
 ---
 
@@ -200,6 +200,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `array`  | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size     |
 | `struct` | `Server { host: "...", ... }`  | Named structured data (see Section 5) |
 | `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)      |
+| `dict`   | `dict.new()`                   | Key-value map (see Section 5c)        |
 
 ### Type Coercion & Truthiness
 
@@ -305,6 +306,72 @@ An enum value is stored as a pair: `(typeName, memberName)`. Dot access on the e
 - **Enum with associated values:** `enum Result { Ok(value), Err(message) }` — algebraic data types.
 - **Iteration:** `for (let s in Status) { ... }` — iterating over all members.
 - **String conversion:** `conv.toStr(Status.Active)` → `"Active"`.
+
+---
+
+## 5c. Dictionaries
+
+Dictionaries provide dynamic key-value mappings — the complement to arrays for keyed lookups. While structs offer fixed-schema structured data, dictionaries allow keys to be added and removed at runtime.
+
+### Creation
+
+Dictionaries are created via the `dict` namespace:
+
+```c
+let d = dict.new();       // empty dictionary
+d["name"] = "Alice";       // set via index syntax
+d["age"] = 30;
+```
+
+### Key Types
+
+Dictionary keys must be **value types**: `string`, `int`, `float`, or `bool`. Using any other type as a key (arrays, structs, functions, `null`) produces a runtime error.
+
+### Access
+
+Dictionaries support index syntax (`d[key]`) for both reading and writing:
+
+```c
+let d = dict.new();
+
+// Write
+d["host"] = "10.0.0.1";
+d["port"] = 8080;
+d[42] = "answer";
+
+// Read — returns null for missing keys
+let host = d["host"];       // "10.0.0.1"
+let missing = d["nope"];    // null
+
+// Check existence
+dict.has(d, "host");        // true
+dict.has(d, "nope");        // false
+```
+
+### Iteration
+
+Dictionaries are iterable — `for-in` iterates over keys:
+
+```c
+let config = dict.new();
+config["host"] = "localhost";
+config["port"] = 8080;
+
+for (let key in config) {
+    io.println(key + " = " + config[key]);
+}
+```
+
+### Built-in Integration
+
+```c
+typeof(dict.new())    // "dict"
+len(d)                // number of key-value pairs
+```
+
+### Internal Representation
+
+A dictionary is backed by a hash map (`Dictionary<object, object?>` in C#). Key lookup is O(1) average. The `dict` namespace provides all manipulation functions (see Section 8).
 
 ---
 
@@ -756,6 +823,7 @@ Only the `for-in` form is supported. C-style `for (init; condition; increment)` 
 
 - **`array`** — iterates over elements in order: `for (let item in [1, 2, 3]) { ... }`
 - **`string`** — iterates over characters: `for (let ch in "hello") { ... }` yields `"h"`, `"e"`, `"l"`, `"l"`, `"o"`
+- **`dict`** — iterates over keys: `for (let key in myDict) { ... }`
 
 All other types produce a runtime error when used as the right-hand side of `for-in`. Iteration over struct fields and enum members may be added in a future version.
 
@@ -1051,6 +1119,147 @@ See [Section 6d](#6d-process-management) for full semantics, the `Process` handl
 | `path.name(p)`                   | Get filename without extension                   |
 | `path.ext(p)`                    | Get file extension (including `.`)               |
 | `path.join(a, b)`                | Join two path segments                           |
+
+#### `arr` — Array Operations
+
+All `arr` functions take the target array as the first argument. Functions that mutate the array do so **in-place**.
+
+##### Core Manipulation
+
+| Function                          | Description                                                       |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `arr.push(array, value)`          | Add value to end of array                                         |
+| `arr.pop(array)`                  | Remove and return last element (error if empty)                   |
+| `arr.peek(array)`                 | Return last element without removing (error if empty)             |
+| `arr.insert(array, index, value)` | Insert value at index (shifts elements right)                     |
+| `arr.removeAt(array, index)`      | Remove and return element at index                                |
+| `arr.remove(array, value)`        | Remove first occurrence of value; returns `true` if found         |
+| `arr.clear(array)`                | Remove all elements                                               |
+
+##### Searching
+
+| Function                          | Description                                                       |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `arr.contains(array, value)`      | Return `true` if value exists in array                            |
+| `arr.indexOf(array, value)`       | Return index of first occurrence, or `-1` if not found            |
+
+##### Transformation
+
+| Function                          | Description                                                       |
+| --------------------------------- | ----------------------------------------------------------------- |
+| `arr.slice(array, start, end)`    | Return new sub-array from start (inclusive) to end (exclusive)    |
+| `arr.concat(array1, array2)`      | Return new array combining both arrays                            |
+| `arr.join(array, separator)`      | Join elements into a string with separator                        |
+| `arr.reverse(array)`              | Reverse array in-place                                            |
+| `arr.sort(array)`                 | Sort array in-place (numbers and strings; error on mixed types)   |
+
+##### Higher-Order Functions
+
+| Function                              | Description                                                   |
+| ------------------------------------- | ------------------------------------------------------------- |
+| `arr.map(array, fn)`                  | Return new array with `fn(element)` applied to each element   |
+| `arr.filter(array, fn)`              | Return new array of elements where `fn(element)` is truthy    |
+| `arr.forEach(array, fn)`             | Call `fn(element)` for each element                           |
+| `arr.find(array, fn)`                | Return first element where `fn(element)` is truthy, or `null` |
+| `arr.reduce(array, fn, initial)`     | Fold array: calls `fn(accumulator, element)` for each element |
+
+##### Examples
+
+```c
+let nums = [3, 1, 4, 1, 5];
+
+// Core manipulation
+arr.push(nums, 9);              // [3, 1, 4, 1, 5, 9]
+let last = arr.pop(nums);       // last = 9, nums = [3, 1, 4, 1, 5]
+arr.insert(nums, 0, 0);         // [0, 3, 1, 4, 1, 5]
+arr.removeAt(nums, 0);          // [3, 1, 4, 1, 5]
+
+// Searching
+arr.contains(nums, 4);          // true
+arr.indexOf(nums, 1);           // 1
+
+// Transformation
+let sub = arr.slice(nums, 1, 3);    // [1, 4]
+let all = arr.concat(nums, [6, 7]); // [3, 1, 4, 1, 5, 6, 7]
+arr.sort(nums);                     // [1, 1, 3, 4, 5]
+let csv = arr.join(nums, ", ");     // "1, 1, 3, 4, 5"
+
+// Higher-order functions
+let doubled = arr.map(nums, (x) => x * 2);      // [2, 2, 6, 8, 10]
+let big = arr.filter(nums, (x) => x > 2);        // [3, 4, 5]
+let sum = arr.reduce(nums, (acc, x) => acc + x, 0); // 14
+let found = arr.find(nums, (x) => x > 3);        // 4
+arr.forEach(nums, (x) => io.println(x));          // prints each element
+```
+
+#### `dict` — Dictionary Operations
+
+All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument.
+
+| Function                         | Description                                                          |
+| -------------------------------- | -------------------------------------------------------------------- |
+| `dict.new()`                     | Create an empty dictionary                                           |
+| `dict.get(d, key)`              | Get value for key, or `null` if not found                            |
+| `dict.set(d, key, value)`       | Set key-value pair (mutates dictionary)                              |
+| `dict.has(d, key)`              | Return `true` if key exists                                         |
+| `dict.remove(d, key)`           | Remove key; returns `true` if found                                  |
+| `dict.clear(d)`                 | Remove all entries                                                   |
+| `dict.keys(d)`                  | Return array of all keys                                             |
+| `dict.values(d)`                | Return array of all values                                           |
+| `dict.size(d)`                  | Return number of entries                                             |
+| `dict.pairs(d)`                 | Return array of Pair structs (each with `.key` and `.value` fields)   |
+| `dict.forEach(d, fn)`           | Call `fn(key, value)` for each entry                                 |
+| `dict.merge(d1, d2)`            | Return new dictionary combining both (d2 wins on key conflicts)      |
+
+##### Index Syntax
+
+Dictionaries also support index access using `d[key]` and `d[key] = value`:
+
+```c
+let d = dict.new();
+d["name"] = "Alice";
+d["age"] = 30;
+let name = d["name"];       // "Alice"
+let missing = d["nope"];    // null (no error)
+```
+
+##### Examples
+
+```c
+let config = dict.new();
+config["host"] = "localhost";
+config["port"] = 8080;
+config["debug"] = true;
+
+// Check and retrieve
+if (dict.has(config, "host")) {
+    io.println("Host: " + config["host"]);
+}
+
+// Iteration
+for (let key in config) {
+    io.println(key + " = " + config[key]);
+}
+
+// Pair struct iteration
+let pairs = dict.pairs(config);
+for (let pair in pairs) {
+    io.println(pair.key + " = " + pair.value);
+}
+
+// Higher-order usage
+dict.forEach(config, (k, v) => {
+    io.println(k + " => " + v);
+});
+
+// Merging
+let defaults = dict.new();
+defaults["timeout"] = 30;
+defaults["retries"] = 3;
+
+let merged = dict.merge(defaults, config);
+// merged has all keys from both; config values take priority
+```
 
 Namespace members are accessed with dot notation: `fs.exists("/etc/hosts")`. Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
