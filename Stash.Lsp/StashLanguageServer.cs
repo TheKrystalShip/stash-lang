@@ -33,6 +33,7 @@ public static class StashLanguageServer
                 .WithHandler<ReferencesHandler>()
                 .WithHandler<DocumentHighlightHandler>()
                 .WithHandler<RenameHandler>()
+                .WithHandler<PrepareRenameHandler>()
                 .WithHandler<SignatureHelpHandler>()
                 .WithHandler<SemanticTokensHandler>()
                 .WithHandler<FoldingRangeHandler>()

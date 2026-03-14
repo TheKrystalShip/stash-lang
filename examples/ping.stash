@@ -1,12 +1,12 @@
 #!/usr/bin/env stash
 
-const DEFAULT_ADDRESS = "192.168.1.128";
-let localAddress = "192.168.1.127";
+const DEFAULT_ADDRESS: string = "192.168.1.128";
+let localAddress: string = "192.168.1.127";
 
-let servers = [ DEFAULT_ADDRESS, localAddress ];
+let servers: array = [ DEFAULT_ADDRESS, localAddress ];
 
-fn pingAddress(address) {
-  let result = $(ping -c 1 {address});
+fn pingAddress(address: string) {
+  let result: CommandResult = $(ping -c 1 {address});
 
   io.println($"Exit code for ping at address {address}: {result.exitCode}");
 
@@ -15,6 +15,6 @@ fn pingAddress(address) {
   }
 }
 
-for (let address in servers) {
+for (let address: string in servers) {
   pingAddress(address);
 }
