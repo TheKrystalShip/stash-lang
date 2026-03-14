@@ -1,0 +1,135 @@
+{
+  "name": "stash-lang",
+  "displayName": "Stash Language",
+  "description": "Full language support for the Stash scripting language — syntax highlighting, LSP-powered diagnostics, autocomplete, formatting, navigation, and more",
+  "version": "0.1.0",
+  "publisher": "TheKrystalShip",
+  "main": "./out/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheKrystalShip/stash-lang"
+  },
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "activationEvents": [],
+  "categories": [
+    "Programming Languages",
+    "Snippets",
+    "Formatters",
+    "Linters"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "stash",
+        "aliases": [
+          "Stash",
+          "stash"
+        ],
+        "extensions": [
+          ".stash"
+        ],
+        "configuration": "./language-configuration.json",
+        "firstLine": "^#!.*\\bstash\\b"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "stash",
+        "scopeName": "source.stash",
+        "path": "./syntaxes/stash.tmLanguage.json",
+        "semanticHighlighting": true
+      }
+    ],
+    "snippets": [
+      {
+        "language": "stash",
+        "path": "./snippets/stash.json"
+      }
+    ],
+    "semanticTokenScopes": [
+      {
+        "language": "stash",
+        "scopes": {
+          "namespace": [
+            "entity.name.namespace.stash"
+          ],
+          "type": [
+            "entity.name.type.stash"
+          ],
+          "function": [
+            "entity.name.function.stash"
+          ],
+          "parameter": [
+            "variable.parameter.stash"
+          ],
+          "variable": [
+            "variable.other.stash"
+          ],
+          "property": [
+            "variable.other.property.stash"
+          ],
+          "enumMember": [
+            "variable.other.enummember.stash"
+          ],
+          "keyword": [
+            "keyword.control.stash"
+          ],
+          "number": [
+            "constant.numeric.stash"
+          ],
+          "string": [
+            "string.quoted.double.stash"
+          ],
+          "comment": [
+            "comment.line.stash"
+          ],
+          "operator": [
+            "keyword.operator.stash"
+          ]
+        }
+      }
+    ],
+    "configurationDefaults": {
+      "[stash]": {
+        "editor.semanticHighlighting.enabled": true,
+        "editor.formatOnSave": false,
+        "editor.formatOnPaste": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": "TheKrystalShip.stash-lang",
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+      }
+    },
+    "configuration": {
+      "title": "Stash",
+      "properties": {
+        "stash.lspPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Stash LSP server binary. If empty, the extension looks for 'stash-lsp' on the system PATH."
+        },
+        "stash.formatting.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable the Stash document formatter. When disabled, Format Document will have no effect."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "stash.showReferences",
+        "title": "Show References"
+      }
+    ]
+  },
+  "dependencies": {
+    "vscode-languageclient": "^9.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "@types/vscode": "^1.75.0",
+    "typescript": "^5.0.0"
+  }
+}

@@ -1,0 +1,148 @@
+{
+  "Function Declaration": {
+    "prefix": "fn",
+    "body": [
+      "fn ${1:name}(${2:params}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Declare a function"
+  },
+  "Variable Declaration": {
+    "prefix": "let",
+    "body": "let ${1:name} = ${2:value};$0",
+    "description": "Declare a mutable variable"
+  },
+  "Constant Declaration": {
+    "prefix": "const",
+    "body": "const ${1:NAME} = ${2:value};$0",
+    "description": "Declare an immutable constant"
+  },
+  "Struct Declaration": {
+    "prefix": "struct",
+    "body": [
+      "struct ${1:Name} {",
+      "\t${2:field1},",
+      "\t${3:field2}",
+      "}"
+    ],
+    "description": "Declare a struct"
+  },
+  "Enum Declaration": {
+    "prefix": "enum",
+    "body": [
+      "enum ${1:Name} {",
+      "\t${2:Member1},",
+      "\t${3:Member2}",
+      "}"
+    ],
+    "description": "Declare an enum"
+  },
+  "If Statement": {
+    "prefix": "if",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If statement"
+  },
+  "If-Else Statement": {
+    "prefix": "ife",
+    "body": [
+      "if (${1:condition}) {",
+      "\t$2",
+      "} else {",
+      "\t$0",
+      "}"
+    ],
+    "description": "If-else statement"
+  },
+  "While Loop": {
+    "prefix": "while",
+    "body": [
+      "while (${1:condition}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "While loop"
+  },
+  "For-In Loop": {
+    "prefix": "for",
+    "body": [
+      "for (let ${1:item} in ${2:collection}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "For-in loop"
+  },
+  "Command Execution": {
+    "prefix": "cmd",
+    "body": "let ${1:result} = \\$(${2:command});$0",
+    "description": "Execute a shell command"
+  },
+  "Import Statement": {
+    "prefix": "import",
+    "body": "import { ${1:name} } from \"${2:module}.stash\";$0",
+    "description": "Import from a module"
+  },
+  "Try Expression": {
+    "prefix": "try",
+    "body": "try ${1:expression} ?? ${2:fallback}$0",
+    "description": "Try expression with fallback"
+  },
+  "Print Line": {
+    "prefix": "pln",
+    "body": "println(${1:value});$0",
+    "description": "Print value with newline"
+  },
+  "Interpolated String": {
+    "prefix": "str",
+    "body": "\\$\"${1:text {${2:expr}}}\"$0",
+    "description": "Interpolated string"
+  },
+  "Shebang": {
+    "prefix": "shebang",
+    "body": "#!/usr/bin/env stash\n$0",
+    "description": "Add shebang line"
+  },
+  "Typed Function Declaration": {
+    "prefix": "fnt",
+    "body": [
+      "fn ${1:name}(${2:params}) -> ${3:Type} {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Declare a function with return type"
+  },
+  "Typed Variable Declaration": {
+    "prefix": "lett",
+    "body": "let ${1:name}: ${2:Type} = ${3:value};$0",
+    "description": "Declare a typed mutable variable"
+  },
+  "Typed Constant Declaration": {
+    "prefix": "constt",
+    "body": "const ${1:NAME}: ${2:Type} = ${3:value};$0",
+    "description": "Declare a typed immutable constant"
+  },
+  "Typed Struct Declaration": {
+    "prefix": "structt",
+    "body": [
+      "struct ${1:Name} {",
+      "\t${2:field1}: ${3:Type},",
+      "\t${4:field2}: ${5:Type}",
+      "}"
+    ],
+    "description": "Declare a struct with typed fields"
+  },
+  "Switch Expression": {
+    "prefix": "switch",
+    "body": [
+      "${1:value} switch {",
+      "  ${2:pattern} => ${3:result},",
+      "  _ => ${4:default}",
+      "}"
+    ],
+    "description": "Switch expression with pattern matching"
+  }
+}
