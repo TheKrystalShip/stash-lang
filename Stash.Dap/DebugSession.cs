@@ -1,0 +1,908 @@
+namespace Stash.Dap;
+
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using Stash.Common;
+using Stash.Debugging;
+using Stash.Interpreting;
+using Stash.Interpreting.Types;
+using Stash.Lexing;
+using Stash.Parsing;
+using OmniSharp.Extensions.DebugAdapter.Protocol.Events;
+using OmniSharp.Extensions.DebugAdapter.Protocol.Models;
+using OmniSharp.Extensions.DebugAdapter.Protocol.Server;
+using DapBreakpoint = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Breakpoint;
+using StashBreakpoint = Stash.Debugging.Breakpoint;
+using StashEnv = Stash.Interpreting.Environment;
+
+/// <summary>
+/// Core bridge between the DAP protocol and the Stash interpreter.
+/// Implements <see cref="IDebugger"/> so the interpreter calls into this class
+/// at every statement and function entry/exit. DAP handlers call into this class
+/// to control execution flow, query the call stack, and inspect variables.
+/// </summary>
+public class DebugSession : IDebugger
+{
+    private const int ThreadId = 1; // Single-threaded interpreter
+
+    // ── Core references ───────────────────────────────────────────────────────
+
+    private IDebugAdapterServer? _server;
+    private Interpreter? _interpreter;
+
+    // ── Pause/resume synchronization ─────────────────────────────────────────
+
+    /// <summary>
+    /// Gate starts signaled (true) so the interpreter runs freely.
+    /// Reset to block the interpreter thread; Set to unblock it.
+    /// </summary>
+    private readonly ManualResetEventSlim _pauseGate = new(initialState: true);
+    private volatile bool _isPaused;
+    private volatile bool _pauseRequested;
+    private PauseReason _pauseReason;
+    private SourceSpan? _pausedAtSpan;
+    private StashEnv? _pausedEnvironment;
+
+    // ── Stepping state ────────────────────────────────────────────────────────
+
+    private enum StepMode { None, StepIn, StepOver, StepOut }
+
+    private volatile StepMode _stepMode = StepMode.None;
+    private int _stepDepth; // call stack depth when step was initiated
+
+    // ── Breakpoints ───────────────────────────────────────────────────────────
+
+    // All breakpoints for a file, keyed by normalized file path
+    private readonly ConcurrentDictionary<string, List<StashBreakpoint>> _breakpoints = new();
+
+    // ── Variable references ───────────────────────────────────────────────────
+
+    // DAP uses integer IDs to reference variable containers (scopes, arrays, dicts, etc.)
+    private long _nextVariableReference = 1;
+    private readonly Dictionary<long, VariableContainer> _variableReferences = new();
+
+    // ── Session state ─────────────────────────────────────────────────────────
+
+    private bool _stopOnEntry;
+    private volatile bool _breakOnAllExceptions;
+
+    private volatile bool _terminated;
+
+    private string? _scriptPath;
+    private string? _workingDirectory;
+
+    // Blocks the interpreter thread until the client sends configurationDone,
+    // ensuring breakpoints are set before execution starts.
+    private readonly ManualResetEventSlim _configurationDone = new(initialState: false);
+
+    // Explicit alias to avoid ambiguity with OmniSharp.Extensions.DebugAdapter.Protocol.Models.Thread
+    private System.Threading.Thread? _interpreterThread;
+
+    // ── Inner types ───────────────────────────────────────────────────────────
+
+    private sealed class VariableContainer
+    {
+        /// <summary>When set, the container holds an Environment scope to enumerate.</summary>
+        public StashEnv? Environment { get; init; }
+
+        /// <summary>When set, the container holds a complex value to expand (array/dict/instance).</summary>
+        public object? Value { get; init; }
+
+        public string Name { get; init; } = "";
+    }
+
+    // ── IDebugger properties ──────────────────────────────────────────────────
+
+    public bool StopOnEntry => _stopOnEntry;
+    public bool IsPauseRequested => _pauseRequested;
+
+    // ── Public API called by DAP handlers ─────────────────────────────────────
+
+    /// <summary>Stores the server reference. Must be called before Launch.</summary>
+    public void SetServer(IDebugAdapterServer server)
+    {
+        _server = server;
+    }
+
+    /// <summary>
+    /// Starts a debug session: creates the interpreter, then launches the interpreter
+    /// thread which waits for ConfigurationDone before executing the script.
+    /// </summary>
+    public void Launch(string scriptPath, string? workingDirectory, bool stopOnEntry, string[]? args)
+    {
+        if (string.IsNullOrWhiteSpace(scriptPath))
+            throw new ArgumentException("Script path is required.", nameof(scriptPath));
+
+        _scriptPath = scriptPath;
+        _workingDirectory = workingDirectory;
+        _stopOnEntry = stopOnEntry;
+
+        _interpreter = new Interpreter();
+        _interpreter.Debugger = this;
+        if (args is { Length: > 0 })
+            _interpreter.SetScriptArgs(args);
+
+        _interpreterThread = new System.Threading.Thread(() =>
+        {
+            // Wait until the client has sent all SetBreakpoints + ConfigurationDone
+            _configurationDone.Wait();
+
+            try
+            {
+                if (!string.IsNullOrEmpty(_workingDirectory))
+                    Directory.SetCurrentDirectory(_workingDirectory);
+
+                var source = File.ReadAllText(_scriptPath!);
+                var lexer = new Lexer(source, _scriptPath);
+                var tokens = lexer.ScanTokens();
+
+                if (lexer.Errors.Any())
+                {
+                    foreach (var err in lexer.Errors)
+                        SendOutput("stderr", err + "\n");
+                    return;
+                }
+
+                var parser = new Parser(tokens);
+                var stmts = parser.ParseProgram();
+
+                if (parser.Errors.Any())
+                {
+                    foreach (var err in parser.Errors)
+                        SendOutput("stderr", err + "\n");
+                    return;
+                }
+
+                _interpreter.Interpret(stmts);
+            }
+            catch (RuntimeError ex)
+            {
+                SendOutput("stderr", ex.Message + "\n");
+            }
+            catch (OperationCanceledException) { /* Terminated via Disconnect */ }
+            catch (ThreadInterruptedException) { /* Terminated via Disconnect */ }
+            catch (Exception ex)
+            {
+                SendOutput("stderr", ex.Message + "\n");
+            }
+            finally
+            {
+                SendTerminated();
+                SendExited(0);
+            }
+        });
+
+        _interpreterThread.IsBackground = true;
+        _interpreterThread.Name = "StashInterpreter";
+        _interpreterThread.Start();
+    }
+
+    /// <summary>Signals that client configuration is complete and execution can begin.</summary>
+    public void ConfigurationDone()
+    {
+        _configurationDone.Set();
+    }
+
+    /// <summary>
+    /// Replaces all breakpoints for the given source file.
+    /// Returns DAP Breakpoint objects with verification status.
+    /// </summary>
+    public IReadOnlyList<DapBreakpoint> SetBreakpoints(string path, IEnumerable<SourceBreakpoint> sourceBreakpoints)
+    {
+        var normalized = NormalizePath(path);
+        var stashBps = new List<StashBreakpoint>();
+        var dapBps = new List<DapBreakpoint>();
+        var source = new Source { Path = normalized, Name = Path.GetFileName(normalized) };
+
+        foreach (var sb in sourceBreakpoints)
+        {
+            var bp = new StashBreakpoint(normalized, sb.Line)
+            {
+                Condition = sb.Condition,
+                HitCondition = sb.HitCondition,
+                LogMessage = sb.LogMessage,
+                Verified = true,
+                ActualLine = sb.Line,
+            };
+            stashBps.Add(bp);
+            dapBps.Add(new DapBreakpoint
+            {
+                Id = bp.Id,
+                Verified = true,
+                Line = sb.Line,
+                Source = source,
+            });
+        }
+
+        _breakpoints[normalized] = stashBps;
+        return dapBps;
+    }
+
+    /// <summary>Resumes execution without stepping constraints.</summary>
+    public void Continue()
+    {
+        _stepMode = StepMode.None;
+        Resume();
+    }
+
+    /// <summary>Steps over the next statement (does not enter function calls).</summary>
+    public void Next()
+    {
+        _stepMode = StepMode.StepOver;
+        _stepDepth = _interpreter?.CallStack.Count ?? 0;
+        Resume();
+    }
+
+    /// <summary>Steps into the next statement or function call.</summary>
+    public void StepIn()
+    {
+        _stepMode = StepMode.StepIn;
+        Resume();
+    }
+
+    /// <summary>Runs until the current function returns.</summary>
+    public void StepOut()
+    {
+        var depth = _interpreter?.CallStack.Count ?? 0;
+        if (depth == 0)
+        {
+            // At top-level; treat as continue since there's nothing to step out of
+            Continue();
+            return;
+        }
+        _stepMode = StepMode.StepOut;
+        _stepDepth = depth;
+        Resume();
+    }
+
+    /// <summary>Requests the interpreter to pause at the next statement.</summary>
+    public void Pause()
+    {
+        _pauseRequested = true;
+    }
+
+    /// <summary>Returns the current call stack as DAP StackFrame objects.</summary>
+    public IReadOnlyList<StackFrame> GetStackTrace()
+    {
+        var frames = new List<StackFrame>();
+        if (_interpreter == null) return frames;
+
+        var callStack = _interpreter.CallStack;
+
+        if (callStack.Count == 0)
+        {
+            // Executing at global (top-level) scope — single frame
+            frames.Add(MakeScriptFrame(0, _pausedAtSpan));
+        }
+        else
+        {
+            // Top frame: current execution point inside the innermost function
+            var topFrame = callStack[callStack.Count - 1];
+            frames.Add(new StackFrame
+            {
+                Id = topFrame.Id,
+                Name = topFrame.FunctionName,
+                Source = MakeSource(_pausedAtSpan?.File),
+                Line = _pausedAtSpan?.StartLine ?? 0,
+                Column = _pausedAtSpan?.StartColumn ?? 0,
+                EndLine = _pausedAtSpan?.EndLine,
+                EndColumn = _pausedAtSpan?.EndColumn,
+            });
+
+            // Intermediate frames: each shows where the inner function was called from
+            for (int i = callStack.Count - 2; i >= 0; i--)
+            {
+                var frame = callStack[i];
+                var callSite = callStack[i + 1].CallSite; // where callStack[i+1] was invoked
+                frames.Add(new StackFrame
+                {
+                    Id = frame.Id,
+                    Name = frame.FunctionName,
+                    Source = MakeSource(callSite?.File),
+                    Line = callSite?.StartLine ?? 0,
+                    Column = callSite?.StartColumn ?? 0,
+                    EndLine = callSite?.EndLine,
+                    EndColumn = callSite?.EndColumn,
+                });
+            }
+
+            // Synthetic script frame at the bottom: where the outermost function was called from
+            var outerCallSite = callStack[0].CallSite;
+            frames.Add(MakeScriptFrame(0, outerCallSite));
+        }
+
+        return frames;
+    }
+
+    /// <summary>Returns DAP Scope objects for the given stack frame ID.</summary>
+    public IReadOnlyList<Scope> GetScopes(int frameId)
+    {
+        var scopes = new List<Scope>();
+        if (_interpreter == null) return scopes;
+
+        var env = ResolveEnvironmentForFrame(frameId);
+        if (env == null) return scopes;
+
+        var chain = env.GetScopeChain().ToList();
+        for (int i = 0; i < chain.Count; i++)
+        {
+            var kind = (i == 0 && chain.Count == 1) ? ScopeKind.Local
+                     : i == 0                        ? ScopeKind.Local
+                     : i == chain.Count - 1          ? ScopeKind.Global
+                     :                                 ScopeKind.Closure;
+
+            var name = kind switch
+            {
+                ScopeKind.Local  => "Local",
+                ScopeKind.Global => "Global",
+                _                => "Closure",
+            };
+
+            long varRef;
+            lock (_variableReferences)
+            {
+                varRef = AllocateVariableReference(new VariableContainer { Environment = chain[i] });
+            }
+
+            var debugScope = new DebugScope(kind, name, chain[i]);
+            scopes.Add(new Scope
+            {
+                Name = name,
+                VariablesReference = varRef,
+                NamedVariables = debugScope.VariableCount,
+                Expensive = kind == ScopeKind.Global,
+            });
+        }
+
+        return scopes;
+    }
+
+    /// <summary>
+    /// Returns the child variables for a variable reference ID.
+    /// Handles environment scopes, arrays, dictionaries, and struct instances.
+    /// </summary>
+    public IReadOnlyList<Variable> GetVariables(int variableReference)
+    {
+        VariableContainer? container;
+        lock (_variableReferences)
+        {
+            _variableReferences.TryGetValue(variableReference, out container);
+        }
+
+        if (container == null) return Array.Empty<Variable>();
+
+        var variables = new List<Variable>();
+
+        if (container.Environment != null)
+        {
+            foreach (var (varName, value) in container.Environment.GetAllBindings().OrderBy(kv => kv.Key))
+                variables.Add(FormatVariable(varName, value));
+        }
+        else
+        {
+            switch (container.Value)
+            {
+                case List<object?> list:
+                    for (int i = 0; i < list.Count; i++)
+                        variables.Add(FormatVariable($"[{i}]", list[i]));
+                    break;
+
+                case StashDictionary dict:
+                    foreach (var key in dict.Keys())
+                        variables.Add(FormatVariable(RuntimeValues.Stringify(key), dict.Get(key!)));
+                    break;
+
+                case StashInstance instance:
+                    foreach (var (fieldName, fieldValue) in instance.GetFields())
+                        variables.Add(FormatVariable(fieldName, fieldValue));
+                    break;
+            }
+        }
+
+        return variables;
+    }
+
+    /// <summary>Evaluates an expression in the context of the given frame and returns the result string.</summary>
+    public string Evaluate(string expression, int? frameId)
+    {
+        if (_interpreter == null) return "No interpreter";
+
+        var env = frameId.HasValue
+            ? (ResolveEnvironmentForFrame(frameId.Value) ?? _interpreter.Globals)
+            : (_pausedEnvironment ?? _interpreter.Globals);
+
+        var (value, error) = _interpreter.EvaluateString(expression, env);
+        return error != null ? $"Error: {error}" : RuntimeValues.Stringify(value);
+    }
+
+    /// <summary>Terminates the debug session and unblocks the interpreter thread if paused.</summary>
+    public void Disconnect()
+    {
+        _terminated = true;
+
+        lock (_variableReferences)
+        {
+            _variableReferences.Clear();
+        }
+
+        if (_isPaused)
+            _pauseGate.Set();
+
+        _interpreterThread?.Interrupt();
+    }
+
+    /// <summary>Configures which exception categories should trigger a break.</summary>
+    public void SetExceptionBreakpoints(IEnumerable<string> filters)
+    {
+        _breakOnAllExceptions = false;
+        foreach (var filter in filters)
+        {
+            if (filter is "all" or "uncaught")
+                _breakOnAllExceptions = true;
+        }
+    }
+
+    // ── IDebugger implementation ───────────────────────────────────────────────
+
+    public void OnBeforeExecute(SourceSpan span, StashEnv environment)
+    {
+        if (_terminated) throw new OperationCanceledException("Debug session terminated.");
+
+        _pausedAtSpan = span;
+        _pausedEnvironment = environment;
+
+        bool shouldPause = false;
+        PauseReason reason = PauseReason.Step;
+
+        if (_pauseRequested)
+        {
+            _pauseRequested = false;
+            shouldPause = true;
+            reason = PauseReason.Pause;
+        }
+        else if (_stopOnEntry)
+        {
+            _stopOnEntry = false; // Only fire once
+            shouldPause = true;
+            reason = PauseReason.Entry;
+        }
+        else if (ShouldStopForStep())
+        {
+            shouldPause = true;
+            reason = PauseReason.Step;
+        }
+        else if (CheckBreakpointAtSpan(span, environment))
+        {
+            shouldPause = true;
+            reason = PauseReason.Breakpoint;
+        }
+
+        if (shouldPause)
+        {
+            _isPaused = true;
+            _pauseReason = reason;
+            lock (_variableReferences)
+            {
+                _variableReferences.Clear();
+                _nextVariableReference = 1;
+            }
+            _pauseGate.Reset(); // Block interpreter thread
+            SendStopped(reason);
+            _pauseGate.Wait(); // Wait until Continue/Step/StepIn/StepOut is called
+            _isPaused = false;
+        }
+    }
+
+    public void OnFunctionEnter(string functionName, SourceSpan callSite, StashEnv localScope)
+    {
+        // Step depth changes are picked up automatically via CallStack.Count in ShouldStopForStep
+    }
+
+    public void OnFunctionExit(string functionName)
+    {
+        // Step-out detection happens via ShouldStopForStep checking CallStack.Count
+    }
+
+    public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack)
+    {
+        SendOutput("stderr", $"Runtime error: {error.Message}\n");
+
+        if (_breakOnAllExceptions)
+        {
+            _pausedAtSpan = error.Span;
+            _isPaused = true;
+            _pauseReason = PauseReason.Exception;
+            lock (_variableReferences)
+            {
+                _variableReferences.Clear();
+                _nextVariableReference = 1;
+            }
+            _pauseGate.Reset();
+            SendStopped(PauseReason.Exception, error.Message);
+            _pauseGate.Wait();
+            _isPaused = false;
+        }
+    }
+
+    public void OnSourceLoaded(string filePath)
+    {
+        // Could send LoadedSourceEvent here for IDE loaded-sources tracking
+    }
+
+    public void OnExecutionComplete()
+    {
+        // Handled in the Launch thread's finally block (SendTerminated + SendExited)
+    }
+
+    public void OnOutput(string category, string text)
+    {
+        SendOutput(category, text);
+    }
+
+    public bool ShouldBreakOnException(RuntimeError error) => _breakOnAllExceptions;
+
+    public bool ShouldBreakOnFunctionEntry(string functionName) => false;
+
+    // ── Private helpers ────────────────────────────────────────────────────────
+
+    private void Resume()
+    {
+        _isPaused = false;
+        _pauseGate.Set();
+    }
+
+    /// <summary>Sends the DAP initialized event to the client.</summary>
+    public void SendInitialized()
+    {
+        _server?.SendDebugAdapterInitialized(new InitializedEvent());
+    }
+
+    private void SendOutput(string category, string text)
+    {
+        if (_server == null) return;
+        var outputCategory = category switch
+        {
+            "stdout"  => OutputEventCategory.StandardOutput,
+            "stderr"  => OutputEventCategory.StandardError,
+            _         => OutputEventCategory.Console,
+        };
+        _server.SendOutput(new OutputEvent { Category = outputCategory, Output = text });
+    }
+
+    private void SendTerminated()
+    {
+        _server?.SendTerminated(new TerminatedEvent());
+    }
+
+    private void SendExited(int exitCode)
+    {
+        _server?.SendExited(new ExitedEvent { ExitCode = exitCode });
+    }
+
+    private void SendStopped(PauseReason reason, string? description = null)
+    {
+        if (_server == null) return;
+
+        var stopReason = reason switch
+        {
+            PauseReason.Breakpoint       => StoppedEventReason.Breakpoint,
+            PauseReason.Step             => StoppedEventReason.Step,
+            PauseReason.Pause            => StoppedEventReason.Pause,
+            PauseReason.Exception        => StoppedEventReason.Exception,
+            PauseReason.Entry            => StoppedEventReason.Entry,
+            PauseReason.FunctionBreakpoint => StoppedEventReason.FunctionBreakpoint,
+            _                            => StoppedEventReason.Pause,
+        };
+
+        _server.SendStopped(new StoppedEvent
+        {
+            Reason = stopReason,
+            ThreadId = ThreadId,
+            Description = description,
+            AllThreadsStopped = true,
+        });
+    }
+
+    /// <summary>
+    /// Allocates a new variable reference ID for the given container.
+    /// Caller must hold the lock on <c>_variableReferences</c>.
+    /// </summary>
+    private long AllocateVariableReference(VariableContainer container)
+    {
+        var id = _nextVariableReference++;
+        _variableReferences[id] = container;
+        return id;
+    }
+
+    /// <summary>Allocates a variable reference for an expandable complex value (array/dict/instance).</summary>
+    private long AllocateExpansion(string name, object? value)
+    {
+        lock (_variableReferences)
+        {
+            return AllocateVariableReference(new VariableContainer { Value = value, Name = name });
+        }
+    }
+
+    private static string NormalizePath(string path) => Path.GetFullPath(path);
+
+    private static Source? MakeSource(string? file)
+    {
+        if (file == null) return null;
+        return new Source { Path = NormalizePath(file), Name = Path.GetFileName(file) };
+    }
+
+    private static StackFrame MakeScriptFrame(int id, SourceSpan? span)
+    {
+        return new StackFrame
+        {
+            Id = id,
+            Name = "<script>",
+            Source = MakeSource(span?.File),
+            Line = span?.StartLine ?? 0,
+            Column = span?.StartColumn ?? 0,
+            EndLine = span?.EndLine,
+            EndColumn = span?.EndColumn,
+        };
+    }
+
+    /// <summary>
+    /// Resolves the active <see cref="StashEnv"/> for a given DAP frame ID.
+    /// The top frame uses <c>_pausedEnvironment</c> (the innermost active scope).
+    /// Deeper frames use the <see cref="CallFrame.LocalScope"/> recorded on entry.
+    /// </summary>
+    private StashEnv? ResolveEnvironmentForFrame(int frameId)
+    {
+        if (_interpreter == null) return null;
+
+        var callStack = _interpreter.CallStack;
+
+        // Global/script scope when no functions are on the stack
+        if (callStack.Count == 0 && frameId == 0)
+            return _pausedEnvironment ?? _interpreter.Globals;
+
+        // Top frame — use the active (innermost) paused environment
+        if (callStack.Count > 0 && callStack[callStack.Count - 1].Id == frameId)
+            return _pausedEnvironment ?? callStack[callStack.Count - 1].LocalScope;
+
+        // Intermediate frames — use the environment recorded when the function was entered
+        for (int i = callStack.Count - 2; i >= 0; i--)
+        {
+            if (callStack[i].Id == frameId)
+                return callStack[i].LocalScope;
+        }
+
+        // Synthetic script frame at the bottom
+        if (frameId == 0)
+            return _interpreter.Globals;
+
+        return null;
+    }
+
+    /// <summary>
+    /// Checks whether the current execution span hits any breakpoint.
+    /// Handles conditions, hit counts, and logpoints.
+    /// Returns true only if execution should pause.
+    /// </summary>
+    private bool CheckBreakpointAtSpan(SourceSpan span, StashEnv environment)
+    {
+        if (span.File == null) return false;
+        var normalized = NormalizePath(span.File);
+        if (!_breakpoints.TryGetValue(normalized, out var bpList)) return false;
+
+        StashBreakpoint? hit = null;
+        foreach (var bp in bpList)
+        {
+            if (bp.Line == span.StartLine)
+            {
+                hit = bp;
+                break;
+            }
+        }
+
+        if (hit == null) return false;
+
+        // Evaluate condition expression if present
+        if (hit.Condition != null && _interpreter != null)
+        {
+            var (condValue, condError) = _interpreter.EvaluateString(hit.Condition, environment);
+            if (condError != null || !RuntimeValues.IsTruthy(condValue))
+                return false;
+        }
+
+        // Increment hit count; check hit condition if present
+        var hitCount = hit.IncrementHitCount();
+        if (hit.HitCondition != null && !EvaluateHitCondition(hit.HitCondition, hitCount))
+            return false;
+
+        // Logpoint: interpolate the message and send as output — do NOT pause
+        if (hit.IsLogpoint)
+        {
+            var msg = InterpolateLogMessage(hit.LogMessage!, environment);
+            SendOutput("console", msg + "\n");
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Evaluates a hit condition expression such as <c>"== 5"</c>, <c>">= 3"</c>, or <c>"% 2 == 0"</c>.
+    /// Returns true if the condition is satisfied or cannot be parsed.
+    /// </summary>
+    private static bool EvaluateHitCondition(string condition, int hitCount)
+    {
+        var c = condition.Trim();
+        if (c.StartsWith("== ") && int.TryParse(c[3..], out var eq))  return hitCount == eq;
+        if (c.StartsWith(">= ") && int.TryParse(c[3..], out var gte)) return hitCount >= gte;
+        if (c.StartsWith("> ")  && int.TryParse(c[2..], out var gt))  return hitCount > gt;
+        if (c.StartsWith("<= ") && int.TryParse(c[3..], out var lte)) return hitCount <= lte;
+        if (c.StartsWith("< ")  && int.TryParse(c[2..], out var lt))  return hitCount < lt;
+        if (c.StartsWith("% "))
+        {
+            var parts = c[2..].Split("==", 2);
+            if (parts.Length == 2
+                && int.TryParse(parts[0].Trim(), out var mod)
+                && int.TryParse(parts[1].Trim(), out var rem))
+                return hitCount % mod == rem;
+        }
+        if (int.TryParse(c, out var n)) return hitCount == n;
+        return true;
+    }
+
+    /// <summary>
+    /// Replaces <c>{expression}</c> placeholders in a logpoint template with evaluated values.
+    /// </summary>
+    private string InterpolateLogMessage(string template, StashEnv environment)
+    {
+        if (_interpreter == null) return template;
+
+        var sb = new StringBuilder();
+        int i = 0;
+        while (i < template.Length)
+        {
+            if (template[i] == '{' && i + 1 < template.Length)
+            {
+                var end = template.IndexOf('}', i + 1);
+                if (end > i)
+                {
+                    var expr = template[(i + 1)..end];
+                    var (value, error) = _interpreter.EvaluateString(expr, environment);
+                    sb.Append(error != null ? $"{{error: {error}}}" : RuntimeValues.Stringify(value));
+                    i = end + 1;
+                    continue;
+                }
+            }
+            sb.Append(template[i++]);
+        }
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Creates a DAP <see cref="Variable"/> from a name/value pair.
+    /// For complex types (arrays, dicts, instances), allocates a variable reference
+    /// so the client can expand them.
+    /// </summary>
+    private Variable FormatVariable(string name, object? value)
+    {
+        string type;
+        string displayValue;
+        long variablesReference = 0;
+
+        switch (value)
+        {
+            case null:
+                type = "null";
+                displayValue = "null";
+                break;
+
+            case long l:
+                type = "int";
+                displayValue = l.ToString();
+                break;
+
+            case double d:
+                type = "float";
+                displayValue = d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                break;
+
+            case bool b:
+                type = "bool";
+                displayValue = b ? "true" : "false";
+                break;
+
+            case string s:
+                type = "string";
+                displayValue = $"\"{s}\"";
+                break;
+
+            case List<object?> list:
+                type = "array";
+                displayValue = $"array[{list.Count}]";
+                variablesReference = AllocateExpansion(name, value);
+                break;
+
+            case StashDictionary dict:
+                type = "dict";
+                displayValue = $"dict[{dict.Count}]";
+                variablesReference = AllocateExpansion(name, value);
+                break;
+
+            case StashInstance instance:
+                type = instance.TypeName;
+                displayValue = $"{instance.TypeName} {{...}}";
+                variablesReference = AllocateExpansion(name, value);
+                break;
+
+            case StashFunction fn:
+                type = "function";
+                displayValue = fn.ToString() ?? "<fn>";
+                break;
+
+            case StashLambda:
+                type = "function";
+                displayValue = "<lambda>";
+                break;
+
+            case StashEnumValue enumVal:
+                type = "enum";
+                displayValue = enumVal.ToString();
+                break;
+
+            default:
+                type = value.GetType().Name;
+                displayValue = RuntimeValues.Stringify(value);
+                break;
+        }
+
+        return new Variable
+        {
+            Name = name,
+            Value = displayValue,
+            Type = type,
+            VariablesReference = variablesReference,
+        };
+    }
+
+    /// <summary>
+    /// Determines whether the current step mode requires pausing at this point.
+    /// Mutates <c>_stepMode</c> to <c>None</c> when a step completes.
+    /// </summary>
+    private bool ShouldStopForStep()
+    {
+        var depth = _interpreter?.CallStack.Count ?? 0;
+        switch (_stepMode)
+        {
+            case StepMode.StepIn:
+                // Stop at the very next statement, regardless of depth
+                _stepMode = StepMode.None;
+                return true;
+
+            case StepMode.StepOver:
+                // Stop when we return to the same or shallower call depth
+                if (depth <= _stepDepth)
+                {
+                    _stepMode = StepMode.None;
+                    return true;
+                }
+                return false;
+
+            case StepMode.StepOut:
+                // Stop when we return to a shallower call depth
+                if (depth < _stepDepth)
+                {
+                    _stepMode = StepMode.None;
+                    return true;
+                }
+                return false;
+
+            default:
+                return false;
+        }
+    }
+}
