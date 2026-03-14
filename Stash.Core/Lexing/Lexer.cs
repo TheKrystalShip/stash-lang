@@ -61,6 +61,8 @@ public class Lexer
     /// <summary>The 1-based column number captured at <see cref="_start"/> when a new token begins.</summary>
     private int _startColumn;
 
+    private readonly bool _preserveTrivia;
+
     /// <summary>
     /// Maps reserved word strings to their corresponding <see cref="TokenType"/> values.
     /// </summary>
@@ -117,12 +119,13 @@ public class Lexer
     /// A file path or display name included in error messages. Defaults to
     /// <c>"&lt;stdin&gt;"</c> for interactive/REPL input.
     /// </param>
-    public Lexer(string source, string file = "<stdin>", int startLine = 1, int startColumn = 1)
+    public Lexer(string source, string file = "<stdin>", int startLine = 1, int startColumn = 1, bool preserveTrivia = false)
     {
         _source = source;
         _file = file;
         _line = startLine;
         _column = startColumn;
+        _preserveTrivia = preserveTrivia;
     }
 
     /// <summary>
@@ -163,10 +166,17 @@ public class Lexer
     {
         if (_current + 1 < _source.Length && _source[_current] == '#' && _source[_current + 1] == '!')
         {
+            _start = _current;
+            _startLine = _line;
+            _startColumn = _column;
             while (!IsAtEnd && _source[_current] != '\n')
             {
                 _current++;
                 _column++;
+            }
+            if (_preserveTrivia)
+            {
+                AddToken(TokenType.Shebang);
             }
             if (!IsAtEnd)
             {
@@ -339,6 +349,11 @@ public class Lexer
             _current++;
             _column++;
         }
+
+        if (_preserveTrivia)
+        {
+            AddToken(TokenType.SingleLineComment);
+        }
     }
 
     /// <summary>
@@ -388,6 +403,11 @@ public class Lexer
             _structuredErrors.Add(new DiagnosticError(
                 new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
                 "Unterminated block comment."));
+        }
+
+        if (_preserveTrivia && depth == 0)
+        {
+            AddToken(TokenType.BlockComment);
         }
     }
 

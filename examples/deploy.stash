@@ -6,52 +6,52 @@
 import "lib/utils.stash" as utils;
 
 enum DeployResult {
-    Success,
-    Failed,
-    Skipped
+  Success,
+  Failed,
+  Skipped
 }
 
 struct Target {
-    host: string,
-    user: string,
-    path: string
+  host: string,
+  user: string,
+  path: string
 }
 
 const MAX_RETRIES: int = 3;
 
 fn check_host(host: string) -> bool {
-    let result = $(ping -c 1 -W 2 {host});
-    return result.exitCode == 0;
+  let result = $(ping -c 1 -W 2 {host});
+  return result.exitCode == 0;
 }
 
 fn deploy_to(target: Target, package: string) -> DeployResult {
-    utils.log(utils.LogLevel.Info, $"Deploying {package} to {target.user}@{target.host}:{target.path}");
+  utils.log(utils.LogLevel.Info, $"Deploying {package} to {target.user}@{target.host}:{target.path}");
 
-    // Check connectivity first
-    if (!check_host(target.host)) {
-        utils.log(utils.LogLevel.Error, $"Host {target.host} is unreachable");
-        return DeployResult.Failed;
-    }
-
-    // Retry loop
-    let attempt: int = 1;
-    while (attempt <= MAX_RETRIES) {
-        utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
-
-        // Simulate deployment (would use scp in real usage)
-        let result = $(echo "deploying {package} to {target.host}");
-
-        if (result.exitCode == 0) {
-            utils.log(utils.LogLevel.Info, $"  Success on attempt {attempt}");
-            return DeployResult.Success;
-        }
-
-        utils.log(utils.LogLevel.Warn, $"  Attempt {attempt} failed: {result.stderr}");
-        attempt++;
-    }
-
-    utils.log(utils.LogLevel.Error, $"  All {MAX_RETRIES} attempts failed for {target.host}");
+  // Check connectivity first
+  if (!check_host(target.host)) {
+    utils.log(utils.LogLevel.Error, $"Host {target.host} is unreachable");
     return DeployResult.Failed;
+  }
+
+  // Retry loop
+  let attempt: int = 1;
+  while (attempt <= MAX_RETRIES) {
+    utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
+
+    // Simulate deployment (would use scp in real usage)
+    let result = $(echo "deploying {package} to {target.host}");
+
+    if (result.exitCode == 0) {
+      utils.log(utils.LogLevel.Info, $"  Success on attempt {attempt}");
+        return DeployResult.Success;
+    }
+
+    utils.log(utils.LogLevel.Warn, $"  Attempt {attempt} failed: {result.stderr}");
+    attempt++;
+  }
+
+  utils.log(utils.LogLevel.Error, $"  All {MAX_RETRIES} attempts failed for {target.host}");
+  return DeployResult.Failed;
 }
 
 // --- Main ---
@@ -62,22 +62,22 @@ utils.banner("Deployment Start");
 io.println("");
 
 let targets: array = [
-    Target { host: "127.0.0.1", user: "deploy", path: "/opt/app" },
-    Target { host: "192.168.1.50", user: "deploy", path: "/opt/app" },
-    Target { host: "192.168.1.51", user: "deploy", path: "/opt/app" }
+  Target { host: "127.0.0.1", user: "deploy", path: "/opt/app" },
+  Target { host: "192.168.1.50", user: "deploy", path: "/opt/app" },
+  Target { host: "192.168.1.51", user: "deploy", path: "/opt/app" }
 ];
 
 let successes: int = 0;
 let failures: int = 0;
 
 for (let target: Target in targets) {
-    let result: DeployResult = deploy_to(target, package);
+  let result: DeployResult = deploy_to(target, package);
 
-    if (result == DeployResult.Success) {
-        successes++;
-    } else if (result == DeployResult.Failed) {
-        failures++;
-    }
+  if (result == DeployResult.Success) {
+    successes++;
+  } else if (result == DeployResult.Failed) {
+    failures++;
+  }
 }
 
 io.println("");
@@ -88,6 +88,6 @@ io.println($"  Failed:    {failures}");
 io.println($"  Total:     {len(targets)}");
 
 if (failures > 0) {
-    utils.log(utils.LogLevel.Error, "Some deployments failed — check logs above");
-    process.exit(1);
+  utils.log(utils.LogLevel.Error, "Some deployments failed — check logs above");
+  process.exit(1);
 }

@@ -1,42 +1,43 @@
+#!/usr/bin/env stash
+
 // examples/lib/utils.stash
 // Shared utilities for deployment scripts
 
 enum LogLevel {
-    Info,
-    Warn,
-    Error
+  Info,
+  Warn,
+  Error
 }
 
 fn log(level, message) {
-    let prefix = "INFO";
-    if (level == LogLevel.Warn) {
-        prefix = "WARN";
-    } else if (level == LogLevel.Error) {
-        prefix = "ERROR";
-    }
-    io.println($"[{prefix}] {message}");
+  let prefix = "INFO";
+  if (level == LogLevel.Warn) {
+    prefix = "WARN";
+  } else if (level == LogLevel.Error) {
+    prefix = "ERROR";
+  }
+  io.println($"[{prefix}] {message}");
 }
 
 fn repeat_char(ch: string, count: int) -> string {
-    let result = "";
-    let i = 0;
-    while (i < count) {
-        result = result + ch;
-        i++;
-    }
-
-    log(LogLevel.Info, $"Generated repeated char string: '{result}'");
-    return result;
+  let result = "";
+  let i = 0;
+  while (i < count) {
+    result = result + ch;
+    i++;
+  }
+  log(LogLevel.Info, $"Generated repeated char string: '{result}'");
+  return result;
 }
 
 fn banner(text) {
-    let border = repeat_char("=", len(text) + 4);
-    io.println(border);
-    io.println($"  {text}");
-    io.println(border);
+  let border = repeat_char("=", len(text) + 4);
+  io.println(border);
+  io.println($"  {text}");
+  io.println(border);
 }
 
 fn callFunctionRef(functionRef: function) {
-    log(LogLevel.Info, "This is a function reference example.");
-    functionRef();
+  log(LogLevel.Info, "This is a function reference example.");
+  functionRef();
 }

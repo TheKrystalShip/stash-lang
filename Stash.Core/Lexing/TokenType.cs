@@ -199,4 +199,15 @@ public enum TokenType
 
     /// <summary>The <c>$</c> character. Used as a prefix for string interpolation expressions.</summary>
     Dollar,
+
+    // ── Trivia (preserved only when requested) ───────────────────────
+
+    /// <summary>A single-line comment starting with <c>//</c>. Only emitted when trivia preservation is enabled.</summary>
+    SingleLineComment,
+
+    /// <summary>A block comment delimited by <c>/* ... */</c>. Only emitted when trivia preservation is enabled.</summary>
+    BlockComment,
+
+    /// <summary>A Unix shebang line (<c>#!/usr/bin/env stash</c>). Only emitted when trivia preservation is enabled.</summary>
+    Shebang,
 }
