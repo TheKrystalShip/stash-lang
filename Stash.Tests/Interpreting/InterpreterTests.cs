@@ -3959,4 +3959,406 @@ public class InterpreterTests
     {
         RunExpectingError("let d = dict.new(); d[[1,2]] = \"val\";");
     }
+
+    // ── str namespace ────────────────────────────────────────────────
+
+    // str.upper
+    [Fact]
+    public void StrUpper_ConvertsToUppercase()
+    {
+        Assert.Equal("HELLO", Run("let result = str.upper(\"hello\");"));
+    }
+
+    [Fact]
+    public void StrUpper_EmptyString()
+    {
+        Assert.Equal("", Run("let result = str.upper(\"\");"));
+    }
+
+    [Fact]
+    public void StrUpper_NonString_Throws()
+    {
+        RunExpectingError("str.upper(123);");
+    }
+
+    // str.lower
+    [Fact]
+    public void StrLower_ConvertsToLowercase()
+    {
+        Assert.Equal("hello", Run("let result = str.lower(\"HELLO\");"));
+    }
+
+    [Fact]
+    public void StrLower_EmptyString()
+    {
+        Assert.Equal("", Run("let result = str.lower(\"\");"));
+    }
+
+    [Fact]
+    public void StrLower_NonString_Throws()
+    {
+        RunExpectingError("str.lower(123);");
+    }
+
+    // str.trim
+    [Fact]
+    public void StrTrim_RemovesBothEnds()
+    {
+        Assert.Equal("hi", Run("let result = str.trim(\"  hi  \");"));
+    }
+
+    [Fact]
+    public void StrTrim_NoWhitespace_ReturnsSame()
+    {
+        Assert.Equal("hi", Run("let result = str.trim(\"hi\");"));
+    }
+
+    [Fact]
+    public void StrTrim_NonString_Throws()
+    {
+        RunExpectingError("str.trim(42);");
+    }
+
+    // str.trimStart
+    [Fact]
+    public void StrTrimStart_RemovesLeadingWhitespace()
+    {
+        Assert.Equal("hi  ", Run("let result = str.trimStart(\"  hi  \");"));
+    }
+
+    [Fact]
+    public void StrTrimStart_NoLeadingWhitespace_ReturnsSame()
+    {
+        Assert.Equal("hi  ", Run("let result = str.trimStart(\"hi  \");"));
+    }
+
+    [Fact]
+    public void StrTrimStart_NonString_Throws()
+    {
+        RunExpectingError("str.trimStart(42);");
+    }
+
+    // str.trimEnd
+    [Fact]
+    public void StrTrimEnd_RemovesTrailingWhitespace()
+    {
+        Assert.Equal("  hi", Run("let result = str.trimEnd(\"  hi  \");"));
+    }
+
+    [Fact]
+    public void StrTrimEnd_NoTrailingWhitespace_ReturnsSame()
+    {
+        Assert.Equal("  hi", Run("let result = str.trimEnd(\"  hi\");"));
+    }
+
+    [Fact]
+    public void StrTrimEnd_NonString_Throws()
+    {
+        RunExpectingError("str.trimEnd(42);");
+    }
+
+    // str.contains
+    [Fact]
+    public void StrContains_SubstringPresent_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = str.contains(\"hello\", \"ell\");"));
+    }
+
+    [Fact]
+    public void StrContains_SubstringAbsent_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = str.contains(\"hello\", \"xyz\");"));
+    }
+
+    [Fact]
+    public void StrContains_NonString_Throws()
+    {
+        RunExpectingError("str.contains(123, \"x\");");
+    }
+
+    // str.startsWith
+    [Fact]
+    public void StrStartsWith_MatchingPrefix_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = str.startsWith(\"hello\", \"hel\");"));
+    }
+
+    [Fact]
+    public void StrStartsWith_NonMatchingPrefix_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = str.startsWith(\"hello\", \"xyz\");"));
+    }
+
+    [Fact]
+    public void StrStartsWith_NonString_Throws()
+    {
+        RunExpectingError("str.startsWith(123, \"h\");");
+    }
+
+    // str.endsWith
+    [Fact]
+    public void StrEndsWith_MatchingSuffix_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = str.endsWith(\"hello\", \"llo\");"));
+    }
+
+    [Fact]
+    public void StrEndsWith_NonMatchingSuffix_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = str.endsWith(\"hello\", \"xyz\");"));
+    }
+
+    [Fact]
+    public void StrEndsWith_NonString_Throws()
+    {
+        RunExpectingError("str.endsWith(123, \"o\");");
+    }
+
+    // str.indexOf
+    [Fact]
+    public void StrIndexOf_SubstringFound_ReturnsIndex()
+    {
+        Assert.Equal(2L, Run("let result = str.indexOf(\"hello\", \"ll\");"));
+    }
+
+    [Fact]
+    public void StrIndexOf_SubstringNotFound_ReturnsNegativeOne()
+    {
+        Assert.Equal(-1L, Run("let result = str.indexOf(\"hello\", \"xyz\");"));
+    }
+
+    [Fact]
+    public void StrIndexOf_NonString_Throws()
+    {
+        RunExpectingError("str.indexOf(123, \"l\");");
+    }
+
+    // str.lastIndexOf
+    [Fact]
+    public void StrLastIndexOf_SubstringFound_ReturnsLastIndex()
+    {
+        Assert.Equal(3L, Run("let result = str.lastIndexOf(\"abcabc\", \"abc\");"));
+    }
+
+    [Fact]
+    public void StrLastIndexOf_SubstringNotFound_ReturnsNegativeOne()
+    {
+        Assert.Equal(-1L, Run("let result = str.lastIndexOf(\"abcabc\", \"xyz\");"));
+    }
+
+    [Fact]
+    public void StrLastIndexOf_NonString_Throws()
+    {
+        RunExpectingError("str.lastIndexOf(123, \"a\");");
+    }
+
+    // str.substring
+    [Fact]
+    public void StrSubstring_StartAndEnd_ReturnsSlice()
+    {
+        Assert.Equal("ell", Run("let result = str.substring(\"hello\", 1, 4);"));
+    }
+
+    [Fact]
+    public void StrSubstring_StartOnly_ReturnsToEnd()
+    {
+        Assert.Equal("llo", Run("let result = str.substring(\"hello\", 2);"));
+    }
+
+    [Fact]
+    public void StrSubstring_OutOfBounds_Throws()
+    {
+        RunExpectingError("str.substring(\"hello\", 2, 99);");
+    }
+
+    [Fact]
+    public void StrSubstring_NonString_Throws()
+    {
+        RunExpectingError("str.substring(123, 0, 1);");
+    }
+
+    // str.replace
+    [Fact]
+    public void StrReplace_ReplacesFirstOccurrence()
+    {
+        Assert.Equal("baa", Run("let result = str.replace(\"aaa\", \"a\", \"b\");"));
+    }
+
+    [Fact]
+    public void StrReplace_PatternNotFound_ReturnsSame()
+    {
+        Assert.Equal("hello", Run("let result = str.replace(\"hello\", \"xyz\", \"z\");"));
+    }
+
+    [Fact]
+    public void StrReplace_NonString_Throws()
+    {
+        RunExpectingError("str.replace(123, \"a\", \"b\");");
+    }
+
+    // str.replaceAll
+    [Fact]
+    public void StrReplaceAll_ReplacesAllOccurrences()
+    {
+        Assert.Equal("bbb", Run("let result = str.replaceAll(\"aaa\", \"a\", \"b\");"));
+    }
+
+    [Fact]
+    public void StrReplaceAll_PatternNotFound_ReturnsSame()
+    {
+        Assert.Equal("hello", Run("let result = str.replaceAll(\"hello\", \"xyz\", \"z\");"));
+    }
+
+    [Fact]
+    public void StrReplaceAll_NonString_Throws()
+    {
+        RunExpectingError("str.replaceAll(123, \"a\", \"b\");");
+    }
+
+    // str.split
+    [Fact]
+    public void StrSplit_SplitsByDelimiter()
+    {
+        var result = Run("let result = str.split(\"a,b,c\", \",\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal("a", list[0]);
+        Assert.Equal("b", list[1]);
+        Assert.Equal("c", list[2]);
+    }
+
+    [Fact]
+    public void StrSplit_DelimiterNotFound_ReturnsSingleElement()
+    {
+        var result = Run("let result = str.split(\"hello\", \",\");");
+        var list = Assert.IsType<List<object?>>(result);
+        var single = Assert.Single(list);
+        Assert.Equal("hello", single);
+    }
+
+    [Fact]
+    public void StrSplit_NonString_Throws()
+    {
+        RunExpectingError("str.split(123, \",\");");
+    }
+
+    // str.repeat
+    [Fact]
+    public void StrRepeat_RepeatsTimes()
+    {
+        Assert.Equal("ababab", Run("let result = str.repeat(\"ab\", 3);"));
+    }
+
+    [Fact]
+    public void StrRepeat_ZeroTimes_ReturnsEmpty()
+    {
+        Assert.Equal("", Run("let result = str.repeat(\"ab\", 0);"));
+    }
+
+    [Fact]
+    public void StrRepeat_NegativeCount_Throws()
+    {
+        RunExpectingError("str.repeat(\"ab\", -1);");
+    }
+
+    [Fact]
+    public void StrRepeat_NonString_Throws()
+    {
+        RunExpectingError("str.repeat(123, 2);");
+    }
+
+    // str.reverse
+    [Fact]
+    public void StrReverse_ReversesString()
+    {
+        Assert.Equal("olleh", Run("let result = str.reverse(\"hello\");"));
+    }
+
+    [Fact]
+    public void StrReverse_EmptyString()
+    {
+        Assert.Equal("", Run("let result = str.reverse(\"\");"));
+    }
+
+    [Fact]
+    public void StrReverse_NonString_Throws()
+    {
+        RunExpectingError("str.reverse(123);");
+    }
+
+    // str.chars
+    [Fact]
+    public void StrChars_ReturnsCharArray()
+    {
+        var result = Run("let result = str.chars(\"abc\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal("a", list[0]);
+        Assert.Equal("b", list[1]);
+        Assert.Equal("c", list[2]);
+    }
+
+    [Fact]
+    public void StrChars_EmptyString_ReturnsEmptyArray()
+    {
+        var result = Run("let result = str.chars(\"\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void StrChars_NonString_Throws()
+    {
+        RunExpectingError("str.chars(123);");
+    }
+
+    // str.padStart
+    [Fact]
+    public void StrPadStart_PadsWithCustomFill()
+    {
+        Assert.Equal("00042", Run("let result = str.padStart(\"42\", 5, \"0\");"));
+    }
+
+    [Fact]
+    public void StrPadStart_DefaultFill_PadsWithSpaces()
+    {
+        Assert.Equal("   hi", Run("let result = str.padStart(\"hi\", 5);"));
+    }
+
+    [Fact]
+    public void StrPadStart_AlreadyLongEnough_ReturnsSame()
+    {
+        Assert.Equal("hello", Run("let result = str.padStart(\"hello\", 3);"));
+    }
+
+    [Fact]
+    public void StrPadStart_NonString_Throws()
+    {
+        RunExpectingError("str.padStart(123, 5);");
+    }
+
+    // str.padEnd
+    [Fact]
+    public void StrPadEnd_DefaultFill_PadsWithSpaces()
+    {
+        Assert.Equal("hi   ", Run("let result = str.padEnd(\"hi\", 5);"));
+    }
+
+    [Fact]
+    public void StrPadEnd_PadsWithCustomFill()
+    {
+        Assert.Equal("hi...", Run("let result = str.padEnd(\"hi\", 5, \".\");"));
+    }
+
+    [Fact]
+    public void StrPadEnd_AlreadyLongEnough_ReturnsSame()
+    {
+        Assert.Equal("hello", Run("let result = str.padEnd(\"hello\", 3);"));
+    }
+
+    [Fact]
+    public void StrPadEnd_NonString_Throws()
+    {
+        RunExpectingError("str.padEnd(123, 5);");
+    }
 }

@@ -193,6 +193,26 @@ public static class BuiltInRegistry
         new NamespaceFunction("dict", "pairs", new[] { new BuiltInParam("dict", "dict") }, "array"),
         new NamespaceFunction("dict", "forEach", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("fn", "function") }),
         new NamespaceFunction("dict", "merge", new[] { new BuiltInParam("dict1", "dict"), new BuiltInParam("dict2", "dict") }, "dict"),
+        // str namespace
+        new NamespaceFunction("str", "upper", new[] { new BuiltInParam("s", "string") }, "string"),
+        new NamespaceFunction("str", "lower", new[] { new BuiltInParam("s", "string") }, "string"),
+        new NamespaceFunction("str", "trim", new[] { new BuiltInParam("s", "string") }, "string"),
+        new NamespaceFunction("str", "trimStart", new[] { new BuiltInParam("s", "string") }, "string"),
+        new NamespaceFunction("str", "trimEnd", new[] { new BuiltInParam("s", "string") }, "string"),
+        new NamespaceFunction("str", "contains", new[] { new BuiltInParam("s", "string"), new BuiltInParam("substring", "string") }, "bool"),
+        new NamespaceFunction("str", "startsWith", new[] { new BuiltInParam("s", "string"), new BuiltInParam("prefix", "string") }, "bool"),
+        new NamespaceFunction("str", "endsWith", new[] { new BuiltInParam("s", "string"), new BuiltInParam("suffix", "string") }, "bool"),
+        new NamespaceFunction("str", "indexOf", new[] { new BuiltInParam("s", "string"), new BuiltInParam("substring", "string") }, "int"),
+        new NamespaceFunction("str", "lastIndexOf", new[] { new BuiltInParam("s", "string"), new BuiltInParam("substring", "string") }, "int"),
+        new NamespaceFunction("str", "substring", new[] { new BuiltInParam("s", "string"), new BuiltInParam("start", "int"), new BuiltInParam("end", "int") }, "string"),
+        new NamespaceFunction("str", "replace", new[] { new BuiltInParam("s", "string"), new BuiltInParam("old", "string"), new BuiltInParam("new", "string") }, "string"),
+        new NamespaceFunction("str", "replaceAll", new[] { new BuiltInParam("s", "string"), new BuiltInParam("old", "string"), new BuiltInParam("new", "string") }, "string"),
+        new NamespaceFunction("str", "split", new[] { new BuiltInParam("s", "string"), new BuiltInParam("delimiter", "string") }, "array"),
+        new NamespaceFunction("str", "repeat", new[] { new BuiltInParam("s", "string"), new BuiltInParam("count", "int") }, "string"),
+        new NamespaceFunction("str", "reverse", new[] { new BuiltInParam("s", "string") }, "string"),
+        new NamespaceFunction("str", "chars", new[] { new BuiltInParam("s", "string") }, "array"),
+        new NamespaceFunction("str", "padStart", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string"),
+        new NamespaceFunction("str", "padEnd", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -212,7 +232,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str"
     };
 
     // ── Keywords ──

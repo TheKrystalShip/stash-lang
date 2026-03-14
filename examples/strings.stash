@@ -1,0 +1,131 @@
+#!/usr/bin/env stash
+
+// String namespace demo
+// Showcases all str.* built-in functions with practical examples
+
+// --- Case Conversion ---
+
+fn demo_case_conversion() {
+    io.println("=== Case Conversion ===");
+
+    let greeting = "Hello, World!";
+    io.println($"  original:   {greeting}");
+    io.println($"  upper:      {str.upper(greeting)}");   // HELLO, WORLD!
+    io.println($"  lower:      {str.lower(greeting)}");   // hello, world!
+    io.println("");
+}
+
+// --- Trimming ---
+
+fn demo_trimming() {
+    io.println("=== Trimming ===");
+
+    let padded = "   hello   ";
+    io.println($"  original:   \"{padded}\"");
+    io.println($"  trim:       \"{str.trim(padded)}\"");       // "hello"
+    io.println($"  trimStart:  \"{str.trimStart(padded)}\"");  // "hello   "
+    io.println($"  trimEnd:    \"{str.trimEnd(padded)}\"");    // "   hello"
+    io.println("");
+}
+
+// --- Searching ---
+
+fn demo_searching() {
+    io.println("=== Searching ===");
+
+    let s = "the quick brown fox";
+    io.println($"  text: \"{s}\"");
+    io.println($"  contains \"fox\":       {str.contains(s, "fox")}");      // true
+    io.println($"  contains \"cat\":       {str.contains(s, "cat")}");      // false
+    io.println($"  startsWith \"the\":     {str.startsWith(s, "the")}");    // true
+    io.println($"  endsWith \"fox\":       {str.endsWith(s, "fox")}");      // true
+    io.println($"  indexOf \"quick\":      {str.indexOf(s, "quick")}");     // 4
+    io.println($"  lastIndexOf \"o\":      {str.lastIndexOf(s, "o")}");     // 17
+    io.println("");
+}
+
+// --- Extraction & Transformation ---
+
+fn demo_extraction() {
+    io.println("=== Extraction & Transformation ===");
+
+    let s = "Hello, Stash!";
+    io.println($"  original:              \"{s}\"");
+    io.println($"  substring(7, 12):      \"{str.substring(s, 7, 12)}\"");         // Stash
+    io.println($"  replace(\"Stash\",\"World\"): \"{str.replace(s, "Stash", "World")}\"");
+
+    let csv_line = "a,b,a,c,a";
+    io.println($"  replaceAll(\",\",\"-\"):   \"{str.replaceAll(csv_line, ",", "-")}\""); // a-b-a-c-a
+
+    io.println($"  reverse(\"racecar\"):    \"{str.reverse("racecar")}\"");   // racecar
+    io.println($"  reverse(\"hello\"):      \"{str.reverse("hello")}\"");     // olleh
+    io.println("");
+}
+
+// --- Splitting & Joining ---
+
+fn demo_split_chars() {
+    io.println("=== Splitting & Chars ===");
+
+    let csv = "alice,bob,carol,dave";
+    let names = str.split(csv, ",");
+    io.println($"  split \"{csv}\" by \",\":");
+    let i = 0;
+    while (i < len(names)) {
+        io.println($"    [{i}] {names[i]}");
+        i++;
+    }
+
+    let word = "rust";
+    let letters = str.chars(word);
+    io.println($"  chars(\"{word}\"): {letters}");   // [r, u, s, t]
+    io.println("");
+}
+
+// --- Padding & Repetition ---
+
+fn demo_padding() {
+    io.println("=== Padding & Repetition ===");
+
+    let s = "42";
+    io.println($"  padStart(\"42\", 6, \"0\"):  \"{str.padStart(s, 6, "0")}\"");  // "000042"
+    io.println($"  padEnd(\"42\", 6, \"..\"):   \"{str.padEnd(s, 6, ".")}\"");    // "42...."
+    io.println($"  repeat(\"ha\", 3):         \"{str.repeat("ha", 3)}\"");        // "hahaha"
+    io.println("");
+}
+
+// --- Practical: Slug Generator ---
+
+fn to_slug(title) {
+    let slug = str.lower(str.trim(title));
+    slug = str.replaceAll(slug, " ", "-");
+    slug = str.replaceAll(slug, "_", "-");
+    return slug;
+}
+
+fn demo_slug_generator() {
+    io.println("=== Slug Generator ===");
+
+    let titles = ["Hello World", "  My New Post  ", "Stash_Lang Tutorial", "10 Tips for Better Code"];
+    let i = 0;
+    while (i < len(titles)) {
+        let slug = to_slug(titles[i]);
+        io.println($"  \"{titles[i]}\"  ->  \"{slug}\"");
+        i++;
+    }
+    io.println("");
+}
+
+// --- Main ---
+
+fn main() {
+    demo_case_conversion();
+    demo_trimming();
+    demo_searching();
+    demo_extraction();
+    demo_split_chars();
+    demo_padding();
+    demo_slug_generator();
+}
+
+main();

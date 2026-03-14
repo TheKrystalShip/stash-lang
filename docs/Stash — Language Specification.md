@@ -1265,6 +1265,61 @@ Namespace members are accessed with dot notation: `fs.exists("/etc/hosts")`. Nam
 
 Standard library to be expanded as needed.
 
+#### `str` — String Operations
+
+All `str` functions take the target string as the first argument. Strings are immutable — functions return new strings rather than modifying in place.
+
+| Function                          | Description                                                          |
+| --------------------------------- | -------------------------------------------------------------------- |
+| `str.upper(s)`                    | Convert to uppercase                                                 |
+| `str.lower(s)`                    | Convert to lowercase                                                 |
+| `str.trim(s)`                     | Remove leading and trailing whitespace                               |
+| `str.trimStart(s)`                | Remove leading whitespace                                            |
+| `str.trimEnd(s)`                  | Remove trailing whitespace                                           |
+| `str.contains(s, sub)`           | Return `true` if `s` contains `sub`                                  |
+| `str.startsWith(s, prefix)`      | Return `true` if `s` starts with `prefix`                            |
+| `str.endsWith(s, suffix)`        | Return `true` if `s` ends with `suffix`                              |
+| `str.indexOf(s, sub)`            | Return index of first occurrence of `sub`, or `-1`                   |
+| `str.lastIndexOf(s, sub)`        | Return index of last occurrence of `sub`, or `-1`                    |
+| `str.substring(s, start, end?)`  | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
+| `str.replace(s, old, new)`       | Replace first occurrence of `old` with `new`                         |
+| `str.replaceAll(s, old, new)`    | Replace all occurrences of `old` with `new`                          |
+| `str.split(s, delimiter)`        | Split string into array by `delimiter`                               |
+| `str.repeat(s, count)`           | Repeat string `count` times                                         |
+| `str.reverse(s)`                 | Reverse the string                                                   |
+| `str.chars(s)`                   | Convert to array of single-character strings                         |
+| `str.padStart(s, len, fill?)`    | Pad start to `len` characters with `fill` (default `" "`)           |
+| `str.padEnd(s, len, fill?)`      | Pad end to `len` characters with `fill` (default `" "`)             |
+
+##### Examples
+
+```c
+let name = "  Hello, World!  ";
+
+// Case conversion
+io.println(str.upper(name));           // "  HELLO, WORLD!  "
+io.println(str.lower(name));           // "  hello, world!  "
+
+// Trimming
+let trimmed = str.trim(name);          // "Hello, World!"
+
+// Search
+io.println(str.contains(trimmed, "World"));   // true
+io.println(str.indexOf(trimmed, "World"));    // 7
+
+// Extraction & transformation
+io.println(str.substring(trimmed, 0, 5));     // "Hello"
+io.println(str.replace(trimmed, "World", "Stash")); // "Hello, Stash!"
+
+// Splitting & joining
+let parts = str.split("a,b,c", ",");          // ["a", "b", "c"]
+let repeated = str.repeat("ab", 3);           // "ababab"
+
+// Padding
+io.println(str.padStart("42", 5, "0"));       // "00042"
+io.println(str.padEnd("hi", 6));              // "hi    "
+```
+
 ---
 
 ## 8b. Lambda Expressions

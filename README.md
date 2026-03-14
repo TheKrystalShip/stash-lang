@@ -155,7 +155,8 @@ Stash is dynamically typed. Values carry their type at runtime:
 | `bool`   | `true`, `false`          |                       |
 | `null`   | `null`                   | Absence of value      |
 | `array`  | `[1, "two", true]`       | Ordered, mixed-type   |
-| `struct` | `Server { host: "..." }` | Named structured data |
+| `dict`   | `dict.new()`             | Key-value pairs       |
+| `struct` | `Server { host: "..." }` | Named structured data  |
 | `enum`   | `Status.Active`          | Named constants       |
 
 ### Operators
@@ -269,6 +270,58 @@ println(nums[0]);           // 1
 nums[2] = 99;               // index assignment
 println(len(nums));         // 3
 ```
+
+### Dictionaries
+
+```stash
+let config = dict.new();
+config["host"] = "localhost";
+config["port"] = 8080;
+config["debug"] = true;
+
+println(config["host"]);           // "localhost"
+println(dict.size(config));        // 3
+println(dict.has(config, "port")); // true
+
+// Iterate keys
+for (let key in config) {
+    println(key + " = " + config[key]);
+}
+
+// Pair structs with .key / .value access
+for (let pair in dict.pairs(config)) {
+    println(pair.key + " => " + pair.value);
+}
+
+// Merging (second dict wins on conflicts)
+let merged = dict.merge(defaults, overrides);
+```
+
+Dictionaries support `string`, `int`, `float`, and `bool` keys. Access via bracket notation (`d[key]`), and use the `dict` namespace for operations like `dict.keys()`, `dict.values()`, `dict.pairs()`, `dict.forEach()`, and `dict.merge()`.
+
+### String Operations
+
+```stash
+let name = "  Hello, World!  ";
+let trimmed = str.trim(name);              // "Hello, World!"
+let upper = str.upper(trimmed);            // "HELLO, WORLD!"
+
+// Search and extract
+println(str.contains(trimmed, "World"));   // true
+println(str.indexOf(trimmed, "World"));    // 7
+println(str.substring(trimmed, 0, 5));     // "Hello"
+
+// Transform
+let csv = "a,b,c";
+let parts = str.split(csv, ",");           // ["a", "b", "c"]
+let replaced = str.replaceAll(trimmed, "l", "L"); // "HeLLo, WorLd!"
+
+// Padding and repetition
+println(str.padStart("42", 5, "0"));       // "00042"
+println(str.repeat("ab", 3));              // "ababab"
+```
+
+The `str` namespace provides 19 functions for string manipulation including case conversion, trimming, searching, slicing, splitting, replacing, padding, and more. Strings also support indexing (`s[0]`), `len(s)`, interpolation (`$"Hello {name}"`), and `for-in` iteration.
 
 ### Control Flow
 
@@ -538,8 +591,31 @@ if (args.command == "deploy") {
 | `process.list()`              | List all tracked process handles                                                                                 |
 | `process.read(proc)`          | Read available stdout from running process                                                                       |
 | `process.write(proc, data)`   | Write to running process stdin                                                                                   |
-| `lastError()`                 | Last error caught by `try`, or null                                                                               |
-| `parseArgs(tree)`             | Parse CLI arguments from an `ArgTree` definition                                                                  |
+| `arr.push(a, val)`            | Push value onto array                                                                             |
+| `arr.pop(a)`                  | Remove and return last element                                                                    |
+| `arr.sort(a)`                 | Sort array in place (numbers or strings)                                                          |
+| `arr.map(a, fn)`              | Return new array with `fn` applied to each element                                                |
+| `arr.filter(a, fn)`           | Return new array with elements where `fn` returns truthy                                          |
+| `arr.reduce(a, fn, init)`     | Reduce array to single value                                                                      |
+| `dict.new()`                  | Create an empty dictionary                                                                        |
+| `dict.get(d, key)`            | Get value for key, or `null` if not found                                                         |
+| `dict.set(d, key, val)`       | Set key-value pair (mutates dictionary)                                                           |
+| `dict.has(d, key)`            | Return `true` if key exists                                                                       |
+| `dict.keys(d)`                | Return array of all keys                                                                          |
+| `dict.pairs(d)`               | Return array of Pair structs (`.key`, `.value`)                                                   |
+| `dict.merge(d1, d2)`          | Return new dictionary combining both                                                              |
+| `str.upper(s)`                | Convert string to uppercase                                                                       |
+| `str.lower(s)`                | Convert string to lowercase                                                                       |
+| `str.trim(s)`                 | Remove leading/trailing whitespace                                                                |
+| `str.contains(s, sub)`        | Check if string contains substring                                                                |
+| `str.indexOf(s, sub)`         | First occurrence index, or `-1`                                                                   |
+| `str.substring(s, start, end?)` | Extract substring                                                                               |
+| `str.replace(s, old, new)`    | Replace first occurrence                                                                          |
+| `str.replaceAll(s, old, new)` | Replace all occurrences                                                                           |
+| `str.split(s, delim)`         | Split string into array                                                                           |
+| `str.padStart(s, len, fill?)` | Pad start to target length                                                                        |
+| `lastError()`                 | Last error caught by `try`, or null                                                               |
+| `parseArgs(tree)`             | Parse CLI arguments from an `ArgTree` definition                                                  |
 
 ### Debugger
 
