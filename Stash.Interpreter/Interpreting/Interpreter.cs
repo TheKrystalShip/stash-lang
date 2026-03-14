@@ -68,6 +68,8 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private readonly List<CallFrame> _callStack = new();
     private IDebugger? _debugger;
     private string[] _scriptArgs = Array.Empty<string>();
+    private readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> _trackedProcesses = new();
+    private readonly Dictionary<StashInstance, StashInstance> _processWaitCache = new(ReferenceEqualityComparer.Instance);
 
     /// <summary>
     /// Gets or sets the current file path being executed.
@@ -2618,15 +2620,322 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         // ── process namespace ────────────────────────────────────────────
         var process = new StashNamespace("process");
 
-        process.Define("exit", new BuiltInFunction("process.exit", 1, (_, args) =>
+        // Signal constants
+        process.Define("SIGHUP", (long)1);
+        process.Define("SIGINT", (long)2);
+        process.Define("SIGQUIT", (long)3);
+        process.Define("SIGKILL", (long)9);
+        process.Define("SIGUSR1", (long)10);
+        process.Define("SIGUSR2", (long)12);
+        process.Define("SIGTERM", (long)15);
+
+        process.Define("exit", new BuiltInFunction("process.exit", 1, (interp, args) =>
         {
             if (args[0] is not long code)
             {
                 throw new RuntimeError("Argument to 'process.exit' must be an integer.");
             }
 
+            interp.CleanupTrackedProcesses();
             System.Environment.Exit((int)code);
             return null;
+        }));
+
+        process.Define("spawn", new BuiltInFunction("process.spawn", 1, (interp, args) =>
+        {
+            if (args[0] is not string command)
+            {
+                throw new RuntimeError("Argument to 'process.spawn' must be a string.");
+            }
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "/bin/sh",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add(command);
+
+            var osProcess = System.Diagnostics.Process.Start(psi);
+            if (osProcess is null)
+            {
+                throw new RuntimeError("Failed to start process.");
+            }
+
+            var fields = new Dictionary<string, object?>
+            {
+                ["pid"] = (long)osProcess.Id,
+                ["command"] = command
+            };
+            var handle = new StashInstance("Process", fields);
+            interp._trackedProcesses.Add((handle, osProcess));
+            return handle;
+        }));
+
+        process.Define("wait", new BuiltInFunction("process.wait", 1, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("Argument to 'process.wait' must be a Process handle.");
+            }
+
+            var entry = interp._trackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null)
+            {
+                // Already waited — return cached result if available
+                if (interp._processWaitCache.TryGetValue(handle, out var cached))
+                {
+                    return cached;
+                }
+
+                return new StashInstance("CommandResult", new Dictionary<string, object?>
+                {
+                    ["stdout"] = "",
+                    ["stderr"] = "",
+                    ["exitCode"] = (long)-1
+                });
+            }
+
+            var osProcess = entry.OsProcess;
+            var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+            osProcess.WaitForExit();
+            Task.WaitAll(stdoutTask, stderrTask);
+
+            var result = new StashInstance("CommandResult", new Dictionary<string, object?>
+            {
+                ["stdout"] = stdoutTask.Result,
+                ["stderr"] = stderrTask.Result,
+                ["exitCode"] = (long)osProcess.ExitCode
+            });
+
+            // Cache the result so subsequent wait() calls return the same data
+            interp._processWaitCache[handle] = result;
+            return result;
+        }));
+
+        process.Define("waitTimeout", new BuiltInFunction("process.waitTimeout", 2, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("First argument to 'process.waitTimeout' must be a Process handle.");
+            }
+
+            if (args[1] is not long ms)
+            {
+                throw new RuntimeError("Second argument to 'process.waitTimeout' must be an integer (milliseconds).");
+            }
+
+            var entry = interp._trackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null)
+            {
+                return null;
+            }
+
+            var osProcess = entry.OsProcess;
+            if (!osProcess.WaitForExit((int)ms))
+            {
+                return null; // timed out
+            }
+
+            var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+            Task.WaitAll(stdoutTask, stderrTask);
+
+            return new StashInstance("CommandResult", new Dictionary<string, object?>
+            {
+                ["stdout"] = stdoutTask.Result,
+                ["stderr"] = stderrTask.Result,
+                ["exitCode"] = (long)osProcess.ExitCode
+            });
+        }));
+
+        process.Define("kill", new BuiltInFunction("process.kill", 1, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("Argument to 'process.kill' must be a Process handle.");
+            }
+
+            var entry = interp._trackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null || entry.OsProcess.HasExited)
+            {
+                return false;
+            }
+
+            try
+            {
+                entry.OsProcess.Kill(false); // SIGKILL on Linux
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }));
+
+        process.Define("isAlive", new BuiltInFunction("process.isAlive", 1, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("Argument to 'process.isAlive' must be a Process handle.");
+            }
+
+            var entry = interp._trackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null)
+            {
+                return false;
+            }
+
+            try { return !entry.OsProcess.HasExited; }
+            catch { return false; }
+        }));
+
+        process.Define("pid", new BuiltInFunction("process.pid", 1, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("Argument to 'process.pid' must be a Process handle.");
+            }
+
+            return handle.GetField("pid", null);
+        }));
+
+        process.Define("signal", new BuiltInFunction("process.signal", 2, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("First argument to 'process.signal' must be a Process handle.");
+            }
+
+            if (args[1] is not long sig)
+            {
+                throw new RuntimeError("Second argument to 'process.signal' must be an integer (signal number).");
+            }
+
+            if (sig < 1 || sig > 64)
+            {
+                throw new RuntimeError($"Signal number must be between 1 and 64, got {sig}.");
+            }
+
+            var entry = interp._trackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null || entry.OsProcess.HasExited)
+            {
+                return false;
+            }
+
+            try
+            {
+                // Use kill command for arbitrary signals since .NET only supports SIGTERM/SIGKILL directly
+                var killPsi = new ProcessStartInfo
+                {
+                    FileName = "/bin/kill",
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+                killPsi.ArgumentList.Add($"-{sig}");
+                killPsi.ArgumentList.Add(entry.OsProcess.Id.ToString());
+
+                using var killProc = System.Diagnostics.Process.Start(killPsi);
+                killProc?.WaitForExit();
+                return killProc?.ExitCode == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }));
+
+        process.Define("detach", new BuiltInFunction("process.detach", 1, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("Argument to 'process.detach' must be a Process handle.");
+            }
+
+            int idx = interp._trackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+            if (idx >= 0)
+            {
+                interp._trackedProcesses.RemoveAt(idx);
+                return true;
+            }
+
+            return false;
+        }));
+
+        process.Define("list", new BuiltInFunction("process.list", 0, (interp, _) =>
+        {
+            var result = new List<object?>();
+            foreach (var (handle, _) in interp._trackedProcesses)
+            {
+                result.Add(handle);
+            }
+            return result;
+        }));
+
+        process.Define("read", new BuiltInFunction("process.read", 1, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("Argument to 'process.read' must be a Process handle.");
+            }
+
+            var entry = interp._trackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null)
+            {
+                return null;
+            }
+
+            try
+            {
+                var stream = entry.OsProcess.StandardOutput;
+                if (stream.Peek() == -1)
+                {
+                    return null;
+                }
+
+                var buffer = new char[4096];
+                int read = stream.Read(buffer, 0, buffer.Length);
+                return read > 0 ? new string(buffer, 0, read) : null;
+            }
+            catch
+            {
+                return null;
+            }
+        }));
+
+        process.Define("write", new BuiltInFunction("process.write", 2, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("First argument to 'process.write' must be a Process handle.");
+            }
+
+            if (args[1] is not string data)
+            {
+                throw new RuntimeError("Second argument to 'process.write' must be a string.");
+            }
+
+            var entry = interp._trackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null || entry.OsProcess.HasExited)
+            {
+                return false;
+            }
+
+            try
+            {
+                entry.OsProcess.StandardInput.Write(data);
+                entry.OsProcess.StandardInput.Flush();
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
         }));
 
         _globals.Define("process", process);
@@ -2884,6 +3193,30 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }));
 
         _globals.Define("path", pathNs);
+    }
+
+    /// <summary>
+    /// Cleans up all tracked processes on script exit.
+    /// Sends SIGTERM, waits up to 3 seconds, then SIGKILL.
+    /// </summary>
+    public void CleanupTrackedProcesses()
+    {
+        foreach (var (_, osProcess) in _trackedProcesses)
+        {
+            try
+            {
+                if (!osProcess.HasExited)
+                {
+                    osProcess.Kill(false); // SIGTERM on Linux
+                    if (!osProcess.WaitForExit(3000))
+                    {
+                        osProcess.Kill(true); // SIGKILL
+                    }
+                }
+            }
+            catch { /* Process may have already exited */ }
+        }
+        _trackedProcesses.Clear();
     }
 
     private class BuiltInFunction : IStashCallable

@@ -53,6 +53,28 @@ public class HoverHandler : HoverHandlerBase
                     })
                 });
             }
+            // Try built-in namespace constants (e.g., process.SIGTERM)
+            {
+                var lines2 = text!.Split('\n');
+                var dotPrefix = TextUtilities.FindDotPrefix(lines2[(int)request.Position.Line], (int)request.Position.Character);
+                if (dotPrefix != null)
+                {
+                    var qualifiedName = $"{dotPrefix}.{word}";
+                    if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out var constant))
+                    {
+                        var markdown = $"```stash\n{constant.Detail}\n```\n*constant* — from `{dotPrefix}`";
+                        return Task.FromResult<Hover?>(new Hover
+                        {
+                            Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                            {
+                                Kind = MarkupKind.Markdown,
+                                Value = markdown
+                            })
+                        });
+                    }
+                }
+            }
+
             return Task.FromResult<Hover?>(null);
         }
 

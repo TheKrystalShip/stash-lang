@@ -23,7 +23,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [5b. Enums](#5b-enums) · [6b. Shebang Support](#6b-shebang-support) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
+**Addenda:** [5b. Enums](#5b-enums) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Process Management](#6d-process-management) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
 
 ---
 
@@ -177,6 +177,11 @@ let index = 0
 while (index < 10) {
   index++;
 }
+
+// Output redirection — write command output to files
+$(ls -la /opt) > "/tmp/listing.txt";
+$(make build) 2> "/tmp/errors.log";
+$(cat /tmp/listing.txt) | $(grep app) >> "/tmp/matches.txt";
 ```
 
 ---
@@ -387,6 +392,17 @@ let result = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
 
 This mirrors Bash's `set -o pipefail` behavior and prevents silent failures in command chains.
 
+#### Output Redirection
+
+Command output can be redirected to files using `>` (write) and `>>` (append). See [Section 6c](#6c-output-redirection) for details.
+
+```c
+$(ls -la) > "output.txt";       // write stdout to file
+$(ls -la) >> "log.txt";         // append stdout to file
+$(make build) 2> "errors.txt";  // stderr to file
+$(make build) &> "all.txt";     // both streams to file
+```
+
 ---
 
 ## 6b. Shebang Support
@@ -410,6 +426,297 @@ The lexer checks if the first two characters of the source are `#!`. If so, it s
 chmod +x script.stash
 ./script.stash
 ```
+
+---
+
+## 6c. Output Redirection
+
+Stash supports output redirection operators for writing command output directly to files, mirroring Bash's familiar `>` and `>>` syntax.
+
+### Syntax
+
+```c
+// Write stdout to file (creates or overwrites)
+$(ls -la) > "output.txt";
+
+// Append stdout to file
+$(ls -la) >> "log.txt";
+
+// Works with pipe chains — redirects the final output
+$(cat /var/log/syslog) | $(grep error) > "filtered.txt";
+$(cat log) | $(grep error) >> "errors.log";
+
+// Interpolated file paths
+let logDir = "/var/log";
+$(dmesg) > "${logDir}/kernel.txt";
+
+// Stderr redirection
+$(make build) 2> "errors.txt";
+$(make build) 2>> "errors.txt";
+
+// Both streams to same file
+$(make build) &> "all_output.txt";
+$(make build) &>> "all_output.txt";
+
+// Both streams to separate files
+$(make build) > "stdout.txt" 2> "stderr.txt";
+```
+
+### Semantics
+
+1. `>` and `>>` are parsed as **postfix redirection operators** that bind after pipe chains are resolved — redirection applies to the final result of the entire pipe chain.
+2. They are **only valid** when the left operand is a `CommandExpr`, `PipeExpr`, or another `RedirectExpr` (for chaining stdout + stderr redirects). Using them after any other expression type is a parse error.
+3. The right operand is **any expression that evaluates to a string** (the file path).
+4. Redirection is **process-level** — the stream is written directly to the file, not buffered in memory. This handles arbitrarily large outputs efficiently.
+5. The expression **still returns a `CommandResult`** struct. The redirected stream's field (`stdout` or `stderr`) will be an empty string since it went to the file. `exitCode` is always available.
+6. `>` creates or overwrites the file; `>>` creates or appends to it.
+
+### Stream Selectors
+
+| Operator | Stream   | Description                           |
+| -------- | -------- | ------------------------------------- |
+| `>`      | stdout   | Write stdout to file (overwrite)      |
+| `>>`     | stdout   | Append stdout to file                 |
+| `2>`     | stderr   | Write stderr to file (overwrite)      |
+| `2>>`    | stderr   | Append stderr to file                 |
+| `&>`     | both     | Write stdout+stderr to file (overwrite) |
+| `&>>`    | both     | Append stdout+stderr to file          |
+
+### Parsing
+
+The `>` operator is context-sensitive — it is parsed as **redirection** only when the left operand is a `CommandExpr`, `PipeExpr`, or `RedirectExpr`. In all other contexts, `>` remains the greater-than comparison operator. This is unambiguous because comparing a raw command result with `>` is nonsensical (`$(ls) > 5`), and meaningful comparisons like `$(ls).exitCode > 0` work because `.exitCode` produces a `DotExpr`, not a `CommandExpr`.
+
+The `2>`, `2>>`, `&>`, and `&>>` operators are scanned as distinct tokens by the lexer.
+
+### Implementation
+
+A `RedirectExpr` AST node wraps the command expression:
+
+```
+RedirectExpr:
+  expression: Expr              // left side (CommandExpr, PipeExpr, or RedirectExpr)
+  stream: Stdout | Stderr | All // which stream(s) to redirect
+  append: bool                  // true for >>, false for >
+  target: Expr                  // right side (evaluates to file path string)
+```
+
+At runtime, the interpreter executes the inner command and writes the selected stream(s) to the target file. The `CommandResult` is returned with empty strings for redirected streams.
+
+---
+
+## 6d. Process Management
+
+Stash provides built-in process management through the `process` namespace, enabling scripts to spawn background processes, track their lifecycle, communicate with them, and control their termination. This goes beyond the synchronous `$(...)` command execution to support long-running services, parallel workloads, and process orchestration.
+
+### Philosophy
+
+Synchronous command execution via `$(...)` is the right default — run a command, get the result. But scripting often requires launching a process that runs alongside the script: a development server, a file watcher, a background worker. The `process` namespace provides **explicit, tracked** background process management. Every spawned process is tracked by default and cleaned up on script exit unless explicitly detached.
+
+### The `Process` Handle
+
+`Process` is a **built-in struct type** (like `CommandResult`, `ArgTree`, `ArgDef`) that represents a handle to a spawned process. It is returned by `process.spawn()` and accepted by all other process management functions.
+
+#### Fields
+
+| Field     | Type     | Description                          |
+| --------- | -------- | ------------------------------------ |
+| `pid`     | `int`    | OS process ID                        |
+| `command` | `string` | The command string that was launched |
+
+The `pid` and `command` fields are set at spawn time and do not change. To query live state (running/exited), use `process.isAlive()` — this is a function rather than a field because it queries the OS each time.
+
+### Spawning Processes
+
+```c
+let server = process.spawn("python3 -m http.server 8080");
+io.println("Server PID: " + server.pid);      // e.g. 12345
+io.println("Command: " + server.command);      // "python3 -m http.server 8080"
+```
+
+`process.spawn(cmd)` launches a process in the background and returns immediately with a `Process` handle. The process runs concurrently with the script. The command string is executed via the system shell (`/bin/sh -c "..."`).
+
+The spawned process's stdout and stderr are captured in internal buffers (accessible via `process.read()`), and its stdin is available for writing via `process.write()`.
+
+### Waiting for Processes
+
+```c
+// Block until the process exits
+let result = process.wait(server);
+io.println("Exit code: " + result.exitCode);
+io.println("Output: " + result.stdout);
+```
+
+`process.wait(proc)` blocks until the process exits and returns a `CommandResult` with `stdout`, `stderr`, and `exitCode` — identical to what `$(...)` returns for synchronous commands.
+
+```c
+// Wait with a timeout (milliseconds)
+let result = process.waitTimeout(server, 5000);
+if (result == null) {
+    io.println("Process did not exit within 5 seconds");
+    process.kill(server);
+}
+```
+
+`process.waitTimeout(proc, ms)` waits up to `ms` milliseconds. Returns a `CommandResult` if the process exited in time, or `null` if it is still running.
+
+### Checking Process State
+
+```c
+if (process.isAlive(server)) {
+    io.println("Server is running");
+} else {
+    io.println("Server has exited");
+}
+
+let pid = process.pid(server);  // same as server.pid
+```
+
+`process.isAlive(proc)` returns `true` if the process is still running, `false` if it has exited.
+
+`process.pid(proc)` returns the OS process ID as an integer. This is equivalent to accessing `proc.pid` directly but is provided for consistency with the functional style of the namespace.
+
+### Killing and Signaling Processes
+
+```c
+// Send SIGTERM (graceful shutdown)
+process.kill(server);
+
+// Send a specific signal
+process.signal(server, process.SIGKILL);  // force kill
+process.signal(server, process.SIGHUP);   // hangup
+```
+
+`process.kill(proc)` sends `SIGTERM` (signal 15) to the process. Returns `true` if the signal was sent, `false` if the process had already exited.
+
+`process.signal(proc, sig)` sends an arbitrary signal. The signal is specified as an integer. Common signal constants are provided on the `process` namespace:
+
+| Constant            | Value | Description                     |
+| ------------------- | ----- | ------------------------------- |
+| `process.SIGHUP`    | 1     | Hangup                          |
+| `process.SIGINT`    | 2     | Interrupt (Ctrl+C)              |
+| `process.SIGQUIT`   | 3     | Quit                            |
+| `process.SIGKILL`   | 9     | Kill (cannot be caught)         |
+| `process.SIGTERM`   | 15    | Terminate (graceful)            |
+| `process.SIGUSR1`   | 10    | User-defined signal 1           |
+| `process.SIGUSR2`   | 12    | User-defined signal 2           |
+
+These are integer constants — `process.SIGTERM` is just `15`. Using `process.signal(proc, 15)` is equivalent.
+
+### Process I/O
+
+```c
+let proc = process.spawn("bc -l");
+process.write(proc, "2 + 3\n");
+let answer = process.read(proc);  // "5\n"
+process.write(proc, "scale=4; 22/7\n");
+let pi = process.read(proc);      // "3.1428\n"
+process.kill(proc);
+```
+
+`process.write(proc, data)` writes a string to the process's stdin. Returns `true` if the write succeeded, `false` if the process has exited or stdin is closed.
+
+`process.read(proc)` reads currently available stdout from the process. Returns a string with the available data, or `null` if no data is available. This is **non-blocking** — it returns immediately with whatever is in the buffer.
+
+### Detaching Processes
+
+```c
+let daemon = process.spawn("my-daemon --config /etc/app.conf");
+process.detach(daemon);
+// daemon now survives script exit
+// the Process handle becomes inert — further calls on it are no-ops
+```
+
+`process.detach(proc)` removes a process from the tracked process list. After detaching:
+- The process will **not** be killed when the script exits.
+- `process.isAlive()`, `process.kill()`, `process.signal()`, `process.wait()`, `process.read()`, and `process.write()` on the detached handle return `false`/`null` as appropriate without error.
+- The `pid` and `command` fields remain accessible on the handle.
+
+This is the mechanism for launching daemons or long-lived services that should outlive the script.
+
+### Listing Tracked Processes
+
+```c
+let procs = process.list();
+for (let p in procs) {
+    io.println(p.command + " (PID: " + p.pid + ") alive=" + process.isAlive(p));
+}
+```
+
+`process.list()` returns an array of all currently tracked `Process` handles (spawned and not yet detached). This is useful for cleanup, monitoring, and debugging.
+
+### Script Exit Cleanup
+
+When a Stash script exits (normally or due to an error), all **tracked** processes receive `SIGTERM`. This prevents orphaned processes from accumulating. The cleanup sequence:
+
+1. Send `SIGTERM` to all tracked processes that are still alive.
+2. Wait up to 3 seconds for each process to exit gracefully.
+3. Send `SIGKILL` to any process that is still alive after the grace period.
+
+Processes that have been `detach()`-ed are excluded from cleanup.
+
+`process.exit(code)` also triggers this cleanup before terminating the script.
+
+### Complete Example
+
+```c
+#!/usr/bin/env stash
+
+// Launch a web server in the background
+let server = process.spawn("python3 -m http.server 8080");
+io.println("Started server (PID: " + server.pid + ")");
+
+// Give it a moment to start
+$(sleep 1);
+
+// Health check
+let health = $(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/);
+if (health.stdout == "200") {
+    io.println("Server is healthy");
+} else {
+    io.println("Server failed to start");
+    process.exit(1);
+}
+
+// Run some tests against the server
+let testResult = $(curl -s http://localhost:8080/);
+io.println("Response length: " + len(testResult.stdout));
+
+// Graceful shutdown
+process.kill(server);
+let finalResult = process.waitTimeout(server, 5000);
+if (finalResult == null) {
+    process.signal(server, process.SIGKILL);
+    process.wait(server);
+}
+
+io.println("Server stopped");
+```
+
+### Implementation
+
+The interpreter maintains a **tracked process list** (`List<TrackedProcess>`) on the interpreter instance. Each entry pairs a `StashInstance` (the `Process` handle) with the underlying `System.Diagnostics.Process` object.
+
+- `process.spawn()` — Creates a `Process` via `System.Diagnostics.Process.Start()` without calling `WaitForExit()`. stdout/stderr are read asynchronously into `StringBuilder` buffers. The handle is added to the tracked list.
+- `process.wait()` — Calls `WaitForExit()` on the underlying process, then returns a `CommandResult` with captured output.
+- `process.waitTimeout()` — Calls `WaitForExit(timeout)`. Returns `null` if timed out.
+- `process.kill()` — Calls `Process.Kill()` (sends SIGTERM on Linux via .NET).
+- `process.signal()` — Shells out to `kill -<sig> <pid>` for arbitrary signals, since .NET's `Process.Kill()` only supports SIGTERM/SIGKILL.
+- `process.isAlive()` — Checks `Process.HasExited`.
+- `process.read()` — Returns the contents of the stdout buffer and clears it.
+- `process.write()` — Writes to `Process.StandardInput`.
+- `process.detach()` — Removes the entry from the tracked list.
+- Script exit cleanup — A shutdown hook iterates the tracked list and sends SIGTERM, waits, then SIGKILL.
+
+The `Process` built-in struct is pre-defined by the interpreter alongside `CommandResult`, `ArgTree`, and `ArgDef`.
+
+### Future Extensions (Not in v1)
+
+- **`process.onExit(proc, callback)`** — Register a lambda callback for when a process exits. Event-driven model.
+- **`process.daemonize(cmd)`** — Launch as a proper daemon (double-fork, detach from terminal, redirect to `/dev/null`).
+- **`process.find(name)`** — Find system processes by name (wraps `pgrep`).
+- **`process.exists(pid)`** — Check if an arbitrary system process exists by PID.
+- **`process.waitAll(procs)`** — Wait for multiple processes to all exit.
+- **`process.waitAny(procs)`** — Wait for the first of multiple processes to exit.
 
 ---
 
@@ -698,11 +1005,24 @@ Stash organizes built-in functions into **namespaces** accessed via dot notation
 | `env.get(name)`        | Read environment variable (null if unset) |
 | `env.set(name, value)` | Set environment variable                  |
 
-#### `process` — Process Control
+#### `process` — Process Control & Management
 
-| Function             | Description                         |
-| -------------------- | ----------------------------------- |
-| `process.exit(code)` | Terminate the script with exit code |
+| Function                            | Description                                                              |
+| ----------------------------------- | ------------------------------------------------------------------------ |
+| `process.exit(code)`                | Terminate the script with exit code                                      |
+| `process.spawn(cmd)`                | Launch a background process, returns a `Process` handle                  |
+| `process.wait(proc)`                | Block until a process exits, returns `CommandResult`                     |
+| `process.waitTimeout(proc, ms)`     | Wait with timeout; returns `CommandResult` or `null` if timed out        |
+| `process.kill(proc)`                | Send SIGTERM to a process                                                |
+| `process.isAlive(proc)`             | Check if a process is still running (returns `bool`)                     |
+| `process.signal(proc, sig)`         | Send an arbitrary signal to a process                                    |
+| `process.pid(proc)`                 | Get the OS process ID                                                    |
+| `process.detach(proc)`              | Detach a process so it survives script exit                              |
+| `process.list()`                    | List all tracked (spawned) process handles                               |
+| `process.read(proc)`                | Read available stdout from a running process (non-blocking)              |
+| `process.write(proc, data)`         | Write to a running process's stdin                                       |
+
+See [Section 6d](#6d-process-management) for full semantics, the `Process` handle, signal constants, and examples.
 
 #### `fs` — File System Operations
 
@@ -1106,9 +1426,11 @@ Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `wh
 
 Contextual keywords: `from` (only reserved after `import`, can be used as a variable name elsewhere)
 
-Operators: `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?`, `:`, `??`, `++`, `--`, `=>`
+Operators: `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?`, `:`, `??`, `++`, `--`, `=>`, `>>`, `2>`, `2>>`, `&>`, `&>>`
 
 Note: `|` (pipe) is not listed as a general operator — it is a special syntactic form exclusive to command chaining (see Section 6).
+
+Note: `>` and `>>` serve dual roles depending on context. After a command expression (`CommandExpr`, `PipeExpr`, or `RedirectExpr`), they are output redirection operators (see Section 6c). Everywhere else, `>` is the greater-than comparison operator. `>>` is exclusively a redirection operator.
 
 Delimiters: `(`, `)`, `{`, `}`, `[`, `]`, `,`, `.`, `;`
 
@@ -1135,6 +1457,7 @@ Identifiers: user-defined names
 - `IndexAssignExpr` — `arr[i] = val`
 - `TernaryExpr` — `cond ? a : b`
 - `PipeExpr` — `$(cmd1) | $(cmd2)`
+- `RedirectExpr` — `$(cmd) > "file"`, `$(cmd) >> "file"`, `$(cmd) 2> "file"`, `$(cmd) &> "file"`
 - `StructInitExpr` — `Server { host: "..." }`
 - `CommandExpr` — `$(ls -la)`, `$(grep {pattern} {file})`
 - `InterpolatedStringExpr` — `$"Hello {name}"`, `"Hello ${name}"`
@@ -1424,7 +1747,9 @@ block          → "{" declaration* "}" ;
 expression     → assignment ;
 assignment     → (call ".")? IDENTIFIER "=" assignment | ternary ;
 ternary        → nullCoalesce ( "?" expression ":" ternary )? ;
-nullCoalesce   → pipe ( "??" pipe )* ;
+nullCoalesce   → redirect ( "??" redirect )* ;
+redirect       → pipe ( redirectOp expression )* ;
+redirectOp     → ">" | ">>" | "2>" | "2>>" | "&>" | "&>>" ;
 pipe           → logic_or ( "|" logic_or )* ;
 logic_or       → logic_and ( "||" logic_and )* ;
 logic_and      → equality ( "&&" equality )* ;

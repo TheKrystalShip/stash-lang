@@ -60,6 +60,12 @@ public static class BuiltInRegistry
         public string[] ParamNames => Parameters.Select(p => p.Name).ToArray();
     }
 
+    public record NamespaceConstant(string Namespace, string Name, string Type, string Value)
+    {
+        public string QualifiedName => $"{Namespace}.{Name}";
+        public string Detail => $"const {Namespace}.{Name}: {Type} = {Value}";
+    }
+
     // ── Built-in Structs ──
 
     public static readonly IReadOnlyList<BuiltInStruct> Structs = new[]
@@ -90,6 +96,11 @@ public static class BuiltInRegistry
             new("required", "bool"),
             new("args", "ArgTree"),
         }),
+        new BuiltInStruct("Process", new BuiltInField[]
+        {
+            new("pid", "int"),
+            new("command", "string"),
+        }),
     };
 
     // ── Built-in Global Functions ──
@@ -114,6 +125,17 @@ public static class BuiltInRegistry
         new NamespaceFunction("env", "get", new[] { new BuiltInParam("name", "string") }, "string"),
         new NamespaceFunction("env", "set", new[] { new BuiltInParam("name", "string"), new BuiltInParam("value", "string") }),
         new NamespaceFunction("process", "exit", new[] { new BuiltInParam("code", "int") }),
+        new NamespaceFunction("process", "spawn", new[] { new BuiltInParam("cmd", "string") }, "Process"),
+        new NamespaceFunction("process", "wait", new[] { new BuiltInParam("proc", "Process") }, "CommandResult"),
+        new NamespaceFunction("process", "waitTimeout", new[] { new BuiltInParam("proc", "Process"), new BuiltInParam("ms", "int") }, "CommandResult"),
+        new NamespaceFunction("process", "kill", new[] { new BuiltInParam("proc", "Process") }, "bool"),
+        new NamespaceFunction("process", "isAlive", new[] { new BuiltInParam("proc", "Process") }, "bool"),
+        new NamespaceFunction("process", "pid", new[] { new BuiltInParam("proc", "Process") }, "int"),
+        new NamespaceFunction("process", "signal", new[] { new BuiltInParam("proc", "Process"), new BuiltInParam("sig", "int") }, "bool"),
+        new NamespaceFunction("process", "detach", new[] { new BuiltInParam("proc", "Process") }, "bool"),
+        new NamespaceFunction("process", "list", Array.Empty<BuiltInParam>(), "array"),
+        new NamespaceFunction("process", "read", new[] { new BuiltInParam("proc", "Process") }, "string"),
+        new NamespaceFunction("process", "write", new[] { new BuiltInParam("proc", "Process"), new BuiltInParam("data", "string") }, "bool"),
         new NamespaceFunction("fs", "readFile", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("fs", "writeFile", new[] { new BuiltInParam("path", "string"), new BuiltInParam("content", "string") }),
         new NamespaceFunction("fs", "exists", new[] { new BuiltInParam("path", "string") }, "bool"),
@@ -132,6 +154,19 @@ public static class BuiltInRegistry
         new NamespaceFunction("path", "ext", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("path", "join", new[] { new BuiltInParam("a", "string"), new BuiltInParam("b", "string") }, "string"),
         new NamespaceFunction("path", "name", new[] { new BuiltInParam("path", "string") }, "string"),
+    };
+
+    // ── Built-in Namespace Constants ──
+
+    public static readonly IReadOnlyList<NamespaceConstant> NamespaceConstants = new[]
+    {
+        new NamespaceConstant("process", "SIGHUP",  "int", "1"),
+        new NamespaceConstant("process", "SIGINT",  "int", "2"),
+        new NamespaceConstant("process", "SIGQUIT", "int", "3"),
+        new NamespaceConstant("process", "SIGKILL", "int", "9"),
+        new NamespaceConstant("process", "SIGUSR1", "int", "10"),
+        new NamespaceConstant("process", "SIGUSR2", "int", "12"),
+        new NamespaceConstant("process", "SIGTERM", "int", "15"),
     };
 
     // ── Built-in Namespace Names ──
@@ -175,6 +210,9 @@ public static class BuiltInRegistry
     private static readonly Dictionary<string, NamespaceFunction> _namespaceFunctionsByQualifiedName =
         NamespaceFunctions.ToDictionary(f => f.QualifiedName);
 
+    private static readonly Dictionary<string, NamespaceConstant> _namespaceConstantsByQualifiedName =
+        NamespaceConstants.ToDictionary(c => c.QualifiedName);
+
     private static readonly HashSet<string> _builtInFunctionNames =
         new(Functions.Select(f => f.Name).Concat(new[] { "println", "print", "readLine" }));
 
@@ -188,6 +226,12 @@ public static class BuiltInRegistry
 
     public static IEnumerable<NamespaceFunction> GetNamespaceMembers(string namespaceName)
         => NamespaceFunctions.Where(f => f.Namespace == namespaceName);
+
+    public static IEnumerable<NamespaceConstant> GetNamespaceConstants(string namespaceName)
+        => NamespaceConstants.Where(c => c.Namespace == namespaceName);
+
+    public static bool TryGetNamespaceConstant(string qualifiedName, out NamespaceConstant constant)
+        => _namespaceConstantsByQualifiedName.TryGetValue(qualifiedName, out constant!);
 
     public static bool IsBuiltInFunction(string name) => _builtInFunctionNames.Contains(name);
 

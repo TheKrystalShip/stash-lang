@@ -174,6 +174,15 @@ public class CompletionHandler : CompletionHandlerBase
                     Detail = fn.Detail
                 });
             }
+            foreach (var c in BuiltInRegistry.GetNamespaceConstants(prefix))
+            {
+                items.Add(new CompletionItem
+                {
+                    Label = c.Name,
+                    Kind = LspCompletionItemKind.Constant,
+                    Detail = c.Detail
+                });
+            }
             return new CompletionList(items);
         }
 

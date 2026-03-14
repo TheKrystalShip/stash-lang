@@ -140,6 +140,10 @@ public class Program
             PrintRuntimeError(ex);
             System.Environment.Exit(70);
         }
+        finally
+        {
+            interpreter.CleanupTrackedProcesses();
+        }
     }
 
     private static void RunFileWithDebugger(string path, string[] scriptArgs)
@@ -196,6 +200,10 @@ public class Program
             PrintRuntimeError(ex);
             System.Environment.Exit(70);
         }
+        finally
+        {
+            interpreter.CleanupTrackedProcesses();
+        }
 
         Console.WriteLine("Script execution completed.");
     }
@@ -210,94 +218,101 @@ public class Program
         var interpreter = new Interpreter();
         var editor = new LineEditor();
 
-        while (true)
+        try
         {
-            string? line = editor.ReadLine("stash> ");
-
-            // null means EOF (Ctrl+D on Unix, Ctrl+Z+Enter on Windows).
-            if (line is null || line == "exit")
+            while (true)
             {
-                break;
-            }
+                string? line = editor.ReadLine("stash> ");
 
-            if (string.IsNullOrWhiteSpace(line))
-            {
-                continue;
-            }
-
-            // --- Stage 1: Lex ---
-            var lexer = new Lexer(line, "<stdin>");
-            List<Token> tokens = lexer.ScanTokens();
-
-            if (lexer.Errors.Count > 0)
-            {
-                foreach (string error in lexer.Errors)
+                // null means EOF (Ctrl+D on Unix, Ctrl+Z+Enter on Windows).
+                if (line is null || line == "exit")
                 {
-                    Console.Error.WriteLine($"[lex error] {error}");
+                    break;
                 }
 
-                continue;
-            }
-
-            // Determine whether the input looks like statements or a bare expression.
-            // If it contains a semicolon, brace, or starts with a keyword that begins
-            // a statement/declaration, parse as a program; otherwise parse as expression.
-            bool isStatementMode = LooksLikeStatements(tokens);
-
-            if (isStatementMode)
-            {
-                // --- Statement mode ---
-                var parser = new Parser(tokens);
-                List<Stmt> statements = parser.ParseProgram();
-
-                if (parser.Errors.Count > 0)
+                if (string.IsNullOrWhiteSpace(line))
                 {
-                    foreach (string error in parser.Errors)
+                    continue;
+                }
+
+                // --- Stage 1: Lex ---
+                var lexer = new Lexer(line, "<stdin>");
+                List<Token> tokens = lexer.ScanTokens();
+
+                if (lexer.Errors.Count > 0)
+                {
+                    foreach (string error in lexer.Errors)
                     {
-                        Console.Error.WriteLine($"[parse error] {error}");
+                        Console.Error.WriteLine($"[lex error] {error}");
                     }
 
                     continue;
                 }
 
-                try
-                {
-                    interpreter.Interpret(statements);
-                }
-                catch (RuntimeError ex)
-                {
-                    PrintRuntimeError(ex);
-                }
-            }
-            else
-            {
-                // --- Expression mode (backward-compatible) ---
-                var parser = new Parser(tokens);
-                Expr expr = parser.Parse();
+                // Determine whether the input looks like statements or a bare expression.
+                // If it contains a semicolon, brace, or starts with a keyword that begins
+                // a statement/declaration, parse as a program; otherwise parse as expression.
+                bool isStatementMode = LooksLikeStatements(tokens);
 
-                if (parser.Errors.Count > 0)
+                if (isStatementMode)
                 {
-                    foreach (string error in parser.Errors)
+                    // --- Statement mode ---
+                    var parser = new Parser(tokens);
+                    List<Stmt> statements = parser.ParseProgram();
+
+                    if (parser.Errors.Count > 0)
                     {
-                        Console.Error.WriteLine($"[parse error] {error}");
+                        foreach (string error in parser.Errors)
+                        {
+                            Console.Error.WriteLine($"[parse error] {error}");
+                        }
+
+                        continue;
                     }
 
-                    continue;
-                }
-
-                try
-                {
-                    object? result = interpreter.Interpret(expr);
-                    if (result is not null)
+                    try
                     {
-                        Console.WriteLine(interpreter.Stringify(result));
+                        interpreter.Interpret(statements);
+                    }
+                    catch (RuntimeError ex)
+                    {
+                        PrintRuntimeError(ex);
                     }
                 }
-                catch (RuntimeError ex)
+                else
                 {
-                    PrintRuntimeError(ex);
+                    // --- Expression mode (backward-compatible) ---
+                    var parser = new Parser(tokens);
+                    Expr expr = parser.Parse();
+
+                    if (parser.Errors.Count > 0)
+                    {
+                        foreach (string error in parser.Errors)
+                        {
+                            Console.Error.WriteLine($"[parse error] {error}");
+                        }
+
+                        continue;
+                    }
+
+                    try
+                    {
+                        object? result = interpreter.Interpret(expr);
+                        if (result is not null)
+                        {
+                            Console.WriteLine(interpreter.Stringify(result));
+                        }
+                    }
+                    catch (RuntimeError ex)
+                    {
+                        PrintRuntimeError(ex);
+                    }
                 }
             }
+        }
+        finally
+        {
+            interpreter.CleanupTrackedProcesses();
         }
     }
 

@@ -364,6 +364,73 @@ $(make build) > "/tmp/out.txt" 2> "/tmp/err.txt";
 
 Redirection still returns a `CommandResult` — `exitCode` is always available. The redirected stream's field will be empty since its content was written to the file.
 
+### Process Management
+
+Spawn background processes, track their lifecycle, communicate with them, and control shutdown:
+
+```stash
+// Spawn a background process — returns a Process handle
+let server = process.spawn("python3 -m http.server 8080");
+io.println(server.pid);         // OS process ID
+io.println(server.command);     // "python3 -m http.server 8080"
+
+// Check if still running
+if (process.isAlive(server)) {
+    io.println("Server is running");
+}
+
+// Communicate with running processes
+let proc = process.spawn("bc -l");
+process.write(proc, "2 + 3\n");
+let answer = process.read(proc);   // "5\n"
+process.kill(proc);
+
+// Wait for a process to finish
+let worker = process.spawn("make build");
+let result = process.wait(worker);
+io.println("Exit code: " + result.exitCode);
+
+// Wait with a timeout (milliseconds)
+let r = process.waitTimeout(server, 5000);
+if (r == null) {
+    io.println("Still running after 5s");
+    process.kill(server);
+}
+
+// Send specific signals
+process.signal(server, process.SIGTERM);   // graceful shutdown
+process.signal(server, process.SIGKILL);   // force kill
+
+// Detach a process so it survives script exit
+let daemon = process.spawn("my-daemon --config app.conf");
+process.detach(daemon);
+// daemon continues running after script exits
+
+// List all tracked processes
+for (let p in process.list()) {
+    io.println(p.command + " (PID: " + p.pid + ")");
+}
+```
+
+All spawned processes are automatically killed (SIGTERM → 3s grace → SIGKILL) when a script exits, unless explicitly detached with `process.detach()`.
+
+| Function                        | Description                                          |
+| ------------------------------- | ---------------------------------------------------- |
+| `process.spawn(cmd)`            | Launch background process, returns `Process` handle  |
+| `process.wait(proc)`            | Block until process exits, returns `CommandResult`   |
+| `process.waitTimeout(proc, ms)` | Wait with timeout; returns `null` if timed out       |
+| `process.kill(proc)`            | Send SIGTERM to process                              |
+| `process.isAlive(proc)`         | Check if process is still running                    |
+| `process.signal(proc, sig)`     | Send arbitrary signal (use `process.SIGTERM`, etc.)  |
+| `process.pid(proc)`             | Get OS process ID                                    |
+| `process.detach(proc)`          | Detach process so it survives script exit             |
+| `process.list()`                | List all tracked process handles                     |
+| `process.read(proc)`            | Read available stdout (non-blocking)                 |
+| `process.write(proc, data)`     | Write to process stdin                               |
+| `process.exit(code)`            | Terminate script with exit code                      |
+
+Signal constants: `process.SIGHUP` (1), `process.SIGINT` (2), `process.SIGQUIT` (3), `process.SIGKILL` (9), `process.SIGUSR1` (10), `process.SIGUSR2` (12), `process.SIGTERM` (15).
+
 ### Error Handling
 
 By default, runtime errors crash the script with a message. When you _expect_ something might fail, opt in:
@@ -461,6 +528,16 @@ if (args.command == "deploy") {
 | `env.get(name)`               | Read environment variable (null if unset)                                                                         |
 | `env.set(name, value)`        | Set environment variable                                                                                          |
 | `process.exit(code)`          | Terminate with exit code                                                                                          |
+| `process.spawn(cmd)`          | Launch background process, returns `Process` handle                                                               |
+| `process.wait(proc)`          | Block until process exits, returns `CommandResult`                                                                |
+| `process.waitTimeout(proc, ms)` | Wait with timeout; `null` if timed out                                                                         |
+| `process.kill(proc)`          | Send SIGTERM to a process                                                                                        |
+| `process.isAlive(proc)`       | Check if process is still running                                                                                |
+| `process.signal(proc, sig)`   | Send arbitrary signal to a process                                                                               |
+| `process.detach(proc)`        | Detach process so it survives script exit                                                                        |
+| `process.list()`              | List all tracked process handles                                                                                 |
+| `process.read(proc)`          | Read available stdout from running process                                                                       |
+| `process.write(proc, data)`   | Write to running process stdin                                                                                   |
 | `lastError()`                 | Last error caught by `try`, or null                                                                               |
 | `parseArgs(tree)`             | Parse CLI arguments from an `ArgTree` definition                                                                  |
 
