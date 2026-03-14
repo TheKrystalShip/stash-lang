@@ -154,6 +154,26 @@ public static class BuiltInRegistry
         new NamespaceFunction("path", "ext", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("path", "join", new[] { new BuiltInParam("a", "string"), new BuiltInParam("b", "string") }, "string"),
         new NamespaceFunction("path", "name", new[] { new BuiltInParam("path", "string") }, "string"),
+        // arr namespace
+        new NamespaceFunction("arr", "push", new[] { new BuiltInParam("array", "array"), new BuiltInParam("value") }),
+        new NamespaceFunction("arr", "pop", new[] { new BuiltInParam("array", "array") }),
+        new NamespaceFunction("arr", "peek", new[] { new BuiltInParam("array", "array") }),
+        new NamespaceFunction("arr", "insert", new[] { new BuiltInParam("array", "array"), new BuiltInParam("index", "int"), new BuiltInParam("value") }),
+        new NamespaceFunction("arr", "removeAt", new[] { new BuiltInParam("array", "array"), new BuiltInParam("index", "int") }),
+        new NamespaceFunction("arr", "remove", new[] { new BuiltInParam("array", "array"), new BuiltInParam("value") }, "bool"),
+        new NamespaceFunction("arr", "clear", new[] { new BuiltInParam("array", "array") }),
+        new NamespaceFunction("arr", "contains", new[] { new BuiltInParam("array", "array"), new BuiltInParam("value") }, "bool"),
+        new NamespaceFunction("arr", "indexOf", new[] { new BuiltInParam("array", "array"), new BuiltInParam("value") }, "int"),
+        new NamespaceFunction("arr", "slice", new[] { new BuiltInParam("array", "array"), new BuiltInParam("start", "int"), new BuiltInParam("end", "int") }, "array"),
+        new NamespaceFunction("arr", "concat", new[] { new BuiltInParam("array1", "array"), new BuiltInParam("array2", "array") }, "array"),
+        new NamespaceFunction("arr", "join", new[] { new BuiltInParam("array", "array"), new BuiltInParam("separator", "string") }, "string"),
+        new NamespaceFunction("arr", "reverse", new[] { new BuiltInParam("array", "array") }),
+        new NamespaceFunction("arr", "sort", new[] { new BuiltInParam("array", "array") }),
+        new NamespaceFunction("arr", "map", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "array"),
+        new NamespaceFunction("arr", "filter", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "array"),
+        new NamespaceFunction("arr", "forEach", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }),
+        new NamespaceFunction("arr", "find", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }),
+        new NamespaceFunction("arr", "reduce", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function"), new BuiltInParam("initial") }),
     };
 
     // ── Built-in Namespace Constants ──
@@ -173,7 +193,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path"
+        "io", "conv", "env", "process", "fs", "path", "arr"
     };
 
     // ── Keywords ──

@@ -3333,4 +3333,350 @@ public class InterpreterTests
     {
         Assert.Equal(22L, Eval("2 switch { 1 => 10 + 1, 2 => 20 + 2, _ => 0 }"));
     }
+
+    // arr namespace tests
+
+    // arr.push
+    [Fact]
+    public void ArrPush_AddsToEnd()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2]; arr.push(a, 3); let result = a[2];"));
+    }
+
+    [Fact]
+    public void ArrPush_IncreasesLength()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2]; arr.push(a, 3); let result = len(a);"));
+    }
+
+    [Fact]
+    public void ArrPush_NonArray_Throws()
+    {
+        RunExpectingError("arr.push(\"hello\", 1);");
+    }
+
+    // arr.pop
+    [Fact]
+    public void ArrPop_ReturnsLastElement()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2, 3]; let result = arr.pop(a);"));
+    }
+
+    [Fact]
+    public void ArrPop_RemovesLastElement()
+    {
+        Assert.Equal(2L, Run("let a = [1, 2, 3]; arr.pop(a); let result = len(a);"));
+    }
+
+    [Fact]
+    public void ArrPop_EmptyArray_Throws()
+    {
+        RunExpectingError("let a = []; arr.pop(a);");
+    }
+
+    // arr.peek
+    [Fact]
+    public void ArrPeek_ReturnsLastElement()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2, 3]; let result = arr.peek(a);"));
+    }
+
+    [Fact]
+    public void ArrPeek_DoesNotRemoveElement()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2, 3]; arr.peek(a); let result = len(a);"));
+    }
+
+    [Fact]
+    public void ArrPeek_EmptyArray_Throws()
+    {
+        RunExpectingError("let a = []; arr.peek(a);");
+    }
+
+    // arr.insert
+    [Fact]
+    public void ArrInsert_AtBeginning()
+    {
+        Assert.Equal(0L, Run("let a = [1, 2, 3]; arr.insert(a, 0, 0); let result = a[0];"));
+    }
+
+    [Fact]
+    public void ArrInsert_InMiddle()
+    {
+        Assert.Equal(10L, Run("let a = [1, 2, 3]; arr.insert(a, 1, 10); let result = a[1];"));
+    }
+
+    [Fact]
+    public void ArrInsert_AtEnd()
+    {
+        Assert.Equal(4L, Run("let a = [1, 2, 3]; arr.insert(a, 3, 4); let result = a[3];"));
+    }
+
+    [Fact]
+    public void ArrInsert_OutOfBounds_Throws()
+    {
+        RunExpectingError("let a = [1, 2]; arr.insert(a, 5, 99);");
+    }
+
+    [Fact]
+    public void ArrInsert_NegativeIndex_Throws()
+    {
+        RunExpectingError("let a = [1, 2]; arr.insert(a, -1, 99);");
+    }
+
+    // arr.removeAt
+    [Fact]
+    public void ArrRemoveAt_ReturnsRemovedElement()
+    {
+        Assert.Equal(2L, Run("let a = [1, 2, 3]; let result = arr.removeAt(a, 1);"));
+    }
+
+    [Fact]
+    public void ArrRemoveAt_DecreasesLength()
+    {
+        Assert.Equal(2L, Run("let a = [1, 2, 3]; arr.removeAt(a, 0); let result = len(a);"));
+    }
+
+    [Fact]
+    public void ArrRemoveAt_OutOfBounds_Throws()
+    {
+        RunExpectingError("let a = [1, 2]; arr.removeAt(a, 5);");
+    }
+
+    // arr.remove
+    [Fact]
+    public void ArrRemove_FindsAndRemovesElement()
+    {
+        Assert.Equal(true, Run("let a = [1, 2, 3]; let result = arr.remove(a, 2);"));
+    }
+
+    [Fact]
+    public void ArrRemove_DecreasesLength()
+    {
+        Assert.Equal(2L, Run("let a = [1, 2, 3]; arr.remove(a, 2); let result = len(a);"));
+    }
+
+    [Fact]
+    public void ArrRemove_NotFound_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let a = [1, 2, 3]; let result = arr.remove(a, 99);"));
+    }
+
+    [Fact]
+    public void ArrRemove_RemovesFirstOccurrence()
+    {
+        Assert.Equal(2L, Run("let a = [1, 2, 1, 3]; arr.remove(a, 1); let result = a[0];"));
+    }
+
+    // arr.clear
+    [Fact]
+    public void ArrClear_EmptiesArray()
+    {
+        Assert.Equal(0L, Run("let a = [1, 2, 3]; arr.clear(a); let result = len(a);"));
+    }
+
+    // arr.contains
+    [Fact]
+    public void ArrContains_Found()
+    {
+        Assert.Equal(true, Run("let a = [1, 2, 3]; let result = arr.contains(a, 2);"));
+    }
+
+    [Fact]
+    public void ArrContains_NotFound()
+    {
+        Assert.Equal(false, Run("let a = [1, 2, 3]; let result = arr.contains(a, 99);"));
+    }
+
+    [Fact]
+    public void ArrContains_StringValues()
+    {
+        Assert.Equal(true, Run("let a = [\"hello\", \"world\"]; let result = arr.contains(a, \"world\");"));
+    }
+
+    // arr.indexOf
+    [Fact]
+    public void ArrIndexOf_Found()
+    {
+        Assert.Equal(1L, Run("let a = [10, 20, 30]; let result = arr.indexOf(a, 20);"));
+    }
+
+    [Fact]
+    public void ArrIndexOf_NotFound()
+    {
+        Assert.Equal(-1L, Run("let a = [10, 20, 30]; let result = arr.indexOf(a, 99);"));
+    }
+
+    // arr.slice
+    [Fact]
+    public void ArrSlice_Middle()
+    {
+        var result = Run("let a = [1, 2, 3, 4, 5]; let result = arr.slice(a, 1, 3);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(2L, list[0]);
+        Assert.Equal(3L, list[1]);
+    }
+
+    [Fact]
+    public void ArrSlice_Full()
+    {
+        var result = Run("let a = [1, 2, 3]; let result = arr.slice(a, 0, 3);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+    }
+
+    [Fact]
+    public void ArrSlice_ClampsToEnd()
+    {
+        var result = Run("let a = [1, 2, 3]; let result = arr.slice(a, 1, 100);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(2L, list[0]);
+        Assert.Equal(3L, list[1]);
+    }
+
+    // arr.concat
+    [Fact]
+    public void ArrConcat_MergesArrays()
+    {
+        var result = Run("let a = [1, 2]; let b = [3, 4]; let result = arr.concat(a, b);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(4, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(4L, list[3]);
+    }
+
+    [Fact]
+    public void ArrConcat_DoesNotMutateOriginals()
+    {
+        Assert.Equal(2L, Run("let a = [1, 2]; let b = [3, 4]; arr.concat(a, b); let result = len(a);"));
+    }
+
+    // arr.join
+    [Fact]
+    public void ArrJoin_WithSeparator()
+    {
+        Assert.Equal("1, 2, 3", Run("let a = [1, 2, 3]; let result = arr.join(a, \", \");"));
+    }
+
+    [Fact]
+    public void ArrJoin_EmptyArray()
+    {
+        Assert.Equal("", Run("let a = []; let result = arr.join(a, \", \");"));
+    }
+
+    [Fact]
+    public void ArrJoin_MixedTypes()
+    {
+        Assert.Equal("1-hello-true", Run("let a = [1, \"hello\", true]; let result = arr.join(a, \"-\");"));
+    }
+
+    // arr.reverse
+    [Fact]
+    public void ArrReverse_ReversesInPlace()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2, 3]; arr.reverse(a); let result = a[0];"));
+    }
+
+    [Fact]
+    public void ArrReverse_LastBecomesFirst()
+    {
+        Assert.Equal(1L, Run("let a = [1, 2, 3]; arr.reverse(a); let result = a[2];"));
+    }
+
+    // arr.sort
+    [Fact]
+    public void ArrSort_SortsIntegers()
+    {
+        Assert.Equal(1L, Run("let a = [3, 1, 2]; arr.sort(a); let result = a[0];"));
+    }
+
+    [Fact]
+    public void ArrSort_SortsStrings()
+    {
+        Assert.Equal("apple", Run("let a = [\"cherry\", \"apple\", \"banana\"]; arr.sort(a); let result = a[0];"));
+    }
+
+    [Fact]
+    public void ArrSort_MixedTypes_Throws()
+    {
+        RunExpectingError("let a = [1, \"hello\"]; arr.sort(a);");
+    }
+
+    // arr.map
+    [Fact]
+    public void ArrMap_TransformsElements()
+    {
+        var result = Run("let a = [1, 2, 3]; let result = arr.map(a, (x) => x * 2);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(2L, list[0]);
+        Assert.Equal(4L, list[1]);
+        Assert.Equal(6L, list[2]);
+    }
+
+    [Fact]
+    public void ArrMap_ReturnsNewArray()
+    {
+        Assert.Equal(1L, Run("let a = [1, 2, 3]; let b = arr.map(a, (x) => x * 2); let result = a[0];"));
+    }
+
+    // arr.filter
+    [Fact]
+    public void ArrFilter_FiltersElements()
+    {
+        var result = Run("let a = [1, 2, 3, 4, 5]; let result = arr.filter(a, (x) => x > 3);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(4L, list[0]);
+        Assert.Equal(5L, list[1]);
+    }
+
+    [Fact]
+    public void ArrFilter_NoMatches_EmptyArray()
+    {
+        var result = Run("let a = [1, 2, 3]; let result = arr.filter(a, (x) => x > 10);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    // arr.forEach
+    [Fact]
+    public void ArrForEach_VisitsAllElements()
+    {
+        Assert.Equal(6L, Run("let a = [1, 2, 3]; let sum = 0; arr.forEach(a, (x) => { sum = sum + x; }); let result = sum;"));
+    }
+
+    // arr.find
+    [Fact]
+    public void ArrFind_ReturnsFirstMatch()
+    {
+        Assert.Equal(4L, Run("let a = [1, 2, 3, 4, 5]; let result = arr.find(a, (x) => x > 3);"));
+    }
+
+    [Fact]
+    public void ArrFind_NoMatch_ReturnsNull()
+    {
+        Assert.Null(Run("let a = [1, 2, 3]; let result = arr.find(a, (x) => x > 10);"));
+    }
+
+    // arr.reduce
+    [Fact]
+    public void ArrReduce_SumsArray()
+    {
+        Assert.Equal(6L, Run("let a = [1, 2, 3]; let result = arr.reduce(a, (acc, x) => acc + x, 0);"));
+    }
+
+    [Fact]
+    public void ArrReduce_WithInitialValue()
+    {
+        Assert.Equal(16L, Run("let a = [1, 2, 3]; let result = arr.reduce(a, (acc, x) => acc + x, 10);"));
+    }
+
+    [Fact]
+    public void ArrReduce_BuildsString()
+    {
+        Assert.Equal("a-1-2-3", Run("let a = [1, 2, 3]; let result = arr.reduce(a, (acc, x) => acc + \"-\" + x, \"a\");"));
+    }
 }
