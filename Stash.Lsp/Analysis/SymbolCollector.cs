@@ -327,6 +327,17 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitSwitchExpr(SwitchExpr expr)
+    {
+        expr.Subject.Accept(this);
+        foreach (var arm in expr.Arms)
+        {
+            arm.Pattern?.Accept(this);
+            arm.Body.Accept(this);
+        }
+        return null;
+    }
+
     public object? VisitAssignExpr(AssignExpr expr)
     {
         RecordReference(expr.Name.Lexeme, expr.Name.Span, ReferenceKind.Write);

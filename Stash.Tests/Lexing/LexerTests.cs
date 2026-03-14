@@ -895,4 +895,13 @@ public class LexerTests
         Assert.Equal(TokenType.LeftBrace, tokens[9].Type);
         Assert.Equal(TokenType.RightBrace, tokens[10].Type);
     }
+
+    [Fact]
+    public void ScanTokens_KeywordSwitch_ProducesKeywordToken()
+    {
+        var tokens = Scan("switch");
+        Assert.Equal(2, tokens.Count); // switch + EOF
+        Assert.Equal(TokenType.Switch, tokens[0].Type);
+        Assert.Equal("switch", tokens[0].Lexeme);
+    }
 }

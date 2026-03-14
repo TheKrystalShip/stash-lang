@@ -391,6 +391,24 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             : expr.ElseBranch.Accept(this);
     }
 
+    public object? VisitSwitchExpr(SwitchExpr expr)
+    {
+        object? subject = expr.Subject.Accept(this);
+        foreach (var arm in expr.Arms)
+        {
+            if (arm.IsDiscard)
+            {
+                return arm.Body.Accept(this);
+            }
+            object? pattern = arm.Pattern!.Accept(this);
+            if (IsEqual(subject, pattern))
+            {
+                return arm.Body.Accept(this);
+            }
+        }
+        throw new RuntimeError("No matching arm in switch expression.", expr.Span);
+    }
+
     /// <summary>
     /// Visits a try expression (<c>try expr</c>), catching any <see cref="RuntimeError"/> and
     /// returning <c>null</c> in that case. The error message is stored in <see cref="_lastError"/>.

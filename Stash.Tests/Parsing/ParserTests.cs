@@ -1649,4 +1649,48 @@ public class ParserTests
         var varDecl = Assert.IsType<VarDeclStmt>(stmts[0]);
         Assert.IsType<BinaryExpr>(varDecl.Initializer);
     }
+
+    // Switch expression
+
+    [Fact]
+    public void Parse_SwitchExpr_BasicArms()
+    {
+        var result = ParseExpr("1 switch { 1 => \"one\", 2 => \"two\" }");
+        var switchExpr = Assert.IsType<SwitchExpr>(result);
+        Assert.Equal(2, switchExpr.Arms.Count);
+
+        var firstArm = switchExpr.Arms[0];
+        Assert.False(firstArm.IsDiscard);
+        var firstPattern = Assert.IsType<LiteralExpr>(firstArm.Pattern);
+        Assert.Equal(1L, firstPattern.Value);
+        var firstBody = Assert.IsType<LiteralExpr>(firstArm.Body);
+        Assert.Equal("one", firstBody.Value);
+
+        var secondArm = switchExpr.Arms[1];
+        Assert.False(secondArm.IsDiscard);
+        var secondPattern = Assert.IsType<LiteralExpr>(secondArm.Pattern);
+        Assert.Equal(2L, secondPattern.Value);
+        var secondBody = Assert.IsType<LiteralExpr>(secondArm.Body);
+        Assert.Equal("two", secondBody.Value);
+    }
+
+    [Fact]
+    public void Parse_SwitchExpr_WithDiscard()
+    {
+        var result = ParseExpr("x switch { 1 => \"one\", _ => \"other\" }");
+        var switchExpr = Assert.IsType<SwitchExpr>(result);
+        Assert.Equal(2, switchExpr.Arms.Count);
+
+        var discardArm = switchExpr.Arms[1];
+        Assert.True(discardArm.IsDiscard);
+        Assert.Null(discardArm.Pattern);
+    }
+
+    [Fact]
+    public void Parse_SwitchExpr_TrailingComma()
+    {
+        var result = ParseExpr("1 switch { 1 => \"a\", 2 => \"b\", }");
+        var switchExpr = Assert.IsType<SwitchExpr>(result);
+        Assert.Equal(2, switchExpr.Arms.Count);
+    }
 }

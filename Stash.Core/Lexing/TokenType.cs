@@ -189,6 +189,9 @@ public enum TokenType
     /// <summary>The <c>as</c> keyword. Aliases an import to a namespace name.</summary>
     As,
 
+    /// <summary>The <c>switch</c> keyword. Begins a switch expression (<c>subject switch { pattern => result }</c>).</summary>
+    Switch,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

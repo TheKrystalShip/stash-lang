@@ -883,6 +883,10 @@ public class Parser
                 Token op = Advance();
                 expr = new UpdateExpr(op, expr, false, MakeSpan(expr.Span, op.Span));
             }
+            else if (Match(TokenType.Switch))
+            {
+                expr = ParseSwitchArms(expr);
+            }
             else
             {
                 break;
@@ -890,6 +894,44 @@ public class Parser
         }
 
         return expr;
+    }
+
+    private Expr ParseSwitchArms(Expr subject)
+    {
+        Consume(TokenType.LeftBrace, "Expected '{' after 'switch'.");
+        List<SwitchArm> arms = new();
+
+        while (!Check(TokenType.RightBrace) && !IsAtEnd)
+        {
+            Token armStart = Peek();
+            bool isDiscard = Peek().Type == TokenType.Identifier
+                && Peek().Lexeme == "_"
+                && _current + 1 < _tokens.Count
+                && _tokens[_current + 1].Type == TokenType.FatArrow;
+
+            if (isDiscard)
+            {
+                Token discard = Advance(); // consume '_'
+                Consume(TokenType.FatArrow, "Expected '=>' after '_'.");
+                Expr body = Expression();
+                arms.Add(new SwitchArm(null, true, body, MakeSpan(discard.Span, body.Span)));
+            }
+            else
+            {
+                Expr pattern = Expression();
+                Consume(TokenType.FatArrow, "Expected '=>' after switch pattern.");
+                Expr body = Expression();
+                arms.Add(new SwitchArm(pattern, false, body, MakeSpan(pattern.Span, body.Span)));
+            }
+
+            if (!Check(TokenType.RightBrace))
+                Consume(TokenType.Comma, "Expected ',' between switch arms.");
+            else
+                Match(TokenType.Comma); // optional trailing comma
+        }
+
+        Token closeBrace = Consume(TokenType.RightBrace, "Expected '}' after switch arms.");
+        return new SwitchExpr(subject, arms, MakeSpan(subject.Span, closeBrace.Span));
     }
 
     /// <summary>

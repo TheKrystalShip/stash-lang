@@ -6,45 +6,55 @@ A dynamically typed, interpreted scripting language that combines the **shell sc
 #!/usr/bin/env stash
 
 import { deploy } from "deploy.stash";
+import "lib/utils.stash" as utils;
 
 enum Status { Unknown, Active, Inactive }
 
-struct Server { host, port, status }
+struct Server {
+  host: string,
+  port: int,
+  status: Status
+}
 
-const DEFAULT_HOST = "192.168.1.10";
+const DEFAULT_HOST: string = "192.168.1.10";
 
-// Graceful error handling — try catches runtime errors, ?? provides a fallback
-let address = try readFile("/etc/server.conf") ?? DEFAULT_HOST;
+// try catches runtime errors, ?? provides a fallback
+let address: string = try fs.readFile("/etc/server.conf") ?? DEFAULT_HOST;
 
 let srv = Server { host: address, port: 22, status: Status.Unknown };
 
-// First-class command execution — raw shell commands with interpolation
+// First-class command execution with interpolation
 let result = $(ping -c 1 {srv.host});
-
-// Ternary with enum values
 srv.status = result.exitCode == 0 ? Status.Active : Status.Inactive;
 
-fn checkServers(servers, payload) {
-    for (let s in servers) {
-        if (deploy(s, payload)) {
-            println($"Deployed {payload} to {s.host}");
-        } else {
-            let err = lastError();
-            println("Failed: " + err);
-        }
-    }
+// Functions with type hints
+fn checkServer(server: Server) -> string {
+  return server.status switch {
+    Status.Active => "online",
+    Status.Inactive => "offline",
+    _ => "unknown"
+  };
 }
 
+// Lambdas — concise anonymous functions
+let format = (label: string, value) => $"{label}: {value}";
+
 let servers = [
-    Server { host: "10.0.0.1", port: 22, status: Status.Unknown },
-    Server { host: "10.0.0.2", port: 22, status: Status.Unknown },
+  Server { host: "10.0.0.1", port: 22, status: Status.Unknown },
+  Server { host: "10.0.0.2", port: 22, status: Status.Unknown },
 ];
 
-checkServers(servers, "app.tar.gz");
+for (let s: Server in servers) {
+  if (deploy(s, "app.tar.gz")) {
+    utils.log(format("Deployed to", s.host));
+  } else {
+    utils.log("Failed: ${lastError()}");
+  }
+}
 
 // Pipe chains — stdout flows between commands, short-circuits on failure
 let errors = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
-println("Error count: " + errors.stdout);
+io.println("Error count: " + errors.stdout);
 ```
 
 ---
@@ -60,19 +70,20 @@ If you have ever written Bash beyond a few lines, you know the pain. Variable qu
 - **C-style syntax.** If you know C, C++, C#, Java, or JavaScript, you can read Stash immediately. Braces, semicolons, `if`/`else`/`while`/`for` — nothing surprising.
 - **Sensible error handling.** `try` expressions catch errors inline, `??` provides fallbacks, and `lastError()` gives you the details when you need them. No try/catch ceremony, no Go-style error-value tuples.
 - **Modules.** `import { deploy, Server } from "utils.stash";` — selective imports with module caching and circular dependency detection.
+- **Lambdas and switch expressions.** `(x) => x * 2` for inline functions, `value switch { 1 => "one", _ => "other" }` for concise multi-way branching — modern expression syntax for scripting.
 
 ### Design Philosophy
 
 Stash is **opinionated about simplicity.** Some things are intentionally left out:
 
-| Decision       | Choice                               | Why                                                             |
-| -------------- | ------------------------------------ | --------------------------------------------------------------- |
-| Typing         | Dynamic                              | Appropriate for scripting; no type annotations to slow you down |
-| Syntax         | C-style braces and semicolons        | Familiar to the majority of developers                          |
-| Loops          | `for-in` only (no C-style `for(;;)`) | Simpler, covers the scripting use case                          |
-| OOP            | Structs without inheritance          | Data modeling without the complexity of class hierarchies       |
-| Error handling | `try` expression + `??`              | Lightweight, composable, no exception machinery                 |
-| Commands       | `$(...)` literals                    | Commands look like commands, not strings                        |
+| Decision       | Choice                               | Why                                                        |
+| -------------- | ------------------------------------ | ---------------------------------------------------------- |
+| Typing         | Dynamic with optional type hints     | Appropriate for scripting; add types when you want clarity |
+| Syntax         | C-style braces and semicolons        | Familiar to the majority of developers                     |
+| Loops          | `for-in` only (no C-style `for(;;)`) | Simpler, covers the scripting use case                     |
+| OOP            | Structs without inheritance          | Data modeling without the complexity of class hierarchies  |
+| Error handling | `try` expression + `??`              | Lightweight, composable, no exception machinery            |
+| Commands       | `$(...)` literals                    | Commands look like commands, not strings                   |
 
 ---
 
@@ -81,23 +92,23 @@ Stash is **opinionated about simplicity.** Some things are intentionally left ou
 ### Building
 
 ```bash
-dotnet build Stash/
+dotnet build
 ```
 
 ### Running
 
 ```bash
 # Start the interactive REPL
-dotnet run --project Stash/
+dotnet run --project Stash.Interpreter/
 
 # Run a script file
-dotnet run --project Stash/ -- script.stash
+dotnet run --project Stash.Interpreter/ -- script.stash
 
 # Run a script with arguments (everything after the script path is passed to the script)
-dotnet run --project Stash/ -- script.stash --verbose --port 8080 target-host
+dotnet run --project Stash.Interpreter/ -- script.stash --verbose --port 8080 target-host
 
 # Run with the CLI debugger
-dotnet run --project Stash/ -- --debug script.stash
+dotnet run --project Stash.Interpreter/ -- --debug script.stash
 ```
 
 Or make a script directly executable:
@@ -115,7 +126,7 @@ chmod +x hello.stash
 ### Running Tests
 
 ```bash
-dotnet test Stash.Tests/
+dotnet test
 ```
 
 ---
@@ -125,11 +136,11 @@ dotnet test Stash.Tests/
 ### Variables & Constants
 
 ```stash
-let name = "deploy";          // mutable variable
-let count = 5;
+let name = "deploy";              // mutable variable
+let count: int = 5;               // optional type hint
 let verbose = true;
-let pending;                  // declared without initializer → null
-const MAX_RETRIES = 3;        // immutable — reassignment is a runtime error
+let pending;                      // declared without initializer → null
+const MAX_RETRIES: int = 3;       // immutable — reassignment is a runtime error
 ```
 
 ### Types
@@ -163,8 +174,12 @@ let c = "Hello " + name;        // concatenation
 ### Functions & Closures
 
 ```stash
-fn greet(name) {
-    println("Hello, " + name);
+fn greet(name: string) {
+    io.println("Hello, " + name);
+}
+
+fn add(a: int, b: int) -> int {
+    return a + b;
 }
 
 fn makeCounter() {
@@ -177,24 +192,62 @@ fn makeCounter() {
 }
 
 let counter = makeCounter();
-println(counter());  // 1
-println(counter());  // 2
+io.println(counter());  // 1
+io.println(counter());  // 2
 ```
 
-Functions without an explicit `return` implicitly return `null`.
+Functions without an explicit `return` implicitly return `null`. Parameter type hints and return type annotations (`->`) are optional.
+
+### Lambdas
+
+```stash
+let double = (x) => x * 2;
+let add = (a: int, b: int) => a + b;
+
+// Block body for multi-statement logic
+let abs = (x) => {
+    if (x < 0) { return -x; }
+    return x;
+};
+
+// Higher-order usage
+fn apply(f, x) { return f(x); }
+let result = apply((x) => x * x, 4);  // 16
+```
+
+Lambdas capture their enclosing scope (closures) and can be passed as arguments or returned from functions.
+
+### Switch Expressions
+
+```stash
+let type = day switch {
+    "Saturday" => "weekend",
+    "Sunday" => "weekend",
+    _ => "weekday"
+};
+
+// Works with any type — integers, strings, enums
+let label = status switch {
+    Status.Active => "running",
+    Status.Inactive => "stopped",
+    _ => "unknown"
+};
+```
+
+Arms are tested in order. The `_` discard matches anything (default arm). If no arm matches, a runtime error is raised.
 
 ### Structs
 
 ```stash
 struct Server {
-    host,
-    port,
+    host: string,
+    port: int,
     status
 }
 
 let srv = Server { host: "10.0.0.1", port: 22, status: "up" };
-println(srv.host);      // read
-srv.status = "down";    // write
+io.println(srv.host);      // read
+srv.status = "down";       // write
 ```
 
 ### Enums
@@ -282,15 +335,15 @@ By default, runtime errors crash the script with a message. When you _expect_ so
 
 ```stash
 // try catches runtime errors and returns null
-let content = try readFile("/etc/missing.conf");
+let content = try fs.readFile("/etc/missing.conf");
 
 // Combine with ?? for a default value
-let content = try readFile("/etc/missing.conf") ?? "fallback config";
+let content = try fs.readFile("/etc/missing.conf") ?? "fallback config";
 
 // Inspect what went wrong
-let data = try toInt("abc");
+let data = try conv.toInt("abc");
 if (data == null) {
-    println(lastError());  // "Cannot parse 'abc' as integer"
+    io.println(lastError());  // "Cannot parse 'abc' as integer"
 }
 ```
 
@@ -359,29 +412,29 @@ if (args.command == "deploy") {
 
 ### Built-in Functions
 
-| Function                   | Description                                                                                                       |
-| -------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `println(val)`             | Print value + newline                                                                                             |
-| `print(val)`               | Print value without newline                                                                                       |
-| `typeof(val)`              | Type as string: `"int"`, `"float"`, `"string"`, `"bool"`, `"null"`, `"array"`, `"struct"`, `"enum"`, `"function"` |
-| `len(val)`                 | Length of string or array                                                                                         |
-| `toStr(val)`               | Convert any value to string                                                                                       |
-| `toInt(val)`               | Parse string/number to integer                                                                                    |
-| `toFloat(val)`             | Parse string/number to float                                                                                      |
-| `readFile(path)`           | Read file contents as string                                                                                      |
-| `writeFile(path, content)` | Write string to file                                                                                              |
-| `exit(code)`               | Terminate with exit code                                                                                          |
-| `lastError()`              | Last error caught by `try`, or null                                                                               |
-| `env(name)`                | Read environment variable                                                                                         |
-| `setEnv(name, value)`      | Set environment variable                                                                                          |
-| `parseArgs(tree)`         | Parse CLI arguments from an `ArgTree` definition                                                                  |
+| Function                      | Description                                                                                                       |
+| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `io.println(val)`             | Print value + newline                                                                                             |
+| `io.print(val)`               | Print value without newline                                                                                       |
+| `typeof(val)`                 | Type as string: `"int"`, `"float"`, `"string"`, `"bool"`, `"null"`, `"array"`, `"struct"`, `"enum"`, `"function"` |
+| `len(val)`                    | Length of string or array                                                                                         |
+| `conv.toStr(val)`             | Convert any value to string                                                                                       |
+| `conv.toInt(val)`             | Parse string/number to integer                                                                                    |
+| `conv.toFloat(val)`           | Parse string/number to float                                                                                      |
+| `fs.readFile(path)`           | Read file contents as string                                                                                      |
+| `fs.writeFile(path, content)` | Write string to file                                                                                              |
+| `env.get(name)`               | Read environment variable (null if unset)                                                                         |
+| `env.set(name, value)`        | Set environment variable                                                                                          |
+| `process.exit(code)`          | Terminate with exit code                                                                                          |
+| `lastError()`                 | Last error caught by `try`, or null                                                                               |
+| `parseArgs(tree)`             | Parse CLI arguments from an `ArgTree` definition                                                                  |
 
 ### Debugger
 
 Run any script with the built-in CLI debugger:
 
 ```bash
-dotnet run --project Stash/ -- --debug script.stash
+dotnet run --project Stash.Interpreter/ -- --debug script.stash
 ```
 
 | Command                      | Description                                            |
@@ -403,19 +456,26 @@ dotnet run --project Stash/ -- --debug script.stash
 ## Project Structure
 
 ```
-Stash/
-├── Common/          # Shared types (SourceSpan)
+Stash.Core/
+├── Common/          # Shared types (SourceSpan, DiagnosticError)
 ├── Lexing/          # Lexer, Token, TokenType
-├── Parsing/         # Recursive descent parser
-│   └── AST/         # All expression and statement node types
+└── Parsing/         # Recursive descent parser
+    └── AST/         # All expression and statement node types
+
+Stash.Interpreter/
 ├── Interpreting/    # Tree-walk interpreter, Environment, runtime types
 ├── Debugging/       # IDebugger interface, CallFrame, CLI debugger
 └── Program.cs       # Entry point (REPL + file execution)
 
+Stash.Lsp/           # Language Server Protocol implementation
+├── Analysis/        # Semantic analysis, symbol collection, formatting
+└── Handlers/        # LSP request handlers
+
 Stash.Tests/         # xUnit test suite
 ├── Lexing/          # Lexer tests
 ├── Parsing/         # Parser tests
-└── Interpreting/    # Interpreter + Environment tests
+├── Interpreting/    # Interpreter + Environment tests
+└── Analysis/        # LSP analysis tests
 ```
 
 ## Architecture

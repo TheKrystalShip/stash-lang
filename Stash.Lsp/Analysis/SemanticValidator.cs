@@ -343,6 +343,17 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitSwitchExpr(SwitchExpr expr)
+    {
+        expr.Subject.Accept(this);
+        foreach (var arm in expr.Arms)
+        {
+            arm.Pattern?.Accept(this);
+            arm.Body.Accept(this);
+        }
+        return null;
+    }
+
     public object? VisitArrayExpr(ArrayExpr expr)
     {
         foreach (var el in expr.Elements)

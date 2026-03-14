@@ -3271,4 +3271,66 @@ public class InterpreterTests
     {
         Assert.Equal(9L, Run("let result = (1 + 2) * 3;"));
     }
+
+    // Switch expression
+
+    [Fact]
+    public void Switch_MatchesFirstArm()
+    {
+        Assert.Equal("one", Eval("1 switch { 1 => \"one\", 2 => \"two\" }"));
+    }
+
+    [Fact]
+    public void Switch_MatchesSecondArm()
+    {
+        Assert.Equal("two", Eval("2 switch { 1 => \"one\", 2 => \"two\" }"));
+    }
+
+    [Fact]
+    public void Switch_DiscardArm()
+    {
+        Assert.Equal("other", Eval("99 switch { 1 => \"one\", _ => \"other\" }"));
+    }
+
+    [Fact]
+    public void Switch_StringSubject()
+    {
+        Assert.Equal(1L, Eval("\"hello\" switch { \"hello\" => 1, \"world\" => 2 }"));
+    }
+
+    [Fact]
+    public void Switch_BoolSubject()
+    {
+        Assert.Equal("yes", Eval("true switch { true => \"yes\", false => \"no\" }"));
+    }
+
+    [Fact]
+    public void Switch_NullSubject()
+    {
+        Assert.Equal("nil", Eval("null switch { null => \"nil\", _ => \"other\" }"));
+    }
+
+    [Fact]
+    public void Switch_NoMatchThrows()
+    {
+        Assert.Throws<RuntimeError>(() => Eval("3 switch { 1 => \"one\", 2 => \"two\" }"));
+    }
+
+    [Fact]
+    public void Switch_WithExpression()
+    {
+        Assert.Equal("five", Run("let x = 5; let result = x switch { 5 => \"five\", _ => \"other\" };"));
+    }
+
+    [Fact]
+    public void Switch_FirstMatchWins()
+    {
+        Assert.Equal("first", Eval("1 switch { 1 => \"first\", 1 => \"second\" }"));
+    }
+
+    [Fact]
+    public void Switch_ExpressionBody()
+    {
+        Assert.Equal(22L, Eval("2 switch { 1 => 10 + 1, 2 => 20 + 2, _ => 0 }"));
+    }
 }

@@ -149,6 +149,13 @@ public interface IExprVisitor<T>
     T VisitNullCoalesceExpr(NullCoalesceExpr expr);
 
     /// <summary>
+    /// Visits a <see cref="SwitchExpr"/> node (<c>subject switch { pattern =&gt; result, ... }</c>).
+    /// </summary>
+    /// <param name="expr">The switch expression node to visit.</param>
+    /// <returns>The result of the matched arm's body expression.</returns>
+    T VisitSwitchExpr(SwitchExpr expr);
+
+    /// <summary>
     /// Visits an <see cref="UpdateExpr"/> node (prefix or postfix <c>++</c>/<c>--</c> operators).
     /// </summary>
     /// <param name="expr">The update expression node to visit.</param>

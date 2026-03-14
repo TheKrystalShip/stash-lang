@@ -23,7 +23,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [5b. Enums](#5b-enums) · [6b. Shebang Support](#6b-shebang-support) · [7b. Error Handling](#7b-error-handling) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
+**Addenda:** [5b. Enums](#5b-enums) · [6b. Shebang Support](#6b-shebang-support) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
 
 ---
 
@@ -530,6 +530,92 @@ if (result.exitCode != 0) {
 
 ---
 
+## 7c. Switch Expressions
+
+Switch expressions provide concise multi-way branching based on value matching. Inspired by C#'s switch expressions, they evaluate the subject once and compare it against each arm's pattern in order.
+
+### Syntax
+
+```c
+let result = value switch {
+    pattern1 => result1,
+    pattern2 => result2,
+    _ => defaultResult
+};
+```
+
+### Examples
+
+```c
+let day = "Monday";
+let type = day switch {
+    "Saturday" => "weekend",
+    "Sunday" => "weekend",
+    _ => "weekday"
+};
+io.println(type);  // "weekday"
+```
+
+```c
+let status = exitCode switch {
+    0 => "success",
+    1 => "warning",
+    2 => "error",
+    _ => "unknown"
+};
+```
+
+Switch expressions work with any value type — integers, strings, booleans, null, and enum values:
+
+```c
+let label = status switch {
+    Status.Active => "running",
+    Status.Inactive => "stopped",
+    Status.Pending => "waiting",
+    _ => "unknown"
+};
+```
+
+### Semantics
+
+1. The subject expression is evaluated **once**.
+2. Arms are tested **in order** — the first matching arm wins.
+3. Patterns are compared using **value equality** (`==` semantics, no type coercion).
+4. Only the matched arm's body expression is evaluated (short-circuit).
+5. The `_` discard pattern matches any value and serves as the default arm.
+6. If no arm matches and no discard arm is present, a **runtime error** is raised.
+
+### Body Expressions
+
+Each arm's body is a single expression (not a block). Use parentheses for complex expressions if needed:
+
+```c
+let score = grade switch {
+    "A" => 100,
+    "B" => 85,
+    "C" => 70,
+    _ => 0
+};
+```
+
+### Trailing Commas
+
+A trailing comma after the last arm is permitted:
+
+```c
+let x = val switch {
+    1 => "one",
+    2 => "two",
+    _ => "other",  // trailing comma OK
+};
+```
+
+### Implementation
+
+A switch expression is parsed as a **postfix operator** on the subject expression, at the same precedence level as `.` (member access), `()` (calls), and `[]` (indexing). The parser produces a `SwitchExpr` AST node containing the subject and a list of `SwitchArm` entries. At runtime, the interpreter evaluates the subject, walks the arms in order, and returns the body of the first arm whose pattern equals the subject.
+
+---
+
 ## 8. Functions
 
 ### Declaration
@@ -649,6 +735,72 @@ Stash organizes built-in functions into **namespaces** accessed via dot notation
 Namespace members are accessed with dot notation: `fs.exists("/etc/hosts")`. Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
 Standard library to be expanded as needed.
+
+---
+
+## 8b. Lambda Expressions
+
+Lambda expressions (arrow functions) provide a concise syntax for creating anonymous functions. They are first-class values that can be assigned to variables, passed as arguments, and returned from functions.
+
+### Syntax
+
+**Expression body** — implicit return of a single expression:
+
+```c
+let double = (x) => x * 2;
+let add = (a, b) => a + b;
+let greet = () => "hello";
+```
+
+**Block body** — explicit `return` for multi-statement logic:
+
+```c
+let abs = (x) => {
+    if (x < 0) {
+        return -x;
+    }
+    return x;
+};
+```
+
+### Parameters
+
+Lambdas support zero or more parameters, with optional type annotations:
+
+```c
+let noParams = () => 42;
+let oneParam = (x) => x + 1;
+let typed = (x: int, y: int) => x + y;
+```
+
+### Closures
+
+Lambdas capture their enclosing lexical environment, just like named functions:
+
+```c
+fn makeMultiplier(factor) {
+    return (x) => x * factor;
+}
+
+let triple = makeMultiplier(3);
+io.println(triple(5));  // 15
+```
+
+### Higher-Order Usage
+
+Lambdas are particularly useful when passed as arguments to other functions:
+
+```c
+fn apply(f, x) {
+    return f(x);
+}
+
+let result = apply((x) => x * x, 4);  // 16
+```
+
+### Internal Representation
+
+A lambda expression is evaluated to a `StashLambda` — an `IStashCallable` that stores the parameter list and body along with the closure environment at the point of definition. Expression-body lambdas implicitly return their expression; block-body lambdas require explicit `return` and default to `null`.
 
 ---
 
@@ -950,11 +1102,11 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`
 
 Contextual keywords: `from` (only reserved after `import`, can be used as a variable name elsewhere)
 
-Operators: `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?`, `:`, `??`, `++`, `--`
+Operators: `+`, `-`, `*`, `/`, `%`, `=`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?`, `:`, `??`, `++`, `--`, `=>`
 
 Note: `|` (pipe) is not listed as a general operator — it is a special syntactic form exclusive to command chaining (see Section 6).
 
@@ -988,6 +1140,8 @@ Identifiers: user-defined names
 - `InterpolatedStringExpr` — `$"Hello {name}"`, `"Hello ${name}"`
 - `TryExpr` — `try expr`
 - `NullCoalesceExpr` — `a ?? b`
+- `SwitchExpr` — `subject switch { pattern => result, ... }`
+- `LambdaExpr` — `(params) => expr` or `(params) => { body }`
 
 **Statements:**
 
@@ -1282,12 +1436,14 @@ unary          → ("!" | "-") unary | prefix ;
 prefix         → ("++" | "--") IDENTIFIER | tryExpr ;
 tryExpr        → "try" unary | postfix ;
 postfix        → call ("++" | "--")? ;
-call           → primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" )* ;
+call           → primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" | "switch" "{" switchArm ("," switchArm)* ","? "}" )* ;
+switchArm      → ( "_" | expression ) "=>" expression ;
 primary        → NUMBER | STRING | INTERPOLATED_STRING | "true" | "false" | "null"
-               | IDENTIFIER | "(" expression ")"
+               | IDENTIFIER | lambdaExpr | "(" expression ")"
                | "[" (expression ("," expression)*)? "]"
                | (call ".")? IDENTIFIER "{" (IDENTIFIER ":" expression ("," IDENTIFIER ":" expression)*)? "}"
                | "$(" COMMAND_TEXT ")" ;
+lambdaExpr     → "(" parameters? ")" "=>" ( block | assignment ) ;
 
 parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
 arguments      → expression ( "," expression )* ;
