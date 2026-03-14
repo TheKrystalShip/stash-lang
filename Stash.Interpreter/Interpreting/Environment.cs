@@ -134,4 +134,39 @@ public class Environment
     /// Gets all bindings defined in this scope (does not include parent scopes).
     /// </summary>
     public IEnumerable<KeyValuePair<string, object?>> GetAllBindings() => _values;
+
+    /// <summary>
+    /// Tries to look up a variable by name in this scope only (does not walk the chain).
+    /// Returns true if found, false otherwise. Does not throw.
+    /// Useful for debugger variable inspection without side effects.
+    /// </summary>
+    public bool TryGet(string name, out object? value)
+    {
+        return _values.TryGetValue(name, out value);
+    }
+
+    /// <summary>
+    /// Checks whether a variable is defined in this scope (does not walk the chain).
+    /// </summary>
+    public bool Contains(string name) => _values.ContainsKey(name);
+
+    /// <summary>
+    /// Checks whether a variable is a constant in this scope.
+    /// </summary>
+    public bool IsConstant(string name) => _constants.Contains(name);
+
+    /// <summary>
+    /// Enumerates this scope and all enclosing scopes up to (and including) the global scope.
+    /// Useful for debugger scope chain inspection — the caller can categorize each
+    /// environment as local, closure, or global based on position in the chain.
+    /// </summary>
+    public IEnumerable<Environment> GetScopeChain()
+    {
+        var current = this;
+        while (current is not null)
+        {
+            yield return current;
+            current = current.Enclosing;
+        }
+    }
 }

@@ -189,6 +189,7 @@ public class Program
         var debugger = new CliDebugger();
         interpreter.Debugger = debugger;
         debugger.SetCallStack(interpreter.CallStack);
+        debugger.SetInterpreter(interpreter);
         debugger.Initialize();
 
         try

@@ -18,6 +18,11 @@ public class StashFunction : IStashCallable
         _closure = closure;
     }
 
+    /// <summary>
+    /// The source location where this function is defined.
+    /// </summary>
+    public Stash.Common.SourceSpan DefinitionSpan => _declaration.Span;
+
     public int Arity => _declaration.Parameters.Count;
 
     public object? Call(Interpreter interpreter, List<object?> arguments)

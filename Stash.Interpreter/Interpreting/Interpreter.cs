@@ -71,6 +71,8 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private string? _currentFile;
     private readonly List<CallFrame> _callStack = new();
     private IDebugger? _debugger;
+    private readonly HashSet<string> _loadedSources = new(StringComparer.OrdinalIgnoreCase);
+    private SourceSpan? _currentSpan;
     internal string[] ScriptArgs = Array.Empty<string>();
     internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
     internal readonly Dictionary<StashInstance, StashInstance> ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
@@ -107,6 +109,24 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public IReadOnlyList<CallFrame> CallStack => _callStack;
 
+    /// <summary>
+    /// Gets all source files that have been loaded during execution (main script + imports).
+    /// Used for DAP "loadedSources" request.
+    /// </summary>
+    public IReadOnlyCollection<string> LoadedSources => _loadedSources;
+
+    /// <summary>
+    /// Gets the source span of the statement currently being executed.
+    /// Null when the interpreter is not executing. Useful for DAP to determine
+    /// the current position when paused.
+    /// </summary>
+    public SourceSpan? CurrentSpan => _currentSpan;
+
+    /// <summary>
+    /// Gets the global environment. Useful for DAP to enumerate global variables.
+    /// </summary>
+    public Environment Globals => _globals;
+
     public Interpreter()
     {
         _globals = new Environment();
@@ -132,6 +152,12 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     public void Interpret(List<Stmt> statements)
     {
+        // Track loaded source
+        if (_currentFile is not null && _loadedSources.Add(_currentFile))
+        {
+            _debugger?.OnSourceLoaded(_currentFile);
+        }
+
         try
         {
             foreach (Stmt statement in statements)
@@ -161,6 +187,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private void Execute(Stmt stmt)
     {
+        _currentSpan = stmt.Span;
         _debugger?.OnBeforeExecute(stmt.Span, _environment);
         stmt.Accept(this);
     }
@@ -692,11 +719,19 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             functionName = functionName.Substring(13, functionName.Length - 14);
         }
 
+        SourceSpan? functionSpan = callee switch
+        {
+            StashFunction fn => fn.DefinitionSpan,
+            StashLambda lm => lm.DefinitionSpan,
+            _ => null
+        };
+
         var callFrame = new CallFrame
         {
             FunctionName = functionName,
             CallSite = expr.Span,
-            LocalScope = _environment
+            LocalScope = _environment,
+            FunctionSpan = functionSpan
         };
         _callStack.Add(callFrame);
         _debugger?.OnFunctionEnter(functionName, expr.Span, _environment);
@@ -745,6 +780,34 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         finally
         {
             _environment = previous;
+        }
+    }
+
+    /// <summary>
+    /// Parses and evaluates a string expression in the given environment.
+    /// Used for DAP "evaluate" requests (watch expressions, debug console, hover).
+    /// Returns a tuple of (result value, error message or null).
+    /// </summary>
+    public (object? Value, string? Error) EvaluateString(string expression, Environment environment)
+    {
+        try
+        {
+            var lexer = new Lexer(expression, "<eval>");
+            var tokens = lexer.ScanTokens();
+            if (lexer.Errors.Count > 0)
+                return (null, lexer.Errors[0].ToString());
+
+            var parser = new Parser(tokens);
+            Expr expr = parser.Parse();
+            if (parser.Errors.Count > 0)
+                return (null, parser.Errors[0].ToString());
+
+            object? result = EvaluateInEnvironment(expr, environment);
+            return (result, null);
+        }
+        catch (RuntimeError e)
+        {
+            return (null, e.Message);
         }
     }
 
@@ -1032,6 +1095,12 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             _importStack.Add(resolvedPath);
             _currentFile = resolvedPath;
             _environment = moduleEnv;
+
+            // Track loaded source for DAP
+            if (_loadedSources.Add(resolvedPath))
+            {
+                _debugger?.OnSourceLoaded(resolvedPath);
+            }
 
             foreach (Stmt statement in statements)
             {
