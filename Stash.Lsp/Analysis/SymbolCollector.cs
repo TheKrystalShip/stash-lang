@@ -436,6 +436,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitRedirectExpr(RedirectExpr expr)
+    {
+        expr.Expression.Accept(this);
+        expr.Target.Accept(this);
+        return null;
+    }
+
     public object? VisitTryExpr(TryExpr expr)
     {
         expr.Expression.Accept(this);

@@ -329,6 +329,41 @@ let lines = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
 
 Pipes **short-circuit on failure** — if any command in the chain fails (non-zero exit code), subsequent commands are not executed.
 
+### Output Redirection
+
+Redirect command output to files using Bash-style `>` (write) and `>>` (append) operators:
+
+```stash
+// Write stdout to a file (creates or overwrites)
+$(ls -la) > "/tmp/listing.txt";
+
+// Append stdout to a file
+$(ls -la) >> "/tmp/log.txt";
+
+// Redirect stderr
+$(make build) 2> "/tmp/errors.txt";
+
+// Redirect both stdout and stderr
+$(make build) &> "/tmp/all_output.txt";
+
+// Works with pipe chains — redirects the final result
+$(cat /var/log/syslog) | $(grep error) > "/tmp/filtered.txt";
+
+// Combine multiple redirects (stdout + stderr to separate files)
+$(make build) > "/tmp/out.txt" 2> "/tmp/err.txt";
+```
+
+| Operator | Stream          | Mode      |
+| -------- | --------------- | --------- |
+| `>`      | stdout          | Overwrite |
+| `>>`     | stdout          | Append    |
+| `2>`     | stderr          | Overwrite |
+| `2>>`    | stderr          | Append    |
+| `&>`     | stdout + stderr | Overwrite |
+| `&>>`    | stdout + stderr | Append    |
+
+Redirection still returns a `CommandResult` — `exitCode` is always available. The redirected stream's field will be empty since its content was written to the file.
+
 ### Error Handling
 
 By default, runtime errors crash the script with a message. When you _expect_ something might fail, opt in:

@@ -20,11 +20,13 @@ public class AnalysisEngine
     {
         var filePath = uri.IsFile ? uri.LocalPath : uri.ToString();
 
-        var lexer = new Lexer(source, filePath);
+        var lexer = new Lexer(source, filePath, preserveTrivia: true);
         var tokens = lexer.ScanTokens();
         var lexErrors = new List<string>(lexer.Errors);
 
-        var parser = new Parser(tokens);
+        // Filter out trivia tokens for the parser (it doesn't handle comments)
+        var parserTokens = tokens.Where(t => t.Type is not (TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang)).ToList();
+        var parser = new Parser(parserTokens);
         var statements = parser.ParseProgram();
         var parseErrors = new List<string>(parser.Errors);
 

@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Handlers;
 
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -24,6 +25,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     private const int TokenTypeKeyword = 7;
     private const int TokenTypeNumber = 8;
     private const int TokenTypeString = 9;
+    private const int TokenTypeComment = 10;
+    private const int TokenTypeOperator = 11;
 
     // Token modifier bit flags
     private const int ModifierDeclaration = 1 << 0;
@@ -51,7 +54,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     SemanticTokenType.EnumMember,
                     SemanticTokenType.Keyword,
                     SemanticTokenType.Number,
-                    SemanticTokenType.String
+                    SemanticTokenType.String,
+                    SemanticTokenType.Comment,
+                    SemanticTokenType.Operator
                 ),
                 TokenModifiers = new Container<SemanticTokenModifier>(
                     SemanticTokenModifier.Declaration,
@@ -97,6 +102,22 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 builder.Push(line, col, length, TokenTypeString, 0);
             }
+            else if (token.Type == TokenType.CommandLiteral)
+            {
+                ProcessCommandLiteral(builder, result, token);
+            }
+            else if (token.Type == TokenType.InterpolatedString)
+            {
+                ProcessCompoundToken(builder, result, token);
+            }
+            else if (IsOperator(token.Type))
+            {
+                builder.Push(line, col, length, TokenTypeOperator, 0);
+            }
+            else if (token.Type is TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang)
+            {
+                builder.Push(line, col, length, TokenTypeComment, 0);
+            }
         }
 
         return Task.CompletedTask;
@@ -126,6 +147,142 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             else if (BuiltInRegistry.IsBuiltInNamespace(name))
             {
                 builder.Push(line, col, length, TokenTypeNamespace, 0);
+            }
+        }
+    }
+
+    private void ProcessCommandLiteral(SemanticTokensBuilder builder, AnalysisResult result, Token token)
+    {
+        if (token.Literal is not List<object> parts)
+            return;
+
+        // Highlight the command name (first word of the first text segment)
+        bool commandNameFound = false;
+        int textOffset = 2; // skip past "$("
+
+        for (int i = 0; i < parts.Count; i++)
+        {
+            if (!commandNameFound && parts[i] is string text)
+            {
+                // Find the first word in this text segment
+                int wordStart = 0;
+                while (wordStart < text.Length && char.IsWhiteSpace(text[wordStart]))
+                    wordStart++;
+
+                if (wordStart < text.Length)
+                {
+                    int wordEnd = wordStart;
+                    while (wordEnd < text.Length && !char.IsWhiteSpace(text[wordEnd]))
+                        wordEnd++;
+
+                    int wordLength = wordEnd - wordStart;
+                    if (wordLength > 0)
+                    {
+                        // Calculate position: token start + "$(" offset + text offset + leading whitespace
+                        int cmdLine = token.Span.StartLine - 1;
+                        int cmdCol = token.Span.StartColumn - 1 + textOffset + wordStart;
+                        builder.Push(cmdLine, cmdCol, wordLength, TokenTypeFunction, 0);
+                        commandNameFound = true;
+                    }
+                }
+                textOffset += text.Length;
+            }
+            else if (parts[i] is string otherText)
+            {
+                textOffset += otherText.Length;
+            }
+            else if (parts[i] is List<Token> subTokens)
+            {
+                // Process embedded expression tokens
+                foreach (var subToken in subTokens)
+                {
+                    if (subToken.Type == TokenType.Eof)
+                        continue;
+
+                    var subLine = subToken.Span.StartLine - 1;
+                    var subCol = subToken.Span.StartColumn - 1;
+                    var subLength = subToken.Lexeme.Length;
+
+                    if (subToken.Type == TokenType.Identifier)
+                    {
+                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength);
+                    }
+                    else if (IsKeyword(subToken.Type))
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeKeyword, 0);
+                    }
+                    else if (subToken.Type is TokenType.IntegerLiteral or TokenType.FloatLiteral)
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeNumber, 0);
+                    }
+                    else if (subToken.Type == TokenType.StringLiteral)
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeString, 0);
+                    }
+                    else if (IsOperator(subToken.Type))
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
+                    }
+                    else if (subToken.Type == TokenType.CommandLiteral)
+                    {
+                        ProcessCommandLiteral(builder, result, subToken);
+                    }
+                    else if (subToken.Type == TokenType.InterpolatedString)
+                    {
+                        ProcessCompoundToken(builder, result, subToken);
+                    }
+                }
+                // Account for {} delimiters in offset
+                // Each interpolation adds at least 2 chars for { and }
+                // But we don't need to track textOffset past the first text segment
+            }
+        }
+    }
+
+    private void ProcessCompoundToken(SemanticTokensBuilder builder, AnalysisResult result, Token token)
+    {
+        if (token.Literal is not List<object> parts)
+            return;
+
+        foreach (var part in parts)
+        {
+            if (part is List<Token> subTokens)
+            {
+                foreach (var subToken in subTokens)
+                {
+                    if (subToken.Type == TokenType.Eof)
+                        continue;
+
+                    var subLine = subToken.Span.StartLine - 1;
+                    var subCol = subToken.Span.StartColumn - 1;
+                    var subLength = subToken.Lexeme.Length;
+
+                    if (subToken.Type == TokenType.Identifier)
+                    {
+                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength);
+                    }
+                    else if (IsKeyword(subToken.Type))
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeKeyword, 0);
+                    }
+                    else if (subToken.Type is TokenType.IntegerLiteral or TokenType.FloatLiteral)
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeNumber, 0);
+                    }
+                    else if (subToken.Type == TokenType.StringLiteral)
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeString, 0);
+                    }
+                    else if (IsOperator(subToken.Type))
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
+                    }
+                    else if (subToken.Type is TokenType.CommandLiteral or TokenType.InterpolatedString)
+                    {
+                        // Recurse for nested compound tokens
+                        ProcessCompoundToken(builder, result, subToken);
+                    }
+                }
             }
         }
     }
@@ -165,7 +322,19 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.Enum or TokenType.If or TokenType.Else or TokenType.For or
         TokenType.In or TokenType.While or TokenType.Return or TokenType.Break or
         TokenType.Continue or TokenType.True or TokenType.False or TokenType.Null or
-        TokenType.Try or TokenType.Import or TokenType.From or TokenType.As;
+        TokenType.Try or TokenType.Import or TokenType.From or TokenType.As or
+        TokenType.Switch;
+
+    private static bool IsOperator(TokenType type) => type is
+        TokenType.Plus or TokenType.Minus or TokenType.Star or TokenType.Slash or
+        TokenType.Percent or TokenType.Bang or TokenType.Less or TokenType.Greater or
+        TokenType.Equal or TokenType.EqualEqual or TokenType.BangEqual or
+        TokenType.LessEqual or TokenType.GreaterEqual or TokenType.AmpersandAmpersand or
+        TokenType.PipePipe or TokenType.QuestionQuestion or TokenType.PlusPlus or
+        TokenType.MinusMinus or TokenType.Arrow or TokenType.FatArrow or
+        TokenType.Pipe or TokenType.GreaterGreater or TokenType.AmpersandGreater or
+        TokenType.AmpersandGreaterGreater or TokenType.TwoGreater or
+        TokenType.TwoGreaterGreater;
 
     protected override Task<SemanticTokensDocument> GetSemanticTokensDocument(
         ITextDocumentIdentifierParams @params, CancellationToken cancellationToken)

@@ -27,6 +27,7 @@ using Stash.Parsing.AST;
 ///   <item><description><see cref="Assignment"/> — <c>=</c> (right-associative)</description></item>
 ///   <item><description><see cref="Ternary"/> — <c>? :</c> (right-associative)</description></item>
 ///   <item><description><see cref="NullCoalesce"/> — <c>??</c> (left-associative)</description></item>
+///   <item><description><see cref="Redirect"/> — <c>&gt;</c> <c>&gt;&gt;</c> <c>2&gt;</c> <c>&amp;&gt;</c> (output redirection, command-context only)</description></item>
 ///   <item><description><see cref="Pipe"/> — <c>|</c> (left-associative, command chaining)</description></item>
 ///   <item><description><see cref="Or"/> — <c>||</c></description></item>
 ///   <item><description><see cref="And"/> — <c>&amp;&amp;</c></description></item>
@@ -617,15 +618,94 @@ public class Parser
     /// </summary>
     private Expr NullCoalesce()
     {
-        Expr expr = Pipe();
+        Expr expr = Redirect();
 
         while (Match(TokenType.QuestionQuestion))
         {
-            Expr right = Pipe();
+            Expr right = Redirect();
             expr = new NullCoalesceExpr(expr, right, MakeSpan(expr.Span, right.Span));
         }
 
         return expr;
+    }
+
+    /// <summary>
+    /// Parses output redirection: <c>$(cmd) &gt; "file"</c>, <c>$(cmd) &gt;&gt; "file"</c>,
+    /// <c>$(cmd) 2&gt; "file"</c>, <c>$(cmd) &amp;&gt; "file"</c>, etc.
+    /// Redirection is only valid after a <see cref="CommandExpr"/>, <see cref="PipeExpr"/>,
+    /// or another <see cref="RedirectExpr"/>. In all other contexts, <c>&gt;</c> remains a
+    /// comparison operator.
+    /// </summary>
+    private Expr Redirect()
+    {
+        Expr expr = Pipe();
+
+        while (true)
+        {
+            // Only attempt redirection if the left side is a command-producing expression
+            bool isCommandLike = expr is CommandExpr or PipeExpr or RedirectExpr;
+
+            if (isCommandLike && Check(TokenType.Greater))
+            {
+                Advance();
+                Expr target = Pipe();
+                expr = new RedirectExpr(expr, RedirectStream.Stdout, false, target,
+                    MakeSpan(expr.Span, target.Span));
+            }
+            else if (isCommandLike && Check(TokenType.GreaterGreater))
+            {
+                Advance();
+                Expr target = Pipe();
+                expr = new RedirectExpr(expr, RedirectStream.Stdout, true, target,
+                    MakeSpan(expr.Span, target.Span));
+            }
+            else if (isCommandLike && Check(TokenType.AmpersandGreater))
+            {
+                Advance();
+                Expr target = Pipe();
+                expr = new RedirectExpr(expr, RedirectStream.All, false, target,
+                    MakeSpan(expr.Span, target.Span));
+            }
+            else if (isCommandLike && Check(TokenType.AmpersandGreaterGreater))
+            {
+                Advance();
+                Expr target = Pipe();
+                expr = new RedirectExpr(expr, RedirectStream.All, true, target,
+                    MakeSpan(expr.Span, target.Span));
+            }
+            else if (isCommandLike && CheckStderrRedirect())
+            {
+                // 2> or 2>> — integer literal 2 followed by > or >>
+                Advance(); // consume the integer 2
+                bool append = Check(TokenType.GreaterGreater);
+                Advance(); // consume > or >>
+                Expr target = Pipe();
+                expr = new RedirectExpr(expr, RedirectStream.Stderr, append, target,
+                    MakeSpan(expr.Span, target.Span));
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Checks if the current position has a stderr redirect pattern: integer literal <c>2</c>
+    /// immediately followed by <c>&gt;</c> or <c>&gt;&gt;</c>.
+    /// </summary>
+    private bool CheckStderrRedirect()
+    {
+        if (IsAtEnd) return false;
+        Token current = Peek();
+        if (current.Type != TokenType.IntegerLiteral || current.Literal is not long val || val != 2)
+            return false;
+        // Check the token after the '2'
+        if (_current + 1 >= _tokens.Count) return false;
+        TokenType next = _tokens[_current + 1].Type;
+        return next == TokenType.Greater || next == TokenType.GreaterGreater;
     }
 
     /// <summary>
@@ -716,12 +796,26 @@ public class Parser
     /// A left-associative chain of <see cref="BinaryExpr"/> nodes for comparison operators,
     /// or the result of <see cref="Term"/> if no comparison operator is present.
     /// </returns>
+    /// <remarks>
+    /// When the left operand is a command-producing expression (<see cref="CommandExpr"/>,
+    /// <see cref="PipeExpr"/>, or <see cref="RedirectExpr"/>), the <c>&gt;</c> and <c>&gt;&gt;</c>
+    /// tokens are NOT consumed as comparison operators. They are left for the
+    /// <see cref="Redirect"/> precedence level to handle as output redirection.
+    /// </remarks>
     private Expr Comparison()
     {
         Expr expr = Term();
 
-        while (Match(TokenType.Less, TokenType.Greater, TokenType.LessEqual, TokenType.GreaterEqual))
+        while (true)
         {
+            // When the left side is a command expression, > and >> are redirection, not comparison.
+            bool isCommandLike = expr is CommandExpr or PipeExpr or RedirectExpr;
+            if (isCommandLike && (Check(TokenType.Greater) || Check(TokenType.GreaterGreater)))
+                break;
+
+            if (!Match(TokenType.Less, TokenType.Greater, TokenType.LessEqual, TokenType.GreaterEqual))
+                break;
+
             Token op = Previous();
             Expr right = Term();
             expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));

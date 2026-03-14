@@ -168,4 +168,11 @@ public interface IExprVisitor<T>
     /// <param name="expr">The lambda expression node to visit.</param>
     /// <returns>The result of processing the lambda expression.</returns>
     T VisitLambdaExpr(LambdaExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="RedirectExpr"/> node (output redirection <c>$(cmd) &gt; "file"</c>).
+    /// </summary>
+    /// <param name="expr">The redirect expression node to visit.</param>
+    /// <returns>The result of executing the command with redirected output.</returns>
+    T VisitRedirectExpr(RedirectExpr expr);
 }

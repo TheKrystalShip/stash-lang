@@ -107,6 +107,21 @@ public enum TokenType
     /// <summary>The <c>=&gt;</c> operator. Used for lambda/arrow function expressions.</summary>
     FatArrow,
 
+    /// <summary>The <c>&gt;&gt;</c> operator. Output redirection — appends stdout to a file.</summary>
+    GreaterGreater,
+
+    /// <summary>The <c>2&gt;</c> operator. Output redirection — writes stderr to a file (overwrite).</summary>
+    TwoGreater,
+
+    /// <summary>The <c>2&gt;&gt;</c> operator. Output redirection — appends stderr to a file.</summary>
+    TwoGreaterGreater,
+
+    /// <summary>The <c>&amp;&gt;</c> operator. Output redirection — writes both stdout and stderr to a file (overwrite).</summary>
+    AmpersandGreater,
+
+    /// <summary>The <c>&amp;&gt;&gt;</c> operator. Output redirection — appends both stdout and stderr to a file.</summary>
+    AmpersandGreaterGreater,
+
     /// <summary>The <c>=</c> operator. Assignment — binds a value to a variable.</summary>
     Equal,
 

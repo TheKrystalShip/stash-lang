@@ -366,7 +366,8 @@ public class StashFormatter
         TokenType.Plus or TokenType.Minus or TokenType.Star or TokenType.Slash or TokenType.Percent or
         TokenType.EqualEqual or TokenType.BangEqual or TokenType.Less or TokenType.Greater or
         TokenType.LessEqual or TokenType.GreaterEqual or TokenType.AmpersandAmpersand or
-        TokenType.PipePipe or TokenType.Pipe;
+        TokenType.PipePipe or TokenType.Pipe or TokenType.GreaterGreater or
+        TokenType.AmpersandGreater or TokenType.AmpersandGreaterGreater;
 
     private static bool IsValueEnd(TokenType t) => t is
         TokenType.Identifier or TokenType.RightParen or TokenType.RightBracket or
@@ -382,5 +383,6 @@ public class StashFormatter
         TokenType.EqualEqual or TokenType.BangEqual or TokenType.Less or TokenType.Greater or
         TokenType.LessEqual or TokenType.GreaterEqual or TokenType.AmpersandAmpersand or
         TokenType.PipePipe or TokenType.QuestionQuestion or TokenType.Pipe or
+        TokenType.GreaterGreater or TokenType.AmpersandGreater or TokenType.AmpersandGreaterGreater or
         TokenType.Bang or TokenType.QuestionMark or TokenType.LeftBrace;
 }

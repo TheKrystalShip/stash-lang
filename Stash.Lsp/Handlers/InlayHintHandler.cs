@@ -154,6 +154,10 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 CollectFromExpr(pipe.Left, hints, result);
                 CollectFromExpr(pipe.Right, hints, result);
                 break;
+            case RedirectExpr redirect:
+                CollectFromExpr(redirect.Expression, hints, result);
+                CollectFromExpr(redirect.Target, hints, result);
+                break;
             case NullCoalesceExpr nullCoalesce:
                 CollectFromExpr(nullCoalesce.Left, hints, result);
                 CollectFromExpr(nullCoalesce.Right, hints, result);

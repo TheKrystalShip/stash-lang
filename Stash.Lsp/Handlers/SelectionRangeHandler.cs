@@ -225,6 +225,10 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
                 CollectContainingSpansExpr(pipe.Left, line, col, spans);
                 CollectContainingSpansExpr(pipe.Right, line, col, spans);
                 break;
+            case RedirectExpr redirect:
+                CollectContainingSpansExpr(redirect.Expression, line, col, spans);
+                CollectContainingSpansExpr(redirect.Target, line, col, spans);
+                break;
             case UpdateExpr update:
                 CollectContainingSpansExpr(update.Operand, line, col, spans);
                 break;

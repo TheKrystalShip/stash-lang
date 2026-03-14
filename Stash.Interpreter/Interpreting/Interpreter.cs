@@ -3,6 +3,7 @@ namespace Stash.Interpreting;
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.IO;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Debugging;
@@ -2247,6 +2248,71 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         finally
         {
             _pendingStdin = null;
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a redirect expression by executing the command and writing the selected
+    /// stream(s) to the target file path.
+    /// </summary>
+    public object? VisitRedirectExpr(RedirectExpr expr)
+    {
+        // Evaluate the inner command/pipe expression
+        object? result = expr.Expression.Accept(this);
+
+        if (result is not StashInstance cmdResult || cmdResult.TypeName != "CommandResult")
+        {
+            throw new RuntimeError("Output redirection requires a command expression.", expr.Span);
+        }
+
+        // Evaluate the target file path
+        object? targetVal = expr.Target.Accept(this);
+        if (targetVal is not string filePath)
+        {
+            throw new RuntimeError("Redirection target must be a string file path.", expr.Target.Span);
+        }
+
+        string? stdoutContent = cmdResult.GetField("stdout", expr.Span) as string;
+        string? stderrContent = cmdResult.GetField("stderr", expr.Span) as string;
+
+        try
+        {
+            // Determine which content to write based on the stream selector
+            string contentToWrite = expr.Stream switch
+            {
+                RedirectStream.Stdout => stdoutContent ?? "",
+                RedirectStream.Stderr => stderrContent ?? "",
+                RedirectStream.All => (stdoutContent ?? "") + (stderrContent ?? ""),
+                _ => throw new RuntimeError($"Unknown redirect stream: {expr.Stream}.", expr.Span)
+            };
+
+            if (expr.Append)
+            {
+                File.AppendAllText(filePath, contentToWrite);
+            }
+            else
+            {
+                File.WriteAllText(filePath, contentToWrite);
+            }
+
+            // Clear the redirected stream(s) in the result since they went to a file.
+            // Return a new CommandResult with the redirected stream(s) emptied.
+            var newFields = new Dictionary<string, object?>
+            {
+                ["stdout"] = expr.Stream is RedirectStream.Stdout or RedirectStream.All ? "" : stdoutContent,
+                ["stderr"] = expr.Stream is RedirectStream.Stderr or RedirectStream.All ? "" : stderrContent,
+                ["exitCode"] = cmdResult.GetField("exitCode", expr.Span)
+            };
+
+            return new StashInstance("CommandResult", newFields);
+        }
+        catch (RuntimeError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Redirection failed: {ex.Message}", expr.Span);
         }
     }
 
