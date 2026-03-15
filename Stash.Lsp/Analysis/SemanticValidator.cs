@@ -286,12 +286,19 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 var paramCount = definition.ParameterNames != null
                     ? definition.ParameterNames.Length
                     : CountParameters(definition.Detail ?? "");
-                if (paramCount >= 0 && expr.Arguments.Count != paramCount)
+                if (paramCount >= 0)
                 {
-                    _diagnostics.Add(new SemanticDiagnostic(
-                        $"Expected {paramCount} arguments but got {expr.Arguments.Count}.",
-                        DiagnosticLevel.Error,
-                        expr.Paren.Span));
+                    int requiredCount = definition.RequiredParameterCount ?? paramCount;
+                    if (expr.Arguments.Count < requiredCount || expr.Arguments.Count > paramCount)
+                    {
+                        string expected = requiredCount == paramCount
+                            ? $"{paramCount}"
+                            : $"{requiredCount} to {paramCount}";
+                        _diagnostics.Add(new SemanticDiagnostic(
+                            $"Expected {expected} arguments but got {expr.Arguments.Count}.",
+                            DiagnosticLevel.Error,
+                            expr.Paren.Span));
+                    }
                 }
             }
         }

@@ -12,14 +12,16 @@ public class FnDeclStmt : Stmt
     public Token Name { get; }
     public List<Token> Parameters { get; }
     public List<Token?> ParameterTypes { get; }
+    public List<Expr?> DefaultValues { get; }
     public Token? ReturnType { get; }
     public BlockStmt Body { get; }
 
-    public FnDeclStmt(Token name, List<Token> parameters, List<Token?> parameterTypes, Token? returnType, BlockStmt body, SourceSpan span) : base(span)
+    public FnDeclStmt(Token name, List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues, Token? returnType, BlockStmt body, SourceSpan span) : base(span)
     {
         Name = name;
         Parameters = parameters;
         ParameterTypes = parameterTypes;
+        DefaultValues = defaultValues;
         ReturnType = returnType;
         Body = body;
     }

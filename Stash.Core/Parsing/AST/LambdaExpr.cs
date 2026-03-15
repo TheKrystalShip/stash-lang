@@ -11,14 +11,16 @@ public class LambdaExpr : Expr
 {
     public List<Token> Parameters { get; }
     public List<Token?> ParameterTypes { get; }
+    public List<Expr?> DefaultValues { get; }
     public Expr? ExpressionBody { get; }
     public BlockStmt? BlockBody { get; }
 
-    public LambdaExpr(List<Token> parameters, List<Token?> parameterTypes,
+    public LambdaExpr(List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues,
                       Expr? expressionBody, BlockStmt? blockBody, SourceSpan span) : base(span)
     {
         Parameters = parameters;
         ParameterTypes = parameterTypes;
+        DefaultValues = defaultValues;
         ExpressionBody = expressionBody;
         BlockBody = blockBody;
     }

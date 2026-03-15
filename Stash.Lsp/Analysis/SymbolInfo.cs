@@ -28,8 +28,9 @@ public class SymbolInfo
     public string? TypeHint { get; }
     public Uri? SourceUri { get; }
     public string[]? ParameterNames { get; }
+    public int? RequiredParameterCount { get; }
 
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null)
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null)
     {
         Name = name;
         Kind = kind;
@@ -40,5 +41,6 @@ public class SymbolInfo
         TypeHint = typeHint;
         SourceUri = sourceUri;
         ParameterNames = parameterNames;
+        RequiredParameterCount = requiredParameterCount;
     }
 }

@@ -1,0 +1,84 @@
+#!/usr/bin/env stash
+
+// Default Parameter Values
+// Demonstrates default values for function and lambda parameters.
+
+// --- Basic default values ---
+
+fn greet(name, greeting = "Hello") {
+    io.println(greeting + ", " + name + "!");
+}
+
+greet("Alice");            // "Hello, Alice!"
+greet("Bob", "Hey");       // "Hey, Bob!"
+
+// --- With type annotations ---
+
+fn connect(host: string, port: int = 8080, secure: bool = false) {
+    let protocol = secure ? "https" : "http";
+    io.println(protocol + "://" + host + ":" + conv.toStr(port));
+}
+
+connect("localhost");                   // http://localhost:8080
+connect("example.com", 443);            // http://example.com:443
+connect("example.com", 443, true);      // https://example.com:443
+
+// --- Multiple defaults ---
+
+fn createUser(name, role = "viewer", active = true) {
+    io.println("User: " + name + " | Role: " + role + " | Active: " + conv.toStr(active));
+}
+
+createUser("Alice");                     // viewer, true
+createUser("Bob", "admin");              // admin, true
+createUser("Charlie", "editor", false);  // editor, false
+
+// --- Defaults with expressions (evaluated at call time) ---
+
+let defaultTimeout = 30;
+
+fn request(url, timeout = defaultTimeout) {
+    io.println("GET " + url + " (timeout: " + conv.toStr(timeout) + "s)");
+}
+
+request("/api/users");           // timeout: 30s
+defaultTimeout = 60;
+request("/api/users");           // timeout: 60s (re-evaluated!)
+request("/api/users", 5);        // timeout: 5s (overridden)
+
+// --- Lambda defaults ---
+
+let multiply = (x, factor = 2) => x * factor;
+io.println(conv.toStr(multiply(5)));       // 10
+io.println(conv.toStr(multiply(5, 3)));    // 15
+
+let formatName = (first, last, separator = " ") => first + separator + last;
+io.println(formatName("John", "Doe"));          // "John Doe"
+io.println(formatName("John", "Doe", ", "));     // "John, Doe"
+
+// --- Practical example: logging utility ---
+
+fn log(message, level = "INFO", timestamp = true) {
+    let prefix = timestamp ? "[" + level + "] " : "";
+    io.println(prefix + message);
+}
+
+log("Server started");                        // [INFO] Server started
+log("Connection refused", "ERROR");            // [ERROR] Connection refused
+log("raw output", "DEBUG", false);             // raw output
+
+// --- With higher-order functions ---
+
+fn repeat(action, times = 3) {
+    let i = 0;
+    while (i < times) {
+        action(i);
+        i++;
+    }
+}
+
+repeat((i) => io.println("  Step " + conv.toStr(i + 1)));
+// Step 1, Step 2, Step 3
+
+repeat((i) => io.println("  Round " + conv.toStr(i + 1)), 2);
+// Round 1, Round 2

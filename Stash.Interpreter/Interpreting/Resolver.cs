@@ -79,10 +79,18 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         // Leave unresolved; interpreter will fall back to Environment.Get().
     }
 
-    private void ResolveFunction(List<Token> parameters, BlockStmt body, FunctionType type)
+    private void ResolveFunction(List<Token> parameters, List<Expr?> defaultValues, BlockStmt body, FunctionType type)
     {
         FunctionType enclosingFunction = _currentFunction;
         _currentFunction = type;
+
+        foreach (var defaultVal in defaultValues)
+        {
+            if (defaultVal != null)
+            {
+                Resolve(defaultVal);
+            }
+        }
 
         BeginScope();
         foreach (var param in parameters)
@@ -129,7 +137,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         Declare(stmt.Name.Lexeme);
         Define(stmt.Name.Lexeme);
-        ResolveFunction(stmt.Parameters, stmt.Body, FunctionType.Function);
+        ResolveFunction(stmt.Parameters, stmt.DefaultValues, stmt.Body, FunctionType.Function);
         return null;
     }
 
@@ -230,6 +238,14 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         FunctionType enclosingFunction = _currentFunction;
         _currentFunction = FunctionType.Lambda;
+
+        foreach (var defaultVal in expr.DefaultValues)
+        {
+            if (defaultVal != null)
+            {
+                Resolve(defaultVal);
+            }
+        }
 
         BeginScope();
         foreach (var param in expr.Parameters)

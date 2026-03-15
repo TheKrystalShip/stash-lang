@@ -5455,5 +5455,96 @@ public class InterpreterTests
         RunExpectingError("env.saveFile(42);");
     }
 
+    // ── Default parameter value tests ────────────────────────────────────────
+
+    [Fact]
+    public void Function_DefaultParam_UsedWhenArgOmitted()
+    {
+        Assert.Equal("Hello", Run("fn greet(greeting = \"Hello\") { return greeting; } let result = greet();"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_OverriddenWhenArgProvided()
+    {
+        Assert.Equal("Hi", Run("fn greet(greeting = \"Hello\") { return greeting; } let result = greet(\"Hi\");"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_MixedRequiredAndOptional()
+    {
+        Assert.Equal(15L, Run("fn add(a, b = 10) { return a + b; } let result = add(5);"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_AllOptionalProvided()
+    {
+        Assert.Equal(7L, Run("fn add(a, b = 10) { return a + b; } let result = add(5, 2);"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_MultipleDefaults()
+    {
+        Assert.Equal("A-B-C", Run("fn join(a, b = \"B\", c = \"C\") { return a + \"-\" + b + \"-\" + c; } let result = join(\"A\");"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_PartialOverride()
+    {
+        Assert.Equal("A-X-C", Run("fn join(a, b = \"B\", c = \"C\") { return a + \"-\" + b + \"-\" + c; } let result = join(\"A\", \"X\");"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_TooFewArgs_ThrowsError()
+    {
+        RunExpectingError("fn f(a, b = 5) { return a + b; } f();");
+    }
+
+    [Fact]
+    public void Function_DefaultParam_TooManyArgs_ThrowsError()
+    {
+        RunExpectingError("fn f(a, b = 5) { return a + b; } f(1, 2, 3);");
+    }
+
+    [Fact]
+    public void Function_DefaultParam_NullDefault()
+    {
+        Assert.Null(Run("fn f(a = null) { return a; } let result = f();"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_BoolDefault()
+    {
+        Assert.Equal(false, Run("fn f(verbose = false) { return verbose; } let result = f();"));
+    }
+
+    [Fact]
+    public void Function_DefaultParam_ExpressionDefault()
+    {
+        Assert.Equal(15L, Run("let base = 10; fn f(x = base + 5) { return x; } let result = f();"));
+    }
+
+    [Fact]
+    public void Lambda_DefaultParam_UsedWhenArgOmitted()
+    {
+        Assert.Equal(20L, Run("let double = (x, factor = 2) => x * factor; let result = double(10);"));
+    }
+
+    [Fact]
+    public void Lambda_DefaultParam_OverriddenWhenArgProvided()
+    {
+        Assert.Equal(30L, Run("let multiply = (x, factor = 2) => x * factor; let result = multiply(10, 3);"));
+    }
+
+    [Fact]
+    public void Lambda_DefaultParam_BlockBody()
+    {
+        Assert.Equal(10L, Run(@"
+            let f = (a, b = 5) => {
+                return a + b;
+            };
+            let result = f(5);
+        "));
+    }
+
 
 }

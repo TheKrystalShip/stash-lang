@@ -861,11 +861,18 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             throw new RuntimeError("Can only call functions.", expr.Paren.Span);
         }
 
-        if (function.Arity != -1 && arguments.Count != function.Arity)
+        if (function.Arity != -1)
         {
-            throw new RuntimeError(
-                $"Expected {function.Arity} arguments but got {arguments.Count}.",
-                expr.Paren.Span);
+            int minArity = function.MinArity;
+            if (arguments.Count < minArity || arguments.Count > function.Arity)
+            {
+                string expected = minArity == function.Arity
+                    ? $"{function.Arity}"
+                    : $"{minArity} to {function.Arity}";
+                throw new RuntimeError(
+                    $"Expected {expected} arguments but got {arguments.Count}.",
+                    expr.Paren.Span);
+            }
         }
 
         string functionName = callee is StashFunction sf ? sf.ToString() : callee.ToString() ?? "<unknown>";

@@ -470,4 +470,20 @@ fn foo() { return 1; }
         Assert.Contains(syms, s => s.Name == "name" && s.Kind == SymbolKind.Field && s.ParentName == "ArgTree" && s.TypeHint == "string");
         Assert.Contains(syms, s => s.Name == "flags" && s.Kind == SymbolKind.Field && s.ParentName == "ArgTree" && s.TypeHint == "array");
     }
+
+    [Fact]
+    public void FunctionScope_WithDefaultParams_ContainsParameters()
+    {
+        var tree = Analyze("fn greet(name, greeting = \"Hello\") { return greeting; }");
+
+        var fnSymbol = tree.GlobalScope.Symbols.First(s => s.Name == "greet");
+        Assert.Equal(SymbolKind.Function, fnSymbol.Kind);
+        Assert.Contains("greeting = \"Hello\"", fnSymbol.Detail);
+
+        var fnScope = tree.GlobalScope.Children[0];
+        Assert.Equal(ScopeKind.Function, fnScope.Kind);
+        Assert.Equal(2, fnScope.Symbols.Count);
+        Assert.Contains(fnScope.Symbols, s => s.Name == "name" && s.Kind == SymbolKind.Parameter);
+        Assert.Contains(fnScope.Symbols, s => s.Name == "greeting" && s.Kind == SymbolKind.Parameter);
+    }
 }

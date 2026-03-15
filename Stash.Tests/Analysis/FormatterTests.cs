@@ -310,4 +310,18 @@ public class FormatterTests
         // If-else formatting
         Assert.Contains("} else if", formatted);
     }
+
+    [Fact]
+    public void Format_FunctionDeclaration_WithDefaultValue()
+    {
+        var result = Format("fn greet(name,greeting=\"Hello\") {}");
+        Assert.Equal("fn greet(name, greeting = \"Hello\") {\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_FunctionDeclaration_TypedWithDefaultValue()
+    {
+        var result = Format("fn connect(host:string,port:int=8080) {}");
+        Assert.Equal("fn connect(host: string, port: int = 8080) {\n}\n", result);
+    }
 }

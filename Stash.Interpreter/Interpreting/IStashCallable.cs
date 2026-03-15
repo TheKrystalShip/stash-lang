@@ -13,6 +13,11 @@ public interface IStashCallable
     int Arity { get; }
 
     /// <summary>
+    /// The minimum number of arguments required (for functions with default parameter values).
+    /// </summary>
+    int MinArity => Arity;
+
+    /// <summary>
     /// Invokes the callable with the given arguments.
     /// </summary>
     object? Call(Interpreter interpreter, List<object?> arguments);

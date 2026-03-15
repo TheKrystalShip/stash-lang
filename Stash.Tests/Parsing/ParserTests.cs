@@ -1693,4 +1693,75 @@ public class ParserTests
         var switchExpr = Assert.IsType<SwitchExpr>(result);
         Assert.Equal(2, switchExpr.Arms.Count);
     }
+
+    // ── Default parameter value tests ────────────────────────────────────────
+
+    [Fact]
+    public void Parse_FnDecl_WithDefaultValues()
+    {
+        var stmts = ParseProgram("fn greet(name, greeting = \"Hello\") { }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal(2, fn.Parameters.Count);
+        Assert.Equal("name", fn.Parameters[0].Lexeme);
+        Assert.Equal("greeting", fn.Parameters[1].Lexeme);
+        Assert.Null(fn.DefaultValues[0]);
+        Assert.NotNull(fn.DefaultValues[1]);
+        Assert.IsType<LiteralExpr>(fn.DefaultValues[1]);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_WithTypedDefaultValues()
+    {
+        var stmts = ParseProgram("fn connect(host: string, port: int = 8080) { }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal(2, fn.Parameters.Count);
+        Assert.Equal("string", fn.ParameterTypes[0]!.Lexeme);
+        Assert.Equal("int", fn.ParameterTypes[1]!.Lexeme);
+        Assert.Null(fn.DefaultValues[0]);
+        var defaultVal = Assert.IsType<LiteralExpr>(fn.DefaultValues[1]);
+        Assert.Equal(8080L, defaultVal.Value);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_AllDefaultValues()
+    {
+        var stmts = ParseProgram("fn opts(a = 1, b = 2, c = 3) { }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal(3, fn.Parameters.Count);
+        Assert.NotNull(fn.DefaultValues[0]);
+        Assert.NotNull(fn.DefaultValues[1]);
+        Assert.NotNull(fn.DefaultValues[2]);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_NoDefaultValues_HasEmptyDefaults()
+    {
+        var stmts = ParseProgram("fn add(a, b) { }");
+        var fn = Assert.IsType<FnDeclStmt>(Assert.Single(stmts));
+        Assert.Equal(2, fn.DefaultValues.Count);
+        Assert.Null(fn.DefaultValues[0]);
+        Assert.Null(fn.DefaultValues[1]);
+    }
+
+    [Fact]
+    public void Parse_FnDecl_NonDefaultAfterDefault_ReportsError()
+    {
+        var lexer = new Lexer("fn bad(a = 1, b) { }");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        parser.ParseProgram();
+        Assert.NotEmpty(parser.Errors);
+        Assert.Contains(parser.Errors, e => e.Contains("Non-default parameter cannot follow a default parameter"));
+    }
+
+    [Fact]
+    public void Parse_Lambda_WithDefaultValues()
+    {
+        var stmts = ParseProgram("let f = (x, y = 10) => x + y;");
+        var varDecl = Assert.IsType<VarDeclStmt>(Assert.Single(stmts));
+        var lambda = Assert.IsType<LambdaExpr>(varDecl.Initializer);
+        Assert.Equal(2, lambda.Parameters.Count);
+        Assert.Null(lambda.DefaultValues[0]);
+        Assert.NotNull(lambda.DefaultValues[1]);
+    }
 }

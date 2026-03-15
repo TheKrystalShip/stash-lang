@@ -352,4 +352,45 @@ public class SemanticValidatorTests
         ");
         Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Unknown type") && d.Level == DiagnosticLevel.Warning);
     }
+
+    // ── Default parameter value tests ────────────────────────────────────────
+
+    [Fact]
+    public void DefaultParam_CorrectArity_MinArgs_NoError()
+    {
+        var diagnostics = Validate("fn f(a, b = 5) { return a + b; } f(1);");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("arguments") && d.Level == DiagnosticLevel.Error);
+    }
+
+    [Fact]
+    public void DefaultParam_CorrectArity_AllArgs_NoError()
+    {
+        var diagnostics = Validate("fn f(a, b = 5) { return a + b; } f(1, 2);");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("arguments") && d.Level == DiagnosticLevel.Error);
+    }
+
+    [Fact]
+    public void DefaultParam_TooFewArgs_ReportsError()
+    {
+        var diagnostics = Validate("fn f(a, b = 5) { return a + b; } f();");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("arguments") &&
+            d.Level == DiagnosticLevel.Error);
+    }
+
+    [Fact]
+    public void DefaultParam_TooManyArgs_ReportsError()
+    {
+        var diagnostics = Validate("fn f(a, b = 5) { return a + b; } f(1, 2, 3);");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("arguments") &&
+            d.Level == DiagnosticLevel.Error);
+    }
+
+    [Fact]
+    public void DefaultParam_AllOptional_ZeroArgs_NoError()
+    {
+        var diagnostics = Validate("fn f(a = 1, b = 2) {} f();");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("arguments") && d.Level == DiagnosticLevel.Error);
+    }
 }

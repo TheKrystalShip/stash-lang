@@ -25,13 +25,38 @@ public class StashFunction : IStashCallable
 
     public int Arity => _declaration.Parameters.Count;
 
+    public int MinArity
+    {
+        get
+        {
+            int required = 0;
+            for (int i = 0; i < _declaration.DefaultValues.Count; i++)
+            {
+                if (_declaration.DefaultValues[i] == null)
+                    required++;
+                else
+                    break;
+            }
+            return required;
+        }
+    }
+
     public object? Call(Interpreter interpreter, List<object?> arguments)
     {
         var env = new Environment(_closure);
 
         for (int i = 0; i < _declaration.Parameters.Count; i++)
         {
-            env.Define(_declaration.Parameters[i].Lexeme, arguments[i]);
+            object? value;
+            if (i < arguments.Count)
+            {
+                value = arguments[i];
+            }
+            else
+            {
+                value = _declaration.DefaultValues[i]!.Accept(interpreter);
+            }
+            env.Define(_declaration.Parameters[i].Lexeme, value);
         }
 
         try

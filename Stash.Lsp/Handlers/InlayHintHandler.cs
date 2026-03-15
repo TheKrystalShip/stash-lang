@@ -207,7 +207,7 @@ public class InlayHintHandler : InlayHintsHandlerBase
             }
         }
 
-        if (paramNames == null || paramNames.Length == 0 || paramNames.Length != call.Arguments.Count)
+        if (paramNames == null || paramNames.Length == 0 || call.Arguments.Count > paramNames.Length)
         {
             return;
         }
@@ -271,6 +271,15 @@ public class InlayHintHandler : InlayHintsHandlerBase
             if (colonIdx >= 0)
             {
                 part = part[..colonIdx].Trim();
+            }
+            else
+            {
+                // Strip default value (e.g., "b = 5" → "b")
+                var equalsIdx = part.IndexOf('=');
+                if (equalsIdx >= 0)
+                {
+                    part = part[..equalsIdx].Trim();
+                }
             }
             parts[i] = part;
         }

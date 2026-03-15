@@ -101,7 +101,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         {
             var paramName = stmt.Parameters[i].Lexeme;
             var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.Lexeme : null;
-            paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
+            var part = paramType != null ? $"{paramName}: {paramType}" : paramName;
+
+            if (i < stmt.DefaultValues.Count && stmt.DefaultValues[i] != null)
+            {
+                part += $" = {FormatDefaultValue(stmt.DefaultValues[i]!)}";
+            }
+
+            paramParts.Add(part);
         }
 
         var detail = $"fn {stmt.Name.Lexeme}({string.Join(", ", paramParts)})";
@@ -112,9 +119,16 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
         var returnTypeStr = stmt.ReturnType?.Lexeme;
         var paramNames = stmt.Parameters.Select(p => p.Lexeme).ToArray();
+        int requiredCount = stmt.DefaultValues.TakeWhile(d => d == null).Count();
 
         // Function name goes into the parent (current) scope
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount));
+
+        // Visit default value expressions for reference collection
+        foreach (var defaultVal in stmt.DefaultValues)
+        {
+            defaultVal?.Accept(this);
+        }
 
         // Parameters and body statements share the function scope
         PushScope(ScopeKind.Function, stmt.Body.Span);
@@ -133,6 +147,23 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
         PopScope();
         return null;
+    }
+
+    private static string FormatDefaultValue(Expr expr)
+    {
+        return expr switch
+        {
+            LiteralExpr lit => lit.Value switch
+            {
+                null => "null",
+                string s => $"\"{ s}\"",
+                bool b => b ? "true" : "false",
+                _ => lit.Value.ToString() ?? "null"
+            },
+            IdentifierExpr id => id.Name.Lexeme,
+            UnaryExpr u => $"{u.Operator.Lexeme}{FormatDefaultValue(u.Right)}",
+            _ => "..."
+        };
     }
 
     public object? VisitStructDeclStmt(StructDeclStmt stmt)
@@ -467,6 +498,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             var paramType = i < expr.ParameterTypes.Count ? expr.ParameterTypes[i]?.Lexeme : null;
             var paramDetail = paramType != null ? $"parameter: {paramType}" : "parameter";
             _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: "<lambda>", typeHint: paramType));
+        }
+
+        foreach (var defaultVal in expr.DefaultValues)
+        {
+            defaultVal?.Accept(this);
         }
 
         if (expr.ExpressionBody != null)

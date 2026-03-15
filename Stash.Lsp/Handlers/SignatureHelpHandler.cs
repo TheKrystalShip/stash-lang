@@ -50,12 +50,12 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         // Try built-in signatures first
         if (BuiltInRegistry.TryGetFunction(functionName, out var builtInFn))
         {
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, builtInFn.ParamNames, activeParam));
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, ExtractParamLabels(builtInFn.Detail), activeParam));
         }
 
         if (BuiltInRegistry.TryGetNamespaceFunction(functionName, out var nsFn))
         {
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, nsFn.ParamNames, activeParam));
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, ExtractParamLabels(nsFn.Detail), activeParam));
         }
 
         // Try user-defined functions
@@ -70,8 +70,8 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
 
             if (definition != null && definition.Kind == Analysis.SymbolKind.Function && definition.Detail != null)
             {
-                var paramNames = definition.ParameterNames ?? ExtractParamNames(definition.Detail);
-                return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(definition.Detail, paramNames, activeParam));
+                var paramLabels = ExtractParamLabels(definition.Detail);
+                return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(definition.Detail, paramLabels, activeParam));
             }
         }
 
@@ -191,7 +191,40 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
             {
                 part = part[..colonIdx].Trim();
             }
+            else
+            {
+                // Strip default value if no type annotation (e.g., "b = 5" → "b")
+                var equalsIdx = part.IndexOf('=');
+                if (equalsIdx >= 0)
+                {
+                    part = part[..equalsIdx].Trim();
+                }
+            }
             parts[i] = part;
+        }
+
+        return parts;
+    }
+
+    private static string[] ExtractParamLabels(string detail)
+    {
+        var openParen = detail.IndexOf('(');
+        var closeParen = detail.IndexOf(')');
+        if (openParen < 0 || closeParen < 0 || closeParen <= openParen + 1)
+        {
+            return Array.Empty<string>();
+        }
+
+        var inside = detail[(openParen + 1)..closeParen].Trim();
+        if (string.IsNullOrEmpty(inside))
+        {
+            return Array.Empty<string>();
+        }
+
+        var parts = inside.Split(',');
+        for (int i = 0; i < parts.Length; i++)
+        {
+            parts[i] = parts[i].Trim();
         }
 
         return parts;

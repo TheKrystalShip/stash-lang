@@ -240,6 +240,9 @@ public class Parser
 
         List<Token> parameters = new();
         List<Token?> parameterTypes = new();
+        List<Expr?> defaultValues = new();
+        bool hasSeenDefault = false;
+
         if (!Check(TokenType.RightParen))
         {
             do
@@ -251,6 +254,18 @@ public class Parser
                     paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
                 }
                 parameterTypes.Add(paramType);
+
+                Expr? defaultValue = null;
+                if (Match(TokenType.Equal))
+                {
+                    defaultValue = Assignment();
+                    hasSeenDefault = true;
+                }
+                else if (hasSeenDefault)
+                {
+                    Error(Previous(), "Non-default parameter cannot follow a default parameter.");
+                }
+                defaultValues.Add(defaultValue);
             } while (Match(TokenType.Comma));
         }
 
@@ -261,7 +276,7 @@ public class Parser
             returnType = Consume(TokenType.Identifier, "Expected return type after '->'.");
         }
         BlockStmt body = ParseBlock();
-        return new FnDeclStmt(name, parameters, parameterTypes, returnType, body, MakeSpan(fnToken.Span, body.Span));
+        return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(fnToken.Span, body.Span));
     }
 
     private Stmt StructDeclaration()
@@ -1233,6 +1248,36 @@ public class Parser
                     Advance(); // skip type name
                 }
 
+                // Optional default value: = expr
+                if (Check(TokenType.Equal))
+                {
+                    Advance(); // skip '='
+                    // Skip the default value expression: scan until ',' or ')' at depth 0
+                    int depth = 0;
+                    while (!IsAtEnd)
+                    {
+                        if (Check(TokenType.LeftParen) || Check(TokenType.LeftBracket) || Check(TokenType.LeftBrace))
+                        {
+                            depth++;
+                        }
+                        else if (Check(TokenType.RightBrace) || Check(TokenType.RightBracket))
+                        {
+                            if (depth == 0) return false;
+                            depth--;
+                        }
+                        else if (Check(TokenType.RightParen))
+                        {
+                            if (depth == 0) break;
+                            depth--;
+                        }
+                        else if (Check(TokenType.Comma) && depth == 0)
+                        {
+                            break;
+                        }
+                        Advance();
+                    }
+                }
+
                 if (Check(TokenType.Comma))
                 {
                     Advance(); // skip ','
@@ -1263,6 +1308,8 @@ public class Parser
     {
         List<Token> parameters = new();
         List<Token?> parameterTypes = new();
+        List<Expr?> defaultValues = new();
+        bool hasSeenDefault = false;
 
         if (!Check(TokenType.RightParen))
         {
@@ -1275,6 +1322,18 @@ public class Parser
                     paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
                 }
                 parameterTypes.Add(paramType);
+
+                Expr? defaultValue = null;
+                if (Match(TokenType.Equal))
+                {
+                    defaultValue = Assignment();
+                    hasSeenDefault = true;
+                }
+                else if (hasSeenDefault)
+                {
+                    Error(Previous(), "Non-default parameter cannot follow a default parameter.");
+                }
+                defaultValues.Add(defaultValue);
             } while (Match(TokenType.Comma));
         }
 
@@ -1285,13 +1344,13 @@ public class Parser
         if (Check(TokenType.LeftBrace))
         {
             BlockStmt block = ParseBlock();
-            return new LambdaExpr(parameters, parameterTypes, null, block,
+            return new LambdaExpr(parameters, parameterTypes, defaultValues, null, block,
                                   MakeSpan(open.Span, block.Span));
         }
 
         // Expression body: (params) => expr
         Expr body = Assignment();
-        return new LambdaExpr(parameters, parameterTypes, body, null,
+        return new LambdaExpr(parameters, parameterTypes, defaultValues, body, null,
                               MakeSpan(open.Span, body.Span));
     }
 
