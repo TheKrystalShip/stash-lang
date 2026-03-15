@@ -390,7 +390,7 @@ io.println(result.stderr);      // captured standard error
 io.println(result.exitCode);    // process exit code
 ```
 
-`$(...)` is **always raw mode**. When the lexer encounters `$(`, it enters "command mode" and collects everything as raw text until the matching `)`. The content is not parsed as a Stash expression — it is treated as a shell command.
+`$(...)` is **always raw mode**. When the lexer encounters `$(`, it enters "command mode" and collects everything as raw text until the matching `)`. The content is not parsed as a Stash expression — it is treated as a command string that is split into a program name and arguments. Programs are invoked directly, not through a system shell.
 
 To inject dynamic values into a command, use interpolation with `{...}`:
 
@@ -600,7 +600,7 @@ io.println("Server PID: " + server.pid);      // e.g. 12345
 io.println("Command: " + server.command);      // "python3 -m http.server 8080"
 ```
 
-`process.spawn(cmd)` launches a process in the background and returns immediately with a `Process` handle. The process runs concurrently with the script. The command string is executed via the system shell (`/bin/sh -c "..."`).
+`process.spawn(cmd)` launches a process in the background and returns immediately with a `Process` handle. The process runs concurrently with the script. The command string is parsed into a program name and arguments, and the program is invoked directly — no system shell is involved.
 
 The spawned process's stdout and stderr are captured in internal buffers (accessible via `process.read()`), and its stdin is available for writing via `process.write()`.
 
@@ -768,7 +768,7 @@ The interpreter maintains a **tracked process list** (`List<TrackedProcess>`) on
 - `process.wait()` — Calls `WaitForExit()` on the underlying process, then returns a `CommandResult` with captured output.
 - `process.waitTimeout()` — Calls `WaitForExit(timeout)`. Returns `null` if timed out.
 - `process.kill()` — Calls `Process.Kill()` (sends SIGTERM on Linux via .NET).
-- `process.signal()` — Shells out to `kill -<sig> <pid>` for arbitrary signals, since .NET's `Process.Kill()` only supports SIGTERM/SIGKILL.
+- `process.signal()` — On Unix, sends signals via the POSIX `kill()` syscall. On Windows, maps common signals (SIGTERM, SIGKILL) to `Process.Kill()`.
 - `process.isAlive()` — Checks `Process.HasExited`.
 - `process.read()` — Returns the contents of the stdout buffer and clears it.
 - `process.write()` — Writes to `Process.StandardInput`.

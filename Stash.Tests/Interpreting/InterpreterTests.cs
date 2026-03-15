@@ -1568,9 +1568,9 @@ public class InterpreterTests
     [Fact]
     public void Command_StderrCaptured()
     {
-        var result = Run("let r = $(echo error >&2); let result = r.stderr;");
+        var result = Run("let r = $(cat /dev/null/nonexistent); let result = r.stderr;");
         Assert.IsType<string>(result);
-        Assert.Contains("error", (string)result!);
+        Assert.True(((string)result!).Length > 0, "Expected stderr output from cat on a nonexistent path");
     }
 
     [Fact]

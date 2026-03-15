@@ -2,6 +2,7 @@ namespace Stash.Interpreting.BuiltIns;
 
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 using Stash.Interpreting.Types;
 
@@ -43,17 +44,20 @@ public static class ProcessBuiltIns
                 throw new RuntimeError("Argument to 'process.spawn' must be a string.");
             }
 
+            var (program, arguments) = CommandParser.Parse(command);
             var psi = new ProcessStartInfo
             {
-                FileName = "/bin/sh",
+                FileName = program,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 RedirectStandardInput = true,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add(command);
+            foreach (var arg in arguments)
+            {
+                psi.ArgumentList.Add(arg);
+            }
 
             var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to start process.");
             var fields = new Dictionary<string, object?>
@@ -144,7 +148,7 @@ public static class ProcessBuiltIns
 
             try
             {
-                entry.OsProcess.Kill(false); // SIGKILL on Linux
+                entry.OsProcess.Kill(false); // SIGTERM on Unix, TerminateProcess on Windows
                 return true;
             }
             catch
@@ -205,19 +209,25 @@ public static class ProcessBuiltIns
 
             try
             {
-                // Use kill command for arbitrary signals since .NET only supports SIGTERM/SIGKILL directly
-                var killPsi = new ProcessStartInfo
+                if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
-                    FileName = "/bin/kill",
-                    UseShellExecute = false,
-                    CreateNoWindow = true
-                };
-                killPsi.ArgumentList.Add($"-{sig}");
-                killPsi.ArgumentList.Add(entry.OsProcess.Id.ToString());
+                    // Windows: map common signals to Process API
+                    if (sig == 9 /* SIGKILL */ || sig == 15 /* SIGTERM */)
+                    {
+                        entry.OsProcess.Kill(sig == 9);
+                        return true;
+                    }
 
-                using var killProc = System.Diagnostics.Process.Start(killPsi);
-                killProc?.WaitForExit();
-                return killProc?.ExitCode == 0;
+                    // Other signals have no Windows equivalent — terminate as best effort
+                    entry.OsProcess.Kill(false);
+                    return true;
+                }
+                else
+                {
+                    // Unix: use the kill() syscall via P/Invoke for arbitrary signals
+                    int result = UnixSignal.Kill(entry.OsProcess.Id, (int)sig);
+                    return result == 0;
+                }
             }
             catch
             {

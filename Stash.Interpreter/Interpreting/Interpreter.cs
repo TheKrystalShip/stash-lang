@@ -1288,17 +1288,21 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
         try
         {
+            var (program, arguments) = CommandParser.Parse(command);
             var psi = new ProcessStartInfo
             {
-                FileName = "/bin/sh",
+                FileName = program,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 RedirectStandardInput = _pendingStdin is not null,
                 UseShellExecute = false,
                 CreateNoWindow = true
             };
-            psi.ArgumentList.Add("-c");
-            psi.ArgumentList.Add(command);
+
+            foreach (var arg in arguments)
+            {
+                psi.ArgumentList.Add(arg);
+            }
 
             using var process = Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", expr.Span);
             if (_pendingStdin is not null)

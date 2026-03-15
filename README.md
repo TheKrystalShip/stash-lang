@@ -65,7 +65,7 @@ If you have ever written Bash beyond a few lines, you know the pain. Variable qu
 
 **Stash sits in the gap.** It gives you:
 
-- **Shell commands as first-class citizens.** `$(ls -la)` just works. No string wrapping, no subprocess imports. Pipe chains with `|` pass stdout between processes exactly like Bash, but with short-circuit-on-failure semantics built in.
+- **External programs as first-class citizens.** `$(ls -la)` just works — programs are invoked directly, no shell wrapping, no subprocess imports. Pipe chains with `|` pass stdout between processes with short-circuit-on-failure semantics built in.
 - **Real data structures.** Structs, enums, and dictionaries let you model your domain — servers, deploy targets, configurations — instead of juggling parallel arrays and magic strings.
 - **C-style syntax.** If you know C, C++, C#, Java, or JavaScript, you can read Stash immediately. Braces, semicolons, `if`/`else`/`while`/`for` — nothing surprising.
 - **Sensible error handling.** `try` expressions catch errors inline, `??` provides fallbacks, and `lastError()` gives you the details when you need them. No try/catch ceremony, no Go-style error-value tuples.
@@ -508,7 +508,7 @@ if (data == null) {
 }
 ```
 
-Shell commands never crash — they return structured results with `exitCode` and `stderr`, so `try` is not needed for `$(...)`.
+Command expressions never crash — they return structured results with `exitCode` and `stderr`, so `try` is not needed for `$(...)`.
 
 ### Imports
 
