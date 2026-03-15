@@ -192,6 +192,128 @@ public static class FsBuiltIns
             return null;
         }));
 
+        fs.Define("readLines", new BuiltInFunction("fs.readLines", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.readLines' must be a string.");
+            }
+
+            try
+            {
+                var lines = System.IO.File.ReadAllLines(path);
+                return new List<object?>(lines);
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
+        }));
+
+        fs.Define("glob", new BuiltInFunction("fs.glob", 1, (_, args) =>
+        {
+            if (args[0] is not string pattern)
+            {
+                throw new RuntimeError("Argument to 'fs.glob' must be a string.");
+            }
+
+            try
+            {
+                string dir = System.IO.Path.GetDirectoryName(pattern) ?? ".";
+                string filePattern = System.IO.Path.GetFileName(pattern);
+                if (string.IsNullOrEmpty(dir))
+                {
+                    dir = ".";
+                }
+
+                if (string.IsNullOrEmpty(filePattern))
+                {
+                    filePattern = "*";
+                }
+
+                var files = System.IO.Directory.GetFiles(dir, filePattern, System.IO.SearchOption.AllDirectories);
+                return new List<object?>(files);
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"fs.glob failed: {e.Message}"); }
+        }));
+
+        fs.Define("isFile", new BuiltInFunction("fs.isFile", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.isFile' must be a string.");
+            }
+
+            return System.IO.File.Exists(path);
+        }));
+
+        fs.Define("isDir", new BuiltInFunction("fs.isDir", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.isDir' must be a string.");
+            }
+
+            return System.IO.Directory.Exists(path);
+        }));
+
+        fs.Define("isSymlink", new BuiltInFunction("fs.isSymlink", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.isSymlink' must be a string.");
+            }
+
+            try
+            {
+                var info = new System.IO.FileInfo(path);
+                return info.Exists && info.Attributes.HasFlag(System.IO.FileAttributes.ReparsePoint);
+            }
+            catch (System.IO.IOException)
+            {
+                return false;
+            }
+        }));
+
+        fs.Define("tempFile", new BuiltInFunction("fs.tempFile", 0, (_, _) =>
+        {
+            return System.IO.Path.GetTempFileName();
+        }));
+
+        fs.Define("tempDir", new BuiltInFunction("fs.tempDir", 0, (_, _) =>
+        {
+            string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName());
+            System.IO.Directory.CreateDirectory(dir);
+            return dir;
+        }));
+
+        fs.Define("modifiedAt", new BuiltInFunction("fs.modifiedAt", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.modifiedAt' must be a string.");
+            }
+
+            try
+            {
+                var info = new System.IO.FileInfo(path);
+                return (double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0;
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get modified time for '{path}': {e.Message}"); }
+        }));
+
+        fs.Define("walk", new BuiltInFunction("fs.walk", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.walk' must be a string.");
+            }
+
+            try
+            {
+                var files = System.IO.Directory.GetFiles(path, "*", System.IO.SearchOption.AllDirectories);
+                return new List<object?>(files);
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"fs.walk failed: {e.Message}"); }
+        }));
+
         globals.Define("fs", fs);
     }
 }

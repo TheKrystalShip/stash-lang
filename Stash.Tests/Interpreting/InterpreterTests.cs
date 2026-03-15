@@ -1,3 +1,4 @@
+using System;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Interpreting;
@@ -4407,5 +4408,857 @@ public class InterpreterTests
             let result = str.replaceAll(""aAbBaAbB"", ""aA"", ""X"");
         ");
         Assert.Equal("XbBXbB", result);
+    }
+
+    // ── math namespace ──────────────────────────────────────────────
+
+    [Fact]
+    public void MathAbs_PositiveInt()
+    {
+        Assert.Equal(5L, Run("let result = math.abs(5);"));
+    }
+
+    [Fact]
+    public void MathAbs_NegativeInt()
+    {
+        Assert.Equal(7L, Run("let result = math.abs(-7);"));
+    }
+
+    [Fact]
+    public void MathAbs_NegativeFloat()
+    {
+        Assert.Equal(3.14, Run("let result = math.abs(-3.14);"));
+    }
+
+    [Fact]
+    public void MathAbs_Zero()
+    {
+        Assert.Equal(0L, Run("let result = math.abs(0);"));
+    }
+
+    [Fact]
+    public void MathAbs_NonNumber_Throws()
+    {
+        RunExpectingError("math.abs(\"hello\");");
+    }
+
+    [Fact]
+    public void MathCeil_Float()
+    {
+        Assert.Equal(4L, Run("let result = math.ceil(3.2);"));
+    }
+
+    [Fact]
+    public void MathCeil_NegativeFloat()
+    {
+        Assert.Equal(-3L, Run("let result = math.ceil(-3.7);"));
+    }
+
+    [Fact]
+    public void MathCeil_Int()
+    {
+        Assert.Equal(5L, Run("let result = math.ceil(5);"));
+    }
+
+    [Fact]
+    public void MathFloor_Float()
+    {
+        Assert.Equal(3L, Run("let result = math.floor(3.9);"));
+    }
+
+    [Fact]
+    public void MathFloor_NegativeFloat()
+    {
+        Assert.Equal(-4L, Run("let result = math.floor(-3.2);"));
+    }
+
+    [Fact]
+    public void MathFloor_Int()
+    {
+        Assert.Equal(5L, Run("let result = math.floor(5);"));
+    }
+
+    [Fact]
+    public void MathRound_RoundsUp()
+    {
+        Assert.Equal(4L, Run("let result = math.round(3.7);"));
+    }
+
+    [Fact]
+    public void MathRound_RoundsDown()
+    {
+        Assert.Equal(3L, Run("let result = math.round(3.2);"));
+    }
+
+    [Fact]
+    public void MathRound_Int()
+    {
+        Assert.Equal(5L, Run("let result = math.round(5);"));
+    }
+
+    [Fact]
+    public void MathMin_Ints()
+    {
+        Assert.Equal(2L, Run("let result = math.min(5, 2);"));
+    }
+
+    [Fact]
+    public void MathMin_Floats()
+    {
+        Assert.Equal(1.5, Run("let result = math.min(2.5, 1.5);"));
+    }
+
+    [Fact]
+    public void MathMin_MixedTypes()
+    {
+        Assert.Equal(1.5, Run("let result = math.min(2, 1.5);"));
+    }
+
+    [Fact]
+    public void MathMax_Ints()
+    {
+        Assert.Equal(5L, Run("let result = math.max(5, 2);"));
+    }
+
+    [Fact]
+    public void MathMax_Floats()
+    {
+        Assert.Equal(2.5, Run("let result = math.max(2.5, 1.5);"));
+    }
+
+    [Fact]
+    public void MathPow_IntExponent()
+    {
+        Assert.Equal(8.0, Run("let result = math.pow(2, 3);"));
+    }
+
+    [Fact]
+    public void MathSqrt_PerfectSquare()
+    {
+        Assert.Equal(3.0, Run("let result = math.sqrt(9);"));
+    }
+
+    [Fact]
+    public void MathSqrt_Float()
+    {
+        Assert.Equal(2.0, Run("let result = math.sqrt(4.0);"));
+    }
+
+    [Fact]
+    public void MathLog_E()
+    {
+        Assert.Equal(1.0, (double)Run("let result = math.log(math.E);")!, 5);
+    }
+
+    [Fact]
+    public void MathRandom_InRange()
+    {
+        // Random returns 0.0 to 1.0
+        var result = (double)Run("let result = math.random();")!;
+        Assert.InRange(result, 0.0, 1.0);
+    }
+
+    [Fact]
+    public void MathRandomInt_InRange()
+    {
+        var result = (long)Run("let result = math.randomInt(1, 10);")!;
+        Assert.InRange(result, 1L, 10L);
+    }
+
+    [Fact]
+    public void MathClamp_WithinRange()
+    {
+        Assert.Equal(5L, Run("let result = math.clamp(5, 1, 10);"));
+    }
+
+    [Fact]
+    public void MathClamp_BelowMin()
+    {
+        Assert.Equal(1L, Run("let result = math.clamp(-5, 1, 10);"));
+    }
+
+    [Fact]
+    public void MathClamp_AboveMax()
+    {
+        Assert.Equal(10L, Run("let result = math.clamp(15, 1, 10);"));
+    }
+
+    [Fact]
+    public void MathClamp_FloatValues()
+    {
+        Assert.Equal(1.5, Run("let result = math.clamp(0.5, 1.5, 10.0);"));
+    }
+
+    [Fact]
+    public void MathPI_IsConstant()
+    {
+        Assert.Equal(Math.PI, Run("let result = math.PI;"));
+    }
+
+    [Fact]
+    public void MathE_IsConstant()
+    {
+        Assert.Equal(Math.E, Run("let result = math.E;"));
+    }
+
+    // ── time namespace ──────────────────────────────────────────────
+
+    [Fact]
+    public void TimeNow_ReturnsFloat()
+    {
+        var result = Run("let result = time.now();");
+        Assert.IsType<double>(result);
+        Assert.True((double)result! > 0);
+    }
+
+    [Fact]
+    public void TimeMillis_ReturnsLong()
+    {
+        var result = Run("let result = time.millis();");
+        Assert.IsType<long>(result);
+        Assert.True((long)result! > 0);
+    }
+
+    [Fact]
+    public void TimeDate_ReturnsFormattedDate()
+    {
+        var result = (string)Run("let result = time.date();")!;
+        // Should match YYYY-MM-DD format
+        Assert.Matches(@"^\d{4}-\d{2}-\d{2}$", result);
+    }
+
+    [Fact]
+    public void TimeIso_ReturnsIsoString()
+    {
+        var result = (string)Run("let result = time.iso();")!;
+        Assert.Contains("T", result);
+    }
+
+    [Fact]
+    public void TimeFormat_CustomFormat()
+    {
+        // Format epoch 0 which is 1970-01-01
+        var result = Run("let result = time.format(0, \"yyyy\");");
+        Assert.Equal("1970", result);
+    }
+
+    [Fact]
+    public void TimeParse_ValidDate()
+    {
+        var result = (double)Run("let result = time.parse(\"2000-01-01\", \"yyyy-MM-dd\");")!;
+        Assert.True(result > 0);
+    }
+
+    [Fact]
+    public void TimeParse_InvalidDate_Throws()
+    {
+        RunExpectingError("time.parse(\"not-a-date\", \"yyyy-MM-dd\");");
+    }
+
+    [Fact]
+    public void TimeClock_ReturnsFloat()
+    {
+        var result = Run("let result = time.clock();");
+        Assert.IsType<double>(result);
+    }
+
+    [Fact]
+    public void TimeSleep_NonNumber_Throws()
+    {
+        RunExpectingError("time.sleep(\"abc\");");
+    }
+
+    // ── json namespace ──────────────────────────────────────────────
+
+    [Fact]
+    public void JsonParse_Object()
+    {
+        var result = Run("let d = json.parse(\"{\\\"name\\\": \\\"Alice\\\", \\\"age\\\": 30}\"); let result = d[\"name\"];");
+        Assert.Equal("Alice", result);
+    }
+
+    [Fact]
+    public void JsonParse_Array()
+    {
+        var result = Run("let a = json.parse(\"[1, 2, 3]\"); let result = len(a);");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void JsonParse_Nested()
+    {
+        var result = Run("let d = json.parse(\"{\\\"a\\\": {\\\"b\\\": 42}}\"); let result = d[\"a\"][\"b\"];");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void JsonParse_Boolean()
+    {
+        Assert.Equal(true, Run("let d = json.parse(\"{\\\"ok\\\": true}\"); let result = d[\"ok\"];"));
+    }
+
+    [Fact]
+    public void JsonParse_Null()
+    {
+        Assert.Null(Run("let d = json.parse(\"{\\\"val\\\": null}\"); let result = d[\"val\"];"));
+    }
+
+    [Fact]
+    public void JsonParse_InvalidJson_Throws()
+    {
+        RunExpectingError("json.parse(\"not json\");");
+    }
+
+    [Fact]
+    public void JsonStringify_Dict()
+    {
+        var result = (string)Run("let d = dict.new(); d[\"a\"] = 1; let result = json.stringify(d);")!;
+        Assert.Contains("\"a\"", result);
+        Assert.Contains("1", result);
+    }
+
+    [Fact]
+    public void JsonStringify_Array()
+    {
+        Assert.Equal("[1,2,3]", Run("let result = json.stringify([1, 2, 3]);"));
+    }
+
+    [Fact]
+    public void JsonStringify_String()
+    {
+        Assert.Equal("\"hello\"", Run("let result = json.stringify(\"hello\");"));
+    }
+
+    [Fact]
+    public void JsonStringify_Null()
+    {
+        Assert.Equal("null", Run("let result = json.stringify(null);"));
+    }
+
+    [Fact]
+    public void JsonStringify_Bool()
+    {
+        Assert.Equal("true", Run("let result = json.stringify(true);"));
+    }
+
+    [Fact]
+    public void JsonPretty_Indented()
+    {
+        var result = (string)Run("let result = json.pretty([1, 2]);")!;
+        Assert.Contains("\n", result);
+    }
+
+    // ── conv additions ──────────────────────────────────────────────
+
+    [Fact]
+    public void ConvToBool_Truthy()
+    {
+        Assert.Equal(true, Run("let result = conv.toBool(1);"));
+    }
+
+    [Fact]
+    public void ConvToBool_Falsy()
+    {
+        Assert.Equal(false, Run("let result = conv.toBool(0);"));
+    }
+
+    [Fact]
+    public void ConvToBool_NullIsFalsy()
+    {
+        Assert.Equal(false, Run("let result = conv.toBool(null);"));
+    }
+
+    [Fact]
+    public void ConvToBool_EmptyStringFalsy()
+    {
+        Assert.Equal(false, Run("let result = conv.toBool(\"\");"));
+    }
+
+    [Fact]
+    public void ConvToHex_Basic()
+    {
+        Assert.Equal("ff", Run("let result = conv.toHex(255);"));
+    }
+
+    [Fact]
+    public void ConvToHex_Zero()
+    {
+        Assert.Equal("0", Run("let result = conv.toHex(0);"));
+    }
+
+    [Fact]
+    public void ConvToOct_Basic()
+    {
+        Assert.Equal("10", Run("let result = conv.toOct(8);"));
+    }
+
+    [Fact]
+    public void ConvToBin_Basic()
+    {
+        Assert.Equal("1010", Run("let result = conv.toBin(10);"));
+    }
+
+    [Fact]
+    public void ConvFromHex_Basic()
+    {
+        Assert.Equal(255L, Run("let result = conv.fromHex(\"ff\");"));
+    }
+
+    [Fact]
+    public void ConvFromHex_WithPrefix()
+    {
+        Assert.Equal(255L, Run("let result = conv.fromHex(\"0xff\");"));
+    }
+
+    [Fact]
+    public void ConvFromOct_Basic()
+    {
+        Assert.Equal(8L, Run("let result = conv.fromOct(\"10\");"));
+    }
+
+    [Fact]
+    public void ConvFromBin_Basic()
+    {
+        Assert.Equal(10L, Run("let result = conv.fromBin(\"1010\");"));
+    }
+
+    [Fact]
+    public void ConvFromBin_WithPrefix()
+    {
+        Assert.Equal(10L, Run("let result = conv.fromBin(\"0b1010\");"));
+    }
+
+    [Fact]
+    public void ConvCharCode_Basic()
+    {
+        Assert.Equal(65L, Run("let result = conv.charCode(\"A\");"));
+    }
+
+    [Fact]
+    public void ConvFromCharCode_Basic()
+    {
+        Assert.Equal("A", Run("let result = conv.fromCharCode(65);"));
+    }
+
+    [Fact]
+    public void ConvFromHex_Invalid_Throws()
+    {
+        RunExpectingError("conv.fromHex(\"xyz\");");
+    }
+
+    // ── str additions ───────────────────────────────────────────────
+
+    [Fact]
+    public void StrIsDigit_True()
+    {
+        Assert.Equal(true, Run("let result = str.isDigit(\"12345\");"));
+    }
+
+    [Fact]
+    public void StrIsDigit_False()
+    {
+        Assert.Equal(false, Run("let result = str.isDigit(\"123a\");"));
+    }
+
+    [Fact]
+    public void StrIsDigit_Empty()
+    {
+        Assert.Equal(false, Run("let result = str.isDigit(\"\");"));
+    }
+
+    [Fact]
+    public void StrIsAlpha_True()
+    {
+        Assert.Equal(true, Run("let result = str.isAlpha(\"hello\");"));
+    }
+
+    [Fact]
+    public void StrIsAlpha_False()
+    {
+        Assert.Equal(false, Run("let result = str.isAlpha(\"hello1\");"));
+    }
+
+    [Fact]
+    public void StrIsAlphaNum_True()
+    {
+        Assert.Equal(true, Run("let result = str.isAlphaNum(\"abc123\");"));
+    }
+
+    [Fact]
+    public void StrIsAlphaNum_False()
+    {
+        Assert.Equal(false, Run("let result = str.isAlphaNum(\"abc-123\");"));
+    }
+
+    [Fact]
+    public void StrIsUpper_True()
+    {
+        Assert.Equal(true, Run("let result = str.isUpper(\"HELLO\");"));
+    }
+
+    [Fact]
+    public void StrIsUpper_False()
+    {
+        Assert.Equal(false, Run("let result = str.isUpper(\"Hello\");"));
+    }
+
+    [Fact]
+    public void StrIsLower_True()
+    {
+        Assert.Equal(true, Run("let result = str.isLower(\"hello\");"));
+    }
+
+    [Fact]
+    public void StrIsLower_False()
+    {
+        Assert.Equal(false, Run("let result = str.isLower(\"Hello\");"));
+    }
+
+    [Fact]
+    public void StrIsEmpty_Empty()
+    {
+        Assert.Equal(true, Run("let result = str.isEmpty(\"\");"));
+    }
+
+    [Fact]
+    public void StrIsEmpty_Whitespace()
+    {
+        Assert.Equal(true, Run("let result = str.isEmpty(\"   \");"));
+    }
+
+    [Fact]
+    public void StrIsEmpty_NonEmpty()
+    {
+        Assert.Equal(false, Run("let result = str.isEmpty(\"hello\");"));
+    }
+
+    [Fact]
+    public void StrMatch_Found()
+    {
+        Assert.Equal("123", Run("let result = str.match(\"abc123def\", \"\\\\d+\");"));
+    }
+
+    [Fact]
+    public void StrMatch_NotFound()
+    {
+        Assert.Null(Run("let result = str.match(\"abcdef\", \"\\\\d+\");"));
+    }
+
+    [Fact]
+    public void StrMatchAll_MultipleMatches()
+    {
+        var result = Run("let matches = str.matchAll(\"a1b2c3\", \"\\\\d\"); let result = len(matches);");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void StrIsMatch_True()
+    {
+        Assert.Equal(true, Run("let result = str.isMatch(\"hello123\", \"\\\\d+\");"));
+    }
+
+    [Fact]
+    public void StrIsMatch_False()
+    {
+        Assert.Equal(false, Run("let result = str.isMatch(\"hello\", \"\\\\d+\");"));
+    }
+
+    [Fact]
+    public void StrReplaceRegex_Basic()
+    {
+        Assert.Equal("abc_def", Run("let result = str.replaceRegex(\"abc123def\", \"\\\\d+\", \"_\");"));
+    }
+
+    [Fact]
+    public void StrCount_Basic()
+    {
+        Assert.Equal(3L, Run("let result = str.count(\"abcabc abc\", \"abc\");"));
+    }
+
+    [Fact]
+    public void StrCount_NoMatch()
+    {
+        Assert.Equal(0L, Run("let result = str.count(\"hello\", \"xyz\");"));
+    }
+
+    [Fact]
+    public void StrFormat_Basic()
+    {
+        Assert.Equal("Hello Alice, you are 30", Run("let result = str.format(\"Hello {0}, you are {1}\", \"Alice\", 30);"));
+    }
+
+    [Fact]
+    public void StrFormat_NoPlaceholders()
+    {
+        Assert.Equal("hello", Run("let result = str.format(\"hello\");"));
+    }
+
+    [Fact]
+    public void StrCount_EmptySub_Throws()
+    {
+        RunExpectingError("str.count(\"hello\", \"\");");
+    }
+
+    // ── env additions ───────────────────────────────────────────────
+
+    [Fact]
+    public void EnvHas_Existing()
+    {
+        // PATH should always exist
+        Assert.Equal(true, Run("let result = env.has(\"PATH\");"));
+    }
+
+    [Fact]
+    public void EnvHas_NonExisting()
+    {
+        Assert.Equal(false, Run("let result = env.has(\"STASH_TEST_NONEXISTENT_VAR_12345\");"));
+    }
+
+    [Fact]
+    public void EnvAll_ReturnsDict()
+    {
+        Assert.Equal("dict", Run("let result = typeof(env.all());"));
+    }
+
+    [Fact]
+    public void EnvRemove_ClearsVariable()
+    {
+        var result = Run("env.set(\"STASH_TEST_REMOVE\", \"value\"); env.remove(\"STASH_TEST_REMOVE\"); let result = env.get(\"STASH_TEST_REMOVE\");");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void EnvCwd_ReturnsString()
+    {
+        var result = Run("let result = env.cwd();");
+        Assert.IsType<string>(result);
+        Assert.True(((string)result!).Length > 0);
+    }
+
+    [Fact]
+    public void EnvHome_ReturnsString()
+    {
+        var result = Run("let result = env.home();");
+        Assert.IsType<string>(result);
+    }
+
+    [Fact]
+    public void EnvHostname_ReturnsString()
+    {
+        var result = Run("let result = env.hostname();");
+        Assert.IsType<string>(result);
+    }
+
+    [Fact]
+    public void EnvUser_ReturnsString()
+    {
+        var result = Run("let result = env.user();");
+        Assert.IsType<string>(result);
+    }
+
+    [Fact]
+    public void EnvOs_ReturnsKnownValue()
+    {
+        var result = (string)Run("let result = env.os();")!;
+        Assert.Contains(result, new[] { "linux", "macos", "windows", "unknown" });
+    }
+
+    [Fact]
+    public void EnvArch_ReturnsString()
+    {
+        var result = (string)Run("let result = env.arch();")!;
+        Assert.True(result.Length > 0);
+    }
+
+    // ── fs additions ────────────────────────────────────────────────
+
+    [Fact]
+    public void FsReadLines_ReturnsArray()
+    {
+        var result = Run(
+            "fs.writeFile(\"/tmp/stash_test_readlines.txt\", \"line1\\nline2\\nline3\");" +
+            "let lines = fs.readLines(\"/tmp/stash_test_readlines.txt\");" +
+            "let result = len(lines);" +
+            "fs.delete(\"/tmp/stash_test_readlines.txt\");");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void FsIsFile_True()
+    {
+        var result = Run(
+            "fs.writeFile(\"/tmp/stash_test_isfile.txt\", \"test\");" +
+            "let result = fs.isFile(\"/tmp/stash_test_isfile.txt\");" +
+            "fs.delete(\"/tmp/stash_test_isfile.txt\");");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void FsIsFile_False()
+    {
+        Assert.Equal(false, Run("let result = fs.isFile(\"/tmp/stash_nonexistent_12345\");"));
+    }
+
+    [Fact]
+    public void FsIsDir_True()
+    {
+        Assert.Equal(true, Run("let result = fs.isDir(\"/tmp\");"));
+    }
+
+    [Fact]
+    public void FsIsDir_False()
+    {
+        Assert.Equal(false, Run("let result = fs.isDir(\"/tmp/stash_nonexistent_dir_12345\");"));
+    }
+
+    [Fact]
+    public void FsTempFile_ReturnsPath()
+    {
+        var result = Run("let result = fs.tempFile();");
+        Assert.IsType<string>(result);
+        Assert.True(((string)result!).Length > 0);
+    }
+
+    [Fact]
+    public void FsTempDir_ReturnsPath()
+    {
+        var result = (string)Run("let result = fs.tempDir();")!;
+        Assert.True(result.Length > 0);
+        Assert.True(System.IO.Directory.Exists(result));
+        // Cleanup
+        System.IO.Directory.Delete(result, true);
+    }
+
+    [Fact]
+    public void FsModifiedAt_ReturnsTimestamp()
+    {
+        var result = Run(
+            "fs.writeFile(\"/tmp/stash_test_modat.txt\", \"test\");" +
+            "let result = fs.modifiedAt(\"/tmp/stash_test_modat.txt\");" +
+            "fs.delete(\"/tmp/stash_test_modat.txt\");");
+        Assert.IsType<double>(result);
+        Assert.True((double)result! > 0);
+    }
+
+    [Fact]
+    public void FsWalk_ReturnsFiles()
+    {
+        var result = Run(
+            "fs.createDir(\"/tmp/stash_test_walk\");" +
+            "fs.writeFile(\"/tmp/stash_test_walk/a.txt\", \"a\");" +
+            "fs.writeFile(\"/tmp/stash_test_walk/b.txt\", \"b\");" +
+            "let files = fs.walk(\"/tmp/stash_test_walk\");" +
+            "let result = len(files);" +
+            "fs.delete(\"/tmp/stash_test_walk\");");
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void FsGlob_FindsFiles()
+    {
+        var result = Run(
+            "fs.createDir(\"/tmp/stash_test_glob\");" +
+            "fs.writeFile(\"/tmp/stash_test_glob/test.txt\", \"data\");" +
+            "let files = fs.glob(\"/tmp/stash_test_glob/*.txt\");" +
+            "let result = len(files);" +
+            "fs.delete(\"/tmp/stash_test_glob\");");
+        Assert.True((long)result! >= 1L);
+    }
+
+    [Fact]
+    public void FsIsSymlink_False()
+    {
+        var result = Run(
+            "fs.writeFile(\"/tmp/stash_test_symlink.txt\", \"test\");" +
+            "let result = fs.isSymlink(\"/tmp/stash_test_symlink.txt\");" +
+            "fs.delete(\"/tmp/stash_test_symlink.txt\");");
+        Assert.Equal(false, result);
+    }
+
+    // ── global utilities ────────────────────────────────────────────
+
+    [Fact]
+    public void Range_SingleArg()
+    {
+        Assert.Equal(5L, Run("let result = len(range(5));"));
+    }
+
+    [Fact]
+    public void Range_SingleArg_Values()
+    {
+        Assert.Equal(0L, Run("let r = range(5); let result = r[0];"));
+    }
+
+    [Fact]
+    public void Range_SingleArg_LastValue()
+    {
+        Assert.Equal(4L, Run("let r = range(5); let result = r[4];"));
+    }
+
+    [Fact]
+    public void Range_TwoArgs()
+    {
+        Assert.Equal(3L, Run("let result = len(range(2, 5));"));
+    }
+
+    [Fact]
+    public void Range_TwoArgs_StartValue()
+    {
+        Assert.Equal(2L, Run("let r = range(2, 5); let result = r[0];"));
+    }
+
+    [Fact]
+    public void Range_ThreeArgs_Step()
+    {
+        Assert.Equal(3L, Run("let result = len(range(0, 10, 4));"));
+    }
+
+    [Fact]
+    public void Range_NegativeStep()
+    {
+        Assert.Equal(10L, Run("let r = range(10, 0, -2); let result = r[0];"));
+    }
+
+    [Fact]
+    public void Range_NegativeStep_Length()
+    {
+        Assert.Equal(5L, Run("let result = len(range(10, 0, -2));"));
+    }
+
+    [Fact]
+    public void Range_ZeroStep_Throws()
+    {
+        RunExpectingError("range(0, 10, 0);");
+    }
+
+    [Fact]
+    public void Range_EmptyRange()
+    {
+        Assert.Equal(0L, Run("let result = len(range(0));"));
+    }
+
+    [Fact]
+    public void Range_NonInt_Throws()
+    {
+        RunExpectingError("range(1.5);");
+    }
+
+    [Fact]
+    public void Hash_IntValue()
+    {
+        var result = Run("let result = hash(42);");
+        Assert.IsType<long>(result);
+    }
+
+    [Fact]
+    public void Hash_NullValue()
+    {
+        Assert.Equal(0L, Run("let result = hash(null);"));
+    }
+
+    [Fact]
+    public void Hash_SameValuesSameHash()
+    {
+        Assert.Equal(true, Run("let result = hash(\"hello\") == hash(\"hello\");"));
     }
 }

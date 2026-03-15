@@ -3,6 +3,7 @@ namespace Stash.Interpreting.BuiltIns;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using Stash.Interpreting.Types;
 
 /// <summary>
@@ -286,6 +287,256 @@ public static class StrBuiltIns
 
         str.Define("padEnd", new BuiltInFunction("str.padEnd", -1, (_, args) =>
             RuntimeValues.PadString("str.padEnd", args, padLeft: false)));
+
+        str.Define("isDigit", new BuiltInFunction("str.isDigit", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.isDigit' must be a string.");
+            }
+
+            return s.Length > 0 && s.All(char.IsDigit);
+        }));
+
+        str.Define("isAlpha", new BuiltInFunction("str.isAlpha", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.isAlpha' must be a string.");
+            }
+
+            return s.Length > 0 && s.All(char.IsLetter);
+        }));
+
+        str.Define("isAlphaNum", new BuiltInFunction("str.isAlphaNum", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.isAlphaNum' must be a string.");
+            }
+
+            return s.Length > 0 && s.All(char.IsLetterOrDigit);
+        }));
+
+        str.Define("isUpper", new BuiltInFunction("str.isUpper", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.isUpper' must be a string.");
+            }
+
+            var letters = s.Where(char.IsLetter).ToList();
+            return letters.Count > 0 && letters.All(char.IsUpper);
+        }));
+
+        str.Define("isLower", new BuiltInFunction("str.isLower", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.isLower' must be a string.");
+            }
+
+            var letters = s.Where(char.IsLetter).ToList();
+            return letters.Count > 0 && letters.All(char.IsLower);
+        }));
+
+        str.Define("isEmpty", new BuiltInFunction("str.isEmpty", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.isEmpty' must be a string.");
+            }
+
+            return string.IsNullOrWhiteSpace(s);
+        }));
+
+        str.Define("match", new BuiltInFunction("str.match", 2, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.match' must be a string.");
+            }
+
+            if (args[1] is not string pattern)
+            {
+                throw new RuntimeError("Second argument to 'str.match' must be a string.");
+            }
+
+            try
+            {
+                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
+                var m = regex.Match(s);
+                return m.Success ? m.Value : null;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new RuntimeError("'str.match' regex match timed out.");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new RuntimeError($"'str.match' invalid regex pattern: {ex.Message}");
+            }
+        }));
+
+        str.Define("matchAll", new BuiltInFunction("str.matchAll", 2, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.matchAll' must be a string.");
+            }
+
+            if (args[1] is not string pattern)
+            {
+                throw new RuntimeError("Second argument to 'str.matchAll' must be a string.");
+            }
+
+            try
+            {
+                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
+                var matches = regex.Matches(s);
+                var result = new List<object?>();
+                foreach (Match m in matches)
+                {
+                    result.Add(m.Value);
+                }
+
+                return result;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new RuntimeError("'str.matchAll' regex match timed out.");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new RuntimeError($"'str.matchAll' invalid regex pattern: {ex.Message}");
+            }
+        }));
+
+        str.Define("isMatch", new BuiltInFunction("str.isMatch", 2, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.isMatch' must be a string.");
+            }
+
+            if (args[1] is not string pattern)
+            {
+                throw new RuntimeError("Second argument to 'str.isMatch' must be a string.");
+            }
+
+            try
+            {
+                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
+                return regex.IsMatch(s);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new RuntimeError("'str.isMatch' regex match timed out.");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new RuntimeError($"'str.isMatch' invalid regex pattern: {ex.Message}");
+            }
+        }));
+
+        str.Define("replaceRegex", new BuiltInFunction("str.replaceRegex", 3, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.replaceRegex' must be a string.");
+            }
+
+            if (args[1] is not string pattern)
+            {
+                throw new RuntimeError("Second argument to 'str.replaceRegex' must be a string.");
+            }
+
+            if (args[2] is not string replacement)
+            {
+                throw new RuntimeError("Third argument to 'str.replaceRegex' must be a string.");
+            }
+
+            try
+            {
+                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
+                return regex.Replace(s, replacement);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new RuntimeError("'str.replaceRegex' regex match timed out.");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new RuntimeError($"'str.replaceRegex' invalid regex pattern: {ex.Message}");
+            }
+        }));
+
+        str.Define("count", new BuiltInFunction("str.count", 2, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.count' must be a string.");
+            }
+
+            if (args[1] is not string sub)
+            {
+                throw new RuntimeError("Second argument to 'str.count' must be a string.");
+            }
+
+            if (sub.Length == 0)
+            {
+                throw new RuntimeError("'str.count' substring must not be empty.");
+            }
+
+            long count = 0;
+            int idx = 0;
+            while ((idx = s.IndexOf(sub, idx, StringComparison.Ordinal)) >= 0)
+            {
+                count++;
+                idx += sub.Length;
+            }
+            return count;
+        }));
+
+        str.Define("format", new BuiltInFunction("str.format", -1, (_, args) =>
+        {
+            if (args.Count < 1)
+            {
+                throw new RuntimeError("'str.format' requires at least 1 argument.");
+            }
+
+            if (args[0] is not string template)
+            {
+                throw new RuntimeError("First argument to 'str.format' must be a string.");
+            }
+
+            try
+            {
+                var placeholderRegex = new Regex(@"\{(\d+)\}", RegexOptions.None, TimeSpan.FromSeconds(5));
+                string? error = null;
+                string result = placeholderRegex.Replace(template, m =>
+                {
+                    int index = int.Parse(m.Groups[1].Value);
+                    int argIndex = index + 1;
+                    if (argIndex >= args.Count)
+                    {
+                        error = $"'str.format' placeholder {{{index}}} is out of range (only {args.Count - 1} substitution argument(s) provided).";
+                        return m.Value;
+                    }
+                    return RuntimeValues.Stringify(args[argIndex]);
+                });
+                if (error != null)
+                {
+                    throw new RuntimeError(error);
+                }
+
+                return result;
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new RuntimeError("'str.format' regex match timed out.");
+            }
+        }));
 
         globals.Define("str", str);
     }

@@ -45,7 +45,10 @@ public static class CommandParser
                         i++;
                     }
                 }
-                if (i < command.Length) i++; // skip closing quote
+                if (i < command.Length)
+                {
+                    i++; // skip closing quote
+                }
             }
             else if (c == '\'')
             {
@@ -56,7 +59,10 @@ public static class CommandParser
                     current.Append(command[i]);
                     i++;
                 }
-                if (i < command.Length) i++; // skip closing quote
+                if (i < command.Length)
+                {
+                    i++; // skip closing quote
+                }
             }
             else if (char.IsWhiteSpace(c))
             {

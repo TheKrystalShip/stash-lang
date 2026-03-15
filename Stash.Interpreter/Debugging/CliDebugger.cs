@@ -54,7 +54,9 @@ public class CliDebugger : IDebugger
                 {
                     var (value, error) = _interpreter.EvaluateString(bp.Condition, env);
                     if (error is not null || !RuntimeValues.IsTruthy(value))
+                    {
                         continue;
+                    }
                 }
 
                 if (bp.IsLogpoint)
@@ -229,9 +231,15 @@ public class CliDebugger : IDebugger
                         {
                             string info = $"  [{bp.Id}] {bp.File}:{bp.Line}";
                             if (bp.Condition is not null)
+                            {
                                 info += $" (when {bp.Condition})";
+                            }
+
                             if (bp.IsLogpoint)
+                            {
                                 info += $" (log: {bp.LogMessage})";
+                            }
+
                             info += $" hits={bp.HitCount}";
                             Console.WriteLine(info);
                         }
@@ -318,7 +326,10 @@ public class CliDebugger : IDebugger
             _breakpoints.Add(newBp);
             string msg = $"  Breakpoint {newBp.Id} set at {newBp.File}:{newBp.Line}";
             if (condition is not null)
+            {
                 msg += $" (when {condition})";
+            }
+
             Console.WriteLine(msg);
         }
     }
@@ -422,7 +433,9 @@ public class CliDebugger : IDebugger
         foreach (var scope in _currentEnv!.GetScopeChain())
         {
             if (scope.TryGet(name, out value))
+            {
                 return true;
+            }
         }
         value = null;
         return false;

@@ -1,5 +1,6 @@
 namespace Stash.Interpreting.BuiltIns;
 
+using System;
 using Stash.Interpreting.Types;
 
 /// <summary>
@@ -26,6 +27,21 @@ public static class IoBuiltIns
             interp.Output.Write(text);
             interp.Debugger?.OnOutput("stdout", text);
             return null;
+        }));
+
+        io.Define("readLine", new BuiltInFunction("io.readLine", -1, (interp, args) =>
+        {
+            if (args.Count > 1)
+            {
+                throw new RuntimeError("'io.readLine' expects 0 or 1 arguments.");
+            }
+
+            if (args.Count == 1)
+            {
+                string prompt = RuntimeValues.Stringify(args[0]);
+                interp.Output.Write(prompt);
+            }
+            return Console.ReadLine();
         }));
 
         globals.Define("io", io);

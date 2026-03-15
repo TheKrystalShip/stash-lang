@@ -101,6 +101,12 @@ public static class BuiltInRegistry
             new("pid", "int"),
             new("command", "string"),
         }),
+        new BuiltInStruct("HttpResponse", new BuiltInField[]
+        {
+            new("status", "int"),
+            new("body", "string"),
+            new("headers", "dict"),
+        }),
     };
 
     // ── Built-in Global Functions ──
@@ -114,6 +120,9 @@ public static class BuiltInRegistry
         new BuiltInFunction("test", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") }),
         new BuiltInFunction("describe", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") }),
         new BuiltInFunction("captureOutput", new[] { new BuiltInParam("fn", "function") }, "string"),
+        new BuiltInFunction("range", new[] { new BuiltInParam("start_or_end", "int"), new BuiltInParam("end", "int"), new BuiltInParam("step", "int") }, "array"),
+        new BuiltInFunction("exit", new[] { new BuiltInParam("code", "int") }),
+        new BuiltInFunction("hash", new[] { new BuiltInParam("value") }, "int"),
     };
 
     // ── Built-in Namespace Functions ──
@@ -123,13 +132,32 @@ public static class BuiltInRegistry
         // io namespace
         new NamespaceFunction("io", "println", new[] { new BuiltInParam("value") }),
         new NamespaceFunction("io", "print", new[] { new BuiltInParam("value") }),
+        new NamespaceFunction("io", "readLine", new[] { new BuiltInParam("prompt", "string") }, "string", IsVariadic: true),
         // conv namespace
         new NamespaceFunction("conv", "toStr", new[] { new BuiltInParam("value") }, "string"),
         new NamespaceFunction("conv", "toInt", new[] { new BuiltInParam("value") }, "int"),
         new NamespaceFunction("conv", "toFloat", new[] { new BuiltInParam("value") }, "float"),
+        new NamespaceFunction("conv", "toBool", new[] { new BuiltInParam("value") }, "bool"),
+        new NamespaceFunction("conv", "toHex", new[] { new BuiltInParam("n", "int") }, "string"),
+        new NamespaceFunction("conv", "toOct", new[] { new BuiltInParam("n", "int") }, "string"),
+        new NamespaceFunction("conv", "toBin", new[] { new BuiltInParam("n", "int") }, "string"),
+        new NamespaceFunction("conv", "fromHex", new[] { new BuiltInParam("s", "string") }, "int"),
+        new NamespaceFunction("conv", "fromOct", new[] { new BuiltInParam("s", "string") }, "int"),
+        new NamespaceFunction("conv", "fromBin", new[] { new BuiltInParam("s", "string") }, "int"),
+        new NamespaceFunction("conv", "charCode", new[] { new BuiltInParam("s", "string") }, "int"),
+        new NamespaceFunction("conv", "fromCharCode", new[] { new BuiltInParam("n", "int") }, "string"),
         // env namespace
         new NamespaceFunction("env", "get", new[] { new BuiltInParam("name", "string") }, "string"),
         new NamespaceFunction("env", "set", new[] { new BuiltInParam("name", "string"), new BuiltInParam("value", "string") }),
+        new NamespaceFunction("env", "has", new[] { new BuiltInParam("name", "string") }, "bool"),
+        new NamespaceFunction("env", "all", Array.Empty<BuiltInParam>(), "dict"),
+        new NamespaceFunction("env", "remove", new[] { new BuiltInParam("name", "string") }),
+        new NamespaceFunction("env", "cwd", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("env", "home", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("env", "hostname", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("env", "user", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("env", "os", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("env", "arch", Array.Empty<BuiltInParam>(), "string"),
         // process namespace
         new NamespaceFunction("process", "exit", new[] { new BuiltInParam("code", "int") }),
         new NamespaceFunction("process", "spawn", new[] { new BuiltInParam("cmd", "string") }, "Process"),
@@ -156,6 +184,15 @@ public static class BuiltInRegistry
         new NamespaceFunction("fs", "size", new[] { new BuiltInParam("path", "string") }, "int"),
         new NamespaceFunction("fs", "listDir", new[] { new BuiltInParam("path", "string") }, "array"),
         new NamespaceFunction("fs", "appendFile", new[] { new BuiltInParam("path", "string"), new BuiltInParam("content", "string") }),
+        new NamespaceFunction("fs", "readLines", new[] { new BuiltInParam("path", "string") }, "array"),
+        new NamespaceFunction("fs", "glob", new[] { new BuiltInParam("pattern", "string") }, "array"),
+        new NamespaceFunction("fs", "isFile", new[] { new BuiltInParam("path", "string") }, "bool"),
+        new NamespaceFunction("fs", "isDir", new[] { new BuiltInParam("path", "string") }, "bool"),
+        new NamespaceFunction("fs", "isSymlink", new[] { new BuiltInParam("path", "string") }, "bool"),
+        new NamespaceFunction("fs", "tempFile", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("fs", "tempDir", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("fs", "modifiedAt", new[] { new BuiltInParam("path", "string") }, "float"),
+        new NamespaceFunction("fs", "walk", new[] { new BuiltInParam("path", "string") }, "array"),
         // path namespace
         new NamespaceFunction("path", "abs", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("path", "dir", new[] { new BuiltInParam("path", "string") }, "string"),
@@ -216,6 +253,18 @@ public static class BuiltInRegistry
         new NamespaceFunction("str", "chars", new[] { new BuiltInParam("s", "string") }, "array"),
         new NamespaceFunction("str", "padStart", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string", IsVariadic: true),
         new NamespaceFunction("str", "padEnd", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string", IsVariadic: true),
+        new NamespaceFunction("str", "isDigit", new[] { new BuiltInParam("s", "string") }, "bool"),
+        new NamespaceFunction("str", "isAlpha", new[] { new BuiltInParam("s", "string") }, "bool"),
+        new NamespaceFunction("str", "isAlphaNum", new[] { new BuiltInParam("s", "string") }, "bool"),
+        new NamespaceFunction("str", "isUpper", new[] { new BuiltInParam("s", "string") }, "bool"),
+        new NamespaceFunction("str", "isLower", new[] { new BuiltInParam("s", "string") }, "bool"),
+        new NamespaceFunction("str", "isEmpty", new[] { new BuiltInParam("s", "string") }, "bool"),
+        new NamespaceFunction("str", "match", new[] { new BuiltInParam("s", "string"), new BuiltInParam("pattern", "string") }, "string"),
+        new NamespaceFunction("str", "matchAll", new[] { new BuiltInParam("s", "string"), new BuiltInParam("pattern", "string") }, "array"),
+        new NamespaceFunction("str", "isMatch", new[] { new BuiltInParam("s", "string"), new BuiltInParam("pattern", "string") }, "bool"),
+        new NamespaceFunction("str", "replaceRegex", new[] { new BuiltInParam("s", "string"), new BuiltInParam("pattern", "string"), new BuiltInParam("replacement", "string") }, "string"),
+        new NamespaceFunction("str", "count", new[] { new BuiltInParam("s", "string"), new BuiltInParam("substring", "string") }, "int"),
+        new NamespaceFunction("str", "format", new[] { new BuiltInParam("template", "string"), new BuiltInParam("args") }, "string", IsVariadic: true),
         // assert namespace
         new NamespaceFunction("assert", "equal", new[] { new BuiltInParam("actual"), new BuiltInParam("expected") }),
         new NamespaceFunction("assert", "notEqual", new[] { new BuiltInParam("actual"), new BuiltInParam("expected") }),
@@ -227,6 +276,46 @@ public static class BuiltInRegistry
         new NamespaceFunction("assert", "less", new[] { new BuiltInParam("a"), new BuiltInParam("b") }),
         new NamespaceFunction("assert", "throws", new[] { new BuiltInParam("fn", "function") }, "string"),
         new NamespaceFunction("assert", "fail", new[] { new BuiltInParam("message", "string") }),
+        // math namespace
+        new NamespaceFunction("math", "abs", new[] { new BuiltInParam("n", "number") }, "number"),
+        new NamespaceFunction("math", "ceil", new[] { new BuiltInParam("n", "number") }, "int"),
+        new NamespaceFunction("math", "floor", new[] { new BuiltInParam("n", "number") }, "int"),
+        new NamespaceFunction("math", "round", new[] { new BuiltInParam("n", "number") }, "int"),
+        new NamespaceFunction("math", "min", new[] { new BuiltInParam("a", "number"), new BuiltInParam("b", "number") }, "number"),
+        new NamespaceFunction("math", "max", new[] { new BuiltInParam("a", "number"), new BuiltInParam("b", "number") }, "number"),
+        new NamespaceFunction("math", "pow", new[] { new BuiltInParam("base", "number"), new BuiltInParam("exp", "number") }, "float"),
+        new NamespaceFunction("math", "sqrt", new[] { new BuiltInParam("n", "number") }, "float"),
+        new NamespaceFunction("math", "log", new[] { new BuiltInParam("n", "number") }, "float"),
+        new NamespaceFunction("math", "random", Array.Empty<BuiltInParam>(), "float"),
+        new NamespaceFunction("math", "randomInt", new[] { new BuiltInParam("min", "int"), new BuiltInParam("max", "int") }, "int"),
+        new NamespaceFunction("math", "clamp", new[] { new BuiltInParam("n", "number"), new BuiltInParam("min", "number"), new BuiltInParam("max", "number") }, "number"),
+        // time namespace
+        new NamespaceFunction("time", "now", Array.Empty<BuiltInParam>(), "float"),
+        new NamespaceFunction("time", "millis", Array.Empty<BuiltInParam>(), "int"),
+        new NamespaceFunction("time", "sleep", new[] { new BuiltInParam("seconds", "number") }),
+        new NamespaceFunction("time", "format", new[] { new BuiltInParam("timestamp", "number"), new BuiltInParam("format", "string") }, "string"),
+        new NamespaceFunction("time", "parse", new[] { new BuiltInParam("str", "string"), new BuiltInParam("format", "string") }, "float"),
+        new NamespaceFunction("time", "date", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("time", "clock", Array.Empty<BuiltInParam>(), "float"),
+        new NamespaceFunction("time", "iso", Array.Empty<BuiltInParam>(), "string"),
+        // json namespace
+        new NamespaceFunction("json", "parse", new[] { new BuiltInParam("str", "string") }),
+        new NamespaceFunction("json", "stringify", new[] { new BuiltInParam("value") }, "string"),
+        new NamespaceFunction("json", "pretty", new[] { new BuiltInParam("value") }, "string"),
+        // http namespace
+        new NamespaceFunction("http", "get", new[] { new BuiltInParam("url", "string") }, "HttpResponse"),
+        new NamespaceFunction("http", "post", new[] { new BuiltInParam("url", "string"), new BuiltInParam("body", "string") }, "HttpResponse"),
+        new NamespaceFunction("http", "put", new[] { new BuiltInParam("url", "string"), new BuiltInParam("body", "string") }, "HttpResponse"),
+        new NamespaceFunction("http", "delete", new[] { new BuiltInParam("url", "string") }, "HttpResponse"),
+        new NamespaceFunction("http", "request", new[] { new BuiltInParam("options", "dict") }, "HttpResponse"),
+        // ini namespace
+        new NamespaceFunction("ini", "parse", new[] { new BuiltInParam("text", "string") }, "dict"),
+        new NamespaceFunction("ini", "stringify", new[] { new BuiltInParam("data", "dict") }, "string"),
+        // config namespace
+        new NamespaceFunction("config", "read", new[] { new BuiltInParam("path", "string"), new BuiltInParam("format", "string") }, "dict", IsVariadic: true),
+        new NamespaceFunction("config", "write", new[] { new BuiltInParam("path", "string"), new BuiltInParam("data"), new BuiltInParam("format", "string") }, null, IsVariadic: true),
+        new NamespaceFunction("config", "parse", new[] { new BuiltInParam("text", "string"), new BuiltInParam("format", "string") }, "dict"),
+        new NamespaceFunction("config", "stringify", new[] { new BuiltInParam("data"), new BuiltInParam("format", "string") }, "string"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -240,13 +329,15 @@ public static class BuiltInRegistry
         new NamespaceConstant("process", "SIGUSR1", "int", "10"),
         new NamespaceConstant("process", "SIGUSR2", "int", "12"),
         new NamespaceConstant("process", "SIGTERM", "int", "15"),
+        new NamespaceConstant("math", "PI", "float", "3.141592653589793"),
+        new NamespaceConstant("math", "E",  "float", "2.718281828459045"),
     };
 
     // ── Built-in Namespace Names ──
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config"
     };
 
     // ── Keywords ──

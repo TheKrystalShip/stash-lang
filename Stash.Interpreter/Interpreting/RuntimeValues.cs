@@ -17,11 +17,31 @@ public static class RuntimeValues
     /// </summary>
     public static bool IsTruthy(object? value)
     {
-        if (value is null) return false;
-        if (value is bool b) return b;
-        if (value is long i) return i != 0;
-        if (value is double d) return d != 0.0;
-        if (value is string s) return s.Length != 0;
+        if (value is null)
+        {
+            return false;
+        }
+
+        if (value is bool b)
+        {
+            return b;
+        }
+
+        if (value is long i)
+        {
+            return i != 0;
+        }
+
+        if (value is double d)
+        {
+            return d != 0.0;
+        }
+
+        if (value is string s)
+        {
+            return s.Length != 0;
+        }
+
         return true;
     }
 
@@ -30,21 +50,56 @@ public static class RuntimeValues
     /// </summary>
     public static string Stringify(object? value)
     {
-        if (value is null) return "null";
-        if (value is bool b) return b ? "true" : "false";
-        if (value is double d) return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        if (value is StashInstance instance) return instance.ToString();
-        if (value is StashStruct structDef) return structDef.ToString();
-        if (value is StashEnumValue enumVal) return enumVal.ToString();
-        if (value is StashEnum enumType) return enumType.ToString();
-        if (value is StashNamespace ns) return ns.ToString();
+        if (value is null)
+        {
+            return "null";
+        }
+
+        if (value is bool b)
+        {
+            return b ? "true" : "false";
+        }
+
+        if (value is double d)
+        {
+            return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (value is StashInstance instance)
+        {
+            return instance.ToString();
+        }
+
+        if (value is StashStruct structDef)
+        {
+            return structDef.ToString();
+        }
+
+        if (value is StashEnumValue enumVal)
+        {
+            return enumVal.ToString();
+        }
+
+        if (value is StashEnum enumType)
+        {
+            return enumType.ToString();
+        }
+
+        if (value is StashNamespace ns)
+        {
+            return ns.ToString();
+        }
 
         if (value is List<object?> list)
         {
             var elements = new StringBuilder("[");
             for (int i = 0; i < list.Count; i++)
             {
-                if (i > 0) elements.Append(", ");
+                if (i > 0)
+                {
+                    elements.Append(", ");
+                }
+
                 elements.Append(Stringify(list[i]));
             }
             elements.Append(']');
@@ -57,7 +112,11 @@ public static class RuntimeValues
             bool first = true;
             foreach (var key in dict.Keys())
             {
-                if (!first) sb.Append(", ");
+                if (!first)
+                {
+                    sb.Append(", ");
+                }
+
                 first = false;
                 sb.Append(Stringify(key));
                 sb.Append(": ");
@@ -75,9 +134,21 @@ public static class RuntimeValues
     /// </summary>
     public static bool IsEqual(object? left, object? right)
     {
-        if (left is null && right is null) return true;
-        if (left is null || right is null) return false;
-        if (left.GetType() != right.GetType()) return false;
+        if (left is null && right is null)
+        {
+            return true;
+        }
+
+        if (left is null || right is null)
+        {
+            return false;
+        }
+
+        if (left.GetType() != right.GetType())
+        {
+            return false;
+        }
+
         return object.Equals(left, right);
     }
 

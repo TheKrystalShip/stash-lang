@@ -303,7 +303,35 @@ for (let pair in dict.pairs(config)) {
 let merged = dict.merge(defaults, overrides);
 ```
 
-Dictionaries support `string`, `int`, `float`, and `bool` keys. Access via bracket notation (`d[key]`), and use the `dict` namespace for operations like `dict.keys()`, `dict.values()`, `dict.pairs()`, `dict.forEach()`, and `dict.merge()`.
+Dictionaries support `string`, `int`, `float`, and `bool` keys. Access via bracket notation (`d[key]`) or dot notation (`d.key`), and use the `dict` namespace for operations like `dict.keys()`, `dict.values()`, `dict.pairs()`, `dict.forEach()`, and `dict.merge()`.
+
+### Configuration Files
+
+Load and manipulate configuration files directly — INI and JSON formats are supported out of the box:
+
+```stash
+// Load an INI config file into a nested dictionary
+let cfg = try config.read("/etc/myapp/config.ini") ?? dict.new();
+
+// Access values with dot notation
+println(cfg.database.host);      // "localhost"
+println(cfg.database.port);      // 5432
+
+// Modify and write back
+cfg.database.port = 3306;
+config.write("/etc/myapp/config.ini", cfg);
+
+// Inline INI parsing
+let text = "[server]\nhost = 0.0.0.0\nport = 8080";
+let settings = ini.parse(text);
+println(settings.server.host);   // "0.0.0.0"
+
+// Format conversion — read INI, write JSON
+let legacy = config.read("old.ini");
+config.write("modern.json", legacy);
+```
+
+The `config` namespace auto-detects format from file extension (`.json`, `.ini`, `.cfg`, `.conf`, `.properties`). The `ini` namespace provides `ini.parse()` and `ini.stringify()` for string-level control.
 
 ### String Operations
 
@@ -620,6 +648,15 @@ if (args.command == "deploy") {
 | `str.replaceAll(s, old, new)`   | Replace all occurrences                                                                                           |
 | `str.split(s, delim)`           | Split string into array                                                                                           |
 | `str.padStart(s, len, fill?)`   | Pad start to target length                                                                                        |
+| `ini.parse(text)`               | Parse INI string into nested dict                                                                                 |
+| `ini.stringify(dict)`           | Serialize dict to INI format string                                                                               |
+| `config.read(path, format?)`    | Read and parse config file (auto-detects `.json`, `.ini`, `.cfg`, `.conf`)                                        |
+| `config.write(path, data, fmt?)`| Write data to config file in detected/specified format                                                            |
+| `config.parse(text, format)`    | Parse config string without file I/O                                                                              |
+| `config.stringify(data, format)`| Serialize data to config format string                                                                            |
+| `json.parse(text)`              | Parse JSON string into dict/array                                                                                 |
+| `json.stringify(value)`         | Serialize value to compact JSON string                                                                            |
+| `json.pretty(value)`            | Serialize value to pretty-printed JSON string                                                                     |
 | `lastError()`                   | Last error caught by `try`, or null                                                                               |
 | `parseArgs(tree)`               | Parse CLI arguments from an `ArgTree` definition                                                                  |
 | `test(name, fn)`                | Register and run a test case (requires `--test`)                                                                  |

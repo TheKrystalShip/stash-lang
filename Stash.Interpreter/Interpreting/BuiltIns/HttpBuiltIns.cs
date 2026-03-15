@@ -1,0 +1,215 @@
+namespace Stash.Interpreting.BuiltIns;
+
+using System;
+using System.Collections.Generic;
+using System.Net.Http;
+using System.Net.Http.Headers;
+using System.Threading.Tasks;
+using Stash.Interpreting.Types;
+
+public static class HttpBuiltIns
+{
+    private static readonly HttpClient _client = new HttpClient
+    {
+        Timeout = TimeSpan.FromSeconds(30)
+    };
+
+    public static void Register(Stash.Interpreting.Environment globals)
+    {
+        var http = new StashNamespace("http");
+
+        http.Define("get", new BuiltInFunction("http.get", 1, (_, args) =>
+        {
+            if (args[0] is not string url)
+            {
+                throw new RuntimeError("First argument to 'http.get' must be a string.");
+            }
+
+            ValidateUrl(url, "http.get");
+
+            try
+            {
+                var response = _client.GetAsync(url).GetAwaiter().GetResult();
+                return MakeResponse(response);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.get: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.get: request timed out.");
+            }
+        }));
+
+        http.Define("post", new BuiltInFunction("http.post", 2, (_, args) =>
+        {
+            if (args[0] is not string url)
+            {
+                throw new RuntimeError("First argument to 'http.post' must be a string.");
+            }
+
+            if (args[1] is not string body)
+            {
+                throw new RuntimeError("Second argument to 'http.post' must be a string.");
+            }
+
+            ValidateUrl(url, "http.post");
+
+            try
+            {
+                var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                var response = _client.PostAsync(url, content).GetAwaiter().GetResult();
+                return MakeResponse(response);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.post: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.post: request timed out.");
+            }
+        }));
+
+        http.Define("put", new BuiltInFunction("http.put", 2, (_, args) =>
+        {
+            if (args[0] is not string url)
+            {
+                throw new RuntimeError("First argument to 'http.put' must be a string.");
+            }
+
+            if (args[1] is not string body)
+            {
+                throw new RuntimeError("Second argument to 'http.put' must be a string.");
+            }
+
+            ValidateUrl(url, "http.put");
+
+            try
+            {
+                var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                var response = _client.PutAsync(url, content).GetAwaiter().GetResult();
+                return MakeResponse(response);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.put: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.put: request timed out.");
+            }
+        }));
+
+        http.Define("delete", new BuiltInFunction("http.delete", 1, (_, args) =>
+        {
+            if (args[0] is not string url)
+            {
+                throw new RuntimeError("First argument to 'http.delete' must be a string.");
+            }
+
+            ValidateUrl(url, "http.delete");
+
+            try
+            {
+                var response = _client.DeleteAsync(url).GetAwaiter().GetResult();
+                return MakeResponse(response);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.delete: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.delete: request timed out.");
+            }
+        }));
+
+        http.Define("request", new BuiltInFunction("http.request", 1, (_, args) =>
+        {
+            if (args[0] is not StashDictionary options)
+            {
+                throw new RuntimeError("First argument to 'http.request' must be a dict.");
+            }
+
+            var urlVal = options.Get("url");
+            if (urlVal is not string url)
+            {
+                throw new RuntimeError("http.request: 'url' must be a string.");
+            }
+
+            ValidateUrl(url, "http.request");
+
+            var methodVal = options.Get("method");
+            var methodStr = methodVal is string m ? m.ToUpperInvariant() : "GET";
+
+            var requestMessage = new HttpRequestMessage(new HttpMethod(methodStr), url);
+
+            var headersVal = options.Get("headers");
+            if (headersVal is StashDictionary headersDict)
+            {
+                foreach (var key in headersDict.Keys())
+                {
+                    var keyStr = RuntimeValues.Stringify(key);
+                    var valStr = RuntimeValues.Stringify(headersDict.Get(key!));
+                    requestMessage.Headers.TryAddWithoutValidation(keyStr, valStr);
+                }
+            }
+
+            var bodyVal = options.Get("body");
+            if (bodyVal is string bodyStr)
+            {
+                requestMessage.Content = new StringContent(bodyStr, System.Text.Encoding.UTF8, "application/json");
+            }
+
+            try
+            {
+                var response = _client.SendAsync(requestMessage).GetAwaiter().GetResult();
+                return MakeResponse(response);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.request: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.request: request timed out.");
+            }
+        }));
+
+        globals.Define("http", http);
+    }
+
+    private static StashInstance MakeResponse(HttpResponseMessage response)
+    {
+        var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        var headers = new StashDictionary();
+
+        foreach (var header in response.Headers)
+        {
+            headers.Set(header.Key, string.Join(", ", header.Value));
+        }
+
+        foreach (var header in response.Content.Headers)
+        {
+            headers.Set(header.Key, string.Join(", ", header.Value));
+        }
+
+        return new StashInstance("HttpResponse", new Dictionary<string, object?>
+        {
+            ["status"] = (long)response.StatusCode,
+            ["body"] = body,
+            ["headers"] = headers
+        });
+    }
+
+    private static void ValidateUrl(string url, string funcName)
+    {
+        if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&
+            !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new RuntimeError($"{funcName}: URL must use http:// or https:// scheme.");
+        }
+    }
+}

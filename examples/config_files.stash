@@ -1,0 +1,158 @@
+#!/usr/bin/env stash
+
+// Configuration files demo
+// Showcases dict dot access, ini.*, config.*, and json.* built-in functions
+// --- Dict Dot Access ---
+
+fn demo_dot_access() {
+  io.println("=== Dict Dot Access ===");
+  let db = dict.new();
+  db["host"] = "localhost";
+  db["port"] = 5432;
+  db["name"] = "myapp";
+
+  // Bracket notation (classic)
+  io.println($"  bracket: host = {db["host"]}, port = {db["port"]}");
+
+  // Dot notation (sugar)
+  io.println($"  dot:     host = {db.host}, port = {db.port}");
+
+  // Dot notation assignment
+  db.port = 3306;
+  io.println($"  updated: port = {db.port}");
+
+  // Nested dict via dot access
+  let cfg = dict.new();
+  cfg["database"] = db;
+  io.println($"  nested:  cfg.database.host = {cfg.database.host}");
+  io.println("");
+}
+
+// --- INI Parsing ---
+
+fn demo_ini_parse() {
+  io.println("=== INI Parsing ===");
+  let text = "[server]\nhost = 0.0.0.0\nport = 8080\n\n[database]\nhost = localhost\nport = 5432\nname = myapp";
+  let settings = ini.parse(text);
+  io.println($"  settings.server.host   = {settings.server.host}");
+
+  // 0.0.0.0
+  io.println($"  settings.server.port   = {settings.server.port}");
+
+  // 8080
+  io.println($"  settings.database.host = {settings.database.host}");
+
+  // localhost
+  io.println($"  settings.database.name = {settings.database.name}");
+
+  // myapp
+  io.println("");
+}
+
+// --- INI Stringify ---
+
+fn demo_ini_stringify() {
+  io.println("=== INI Stringify ===");
+  let text = "[app]\nname = Stash\nversion = 1.0\ndebug = false";
+  let cfg = ini.parse(text);
+
+  // Modify a value via dot notation
+  cfg.app.version = "2.0";
+  cfg.app.debug = "true";
+  let output = ini.stringify(cfg);
+  io.println("  Serialized INI:");
+  for (let line in str.split(output, "\n")) {
+    io.println($"    {line}");
+  }
+  io.println("");
+}
+
+// --- config.parse / config.stringify (format conversion) ---
+
+fn demo_config_convert() {
+  io.println("=== Format Conversion (INI → JSON) ===");
+  let ini_text = "[logging]\nlevel = info\nfile = /var/log/app.log\n\n[cache]\nttl = 300\nenabled = true";
+
+  // Parse as INI
+  let data = config.parse(ini_text, "ini");
+  io.println($"  parsed.logging.level  = {data.logging.level}");
+
+  // info
+  io.println($"  parsed.cache.ttl      = {data.cache.ttl}");
+
+  // 300
+  // Serialize as JSON
+  let json_out = config.stringify(data, "json");
+  io.println("  As JSON:");
+  io.println($"    {json_out}");
+
+  // Round-trip: JSON → pretty JSON
+  let pretty = json.pretty(data);
+  io.println("  Pretty JSON (first 3 lines):");
+  let lines = str.split(pretty, "\n");
+  io.println($"    {lines[0]}");
+  io.println($"    {lines[1]}");
+  io.println($"    {lines[2]}");
+  io.println("");
+}
+
+// --- config.read / config.write (file I/O) ---
+
+fn demo_config_file_io() {
+  io.println("=== File I/O (config.read / config.write) ===");
+  let tmp_ini = "/tmp/stash_demo_config.ini";
+  let tmp_json = "/tmp/stash_demo_config.json";
+
+  // Write an INI file
+  let ini_content = "[service]\nname = demo\nport = 9000\nenabled = true";
+  let parsed = ini.parse(ini_content);
+  config.write(tmp_ini, parsed);
+  io.println($"  Wrote INI  → {tmp_ini}");
+
+  // Read it back
+  let loaded = config.read(tmp_ini);
+  io.println($"  Read back: service.name = {loaded.service.name}, port = {loaded.service.port}");
+
+  // Modify and write as JSON (format detected from extension)
+  loaded.service.port = "9001";
+  config.write(tmp_json, loaded);
+  io.println($"  Wrote JSON → {tmp_json}");
+
+  // Read JSON back and verify
+  let from_json = config.read(tmp_json);
+  io.println($"  Read JSON: service.port = {from_json.service.port}");
+  io.println("");
+}
+
+// --- json.parse with nested dot access ---
+
+fn demo_json_parse() {
+  io.println("=== JSON Parsing & Dot Access ===");
+  let text = "{\"app\":{\"name\":\"Stash\",\"version\":\"1.0\"},\"features\":{\"lsp\":true,\"debugger\":true}}";
+  let obj = json.parse(text);
+  io.println($"  obj.app.name          = {obj.app.name}");
+
+  // Stash
+  io.println($"  obj.app.version       = {obj.app.version}");
+
+  // 1.0
+  io.println($"  obj.features.lsp      = {obj.features.lsp}");
+
+  // true
+  io.println($"  obj.features.debugger = {obj.features.debugger}");
+
+  // true
+  // Modify and re-serialize
+  obj.app.version = "2.0";
+  io.println($"  updated:  {json.stringify(obj.app)}");
+  io.println("");
+}
+
+// --- Run all demos ---
+
+demo_dot_access();
+demo_ini_parse();
+demo_ini_stringify();
+demo_config_convert();
+demo_config_file_io();
+demo_json_parse();

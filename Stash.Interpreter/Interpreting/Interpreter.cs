@@ -837,12 +837,16 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             var lexer = new Lexer(expression, "<eval>");
             var tokens = lexer.ScanTokens();
             if (lexer.Errors.Count > 0)
+            {
                 return (null, lexer.Errors[0].ToString());
+            }
 
             var parser = new Parser(tokens);
             Expr expr = parser.Parse();
             if (parser.Errors.Count > 0)
+            {
                 return (null, parser.Errors[0].ToString());
+            }
 
             object? result = EvaluateInEnvironment(expr, environment);
             return (result, null);
@@ -1209,6 +1213,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             return instance.GetField(expr.Name.Lexeme, expr.Name.Span);
         }
 
+        if (obj is StashDictionary dict)
+        {
+            return dict.Get(expr.Name.Lexeme);
+        }
+
         if (obj is StashEnum enumDef)
         {
             StashEnumValue? value = enumDef.GetMember(expr.Name.Lexeme) ?? throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{expr.Name.Lexeme}'.", expr.Name.Span);
@@ -1220,7 +1229,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             return ns.GetMember(expr.Name.Lexeme, expr.Name.Span);
         }
 
-        throw new RuntimeError("Only struct instances, enums, and namespaces have members.", expr.Name.Span);
+        throw new RuntimeError("Only struct instances, dictionaries, enums, and namespaces have members.", expr.Name.Span);
     }
 
     public object? VisitDotAssignExpr(DotAssignExpr expr)
@@ -1232,14 +1241,21 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             throw new RuntimeError("Cannot assign to namespace members.", expr.Name.Span);
         }
 
-        if (obj is not StashInstance instance)
+        if (obj is StashDictionary dict)
         {
-            throw new RuntimeError("Only struct instances have fields.", expr.Name.Span);
+            object? value = expr.Value.Accept(this);
+            dict.Set(expr.Name.Lexeme, value);
+            return value;
         }
 
-        object? value = expr.Value.Accept(this);
-        instance.SetField(expr.Name.Lexeme, value, expr.Name.Span);
-        return value;
+        if (obj is not StashInstance instance)
+        {
+            throw new RuntimeError("Only struct instances and dictionaries have fields.", expr.Name.Span);
+        }
+
+        object? assignValue = expr.Value.Accept(this);
+        instance.SetField(expr.Name.Lexeme, assignValue, expr.Name.Span);
+        return assignValue;
     }
 
     /// <summary>
@@ -1565,6 +1581,12 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         ArrBuiltIns.Register(_globals);
         DictBuiltIns.Register(_globals);
         StrBuiltIns.Register(_globals);
+        MathBuiltIns.Register(_globals);
+        TimeBuiltIns.Register(_globals);
+        JsonBuiltIns.Register(_globals);
+        IniBuiltIns.Register(_globals);
+        ConfigBuiltIns.Register(_globals);
+        HttpBuiltIns.Register(_globals);
         TestBuiltIns.Register(_globals);
     }
 

@@ -39,6 +39,82 @@ public static class EnvBuiltIns
             return null;
         }));
 
+        envNs.Define("has", new BuiltInFunction("env.has", 1, (_, args) =>
+        {
+            if (args[0] is not string name)
+            {
+                throw new RuntimeError("Argument to 'env.has' must be a string.");
+            }
+
+            return (bool)(System.Environment.GetEnvironmentVariable(name) != null);
+        }));
+
+        envNs.Define("all", new BuiltInFunction("env.all", 0, (_, args) =>
+        {
+            var dict = new StashDictionary();
+            foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+            {
+                dict.Set(entry.Key.ToString()!, entry.Value?.ToString());
+            }
+            return dict;
+        }));
+
+        envNs.Define("remove", new BuiltInFunction("env.remove", 1, (_, args) =>
+        {
+            if (args[0] is not string name)
+            {
+                throw new RuntimeError("Argument to 'env.remove' must be a string.");
+            }
+
+            System.Environment.SetEnvironmentVariable(name, null);
+            return null;
+        }));
+
+        envNs.Define("cwd", new BuiltInFunction("env.cwd", 0, (_, args) =>
+        {
+            return System.Environment.CurrentDirectory;
+        }));
+
+        envNs.Define("home", new BuiltInFunction("env.home", 0, (_, args) =>
+        {
+            return System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        }));
+
+        envNs.Define("hostname", new BuiltInFunction("env.hostname", 0, (_, args) =>
+        {
+            return System.Environment.MachineName;
+        }));
+
+        envNs.Define("user", new BuiltInFunction("env.user", 0, (_, args) =>
+        {
+            return System.Environment.UserName;
+        }));
+
+        envNs.Define("os", new BuiltInFunction("env.os", 0, (_, args) =>
+        {
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
+            {
+                return "linux";
+            }
+
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
+            {
+                return "macos";
+            }
+
+            if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
+            {
+                return "windows";
+            }
+
+            return "unknown";
+        }));
+
+        envNs.Define("arch", new BuiltInFunction("env.arch", 0, (_, args) =>
+        {
+            return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+        }));
+
         globals.Define("env", envNs);
     }
 }

@@ -23,7 +23,9 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Process Management](#6d-process-management) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations) · [9d. Testing Infrastructure](#9d-testing-infrastructure)
+**Addenda:** [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
+
+> **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
 ---
 
@@ -62,7 +64,7 @@
 
 ### Variables
 
-```c
+```stash
 let name = "deploy";
 let count = 5;
 let verbose = true;
@@ -78,7 +80,7 @@ Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&
 
 The `++` and `--` operators work on numeric variables, both as prefix and postfix:
 
-```c
+```stash
 let i = 0;
 i++;       // postfix: returns 0, then i becomes 1
 ++i;       // prefix: i becomes 2, then returns 2
@@ -92,7 +94,7 @@ Prefix returns the value **after** the change; postfix returns the value **befor
 
 Both interpolation syntaxes are supported:
 
-```c
+```stash
 let name = "world";
 let greeting = "Hello ${name}";      // embedded interpolation
 let greeting2 = $"Hello {name}";     // prefixed interpolation (C#-style)
@@ -105,7 +107,7 @@ The lexer treats `$"..."` as a special token type (`InterpolatedString`). Inside
 
 ### Comments
 
-```c
+```stash
 // Single-line comment
 /* Multi-line
    comment */
@@ -113,7 +115,7 @@ The lexer treats `$"..."` as a special token type (`InterpolatedString`). Inside
 
 ### Sample Program
 
-```csharp
+```stash
 #!/usr/bin/env stash
 
 // Modular imports
@@ -218,7 +220,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 
 ### Declaration
 
-```c
+```stash
 struct Server {
     host,
     port,
@@ -230,7 +232,7 @@ A `struct` declaration registers a **template** — a name and a list of field n
 
 ### Instantiation
 
-```c
+```stash
 let srv = Server { host: "10.0.0.1", port: 22, status: "unknown" };
 ```
 
@@ -238,7 +240,7 @@ Creates a new instance with the given field values.
 
 ### Field Access
 
-```c
+```stash
 let h = srv.host;       // read
 srv.status = "up";       // write
 ```
@@ -269,7 +271,7 @@ Enums provide named constants that eliminate magic strings and arbitrary integer
 
 ### Declaration
 
-```c
+```stash
 enum Status {
     Active,
     Inactive,
@@ -285,7 +287,7 @@ enum Color {
 
 ### Usage
 
-```c
+```stash
 let current = Status.Active;
 
 if (current == Status.Pending) {
@@ -317,10 +319,10 @@ Dictionaries provide dynamic key-value mappings — the complement to arrays for
 
 Dictionaries are created via the `dict` namespace:
 
-```c
+```stash
 let d = dict.new();       // empty dictionary
-d["name"] = "Alice";       // set via index syntax
-d["age"] = 30;
+d["name"] = "Alice";      // set via index syntax
+d.age = 30;               // set via dot access
 ```
 
 ### Key Types
@@ -331,7 +333,7 @@ Dictionary keys must be **value types**: `string`, `int`, `float`, or `bool`. Us
 
 Dictionaries support index syntax (`d[key]`) for both reading and writing:
 
-```c
+```stash
 let d = dict.new();
 
 // Write
@@ -352,7 +354,7 @@ dict.has(d, "nope");        // false
 
 Dictionaries are iterable — `for-in` iterates over keys:
 
-```c
+```stash
 let config = dict.new();
 config["host"] = "localhost";
 config["port"] = 8080;
@@ -364,7 +366,7 @@ for (let key in config) {
 
 ### Built-in Integration
 
-```c
+```stash
 typeof(dict.new())    // "dict"
 len(d)                // number of key-value pairs
 ```
@@ -372,6 +374,69 @@ len(d)                // number of key-value pairs
 ### Internal Representation
 
 A dictionary is backed by a hash map (`Dictionary<object, object?>` in C#). Key lookup is O(1) average. The `dict` namespace provides all manipulation functions (see Section 8).
+
+---
+
+## 5d. Dictionary Dot Access
+
+Dictionaries support **dot notation** for reading and writing string-keyed entries, providing a convenient alternative to bracket notation when keys are valid identifiers.
+
+### Reading
+
+```stash
+let d = dict.new();
+d["name"] = "Alice";
+d["age"] = 30;
+
+// These are equivalent:
+let name1 = d["name"];   // bracket notation
+let name2 = d.name;      // dot notation
+```
+
+Dot access returns `null` for missing keys — the same behavior as bracket notation:
+
+```stash
+let missing = d.nonexistent;  // null (no error)
+```
+
+### Writing
+
+```stash
+let d = dict.new();
+d.host = "localhost";    // creates the key "host"
+d.port = 8080;           // creates the key "port"
+d.host = "10.0.0.1";    // overwrites existing key
+```
+
+### Nested Access
+
+Dot notation chains naturally for nested dictionaries:
+
+```stash
+let cfg = json.parse("{\"database\": {\"host\": \"localhost\", \"port\": 5432}}");
+
+// Nested dot access
+let host = cfg.database.host;    // "localhost"
+let port = cfg.database.port;    // 5432
+
+// Nested dot assignment
+cfg.database.port = 3306;
+```
+
+This is especially powerful with `config.read()` and `ini.parse()`, where config files are loaded as nested dictionaries and accessed with a clean, natural syntax.
+
+### When to Use Bracket vs. Dot Notation
+
+| Syntax     | Use when                                                 |
+| ---------- | -------------------------------------------------------- |
+| `d["key"]` | Key is dynamic, computed, or contains special characters |
+| `d.key`    | Key is a known identifier — cleaner and more readable    |
+
+Both notations are fully interchangeable for string keys. Bracket notation is required for non-string keys (`d[42]`).
+
+### Interaction with Other Types
+
+Dot notation works on **dictionaries**, **struct instances**, **enums**, and **namespaces**. For struct instances, dot access validates that the field exists (throws if not). For dictionaries, dot access simply performs a string key lookup (returns `null` if missing — no error).
 
 ---
 
@@ -383,7 +448,7 @@ Commands are executed via **command literals** — a dedicated syntax that makes
 
 #### Syntax: `$(command)` — Command Literals
 
-```c
+```stash
 let result = $(ls -la);
 io.println(result.stdout);      // captured standard output
 io.println(result.stderr);      // captured standard error
@@ -394,7 +459,7 @@ io.println(result.exitCode);    // process exit code
 
 To inject dynamic values into a command, use interpolation with `{...}`:
 
-```c
+```stash
 // Raw mode — command text is written directly
 let r1 = $(ls -la);
 
@@ -407,7 +472,7 @@ let cmd = "echo hello";
 let r3 = $({cmd});
 ```
 
-This makes `$(...)` the **single, unified way** to execute commands. No separate `exec()` function is needed. The `{...}` interpolation syntax within commands is consistent with how interpolation works elsewhere in the language.
+This makes `$(...)` the **single, unified way** to execute commands. The `{...}` interpolation syntax within commands is consistent with how interpolation works elsewhere in the language.
 
 `$(...)` returns a struct-like object with `stdout`, `stderr`, and `exitCode` fields.
 
@@ -415,7 +480,7 @@ This makes `$(...)` the **single, unified way** to execute commands. No separate
 
 Variables and expressions can be embedded using `{...}`:
 
-```c
+```stash
 let host = "192.168.1.10";
 let result = $(ping -c 1 {host});
 
@@ -440,7 +505,7 @@ Implementation: backed by `System.Diagnostics.Process` in C#.
 
 Chain process outputs using `|` between command literals:
 
-```c
+```stash
 let lines = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
 ```
 
@@ -450,7 +515,7 @@ The `|` operator is **exclusive to command chaining** — it pipes stdout of the
 
 Pipe chains **short-circuit on failure**. If any command in the chain exits with a non-zero exit code, the remaining commands are not executed. The result of the entire pipe expression is the `CommandResult` of the **failed command** (or the last command if all succeed).
 
-```c
+```stash
 let result = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
 // If 'cat' fails (exitCode != 0), 'grep' and 'wc' are never started.
 // result.exitCode reflects the failed command's exit code.
@@ -463,7 +528,7 @@ This mirrors Bash's `set -o pipefail` behavior and prevents silent failures in c
 
 Command output can be redirected to files using `>` (write) and `>>` (append). See [Section 6c](#6c-output-redirection) for details.
 
-```c
+```stash
 $(ls -la) > "output.txt";       // write stdout to file
 $(ls -la) >> "log.txt";         // append stdout to file
 $(make build) 2> "errors.txt";  // stderr to file
@@ -502,7 +567,7 @@ Stash supports output redirection operators for writing command output directly 
 
 ### Syntax
 
-```c
+```stash
 // Write stdout to file (creates or overwrites)
 $(ls -la) > "output.txt";
 
@@ -571,228 +636,11 @@ At runtime, the interpreter executes the inner command and writes the selected s
 
 ---
 
-## 6d. Process Management
-
-Stash provides built-in process management through the `process` namespace, enabling scripts to spawn background processes, track their lifecycle, communicate with them, and control their termination. This goes beyond the synchronous `$(...)` command execution to support long-running services, parallel workloads, and process orchestration.
-
-### Philosophy
-
-Synchronous command execution via `$(...)` is the right default — run a command, get the result. But scripting often requires launching a process that runs alongside the script: a development server, a file watcher, a background worker. The `process` namespace provides **explicit, tracked** background process management. Every spawned process is tracked by default and cleaned up on script exit unless explicitly detached.
-
-### The `Process` Handle
-
-`Process` is a **built-in struct type** (like `CommandResult`, `ArgTree`, `ArgDef`) that represents a handle to a spawned process. It is returned by `process.spawn()` and accepted by all other process management functions.
-
-#### Fields
-
-| Field     | Type     | Description                          |
-| --------- | -------- | ------------------------------------ |
-| `pid`     | `int`    | OS process ID                        |
-| `command` | `string` | The command string that was launched |
-
-The `pid` and `command` fields are set at spawn time and do not change. To query live state (running/exited), use `process.isAlive()` — this is a function rather than a field because it queries the OS each time.
-
-### Spawning Processes
-
-```c
-let server = process.spawn("python3 -m http.server 8080");
-io.println("Server PID: " + server.pid);      // e.g. 12345
-io.println("Command: " + server.command);      // "python3 -m http.server 8080"
-```
-
-`process.spawn(cmd)` launches a process in the background and returns immediately with a `Process` handle. The process runs concurrently with the script. The command string is parsed into a program name and arguments, and the program is invoked directly — no system shell is involved.
-
-The spawned process's stdout and stderr are captured in internal buffers (accessible via `process.read()`), and its stdin is available for writing via `process.write()`.
-
-### Waiting for Processes
-
-```c
-// Block until the process exits
-let result = process.wait(server);
-io.println("Exit code: " + result.exitCode);
-io.println("Output: " + result.stdout);
-```
-
-`process.wait(proc)` blocks until the process exits and returns a `CommandResult` with `stdout`, `stderr`, and `exitCode` — identical to what `$(...)` returns for synchronous commands.
-
-```c
-// Wait with a timeout (milliseconds)
-let result = process.waitTimeout(server, 5000);
-if (result == null) {
-    io.println("Process did not exit within 5 seconds");
-    process.kill(server);
-}
-```
-
-`process.waitTimeout(proc, ms)` waits up to `ms` milliseconds. Returns a `CommandResult` if the process exited in time, or `null` if it is still running.
-
-### Checking Process State
-
-```c
-if (process.isAlive(server)) {
-    io.println("Server is running");
-} else {
-    io.println("Server has exited");
-}
-
-let pid = process.pid(server);  // same as server.pid
-```
-
-`process.isAlive(proc)` returns `true` if the process is still running, `false` if it has exited.
-
-`process.pid(proc)` returns the OS process ID as an integer. This is equivalent to accessing `proc.pid` directly but is provided for consistency with the functional style of the namespace.
-
-### Killing and Signaling Processes
-
-```c
-// Send SIGTERM (graceful shutdown)
-process.kill(server);
-
-// Send a specific signal
-process.signal(server, process.SIGKILL);  // force kill
-process.signal(server, process.SIGHUP);   // hangup
-```
-
-`process.kill(proc)` sends `SIGTERM` (signal 15) to the process. Returns `true` if the signal was sent, `false` if the process had already exited.
-
-`process.signal(proc, sig)` sends an arbitrary signal. The signal is specified as an integer. Common signal constants are provided on the `process` namespace:
-
-| Constant          | Value | Description             |
-| ----------------- | ----- | ----------------------- |
-| `process.SIGHUP`  | 1     | Hangup                  |
-| `process.SIGINT`  | 2     | Interrupt (Ctrl+C)      |
-| `process.SIGQUIT` | 3     | Quit                    |
-| `process.SIGKILL` | 9     | Kill (cannot be caught) |
-| `process.SIGTERM` | 15    | Terminate (graceful)    |
-| `process.SIGUSR1` | 10    | User-defined signal 1   |
-| `process.SIGUSR2` | 12    | User-defined signal 2   |
-
-These are integer constants — `process.SIGTERM` is just `15`. Using `process.signal(proc, 15)` is equivalent.
-
-### Process I/O
-
-```c
-let proc = process.spawn("bc -l");
-process.write(proc, "2 + 3\n");
-let answer = process.read(proc);  // "5\n"
-process.write(proc, "scale=4; 22/7\n");
-let pi = process.read(proc);      // "3.1428\n"
-process.kill(proc);
-```
-
-`process.write(proc, data)` writes a string to the process's stdin. Returns `true` if the write succeeded, `false` if the process has exited or stdin is closed.
-
-`process.read(proc)` reads currently available stdout from the process. Returns a string with the available data, or `null` if no data is available. This is **non-blocking** — it returns immediately with whatever is in the buffer.
-
-### Detaching Processes
-
-```c
-let daemon = process.spawn("my-daemon --config /etc/app.conf");
-process.detach(daemon);
-// daemon now survives script exit
-// the Process handle becomes inert — further calls on it are no-ops
-```
-
-`process.detach(proc)` removes a process from the tracked process list. After detaching:
-
-- The process will **not** be killed when the script exits.
-- `process.isAlive()`, `process.kill()`, `process.signal()`, `process.wait()`, `process.read()`, and `process.write()` on the detached handle return `false`/`null` as appropriate without error.
-- The `pid` and `command` fields remain accessible on the handle.
-
-This is the mechanism for launching daemons or long-lived services that should outlive the script.
-
-### Listing Tracked Processes
-
-```c
-let procs = process.list();
-for (let p in procs) {
-    io.println(p.command + " (PID: " + p.pid + ") alive=" + process.isAlive(p));
-}
-```
-
-`process.list()` returns an array of all currently tracked `Process` handles (spawned and not yet detached). This is useful for cleanup, monitoring, and debugging.
-
-### Script Exit Cleanup
-
-When a Stash script exits (normally or due to an error), all **tracked** processes receive `SIGTERM`. This prevents orphaned processes from accumulating. The cleanup sequence:
-
-1. Send `SIGTERM` to all tracked processes that are still alive.
-2. Wait up to 3 seconds for each process to exit gracefully.
-3. Send `SIGKILL` to any process that is still alive after the grace period.
-
-Processes that have been `detach()`-ed are excluded from cleanup.
-
-`process.exit(code)` also triggers this cleanup before terminating the script.
-
-### Complete Example
-
-```c
-#!/usr/bin/env stash
-
-// Launch a web server in the background
-let server = process.spawn("python3 -m http.server 8080");
-io.println("Started server (PID: " + server.pid + ")");
-
-// Give it a moment to start
-$(sleep 1);
-
-// Health check
-let health = $(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/);
-if (health.stdout == "200") {
-    io.println("Server is healthy");
-} else {
-    io.println("Server failed to start");
-    process.exit(1);
-}
-
-// Run some tests against the server
-let testResult = $(curl -s http://localhost:8080/);
-io.println("Response length: " + len(testResult.stdout));
-
-// Graceful shutdown
-process.kill(server);
-let finalResult = process.waitTimeout(server, 5000);
-if (finalResult == null) {
-    process.signal(server, process.SIGKILL);
-    process.wait(server);
-}
-
-io.println("Server stopped");
-```
-
-### Implementation
-
-The interpreter maintains a **tracked process list** (`List<TrackedProcess>`) on the interpreter instance. Each entry pairs a `StashInstance` (the `Process` handle) with the underlying `System.Diagnostics.Process` object.
-
-- `process.spawn()` — Creates a `Process` via `System.Diagnostics.Process.Start()` without calling `WaitForExit()`. stdout/stderr are read asynchronously into `StringBuilder` buffers. The handle is added to the tracked list.
-- `process.wait()` — Calls `WaitForExit()` on the underlying process, then returns a `CommandResult` with captured output.
-- `process.waitTimeout()` — Calls `WaitForExit(timeout)`. Returns `null` if timed out.
-- `process.kill()` — Calls `Process.Kill()` (sends SIGTERM on Linux via .NET).
-- `process.signal()` — On Unix, sends signals via the POSIX `kill()` syscall. On Windows, maps common signals (SIGTERM, SIGKILL) to `Process.Kill()`.
-- `process.isAlive()` — Checks `Process.HasExited`.
-- `process.read()` — Returns the contents of the stdout buffer and clears it.
-- `process.write()` — Writes to `Process.StandardInput`.
-- `process.detach()` — Removes the entry from the tracked list.
-- Script exit cleanup — A shutdown hook iterates the tracked list and sends SIGTERM, waits, then SIGKILL.
-
-The `Process` built-in struct is pre-defined by the interpreter alongside `CommandResult`, `ArgTree`, and `ArgDef`.
-
-### Future Extensions (Not in v1)
-
-- **`process.onExit(proc, callback)`** — Register a lambda callback for when a process exits. Event-driven model.
-- **`process.daemonize(cmd)`** — Launch as a proper daemon (double-fork, detach from terminal, redirect to `/dev/null`).
-- **`process.find(name)`** — Find system processes by name (wraps `pgrep`).
-- **`process.exists(pid)`** — Check if an arbitrary system process exists by PID.
-- **`process.waitAll(procs)`** — Wait for multiple processes to all exit.
-- **`process.waitAny(procs)`** — Wait for the first of multiple processes to exit.
-
----
-
 ## 7. Control Flow
 
 ### If / Else
 
-```c
+```stash
 if (condition) {
     // ...
 } else if (other) {
@@ -804,7 +652,7 @@ if (condition) {
 
 ### While Loop
 
-```c
+```stash
 while (condition) {
     // ...
 }
@@ -812,7 +660,7 @@ while (condition) {
 
 ### For Loop
 
-```c
+```stash
 for (let item in collection) {
     // ...
 }
@@ -836,7 +684,7 @@ Standard `break` and `continue` within loops.
 
 The `??` operator returns the left operand if it is not `null`, otherwise returns the right operand:
 
-```c
+```stash
 let name = inputName ?? "default";
 let config = try fs.readFile("/etc/app.conf") ?? "fallback config";
 ```
@@ -857,7 +705,7 @@ By default, runtime errors **crash the script** with a stack trace. This is the 
 
 `try` is a **prefix expression** that wraps any expression. If the wrapped expression produces a runtime error, `try` catches it and returns `null` instead of crashing.
 
-```c
+```stash
 // Without try — script crashes if file doesn't exist
 let content = fs.readFile("/etc/missing.conf");
 
@@ -872,7 +720,7 @@ let content = try fs.readFile("/etc/missing.conf") ?? "default config";
 
 When you need to know _what_ went wrong, the `lastError()` built-in returns the **most recent** error message as a string (or `null` if no error occurred):
 
-```c
+```stash
 let data = try conv.toInt("abc");
 if (data == null) {
     io.println(lastError());  // "Cannot parse 'abc' as integer"
@@ -885,7 +733,7 @@ if (data == null) {
 
 Shell command results already carry structured error information via `exitCode` and `stderr` — they never crash the script:
 
-```c
+```stash
 let result = $(ping -c 1 {host});
 if (result.exitCode != 0) {
     io.println("Host unreachable: " + result.stderr);
@@ -912,7 +760,7 @@ Switch expressions provide concise multi-way branching based on value matching. 
 
 ### Syntax
 
-```c
+```stash
 let result = value switch {
     pattern1 => result1,
     pattern2 => result2,
@@ -922,7 +770,7 @@ let result = value switch {
 
 ### Examples
 
-```c
+```stash
 let day = "Monday";
 let type = day switch {
     "Saturday" => "weekend",
@@ -932,7 +780,7 @@ let type = day switch {
 io.println(type);  // "weekday"
 ```
 
-```c
+```stash
 let status = exitCode switch {
     0 => "success",
     1 => "warning",
@@ -943,7 +791,7 @@ let status = exitCode switch {
 
 Switch expressions work with any value type — integers, strings, booleans, null, and enum values:
 
-```c
+```stash
 let label = status switch {
     Status.Active => "running",
     Status.Inactive => "stopped",
@@ -965,7 +813,7 @@ let label = status switch {
 
 Each arm's body is a single expression (not a block). Use parentheses for complex expressions if needed:
 
-```c
+```stash
 let score = grade switch {
     "A" => 100,
     "B" => 85,
@@ -978,7 +826,7 @@ let score = grade switch {
 
 A trailing comma after the last arm is permitted:
 
-```c
+```stash
 let x = val switch {
     1 => "one",
     2 => "two",
@@ -996,7 +844,7 @@ A switch expression is parsed as a **postfix operator** on the subject expressio
 
 ### Declaration
 
-```c
+```stash
 fn greet(name) {
     io.println("Hello, " + name);
 }
@@ -1010,7 +858,7 @@ fn add(a, b) {
 
 Functions that do not execute a `return` statement implicitly return `null`:
 
-```c
+```stash
 fn greet(name) {
     io.println("Hello, " + name);
 }
@@ -1022,7 +870,7 @@ let result = greet("world");  // result is null
 
 Functions capture their enclosing lexical environment:
 
-```c
+```stash
 fn makeCounter() {
     let count = 0;
     fn increment() {
@@ -1039,12 +887,15 @@ io.println(counter()); // 2
 
 ### Built-in Functions
 
-| Function       | Description                          |
-| -------------- | ------------------------------------ |
-| `typeof(val)`  | Return the type of a value as string |
-| `len(val)`     | Length of a string or array          |
-| `lastError()`  | Last error message (string) or null  |
-| `parseArgs(t)` | Parse command-line arguments         |
+| Function           | Description                               |
+| ------------------ | ----------------------------------------- |
+| `typeof(val)`      | Return the type of a value as string      |
+| `len(val)`         | Length of a string or array               |
+| `lastError()`      | Last error message (string) or null       |
+| `parseArgs(t)`     | Parse command-line arguments              |
+| `test(s, f)`       | Run a test                                |
+| `declare(s, f)`    | Group tests together                      |
+| `captureOutput(f)` | Redirects the output of any internal call |
 
 All other built-in functions are organized into namespaces (see below).
 
@@ -1052,274 +903,11 @@ All other built-in functions are organized into namespaces (see below).
 
 Stash organizes built-in functions into **namespaces** accessed via dot notation. A small set of fundamental functions remain global (see above); everything else lives in a namespace.
 
-#### `io` — Standard I/O
-
-| Function          | Description                     |
-| ----------------- | ------------------------------- |
-| `io.println(val)` | Print value followed by newline |
-| `io.print(val)`   | Print value without newline     |
-
-#### `conv` — Type Conversion
-
-| Function            | Description             |
-| ------------------- | ----------------------- |
-| `conv.toStr(val)`   | Convert value to string |
-| `conv.toInt(val)`   | Parse string to integer |
-| `conv.toFloat(val)` | Parse string to float   |
-
-#### `env` — Environment Variables
-
-| Function               | Description                               |
-| ---------------------- | ----------------------------------------- |
-| `env.get(name)`        | Read environment variable (null if unset) |
-| `env.set(name, value)` | Set environment variable                  |
-
-#### `process` — Process Control & Management
-
-| Function                        | Description                                                       |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `process.exit(code)`            | Terminate the script with exit code                               |
-| `process.spawn(cmd)`            | Launch a background process, returns a `Process` handle           |
-| `process.wait(proc)`            | Block until a process exits, returns `CommandResult`              |
-| `process.waitTimeout(proc, ms)` | Wait with timeout; returns `CommandResult` or `null` if timed out |
-| `process.kill(proc)`            | Send SIGTERM to a process                                         |
-| `process.isAlive(proc)`         | Check if a process is still running (returns `bool`)              |
-| `process.signal(proc, sig)`     | Send an arbitrary signal to a process                             |
-| `process.pid(proc)`             | Get the OS process ID                                             |
-| `process.detach(proc)`          | Detach a process so it survives script exit                       |
-| `process.list()`                | List all tracked (spawned) process handles                        |
-| `process.read(proc)`            | Read available stdout from a running process (non-blocking)       |
-| `process.write(proc, data)`     | Write to a running process's stdin                                |
-
-See [Section 6d](#6d-process-management) for full semantics, the `Process` handle, signal constants, and examples.
-
-#### `fs` — File System Operations
-
-| Function                       | Description                                   |
-| ------------------------------ | --------------------------------------------- |
-| `fs.readFile(path)`            | Read file contents as string                  |
-| `fs.writeFile(path, content)`  | Write string to file (creates or overwrites)  |
-| `fs.appendFile(path, content)` | Append string to file                         |
-| `fs.exists(path)`              | Check if a file exists (returns boolean)      |
-| `fs.dirExists(path)`           | Check if a directory exists (returns boolean) |
-| `fs.pathExists(path)`          | Check if a file or directory exists           |
-| `fs.createDir(path)`           | Create a directory (including parents)        |
-| `fs.delete(path)`              | Delete a file or directory (recursive)        |
-| `fs.copy(src, dst)`            | Copy a file (overwrites destination)          |
-| `fs.move(src, dst)`            | Move/rename a file (overwrites destination)   |
-| `fs.size(path)`                | Get file size in bytes                        |
-| `fs.listDir(path)`             | List entries in a directory (returns array)   |
-
-#### `path` — Path Manipulation
-
-| Function          | Description                        |
-| ----------------- | ---------------------------------- |
-| `path.abs(p)`     | Get absolute path                  |
-| `path.dir(p)`     | Get directory portion of path      |
-| `path.base(p)`    | Get filename with extension        |
-| `path.name(p)`    | Get filename without extension     |
-| `path.ext(p)`     | Get file extension (including `.`) |
-| `path.join(a, b)` | Join two path segments             |
-
-#### `arr` — Array Operations
-
-All `arr` functions take the target array as the first argument. Functions that mutate the array do so **in-place**.
-
-##### Core Manipulation
-
-| Function                          | Description                                               |
-| --------------------------------- | --------------------------------------------------------- |
-| `arr.push(array, value)`          | Add value to end of array                                 |
-| `arr.pop(array)`                  | Remove and return last element (error if empty)           |
-| `arr.peek(array)`                 | Return last element without removing (error if empty)     |
-| `arr.insert(array, index, value)` | Insert value at index (shifts elements right)             |
-| `arr.removeAt(array, index)`      | Remove and return element at index                        |
-| `arr.remove(array, value)`        | Remove first occurrence of value; returns `true` if found |
-| `arr.clear(array)`                | Remove all elements                                       |
-
-##### Searching
-
-| Function                     | Description                                            |
-| ---------------------------- | ------------------------------------------------------ |
-| `arr.contains(array, value)` | Return `true` if value exists in array                 |
-| `arr.indexOf(array, value)`  | Return index of first occurrence, or `-1` if not found |
-
-##### Transformation
-
-| Function                       | Description                                                     |
-| ------------------------------ | --------------------------------------------------------------- |
-| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)  |
-| `arr.concat(array1, array2)`   | Return new array combining both arrays                          |
-| `arr.join(array, separator)`   | Join elements into a string with separator                      |
-| `arr.reverse(array)`           | Reverse array in-place                                          |
-| `arr.sort(array)`              | Sort array in-place (numbers and strings; error on mixed types) |
-
-##### Higher-Order Functions
-
-| Function                         | Description                                                   |
-| -------------------------------- | ------------------------------------------------------------- |
-| `arr.map(array, fn)`             | Return new array with `fn(element)` applied to each element   |
-| `arr.filter(array, fn)`          | Return new array of elements where `fn(element)` is truthy    |
-| `arr.forEach(array, fn)`         | Call `fn(element)` for each element                           |
-| `arr.find(array, fn)`            | Return first element where `fn(element)` is truthy, or `null` |
-| `arr.reduce(array, fn, initial)` | Fold array: calls `fn(accumulator, element)` for each element |
-
-##### Examples
-
-```c
-let nums = [3, 1, 4, 1, 5];
-
-// Core manipulation
-arr.push(nums, 9);              // [3, 1, 4, 1, 5, 9]
-let last = arr.pop(nums);       // last = 9, nums = [3, 1, 4, 1, 5]
-arr.insert(nums, 0, 0);         // [0, 3, 1, 4, 1, 5]
-arr.removeAt(nums, 0);          // [3, 1, 4, 1, 5]
-
-// Searching
-arr.contains(nums, 4);          // true
-arr.indexOf(nums, 1);           // 1
-
-// Transformation
-let sub = arr.slice(nums, 1, 3);    // [1, 4]
-let all = arr.concat(nums, [6, 7]); // [3, 1, 4, 1, 5, 6, 7]
-arr.sort(nums);                     // [1, 1, 3, 4, 5]
-let csv = arr.join(nums, ", ");     // "1, 1, 3, 4, 5"
-
-// Higher-order functions
-let doubled = arr.map(nums, (x) => x * 2);      // [2, 2, 6, 8, 10]
-let big = arr.filter(nums, (x) => x > 2);        // [3, 4, 5]
-let sum = arr.reduce(nums, (acc, x) => acc + x, 0); // 14
-let found = arr.find(nums, (x) => x > 3);        // 4
-arr.forEach(nums, (x) => io.println(x));          // prints each element
-```
-
-#### `dict` — Dictionary Operations
-
-All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument.
-
-| Function                  | Description                                                         |
-| ------------------------- | ------------------------------------------------------------------- |
-| `dict.new()`              | Create an empty dictionary                                          |
-| `dict.get(d, key)`        | Get value for key, or `null` if not found                           |
-| `dict.set(d, key, value)` | Set key-value pair (mutates dictionary)                             |
-| `dict.has(d, key)`        | Return `true` if key exists                                         |
-| `dict.remove(d, key)`     | Remove key; returns `true` if found                                 |
-| `dict.clear(d)`           | Remove all entries                                                  |
-| `dict.keys(d)`            | Return array of all keys                                            |
-| `dict.values(d)`          | Return array of all values                                          |
-| `dict.size(d)`            | Return number of entries                                            |
-| `dict.pairs(d)`           | Return array of Pair structs (each with `.key` and `.value` fields) |
-| `dict.forEach(d, fn)`     | Call `fn(key, value)` for each entry                                |
-| `dict.merge(d1, d2)`      | Return new dictionary combining both (d2 wins on key conflicts)     |
-
-##### Index Syntax
-
-Dictionaries also support index access using `d[key]` and `d[key] = value`:
-
-```c
-let d = dict.new();
-d["name"] = "Alice";
-d["age"] = 30;
-let name = d["name"];       // "Alice"
-let missing = d["nope"];    // null (no error)
-```
-
-##### Examples
-
-```c
-let config = dict.new();
-config["host"] = "localhost";
-config["port"] = 8080;
-config["debug"] = true;
-
-// Check and retrieve
-if (dict.has(config, "host")) {
-    io.println("Host: " + config["host"]);
-}
-
-// Iteration
-for (let key in config) {
-    io.println(key + " = " + config[key]);
-}
-
-// Pair struct iteration
-let pairs = dict.pairs(config);
-for (let pair in pairs) {
-    io.println(pair.key + " = " + pair.value);
-}
-
-// Higher-order usage
-dict.forEach(config, (k, v) => {
-    io.println(k + " => " + v);
-});
-
-// Merging
-let defaults = dict.new();
-defaults["timeout"] = 30;
-defaults["retries"] = 3;
-
-let merged = dict.merge(defaults, config);
-// merged has all keys from both; config values take priority
-```
+Available namespaces: `io`, `conv`, `env`, `fs`, `path`, `str`, `arr`, `dict`, `math`, `time`, `json`, `ini`, `config`, `http`, `process`, `assert`.
 
 Namespace members are accessed with dot notation: `fs.exists("/etc/hosts")`. Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
-Standard library to be expanded as needed.
-
-#### `str` — String Operations
-
-All `str` functions take the target string as the first argument. Strings are immutable — functions return new strings rather than modifying in place.
-
-| Function                        | Description                                                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------ |
-| `str.upper(s)`                  | Convert to uppercase                                                                 |
-| `str.lower(s)`                  | Convert to lowercase                                                                 |
-| `str.trim(s)`                   | Remove leading and trailing whitespace                                               |
-| `str.trimStart(s)`              | Remove leading whitespace                                                            |
-| `str.trimEnd(s)`                | Remove trailing whitespace                                                           |
-| `str.contains(s, sub)`          | Return `true` if `s` contains `sub`                                                  |
-| `str.startsWith(s, prefix)`     | Return `true` if `s` starts with `prefix`                                            |
-| `str.endsWith(s, suffix)`       | Return `true` if `s` ends with `suffix`                                              |
-| `str.indexOf(s, sub)`           | Return index of first occurrence of `sub`, or `-1`                                   |
-| `str.lastIndexOf(s, sub)`       | Return index of last occurrence of `sub`, or `-1`                                    |
-| `str.substring(s, start, end?)` | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
-| `str.replace(s, old, new)`      | Replace first occurrence of `old` with `new`                                         |
-| `str.replaceAll(s, old, new)`   | Replace all occurrences of `old` with `new`                                          |
-| `str.split(s, delimiter)`       | Split string into array by `delimiter`                                               |
-| `str.repeat(s, count)`          | Repeat string `count` times                                                          |
-| `str.reverse(s)`                | Reverse the string                                                                   |
-| `str.chars(s)`                  | Convert to array of single-character strings                                         |
-| `str.padStart(s, len, fill?)`   | Pad start to `len` characters with `fill` (default `" "`)                            |
-| `str.padEnd(s, len, fill?)`     | Pad end to `len` characters with `fill` (default `" "`)                              |
-
-##### Examples
-
-```c
-let name = "  Hello, World!  ";
-
-// Case conversion
-io.println(str.upper(name));           // "  HELLO, WORLD!  "
-io.println(str.lower(name));           // "  hello, world!  "
-
-// Trimming
-let trimmed = str.trim(name);          // "Hello, World!"
-
-// Search
-io.println(str.contains(trimmed, "World"));   // true
-io.println(str.indexOf(trimmed, "World"));    // 7
-
-// Extraction & transformation
-io.println(str.substring(trimmed, 0, 5));     // "Hello"
-io.println(str.replace(trimmed, "World", "Stash")); // "Hello, Stash!"
-
-// Splitting & joining
-let parts = str.split("a,b,c", ",");          // ["a", "b", "c"]
-let repeated = str.repeat("ab", 3);           // "ababab"
-
-// Padding
-io.println(str.padStart("42", 5, "0"));       // "00042"
-io.println(str.padEnd("hi", 6));              // "hi    "
-```
+See the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) for complete documentation of all namespace functions.
 
 ---
 
@@ -1331,7 +919,7 @@ Lambda expressions (arrow functions) provide a concise syntax for creating anony
 
 **Expression body** — implicit return of a single expression:
 
-```c
+```stash
 let double = (x) => x * 2;
 let add = (a, b) => a + b;
 let greet = () => "hello";
@@ -1339,7 +927,7 @@ let greet = () => "hello";
 
 **Block body** — explicit `return` for multi-statement logic:
 
-```c
+```stash
 let abs = (x) => {
     if (x < 0) {
         return -x;
@@ -1352,7 +940,7 @@ let abs = (x) => {
 
 Lambdas support zero or more parameters, with optional type annotations:
 
-```c
+```stash
 let noParams = () => 42;
 let oneParam = (x) => x + 1;
 let typed = (x: int, y: int) => x + y;
@@ -1362,7 +950,7 @@ let typed = (x: int, y: int) => x + y;
 
 Lambdas capture their enclosing lexical environment, just like named functions:
 
-```c
+```stash
 fn makeMultiplier(factor) {
     return (x) => x * factor;
 }
@@ -1375,7 +963,7 @@ io.println(triple(5));  // 15
 
 Lambdas are particularly useful when passed as arguments to other functions:
 
-```c
+```stash
 fn apply(f, x) {
     return f(x);
 }
@@ -1393,7 +981,7 @@ A lambda expression is evaluated to a `StashLambda` — an `IStashCallable` that
 
 **Lexical scoping.** A variable is visible in the block where it's declared and all nested blocks.
 
-```c
+```stash
 let x = 10;           // global scope
 {
     let y = 20;        // block scope
@@ -1422,7 +1010,7 @@ Stash supports **selective imports** — you can import specific declarations fr
 
 **Selective import** — import specific names into the current scope:
 
-```c
+```stash
 import { deploy, Server } from "utils.stash";
 import { Status } from "enums.stash";
 
@@ -1435,7 +1023,7 @@ Only the names listed in `{ ... }` are made available in the importing script's 
 
 **Namespace import** — import an entire module as a namespace:
 
-```c
+```stash
 import "utils.stash" as utils;
 import "enums.stash" as enums;
 
@@ -1489,399 +1077,6 @@ This is checked during the resolve/import phase, not at runtime.
 - **Wildcard imports:** `import * from "utils.stash";` — imports everything (bash-style, for convenience).
 - **Per-name aliased imports:** `import { deploy as remoteDeploy } from "utils.stash";` — rename individual names on import.
 - **Relative path shortcuts:** `import { util } from "./lib/";` — directory-based module resolution.
-
----
-
-## 9c. Argument Declarations
-
-Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus a **`parseArgs()`** function for declarative CLI argument parsing. Instead of manually parsing `argv`, scripts construct an `ArgTree` describing expected flags, options, positional arguments, and subcommands, then call `parseArgs()` to get a struct of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
-
-### Built-in Structs
-
-`ArgTree` and `ArgDef` are pre-defined by the interpreter — scripts use them directly without declaring them.
-
-#### `ArgTree` Fields
-
-| Field         | Type              | Description                                        |
-| ------------- | ----------------- | -------------------------------------------------- |
-| `name`        | string (optional) | Script name (used in help text and usage line)     |
-| `version`     | string (optional) | Version string (used with auto `--version` flag)   |
-| `description` | string            | Script description (required, can be `""`)         |
-| `flags`       | array (optional)  | Array of `ArgDef` entries for boolean switches     |
-| `options`     | array (optional)  | Array of `ArgDef` entries for value-taking options |
-| `commands`    | array (optional)  | Array of `ArgDef` entries for subcommands          |
-| `positionals` | array (optional)  | Array of `ArgDef` entries for positional arguments |
-
-#### `ArgDef` Fields
-
-| Field         | Type               | Description                                                 |
-| ------------- | ------------------ | ----------------------------------------------------------- |
-| `name`        | string (required)  | Long name of the argument                                   |
-| `short`       | string (optional)  | Single-character short form                                 |
-| `type`        | string (optional)  | Type for coercion: `"string"`, `"int"`, `"float"`, `"bool"` |
-| `default`     | any (optional)     | Default value (any expression)                              |
-| `description` | string             | Description for help text (required, can be `""`)           |
-| `required`    | bool (optional)    | Whether the argument must be provided (default: `false`)    |
-| `args`        | ArgTree (optional) | Nested `ArgTree` for subcommand flags/options/positionals   |
-
-### Syntax
-
-```c
-let args = parseArgs(ArgTree {
-    name: "deploy",
-    version: "1.0.0",
-    description: "A deployment tool",
-    flags: [
-        ArgDef { name: "help", short: "h", description: "Show help" },
-        ArgDef { name: "verbose", short: "v", description: "Enable verbose output" }
-    ],
-    options: [
-        ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Port to listen on" }
-    ],
-    positionals: [
-        ArgDef { name: "target", type: "string", required: true, description: "Target host" }
-    ],
-    commands: [
-        ArgDef {
-            name: "deploy",
-            description: "Deploy the application",
-            args: ArgTree {
-                flags: [ArgDef { name: "force", short: "f", description: "Force deployment" }],
-                options: [ArgDef { name: "timeout", type: "int", default: 30, description: "Timeout in seconds" }]
-            }
-        }
-    ]
-});
-```
-
-`parseArgs()` returns a `StashInstance` bound to the variable; all parsed values are accessed via dot notation.
-
-### Flags
-
-Flags are boolean switches that default to `false` and become `true` when present. Each flag is an `ArgDef` in the `flags` array.
-
-Usage: `--name` or `-short`
-
-**Special flags:**
-
-- A flag named `help` will automatically print formatted help text and exit when `--help` or its short form is passed.
-- A flag named `version` will automatically print the `version` metadata value and exit when `--version` is passed (requires `version` to be set on the `ArgTree`).
-
-### Options
-
-Options take a value and support type coercion. Each option is an `ArgDef` in the `options` array.
-
-Usage: `--name value`, `-s value`, or `--name=value`
-
-**Type coercion:**
-
-| Type     | Stash Type | Accepted Values                                    |
-| -------- | ---------- | -------------------------------------------------- |
-| `string` | string     | Any string (default if no `type` specified)        |
-| `int`    | int (long) | Integer strings (e.g., `"42"`, `"-1"`)             |
-| `float`  | float      | Decimal strings (e.g., `"3.14"`)                   |
-| `bool`   | bool       | `"true"`, `"false"`, `"1"`, `"0"`, `"yes"`, `"no"` |
-
-A runtime error is raised if the value cannot be parsed as the specified type.
-
-### Positional Arguments
-
-Positional arguments are captured in declaration order. Non-flag, non-option, non-command arguments fill positionals sequentially. Each positional is an `ArgDef` in the `positionals` array.
-
-Usage: `./script.stash myhost` — the first non-flag, non-option argument fills the first positional.
-
-### Subcommands
-
-`ArgDef` entries in the `commands` array define named subcommands. An `args` field on the `ArgDef` provides an `ArgTree` describing the subcommand's own flags, options, and positionals.
-
-When a subcommand is matched, `args.command` is set to the command name as a string, and `args.<commandName>` contains the subcommand's parsed values:
-
-```c
-if (args.command == "deploy") {
-    io.println(args.deploy.force);    // bool
-    io.println(args.deploy.timeout);  // int
-}
-```
-
-### Accessing Parsed Values
-
-All parsed values are accessible via dot notation on the variable returned by `parseArgs()`:
-
-```c
-let args = parseArgs(ArgTree {
-    flags:     [ArgDef { name: "verbose", short: "v", description: "" }],
-    options:   [ArgDef { name: "port", type: "int", default: 8080, description: "" }],
-    positionals: [ArgDef { name: "file", required: true, description: "" }]
-});
-
-io.println(args.verbose);    // false (or true if --verbose was passed)
-io.println(args.port);       // 8080 (or user-provided value)
-io.println(args.file);       // first positional argument value
-io.println(args.command);    // name of matched subcommand, or null
-io.println(args.deploy.force); // subcommand flag value
-```
-
-### Validation & Error Handling
-
-`parseArgs()` performs automatic validation:
-
-- **Required options/positionals:** A runtime error is raised if a required argument is not provided.
-- **Unknown arguments:** A runtime error is raised for unrecognized flags or options.
-- **Type coercion failures:** A runtime error is raised if a value cannot be parsed as the declared type.
-- **Missing option values:** A runtime error is raised if an option flag is provided without a corresponding value (e.g., `--port` at the end of the argument list).
-
-### Auto-Generated Help
-
-When a `help` flag is defined and triggered, the interpreter automatically generates formatted help text:
-
-```
-my-tool v1.0.0
-A deployment tool
-
-USAGE:
-  my-tool [command] [options] <target>
-
-COMMANDS:
-  deploy    Deploy the application
-  rollback  Rollback the deployment
-
-ARGUMENTS:
-  <target>  Target host (required)
-
-OPTIONS:
-  -v, --verbose        Enable verbose output
-  -p, --port <int>     Port to listen on (default: 8080)
-  -h, --help           Show help
-
-COMMAND 'deploy':
-  -f, --force          Force deployment
-      --timeout <int>  Timeout in seconds (default: 30)
-```
-
-### Implementation
-
-`parseArgs()` is a built-in function and `ArgTree`/`ArgDef` are built-in struct types pre-defined by the interpreter. At runtime, `parseArgs()` receives an `ArgTree` instance, processes the script's command-line arguments (`_scriptArgs`), performs type coercion, validates required arguments, and returns a `StashInstance` of type `"Args"` with all parsed values bound as fields.
-
----
-
-## 9d. Testing Infrastructure
-
-Stash provides built-in testing primitives that enable structured, tooling-friendly test execution. Unlike Bash, which lacks any testing support, Stash includes assertion functions and test registration as first-class built-ins, with a pluggable harness that producers TAP-compliant output by default.
-
-### Philosophy
-
-Test scripts are **ordinary Stash scripts**. There is no special file format, no magic — `test()` and `assert.equal()` are regular function calls. The language provides the hooks; users and the ecosystem can build full testing frameworks on top.
-
-By default, runtime errors **crash the script**. The testing harness changes this: when running in test mode (`--test`), assertion failures inside `test()` blocks are **caught and recorded** rather than crashing. Execution continues to the next test, collecting all results.
-
-### Running Tests
-
-```bash
-stash --test math_test.stash          # Run tests with TAP output
-stash --test tests/                    # Run all .stash files in directory
-```
-
-The `--test` flag activates test mode: a `TapReporter` is attached as the test harness, and the interpreter executes the script normally. `test()` calls register and run tests through the harness.
-
-### Test Registration
-
-Tests are registered with the `test()` global function, which takes a name and a lambda:
-
-```c
-test("addition works", () => {
-    assert.equal(1 + 1, 2);
-});
-
-test("string interpolation", () => {
-    let name = "world";
-    assert.equal("hello ${name}", "hello world");
-});
-```
-
-Each `test()` call:
-1. Notifies the harness that a test is starting.
-2. Executes the lambda in an error-catching wrapper.
-3. Reports pass or fail to the harness.
-4. **Continues execution** — failures do not crash the script.
-
-### Test Grouping
-
-Tests can be grouped with `describe()` for organizational clarity:
-
-```c
-describe("math operations", () => {
-    test("addition", () => {
-        assert.equal(2 + 3, 5);
-    });
-
-    test("multiplication", () => {
-        assert.equal(3 * 4, 12);
-    });
-});
-```
-
-`describe()` blocks produce hierarchical test names in the output (e.g., `math operations > addition`). Nesting is supported.
-
-### `assert` Namespace
-
-The `assert` namespace provides structured assertion functions. When an assertion fails, it throws an `AssertionError` (a subclass of `RuntimeError`) carrying structured data (expected value, actual value, message, source location).
-
-| Function                        | Description                                                              |
-| ------------------------------- | ------------------------------------------------------------------------ |
-| `assert.equal(actual, expected)` | Assert `actual == expected` (no type coercion)                          |
-| `assert.notEqual(actual, expected)` | Assert `actual != expected`                                          |
-| `assert.true(value)`            | Assert that `value` is truthy                                           |
-| `assert.false(value)`           | Assert that `value` is falsy                                            |
-| `assert.null(value)`            | Assert that `value` is `null`                                           |
-| `assert.notNull(value)`         | Assert that `value` is not `null`                                       |
-| `assert.greater(a, b)`          | Assert `a > b`                                                          |
-| `assert.less(a, b)`             | Assert `a < b`                                                          |
-| `assert.throws(fn)`             | Assert that `fn()` throws a runtime error; returns the error message    |
-| `assert.fail(message?)`         | Unconditionally fail with an optional message                           |
-
-#### Assertion Error Messages
-
-Assertion failures produce descriptive error messages with source location:
-
-```
-assert.equal failed: expected 42 but got 17
-  at test_math.stash:14:5
-```
-
-When running outside test mode (no `--test` flag), assertion failures are regular `RuntimeError` exceptions — the script crashes on the first failure, just like any other error.
-
-### TAP Output
-
-When running with `--test`, output follows the [Test Anything Protocol (TAP)](https://testanything.org/) version 14:
-
-```
-TAP version 14
-1..3
-ok 1 - math operations > addition
-not ok 2 - string equality
-  ---
-  message: "assert.equal failed: expected \"hello\" but got \"world\""
-  severity: fail
-  at:
-    file: test_strings.stash
-    line: 14
-    column: 5
-  ...
-ok 3 - null handling
-```
-
-TAP is a well-established protocol supported by CI/CD systems, test runners, and reporting tools.
-
-### Test Harness Architecture
-
-The testing infrastructure mirrors the debugging architecture:
-
-| Concept        | Debugging Parallel       | Testing                   |
-| -------------- | ------------------------ | ------------------------- |
-| Interface      | `IDebugger`              | `ITestHarness`            |
-| Default impl   | `CliDebugger`            | `TapReporter`             |
-| CLI flag       | `--debug`                | `--test`                  |
-| Null when off  | `_debugger`              | `_testHarness`            |
-| Zero overhead  | Null-guarded hooks       | Null-guarded hooks        |
-| Protocol adapter | DAP `DebugSession`     | Future test explorer      |
-
-The `ITestHarness` interface defines the contract between the interpreter and any test reporter:
-
-- `OnTestStart(name, span)` — A test case begins.
-- `OnTestPass(name, duration)` — A test case passed.
-- `OnTestFail(name, message, span, duration)` — A test case failed.
-- `OnTestSkip(name, reason)` — A test case was skipped.
-- `OnSuiteStart(name)` — A `describe()` group begins.
-- `OnSuiteEnd(name, passed, failed, skipped)` — A `describe()` group ends.
-- `OnRunComplete(passed, failed, skipped)` — All tests finished.
-
-When no test harness is attached (`_testHarness` is null), all testing hooks are skipped — zero runtime overhead, identical to how `_debugger` works.
-
-### Global Test Functions
-
-| Function                  | Description                                                         |
-| ------------------------- | ------------------------------------------------------------------- |
-| `test(name, fn)`          | Register and run a test case                                        |
-| `describe(name, fn)`      | Group tests under a descriptive name                                |
-| `captureOutput(fn)`       | Execute `fn()` with output redirected; returns captured string      |
-
-These are global functions (not namespaced) because they are used at the top level of test scripts, similar to how `typeof()` and `len()` are global.
-
-### Complete Example
-
-```c
-#!/usr/bin/env stash
-
-import { deploy, Server } from "deploy.stash";
-
-describe("deployment", () => {
-    test("creates server instance", () => {
-        let srv = Server { host: "10.0.0.1", port: 22, status: "unknown" };
-        assert.equal(srv.host, "10.0.0.1");
-        assert.equal(srv.port, 22);
-    });
-
-    test("deploy returns boolean", () => {
-        let srv = Server { host: "localhost", port: 22, status: "unknown" };
-        let result = deploy(srv, "app.tar.gz");
-        assert.equal(typeof(result), "bool");
-    });
-
-    test("null coalescing works", () => {
-        let val = null ?? "default";
-        assert.equal(val, "default");
-    });
-
-    test("type coercion does not happen", () => {
-        assert.notEqual(5, "5");
-        assert.notEqual(0, false);
-        assert.notEqual(0, null);
-    });
-});
-```
-
-### Output Capture
-
-The `captureOutput()` global function redirects `io.println` and `io.print` output to a string during the execution of a given function, then returns the captured output:
-
-```c
-let output = captureOutput(() => {
-    io.println("hello");
-    io.print("world");
-});
-assert.equal(output, "hello\nworld");
-```
-
-This is the backbone for testing code that produces side-effect output. During capture, the interpreter's output writer is temporarily swapped to a string buffer — output from the captured function is not printed to the console.
-
-#### Output Abstraction
-
-The interpreter provides pluggable output via `TextWriter` properties:
-
-- `Output` — Writer used by `io.println` and `io.print` (defaults to `Console.Out`).
-- `ErrorOutput` — Writer for error output (defaults to `Console.Error`).
-
-These abstractions also bridge to the debugger: `io.println` and `io.print` call `IDebugger.OnOutput()` when a debugger is attached, enabling DAP output events in VS Code.
-
-### Implementation
-
-- **`ITestHarness`** — Interface in `Stash.Interpreter/Testing/`, mirroring `IDebugger` in `Stash.Interpreter/Debugging/`.
-- **`TapReporter`** — Default implementation producing TAP version 14 output.
-- **`AssertionError`** — Subclass of `RuntimeError` carrying `Expected` and `Actual` fields for structured reporting.
-- **`TestBuiltIns`** — Registers `test()`, `describe()`, `captureOutput()`, and the `assert` namespace into the interpreter's global environment, following the same pattern as `IoBuiltIns`, `ArrBuiltIns`, etc.
-- **`--test` CLI flag** — Attaches a `TapReporter` to the interpreter and sets the exit code based on test results.
-- **Output abstraction** — `Interpreter.Output` and `Interpreter.ErrorOutput` (`TextWriter` properties) replace direct `Console` access in `IoBuiltIns`. `IDebugger.OnOutput()` is called from `io.println`/`io.print` when a debugger is attached.
-
-### Future Extensions (Not in v1)
-
-- **`test.skip(name, fn)`** — Skip a test with a reason.
-- **`test.only(name, fn)`** — Run only this test (for debugging).
-- **`assert.deepEqual(a, b)`** — Deep equality for arrays, dicts, and structs.
-- **`assert.closeTo(a, b, delta)`** — Float comparison with tolerance.
-- **`--test-format=tap|json|junit`** — Alternate output formats.
-- **Test discovery** — `stash --test tests/` runs all `*_test.stash` or `test_*.stash` files in a directory.
-- **Setup/teardown** — `beforeEach()`, `afterEach()`, `beforeAll()`, `afterAll()`.
-- **IDE integration** — VS Code test explorer adapter (parallel to DAP for debugging).
 
 ---
 
@@ -2045,7 +1240,7 @@ When no debugger is attached, the hook is a null check (zero overhead).
 | **Variable Watch** | Read `Environment` and walk parent chain                          |
 | **Struct Expand**  | Enumerate dictionary fields of a struct instance                  |
 
-### Future: DAP (Debug Adapter Protocol)
+### DAP (Debug Adapter Protocol)
 
 Microsoft's Debug Adapter Protocol allows integration with VS Code and other editors. With the hooks above, a DAP adapter becomes a thin translation layer rather than a rewrite.
 
@@ -2071,23 +1266,23 @@ Execution:       ~80-90%  (runs repeatedly)
 
 #### Tier 1 — Easy Wins (Apply During Development)
 
-| Optimization                             | Where              | Impact  |
-| ---------------------------------------- | ------------------ | ------- |
-| String interning                         | Lexer              | High    |
-| `FrozenDictionary` for keywords/builtins | Lexer, Interpreter | Low-Med |
-| `ReadOnlySpan<char>` in lexer            | Lexer              | High    |
+| Optimization                             | Where              | Impact  | Status                                            |
+| ---------------------------------------- | ------------------ | ------- | ------------------------------------------------- |
+| String interning                         | Lexer              | High    | ✅ Done — `string.Intern()` in `ScanIdentifier()` |
+| `FrozenDictionary` for keywords/builtins | Lexer, Interpreter | Low-Med | ⚡ Partial — Lexer uses it; Interpreter does not  |
+| `ReadOnlySpan<char>` in lexer            | Lexer              | High    | ❌ Not started                                    |
 
 #### Tier 2 — Architectural (Apply After v1 Works)
 
-| Optimization                                      | Where                  | Impact  |
-| ------------------------------------------------- | ---------------------- | ------- |
-| Variable resolution at parse time (resolver pass) | Resolver + Interpreter | Highest |
-| Slot-based environments (array, not dictionary)   | Environment            | High    |
-| `ArrayPool<T>` for function call argument arrays  | Interpreter            | Medium  |
+| Optimization                                      | Where                  | Impact  | Status                                                         |
+| ------------------------------------------------- | ---------------------- | ------- | -------------------------------------------------------------- |
+| Variable resolution at parse time (resolver pass) | Resolver + Interpreter | Highest | ❌ Not started — `GetAt()`/`AssignAt()` exist but are unused   |
+| Slot-based environments (array, not dictionary)   | Environment            | High    | ❌ Not started — `Dictionary<string, object?>` backing         |
+| `ArrayPool<T>` for function call argument arrays  | Interpreter            | Medium  | ❌ Not started                                                 |
 
 #### Tier 3 — Nuclear Option
 
-If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM**. This is a 10-50x speedup and dwarfs all micro-optimizations. The bytecode VM compiles the AST to a flat array of opcodes, and a tight `switch`-dispatch loop executes them.
+If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM**. This is a 10-50x speedup and dwarfs all micro-optimizations. The bytecode VM compiles the AST to a flat array of opcodes, and a tight `switch`-dispatch loop executes them. ❌ Not started.
 
 ### What NOT to Optimize
 

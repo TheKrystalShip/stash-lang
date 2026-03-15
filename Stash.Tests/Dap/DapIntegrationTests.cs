@@ -43,7 +43,10 @@ public class DapIntegrationTests
         while (!GetIsPaused(session))
         {
             if (DateTime.UtcNow > deadline)
+            {
                 throw new TimeoutException("Interpreter did not pause within timeout.");
+            }
+
             SysThread.Sleep(10);
         }
     }
@@ -52,7 +55,9 @@ public class DapIntegrationTests
     {
         var thread = (SysThread?)InterpreterThreadField.GetValue(session);
         if (thread != null && !thread.Join(timeoutMs))
+        {
             throw new TimeoutException("Interpreter thread did not terminate within timeout.");
+        }
     }
 
     private static string CreateTempScript(string code)
