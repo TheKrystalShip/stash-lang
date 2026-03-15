@@ -290,7 +290,14 @@ public class Lexer
 
                 break;
             case '<':
-                AddToken(Match('=') ? TokenType.LessEqual : TokenType.Less);
+                if (Match('='))
+                {
+                    AddToken(TokenType.LessEqual);
+                }
+                else
+                {
+                    AddToken(TokenType.Less);
+                }
                 break;
             case '>':
                 if (Match('='))

@@ -158,8 +158,11 @@ public static class BuiltInRegistry
         new NamespaceFunction("env", "user", Array.Empty<BuiltInParam>(), "string"),
         new NamespaceFunction("env", "os", Array.Empty<BuiltInParam>(), "string"),
         new NamespaceFunction("env", "arch", Array.Empty<BuiltInParam>(), "string"),
+        new NamespaceFunction("env", "loadFile", new[] { new BuiltInParam("path", "string") }, "int"),
+        new NamespaceFunction("env", "saveFile", new[] { new BuiltInParam("path", "string") }),
         // process namespace
         new NamespaceFunction("process", "exit", new[] { new BuiltInParam("code", "int") }),
+        new NamespaceFunction("process", "exec", new[] { new BuiltInParam("cmd", "string") }),
         new NamespaceFunction("process", "spawn", new[] { new BuiltInParam("cmd", "string") }, "Process"),
         new NamespaceFunction("process", "wait", new[] { new BuiltInParam("proc", "Process") }, "CommandResult"),
         new NamespaceFunction("process", "waitTimeout", new[] { new BuiltInParam("proc", "Process"), new BuiltInParam("ms", "int") }, "CommandResult"),
@@ -193,6 +196,9 @@ public static class BuiltInRegistry
         new NamespaceFunction("fs", "tempDir", Array.Empty<BuiltInParam>(), "string"),
         new NamespaceFunction("fs", "modifiedAt", new[] { new BuiltInParam("path", "string") }, "float"),
         new NamespaceFunction("fs", "walk", new[] { new BuiltInParam("path", "string") }, "array"),
+        new NamespaceFunction("fs", "readable", new[] { new BuiltInParam("path", "string") }, "bool"),
+        new NamespaceFunction("fs", "writable", new[] { new BuiltInParam("path", "string") }, "bool"),
+        new NamespaceFunction("fs", "executable", new[] { new BuiltInParam("path", "string") }, "bool"),
         // path namespace
         new NamespaceFunction("path", "abs", new[] { new BuiltInParam("path", "string") }, "string"),
         new NamespaceFunction("path", "dir", new[] { new BuiltInParam("path", "string") }, "string"),

@@ -37,6 +37,60 @@ public static class ProcessBuiltIns
             return null;
         }));
 
+        process.Define("exec", new BuiltInFunction("process.exec", 1, (interp, args) =>
+        {
+            if (args[0] is not string command)
+            {
+                throw new RuntimeError("Argument to 'process.exec' must be a string.");
+            }
+
+            var (program, arguments) = CommandParser.Parse(command);
+
+            // Clean up tracked processes before replacing the process image
+            interp.CleanupTrackedProcesses();
+
+            if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            {
+                // Windows has no execvp — start the process with inherited I/O and exit
+                var psi = new ProcessStartInfo
+                {
+                    FileName = program,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = false,
+                    RedirectStandardInput = false,
+                };
+                foreach (var arg in arguments)
+                {
+                    psi.ArgumentList.Add(arg);
+                }
+
+                try
+                {
+                    using var child = System.Diagnostics.Process.Start(psi)
+                        ?? throw new RuntimeError("Failed to start process.");
+                    child.WaitForExit();
+                    System.Environment.Exit(child.ExitCode);
+                }
+                catch (RuntimeError) { throw; }
+                catch (System.Exception ex)
+                {
+                    throw new RuntimeError($"process.exec failed: {ex.Message}");
+                }
+            }
+            else
+            {
+                // Unix: true exec — replaces the current process image
+                int result = UnixSignal.Exec(program, arguments.ToArray());
+
+                // If we get here, execvp failed
+                int errno = Marshal.GetLastPInvokeError();
+                throw new RuntimeError($"process.exec failed: execvp returned {result} (errno {errno}).");
+            }
+
+            return null; // unreachable
+        }));
+
         process.Define("spawn", new BuiltInFunction("process.spawn", 1, (interp, args) =>
         {
             if (args[0] is not string command)

@@ -8,6 +8,8 @@ using Stash.Interpreting.Types;
 /// </summary>
 public static class FsBuiltIns
 {
+    private static string ExpandTilde(string path) => Interpreter.ExpandTilde(path);
+
     public static void Register(Environment globals)
     {
         // ── fs namespace ─────────────────────────────────────────────────
@@ -19,6 +21,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.readFile' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try { return System.IO.File.ReadAllText(path); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
@@ -35,6 +38,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Second argument to 'fs.writeFile' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try { System.IO.File.WriteAllText(path, content); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot write file '{path}': {e.Message}"); }
@@ -47,6 +51,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.exists' must be a string.");
             }
+            path = ExpandTilde(path);
 
             return System.IO.File.Exists(path);
         }));
@@ -57,6 +62,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.dirExists' must be a string.");
             }
+            path = ExpandTilde(path);
 
             return System.IO.Directory.Exists(path);
         }));
@@ -67,6 +73,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.pathExists' must be a string.");
             }
+            path = ExpandTilde(path);
 
             return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
         }));
@@ -77,6 +84,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.createDir' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try { System.IO.Directory.CreateDirectory(path); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create directory '{path}': {e.Message}"); }
@@ -89,6 +97,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.delete' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try
             {
@@ -120,6 +129,8 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Second argument to 'fs.copy' must be a string.");
             }
+            src = ExpandTilde(src);
+            dst = ExpandTilde(dst);
 
             try { System.IO.File.Copy(src, dst, overwrite: true); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot copy '{src}' to '{dst}': {e.Message}"); }
@@ -137,6 +148,8 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Second argument to 'fs.move' must be a string.");
             }
+            src = ExpandTilde(src);
+            dst = ExpandTilde(dst);
 
             try { System.IO.File.Move(src, dst, overwrite: true); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot move '{src}' to '{dst}': {e.Message}"); }
@@ -149,6 +162,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.size' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try { return new System.IO.FileInfo(path).Length; }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}"); }
@@ -160,6 +174,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.listDir' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try
             {
@@ -186,6 +201,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Second argument to 'fs.appendFile' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try { System.IO.File.AppendAllText(path, content); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot append to file '{path}': {e.Message}"); }
@@ -198,6 +214,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.readLines' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try
             {
@@ -213,6 +230,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.glob' must be a string.");
             }
+            pattern = ExpandTilde(pattern);
 
             try
             {
@@ -240,6 +258,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.isFile' must be a string.");
             }
+            path = ExpandTilde(path);
 
             return System.IO.File.Exists(path);
         }));
@@ -250,6 +269,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.isDir' must be a string.");
             }
+            path = ExpandTilde(path);
 
             return System.IO.Directory.Exists(path);
         }));
@@ -260,6 +280,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.isSymlink' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try
             {
@@ -290,6 +311,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.modifiedAt' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try
             {
@@ -305,6 +327,7 @@ public static class FsBuiltIns
             {
                 throw new RuntimeError("Argument to 'fs.walk' must be a string.");
             }
+            path = ExpandTilde(path);
 
             try
             {
@@ -312,6 +335,83 @@ public static class FsBuiltIns
                 return new List<object?>(files);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"fs.walk failed: {e.Message}"); }
+        }));
+
+        fs.Define("readable", new BuiltInFunction("fs.readable", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.readable' must be a string.");
+            }
+            path = ExpandTilde(path);
+
+            try
+            {
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                    return false;
+                using var stream = System.IO.File.OpenRead(path);
+                return true;
+            }
+            catch (System.UnauthorizedAccessException) { return false; }
+            catch (System.IO.IOException) { return false; }
+        }));
+
+        fs.Define("writable", new BuiltInFunction("fs.writable", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.writable' must be a string.");
+            }
+            path = ExpandTilde(path);
+
+            try
+            {
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                    return false;
+                if (System.IO.File.Exists(path))
+                {
+                    using var stream = System.IO.File.OpenWrite(path);
+                    return true;
+                }
+                // For directories, check by attempting to create a temp file
+                var testFile = System.IO.Path.Combine(path, System.IO.Path.GetRandomFileName());
+                using (System.IO.File.Create(testFile)) { }
+                System.IO.File.Delete(testFile);
+                return true;
+            }
+            catch (System.UnauthorizedAccessException) { return false; }
+            catch (System.IO.IOException) { return false; }
+        }));
+
+        fs.Define("executable", new BuiltInFunction("fs.executable", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+            {
+                throw new RuntimeError("Argument to 'fs.executable' must be a string.");
+            }
+            path = ExpandTilde(path);
+
+            try
+            {
+                if (!System.IO.File.Exists(path))
+                    return false;
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    // On Windows, check file extension
+                    var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                    return ext is ".exe" or ".cmd" or ".bat" or ".com" or ".ps1";
+                }
+                else
+                {
+                    // On Unix, check executable permission via file mode
+                    var mode = System.IO.File.GetUnixFileMode(path);
+                    return (mode & (System.IO.UnixFileMode.UserExecute |
+                                    System.IO.UnixFileMode.GroupExecute |
+                                    System.IO.UnixFileMode.OtherExecute)) != 0;
+                }
+            }
+            catch (System.IO.IOException) { return false; }
         }));
 
         globals.Define("fs", fs);

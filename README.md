@@ -835,10 +835,7 @@ Stash intentionally trades some shell-isms for cleaner syntax and structured pro
 | **Subshells** | `(cd /tmp && cmd)` — isolated env | Block scoping `{ }` for variable isolation, but no subprocess isolation |
 | **Coprocesses** | `coproc` for bidirectional pipes | `process.spawn()` + `process.read()` / `process.write()` (more verbose but equivalent) |
 | **Aliases** | `alias ll='ls -la'` | Define a function: `fn ll() { return $(ls -la); }` |
-| **Tilde expansion** | `~/file` → `/home/user/file` | `path.join(env.home(), "file")` |
 | **POSIX compliance** | Runs on any Unix system out of the box | Requires .NET runtime (install via single command, but it's a dependency) |
-| **Arithmetic expansion** | `echo $((5 + 3))` inline | Assign to variable first: `let x = 5 + 3;` |
-| **File permission tests** | `[[ -r file ]]`, `[[ -x file ]]` | `fs.isFile()` and `fs.isDir()` exist, but no `-r`, `-w`, `-x` permission checks |
 
 Some of these are intentional design choices — no `eval` eliminates a class of injection vulnerabilities, explicit `fs.glob()` prevents surprises from wildcard expansion in arguments, and requiring .NET is the tradeoff that enables the performance and type system advantages shown above.
 

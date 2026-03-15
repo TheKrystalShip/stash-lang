@@ -904,4 +904,23 @@ public class LexerTests
         Assert.Equal(TokenType.Switch, tokens[0].Type);
         Assert.Equal("switch", tokens[0].Lexeme);
     }
+
+    [Fact]
+    public void ScanTokens_LessThan_StillWorks()
+    {
+        // Ensure << detection doesn't break < and <=
+        var tokens = Scan("1 < 2");
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Less, tokens[1].Type);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[2].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_LessEqual_StillWorks()
+    {
+        var tokens = Scan("1 <= 2");
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.LessEqual, tokens[1].Type);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[2].Type);
+    }
 }

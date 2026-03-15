@@ -5261,4 +5261,199 @@ public class InterpreterTests
     {
         Assert.Equal(true, Run("let result = hash(\"hello\") == hash(\"hello\");"));
     }
+
+    // ── fs.readable / fs.writable / fs.executable ──
+
+    [Fact]
+    public void FsReadable_ExistingFile_ReturnsTrue()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            var result = Run($"let result = fs.readable(\"{tmp.Replace("\\\\", "\\\\\\\\")}\");");
+            Assert.Equal(true, result);
+        }
+        finally { System.IO.File.Delete(tmp); }
+    }
+
+    [Fact]
+    public void FsReadable_NonExistentFile_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = fs.readable(\"/nonexistent/path/xyz.txt\");"));
+    }
+
+    [Fact]
+    public void FsWritable_ExistingFile_ReturnsTrue()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            var result = Run($"let result = fs.writable(\"{tmp.Replace("\\\\", "\\\\\\\\")}\");");
+            Assert.Equal(true, result);
+        }
+        finally { System.IO.File.Delete(tmp); }
+    }
+
+    [Fact]
+    public void FsWritable_NonExistentFile_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = fs.writable(\"/nonexistent/path/xyz.txt\");"));
+    }
+
+    [Fact]
+    public void FsExecutable_NonExistentFile_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = fs.executable(\"/nonexistent/path/xyz\");"));
+    }
+
+    [Fact]
+    public void FsExecutable_RegularFile_ReturnsFalse()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            // Temp files are created without execute permission
+            var result = Run($"let result = fs.executable(\"{tmp.Replace("\\\\", "\\\\\\\\")}\");");
+            Assert.Equal(false, result);
+        }
+        finally { System.IO.File.Delete(tmp); }
+    }
+
+    [Fact]
+    public void FsExecutable_ExecutableFile_ReturnsTrue()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            // Make the file executable
+            System.IO.File.SetUnixFileMode(tmp,
+                System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute);
+            var result = Run($"let result = fs.executable(\"{tmp.Replace("\\\\", "\\\\\\\\")}\");");
+            Assert.Equal(true, result);
+        }
+        finally { System.IO.File.Delete(tmp); }
+    }
+
+    // ── Tilde Expansion ──
+
+    [Fact]
+    public void TildeExpansion_InCommand_ExpandsHomeDirectory()
+    {
+        string home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        var result = Run("let r = $(echo ~); let result = r.stdout;");
+        Assert.Contains(home, (string)result!);
+    }
+
+    [Fact]
+    public void TildeExpansion_InFsDirExists_ExpandsHomeDirectory()
+    {
+        // The home directory should exist
+        Assert.Equal(true, Run("let result = fs.dirExists(\"~/\");"));
+    }
+
+    // ── process.exec ──
+
+    [Fact]
+    public void ProcessExec_NonStringArg_ThrowsError()
+    {
+        RunExpectingError("process.exec(42);");
+    }
+
+    [Fact]
+    public void ProcessExec_NonExistentProgram_ThrowsError()
+    {
+        RunExpectingError("process.exec(\"__stash_nonexistent_program_xyz__\");");
+    }
+
+    // ── env.loadFile / env.saveFile ──
+
+    [Fact]
+    public void EnvLoadFile_LoadsVariables()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllText(tmp, "MY_TEST_VAR_1=hello\nMY_TEST_VAR_2=world\n");
+            var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
+            Assert.Equal(2L, result);
+            Assert.Equal("hello", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_1"));
+            Assert.Equal("world", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_2"));
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_1", null);
+            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_2", null);
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void EnvLoadFile_SkipsCommentsAndBlankLines()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllText(tmp, "# This is a comment\n\nMY_TEST_VAR_3=value\n# Another comment\n");
+            var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
+            Assert.Equal(1L, result);
+            Assert.Equal("value", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_3"));
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_3", null);
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void EnvLoadFile_StripsQuotes()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllText(tmp, "MY_TEST_VAR_4=\"quoted value\"\nMY_TEST_VAR_5='single quoted'\n");
+            var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
+            Assert.Equal(2L, result);
+            Assert.Equal("quoted value", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_4"));
+            Assert.Equal("single quoted", System.Environment.GetEnvironmentVariable("MY_TEST_VAR_5"));
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_4", null);
+            System.Environment.SetEnvironmentVariable("MY_TEST_VAR_5", null);
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void EnvLoadFile_NonExistentFile_ThrowsError()
+    {
+        RunExpectingError("env.loadFile(\"/nonexistent/path/.env\");");
+    }
+
+    [Fact]
+    public void EnvSaveFile_WritesVariables()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.Environment.SetEnvironmentVariable("MY_SAVE_TEST_VAR", "testvalue");
+            Run($"env.saveFile(\"{tmp.Replace("\\", "\\\\")}\"); let result = 1;");
+            string content = System.IO.File.ReadAllText(tmp);
+            Assert.Contains("MY_SAVE_TEST_VAR=testvalue", content);
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("MY_SAVE_TEST_VAR", null);
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void EnvSaveFile_NonStringArg_ThrowsError()
+    {
+        RunExpectingError("env.saveFile(42);");
+    }
+
+
 }

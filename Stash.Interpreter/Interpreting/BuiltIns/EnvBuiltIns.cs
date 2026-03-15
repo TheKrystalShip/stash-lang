@@ -8,6 +8,8 @@ using Stash.Interpreting.Types;
 /// </summary>
 public static class EnvBuiltIns
 {
+    private static string ExpandTilde(string path) => Interpreter.ExpandTilde(path);
+
     public static void Register(Environment globals)
     {
         // ── env namespace ────────────────────────────────────────────────
@@ -113,6 +115,111 @@ public static class EnvBuiltIns
         envNs.Define("arch", new BuiltInFunction("env.arch", 0, (_, args) =>
         {
             return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+        }));
+
+        envNs.Define("loadFile", new BuiltInFunction("env.loadFile", 1, (_, args) =>
+        {
+            if (args[0] is not string filePath)
+            {
+                throw new RuntimeError("Argument to 'env.loadFile' must be a string.");
+            }
+
+            filePath = ExpandTilde(filePath);
+
+            string text;
+            try
+            {
+                text = System.IO.File.ReadAllText(filePath);
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError("env.loadFile: " + e.Message);
+            }
+
+            long count = 0;
+            foreach (var rawLine in text.Split('\n'))
+            {
+                var line = rawLine.Trim();
+                if (line.Length == 0 || line[0] == '#')
+                {
+                    continue;
+                }
+
+                var eqIndex = line.IndexOf('=');
+                if (eqIndex < 0)
+                {
+                    continue;
+                }
+
+                var key = line.Substring(0, eqIndex).Trim();
+                if (key.Length == 0)
+                {
+                    continue;
+                }
+
+                var value = line.Substring(eqIndex + 1).Trim();
+
+                // Strip surrounding quotes (single or double)
+                if (value.Length >= 2)
+                {
+                    if ((value[0] == '"' && value[value.Length - 1] == '"') ||
+                        (value[0] == '\'' && value[value.Length - 1] == '\''  ))
+                    {
+                        value = value.Substring(1, value.Length - 2);
+                    }
+                }
+
+                System.Environment.SetEnvironmentVariable(key, value);
+                count++;
+            }
+
+            return count;
+        }));
+
+        envNs.Define("saveFile", new BuiltInFunction("env.saveFile", 1, (_, args) =>
+        {
+            if (args[0] is not string filePath)
+            {
+                throw new RuntimeError("Argument to 'env.saveFile' must be a string.");
+            }
+
+            filePath = ExpandTilde(filePath);
+
+            var sb = new System.Text.StringBuilder();
+            var entries = new System.Collections.Generic.SortedDictionary<string, string>();
+            foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+            {
+                var key = entry.Key.ToString()!;
+                var val = entry.Value?.ToString() ?? "";
+                entries[key] = val;
+            }
+
+            foreach (var kvp in entries)
+            {
+                // Quote values that contain spaces, #, or quotes
+                if (kvp.Value.Contains(' ') || kvp.Value.Contains('#') ||
+                    kvp.Value.Contains('"') || kvp.Value.Contains('\'' ))
+                {
+                    // Use double quotes, escape existing double quotes
+                    var escapedValue = kvp.Value.Replace("\"", "\\\"");
+                    sb.AppendLine($"{kvp.Key}=\"{escapedValue}\"");
+                }
+                else
+                {
+                    sb.AppendLine($"{kvp.Key}={kvp.Value}");
+                }
+            }
+
+            try
+            {
+                System.IO.File.WriteAllText(filePath, sb.ToString());
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError("env.saveFile: " + e.Message);
+            }
+
+            return null;
         }));
 
         globals.Define("env", envNs);

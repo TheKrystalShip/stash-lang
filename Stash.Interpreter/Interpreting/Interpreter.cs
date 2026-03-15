@@ -755,6 +755,79 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private static double ToDouble(object? value) => RuntimeValues.ToDouble(value);
 
+    /// <summary>
+    /// Expands a leading tilde (~) in a path to the user's home directory.
+    /// <c>~/foo</c> becomes <c>/home/user/foo</c>, <c>~</c> alone becomes <c>/home/user</c>.
+    /// Tildes not at the start of the string are left untouched.
+    /// </summary>
+    internal static string ExpandTilde(string path)
+    {
+        if (path == "~")
+            return System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        if (path.StartsWith("~/") || path.StartsWith("~\\"))
+            return System.IO.Path.Combine(
+                System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
+                path.Substring(2));
+        return path;
+    }
+
+    /// <summary>
+    /// Expands leading tildes in command strings. Handles both the command itself
+    /// and arguments: <c>~/bin/tool ~/file.txt</c> → <c>/home/user/bin/tool /home/user/file.txt</c>.
+    /// Only expands <c>~</c> followed by <c>/</c> or at end of a word, not inside quoted strings.
+    /// </summary>
+    private static string ExpandTildeInCommand(string command)
+    {
+        var sb = new System.Text.StringBuilder(command.Length);
+        bool inSingleQuote = false;
+        bool inDoubleQuote = false;
+        bool atWordStart = true;
+
+        for (int i = 0; i < command.Length; i++)
+        {
+            char c = command[i];
+
+            if (c == '\'' && !inDoubleQuote)
+            {
+                inSingleQuote = !inSingleQuote;
+                sb.Append(c);
+                atWordStart = false;
+            }
+            else if (c == '"' && !inSingleQuote)
+            {
+                inDoubleQuote = !inDoubleQuote;
+                sb.Append(c);
+                atWordStart = false;
+            }
+            else if (c == '~' && atWordStart && !inSingleQuote && !inDoubleQuote)
+            {
+                string home = System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+                // ~ alone or ~/path
+                if (i + 1 >= command.Length || command[i + 1] == '/' || command[i + 1] == '\\' || char.IsWhiteSpace(command[i + 1]))
+                {
+                    sb.Append(home);
+                }
+                else
+                {
+                    sb.Append(c); // ~user syntax not supported, keep as-is
+                }
+                atWordStart = false;
+            }
+            else if (char.IsWhiteSpace(c))
+            {
+                sb.Append(c);
+                atWordStart = true;
+            }
+            else
+            {
+                sb.Append(c);
+                atWordStart = false;
+            }
+        }
+
+        return sb.ToString();
+    }
+
     public object? VisitAssignExpr(AssignExpr expr)
     {
         object? value = expr.Value.Accept(this);
@@ -1345,6 +1418,9 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
 
         string command = commandBuilder.ToString().Trim();
+
+        // Expand tilde (~) to home directory in command arguments
+        command = ExpandTildeInCommand(command);
 
         if (string.IsNullOrEmpty(command))
         {
