@@ -109,6 +109,12 @@ dotnet run --project Stash.Interpreter/ -- script.stash --verbose --port 8080 ta
 
 # Run with the CLI debugger
 dotnet run --project Stash.Interpreter/ -- --debug script.stash
+
+# Run tests with TAP output
+dotnet run --project Stash.Interpreter/ -- --test tests.stash
+
+# Debug tests (breakpoints work inside test blocks)
+dotnet run --project Stash.Interpreter/ -- --debug --test tests.stash
 ```
 
 Or make a script directly executable:
@@ -156,7 +162,7 @@ Stash is dynamically typed. Values carry their type at runtime:
 | `null`   | `null`                   | Absence of value      |
 | `array`  | `[1, "two", true]`       | Ordered, mixed-type   |
 | `dict`   | `dict.new()`             | Key-value pairs       |
-| `struct` | `Server { host: "..." }` | Named structured data  |
+| `struct` | `Server { host: "..." }` | Named structured data |
 | `enum`   | `Status.Active`          | Named constants       |
 
 ### Operators
@@ -467,20 +473,20 @@ for (let p in process.list()) {
 
 All spawned processes are automatically killed (SIGTERM → 3s grace → SIGKILL) when a script exits, unless explicitly detached with `process.detach()`.
 
-| Function                        | Description                                          |
-| ------------------------------- | ---------------------------------------------------- |
-| `process.spawn(cmd)`            | Launch background process, returns `Process` handle  |
-| `process.wait(proc)`            | Block until process exits, returns `CommandResult`   |
-| `process.waitTimeout(proc, ms)` | Wait with timeout; returns `null` if timed out       |
-| `process.kill(proc)`            | Send SIGTERM to process                              |
-| `process.isAlive(proc)`         | Check if process is still running                    |
-| `process.signal(proc, sig)`     | Send arbitrary signal (use `process.SIGTERM`, etc.)  |
-| `process.pid(proc)`             | Get OS process ID                                    |
-| `process.detach(proc)`          | Detach process so it survives script exit             |
-| `process.list()`                | List all tracked process handles                     |
-| `process.read(proc)`            | Read available stdout (non-blocking)                 |
-| `process.write(proc, data)`     | Write to process stdin                               |
-| `process.exit(code)`            | Terminate script with exit code                      |
+| Function                        | Description                                         |
+| ------------------------------- | --------------------------------------------------- |
+| `process.spawn(cmd)`            | Launch background process, returns `Process` handle |
+| `process.wait(proc)`            | Block until process exits, returns `CommandResult`  |
+| `process.waitTimeout(proc, ms)` | Wait with timeout; returns `null` if timed out      |
+| `process.kill(proc)`            | Send SIGTERM to process                             |
+| `process.isAlive(proc)`         | Check if process is still running                   |
+| `process.signal(proc, sig)`     | Send arbitrary signal (use `process.SIGTERM`, etc.) |
+| `process.pid(proc)`             | Get OS process ID                                   |
+| `process.detach(proc)`          | Detach process so it survives script exit           |
+| `process.list()`                | List all tracked process handles                    |
+| `process.read(proc)`            | Read available stdout (non-blocking)                |
+| `process.write(proc, data)`     | Write to process stdin                              |
+| `process.exit(code)`            | Terminate script with exit code                     |
 
 Signal constants: `process.SIGHUP` (1), `process.SIGINT` (2), `process.SIGQUIT` (3), `process.SIGKILL` (9), `process.SIGUSR1` (10), `process.SIGUSR2` (12), `process.SIGTERM` (15).
 
@@ -567,55 +573,68 @@ if (args.command == "deploy") {
 
 ### Built-in Functions
 
-| Function                      | Description                                                                                                       |
-| ----------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `io.println(val)`             | Print value + newline                                                                                             |
-| `io.print(val)`               | Print value without newline                                                                                       |
-| `typeof(val)`                 | Type as string: `"int"`, `"float"`, `"string"`, `"bool"`, `"null"`, `"array"`, `"struct"`, `"enum"`, `"function"` |
-| `len(val)`                    | Length of string or array                                                                                         |
-| `conv.toStr(val)`             | Convert any value to string                                                                                       |
-| `conv.toInt(val)`             | Parse string/number to integer                                                                                    |
-| `conv.toFloat(val)`           | Parse string/number to float                                                                                      |
-| `fs.readFile(path)`           | Read file contents as string                                                                                      |
-| `fs.writeFile(path, content)` | Write string to file                                                                                              |
-| `env.get(name)`               | Read environment variable (null if unset)                                                                         |
-| `env.set(name, value)`        | Set environment variable                                                                                          |
-| `process.exit(code)`          | Terminate with exit code                                                                                          |
-| `process.spawn(cmd)`          | Launch background process, returns `Process` handle                                                               |
-| `process.wait(proc)`          | Block until process exits, returns `CommandResult`                                                                |
-| `process.waitTimeout(proc, ms)` | Wait with timeout; `null` if timed out                                                                         |
-| `process.kill(proc)`          | Send SIGTERM to a process                                                                                        |
-| `process.isAlive(proc)`       | Check if process is still running                                                                                |
-| `process.signal(proc, sig)`   | Send arbitrary signal to a process                                                                               |
-| `process.detach(proc)`        | Detach process so it survives script exit                                                                        |
-| `process.list()`              | List all tracked process handles                                                                                 |
-| `process.read(proc)`          | Read available stdout from running process                                                                       |
-| `process.write(proc, data)`   | Write to running process stdin                                                                                   |
-| `arr.push(a, val)`            | Push value onto array                                                                             |
-| `arr.pop(a)`                  | Remove and return last element                                                                    |
-| `arr.sort(a)`                 | Sort array in place (numbers or strings)                                                          |
-| `arr.map(a, fn)`              | Return new array with `fn` applied to each element                                                |
-| `arr.filter(a, fn)`           | Return new array with elements where `fn` returns truthy                                          |
-| `arr.reduce(a, fn, init)`     | Reduce array to single value                                                                      |
-| `dict.new()`                  | Create an empty dictionary                                                                        |
-| `dict.get(d, key)`            | Get value for key, or `null` if not found                                                         |
-| `dict.set(d, key, val)`       | Set key-value pair (mutates dictionary)                                                           |
-| `dict.has(d, key)`            | Return `true` if key exists                                                                       |
-| `dict.keys(d)`                | Return array of all keys                                                                          |
-| `dict.pairs(d)`               | Return array of Pair structs (`.key`, `.value`)                                                   |
-| `dict.merge(d1, d2)`          | Return new dictionary combining both                                                              |
-| `str.upper(s)`                | Convert string to uppercase                                                                       |
-| `str.lower(s)`                | Convert string to lowercase                                                                       |
-| `str.trim(s)`                 | Remove leading/trailing whitespace                                                                |
-| `str.contains(s, sub)`        | Check if string contains substring                                                                |
-| `str.indexOf(s, sub)`         | First occurrence index, or `-1`                                                                   |
-| `str.substring(s, start, end?)` | Extract substring                                                                               |
-| `str.replace(s, old, new)`    | Replace first occurrence                                                                          |
-| `str.replaceAll(s, old, new)` | Replace all occurrences                                                                           |
-| `str.split(s, delim)`         | Split string into array                                                                           |
-| `str.padStart(s, len, fill?)` | Pad start to target length                                                                        |
-| `lastError()`                 | Last error caught by `try`, or null                                                               |
-| `parseArgs(tree)`             | Parse CLI arguments from an `ArgTree` definition                                                  |
+| Function                        | Description                                                                                                       |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `io.println(val)`               | Print value + newline                                                                                             |
+| `io.print(val)`                 | Print value without newline                                                                                       |
+| `typeof(val)`                   | Type as string: `"int"`, `"float"`, `"string"`, `"bool"`, `"null"`, `"array"`, `"struct"`, `"enum"`, `"function"` |
+| `len(val)`                      | Length of string or array                                                                                         |
+| `conv.toStr(val)`               | Convert any value to string                                                                                       |
+| `conv.toInt(val)`               | Parse string/number to integer                                                                                    |
+| `conv.toFloat(val)`             | Parse string/number to float                                                                                      |
+| `fs.readFile(path)`             | Read file contents as string                                                                                      |
+| `fs.writeFile(path, content)`   | Write string to file                                                                                              |
+| `env.get(name)`                 | Read environment variable (null if unset)                                                                         |
+| `env.set(name, value)`          | Set environment variable                                                                                          |
+| `process.exit(code)`            | Terminate with exit code                                                                                          |
+| `process.spawn(cmd)`            | Launch background process, returns `Process` handle                                                               |
+| `process.wait(proc)`            | Block until process exits, returns `CommandResult`                                                                |
+| `process.waitTimeout(proc, ms)` | Wait with timeout; `null` if timed out                                                                            |
+| `process.kill(proc)`            | Send SIGTERM to a process                                                                                         |
+| `process.isAlive(proc)`         | Check if process is still running                                                                                 |
+| `process.signal(proc, sig)`     | Send arbitrary signal to a process                                                                                |
+| `process.detach(proc)`          | Detach process so it survives script exit                                                                         |
+| `process.list()`                | List all tracked process handles                                                                                  |
+| `process.read(proc)`            | Read available stdout from running process                                                                        |
+| `process.write(proc, data)`     | Write to running process stdin                                                                                    |
+| `arr.push(a, val)`              | Push value onto array                                                                                             |
+| `arr.pop(a)`                    | Remove and return last element                                                                                    |
+| `arr.sort(a)`                   | Sort array in place (numbers or strings)                                                                          |
+| `arr.map(a, fn)`                | Return new array with `fn` applied to each element                                                                |
+| `arr.filter(a, fn)`             | Return new array with elements where `fn` returns truthy                                                          |
+| `arr.reduce(a, fn, init)`       | Reduce array to single value                                                                                      |
+| `dict.new()`                    | Create an empty dictionary                                                                                        |
+| `dict.get(d, key)`              | Get value for key, or `null` if not found                                                                         |
+| `dict.set(d, key, val)`         | Set key-value pair (mutates dictionary)                                                                           |
+| `dict.has(d, key)`              | Return `true` if key exists                                                                                       |
+| `dict.keys(d)`                  | Return array of all keys                                                                                          |
+| `dict.pairs(d)`                 | Return array of Pair structs (`.key`, `.value`)                                                                   |
+| `dict.merge(d1, d2)`            | Return new dictionary combining both                                                                              |
+| `str.upper(s)`                  | Convert string to uppercase                                                                                       |
+| `str.lower(s)`                  | Convert string to lowercase                                                                                       |
+| `str.trim(s)`                   | Remove leading/trailing whitespace                                                                                |
+| `str.contains(s, sub)`          | Check if string contains substring                                                                                |
+| `str.indexOf(s, sub)`           | First occurrence index, or `-1`                                                                                   |
+| `str.substring(s, start, end?)` | Extract substring                                                                                                 |
+| `str.replace(s, old, new)`      | Replace first occurrence                                                                                          |
+| `str.replaceAll(s, old, new)`   | Replace all occurrences                                                                                           |
+| `str.split(s, delim)`           | Split string into array                                                                                           |
+| `str.padStart(s, len, fill?)`   | Pad start to target length                                                                                        |
+| `lastError()`                   | Last error caught by `try`, or null                                                                               |
+| `parseArgs(tree)`               | Parse CLI arguments from an `ArgTree` definition                                                                  |
+| `test(name, fn)`                | Register and run a test case (requires `--test`)                                                                  |
+| `describe(name, fn)`            | Group tests under a descriptive name                                                                              |
+| `captureOutput(fn)`             | Execute `fn` with output redirected; returns captured string                                                      |
+| `assert.equal(a, b)`            | Assert `a == b` (no type coercion)                                                                                |
+| `assert.notEqual(a, b)`         | Assert `a != b`                                                                                                   |
+| `assert.true(val)`              | Assert value is truthy                                                                                            |
+| `assert.false(val)`             | Assert value is falsy                                                                                             |
+| `assert.null(val)`              | Assert value is `null`                                                                                            |
+| `assert.notNull(val)`           | Assert value is not `null`                                                                                        |
+| `assert.greater(a, b)`          | Assert `a > b`                                                                                                    |
+| `assert.less(a, b)`             | Assert `a < b`                                                                                                    |
+| `assert.throws(fn)`             | Assert `fn()` throws; returns error message                                                                       |
+| `assert.fail(msg?)`             | Unconditionally fail                                                                                              |
 
 ### Debugger
 
@@ -639,6 +658,82 @@ dotnet run --project Stash.Interpreter/ -- --debug script.stash
 | `clear [location]`           | Remove breakpoint(s)                                   |
 | `quit` / `q`                 | Exit debugger                                          |
 
+### Testing
+
+Stash has built-in testing support — no external frameworks needed. Test scripts are ordinary Stash scripts that use `test()`, `describe()`, and the `assert` namespace:
+
+```stash
+#!/usr/bin/env stash
+
+describe("string operations", () => {
+    test("upper case conversion", () => {
+        assert.equal(str.upper("hello"), "HELLO");
+    });
+
+    test("string contains", () => {
+        assert.true(str.contains("hello world", "world"));
+    });
+
+    test("split and rejoin", () => {
+        let parts = str.split("a,b,c", ",");
+        assert.equal(len(parts), 3);
+        assert.equal(parts[0], "a");
+    });
+});
+```
+
+Run with `--test` to get TAP (Test Anything Protocol) output:
+
+```bash
+dotnet run --project Stash.Interpreter/ -- --test test_strings.stash
+```
+
+```
+TAP version 14
+ok 1 - string operations > upper case conversion
+ok 2 - string operations > string contains
+ok 3 - string operations > split and rejoin
+1..3
+```
+
+#### `assert` Namespace
+
+| Function                            | Description                                     |
+| ----------------------------------- | ----------------------------------------------- |
+| `assert.equal(actual, expected)`    | Assert `actual == expected` (no type coercion)  |
+| `assert.notEqual(actual, expected)` | Assert `actual != expected`                     |
+| `assert.true(value)`                | Assert value is truthy                          |
+| `assert.false(value)`               | Assert value is falsy                           |
+| `assert.null(value)`                | Assert value is `null`                          |
+| `assert.notNull(value)`             | Assert value is not `null`                      |
+| `assert.greater(a, b)`              | Assert `a > b`                                  |
+| `assert.less(a, b)`                 | Assert `a < b`                                  |
+| `assert.throws(fn)`                 | Assert `fn()` throws; returns the error message |
+| `assert.fail(message?)`             | Unconditionally fail                            |
+
+#### Output Capture
+
+Test code that produces output using `captureOutput()`:
+
+```stash
+test("greeting prints correctly", () => {
+    let output = captureOutput(() => {
+        io.println("Hello, world!");
+    });
+    assert.equal(output, "Hello, world!\n");
+});
+```
+
+#### Debugging Tests
+
+Tests and the debugger work together — set breakpoints inside test blocks:
+
+```bash
+dotnet run --project Stash.Interpreter/ -- --debug --test tests.stash
+```
+
+Breakpoints, `step`, `next`, `print`, and all debugger commands work normally inside `test()` and `describe()` blocks.
+
 ---
 
 ## Project Structure
@@ -653,6 +748,7 @@ Stash.Core/
 Stash.Interpreter/
 ├── Interpreting/    # Tree-walk interpreter, Environment, runtime types
 ├── Debugging/       # IDebugger interface, CallFrame, CLI debugger
+├── Testing/         # ITestHarness interface, TapReporter
 └── Program.cs       # Entry point (REPL + file execution)
 
 Stash.Lsp/           # Language Server Protocol implementation

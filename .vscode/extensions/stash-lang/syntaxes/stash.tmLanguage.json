@@ -173,11 +173,11 @@
       "patterns": [
         {
           "name": "constant.language.boolean.stash",
-          "match": "\\b(true|false)\\b"
+          "match": "(?<!\\.)\\b(true|false)\\b"
         },
         {
           "name": "constant.language.null.stash",
-          "match": "\\bnull\\b"
+          "match": "(?<!\\.)\\bnull\\b"
         }
       ]
     },

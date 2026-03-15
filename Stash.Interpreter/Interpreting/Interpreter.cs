@@ -72,10 +72,14 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private readonly List<CallFrame> _callStack = new();
     private IDebugger? _debugger;
     private readonly HashSet<string> _loadedSources = new(StringComparer.OrdinalIgnoreCase);
+    private Stash.Testing.ITestHarness? _testHarness;
+    private string? _currentDescribe;
     private SourceSpan? _currentSpan;
     internal string[] ScriptArgs = Array.Empty<string>();
     internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
     internal readonly Dictionary<StashInstance, StashInstance> ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
+    private TextWriter _output = Console.Out;
+    private TextWriter _errorOutput = Console.Error;
 
     /// <summary>
     /// Gets or sets the current file path being executed.
@@ -102,6 +106,44 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         get => _debugger;
         set => _debugger = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the test harness. When set, test() and describe() report results to it.
+    /// </summary>
+    public Stash.Testing.ITestHarness? TestHarness
+    {
+        get => _testHarness;
+        set => _testHarness = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the current describe block name for nesting test names.
+    /// </summary>
+    public string? CurrentDescribe
+    {
+        get => _currentDescribe;
+        set => _currentDescribe = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the output writer used by io.println and io.print.
+    /// Defaults to Console.Out. Override to capture or redirect output.
+    /// </summary>
+    public TextWriter Output
+    {
+        get => _output;
+        set => _output = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the error output writer.
+    /// Defaults to Console.Error. Override to capture or redirect error output.
+    /// </summary>
+    public TextWriter ErrorOutput
+    {
+        get => _errorOutput;
+        set => _errorOutput = value;
     }
 
     /// <summary>
@@ -1519,6 +1561,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         ArrBuiltIns.Register(_globals);
         DictBuiltIns.Register(_globals);
         StrBuiltIns.Register(_globals);
+        TestBuiltIns.Register(_globals);
     }
 
     /// <summary>

@@ -23,7 +23,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Process Management](#6d-process-management) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations)
+**Addenda:** [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Process Management](#6d-process-management) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system) · [9c. Argument Declarations](#9c-argument-declarations) · [9d. Testing Infrastructure](#9d-testing-infrastructure)
 
 ---
 
@@ -1661,6 +1661,227 @@ COMMAND 'deploy':
 ### Implementation
 
 `parseArgs()` is a built-in function and `ArgTree`/`ArgDef` are built-in struct types pre-defined by the interpreter. At runtime, `parseArgs()` receives an `ArgTree` instance, processes the script's command-line arguments (`_scriptArgs`), performs type coercion, validates required arguments, and returns a `StashInstance` of type `"Args"` with all parsed values bound as fields.
+
+---
+
+## 9d. Testing Infrastructure
+
+Stash provides built-in testing primitives that enable structured, tooling-friendly test execution. Unlike Bash, which lacks any testing support, Stash includes assertion functions and test registration as first-class built-ins, with a pluggable harness that producers TAP-compliant output by default.
+
+### Philosophy
+
+Test scripts are **ordinary Stash scripts**. There is no special file format, no magic — `test()` and `assert.equal()` are regular function calls. The language provides the hooks; users and the ecosystem can build full testing frameworks on top.
+
+By default, runtime errors **crash the script**. The testing harness changes this: when running in test mode (`--test`), assertion failures inside `test()` blocks are **caught and recorded** rather than crashing. Execution continues to the next test, collecting all results.
+
+### Running Tests
+
+```bash
+stash --test math_test.stash          # Run tests with TAP output
+stash --test tests/                    # Run all .stash files in directory
+```
+
+The `--test` flag activates test mode: a `TapReporter` is attached as the test harness, and the interpreter executes the script normally. `test()` calls register and run tests through the harness.
+
+### Test Registration
+
+Tests are registered with the `test()` global function, which takes a name and a lambda:
+
+```c
+test("addition works", () => {
+    assert.equal(1 + 1, 2);
+});
+
+test("string interpolation", () => {
+    let name = "world";
+    assert.equal("hello ${name}", "hello world");
+});
+```
+
+Each `test()` call:
+1. Notifies the harness that a test is starting.
+2. Executes the lambda in an error-catching wrapper.
+3. Reports pass or fail to the harness.
+4. **Continues execution** — failures do not crash the script.
+
+### Test Grouping
+
+Tests can be grouped with `describe()` for organizational clarity:
+
+```c
+describe("math operations", () => {
+    test("addition", () => {
+        assert.equal(2 + 3, 5);
+    });
+
+    test("multiplication", () => {
+        assert.equal(3 * 4, 12);
+    });
+});
+```
+
+`describe()` blocks produce hierarchical test names in the output (e.g., `math operations > addition`). Nesting is supported.
+
+### `assert` Namespace
+
+The `assert` namespace provides structured assertion functions. When an assertion fails, it throws an `AssertionError` (a subclass of `RuntimeError`) carrying structured data (expected value, actual value, message, source location).
+
+| Function                        | Description                                                              |
+| ------------------------------- | ------------------------------------------------------------------------ |
+| `assert.equal(actual, expected)` | Assert `actual == expected` (no type coercion)                          |
+| `assert.notEqual(actual, expected)` | Assert `actual != expected`                                          |
+| `assert.true(value)`            | Assert that `value` is truthy                                           |
+| `assert.false(value)`           | Assert that `value` is falsy                                            |
+| `assert.null(value)`            | Assert that `value` is `null`                                           |
+| `assert.notNull(value)`         | Assert that `value` is not `null`                                       |
+| `assert.greater(a, b)`          | Assert `a > b`                                                          |
+| `assert.less(a, b)`             | Assert `a < b`                                                          |
+| `assert.throws(fn)`             | Assert that `fn()` throws a runtime error; returns the error message    |
+| `assert.fail(message?)`         | Unconditionally fail with an optional message                           |
+
+#### Assertion Error Messages
+
+Assertion failures produce descriptive error messages with source location:
+
+```
+assert.equal failed: expected 42 but got 17
+  at test_math.stash:14:5
+```
+
+When running outside test mode (no `--test` flag), assertion failures are regular `RuntimeError` exceptions — the script crashes on the first failure, just like any other error.
+
+### TAP Output
+
+When running with `--test`, output follows the [Test Anything Protocol (TAP)](https://testanything.org/) version 14:
+
+```
+TAP version 14
+1..3
+ok 1 - math operations > addition
+not ok 2 - string equality
+  ---
+  message: "assert.equal failed: expected \"hello\" but got \"world\""
+  severity: fail
+  at:
+    file: test_strings.stash
+    line: 14
+    column: 5
+  ...
+ok 3 - null handling
+```
+
+TAP is a well-established protocol supported by CI/CD systems, test runners, and reporting tools.
+
+### Test Harness Architecture
+
+The testing infrastructure mirrors the debugging architecture:
+
+| Concept        | Debugging Parallel       | Testing                   |
+| -------------- | ------------------------ | ------------------------- |
+| Interface      | `IDebugger`              | `ITestHarness`            |
+| Default impl   | `CliDebugger`            | `TapReporter`             |
+| CLI flag       | `--debug`                | `--test`                  |
+| Null when off  | `_debugger`              | `_testHarness`            |
+| Zero overhead  | Null-guarded hooks       | Null-guarded hooks        |
+| Protocol adapter | DAP `DebugSession`     | Future test explorer      |
+
+The `ITestHarness` interface defines the contract between the interpreter and any test reporter:
+
+- `OnTestStart(name, span)` — A test case begins.
+- `OnTestPass(name, duration)` — A test case passed.
+- `OnTestFail(name, message, span, duration)` — A test case failed.
+- `OnTestSkip(name, reason)` — A test case was skipped.
+- `OnSuiteStart(name)` — A `describe()` group begins.
+- `OnSuiteEnd(name, passed, failed, skipped)` — A `describe()` group ends.
+- `OnRunComplete(passed, failed, skipped)` — All tests finished.
+
+When no test harness is attached (`_testHarness` is null), all testing hooks are skipped — zero runtime overhead, identical to how `_debugger` works.
+
+### Global Test Functions
+
+| Function                  | Description                                                         |
+| ------------------------- | ------------------------------------------------------------------- |
+| `test(name, fn)`          | Register and run a test case                                        |
+| `describe(name, fn)`      | Group tests under a descriptive name                                |
+| `captureOutput(fn)`       | Execute `fn()` with output redirected; returns captured string      |
+
+These are global functions (not namespaced) because they are used at the top level of test scripts, similar to how `typeof()` and `len()` are global.
+
+### Complete Example
+
+```c
+#!/usr/bin/env stash
+
+import { deploy, Server } from "deploy.stash";
+
+describe("deployment", () => {
+    test("creates server instance", () => {
+        let srv = Server { host: "10.0.0.1", port: 22, status: "unknown" };
+        assert.equal(srv.host, "10.0.0.1");
+        assert.equal(srv.port, 22);
+    });
+
+    test("deploy returns boolean", () => {
+        let srv = Server { host: "localhost", port: 22, status: "unknown" };
+        let result = deploy(srv, "app.tar.gz");
+        assert.equal(typeof(result), "bool");
+    });
+
+    test("null coalescing works", () => {
+        let val = null ?? "default";
+        assert.equal(val, "default");
+    });
+
+    test("type coercion does not happen", () => {
+        assert.notEqual(5, "5");
+        assert.notEqual(0, false);
+        assert.notEqual(0, null);
+    });
+});
+```
+
+### Output Capture
+
+The `captureOutput()` global function redirects `io.println` and `io.print` output to a string during the execution of a given function, then returns the captured output:
+
+```c
+let output = captureOutput(() => {
+    io.println("hello");
+    io.print("world");
+});
+assert.equal(output, "hello\nworld");
+```
+
+This is the backbone for testing code that produces side-effect output. During capture, the interpreter's output writer is temporarily swapped to a string buffer — output from the captured function is not printed to the console.
+
+#### Output Abstraction
+
+The interpreter provides pluggable output via `TextWriter` properties:
+
+- `Output` — Writer used by `io.println` and `io.print` (defaults to `Console.Out`).
+- `ErrorOutput` — Writer for error output (defaults to `Console.Error`).
+
+These abstractions also bridge to the debugger: `io.println` and `io.print` call `IDebugger.OnOutput()` when a debugger is attached, enabling DAP output events in VS Code.
+
+### Implementation
+
+- **`ITestHarness`** — Interface in `Stash.Interpreter/Testing/`, mirroring `IDebugger` in `Stash.Interpreter/Debugging/`.
+- **`TapReporter`** — Default implementation producing TAP version 14 output.
+- **`AssertionError`** — Subclass of `RuntimeError` carrying `Expected` and `Actual` fields for structured reporting.
+- **`TestBuiltIns`** — Registers `test()`, `describe()`, `captureOutput()`, and the `assert` namespace into the interpreter's global environment, following the same pattern as `IoBuiltIns`, `ArrBuiltIns`, etc.
+- **`--test` CLI flag** — Attaches a `TapReporter` to the interpreter and sets the exit code based on test results.
+- **Output abstraction** — `Interpreter.Output` and `Interpreter.ErrorOutput` (`TextWriter` properties) replace direct `Console` access in `IoBuiltIns`. `IDebugger.OnOutput()` is called from `io.println`/`io.print` when a debugger is attached.
+
+### Future Extensions (Not in v1)
+
+- **`test.skip(name, fn)`** — Skip a test with a reason.
+- **`test.only(name, fn)`** — Run only this test (for debugging).
+- **`assert.deepEqual(a, b)`** — Deep equality for arrays, dicts, and structs.
+- **`assert.closeTo(a, b, delta)`** — Float comparison with tolerance.
+- **`--test-format=tap|json|junit`** — Alternate output formats.
+- **Test discovery** — `stash --test tests/` runs all `*_test.stash` or `test_*.stash` files in a directory.
+- **Setup/teardown** — `beforeEach()`, `afterEach()`, `beforeAll()`, `afterAll()`.
+- **IDE integration** — VS Code test explorer adapter (parallel to DAP for debugging).
 
 ---
 

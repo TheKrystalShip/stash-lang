@@ -26,6 +26,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting;
+using Stash.Testing;
 
 namespace Stash;
 
@@ -40,6 +41,7 @@ public class Program
         }
 
         bool debug = false;
+        bool test = false;
         string? scriptPath = null;
         int scriptArgStart = -1;
 
@@ -48,6 +50,10 @@ public class Program
             if (args[i] == "--debug" && scriptPath is null)
             {
                 debug = true;
+            }
+            else if (args[i] == "--test" && scriptPath is null)
+            {
+                test = true;
             }
             else if (scriptPath is null)
             {
@@ -67,6 +73,13 @@ public class Program
             return;
         }
 
+        if (test && scriptPath is null)
+        {
+            Console.Error.WriteLine("Error: --test mode requires a script file.");
+            System.Environment.Exit(64);
+            return;
+        }
+
         if (scriptPath is null)
         {
             RunRepl();
@@ -78,9 +91,17 @@ public class Program
             ? args[scriptArgStart..]
             : Array.Empty<string>();
 
-        if (debug)
+        if (debug && test)
+        {
+            RunFileWithDebuggerAndTests(scriptPath, scriptArgs);
+        }
+        else if (debug)
         {
             RunFileWithDebugger(scriptPath, scriptArgs);
+        }
+        else if (test)
+        {
+            RunFileWithTests(scriptPath, scriptArgs);
         }
         else
         {
@@ -207,6 +228,152 @@ public class Program
         }
 
         Console.WriteLine("Script execution completed.");
+    }
+
+    private static void RunFileWithDebuggerAndTests(string path, string[] scriptArgs)
+    {
+        if (!System.IO.File.Exists(path))
+        {
+            Console.Error.WriteLine($"Error: file not found: {path}");
+            System.Environment.Exit(66);
+            return;
+        }
+
+        string source = System.IO.File.ReadAllText(path);
+        var lexer = new Lexer(source, path);
+        List<Token> tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
+        {
+            foreach (string error in lexer.Errors)
+            {
+                Console.Error.WriteLine($"[lex error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        var parser = new Parser(tokens);
+        List<Stmt> statements = parser.ParseProgram();
+
+        if (parser.Errors.Count > 0)
+        {
+            foreach (string error in parser.Errors)
+            {
+                Console.Error.WriteLine($"[parse error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        var interpreter = new Interpreter();
+        interpreter.CurrentFile = path;
+        interpreter.SetScriptArgs(scriptArgs);
+
+        // Attach both debugger and test harness
+        var debugger = new CliDebugger();
+        interpreter.Debugger = debugger;
+        debugger.SetCallStack(interpreter.CallStack);
+        debugger.SetInterpreter(interpreter);
+        debugger.Initialize();
+
+        var reporter = new TapReporter();
+        interpreter.TestHarness = reporter;
+
+        try
+        {
+            interpreter.Interpret(statements);
+        }
+        catch (RuntimeError ex)
+        {
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+            return;
+        }
+        finally
+        {
+            interpreter.CleanupTrackedProcesses();
+        }
+
+        // Emit TAP plan and exit with appropriate code
+        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        Console.WriteLine("Script execution completed.");
+
+        if (reporter.Failed > 0)
+        {
+            System.Environment.Exit(1);
+        }
+    }
+
+    private static void RunFileWithTests(string path, string[] scriptArgs)
+    {
+        if (!System.IO.File.Exists(path))
+        {
+            Console.Error.WriteLine($"Error: file not found: {path}");
+            System.Environment.Exit(66);
+            return;
+        }
+
+        string source = System.IO.File.ReadAllText(path);
+
+        // Stage 1: Lex
+        var lexer = new Lexer(source, path);
+        List<Token> tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
+        {
+            foreach (string error in lexer.Errors)
+            {
+                Console.Error.WriteLine($"[lex error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        // Stage 2: Parse
+        var parser = new Parser(tokens);
+        List<Stmt> statements = parser.ParseProgram();
+
+        if (parser.Errors.Count > 0)
+        {
+            foreach (string error in parser.Errors)
+            {
+                Console.Error.WriteLine($"[parse error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
+        }
+
+        // Stage 3: Interpret with test harness
+        var interpreter = new Interpreter();
+        interpreter.CurrentFile = path;
+        interpreter.SetScriptArgs(scriptArgs);
+
+        var reporter = new TapReporter();
+        interpreter.TestHarness = reporter;
+
+        try
+        {
+            interpreter.Interpret(statements);
+        }
+        catch (RuntimeError ex)
+        {
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+            return;
+        }
+        finally
+        {
+            interpreter.CleanupTrackedProcesses();
+        }
+
+        // Emit TAP plan and exit with appropriate code
+        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+
+        if (reporter.Failed > 0)
+        {
+            System.Environment.Exit(1);
+        }
     }
 
     private static void RunRepl()

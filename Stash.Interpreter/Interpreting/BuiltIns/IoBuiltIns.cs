@@ -1,6 +1,5 @@
 namespace Stash.Interpreting.BuiltIns;
 
-using System;
 using Stash.Interpreting.Types;
 
 /// <summary>
@@ -13,15 +12,19 @@ public static class IoBuiltIns
         // ── io namespace ─────────────────────────────────────────────────
         var io = new StashNamespace("io");
 
-        io.Define("println", new BuiltInFunction("io.println", 1, (_, args) =>
+        io.Define("println", new BuiltInFunction("io.println", 1, (interp, args) =>
         {
-            Console.WriteLine(RuntimeValues.Stringify(args[0]));
+            string text = RuntimeValues.Stringify(args[0]);
+            interp.Output.WriteLine(text);
+            interp.Debugger?.OnOutput("stdout", text + "\n");
             return null;
         }));
 
-        io.Define("print", new BuiltInFunction("io.print", 1, (_, args) =>
+        io.Define("print", new BuiltInFunction("io.print", 1, (interp, args) =>
         {
-            Console.Write(RuntimeValues.Stringify(args[0]));
+            string text = RuntimeValues.Stringify(args[0]);
+            interp.Output.Write(text);
+            interp.Debugger?.OnOutput("stdout", text);
             return null;
         }));
 

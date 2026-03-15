@@ -943,7 +943,7 @@ public class Parser
             }
             else if (Match(TokenType.Dot))
             {
-                Token name = Consume(TokenType.Identifier, "Expected field name after '.'.");
+                Token name = ConsumePropertyName();
                 Expr dotExpr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span));
 
                 // Check for namespaced struct init: ns.StructName { field: value, ... }
@@ -1475,6 +1475,23 @@ public class Parser
         }
 
         throw Error(Peek(), message);
+    }
+
+    /// <summary>
+    /// Consumes the next token as a property name after a dot. Accepts any identifier or
+    /// keyword that may legally appear as a member name (e.g. <c>assert.true</c>, <c>assert.null</c>).
+    /// </summary>
+    private Token ConsumePropertyName()
+    {
+        if (Check(TokenType.Identifier) ||
+            Check(TokenType.True) ||
+            Check(TokenType.False) ||
+            Check(TokenType.Null))
+        {
+            return Advance();
+        }
+
+        throw Error(Peek(), "Expected field name after '.'.");
     }
 
     /// <summary>

@@ -111,6 +111,9 @@ public static class BuiltInRegistry
         new BuiltInFunction("len", new[] { new BuiltInParam("value") }, "int"),
         new BuiltInFunction("lastError", Array.Empty<BuiltInParam>(), "string"),
         new BuiltInFunction("parseArgs", new[] { new BuiltInParam("tree", "ArgTree") }, "Args"),
+        new BuiltInFunction("test", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") }),
+        new BuiltInFunction("describe", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") }),
+        new BuiltInFunction("captureOutput", new[] { new BuiltInParam("fn", "function") }, "string"),
     };
 
     // ── Built-in Namespace Functions ──
@@ -213,6 +216,17 @@ public static class BuiltInRegistry
         new NamespaceFunction("str", "chars", new[] { new BuiltInParam("s", "string") }, "array"),
         new NamespaceFunction("str", "padStart", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string", IsVariadic: true),
         new NamespaceFunction("str", "padEnd", new[] { new BuiltInParam("s", "string"), new BuiltInParam("length", "int"), new BuiltInParam("fill", "string") }, "string", IsVariadic: true),
+        // assert namespace
+        new NamespaceFunction("assert", "equal", new[] { new BuiltInParam("actual"), new BuiltInParam("expected") }),
+        new NamespaceFunction("assert", "notEqual", new[] { new BuiltInParam("actual"), new BuiltInParam("expected") }),
+        new NamespaceFunction("assert", "true", new[] { new BuiltInParam("value") }),
+        new NamespaceFunction("assert", "false", new[] { new BuiltInParam("value") }),
+        new NamespaceFunction("assert", "null", new[] { new BuiltInParam("value") }),
+        new NamespaceFunction("assert", "notNull", new[] { new BuiltInParam("value") }),
+        new NamespaceFunction("assert", "greater", new[] { new BuiltInParam("a"), new BuiltInParam("b") }),
+        new NamespaceFunction("assert", "less", new[] { new BuiltInParam("a"), new BuiltInParam("b") }),
+        new NamespaceFunction("assert", "throws", new[] { new BuiltInParam("fn", "function") }, "string"),
+        new NamespaceFunction("assert", "fail", new[] { new BuiltInParam("message", "string") }),
     };
 
     // ── Built-in Namespace Constants ──
@@ -232,7 +246,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert"
     };
 
     // ── Keywords ──

@@ -1,0 +1,313 @@
+#!/usr/bin/env stash
+
+/*
+ * Testing Demo
+ * ------------
+ * Run with: stash --test testing.stash
+ *
+ * Showcases the built-in testing infrastructure:
+ *   - test() and describe() for organizing tests
+ *   - assert namespace for structured assertions
+ *   - captureOutput() for testing printed output
+ *   - Nested describe blocks for hierarchical grouping
+ */
+
+// --- Helper functions under test ---
+
+fn factorial(n) {
+    if (n <= 1) { return 1; }
+    return n * factorial(n - 1);
+}
+
+fn fibonacci(n) {
+    if (n <= 0) { return 0; }
+    if (n == 1) { return 1; }
+    return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+fn to_slug(title) {
+    let slug = str.lower(str.trim(title));
+    slug = str.replaceAll(slug, " ", "-");
+    slug = str.replaceAll(slug, "_", "-");
+    return slug;
+}
+
+fn clamp(value, lo, hi) {
+    if (value < lo) { return lo; }
+    if (value > hi) { return hi; }
+    return value;
+}
+
+// --- Tests ---
+
+describe("math", () => {
+    test("factorial base case", () => {
+        assert.equal(factorial(0), 1);
+        assert.equal(factorial(1), 1);
+    });
+
+    test("factorial computes correctly", () => {
+        assert.equal(factorial(5), 120);
+        assert.equal(factorial(10), 3628800);
+    });
+
+    test("fibonacci sequence", () => {
+        assert.equal(fibonacci(0), 0);
+        assert.equal(fibonacci(1), 1);
+        assert.equal(fibonacci(6), 8);
+        assert.equal(fibonacci(10), 55);
+    });
+
+    test("arithmetic operators", () => {
+        assert.equal(10 + 5, 15);
+        assert.equal(10 - 5, 5);
+        assert.equal(10 * 5, 50);
+        assert.equal(10 / 3, 3);
+        assert.equal(10 % 3, 1);
+    });
+
+    test("clamp constrains values", () => {
+        assert.equal(clamp(5, 0, 10), 5);
+        assert.equal(clamp(-3, 0, 10), 0);
+        assert.equal(clamp(15, 0, 10), 10);
+    });
+});
+
+describe("strings", () => {
+    test("case conversion", () => {
+        assert.equal(str.upper("hello"), "HELLO");
+        assert.equal(str.lower("HELLO"), "hello");
+    });
+
+    test("trimming", () => {
+        assert.equal(str.trim("  hello  "), "hello");
+        assert.equal(str.trimStart("  hello  "), "hello  ");
+        assert.equal(str.trimEnd("  hello  "), "  hello");
+    });
+
+    test("searching", () => {
+        assert.true(str.contains("hello world", "world"));
+        assert.false(str.contains("hello world", "xyz"));
+        assert.equal(str.indexOf("hello", "ll"), 2);
+    });
+
+    test("split and join", () => {
+        let parts = str.split("a,b,c", ",");
+        assert.equal(len(parts), 3);
+        assert.equal(parts[0], "a");
+        assert.equal(parts[1], "b");
+        assert.equal(parts[2], "c");
+    });
+
+    test("slug generation", () => {
+        assert.equal(to_slug("Hello World"), "hello-world");
+        assert.equal(to_slug("  My Post  "), "my-post");
+        assert.equal(to_slug("Stash_Lang"), "stash-lang");
+    });
+
+    test("string interpolation", () => {
+        let name = "Stash";
+        assert.equal($"Hello, {name}!", "Hello, Stash!");
+        assert.equal("Value: ${1 + 2}", "Value: 3");
+    });
+});
+
+describe("arrays", () => {
+    test("basic operations", () => {
+        let a = [1, 2, 3];
+        assert.equal(len(a), 3);
+        assert.equal(a[0], 1);
+        assert.equal(a[2], 3);
+    });
+
+    test("push and pop", () => {
+        let a = [1, 2];
+        arr.push(a, 3);
+        assert.equal(len(a), 3);
+        assert.equal(a[2], 3);
+
+        let popped = arr.pop(a);
+        assert.equal(popped, 3);
+        assert.equal(len(a), 2);
+    });
+
+    test("map transforms elements", () => {
+        let nums = [1, 2, 3, 4];
+        let doubled = arr.map(nums, (x) => x * 2);
+        assert.equal(doubled[0], 2);
+        assert.equal(doubled[3], 8);
+    });
+
+    test("filter selects elements", () => {
+        let nums = [1, 2, 3, 4, 5, 6];
+        let evens = arr.filter(nums, (x) => x % 2 == 0);
+        assert.equal(len(evens), 3);
+        assert.equal(evens[0], 2);
+        assert.equal(evens[1], 4);
+    });
+
+    test("reduce accumulates", () => {
+        let nums = [1, 2, 3, 4];
+        let sum = arr.reduce(nums, (acc, x) => acc + x, 0);
+        assert.equal(sum, 10);
+    });
+});
+
+describe("dictionaries", () => {
+    test("CRUD operations", () => {
+        let d = dict.new();
+        d["name"] = "Alice";
+        d["age"] = 30;
+
+        assert.equal(d["name"], "Alice");
+        assert.equal(d["age"], 30);
+        assert.equal(dict.size(d), 2);
+        assert.true(dict.has(d, "name"));
+        assert.false(dict.has(d, "email"));
+    });
+
+    test("merge combines dictionaries", () => {
+        let defaults = dict.new();
+        defaults["color"] = "blue";
+        defaults["timeout"] = 30;
+
+        let overrides = dict.new();
+        overrides["color"] = "red";
+
+        let merged = dict.merge(defaults, overrides);
+        assert.equal(merged["color"], "red");
+        assert.equal(merged["timeout"], 30);
+    });
+});
+
+describe("types and equality", () => {
+    test("no type coercion on equality", () => {
+        assert.notEqual(5, "5");
+        assert.notEqual(0, false);
+        assert.notEqual(0, null);
+        assert.notEqual("", false);
+    });
+
+    test("typeof returns correct types", () => {
+        assert.equal(typeof(42), "int");
+        assert.equal(typeof(3.14), "float");
+        assert.equal(typeof("hi"), "string");
+        assert.equal(typeof(true), "bool");
+        assert.equal(typeof(null), "null");
+        assert.equal(typeof([1, 2]), "array");
+    });
+
+    test("truthiness rules", () => {
+        // Falsy values
+        assert.false(false);
+        assert.false(null);
+        assert.false(0);
+        assert.false(0.0);
+        assert.false("");
+
+        // Truthy values
+        assert.true(1);
+        assert.true("hello");
+        assert.true([]);
+    });
+});
+
+describe("error handling", () => {
+    test("assert.throws catches errors", () => {
+        let msg = assert.throws(() => {
+            let x = 1 / 0;
+        });
+        assert.notNull(msg);
+    });
+
+    test("try expression catches errors", () => {
+        let result = try conv.toInt("not_a_number");
+        assert.null(result);
+    });
+
+    test("null coalescing provides fallback", () => {
+        let a = null ?? "default";
+        assert.equal(a, "default");
+
+        let b = "value" ?? "default";
+        assert.equal(b, "value");
+    });
+});
+
+describe("output capture", () => {
+    test("captures println output", () => {
+        let output = captureOutput(() => {
+            io.println("Hello, world!");
+        });
+        assert.equal(output, "Hello, world!\n");
+    });
+
+    test("captures print without newline", () => {
+        let output = captureOutput(() => {
+            io.print("no newline");
+        });
+        assert.equal(output, "no newline");
+    });
+
+    test("captures multiple outputs", () => {
+        let output = captureOutput(() => {
+            io.print("one ");
+            io.print("two ");
+            io.println("three");
+        });
+        assert.equal(output, "one two three\n");
+    });
+
+    test("returns empty string when no output", () => {
+        let output = captureOutput(() => {
+            let x = 42;
+        });
+        assert.equal(output, "");
+    });
+
+    test("nested capture works", () => {
+        let outer = captureOutput(() => {
+            io.print("A");
+            let inner = captureOutput(() => {
+                io.print("B");
+            });
+            io.print(inner);
+        });
+        assert.equal(outer, "AB");
+    });
+});
+
+describe("closures and lambdas", () => {
+    test("closure captures variables", () => {
+        fn makeCounter() {
+            let count = 0;
+            return () => {
+                count = count + 1;
+                return count;
+            };
+        }
+
+        let counter = makeCounter();
+        assert.equal(counter(), 1);
+        assert.equal(counter(), 2);
+        assert.equal(counter(), 3);
+    });
+
+    test("lambda as argument", () => {
+        fn apply(f, x) { return f(x); }
+        assert.equal(apply((x) => x * x, 5), 25);
+        assert.equal(apply((x) => x + 1, 10), 11);
+    });
+
+    test("switch expression", () => {
+        let classify = (n) => n switch {
+            0 => "zero",
+            1 => "one",
+            _ => "other"
+        };
+
+        assert.equal(classify(0), "zero");
+        assert.equal(classify(1), "one");
+        assert.equal(classify(42), "other");
+    });
+});

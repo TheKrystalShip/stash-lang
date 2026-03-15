@@ -9,7 +9,7 @@
             "request": "launch",
             "name": "Debug script (stop on entry)",
             "program": "${file}",
-            "stopOnEntry": true,
+            "stopOnEntry": false,
             "cwd": "${workspaceFolder}"
         },
     ]
