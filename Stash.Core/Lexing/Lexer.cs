@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Collections.Frozen;
 using System.Text;
@@ -98,6 +99,9 @@ public class Lexer
             ["as"] = TokenType.As,
             ["switch"] = TokenType.Switch,
         }.ToFrozenDictionary();
+
+    private static readonly FrozenDictionary<string, TokenType>.AlternateLookup<ReadOnlySpan<char>> _keywordLookup =
+        _keywords.GetAlternateLookup<ReadOnlySpan<char>>();
 
     /// <summary>
     /// Gets the list of error messages accumulated during scanning.
@@ -942,19 +946,20 @@ public class Lexer
                 _column++;
             }
 
-            string lexeme = _source[_start.._current];
-            double value = double.Parse(lexeme, System.Globalization.CultureInfo.InvariantCulture);
-            AddToken(TokenType.FloatLiteral, value, lexeme);
+            ReadOnlySpan<char> span = _source.AsSpan(_start, _current - _start);
+            double value = double.Parse(span, provider: System.Globalization.CultureInfo.InvariantCulture);
+            AddToken(TokenType.FloatLiteral, value, _source[_start.._current]);
         }
         else
         {
-            string lexeme = _source[_start.._current];
-            if (long.TryParse(lexeme, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
+            ReadOnlySpan<char> span = _source.AsSpan(_start, _current - _start);
+            if (long.TryParse(span, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
             {
-                AddToken(TokenType.IntegerLiteral, value, lexeme);
+                AddToken(TokenType.IntegerLiteral, value, _source[_start.._current]);
             }
             else
             {
+                string lexeme = _source[_start.._current];
                 _errors.Add($"[{_file} {_startLine}:{_startColumn}] Integer literal '{lexeme}' is too large.");
                 _structuredErrors.Add(new DiagnosticError(
                     new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
@@ -984,8 +989,8 @@ public class Lexer
             _column++;
         }
 
-        string text = _source[_start.._current];
-        if (_keywords.TryGetValue(text, out TokenType type))
+        ReadOnlySpan<char> span = _source.AsSpan(_start, _current - _start);
+        if (_keywordLookup.TryGetValue(span, out TokenType type))
         {
             object? literal = type switch
             {
@@ -993,11 +998,11 @@ public class Lexer
                 TokenType.False => false,
                 _ => null,
             };
-            AddToken(type, literal, text);
+            AddToken(type, literal, _source[_start.._current]);
         }
         else
         {
-            AddToken(TokenType.Identifier, null, string.Intern(text));
+            AddToken(TokenType.Identifier, null, string.Intern(_source[_start.._current]));
         }
     }
 

@@ -1,0 +1,48 @@
+// =============================================================================
+// Benchmark: Scope Lookup
+// Tests variable resolution across deeply nested Environment chains.
+// Each call to depth1() builds a 5-level scope chain and the innermost
+// function reads variables from every outer level.
+// =============================================================================
+
+fn depth1() {
+    let a1 = 1;
+    let a2 = 2;
+    fn depth2() {
+        let b1 = 3;
+        let b2 = 4;
+        fn depth3() {
+            let c1 = 5;
+            let c2 = 6;
+            fn depth4() {
+                let d1 = 7;
+                let d2 = 8;
+                fn depth5() {
+                    // Walks 4 levels up the environment chain for each variable
+                    return a1 + a2 + b1 + b2 + c1 + c2 + d1 + d2;
+                }
+                return depth5();
+            }
+            return depth4();
+        }
+        return depth3();
+    }
+    return depth2();
+}
+
+const ITERATIONS = 100000;
+
+io.println("=== Benchmark: Scope Lookup ===");
+
+let start = time.millis();
+let i = 0;
+let sum = 0;
+while (i < ITERATIONS) {
+    sum = sum + depth1();
+    i++;
+}
+let elapsed = time.millis() - start;
+
+io.println($"Iterations: {ITERATIONS}");
+io.println($"Result (checksum): {sum}");
+io.println($"Time: {elapsed} ms");

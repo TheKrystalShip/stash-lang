@@ -78,6 +78,8 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     internal string[] ScriptArgs = Array.Empty<string>();
     internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
     internal readonly Dictionary<StashInstance, StashInstance> ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Expr, int> _locals = new(ReferenceEqualityComparer.Instance);
+    private bool _isAdHocEval = false;
     private TextWriter _output = Console.Out;
     private TextWriter _errorOutput = Console.Error;
 
@@ -177,6 +179,14 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <summary>
+    /// Records the lexical scope distance for a variable reference, as computed by the Resolver.
+    /// </summary>
+    public void Resolve(Expr expr, int distance)
+    {
+        _locals[expr] = distance;
+    }
+
+    /// <summary>
     /// Evaluates a parsed expression AST and returns the resulting runtime value.
     /// </summary>
     /// <param name="expression">The root <see cref="Expr"/> node to evaluate.</param>
@@ -199,6 +209,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             _debugger?.OnSourceLoaded(_currentFile);
         }
+
+        // Resolve variable references for O(1) lookup
+        var resolver = new Resolver(this);
+        resolver.Resolve(statements);
 
         try
         {
@@ -254,7 +268,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </exception>
     public object? VisitIdentifierExpr(IdentifierExpr expr)
     {
-        return _environment.Get(expr.Name.Lexeme, expr.Span);
+        if (_locals.TryGetValue(expr, out int distance))
+        {
+            return _environment.GetAt(distance, expr.Name.Lexeme);
+        }
+        if (_isAdHocEval)
+        {
+            return _environment.Get(expr.Name.Lexeme, expr.Span);
+        }
+        return _globals.Get(expr.Name.Lexeme, expr.Span);
     }
 
     /// <summary>
@@ -330,7 +352,18 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         // Write back
         if (expr.Operand is IdentifierExpr id)
         {
-            _environment.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+            if (_locals.TryGetValue(expr, out int distance))
+            {
+                _environment.AssignAt(distance, id.Name.Lexeme, newValue, id.Name.Span);
+            }
+            else if (_isAdHocEval)
+            {
+                _environment.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+            }
+            else
+            {
+                _globals.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+            }
         }
         else if (expr.Operand is DotExpr dot)
         {
@@ -725,7 +758,18 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     public object? VisitAssignExpr(AssignExpr expr)
     {
         object? value = expr.Value.Accept(this);
-        _environment.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+        if (_locals.TryGetValue(expr, out int distance))
+        {
+            _environment.AssignAt(distance, expr.Name.Lexeme, value, expr.Name.Span);
+        }
+        else if (_isAdHocEval)
+        {
+            _environment.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+        }
+        else
+        {
+            _globals.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+        }
         return value;
     }
 
@@ -733,7 +777,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         object? callee = expr.Callee.Accept(this);
 
-        List<object?> arguments = new();
+        var arguments = new List<object?>(expr.Arguments.Count);
         foreach (Expr argument in expr.Arguments)
         {
             arguments.Add(argument.Accept(this));
@@ -814,14 +858,17 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     public object? EvaluateInEnvironment(Expr expr, Environment environment)
     {
         Environment previous = _environment;
+        bool previousAdHocEval = _isAdHocEval;
         try
         {
             _environment = environment;
+            _isAdHocEval = true;
             return expr.Accept(this);
         }
         finally
         {
             _environment = previous;
+            _isAdHocEval = previousAdHocEval;
         }
     }
 
@@ -1066,6 +1113,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             ns.Define(name, value);
         }
 
+        ns.Freeze();
         _environment.Define(stmt.Alias.Lexeme, ns);
         return null;
     }
@@ -1148,6 +1196,11 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 _debugger?.OnSourceLoaded(resolvedPath);
             }
 
+            // Resolve variable references for O(1) lookup
+            var resolver = new Resolver(this);
+            resolver.Resolve(statements);
+
+            // Execute the module
             foreach (Stmt statement in statements)
             {
                 Execute(statement);
@@ -1588,6 +1641,15 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         ConfigBuiltIns.Register(_globals);
         HttpBuiltIns.Register(_globals);
         TestBuiltIns.Register(_globals);
+
+        // Freeze all built-in namespaces for optimal read performance.
+        foreach (var binding in _globals.GetAllBindings())
+        {
+            if (binding.Value is Types.StashNamespace ns)
+            {
+                ns.Freeze();
+            }
+        }
     }
 
     /// <summary>

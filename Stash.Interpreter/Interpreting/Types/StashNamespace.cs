@@ -1,7 +1,8 @@
 namespace Stash.Interpreting.Types;
 
+using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
-using System.Collections.ObjectModel;
 using Stash.Common;
 
 /// <summary>
@@ -10,20 +11,49 @@ using Stash.Common;
 public class StashNamespace
 {
     public string Name { get; }
-    private readonly Dictionary<string, object?> _members = new();
+    private Dictionary<string, object?>? _mutableMembers = new();
+    private FrozenDictionary<string, object?>? _frozenMembers;
 
     public StashNamespace(string name)
     {
         Name = name;
     }
 
-    public void Define(string name, object? value) => _members[name] = value;
+    public void Define(string name, object? value)
+    {
+        if (_mutableMembers is null)
+            throw new InvalidOperationException($"Namespace '{Name}' is frozen and cannot be modified.");
 
-    public bool HasMember(string name) => _members.ContainsKey(name);
+        _mutableMembers[name] = value;
+    }
+
+    /// <summary>
+    /// Freezes the namespace, converting the internal dictionary to a FrozenDictionary
+    /// for optimal read performance. After freezing, Define() will throw.
+    /// </summary>
+    public void Freeze()
+    {
+        if (_mutableMembers is not null)
+        {
+            _frozenMembers = _mutableMembers.ToFrozenDictionary();
+            _mutableMembers = null;
+        }
+    }
+
+    public bool HasMember(string name)
+    {
+        if (_frozenMembers is not null) return _frozenMembers.ContainsKey(name);
+        return _mutableMembers!.ContainsKey(name);
+    }
 
     public object? GetMember(string name, SourceSpan? span)
     {
-        if (_members.TryGetValue(name, out var value))
+        if (_frozenMembers is not null)
+        {
+            if (_frozenMembers.TryGetValue(name, out var frozenValue))
+                return frozenValue;
+        }
+        else if (_mutableMembers!.TryGetValue(name, out var value))
         {
             return value;
         }
@@ -31,8 +61,11 @@ public class StashNamespace
         throw new RuntimeError($"Namespace '{Name}' has no member '{name}'.", span);
     }
 
-    public IReadOnlyDictionary<string, object?> GetAllMembers() =>
-        new ReadOnlyDictionary<string, object?>(_members);
+    public IReadOnlyDictionary<string, object?> GetAllMembers()
+    {
+        if (_frozenMembers is not null) return _frozenMembers;
+        return _mutableMembers!;
+    }
 
     public override string ToString() => $"<namespace {Name}>";
 }

@@ -1,0 +1,160 @@
+// =============================================================================
+// Benchmark: Algorithms
+// A real-world workload combining recursion, iteration, array manipulation,
+// and struct usage. Times each algorithm individually and reports a total.
+// =============================================================================
+// --- Recursive Fibonacci ---
+
+fn fibonacci(n) {
+  if (n <= 0) {
+    return 0;
+  }
+  if (n == 1) {
+    return 1;
+  }
+  return fibonacci(n - 1) + fibonacci(n - 2);
+}
+
+// --- Bubble Sort ---
+
+fn bubble_sort(arr) {
+  let n = len(arr);
+  let swapped = true;
+  while (swapped) {
+    swapped = false;
+    let j = 0;
+    while (j < n - 1) {
+      if (arr[j] > arr[j + 1]) {
+        let tmp = arr[j];
+        arr[j] = arr[j + 1];
+        arr[j + 1] = tmp;
+        swapped = true;
+      }
+      j++;
+    }
+    n--;
+  }
+  return arr;
+}
+
+// --- Binary Search (requires sorted array) ---
+
+fn binary_search(arr, target) {
+  let lo = 0;
+  let hi = len(arr) - 1;
+  while (lo <= hi) {
+    let mid = (lo + hi) / 2;
+    if (arr[mid] == target) {
+      return mid;
+    }
+    if (arr[mid] < target) {
+      lo = mid + 1;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return -1;
+}
+
+// --- Struct usage ---
+
+struct Node {
+  value,
+  index
+}
+
+fn build_nodes(count) {
+  let nodes = [];
+  let i = 0;
+  while (i < count) {
+    let n = Node {value: i * 3 + 1, index: i};
+    arr.push(nodes, n);
+    i++;
+  }
+  return nodes;
+}
+
+fn sum_nodes(nodes) {
+  let total = 0;
+  for (let n in nodes) {
+    total = total + n.value;
+  }
+  return total;
+}
+
+// =============================================================================
+// Run benchmarks
+// =============================================================================
+
+io.println("=== Benchmark: Algorithms ===");
+io.println("");
+
+// 1. Fibonacci(26) — deep recursion tree
+
+let t0 = time.millis();
+
+let fib_result = fibonacci(26);
+
+let fib_time = time.millis() - t0;
+io.println($"fibonacci(26)      = {fib_result}");
+io.println($"Time: {fib_time} ms");
+io.println("");
+
+// 2. Bubble sort on 1000 pseudo-random integers
+//    Build a descending array (worst case for bubble sort)
+
+let sort_data = [];
+
+let si = 1000;
+
+while (si > 0) {
+  arr.push(sort_data, si);
+  si--;
+}
+
+let t1 = time.millis();
+
+let sorted = bubble_sort(sort_data);
+
+let sort_time = time.millis() - t1;
+io.println($"bubble_sort(1000)  first={sorted[0]}, last={sorted[len(sorted)-1]}");
+io.println($"Time: {sort_time} ms");
+io.println("");
+
+// 3. Binary search — 10,000 searches on the sorted array
+
+let t2 = time.millis();
+
+let found_count = 0;
+
+let bi = 0;
+
+while (bi < 10000) {
+  let target = (bi % 1000) + 1;
+  let idx = binary_search(sorted, target);
+  if (idx >= 0) {
+    found_count++;
+  }
+  bi++;
+}
+
+let search_time = time.millis() - t2;
+io.println($"binary_search x10000  found={found_count}");
+io.println($"Time: {search_time} ms");
+io.println("");
+
+// 4. Struct build + aggregate — 5000 Node instances
+
+let t3 = time.millis();
+
+let nodes = build_nodes(5000);
+
+let node_sum = sum_nodes(nodes);
+
+let struct_time = time.millis() - t3;
+io.println($"build+sum nodes(5000) sum={node_sum}");
+io.println($"Time: {struct_time} ms");
+io.println("");
+
+let total_time = fib_time + sort_time + search_time + struct_time;
+io.println($"Total time: {total_time} ms");

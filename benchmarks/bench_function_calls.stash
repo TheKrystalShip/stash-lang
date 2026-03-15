@@ -1,0 +1,57 @@
+// =============================================================================
+// Benchmark: Function Call Overhead
+// Tests the cost of function dispatch, argument passing, and environment
+// setup across functions of varying arities.
+// =============================================================================
+
+fn zero_args() {
+  return 42;
+}
+
+fn one_arg(x) {
+  return x + 1;
+}
+
+fn two_args(a, b) {
+  return a + b;
+}
+
+fn three_args(a, b, c) {
+  return a + b + c;
+}
+
+fn four_args(a, b, c, d) {
+  return a + b + c + d;
+}
+
+// A slightly heavier function to mix in
+
+fn compute(x) {
+  let t = x * 3;
+  let u = t - x;
+  return u + 1;
+}
+
+const ITERATIONS = 100000;
+io.println("=== Benchmark: Function Calls ===");
+
+let start = time.millis();
+
+let i = 0;
+
+let acc = 0;
+
+while (i < ITERATIONS) {
+  acc = acc + zero_args();
+  acc = acc + one_arg(i);
+  acc = acc + two_args(i, 2);
+  acc = acc + three_args(i, 2, 3);
+  acc = acc + four_args(i, 1, 2, 3);
+  acc = acc + compute(i);
+  i++;
+}
+
+let elapsed = time.millis() - start;
+io.println($"Iterations: {ITERATIONS}");
+io.println($"Result (checksum): {acc}");
+io.println($"Time: {elapsed} ms");

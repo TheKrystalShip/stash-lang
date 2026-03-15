@@ -1,0 +1,42 @@
+// =============================================================================
+// Benchmark: Namespace Member Lookup
+// Tests the cost of resolving built-in namespace functions (math.*, str.*,
+// conv.*). Each iteration performs multiple namespace lookups across different
+// namespaces to stress the FrozenDictionary dispatch path.
+// =============================================================================
+
+const ITERATIONS = 200000;
+
+io.println("=== Benchmark: Namespace Calls ===");
+
+let start = time.millis();
+let i = 0;
+let acc = 0.0;
+while (i < ITERATIONS) {
+    // math namespace
+    let sq  = math.sqrt(i + 1);
+    let ab  = math.abs(-i - 1);
+    let fl  = math.floor(sq + 0.5);
+    let pw  = math.pow(2, 8);
+    let mx  = math.max(i, i + 1);
+    let mn  = math.min(i, i + 1);
+
+    // str namespace
+    let up  = str.upper("hello");
+    let lo  = str.lower("WORLD");
+    let tr  = str.trim("  stash  ");
+    let rp  = str.replace("abc", "b", "B");
+
+    // conv namespace
+    let cs  = conv.toStr(i);
+    let ci  = conv.toInt("42");
+    let chx = conv.toHex(255);
+
+    acc = acc + sq + ab + fl + pw + mx + mn;
+    i++;
+}
+let elapsed = time.millis() - start;
+
+io.println($"Iterations: {ITERATIONS}");
+io.println($"Result (checksum): {acc}");
+io.println($"Time: {elapsed} ms");
