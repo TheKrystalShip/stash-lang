@@ -41,6 +41,14 @@
         "scopeName": "source.stash",
         "path": "./syntaxes/stash.tmLanguage.json",
         "semanticHighlighting": true
+      },
+      {
+        "scopeName": "markdown.stash.codeblock",
+        "path": "./syntaxes/stash-markdown-injection.tmLanguage.json",
+        "injectTo": ["text.html.markdown"],
+        "embeddedLanguages": {
+          "meta.embedded.block.stash": "stash"
+        }
       }
     ],
     "snippets": [
