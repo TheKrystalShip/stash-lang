@@ -3,6 +3,12 @@
 > **Status:** Draft v0.1
 > **Created:** March 2026
 > **Purpose:** Source of truth for the design and implementation of **Stash**, a C-style interpreted shell scripting language.
+>
+> **Companion documents:**
+> - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions and argument parsing
+> - [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md) — debug adapter server implementation
+> - [LSP — Language Server Protocol](specs/LSP%20—%20Language%20Server%20Protocol.md) — language server implementation
+> - [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md) — testing primitives, assert namespace, TAP output
 
 ---
 
@@ -1671,7 +1677,11 @@ When no debugger is attached, the hook is a null check (zero overhead).
 
 ### DAP (Debug Adapter Protocol)
 
-Microsoft's Debug Adapter Protocol allows integration with VS Code and other editors. With the hooks above, a DAP adapter becomes a thin translation layer rather than a rewrite.
+The debug hook interface above enables integration with VS Code and other editors through the Debug Adapter Protocol. The DAP server (`Stash.Dap`) is a thin translation layer on top of these hooks. For full DAP server documentation, see [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md).
+
+### Testing Hooks
+
+The testing infrastructure follows the same architectural pattern — an `ITestHarness` interface with the same null-guard approach for zero overhead. For testing built-ins (`test()`, `describe()`, `assert` namespace) and TAP output, see [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md).
 
 ---
 
@@ -1806,10 +1816,11 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 
 ### Specifications & Protocols
 
-| Resource                           | Description                                               |
-| ---------------------------------- | --------------------------------------------------------- |
-| **Debug Adapter Protocol (DAP)**   | Microsoft's protocol for editor-debugger communication.   |
-| **Language Server Protocol (LSP)** | For future IDE support (autocomplete, diagnostics, etc.). |
+| Resource                                                                  | Description                                                  |
+| ------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md)  | Stash debug adapter server — breakpoints, stepping, variables |
+| [LSP — Language Server Protocol](specs/LSP%20—%20Language%20Server%20Protocol.md) | Stash language server — diagnostics, completion, navigation   |
+| [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md)    | Testing primitives, assert namespace, TAP output              |
 
 ---
 
