@@ -1005,15 +1005,11 @@ for (let i, item in ["a", "b", "c"]) {
 // Output: 0: a, 1: b, 2: c
 ```
 
-The first variable (`i`) receives the zero-based index (as an integer), and the second variable (`item`) receives the element value. This works with all iterable types — arrays, strings, dictionaries, and ranges:
+The first variable (`i`) receives the zero-based index (as an integer), and the second variable (`item`) receives the element value. This works with arrays, strings, and ranges:
 
 ```stash
 for (let i, ch in "hello") {
     io.println($"{i}: {ch}");   // 0: h, 1: e, 2: l, ...
-}
-
-for (let i, key in myDict) {
-    io.println($"{i}: {key}");  // tracks iteration order
 }
 ```
 
@@ -1028,11 +1024,35 @@ for (let i, val in 5..8) {
 // index=2, value=7
 ```
 
+#### Dictionary Key-Value Iteration
+
+For dictionaries, the two-variable form iterates over **key-value pairs** instead of index-key pairs:
+
+```stash
+let config = dict.new();
+config["host"] = "localhost";
+config["port"] = 8080;
+
+for (let key, value in config) {
+    io.println($"{key} = {value}");
+}
+// host = localhost
+// port = 8080
+```
+
+This follows Go's `for k, v := range m` pattern. The first variable receives the dictionary key and the second receives the corresponding value. Single-variable iteration still yields keys only:
+
+```stash
+for (let key in config) {
+    io.println(key);  // "host", "port"
+}
+```
+
 #### Iterable Types
 
 - **`array`** — iterates over elements in order: `for (let item in [1, 2, 3]) { ... }`
 - **`string`** — iterates over characters: `for (let ch in "hello") { ... }` yields `"h"`, `"e"`, `"l"`, `"l"`, `"o"`
-- **`dict`** — iterates over keys: `for (let key in myDict) { ... }`
+- **`dict`** — iterates over keys: `for (let key in myDict) { ... }`. With two variables, iterates key-value pairs: `for (let key, value in myDict) { ... }`
 - **`range`** — iterates over integer values: `for (let i in 1..10) { ... }` yields `1` through `9` (end-exclusive)
 
 All other types produce a runtime error when used as the right-hand side of `for-in`.

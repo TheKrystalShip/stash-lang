@@ -1193,6 +1193,32 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         object? iterable = stmt.Iterable.Accept(this);
 
+        // Special case: two-variable for-in on dictionary iterates key-value pairs
+        if (iterable is StashDictionary dict && stmt.IndexName is not null)
+        {
+            foreach (var kvp in dict.RawEntries())
+            {
+                var loopEnv = new Environment(_environment);
+                loopEnv.Define(stmt.IndexName.Lexeme, kvp.Key);
+                loopEnv.Define(stmt.VariableName.Lexeme, kvp.Value);
+
+                try
+                {
+                    ExecuteBlock(stmt.Body.Statements, loopEnv);
+                }
+                catch (BreakException)
+                {
+                    break;
+                }
+                catch (ContinueException)
+                {
+                    // Continue to next iteration
+                }
+            }
+
+            return null;
+        }
+
         IEnumerable<object?> items;
         if (iterable is List<object?> list)
         {
@@ -1202,9 +1228,9 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             items = StringToChars(str);
         }
-        else if (iterable is StashDictionary dict)
+        else if (iterable is StashDictionary dict2)
         {
-            items = dict.IterableKeys().ToList();
+            items = dict2.IterableKeys().ToList();
         }
         else if (iterable is StashRange range)
         {

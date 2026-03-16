@@ -5947,9 +5947,33 @@ public class InterpreterTests
     }
 
     [Fact]
-    public void ForInIndex_Dict_IndexTracksIteration()
+    public void ForInIndex_Dict_KeyValueIteration()
     {
-        Assert.Equal(2L, Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; d[\"c\"] = 3; let result = 0; for (let i, key in d) { result = i; }"));
+        Assert.Equal(6L, Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; d[\"c\"] = 3; let result = 0; for (let key, val in d) { result = result + val; }"));
+    }
+
+    [Fact]
+    public void ForInIndex_Dict_KeyIsCorrect()
+    {
+        Assert.Equal("b=2", Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; let result = \"\"; for (let key, val in d) { if (key == \"b\") { result = key + \"=\" + val; } }"));
+    }
+
+    [Fact]
+    public void ForInIndex_Dict_SingleVar_StillIteratesKeys()
+    {
+        Assert.Equal("abc", Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; d[\"c\"] = 3; let result = \"\"; for (let key in d) { result = result + key; }"));
+    }
+
+    [Fact]
+    public void ForInIndex_Dict_KeyValue_WithBreak()
+    {
+        Assert.Equal(1L, Run("let d = dict.new(); d[\"x\"] = 1; d[\"y\"] = 2; let result = 0; for (let key, val in d) { result = val; break; }"));
+    }
+
+    [Fact]
+    public void ForInIndex_Dict_KeyValue_WithContinue()
+    {
+        Assert.Equal(4L, Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; d[\"c\"] = 3; let result = 0; for (let key, val in d) { if (key == \"b\") { continue; } result = result + val; }"));
     }
 
     [Fact]
