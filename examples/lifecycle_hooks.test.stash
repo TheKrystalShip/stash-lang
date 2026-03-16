@@ -1,0 +1,191 @@
+#!/usr/bin/env stash
+
+/*
+ * Lifecycle Hooks & Skip Demo
+ * ---------------------------
+ * Run with: stash --test lifecycle_hooks.test.stash
+ *
+ * Showcases:
+ *   - skip() for marking tests as pending / work-in-progress
+ *   - beforeAll() / afterAll() for one-time setup and teardown
+ *   - beforeEach() / afterEach() for per-test setup and teardown
+ *   - Nested describe blocks inheriting parent hooks
+ */
+
+// --- Helpers under test ---
+
+// Uses a shared mutable array as a simple counter:
+// counter[0] holds the count value.
+
+fn create_counter() {
+    return [0];
+}
+
+fn increment(counter) {
+    counter[0] = counter[0] + 1;
+}
+
+fn reset(counter) {
+    counter[0] = 0;
+}
+
+// --- Tests ---
+
+describe("skip() demo", () => {
+    test("this test runs", () => {
+        assert.equal(2 + 2, 4);
+    });
+
+    skip("not yet implemented", () => {
+        // This body is never executed — safe to reference unfinished code
+        assert.fail("should never reach here");
+    });
+
+    skip("known flaky on CI", () => {
+        assert.equal(1, 1);
+    });
+
+    test("this also runs", () => {
+        assert.true(true);
+    });
+});
+
+describe("beforeAll / afterAll", () => {
+    let items = [];
+
+    beforeAll(() => {
+        // Runs once before any test in this describe block
+        arr.push(items, "initialized");
+    });
+
+    afterAll(() => {
+        // Runs once after all tests in this describe block
+        arr.push(items, "cleaned up");
+    });
+
+    test("items has initialization marker", () => {
+        assert.equal(len(items), 1);
+        assert.equal(items[0], "initialized");
+    });
+
+    test("items grows as tests run", () => {
+        arr.push(items, "test data");
+        assert.greater(len(items), 1);
+    });
+});
+
+describe("beforeEach / afterEach", () => {
+    let counter = create_counter();
+
+    beforeEach(() => {
+        // Reset counter before every test
+        reset(counter);
+        increment(counter);  // Start each test with count = 1
+    });
+
+    afterEach(() => {
+        // Verify counter is in valid range after each test
+        // (this runs after the test body)
+    });
+
+    test("counter starts at 1", () => {
+        assert.equal(counter[0], 1);
+    });
+
+    test("counter is reset between tests", () => {
+        // Even though the previous test didn't change it,
+        // beforeEach resets and increments, so it's 1 again
+        assert.equal(counter[0], 1);
+        increment(counter);
+        increment(counter);
+        assert.equal(counter[0], 3);
+    });
+
+    test("counter is 1 again after reset", () => {
+        assert.equal(counter[0], 1);
+    });
+});
+
+describe("nested hooks", () => {
+    let log = [];
+
+    beforeEach(() => {
+        arr.push(log, "outer-before");
+    });
+
+    afterEach(() => {
+        arr.push(log, "outer-after");
+    });
+
+    test("outer test", () => {
+        arr.push(log, "outer-test");
+    });
+
+    describe("inner group", () => {
+        beforeEach(() => {
+            arr.push(log, "inner-before");
+        });
+
+        afterEach(() => {
+            arr.push(log, "inner-after");
+        });
+
+        test("inner test", () => {
+            arr.push(log, "inner-test");
+            // At this point, log should be:
+            // outer-before, outer-test, outer-after,  (from outer test)
+            // outer-before, inner-before, inner-test   (from this test, hooks not yet done)
+        });
+    });
+
+    test("verify hook execution order", () => {
+        // After the outer test and inner test have run:
+        // 1. outer-before, outer-test, outer-after           (outer test)
+        // 2. outer-before, inner-before, inner-test,         (inner test body)
+        //    inner-after, outer-after                         (inner test cleanup)
+        // 3. outer-before                                    (this test's beforeEach)
+        assert.equal(log[0], "outer-before");
+        assert.equal(log[1], "outer-test");
+        assert.equal(log[2], "outer-after");
+        assert.equal(log[3], "outer-before");
+        assert.equal(log[4], "inner-before");
+        assert.equal(log[5], "inner-test");
+        assert.equal(log[6], "inner-after");
+        assert.equal(log[7], "outer-after");
+        assert.equal(log[8], "outer-before");
+    });
+});
+
+describe("combined lifecycle", () => {
+    let events = [];
+
+    beforeAll(() => { arr.push(events, "SETUP"); });
+    afterAll(() => { arr.push(events, "TEARDOWN"); });
+    beforeEach(() => { arr.push(events, "before"); });
+    afterEach(() => { arr.push(events, "after"); });
+
+    test("first", () => {
+        arr.push(events, "test-1");
+    });
+
+    test("second", () => {
+        arr.push(events, "test-2");
+    });
+
+    skip("third (pending)", () => {
+        arr.push(events, "test-3");
+    });
+
+    test("verify full lifecycle", () => {
+        // Expected: SETUP, before, test-1, after, before, test-2, after, before
+        assert.equal(events[0], "SETUP");
+        assert.equal(events[1], "before");
+        assert.equal(events[2], "test-1");
+        assert.equal(events[3], "after");
+        assert.equal(events[4], "before");
+        assert.equal(events[5], "test-2");
+        assert.equal(events[6], "after");
+        // events[7] is "before" for this test
+        assert.equal(events[7], "before");
+    });
+});

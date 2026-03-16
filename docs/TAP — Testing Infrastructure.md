@@ -22,8 +22,9 @@
 5. [`assert` Namespace](#5-assert-namespace)
 6. [TAP Output](#6-tap-output)
 7. [Output Capture](#7-output-capture)
-8. [Implementation Details](#8-implementation-details)
-9. [Future Extensions](#9-future-extensions)
+8. [Setup & Teardown Hooks](#8-setup--teardown-hooks)
+9. [Implementation Details](#9-implementation-details)
+10. [Future Extensions](#10-future-extensions)
 
 ---
 
@@ -122,13 +123,35 @@ describe("math operations", () => {
 
 `describe()` blocks produce hierarchical test names (e.g., `math operations > addition`). Nesting is supported.
 
+### `skip(name, fn)` — Register a Skipped Test
+
+```stash
+skip("not yet implemented", () => {
+    // Body is never executed
+    assert.fail("should not reach here");
+});
+```
+
+`skip()` registers a test that is intentionally not run. The test body is provided for documentation but is never executed. In TAP output, skipped tests emit `ok N - <name> # SKIP skipped`.
+
+Use `skip()` for:
+
+- Work-in-progress tests that aren't ready yet
+- Tests for features that are known broken
+- Platform-specific tests that don't apply to the current environment
+
 ### Global Test Functions Summary
 
-| Function             | Description                                                    |
-| -------------------- | -------------------------------------------------------------- |
-| `test(name, fn)`     | Register and run a test case                                   |
-| `describe(name, fn)` | Group tests under a descriptive name                           |
-| `captureOutput(fn)`  | Execute `fn()` with output redirected; returns captured string |
+| Function             | Description                                                     |
+| -------------------- | --------------------------------------------------------------- |
+| `test(name, fn)`     | Register and run a test case                                    |
+| `skip(name, fn)`     | Register a skipped test (body is not executed)                  |
+| `describe(name, fn)` | Group tests under a descriptive name                            |
+| `beforeAll(fn)`      | Run `fn()` once before tests in the current `describe` block    |
+| `afterAll(fn)`       | Run `fn()` once after all tests in the current `describe` block |
+| `beforeEach(fn)`     | Run `fn()` before each `test()` in the current `describe` scope |
+| `afterEach(fn)`      | Run `fn()` after each `test()` in the current `describe` scope  |
+| `captureOutput(fn)`  | Execute `fn()` with output redirected; returns captured string  |
 
 These are global functions (not namespaced) because they are used at the top level of test scripts.
 
@@ -209,7 +232,96 @@ This allows tests to assert on what a function prints without polluting the TAP 
 
 ---
 
-## 8. Implementation Details
+## 8. Setup & Teardown Hooks
+
+Lifecycle hooks provide setup and teardown logic scoped to `describe()` blocks. All four hooks must be called inside a `describe()` block — using them at the top level throws a `RuntimeError`.
+
+### `beforeAll(fn)` — One-Time Setup
+
+```stash
+describe("database tests", () => {
+    let items = [];
+
+    beforeAll(() => {
+        arr.push(items, "initialized");
+    });
+
+    test("items is initialized", () => {
+        assert.equal(items[0], "initialized");
+    });
+});
+```
+
+`beforeAll(fn)` executes `fn()` immediately when encountered. Since Stash executes synchronously and top-to-bottom, placing `beforeAll()` at the top of a `describe()` block ensures it runs before any tests.
+
+### `afterAll(fn)` — One-Time Teardown
+
+```stash
+describe("resources", () => {
+    afterAll(() => {
+        // Runs after all tests in this describe block finish
+    });
+
+    test("uses resource", () => { /* ... */ });
+});
+```
+
+`afterAll(fn)` registers `fn` to run when the `describe()` block ends. It runs in the `finally` block, so it executes even if a test fails.
+
+### `beforeEach(fn)` / `afterEach(fn)` — Per-Test Hooks
+
+```stash
+describe("counter", () => {
+    let count = [0];
+
+    beforeEach(() => {
+        count[0] = 0;  // Reset before each test
+    });
+
+    afterEach(() => {
+        // Runs after each test body completes
+    });
+
+    test("starts at zero", () => {
+        assert.equal(count[0], 0);
+    });
+
+    test("is reset between tests", () => {
+        assert.equal(count[0], 0);
+    });
+});
+```
+
+### Hook Inheritance in Nested Describes
+
+Hooks from parent `describe()` blocks are inherited by nested blocks. `beforeEach` hooks run outermost-to-innermost; `afterEach` hooks run innermost-to-outermost:
+
+```stash
+describe("outer", () => {
+    beforeEach(() => { /* runs first */ });
+    afterEach(() => { /* runs last */ });
+
+    describe("inner", () => {
+        beforeEach(() => { /* runs second */ });
+        afterEach(() => { /* runs first in cleanup */ });
+
+        test("example", () => {
+            // Execution order:
+            // 1. outer beforeEach
+            // 2. inner beforeEach
+            // 3. test body
+            // 4. inner afterEach
+            // 5. outer afterEach
+        });
+    });
+});
+```
+
+Hooks do **not** leak between sibling `describe()` blocks — each block manages its own hook scope.
+
+---
+
+## 9. Implementation Details
 
 ### Project Structure
 
@@ -217,32 +329,33 @@ This allows tests to assert on what a function prints without polluting the TAP 
 Stash.Interpreter/
 ├── Testing/
 │   ├── ITestHarness.cs        # Interface — 7 callback methods
-│   └── TapReporter.cs         # TAP output implementation
+│   ├── TapReporter.cs         # TAP output implementation
+│   └── AssertionError.cs      # Structured assertion failure exception
 └── Interpreting/
-    └── TestBuiltIns.cs        # test(), describe(), assert.*, captureOutput()
+    └── TestBuiltIns.cs        # test(), skip(), describe(), hooks, assert.*, captureOutput()
 ```
 
-The `test()` and `describe()` functions and the `assert` namespace are registered in `TestBuiltIns.cs`, following the same pattern as other [built-in function registries](../Stash%20—%20Standard%20Library%20Reference.md#overview).
+The `test()`, `skip()`, `describe()`, lifecycle hooks, and the `assert` namespace are registered in `TestBuiltIns.cs`, following the same pattern as other [built-in function registries](../Stash%20—%20Standard%20Library%20Reference.md#overview).
 
 ### Integration Points
 
 - **CLI (`Program.cs`)** — The `--test` flag instantiates a `TapReporter` and assigns it to `Interpreter.TestHarness` before script execution.
 - **Interpreter** — Exposes `ITestHarness? TestHarness { get; set; }`. All harness calls are guarded: `TestHarness?.OnTestStart(...)`.
-- **`test()` built-in** — Catches `RuntimeError` and `AssertionException` inside the test lambda and routes them to `OnTestFail`. All other exceptions propagate normally.
+- **`test()` built-in** — Catches `RuntimeError` and `AssertionException` inside the test lambda and routes them to `OnTestFail`. Runs `beforeEach`/`afterEach` hooks around the test body. All other exceptions propagate normally.
+- **`skip()` built-in** — Calls `OnTestSkip` on the harness without executing the test body.
+- **`describe()` built-in** — Pushes hook layers on entry and pops them on exit. Runs `afterAll` hooks in a `finally` block.
+- **Lifecycle hooks** — `beforeAll` executes immediately. `afterAll` defers to the `describe` `finally` block. `beforeEach`/`afterEach` append to a per-`describe` hook stack; `test()` iterates all levels.
 - **`assert.*` functions** — In test mode, throw `AssertionException` (caught by the `test()` wrapper). Outside test mode, throw `RuntimeError` (crashes the script).
 
 ---
 
-## 9. Future Extensions
+## 10. Future Extensions
 
-- **`test.skip(name, fn)`** — Skip a test with a reason; emits `ok N # SKIP` in TAP output.
 - **`test.only(name, fn)`** — Run only this test (for focused debugging); all other tests are skipped.
 - **`assert.deepEqual(a, b)`** — Recursive equality for arrays, dicts, and struct instances.
 - **`assert.closeTo(a, b, delta)`** — Float comparison with tolerance (avoids floating-point precision issues).
 - **`--test-format=tap|json|junit`** — Alternate output formats for different CI/CD consumers.
 - **Test discovery** — `stash --test tests/` discovers and runs all `*_test.stash` or `test_*.stash` files automatically.
-- **Setup/teardown** — `beforeEach()`, `afterEach()`, `beforeAll()`, `afterAll()` lifecycle hooks scoped to `describe()` blocks.
-- **IDE integration** — VS Code test explorer adapter following the [DAP pattern](DAP%20—%20Debug%20Adapter%20Protocol.md), enabling inline pass/fail indicators and test run controls.
 
 ### Complete Example
 
@@ -252,18 +365,33 @@ The `test()` and `describe()` functions and the `assert` namespace are registere
 import { deploy, Server } from "deploy.stash";
 
 describe("deployment", () => {
+    let srv = null;
+
+    beforeEach(() => {
+        srv = Server { host: "localhost", port: 22, status: "unknown" };
+    });
+
+    afterAll(() => {
+        srv = null;  // Cleanup
+    });
+
     test("creates server instance", () => {
-        let srv = Server { host: "10.0.0.1", port: 22, status: "unknown" };
-        assert.equal(srv.host, "10.0.0.1");
+        assert.equal(srv.host, "localhost");
         assert.equal(srv.port, 22);
     });
 
     test("deploy returns boolean", () => {
-        let srv = Server { host: "localhost", port: 22, status: "unknown" };
         let result = deploy(srv, "app.tar.gz");
         assert.equal(typeof(result), "bool");
     });
 
+    skip("rollback not implemented yet", () => {
+        let result = rollback(srv);
+        assert.true(result);
+    });
+});
+
+describe("language features", () => {
     test("null coalescing works", () => {
         let val = null ?? "default";
         assert.equal(val, "default");

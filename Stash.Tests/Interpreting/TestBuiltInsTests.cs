@@ -49,6 +49,21 @@ public class TestBuiltInsTests
         return (reporter, sw.ToString());
     }
 
+    private static (TapReporter reporter, string output, Interpreter interpreter) RunWithHarnessAndInterpreter(string source)
+    {
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        var interpreter = new Interpreter();
+        var sw = new StringWriter();
+        var reporter = new TapReporter(sw);
+        interpreter.TestHarness = reporter;
+        interpreter.Interpret(statements);
+        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        return (reporter, sw.ToString(), interpreter);
+    }
+
     // ── 1. Assert passing (no exception) ─────────────────────────────────────
 
     [Fact]
@@ -526,4 +541,310 @@ public class TestBuiltInsTests
     }
 
     #endregion
+
+    // ── 8. skip() — skipped tests ─────────────────────────────────────────
+
+    [Fact]
+    public void Skip_RecordsSkippedTest()
+    {
+        var (reporter, _) = RunWithHarness("""
+            skip("work in progress", () => {
+                assert.fail("should not run");
+            });
+            """);
+
+        Assert.Equal(0, reporter.Passed);
+        Assert.Equal(0, reporter.Failed);
+        Assert.Equal(1, reporter.Skipped);
+    }
+
+    [Fact]
+    public void Skip_DoesNotExecuteBody()
+    {
+        // If the body ran, it would throw and fail
+        var (reporter, _) = RunWithHarness("""
+            skip("not ready", () => {
+                assert.equal(1, 2);
+            });
+            """);
+
+        Assert.Equal(0, reporter.Failed);
+        Assert.Equal(1, reporter.Skipped);
+    }
+
+    [Fact]
+    public void Skip_EmitsTapSkipDirective()
+    {
+        var (_, output) = RunWithHarness("""
+            skip("pending feature", () => {});
+            """);
+
+        Assert.Contains("# SKIP", output);
+        Assert.Contains("pending feature", output);
+    }
+
+    [Fact]
+    public void Skip_InsideDescribe_UsesFullName()
+    {
+        var (_, output) = RunWithHarness("""
+            describe("math", () => {
+                skip("division by zero", () => {});
+            });
+            """);
+
+        Assert.Contains("math > division by zero", output);
+        Assert.Contains("# SKIP", output);
+    }
+
+    [Fact]
+    public void Skip_MixedWithTests_AllCounted()
+    {
+        var (reporter, _) = RunWithHarness("""
+            test("passes", () => { assert.true(true); });
+            skip("skipped", () => {});
+            test("also passes", () => { assert.equal(1, 1); });
+            """);
+
+        Assert.Equal(2, reporter.Passed);
+        Assert.Equal(0, reporter.Failed);
+        Assert.Equal(1, reporter.Skipped);
+    }
+
+    [Fact]
+    public void Skip_PlanLineIncludesSkippedTests()
+    {
+        var (_, output) = RunWithHarness("""
+            test("one", () => { assert.true(true); });
+            skip("two", () => {});
+            test("three", () => { assert.true(true); });
+            """);
+
+        Assert.Contains("1..3", output);
+    }
+
+    [Fact]
+    public void Skip_WithoutHarness_DoesNotCrash()
+    {
+        // skip() without a harness should silently do nothing
+        RunStatements("""
+            skip("no harness", () => { assert.fail("boom"); });
+            """);
+    }
+
+    // ── 9. Lifecycle hooks ────────────────────────────────────────────────
+
+    [Fact]
+    public void BeforeEach_RunsBeforeEachTest()
+    {
+        var result = Run("""
+            let result = [];
+            describe("hooks", () => {
+                beforeEach(() => { arr.push(result, "setup"); });
+                test("a", () => { arr.push(result, "a"); });
+                test("b", () => { arr.push(result, "b"); });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        Assert.Equal(4, list.Count);
+        Assert.Equal("setup", list[0]);
+        Assert.Equal("a", list[1]);
+        Assert.Equal("setup", list[2]);
+        Assert.Equal("b", list[3]);
+    }
+
+    [Fact]
+    public void AfterEach_RunsAfterEachTest()
+    {
+        var result = Run("""
+            let result = [];
+            describe("hooks", () => {
+                afterEach(() => { arr.push(result, "cleanup"); });
+                test("a", () => { arr.push(result, "a"); });
+                test("b", () => { arr.push(result, "b"); });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        Assert.Equal(4, list.Count);
+        Assert.Equal("a", list[0]);
+        Assert.Equal("cleanup", list[1]);
+        Assert.Equal("b", list[2]);
+        Assert.Equal("cleanup", list[3]);
+    }
+
+    [Fact]
+    public void BeforeAll_RunsOnceBeforeTests()
+    {
+        var result = Run("""
+            let result = [];
+            describe("hooks", () => {
+                beforeAll(() => { arr.push(result, "init"); });
+                test("a", () => { arr.push(result, "a"); });
+                test("b", () => { arr.push(result, "b"); });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        Assert.Equal(3, list.Count);
+        Assert.Equal("init", list[0]);
+        Assert.Equal("a", list[1]);
+        Assert.Equal("b", list[2]);
+    }
+
+    [Fact]
+    public void AfterAll_RunsOnceAfterAllTests()
+    {
+        var result = Run("""
+            let result = [];
+            describe("hooks", () => {
+                afterAll(() => { arr.push(result, "done"); });
+                test("a", () => { arr.push(result, "a"); });
+                test("b", () => { arr.push(result, "b"); });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        Assert.Equal(3, list.Count);
+        Assert.Equal("a", list[0]);
+        Assert.Equal("b", list[1]);
+        Assert.Equal("done", list[2]);
+    }
+
+    [Fact]
+    public void BeforeEach_NestedDescribe_InheritsParentHooks()
+    {
+        var result = Run("""
+            let result = [];
+            describe("outer", () => {
+                beforeEach(() => { arr.push(result, "outer-setup"); });
+                describe("inner", () => {
+                    beforeEach(() => { arr.push(result, "inner-setup"); });
+                    test("check", () => { arr.push(result, "test"); });
+                });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        Assert.Equal(3, list.Count);
+        Assert.Equal("outer-setup", list[0]);
+        Assert.Equal("inner-setup", list[1]);
+        Assert.Equal("test", list[2]);
+    }
+
+    [Fact]
+    public void AfterEach_NestedDescribe_RunsInnermostFirst()
+    {
+        var result = Run("""
+            let result = [];
+            describe("outer", () => {
+                afterEach(() => { arr.push(result, "outer-cleanup"); });
+                describe("inner", () => {
+                    afterEach(() => { arr.push(result, "inner-cleanup"); });
+                    test("check", () => { arr.push(result, "test"); });
+                });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        Assert.Equal(3, list.Count);
+        Assert.Equal("test", list[0]);
+        Assert.Equal("inner-cleanup", list[1]);
+        Assert.Equal("outer-cleanup", list[2]);
+    }
+
+    [Fact]
+    public void Hooks_OutsideDescribe_ThrowsRuntimeError()
+    {
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("beforeEach(() => {});"));
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("afterEach(() => {});"));
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("beforeAll(() => {});"));
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("afterAll(() => {});"));
+    }
+
+    [Fact]
+    public void Hooks_RequireFunctionArgument()
+    {
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("""describe("x", () => { beforeEach(42); });"""));
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("""describe("x", () => { afterEach(42); });"""));
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("""describe("x", () => { beforeAll(42); });"""));
+        Assert.Throws<RuntimeError>(() =>
+            RunStatements("""describe("x", () => { afterAll(42); });"""));
+    }
+
+    [Fact]
+    public void BeforeEach_AfterEach_FullLifecycle()
+    {
+        var result = Run("""
+            let result = [];
+            describe("lifecycle", () => {
+                beforeAll(() => { arr.push(result, "before-all"); });
+                beforeEach(() => { arr.push(result, "before-each"); });
+                afterEach(() => { arr.push(result, "after-each"); });
+                afterAll(() => { arr.push(result, "after-all"); });
+                test("one", () => { arr.push(result, "test-1"); });
+                test("two", () => { arr.push(result, "test-2"); });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        // Expected order: before-all, before-each, test-1, after-each, before-each, test-2, after-each, after-all
+        Assert.Equal(8, list.Count);
+        Assert.Equal("before-all", list[0]);
+        Assert.Equal("before-each", list[1]);
+        Assert.Equal("test-1", list[2]);
+        Assert.Equal("after-each", list[3]);
+        Assert.Equal("before-each", list[4]);
+        Assert.Equal("test-2", list[5]);
+        Assert.Equal("after-each", list[6]);
+        Assert.Equal("after-all", list[7]);
+    }
+
+    [Fact]
+    public void Hooks_DoNotLeakBetweenDescribeBlocks()
+    {
+        var result = Run("""
+            let result = [];
+            describe("first", () => {
+                beforeEach(() => { arr.push(result, "first-hook"); });
+                test("a", () => { arr.push(result, "a"); });
+            });
+            describe("second", () => {
+                test("b", () => { arr.push(result, "b"); });
+            });
+            """);
+
+        var list = (List<object?>)result!;
+        Assert.Equal(3, list.Count);
+        Assert.Equal("first-hook", list[0]);
+        Assert.Equal("a", list[1]);
+        Assert.Equal("b", list[2]);
+    }
+
+    [Fact]
+    public void AfterAll_RunsEvenIfTestFails()
+    {
+        var (reporter, _, interp) = RunWithHarnessAndInterpreter("""
+            let cleaned = false;
+            describe("cleanup", () => {
+                afterAll(() => { cleaned = true; });
+                test("fails", () => { assert.equal(1, 2); });
+            });
+            """);
+
+        Assert.Equal(1, reporter.Failed);
+        var resultLexer = new Lexer("cleaned");
+        var resultTokens = resultLexer.ScanTokens();
+        var resultParser = new Parser(resultTokens);
+        var resultExpr = resultParser.Parse();
+        var cleaned = interp.Interpret(resultExpr);
+        Assert.Equal(true, cleaned);
+    }
 }

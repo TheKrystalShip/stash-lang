@@ -76,6 +76,9 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private string? _currentDescribe;
     private string[]? _testFilter;
     private bool _discoveryMode;
+    private readonly List<List<IStashCallable>> _beforeEachHooks = new();
+    private readonly List<List<IStashCallable>> _afterEachHooks = new();
+    private readonly List<List<IStashCallable>> _afterAllHooks = new();
     private SourceSpan? _currentSpan;
     internal string[] ScriptArgs = Array.Empty<string>();
     internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
@@ -149,6 +152,10 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         get => _discoveryMode;
         set => _discoveryMode = value;
     }
+
+    internal List<List<IStashCallable>> BeforeEachHooks => _beforeEachHooks;
+    internal List<List<IStashCallable>> AfterEachHooks => _afterEachHooks;
+    internal List<List<IStashCallable>> AfterAllHooks => _afterAllHooks;
 
     /// <summary>
     /// Gets or sets the output writer used by io.println and io.print.

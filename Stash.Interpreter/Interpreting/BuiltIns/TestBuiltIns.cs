@@ -183,8 +183,27 @@ public static class TestBuiltIns
 
             try
             {
+                // Run beforeEach hooks from all describe levels (outermost to innermost)
+                foreach (var level in interp.BeforeEachHooks)
+                {
+                    foreach (var hook in level)
+                    {
+                        hook.Call(interp, new List<object?>());
+                    }
+                }
+
                 body.Call(interp, new List<object?>());
                 sw.Stop();
+
+                // Run afterEach hooks from all describe levels (innermost to outermost)
+                for (int i = interp.AfterEachHooks.Count - 1; i >= 0; i--)
+                {
+                    foreach (var hook in interp.AfterEachHooks[i])
+                    {
+                        hook.Call(interp, new List<object?>());
+                    }
+                }
+
                 harness?.OnTestPass(fullName, sw.Elapsed);
             }
             catch (AssertionError ex)
@@ -213,6 +232,40 @@ public static class TestBuiltIns
                 }
             }
 
+            return null;
+        }));
+
+        // skip(name, fn) — register a skipped test; body is never executed
+        globals.Define("skip", new BuiltInFunction("skip", 2, (interp, args) =>
+        {
+            if (args[0] is not string name)
+            {
+                throw new RuntimeError("skip() requires a string name as first argument.", interp.CurrentSpan);
+            }
+            if (args[1] is not IStashCallable)
+            {
+                throw new RuntimeError("skip() requires a function as second argument.", interp.CurrentSpan);
+            }
+
+            string fullName = BuildFullName(interp, interp.CurrentDescribe, name);
+
+            // Check test filter
+            if (interp.TestFilter is not null)
+            {
+                bool matches = interp.TestFilter.Any(f => fullName.StartsWith(f));
+                if (!matches)
+                    return null;
+            }
+
+            // Discovery mode — record but don't execute
+            if (interp.DiscoveryMode)
+            {
+                var span = interp.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
+                interp.TestHarness?.OnTestDiscovered(fullName, span);
+                return null;
+            }
+
+            interp.TestHarness?.OnTestSkip(fullName, "skipped");
             return null;
         }));
 
@@ -252,12 +305,28 @@ public static class TestBuiltIns
             int failedBefore = harness?.FailedCount ?? 0;
             int skippedBefore = harness?.SkippedCount ?? 0;
 
+            // Push hook layers for this describe scope
+            interp.BeforeEachHooks.Add(new List<IStashCallable>());
+            interp.AfterEachHooks.Add(new List<IStashCallable>());
+            interp.AfterAllHooks.Add(new List<IStashCallable>());
+
             try
             {
                 body.Call(interp, new List<object?>());
             }
             finally
             {
+                // Run afterAll hooks for this scope
+                foreach (var hook in interp.AfterAllHooks[^1])
+                {
+                    hook.Call(interp, new List<object?>());
+                }
+
+                // Pop hook layers
+                interp.BeforeEachHooks.RemoveAt(interp.BeforeEachHooks.Count - 1);
+                interp.AfterEachHooks.RemoveAt(interp.AfterEachHooks.Count - 1);
+                interp.AfterAllHooks.RemoveAt(interp.AfterAllHooks.Count - 1);
+
                 int passed = (harness?.PassedCount ?? 0) - passedBefore;
                 int failed = (harness?.FailedCount ?? 0) - failedBefore;
                 int skipped = (harness?.SkippedCount ?? 0) - skippedBefore;
@@ -266,6 +335,66 @@ public static class TestBuiltIns
                 interp.CurrentDescribe = previousDescribe;
             }
 
+            return null;
+        }));
+
+        // beforeAll(fn) — execute fn() immediately inside a describe block (runs before any tests below it)
+        globals.Define("beforeAll", new BuiltInFunction("beforeAll", 1, (interp, args) =>
+        {
+            if (args[0] is not IStashCallable callable)
+            {
+                throw new RuntimeError("beforeAll() requires a function argument.", interp.CurrentSpan);
+            }
+            if (interp.BeforeEachHooks.Count == 0)
+            {
+                throw new RuntimeError("beforeAll() must be used inside a describe() block.", interp.CurrentSpan);
+            }
+            callable.Call(interp, new List<object?>());
+            return null;
+        }));
+
+        // afterAll(fn) — register fn() to run when the current describe block ends
+        globals.Define("afterAll", new BuiltInFunction("afterAll", 1, (interp, args) =>
+        {
+            if (args[0] is not IStashCallable callable)
+            {
+                throw new RuntimeError("afterAll() requires a function argument.", interp.CurrentSpan);
+            }
+            if (interp.AfterAllHooks.Count == 0)
+            {
+                throw new RuntimeError("afterAll() must be used inside a describe() block.", interp.CurrentSpan);
+            }
+            interp.AfterAllHooks[^1].Add(callable);
+            return null;
+        }));
+
+        // beforeEach(fn) — register fn() to run before each test in the current describe scope
+        globals.Define("beforeEach", new BuiltInFunction("beforeEach", 1, (interp, args) =>
+        {
+            if (args[0] is not IStashCallable callable)
+            {
+                throw new RuntimeError("beforeEach() requires a function argument.", interp.CurrentSpan);
+            }
+            if (interp.BeforeEachHooks.Count == 0)
+            {
+                throw new RuntimeError("beforeEach() must be used inside a describe() block.", interp.CurrentSpan);
+            }
+            interp.BeforeEachHooks[^1].Add(callable);
+            return null;
+        }));
+
+        // afterEach(fn) — register fn() to run after each test in the current describe scope
+        globals.Define("afterEach", new BuiltInFunction("afterEach", 1, (interp, args) =>
+        {
+            if (args[0] is not IStashCallable callable)
+            {
+                throw new RuntimeError("afterEach() requires a function argument.", interp.CurrentSpan);
+            }
+            if (interp.AfterEachHooks.Count == 0)
+            {
+                throw new RuntimeError("afterEach() must be used inside a describe() block.", interp.CurrentSpan);
+            }
+            interp.AfterEachHooks[^1].Add(callable);
             return null;
         }));
 
