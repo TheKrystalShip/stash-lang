@@ -9,11 +9,20 @@ using Stash.Common;
 public class StashInstance
 {
     public string TypeName { get; }
+    public StashStruct? Struct { get; }
     private readonly Dictionary<string, object?> _fields;
 
     public StashInstance(string typeName, Dictionary<string, object?> fields)
     {
         TypeName = typeName;
+        Struct = null;
+        _fields = fields;
+    }
+
+    public StashInstance(string typeName, StashStruct structDef, Dictionary<string, object?> fields)
+    {
+        TypeName = typeName;
+        Struct = structDef;
         _fields = fields;
     }
 
@@ -22,6 +31,12 @@ public class StashInstance
         if (_fields.TryGetValue(name, out object? value))
         {
             return value;
+        }
+
+        // Check for methods on the struct template
+        if (Struct != null && Struct.Methods.TryGetValue(name, out StashFunction? method))
+        {
+            return new StashBoundMethod(this, method);
         }
 
         throw new RuntimeError($"Undefined field '{name}' on struct '{TypeName}'.", span);

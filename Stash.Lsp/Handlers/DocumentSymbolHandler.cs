@@ -89,6 +89,7 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
         Analysis.SymbolKind.Enum => LspSymbolKind.Enum,
         Analysis.SymbolKind.EnumMember => LspSymbolKind.EnumMember,
         Analysis.SymbolKind.Field => LspSymbolKind.Field,
+        Analysis.SymbolKind.Method => LspSymbolKind.Method,
         Analysis.SymbolKind.Parameter => LspSymbolKind.Variable,
         Analysis.SymbolKind.LoopVariable => LspSymbolKind.Variable,
         Analysis.SymbolKind.Namespace => LspSymbolKind.Namespace,

@@ -1558,6 +1558,68 @@ public class ParserTests
         Assert.Null(structDecl.FieldTypes[1]);
     }
 
+    // Struct methods
+
+    [Fact]
+    public void Parse_StructDecl_WithMethod()
+    {
+        var stmts = ParseProgram("struct Point { x, y, fn getX() { return self.x; } }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("Point", structDecl.Name.Lexeme);
+        Assert.Equal(2, structDecl.Fields.Count);
+        Assert.Single(structDecl.Methods);
+        Assert.Equal("getX", structDecl.Methods[0].Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_WithMultipleMethods()
+    {
+        var stmts = ParseProgram("struct Point { x, y, fn getX() { return self.x; } fn getY() { return self.y; } }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal(2, structDecl.Fields.Count);
+        Assert.Equal(2, structDecl.Methods.Count);
+        Assert.Equal("getX", structDecl.Methods[0].Name.Lexeme);
+        Assert.Equal("getY", structDecl.Methods[1].Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_MethodsOnly()
+    {
+        var stmts = ParseProgram("struct Util { fn greet() { return \"hello\"; } }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Empty(structDecl.Fields);
+        Assert.Single(structDecl.Methods);
+        Assert.Equal("greet", structDecl.Methods[0].Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_MethodWithParams()
+    {
+        var stmts = ParseProgram("struct Point { x, y, fn add(other) { return self.x + other.x; } }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Single(structDecl.Methods);
+        Assert.Single(structDecl.Methods[0].Parameters);
+        Assert.Equal("other", structDecl.Methods[0].Parameters[0].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_MethodWithDefaultParam()
+    {
+        var stmts = ParseProgram("struct Counter { val, fn increment(amount = 1) { return self.val + amount; } }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Single(structDecl.Methods);
+        Assert.Single(structDecl.Methods[0].Parameters);
+        Assert.NotNull(structDecl.Methods[0].DefaultValues[0]);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_NoMethods()
+    {
+        var stmts = ParseProgram("struct Point { x, y }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Empty(structDecl.Methods);
+    }
+
     [Fact]
     public void Parse_ForIn_WithTypeHint()
     {

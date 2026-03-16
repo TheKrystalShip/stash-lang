@@ -116,12 +116,12 @@ public static class GlobalBuiltIns
         globals.Define("ArgTree", new StashStruct("ArgTree", new List<string>
         {
             "name", "version", "description", "flags", "options", "commands", "positionals"
-        }));
+        }, new Dictionary<string, StashFunction>()));
 
         globals.Define("ArgDef", new StashStruct("ArgDef", new List<string>
         {
             "name", "short", "type", "default", "description", "required", "args"
-        }));
+        }, new Dictionary<string, StashFunction>()));
 
         // parseArgs built-in function
         globals.Define("parseArgs", new BuiltInFunction("parseArgs", 1, (interpreter, fnArgs) =>

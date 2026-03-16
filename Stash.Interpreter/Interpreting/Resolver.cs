@@ -15,7 +15,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     private readonly Interpreter _interpreter;
     private readonly Stack<Dictionary<string, bool>> _scopes = new();
 
-    private enum FunctionType { None, Function, Lambda }
+    private enum FunctionType { None, Function, Lambda, Method }
     private FunctionType _currentFunction = FunctionType.None;
 
     public Resolver(Interpreter interpreter)
@@ -221,6 +221,16 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         Declare(stmt.Name.Lexeme);
         Define(stmt.Name.Lexeme);
+
+        foreach (var method in stmt.Methods)
+        {
+            BeginScope();
+            Declare("self");
+            Define("self");
+            ResolveFunction(method.Parameters, method.DefaultValues, method.Body, FunctionType.Method);
+            EndScope();
+        }
+
         return null;
     }
 

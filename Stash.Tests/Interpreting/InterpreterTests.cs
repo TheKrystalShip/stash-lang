@@ -1337,6 +1337,208 @@ public class InterpreterTests
         Assert.Equal("struct", Run("struct P { x } let result = typeof(P);"));
     }
 
+    // ===== Struct Methods =====
+
+    [Fact]
+    public void StructMethod_BasicCall()
+    {
+        Assert.Equal(42L, Run("struct S { x, fn getX() { return self.x; } } let s = S { x: 42 }; let result = s.getX();"));
+    }
+
+    [Fact]
+    public void StructMethod_WithParams()
+    {
+        Assert.Equal(15L, Run("struct S { x, fn add(y) { return self.x + y; } } let s = S { x: 10 }; let result = s.add(5);"));
+    }
+
+    [Fact]
+    public void StructMethod_AccessMultipleFields()
+    {
+        Assert.Equal(30L, Run("struct P { x, y, fn sum() { return self.x + self.y; } } let p = P { x: 10, y: 20 }; let result = p.sum();"));
+    }
+
+    [Fact]
+    public void StructMethod_ReturnsInstance()
+    {
+        Assert.Equal(65L, Run(@"
+            struct P { x, y,
+                fn add(other) {
+                    return P { x: self.x + other.x, y: self.y + other.y };
+                }
+            }
+            let a = P { x: 20, y: 30 };
+            let b = P { x: 5, y: 10 };
+            let c = a.add(b);
+            let result = c.x + c.y;
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_MultipleMethods()
+    {
+        Assert.Equal(16L, Run(@"
+            struct Rect { w, h,
+                fn area() { return self.w * self.h; }
+                fn perimeter() { return 2 * (self.w + self.h); }
+            }
+            let r = Rect { w: 2, h: 3 };
+            let result = r.area() + r.perimeter();
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_NoParams()
+    {
+        Assert.Equal("hello", Run("struct G { fn greet() { return \"hello\"; } } let g = G {}; let result = g.greet();"));
+    }
+
+    [Fact]
+    public void StructMethod_DefaultParam()
+    {
+        Assert.Equal(11L, Run("struct C { val, fn inc(n = 1) { return self.val + n; } } let c = C { val: 10 }; let result = c.inc();"));
+    }
+
+    [Fact]
+    public void StructMethod_DefaultParam_Overridden()
+    {
+        Assert.Equal(15L, Run("struct C { val, fn inc(n = 1) { return self.val + n; } } let c = C { val: 10 }; let result = c.inc(5);"));
+    }
+
+    [Fact]
+    public void StructMethod_ModifySelf()
+    {
+        Assert.Equal(99L, Run(@"
+            struct Box { value,
+                fn set(v) { self.value = v; }
+            }
+            let b = Box { value: 0 };
+            b.set(99);
+            let result = b.value;
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_ChainingCalls()
+    {
+        Assert.Equal(42L, Run(@"
+            struct Builder { val,
+                fn build() { return self.val; }
+            }
+            let b = Builder { val: 42 };
+            let result = b.build();
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_CallOnNewInstance()
+    {
+        Assert.Equal(5L, Run("struct S { x, fn getX() { return self.x; } } let result = S { x: 5 }.getX();"));
+    }
+
+    [Fact]
+    public void StructMethod_UndefinedMethod_Throws()
+    {
+        RunExpectingError("struct S { x } let s = S { x: 1 }; s.noSuchMethod();");
+    }
+
+    [Fact]
+    public void StructMethod_WrongArity_Throws()
+    {
+        RunExpectingError("struct S { fn f(a) { return a; } } let s = S {}; s.f(1, 2);");
+    }
+
+    [Fact]
+    public void StructMethod_SelfNotLeaked()
+    {
+        // self should not be accessible outside of methods
+        RunExpectingError("struct S { x, fn getX() { return self.x; } } let s = S { x: 1 }; let r = self;");
+    }
+
+    [Fact]
+    public void StructMethod_TypeofBoundMethod()
+    {
+        Assert.Equal("function", Run("struct S { fn f() { return 1; } } let s = S {}; let result = typeof(s.f);"));
+    }
+
+    [Fact]
+    public void StructMethod_MethodCallsMethod()
+    {
+        Assert.Equal(10L, Run(@"
+            struct S { x,
+                fn double() { return self.x * 2; }
+                fn quadruple() { return self.double() * 2; }
+            }
+            let s = S { x: 5 };
+            let result = s.double();
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_MethodCallsOtherMethod()
+    {
+        Assert.Equal(20L, Run(@"
+            struct S { x,
+                fn double() { return self.x * 2; }
+                fn quadruple() { return self.double() * 2; }
+            }
+            let s = S { x: 5 };
+            let result = s.quadruple();
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_SharedAcrossInstances()
+    {
+        Assert.Equal(30L, Run(@"
+            struct P { x,
+                fn getX() { return self.x; }
+            }
+            let a = P { x: 10 };
+            let b = P { x: 20 };
+            let result = a.getX() + b.getX();
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_WithClosure()
+    {
+        Assert.Equal(15L, Run(@"
+            let factor = 3;
+            struct S { x,
+                fn scaled() { return self.x * factor; }
+            }
+            let s = S { x: 5 };
+            let result = s.scaled();
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_FieldsAndMethodsSameName_FieldWins()
+    {
+        // If a field has the same name as a method, field access should win
+        Assert.Equal(42L, Run(@"
+            struct S { x,
+                fn x() { return 99; }
+            }
+            let s = S { x: 42 };
+            let result = s.x;
+        "));
+    }
+
+    [Fact]
+    public void StructMethod_EmptyStruct_WithMethod()
+    {
+        Assert.Equal(42L, Run("struct S { fn answer() { return 42; } } let s = S {}; let result = s.answer();"));
+    }
+
+    [Fact]
+    public void StructMethod_MethodAssign_Throws()
+    {
+        // Cannot assign to a method — methods are looked up on the struct template, not as fields
+        // Attempting to set a field that doesn't exist should fail
+        RunExpectingError("struct S { fn f() { return 1; } } let s = S {}; s.f = 42;");
+    }
+
     // Struct toStr
 
     [Fact]

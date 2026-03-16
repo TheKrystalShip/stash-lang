@@ -28,6 +28,11 @@ public static class TypeInferenceEngine
                 foreach (var s in fnDecl.Body.Statements)
                     InferFromStatement(scopeTree, s);
                 break;
+            case StructDeclStmt structDecl:
+                foreach (var method in structDecl.Methods)
+                    foreach (var s in method.Body.Statements)
+                        InferFromStatement(scopeTree, s);
+                break;
             case BlockStmt block:
                 foreach (var s in block.Statements)
                     InferFromStatement(scopeTree, s);

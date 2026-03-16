@@ -4,6 +4,7 @@
 > For language syntax, semantics, and interpreter details, see the [Language Specification](Stash%20—%20Language%20Specification.md).
 >
 > **Companion documents:**
+>
 > - [Language Specification](Stash%20—%20Language%20Specification.md) — syntax, type system, scoping rules, interpreter architecture
 > - [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md) — debug adapter server
 > - [LSP — Language Server Protocol](specs/LSP%20—%20Language%20Server%20Protocol.md) — language server
@@ -41,59 +42,59 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 
 ### Global Functions
 
-| Function       | Description                          |
-| -------------- | ------------------------------------ |
-| `typeof(val)`  | Return the type of a value as string |
-| `len(val)`     | Length of a string or array          |
-| `lastError()`  | Last error message (string) or null  |
+| Function       | Description                                                              |
+| -------------- | ------------------------------------------------------------------------ |
+| `typeof(val)`  | Return the type of a value as string                                     |
+| `len(val)`     | Length of a string or array                                              |
+| `lastError()`  | Last error message (string) or null                                      |
 | `parseArgs(t)` | Parse command-line arguments (see [Argument Parsing](#argument-parsing)) |
 
 ---
 
 ## `io` — Standard I/O
 
-| Function              | Description                                          |
-| --------------------- | ---------------------------------------------------- |
-| `io.println(val)`     | Print value followed by newline                      |
-| `io.print(val)`       | Print value without newline                          |
+| Function               | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `io.println(val)`      | Print value followed by newline                       |
+| `io.print(val)`        | Print value without newline                           |
 | `io.readLine(prompt?)` | Read a line from standard input, with optional prompt |
 
 ---
 
 ## `conv` — Type Conversion
 
-| Function               | Description                                            |
-| ---------------------- | ------------------------------------------------------ |
-| `conv.toStr(val)`      | Convert value to string                                |
-| `conv.toInt(val)`      | Parse string to integer                                |
-| `conv.toFloat(val)`    | Parse string to float                                  |
-| `conv.toBool(val)`     | Convert a value to boolean using truthiness rules      |
-| `conv.toHex(val)`      | Convert an integer to hexadecimal string               |
-| `conv.toOct(val)`      | Convert an integer to octal string                     |
-| `conv.toBin(val)`      | Convert an integer to binary string                    |
-| `conv.fromHex(s)`      | Parse a hexadecimal string to integer (supports `0x`)  |
-| `conv.fromOct(s)`      | Parse an octal string to integer (supports `0o`)       |
-| `conv.fromBin(s)`      | Parse a binary string to integer (supports `0b`)       |
-| `conv.charCode(c)`     | Return the Unicode code point of the first character   |
-| `conv.fromCharCode(n)` | Return a character from its Unicode code point         |
+| Function               | Description                                           |
+| ---------------------- | ----------------------------------------------------- |
+| `conv.toStr(val)`      | Convert value to string                               |
+| `conv.toInt(val)`      | Parse string to integer                               |
+| `conv.toFloat(val)`    | Parse string to float                                 |
+| `conv.toBool(val)`     | Convert a value to boolean using truthiness rules     |
+| `conv.toHex(val)`      | Convert an integer to hexadecimal string              |
+| `conv.toOct(val)`      | Convert an integer to octal string                    |
+| `conv.toBin(val)`      | Convert an integer to binary string                   |
+| `conv.fromHex(s)`      | Parse a hexadecimal string to integer (supports `0x`) |
+| `conv.fromOct(s)`      | Parse an octal string to integer (supports `0o`)      |
+| `conv.fromBin(s)`      | Parse a binary string to integer (supports `0b`)      |
+| `conv.charCode(c)`     | Return the Unicode code point of the first character  |
+| `conv.fromCharCode(n)` | Return a character from its Unicode code point        |
 
 ---
 
 ## `env` — Environment Variables
 
-| Function               | Description                                               |
-| ---------------------- | --------------------------------------------------------- |
-| `env.get(name)`        | Read environment variable (null if unset)                 |
-| `env.set(name, value)` | Set environment variable                                  |
-| `env.has(name)`        | Check if an environment variable exists                   |
-| `env.all()`            | Return all environment variables as a dictionary          |
-| `env.remove(name)`     | Delete an environment variable                            |
-| `env.cwd()`            | Return the current working directory                      |
-| `env.home()`           | Return the user's home directory path                     |
-| `env.hostname()`       | Return the machine hostname                               |
-| `env.user()`           | Return the current username                               |
-| `env.os()`             | Return the OS name (`"linux"`, `"macos"`, `"windows"`)    |
-| `env.arch()`           | Return the CPU architecture (`"x64"`, `"arm64"`, etc.)    |
+| Function               | Description                                            |
+| ---------------------- | ------------------------------------------------------ |
+| `env.get(name)`        | Read environment variable (null if unset)              |
+| `env.set(name, value)` | Set environment variable                               |
+| `env.has(name)`        | Check if an environment variable exists                |
+| `env.all()`            | Return all environment variables as a dictionary       |
+| `env.remove(name)`     | Delete an environment variable                         |
+| `env.cwd()`            | Return the current working directory                   |
+| `env.home()`           | Return the user's home directory path                  |
+| `env.hostname()`       | Return the machine hostname                            |
+| `env.user()`           | Return the current username                            |
+| `env.os()`             | Return the OS name (`"linux"`, `"macos"`, `"windows"`) |
+| `env.arch()`           | Return the CPU architecture (`"x64"`, `"arm64"`, etc.) |
 
 ---
 
@@ -144,59 +145,59 @@ All `str` functions take the target string as the first argument. Strings are im
 
 ### Case & Whitespace
 
-| Function             | Description                        |
-| -------------------- | ---------------------------------- |
-| `str.upper(s)`       | Convert to uppercase               |
-| `str.lower(s)`       | Convert to lowercase               |
-| `str.trim(s)`        | Remove leading and trailing whitespace |
-| `str.trimStart(s)`   | Remove leading whitespace          |
-| `str.trimEnd(s)`     | Remove trailing whitespace         |
+| Function           | Description                            |
+| ------------------ | -------------------------------------- |
+| `str.upper(s)`     | Convert to uppercase                   |
+| `str.lower(s)`     | Convert to lowercase                   |
+| `str.trim(s)`      | Remove leading and trailing whitespace |
+| `str.trimStart(s)` | Remove leading whitespace              |
+| `str.trimEnd(s)`   | Remove trailing whitespace             |
 
 ### Search & Test
 
-| Function                    | Description                                                                |
-| --------------------------- | -------------------------------------------------------------------------- |
-| `str.contains(s, sub)`     | Return `true` if `s` contains `sub`                                        |
-| `str.startsWith(s, prefix)` | Return `true` if `s` starts with `prefix`                                 |
-| `str.endsWith(s, suffix)`  | Return `true` if `s` ends with `suffix`                                    |
-| `str.indexOf(s, sub)`      | Return index of first occurrence of `sub`, or `-1`                         |
-| `str.lastIndexOf(s, sub)`  | Return index of last occurrence of `sub`, or `-1`                          |
-| `str.count(s, sub)`        | Return the count of non-overlapping occurrences of `sub`                   |
+| Function                    | Description                                              |
+| --------------------------- | -------------------------------------------------------- |
+| `str.contains(s, sub)`      | Return `true` if `s` contains `sub`                      |
+| `str.startsWith(s, prefix)` | Return `true` if `s` starts with `prefix`                |
+| `str.endsWith(s, suffix)`   | Return `true` if `s` ends with `suffix`                  |
+| `str.indexOf(s, sub)`       | Return index of first occurrence of `sub`, or `-1`       |
+| `str.lastIndexOf(s, sub)`   | Return index of last occurrence of `sub`, or `-1`        |
+| `str.count(s, sub)`         | Return the count of non-overlapping occurrences of `sub` |
 
 ### Character Tests
 
-| Function              | Description                                        |
-| --------------------- | -------------------------------------------------- |
-| `str.isDigit(s)`      | Return `true` if all characters are digits         |
-| `str.isAlpha(s)`      | Return `true` if all characters are letters        |
-| `str.isAlphaNum(s)`   | Return `true` if all characters are alphanumeric   |
-| `str.isUpper(s)`      | Return `true` if all letters are uppercase         |
-| `str.isLower(s)`      | Return `true` if all letters are lowercase         |
-| `str.isEmpty(s)`      | Return `true` if string is null, empty, or whitespace-only |
+| Function            | Description                                                |
+| ------------------- | ---------------------------------------------------------- |
+| `str.isDigit(s)`    | Return `true` if all characters are digits                 |
+| `str.isAlpha(s)`    | Return `true` if all characters are letters                |
+| `str.isAlphaNum(s)` | Return `true` if all characters are alphanumeric           |
+| `str.isUpper(s)`    | Return `true` if all letters are uppercase                 |
+| `str.isLower(s)`    | Return `true` if all letters are lowercase                 |
+| `str.isEmpty(s)`    | Return `true` if string is null, empty, or whitespace-only |
 
 ### Extraction & Transformation
 
-| Function                         | Description                                                                          |
-| -------------------------------- | ------------------------------------------------------------------------------------ |
-| `str.substring(s, start, end?)`  | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
-| `str.replace(s, old, new)`       | Replace first occurrence of `old` with `new`                                         |
-| `str.replaceAll(s, old, new)`    | Replace all occurrences of `old` with `new`                                          |
-| `str.split(s, delimiter)`        | Split string into array by `delimiter`                                               |
-| `str.repeat(s, count)`           | Repeat string `count` times                                                          |
-| `str.reverse(s)`                 | Reverse the string                                                                   |
-| `str.chars(s)`                   | Convert to array of single-character strings                                         |
-| `str.padStart(s, len, fill?)`    | Pad start to `len` characters with `fill` (default `" "`)                            |
-| `str.padEnd(s, len, fill?)`      | Pad end to `len` characters with `fill` (default `" "`)                              |
-| `str.format(template, ...args)`  | Replace `{0}`, `{1}`, etc. placeholders with arguments                              |
+| Function                        | Description                                                                          |
+| ------------------------------- | ------------------------------------------------------------------------------------ |
+| `str.substring(s, start, end?)` | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
+| `str.replace(s, old, new)`      | Replace first occurrence of `old` with `new`                                         |
+| `str.replaceAll(s, old, new)`   | Replace all occurrences of `old` with `new`                                          |
+| `str.split(s, delimiter)`       | Split string into array by `delimiter`                                               |
+| `str.repeat(s, count)`          | Repeat string `count` times                                                          |
+| `str.reverse(s)`                | Reverse the string                                                                   |
+| `str.chars(s)`                  | Convert to array of single-character strings                                         |
+| `str.padStart(s, len, fill?)`   | Pad start to `len` characters with `fill` (default `" "`)                            |
+| `str.padEnd(s, len, fill?)`     | Pad end to `len` characters with `fill` (default `" "`)                              |
+| `str.format(template, ...args)` | Replace `{0}`, `{1}`, etc. placeholders with arguments                               |
 
 ### Regex
 
-| Function                              | Description                                                        |
-| ------------------------------------- | ------------------------------------------------------------------ |
-| `str.match(s, pattern)`               | Return the first substring matching a regex pattern (or `null`)    |
-| `str.matchAll(s, pattern)`            | Return an array of all substrings matching a regex pattern         |
-| `str.isMatch(s, pattern)`             | Return `true` if string contains a match for the regex pattern     |
-| `str.replaceRegex(s, pattern, repl)`  | Replace all regex matches with a replacement string                |
+| Function                             | Description                                                     |
+| ------------------------------------ | --------------------------------------------------------------- |
+| `str.match(s, pattern)`              | Return the first substring matching a regex pattern (or `null`) |
+| `str.matchAll(s, pattern)`           | Return an array of all substrings matching a regex pattern      |
+| `str.isMatch(s, pattern)`            | Return `true` if string contains a match for the regex pattern  |
+| `str.replaceRegex(s, pattern, repl)` | Replace all regex matches with a replacement string             |
 
 ### Examples
 
@@ -376,57 +377,57 @@ let merged = dict.merge(defaults, config);
 
 ## `math` — Math Functions
 
-| Function                    | Description                                                |
-| --------------------------- | ---------------------------------------------------------- |
-| `math.abs(value)`           | Return the absolute value of a number                      |
-| `math.ceil(value)`          | Round a number up to the nearest integer                   |
-| `math.floor(value)`         | Round a number down to the nearest integer                 |
-| `math.round(value)`         | Round a number to the nearest integer                      |
-| `math.min(a, b)`            | Return the smaller of two numbers                          |
-| `math.max(a, b)`            | Return the larger of two numbers                           |
-| `math.pow(base, exponent)`  | Raise a number to a power                                  |
-| `math.sqrt(value)`          | Return the square root of a number                         |
-| `math.log(value)`           | Return the natural logarithm of a number                   |
-| `math.random()`             | Return a random float between 0.0 (inclusive) and 1.0 (exclusive) |
-| `math.randomInt(min, max)`  | Return a random integer between min and max (inclusive)     |
-| `math.clamp(value, min, max)` | Constrain a number within a min/max range                |
+| Function                      | Description                                                       |
+| ----------------------------- | ----------------------------------------------------------------- |
+| `math.abs(value)`             | Return the absolute value of a number                             |
+| `math.ceil(value)`            | Round a number up to the nearest integer                          |
+| `math.floor(value)`           | Round a number down to the nearest integer                        |
+| `math.round(value)`           | Round a number to the nearest integer                             |
+| `math.min(a, b)`              | Return the smaller of two numbers                                 |
+| `math.max(a, b)`              | Return the larger of two numbers                                  |
+| `math.pow(base, exponent)`    | Raise a number to a power                                         |
+| `math.sqrt(value)`            | Return the square root of a number                                |
+| `math.log(value)`             | Return the natural logarithm of a number                          |
+| `math.random()`               | Return a random float between 0.0 (inclusive) and 1.0 (exclusive) |
+| `math.randomInt(min, max)`    | Return a random integer between min and max (inclusive)           |
+| `math.clamp(value, min, max)` | Constrain a number within a min/max range                         |
 
 ---
 
 ## `time` — Time & Date
 
-| Function                       | Description                                              |
-| ------------------------------ | -------------------------------------------------------- |
-| `time.now()`                   | Return current Unix time in seconds (float)              |
-| `time.millis()`                | Return current Unix time in milliseconds                 |
-| `time.sleep(seconds)`          | Pause execution for the given number of seconds          |
-| `time.format(timestamp, fmt)`  | Format a Unix timestamp using a format string            |
-| `time.parse(dateString, fmt)`  | Parse a date string and return Unix timestamp            |
-| `time.date()`                  | Return current date as `YYYY-MM-DD` string               |
-| `time.clock()`                 | Return high-resolution monotonic clock time (for benchmarking) |
-| `time.iso()`                   | Return current time as ISO 8601 string with UTC timezone |
+| Function                      | Description                                                    |
+| ----------------------------- | -------------------------------------------------------------- |
+| `time.now()`                  | Return current Unix time in seconds (float)                    |
+| `time.millis()`               | Return current Unix time in milliseconds                       |
+| `time.sleep(seconds)`         | Pause execution for the given number of seconds                |
+| `time.format(timestamp, fmt)` | Format a Unix timestamp using a format string                  |
+| `time.parse(dateString, fmt)` | Parse a date string and return Unix timestamp                  |
+| `time.date()`                 | Return current date as `YYYY-MM-DD` string                     |
+| `time.clock()`                | Return high-resolution monotonic clock time (for benchmarking) |
+| `time.iso()`                  | Return current time as ISO 8601 string with UTC timezone       |
 
 ---
 
 ## `json` — JSON
 
-| Function              | Description                                     |
-| --------------------- | ----------------------------------------------- |
-| `json.parse(text)`    | Parse a JSON string into Stash values           |
-| `json.stringify(val)` | Serialize a Stash value to compact JSON string  |
-| `json.pretty(val)`    | Serialize a Stash value to pretty-printed JSON  |
+| Function              | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `json.parse(text)`    | Parse a JSON string into Stash values          |
+| `json.stringify(val)` | Serialize a Stash value to compact JSON string |
+| `json.pretty(val)`    | Serialize a Stash value to pretty-printed JSON |
 
 ### Type Mapping
 
-| JSON type | Stash type       |
-| --------- | ---------------- |
-| string    | `string`         |
-| number (int) | `int` (long)  |
+| JSON type      | Stash type       |
+| -------------- | ---------------- |
+| string         | `string`         |
+| number (int)   | `int` (long)     |
 | number (float) | `float` (double) |
-| true/false | `bool`          |
-| null      | `null`           |
-| array     | `array`          |
-| object    | `dict`           |
+| true/false     | `bool`           |
+| null           | `null`           |
+| array          | `array`          |
+| object         | `dict`           |
 
 Values that can be serialized: `null`, `bool`, `int`, `float`, `string`, arrays, dictionaries, and struct instances.
 
@@ -462,12 +463,12 @@ io.println(cfg.logging.level);   // "info"
 
 Values are automatically coerced in this order:
 
-| Raw value | Stash type | Example |
-| --- | --- | --- |
-| Integer string | `int` (long) | `port = 143` → `143` |
-| Float string | `float` (double) | `ratio = 3.14` → `3.14` |
-| `true` / `false` (case-insensitive) | `bool` | `enabled = true` → `true` |
-| Anything else | `string` | `name = Alice` → `"Alice"` |
+| Raw value                           | Stash type       | Example                    |
+| ----------------------------------- | ---------------- | -------------------------- |
+| Integer string                      | `int` (long)     | `port = 143` → `143`       |
+| Float string                        | `float` (double) | `ratio = 3.14` → `3.14`    |
+| `true` / `false` (case-insensitive) | `bool`           | `enabled = true` → `true`  |
+| Anything else                       | `string`         | `name = Alice` → `"Alice"` |
 
 ### `ini.stringify(dict)`
 
@@ -484,6 +485,7 @@ let output = ini.stringify(cfg);
 ```
 
 **Serialization rules:**
+
 - Top-level non-dict entries are written first (global keys)
 - Top-level dict entries become `[section]` blocks
 - Values with leading/trailing whitespace are quoted
@@ -499,13 +501,13 @@ The `config` namespace provides a unified, format-agnostic API for reading and w
 
 ### Supported Formats
 
-| Extension | Format | Parser |
-| --- | --- | --- |
-| `.json` | JSON | Built-in JSON parser |
-| `.ini` | INI | Built-in INI parser (see [`ini` namespace](#ini--ini-configuration)) |
-| `.cfg` | INI | Same as `.ini` |
-| `.conf` | INI | Same as `.ini` |
-| `.properties` | INI | Same as `.ini` |
+| Extension     | Format | Parser                                                               |
+| ------------- | ------ | -------------------------------------------------------------------- |
+| `.json`       | JSON   | Built-in JSON parser                                                 |
+| `.ini`        | INI    | Built-in INI parser (see [`ini` namespace](#ini--ini-configuration)) |
+| `.cfg`        | INI    | Same as `.ini`                                                       |
+| `.conf`       | INI    | Same as `.ini`                                                       |
+| `.properties` | INI    | Same as `.ini`                                                       |
 
 ### `config.read(path)` / `config.read(path, format)`
 
@@ -588,34 +590,34 @@ io.println("Configuration updated.");
 
 ## `http` — HTTP Requests
 
-| Function                | Description                                                |
-| ----------------------- | ---------------------------------------------------------- |
-| `http.get(url)`         | Send HTTP GET request and return response                  |
-| `http.post(url, body)`  | Send HTTP POST request with body and return response       |
-| `http.put(url, body)`   | Send HTTP PUT request with body and return response        |
-| `http.delete(url)`      | Send HTTP DELETE request and return response               |
-| `http.request(options)` | Send custom HTTP request with a dict of options            |
+| Function                | Description                                          |
+| ----------------------- | ---------------------------------------------------- |
+| `http.get(url)`         | Send HTTP GET request and return response            |
+| `http.post(url, body)`  | Send HTTP POST request with body and return response |
+| `http.put(url, body)`   | Send HTTP PUT request with body and return response  |
+| `http.delete(url)`      | Send HTTP DELETE request and return response         |
+| `http.request(options)` | Send custom HTTP request with a dict of options      |
 
 ### Response Object
 
 All `http` functions return a response struct with:
 
-| Field        | Type     | Description                  |
-| ------------ | -------- | ---------------------------- |
-| `status`     | `int`    | HTTP status code             |
-| `body`       | `string` | Response body as string      |
-| `headers`    | `dict`   | Response headers             |
+| Field     | Type     | Description             |
+| --------- | -------- | ----------------------- |
+| `status`  | `int`    | HTTP status code        |
+| `body`    | `string` | Response body as string |
+| `headers` | `dict`   | Response headers        |
 
 ### `http.request(options)`
 
 The `options` dict supports:
 
-| Key       | Type     | Description                            |
-| --------- | -------- | -------------------------------------- |
-| `url`     | `string` | Request URL (required)                 |
-| `method`  | `string` | HTTP method (default: `"GET"`)         |
-| `headers` | `dict`   | Request headers                        |
-| `body`    | `string` | Request body                           |
+| Key       | Type     | Description                    |
+| --------- | -------- | ------------------------------ |
+| `url`     | `string` | Request URL (required)         |
+| `method`  | `string` | HTTP method (default: `"GET"`) |
+| `headers` | `dict`   | Request headers                |
+| `body`    | `string` | Request body                   |
 
 ---
 

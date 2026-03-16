@@ -13,6 +13,7 @@ public enum SymbolKind
     Enum,
     EnumMember,
     Field,
+    Method,
     LoopVariable,
     Namespace
 }

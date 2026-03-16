@@ -1339,7 +1339,13 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             fields.Add(field.Lexeme);
         }
 
-        var structDef = new StashStruct(stmt.Name.Lexeme, fields);
+        var methods = new Dictionary<string, StashFunction>();
+        foreach (var method in stmt.Methods)
+        {
+            methods[method.Name.Lexeme] = new StashFunction(method, _environment);
+        }
+
+        var structDef = new StashStruct(stmt.Name.Lexeme, fields, methods);
         _environment.Define(stmt.Name.Lexeme, structDef);
         return null;
     }
@@ -1547,7 +1553,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             fieldValues[fieldName] = valueExpr.Accept(this);
         }
 
-        return new StashInstance(template.Name, fieldValues);
+        return new StashInstance(template.Name, template, fieldValues);
     }
 
     public object? VisitDotExpr(DotExpr expr)

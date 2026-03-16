@@ -139,9 +139,9 @@ public class ScopeTree
 
                 if (sym.Kind is SymbolKind.Struct)
                 {
-                    // Struct fields are in the global scope right after the struct declaration
+                    // Struct fields and methods are in the global scope
                     childSymbols.AddRange(GlobalScope.Symbols.Where(s =>
-                        s.Kind == SymbolKind.Field && s.ParentName == sym.Name));
+                        (s.Kind == SymbolKind.Field || s.Kind == SymbolKind.Method) && s.ParentName == sym.Name));
                 }
                 else if (sym.Kind is SymbolKind.Enum)
                 {

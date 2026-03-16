@@ -226,12 +226,12 @@ public class CompletionHandler : CompletionHandlerBase
                 var structDef = allSymbols.FirstOrDefault(s => s.Name == structName && s.Kind == Analysis.SymbolKind.Struct);
                 if (structDef != null)
                 {
-                    foreach (var sym in allSymbols.Where(s => s.ParentName == structName && s.Kind == Analysis.SymbolKind.Field))
+                    foreach (var sym in allSymbols.Where(s => s.ParentName == structName && (s.Kind == Analysis.SymbolKind.Field || s.Kind == Analysis.SymbolKind.Method)))
                     {
                         items.Add(new CompletionItem
                         {
                             Label = sym.Name,
-                            Kind = LspCompletionItemKind.Field,
+                            Kind = sym.Kind == Analysis.SymbolKind.Method ? LspCompletionItemKind.Method : LspCompletionItemKind.Field,
                             Detail = sym.Detail
                         });
                     }
@@ -259,12 +259,12 @@ public class CompletionHandler : CompletionHandlerBase
             if (prefixDef != null && prefixDef.Kind == Analysis.SymbolKind.Struct)
             {
                 var allSymbols = result.Symbols.All;
-                foreach (var sym in allSymbols.Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.Field))
+                foreach (var sym in allSymbols.Where(s => s.ParentName == prefix && (s.Kind == Analysis.SymbolKind.Field || s.Kind == Analysis.SymbolKind.Method)))
                 {
                     items.Add(new CompletionItem
                     {
                         Label = sym.Name,
-                        Kind = LspCompletionItemKind.Field,
+                        Kind = sym.Kind == Analysis.SymbolKind.Method ? LspCompletionItemKind.Method : LspCompletionItemKind.Field,
                         Detail = sym.Detail
                     });
                 }

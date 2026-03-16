@@ -164,6 +164,17 @@
       },
       "patterns": [
         { "include": "#comments" },
+        { "include": "#function-declaration" },
+        { "include": "#return-type-annotation" },
+        {
+          "begin": "\\{",
+          "beginCaptures": { "0": { "name": "punctuation.section.block.begin.stash" } },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.section.block.end.stash" } },
+          "patterns": [
+            { "include": "$self" }
+          ]
+        },
         {
           "match": "([a-zA-Z_][a-zA-Z0-9_]*)\\s*(:)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
           "captures": {

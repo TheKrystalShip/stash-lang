@@ -360,10 +360,14 @@ public class Parser
 
         List<Token> fields = new();
         List<Token?> fieldTypes = new();
-        if (!Check(TokenType.RightBrace))
+        List<FnDeclStmt> methods = new();
+
+        // Parse fields (comma-separated, stop when we hit fn or })
+        if (!Check(TokenType.RightBrace) && !Check(TokenType.Fn))
         {
             do
             {
+                if (Check(TokenType.Fn)) break;
                 fields.Add(Consume(TokenType.Identifier, "Expected field name."));
                 Token? fieldType = null;
                 if (Match(TokenType.Colon))
@@ -374,8 +378,14 @@ public class Parser
             } while (Match(TokenType.Comma));
         }
 
-        Token close = Consume(TokenType.RightBrace, "Expected '}' after struct fields.");
-        return new StructDeclStmt(name, fields, fieldTypes, MakeSpan(structToken.Span, close.Span));
+        // Parse methods
+        while (Match(TokenType.Fn))
+        {
+            methods.Add((FnDeclStmt)FnDeclaration());
+        }
+
+        Token close = Consume(TokenType.RightBrace, "Expected '}' after struct body.");
+        return new StructDeclStmt(name, fields, fieldTypes, methods, MakeSpan(structToken.Span, close.Span));
     }
 
     private Stmt EnumDeclaration()

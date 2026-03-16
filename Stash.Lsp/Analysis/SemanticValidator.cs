@@ -265,6 +265,21 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         {
             ValidateTypeHint(fieldType);
         }
+
+        // Validate method bodies
+        foreach (var method in stmt.Methods)
+        {
+            foreach (var paramType in method.ParameterTypes)
+            {
+                ValidateTypeHint(paramType);
+            }
+            ValidateTypeHint(method.ReturnType);
+
+            _functionDepth++;
+            CheckUnreachableStatements(method.Body.Statements);
+            _functionDepth--;
+        }
+
         return null;
     }
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt) => null;

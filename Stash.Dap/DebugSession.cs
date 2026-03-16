@@ -600,6 +600,14 @@ public class DebugSession : IDebugger
                         variables.Add(FormatVariable(fieldName, fieldValue));
                     }
 
+                    if (instance.Struct?.Methods is { Count: > 0 } methods)
+                    {
+                        foreach (var (methodName, method) in methods.OrderBy(kv => kv.Key))
+                        {
+                            variables.Add(FormatVariable(methodName, new StashBoundMethod(instance, method)));
+                        }
+                    }
+
                     break;
 
                 case StashNamespace ns:
@@ -1136,6 +1144,11 @@ public class DebugSession : IDebugger
                 displayValue = fn.ToString() ?? "<fn>";
                 break;
 
+            case StashBoundMethod bm:
+                type = "function";
+                displayValue = bm.ToString();
+                break;
+
             case StashLambda:
                 type = "function";
                 displayValue = "<lambda>";
@@ -1165,7 +1178,10 @@ public class DebugSession : IDebugger
 
             case StashStruct st:
                 type = "struct";
-                displayValue = $"<struct {st.Name}> ({string.Join(", ", st.Fields)})";
+                var methodCount = st.Methods.Count;
+                displayValue = methodCount > 0
+                    ? $"<struct {st.Name}> ({string.Join(", ", st.Fields)}) [{methodCount} method(s)]"
+                    : $"<struct {st.Name}> ({string.Join(", ", st.Fields)})";
                 break;
 
             default:

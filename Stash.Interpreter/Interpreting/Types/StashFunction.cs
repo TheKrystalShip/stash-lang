@@ -75,5 +75,45 @@ public class StashFunction : IStashCallable
         return null;
     }
 
+    /// <summary>
+    /// Calls this function with `self` bound to the given instance.
+    /// Used for struct method dispatch. Creates two scope layers to match
+    /// the resolver's topology: { self } → { params, body }.
+    /// </summary>
+    public object? CallWithSelf(Interpreter interpreter, StashInstance instance, List<object?> arguments)
+    {
+        // Outer scope: binds 'self' (matches the resolver's BeginScope/Define("self"))
+        var selfEnv = new Environment(_closure);
+        selfEnv.Define("self", instance);
+
+        // Inner scope: binds parameters (matches ResolveFunction's BeginScope)
+        var env = new Environment(selfEnv);
+
+        for (int i = 0; i < _declaration.Parameters.Count; i++)
+        {
+            object? value;
+            if (i < arguments.Count)
+            {
+                value = arguments[i];
+            }
+            else
+            {
+                value = _declaration.DefaultValues[i]!.Accept(interpreter);
+            }
+            env.Define(_declaration.Parameters[i].Lexeme, value);
+        }
+
+        try
+        {
+            interpreter.ExecuteBlock(_declaration.Body.Statements, env);
+        }
+        catch (ReturnException returnValue)
+        {
+            return returnValue.Value;
+        }
+
+        return null;
+    }
+
     public override string ToString() => $"<fn {_declaration.Name.Lexeme}>";
 }

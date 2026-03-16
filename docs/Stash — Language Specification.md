@@ -284,9 +284,84 @@ A struct instance is a **dictionary/hash map with a type tag**:
 { __type: "Server", host: "10.0.0.1", port: 22, status: "unknown" }
 ```
 
+### Methods
+
+Structs support method declarations — functions defined inside the struct body that receive an implicit `self` parameter bound to the instance at call time.
+
+#### Syntax
+
+Methods are declared with `fn` inside the struct body, after any field declarations:
+
+```stash
+struct Counter {
+    count
+
+    fn increment() {
+        self.count = self.count + 1;
+    }
+
+    fn add(n) {
+        self.count = self.count + n;
+    }
+
+    fn get() {
+        return self.count;
+    }
+}
+```
+
+Fields and methods are separated naturally — fields are comma-separated identifiers, methods start with `fn`.
+
+#### Method Calls
+
+Methods are called via dot access on an instance:
+
+```stash
+let c = Counter { count: 0 };
+c.increment();
+c.add(5);
+io.println(c.get());  // 6
+```
+
+#### The `self` Parameter
+
+- `self` is **implicitly** bound when a method is called — it is not declared in the parameter list.
+- Inside a method body, `self` refers to the instance the method was called on.
+- `self` provides access to all fields and other methods of the instance.
+- `self` is **not** available outside method bodies.
+
+#### Method Storage
+
+Methods are stored on the **struct template**, not on individual instances. All instances of a struct share the same method definitions. This means:
+
+- Adding methods does not increase per-instance memory.
+- Methods cannot be overridden on individual instances.
+- When a method is accessed via dot notation (e.g., `c.increment`), it produces a **bound method** — an object that captures both the method function and the target instance.
+
+#### Field/Method Name Collision
+
+If a field and a method share the same name, the **field takes precedence** during dot access. The method is effectively shadowed.
+
+#### Methods Calling Other Methods
+
+Methods can call other methods on the same instance via `self`:
+
+```stash
+struct Rect {
+    w, h
+
+    fn area() {
+        return self.w * self.h;
+    }
+
+    fn describe() {
+        return $"Rect({self.w}x{self.h}, area={self.area()})";
+    }
+}
+```
+
 ### Future Extensions (Not in v1)
 
-- **Methods:** Functions defined inside a struct that receive an implicit `self` parameter.
 - **Nested structs:** Structs as field values of other structs.
 - **Default values:** Field declarations with default values.
 
@@ -1610,7 +1685,7 @@ Identifiers: user-defined names
 - `ReturnStmt` — `return expr;`
 - `BreakStmt` — `break;`
 - `ContinueStmt` — `continue;`
-- `StructDeclStmt` — `struct Name { fields }`
+- `StructDeclStmt` — `struct Name { fields, fn methods... }`
 - `EnumDeclStmt` — `enum Name { Member1, Member2 }`
 - `ImportStmt` — `import { name1, name2 } from "file.stash";`
 - `ImportAsStmt` — `import "file.stash" as name;`
@@ -1804,7 +1879,7 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 ### Phase 6 — Future
 
 - Bytecode VM (if performance requires it)
-- Methods on structs
+- ~~Methods on structs~~ ✅ Implemented
 - C-style `for(;;)` loops
 - Regular expressions
 
