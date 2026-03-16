@@ -2642,6 +2642,34 @@ public class InterpreterTests
         }
     }
 
+    [Fact]
+    public void Import_ModuleWithTopLevelFunctionCall()
+    {
+        // Module defines a function and calls it at the top level — this previously
+        // failed with "Undefined variable 'greet'" because the Resolver skipped
+        // top-level declarations and the Interpreter fell back to _globals instead
+        // of _environment.
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "utils.stash");
+            System.IO.File.WriteAllText(modulePath,
+                "let greeting = \"\";\n" +
+                "fn greet(name) { greeting = name; }\n" +
+                "greet(\"loaded\");\n");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { greeting } from \"utils.stash\"; let result = greeting;";
+
+            Assert.Equal("loaded", RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
     // ===== Phase 6: Namespaces =====
 
     // -- fs namespace --

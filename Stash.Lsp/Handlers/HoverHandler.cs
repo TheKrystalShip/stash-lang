@@ -79,7 +79,18 @@ public class HoverHandler : HoverHandlerBase
         }
 
         // Normal symbol hover
-        var md = $"```stash\n{symbol.Detail ?? symbol.Name}\n```\n*{symbol.Kind}*";
+        var detail = symbol.Detail ?? symbol.Name;
+
+        // Append inferred type if the symbol has a TypeHint not already shown in detail
+        if (symbol.TypeHint != null &&
+            symbol.Kind is Analysis.SymbolKind.Variable or Analysis.SymbolKind.Constant
+                or Analysis.SymbolKind.Parameter or Analysis.SymbolKind.LoopVariable &&
+            !detail.Contains($": {symbol.TypeHint}"))
+        {
+            detail += $": {symbol.TypeHint}";
+        }
+
+        var md = $"```stash\n{detail}\n```\n*{symbol.Kind}*";
         if (symbol.SourceUri != null)
         {
             var importedPath = System.IO.Path.GetFileName(symbol.SourceUri.LocalPath);

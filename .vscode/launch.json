@@ -7,7 +7,7 @@
         {
             "type": "stash",
             "request": "launch",
-            "name": "Debug script (stop on entry)",
+            "name": "Debug script",
             "program": "${file}",
             "stopOnEntry": false,
             "cwd": "${workspaceFolder}"

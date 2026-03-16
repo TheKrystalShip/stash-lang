@@ -51,7 +51,7 @@ public class CompletionHandler : CompletionHandlerBase
             var prefix = GetDotPrefix(currentLine, col);
             if (prefix != null)
             {
-                return Task.FromResult(HandleDotCompletion(prefix, uri));
+                return Task.FromResult(HandleDotCompletion(prefix, uri, line, col));
             }
         }
 
@@ -158,7 +158,7 @@ public class CompletionHandler : CompletionHandlerBase
         return line.Substring(end, col - 1 - end);
     }
 
-    private CompletionList HandleDotCompletion(string prefix, Uri uri)
+    private CompletionList HandleDotCompletion(string prefix, Uri uri, int lspLine, int lspCol)
     {
         var items = new List<CompletionItem>();
 
@@ -205,10 +205,10 @@ public class CompletionHandler : CompletionHandlerBase
         // Check if prefix is a struct or enum — look up its type via ScopeTree
         if (result != null)
         {
-            var symbols = result.Symbols.GetVisibleSymbols(1, 1);
+            var symbols = result.Symbols.GetVisibleSymbols(lspLine + 1, lspCol + 1);
             var prefixDef = symbols.FirstOrDefault(s => s.Name == prefix);
 
-            // If prefix is a variable/parameter with a type hint, resolve to that struct's fields
+            // If prefix is a variable/parameter with a type hint (explicit or inferred), resolve to that struct's fields
             var structName = prefix;
             if (prefixDef != null && prefixDef.TypeHint != null &&
                 (prefixDef.Kind == Analysis.SymbolKind.Variable ||
@@ -221,11 +221,12 @@ public class CompletionHandler : CompletionHandlerBase
 
             if (prefixDef == null || prefixDef.Kind != Analysis.SymbolKind.Struct)
             {
-                // Check if the resolved structName matches a struct definition
-                var structDef = symbols.FirstOrDefault(s => s.Name == structName && s.Kind == Analysis.SymbolKind.Struct);
+                // Check if the resolved structName matches a user-defined struct
+                var allSymbols = result.Symbols.All;
+                var structDef = allSymbols.FirstOrDefault(s => s.Name == structName && s.Kind == Analysis.SymbolKind.Struct);
                 if (structDef != null)
                 {
-                    foreach (var sym in symbols.Where(s => s.ParentName == structName && s.Kind == Analysis.SymbolKind.Field))
+                    foreach (var sym in allSymbols.Where(s => s.ParentName == structName && s.Kind == Analysis.SymbolKind.Field))
                     {
                         items.Add(new CompletionItem
                         {
@@ -235,11 +236,30 @@ public class CompletionHandler : CompletionHandlerBase
                         });
                     }
                 }
+                else
+                {
+                    // Fallback: check built-in structs from BuiltInRegistry
+                    var builtInStruct = BuiltInRegistry.Structs.FirstOrDefault(s => s.Name == structName);
+                    if (builtInStruct != null)
+                    {
+                        foreach (var field in builtInStruct.Fields)
+                        {
+                            var fieldDetail = field.Type != null ? $"field of {structName}: {field.Type}" : $"field of {structName}";
+                            items.Add(new CompletionItem
+                            {
+                                Label = field.Name,
+                                Kind = LspCompletionItemKind.Field,
+                                Detail = fieldDetail
+                            });
+                        }
+                    }
+                }
             }
 
             if (prefixDef != null && prefixDef.Kind == Analysis.SymbolKind.Struct)
             {
-                foreach (var sym in symbols.Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.Field))
+                var allSymbols = result.Symbols.All;
+                foreach (var sym in allSymbols.Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.Field))
                 {
                     items.Add(new CompletionItem
                     {
@@ -250,10 +270,11 @@ public class CompletionHandler : CompletionHandlerBase
                 }
             }
 
-            var enumDef = symbols.FirstOrDefault(s => s.Name == prefix && s.Kind == Analysis.SymbolKind.Enum);
+            var allForEnum = result.Symbols.All;
+            var enumDef = allForEnum.FirstOrDefault(s => s.Name == prefix && s.Kind == Analysis.SymbolKind.Enum);
             if (enumDef != null)
             {
-                foreach (var sym in symbols.Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.EnumMember))
+                foreach (var sym in allForEnum.Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.EnumMember))
                 {
                     items.Add(new CompletionItem
                     {

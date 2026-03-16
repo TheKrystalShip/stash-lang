@@ -75,6 +75,8 @@ public class AnalysisEngine
             }
         }
 
+        TypeInferenceEngine.InferTypes(symbols, statements);
+
         var validator = new SemanticValidator(symbols);
         var semanticDiagnostics = validator.Validate(statements);
         semanticDiagnostics.AddRange(importResolution.Diagnostics);

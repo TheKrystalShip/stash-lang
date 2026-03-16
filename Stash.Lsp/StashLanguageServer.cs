@@ -44,6 +44,8 @@ public static class StashLanguageServer
                 .WithHandler<InlayHintHandler>()
                 .WithHandler<CodeLensHandler>()
                 .WithHandler<FormattingHandler>()
+                .WithHandler<CallHierarchyHandler>()
+                .WithHandler<LinkedEditingRangeHandler>()
                 .OnInitialize((server, request, cancellationToken) =>
                 {
                     return Task.CompletedTask;

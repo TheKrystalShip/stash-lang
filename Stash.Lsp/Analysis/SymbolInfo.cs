@@ -25,7 +25,7 @@ public class SymbolInfo
     public SourceSpan? FullSpan { get; }
     public string? Detail { get; }
     public string? ParentName { get; }
-    public string? TypeHint { get; }
+    public string? TypeHint { get; set; }
     public Uri? SourceUri { get; }
     public string[]? ParameterNames { get; }
     public int? RequiredParameterCount { get; }
