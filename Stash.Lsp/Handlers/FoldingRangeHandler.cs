@@ -109,6 +109,11 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
                 CollectFoldingRanges(whileStmt.Body, ranges);
                 break;
 
+            case DoWhileStmt doWhileStmt:
+                AddRegion(ranges, doWhileStmt.Span, FoldingRangeKind.Region);
+                CollectFoldingRanges(doWhileStmt.Body, ranges);
+                break;
+
             case ForInStmt forInStmt:
                 AddRegion(ranges, forInStmt.Span, FoldingRangeKind.Region);
                 CollectFoldingRanges(forInStmt.Body, ranges);

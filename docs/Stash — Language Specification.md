@@ -217,6 +217,8 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 
 **String concatenation (`+`):** When one operand of `+` is a string, the other operand is automatically converted to its string representation. `"count: " + 5` produces `"count: 5"`.
 
+**String repetition (`*`):** When one operand of `*` is a string and the other is an integer, the string is repeated that many times. `"ha" * 3` produces `"hahaha"`, and `3 * "ha"` produces the same result (commutative). `"x" * 0` produces `""`. A negative count is a runtime error.
+
 **Numeric type mixing:** When an `int` and a `float` are used in an arithmetic operation (`+`, `-`, `*`, `/`, `%`), the `int` is promoted to `float` and the result is a `float`. `5 + 3.14` produces `8.14`.
 
 **Equality:** `==` and `!=` never perform type coercion. Values of different types are never equal (`5 != "5"`, `0 != false`, `0 != null`). Enum values are compared by identity (type + member name).
@@ -990,6 +992,18 @@ while (condition) {
 }
 ```
 
+### Do-While Loop
+
+A `do-while` loop executes its body **at least once**, then repeats while the condition remains truthy:
+
+```stash
+do {
+    let input = io.readLine("Enter 'yes': ");
+} while (input != "yes");
+```
+
+Standard `break` and `continue` are supported inside `do-while` loops. The semicolon after the closing `)` is required.
+
 ### For Loop
 
 ```stash
@@ -1539,7 +1553,7 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`
 
 Contextual keywords: `from` (only reserved after `import`, can be used as a variable name elsewhere)
 

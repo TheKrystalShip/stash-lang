@@ -180,6 +180,10 @@ public class StashFormatter
             {
                 pendingKeyword = "while";
             }
+            else if (token.Type is TokenType.Do)
+            {
+                pendingKeyword = "do";
+            }
             else if (token.Type is TokenType.For)
             {
                 pendingKeyword = "for";
@@ -463,15 +467,15 @@ public class StashFormatter
 
     private static bool IsTopLevelStart(TokenType t) => t is
         TokenType.Fn or TokenType.Struct or TokenType.Enum or TokenType.Const or TokenType.Let or
-        TokenType.Import or TokenType.For or TokenType.While or TokenType.If or
+        TokenType.Import or TokenType.For or TokenType.While or TokenType.Do or TokenType.If or
         TokenType.SingleLineComment;
 
     private static bool IsControlKeyword(TokenType t) => t is
-        TokenType.If or TokenType.While or TokenType.For;
+        TokenType.If or TokenType.While or TokenType.Do or TokenType.For;
 
     private static bool IsKeyword(TokenType t) => t is
         TokenType.Let or TokenType.Const or TokenType.Fn or TokenType.Struct or TokenType.Enum or
-        TokenType.If or TokenType.Else or TokenType.For or TokenType.In or TokenType.While or
+        TokenType.If or TokenType.Else or TokenType.For or TokenType.In or TokenType.While or TokenType.Do or
         TokenType.Return or TokenType.Break or TokenType.Continue or TokenType.True or
         TokenType.False or TokenType.Null or TokenType.Try or TokenType.Import or
         TokenType.From or TokenType.As;

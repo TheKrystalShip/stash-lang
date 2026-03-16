@@ -274,6 +274,18 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitDoWhileStmt(DoWhileStmt stmt)
+    {
+        PushScope(ScopeKind.Loop, stmt.Body.Span);
+        foreach (var s in stmt.Body.Statements)
+        {
+            s.Accept(this);
+        }
+        PopScope();
+        stmt.Condition.Accept(this);
+        return null;
+    }
+
     public object? VisitForInStmt(ForInStmt stmt)
     {
         stmt.Iterable.Accept(this);

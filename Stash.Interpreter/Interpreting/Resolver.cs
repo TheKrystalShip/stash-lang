@@ -181,6 +181,13 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
+    public object? VisitDoWhileStmt(DoWhileStmt stmt)
+    {
+        Resolve(stmt.Body);
+        Resolve(stmt.Condition);
+        return null;
+    }
+
     public object? VisitForInStmt(ForInStmt stmt)
     {
         Resolve(stmt.Iterable);

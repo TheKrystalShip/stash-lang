@@ -254,6 +254,7 @@ public class LexerTests
     [InlineData("for", TokenType.For)]
     [InlineData("in", TokenType.In)]
     [InlineData("while", TokenType.While)]
+    [InlineData("do", TokenType.Do)]
     [InlineData("return", TokenType.Return)]
     [InlineData("break", TokenType.Break)]
     [InlineData("continue", TokenType.Continue)]

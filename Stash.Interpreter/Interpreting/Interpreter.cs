@@ -482,6 +482,16 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 return EvaluateArithmetic(leftVal, rightVal, expr, (a, b) => a - b, (a, b) => a - b);
 
             case TokenType.Star:
+                if (leftVal is string ls && rightVal is long ri)
+                {
+                    if (ri < 0) throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    return ri == 0 ? "" : string.Concat(Enumerable.Repeat(ls, (int)ri));
+                }
+                if (leftVal is long li2 && rightVal is string rs)
+                {
+                    if (li2 < 0) throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    return li2 == 0 ? "" : string.Concat(Enumerable.Repeat(rs, (int)li2));
+                }
                 return EvaluateArithmetic(leftVal, rightVal, expr, (a, b) => a * b, (a, b) => a * b);
 
             case TokenType.Slash:
@@ -1192,6 +1202,27 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 // Continue to next loop iteration
             }
         }
+
+        return null;
+    }
+
+    public object? VisitDoWhileStmt(DoWhileStmt stmt)
+    {
+        do
+        {
+            try
+            {
+                Execute(stmt.Body);
+            }
+            catch (BreakException)
+            {
+                break;
+            }
+            catch (ContinueException)
+            {
+                // Continue to condition check
+            }
+        } while (IsTruthy(stmt.Condition.Accept(this)));
 
         return null;
     }

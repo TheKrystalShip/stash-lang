@@ -106,6 +106,42 @@ public class InterpreterTests
     }
 
     [Fact]
+    public void StringRepetition_Basic()
+    {
+        Assert.Equal("hahaha", Eval("\"ha\" * 3"));
+    }
+
+    [Fact]
+    public void StringRepetition_Commutative()
+    {
+        Assert.Equal("hahaha", Eval("3 * \"ha\""));
+    }
+
+    [Fact]
+    public void StringRepetition_Zero()
+    {
+        Assert.Equal("", Eval("\"x\" * 0"));
+    }
+
+    [Fact]
+    public void StringRepetition_EmptyString()
+    {
+        Assert.Equal("", Eval("\"\" * 5"));
+    }
+
+    [Fact]
+    public void StringRepetition_Once()
+    {
+        Assert.Equal("ab", Eval("\"ab\" * 1"));
+    }
+
+    [Fact]
+    public void StringRepetition_NegativeCount_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Eval("\"x\" * -1"));
+    }
+
+    [Fact]
     public void IntegerDivision_Truncates()
     {
         Assert.Equal(3L, Eval("10 / 3"));
@@ -652,6 +688,38 @@ public class InterpreterTests
     public void While_NestedBreak_BreaksInnerOnly()
     {
         Assert.Equal(3L, Run("let result = 0; let i = 0; while (i < 3) { i = i + 1; let j = 0; while (j < 3) { j = j + 1; if (j == 2) { break; } result = result + 1; } }"));
+    }
+
+    // ===== Category X: Do-While Loop =====
+
+    [Fact]
+    public void DoWhile_BasicLoop()
+    {
+        Assert.Equal(5L, Run("let result = 0; let i = 0; do { result = result + 1; i = i + 1; } while (i < 5);"));
+    }
+
+    [Fact]
+    public void DoWhile_FalseCondition_ExecutesOnce()
+    {
+        Assert.Equal(1L, Run("let result = 0; do { result = result + 1; } while (false);"));
+    }
+
+    [Fact]
+    public void DoWhile_Break()
+    {
+        Assert.Equal(3L, Run("let result = 0; do { result = result + 1; if (result == 3) { break; } } while (true);"));
+    }
+
+    [Fact]
+    public void DoWhile_Continue()
+    {
+        Assert.Equal(4L, Run("let result = 0; let i = 0; do { i = i + 1; if (i == 3) { continue; } result = result + 1; } while (i < 5);"));
+    }
+
+    [Fact]
+    public void DoWhile_NestedBreak_BreaksInnerOnly()
+    {
+        Assert.Equal(3L, Run("let result = 0; let i = 0; do { i = i + 1; let j = 0; do { j = j + 1; if (j == 2) { break; } result = result + 1; } while (j < 3); } while (i < 3);"));
     }
 
     // ===== Category 6: For-In Loop =====

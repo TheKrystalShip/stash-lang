@@ -87,6 +87,7 @@ public class Lexer
             ["for"] = TokenType.For,
             ["in"] = TokenType.In,
             ["while"] = TokenType.While,
+            ["do"] = TokenType.Do,
             ["return"] = TokenType.Return,
             ["break"] = TokenType.Break,
             ["continue"] = TokenType.Continue,

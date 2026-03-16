@@ -115,6 +115,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitDoWhileStmt(DoWhileStmt stmt)
+    {
+        _loopDepth++;
+        stmt.Body.Accept(this);
+        _loopDepth--;
+        stmt.Condition.Accept(this);
+        return null;
+    }
+
     public object? VisitForInStmt(ForInStmt stmt)
     {
         ValidateTypeHint(stmt.TypeHint);

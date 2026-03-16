@@ -11,6 +11,7 @@ public interface IStmtVisitor<T>
     T VisitBlockStmt(BlockStmt stmt);
     T VisitIfStmt(IfStmt stmt);
     T VisitWhileStmt(WhileStmt stmt);
+    T VisitDoWhileStmt(DoWhileStmt stmt);
     T VisitForInStmt(ForInStmt stmt);
     T VisitBreakStmt(BreakStmt stmt);
     T VisitContinueStmt(ContinueStmt stmt);

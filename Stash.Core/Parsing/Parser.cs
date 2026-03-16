@@ -456,6 +456,11 @@ public class Parser
             return WhileStatement();
         }
 
+        if (Match(TokenType.Do))
+        {
+            return DoWhileStatement();
+        }
+
         if (Match(TokenType.For))
         {
             return ForInStatement();
@@ -546,6 +551,23 @@ public class Parser
         Consume(TokenType.RightParen, "Expected ')' after while condition.");
         BlockStmt body = ParseBlock();
         return new WhileStmt(condition, body, MakeSpan(whileToken.Span, body.Span));
+    }
+
+    /// <summary>
+    /// Parses a do-while statement: <c>do { ... } while (condition);</c>.
+    /// The <c>do</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="DoWhileStmt"/>.</returns>
+    private Stmt DoWhileStatement()
+    {
+        Token doToken = Previous();
+        BlockStmt body = ParseBlock();
+        Consume(TokenType.While, "Expected 'while' after do block.");
+        Consume(TokenType.LeftParen, "Expected '(' after 'while'.");
+        Expr condition = Expression();
+        Consume(TokenType.RightParen, "Expected ')' after do-while condition.");
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after do-while condition.");
+        return new DoWhileStmt(body, condition, MakeSpan(doToken.Span, semi.Span));
     }
 
     /// <summary>

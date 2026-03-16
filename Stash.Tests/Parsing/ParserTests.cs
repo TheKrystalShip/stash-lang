@@ -584,6 +584,17 @@ public class ParserTests
         Assert.IsType<BreakStmt>(Assert.Single(body.Statements));
     }
 
+    [Fact]
+    public void Parse_DoWhile()
+    {
+        var stmts = ParseProgram("do { break; } while (true);");
+        var doWhileStmt = Assert.IsType<DoWhileStmt>(Assert.Single(stmts));
+        var body = Assert.IsType<BlockStmt>(doWhileStmt.Body);
+        Assert.IsType<BreakStmt>(Assert.Single(body.Statements));
+        var condition = Assert.IsType<LiteralExpr>(doWhileStmt.Condition);
+        Assert.Equal(true, condition.Value);
+    }
+
     // 6. For-In Loop
 
     [Fact]

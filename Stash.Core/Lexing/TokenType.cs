@@ -198,6 +198,9 @@ public enum TokenType
     /// <summary>The <c>while</c> keyword. Begins a while loop that repeats as long as its condition is truthy.</summary>
     While,
 
+    /// <summary>The <c>do</c> keyword. Begins a do-while loop that executes its body at least once.</summary>
+    Do,
+
     /// <summary>The <c>return</c> keyword. Exits a function and optionally yields a value to the caller.</summary>
     Return,
 

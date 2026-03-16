@@ -356,7 +356,7 @@ public static class BuiltInRegistry
     public static readonly IReadOnlyList<string> Keywords = new[]
     {
         "let", "const", "fn", "struct", "enum", "if", "else",
-        "for", "in", "while", "return", "break", "continue",
+        "for", "in", "while", "do", "return", "break", "continue",
         "true", "false", "null", "try", "import", "from", "as", "args"
     };
 
