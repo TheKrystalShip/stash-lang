@@ -46,6 +46,8 @@ public static class StashLanguageServer
                 .WithHandler<FormattingHandler>()
                 .WithHandler<CallHierarchyHandler>()
                 .WithHandler<LinkedEditingRangeHandler>()
+                .WithHandler<TypeDefinitionHandler>()
+                .WithHandler<ImplementationHandler>()
                 .OnInitialize((server, request, cancellationToken) =>
                 {
                     return Task.CompletedTask;

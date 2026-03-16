@@ -1,7 +1,8 @@
 # Stash — LSP (Language Server Protocol)
 
-> **Status:** Draft v0.1
+> **Status:** v1.0 — Complete
 > **Created:** March 2026
+> **Last updated:** March 2026
 > **Purpose:** Source of truth for the Stash language server — architecture, analysis engine, supported features, and editor integration.
 >
 > **Companion documents:**
@@ -18,7 +19,7 @@
 1. [Architecture](#1-architecture)
 2. [Project Structure](#2-project-structure)
 3. [Reusable Infrastructure](#3-reusable-infrastructure)
-4. [Implementation Phases](#4-implementation-phases)
+4. [Implementation Status](#4-implementation-status)
 5. [Technical Decisions](#5-technical-decisions)
 6. [LSP Feature Reference](#6-lsp-feature-reference)
 
@@ -76,32 +77,56 @@ Stash.Lsp/                         # LSP server
 ├── Program.cs                     # Entry point — start server on stdio
 ├── StashLanguageServer.cs         # Server setup, capability registration
 ├── Analysis/
-│   ├── DocumentManager.cs         # Track open documents + versions
-│   ├── AnalysisEngine.cs          # Lex → Parse → Build symbols per document
-│   └── SymbolTable.cs             # Scope-aware symbol map
+│   ├── AnalysisEngine.cs          # Lex → Parse → Scope → Validate pipeline
+│   ├── AnalysisResult.cs          # Complete analysis output per document
+│   ├── BuiltInRegistry.cs         # Centralized built-in function/struct/namespace definitions
+│   ├── DocumentManager.cs         # Track open documents + versions (incremental sync)
+│   ├── ImportResolver.cs          # Cross-file import resolution and module caching
+│   ├── LspExtensions.cs           # SourceSpan → LSP Range conversion
+│   ├── ReferenceInfo.cs           # Reference occurrence tracking (read/write/call/type-use)
+│   ├── Scope.cs                   # Single scope node (Global/Function/Block/Loop)
+│   ├── ScopeTree.cs               # Hierarchical scope tree (replaces flat symbol table)
+│   ├── SemanticValidator.cs       # Semantic error checking (undefined vars, misplaced control flow)
+│   ├── StashFormatter.cs          # Full document code formatter
+│   ├── SymbolCollector.cs         # AST visitor that builds scope tree and reference list
+│   ├── SymbolInfo.cs              # Symbol representation (name, kind, span, type hint)
+│   ├── TextUtilities.cs           # Word-at-position and dot-prefix extraction
+│   └── TypeInferenceEngine.cs     # Static type deduction for variables and expressions
 └── Handlers/
-    ├── TextDocumentSyncHandler.cs  # didOpen, didChange, didClose
-    ├── DiagnosticsHandler.cs      # Publish lex/parse errors
-    ├── DocumentSymbolHandler.cs   # Outline view
-    ├── CompletionHandler.cs       # Autocomplete
-    ├── HoverHandler.cs            # Hover info
-    ├── DefinitionHandler.cs       # Go-to-definition
-    ├── ReferencesHandler.cs       # Find all references
-    ├── SignatureHelpHandler.cs    # Parameter hints
-    ├── SemanticTokensHandler.cs   # Rich semantic highlighting
-    ├── RenameHandler.cs           # Symbol rename
-    └── FoldingRangeHandler.cs     # Code folding
+    ├── TextDocumentSyncHandler.cs  # didOpen, didChange, didClose + publishes diagnostics
+    ├── DocumentSymbolHandler.cs    # Outline view (hierarchical)
+    ├── HoverHandler.cs             # Hover info (symbols, namespaces, built-in constants)
+    ├── DefinitionHandler.cs        # Go-to-definition (same-file + cross-file imports)
+    ├── CompletionHandler.cs        # Autocomplete (keywords, symbols, dot-completion)
+    ├── ReferencesHandler.cs        # Find all references (same-file + cross-file)
+    ├── DocumentHighlightHandler.cs # Highlight read/write references in current document
+    ├── RenameHandler.cs            # Symbol rename (all references in document)
+    ├── PrepareRenameHandler.cs     # Validate rename target and return placeholder
+    ├── SignatureHelpHandler.cs     # Parameter hints (built-in + user-defined functions)
+    ├── SemanticTokensHandler.cs    # Rich semantic highlighting (12 types, 2 modifiers)
+    ├── FoldingRangeHandler.cs      # Code folding (blocks + consecutive comment regions)
+    ├── SelectionRangeHandler.cs    # Expand/shrink selection (nested ranges)
+    ├── DocumentLinkHandler.cs      # Clickable import file paths
+    ├── CodeActionHandler.cs        # Quick-fix suggestions (e.g., "Did you mean?")
+    ├── WorkspaceSymbolHandler.cs   # Workspace-wide symbol search
+    ├── InlayHintHandler.cs         # Inline type and parameter hints
+    ├── CodeLensHandler.cs          # Reference counts for functions/structs/enums
+    ├── FormattingHandler.cs        # Document formatting (configurable indent)
+    ├── CallHierarchyHandler.cs     # Incoming/outgoing call hierarchy
+    ├── LinkedEditingRangeHandler.cs # Linked editing for symbol occurrences
+    ├── TypeDefinitionHandler.cs    # Go to type definition (struct/enum of a variable)
+    └── ImplementationHandler.cs    # Find all instantiations of a struct/enum
 
-editors/vscode/stash-lang/          # VS Code extension (extended)
-├── package.json                    # Updated: activationEvents, LSP client deps
+.vscode/extensions/stash-lang/      # VS Code extension
+├── package.json                     # activationEvents, LSP client deps
 ├── src/
-│   └── extension.ts               # Start LSP server, create LanguageClient
+│   └── extension.ts                 # Start LSP server, create LanguageClient
 ├── tsconfig.json
 ├── syntaxes/
-│   └── stash.tmLanguage.json       # Existing grammar
+│   └── stash.tmLanguage.json        # TextMate grammar
 ├── snippets/
-│   └── stash.json                  # Existing snippets
-└── language-configuration.json     # Existing
+│   └── stash.json                   # Code snippets
+└── language-configuration.json      # Brackets, comments, auto-closing pairs
 
 Stash.Tests/                        # Test project (references Stash.Core)
 ```
@@ -127,179 +152,236 @@ The following existing components from `Stash.Core` are directly reusable by the
 | `IdentifierExpr`                                           | Reference resolution, rename                           |
 | `ImportStmt`                                               | Cross-file analysis                                    |
 
-### What Must Be Built New
+### Analysis Components (Built)
 
-| Component               | Purpose                                                                | Notes                                                                                                                                       |
-| ----------------------- | ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Document Manager**    | Track open file contents, versions, dirty state                        | Dictionary keyed by URI, updated on didChange                                                                                               |
-| **Analysis Engine**     | Re-lex + re-parse on each change, cache results                        | Full re-analysis per edit (sufficient for script-sized files)                                                                               |
-| **Symbol Table**        | Static scope-aware map of declarations                                 | Walk AST, record: name, kind (fn/var/const/struct/enum/param), span, scope depth. Unlike `Environment`, this is static (no runtime values). |
-| **Position Utilities**  | Convert between LSP positions (0-based) and Stash SourceSpan (1-based) | Simple offset arithmetic                                                                                                                    |
-| **AST Query Utilities** | "Find the node at position X", "Find all references to name Y"         | Walk AST with visitors, filter by span containment                                                                                          |
+All analysis infrastructure has been implemented. Here are the key components:
+
+| Component              | File                                    | Purpose                                                                                              |
+| ---------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Document Manager**   | `DocumentManager.cs`                    | Tracks open documents with incremental change application and version tracking                       |
+| **Analysis Engine**    | `AnalysisEngine.cs`                     | Orchestrates full pipeline: lex → parse → collect symbols → resolve imports → infer types → validate |
+| **Scope Tree**         | `ScopeTree.cs` + `Scope.cs`             | Hierarchical scope tree mirroring block nesting; replaces flat symbol table                          |
+| **Symbol Collector**   | `SymbolCollector.cs`                    | AST visitor that builds scope tree and collects all symbol references                                |
+| **Semantic Validator** | `SemanticValidator.cs`                  | AST visitor producing warnings for undefined variables, misplaced control flow, type mismatches      |
+| **Import Resolver**    | `ImportResolver.cs`                     | Cross-file import resolution with module caching and dependency tracking                             |
+| **Type Inference**     | `TypeInferenceEngine.cs`                | Static type deduction from assignments, struct initialization, function returns                      |
+| **Formatter**          | `StashFormatter.cs`                     | Full document code formatter with configurable indent size and tab/space preference                  |
+| **Built-In Registry**  | `BuiltInRegistry.cs`                    | Centralized definitions for all built-in functions, structs, namespaces, keywords                    |
+| **Position Utilities** | `LspExtensions.cs` + `TextUtilities.cs` | SourceSpan ↔ LSP Range conversion, word-at-position, dot-prefix extraction                           |
+| **Symbol Info**        | `SymbolInfo.cs`                         | Symbol representation: name, kind, span, type hint, parameter info                                   |
+| **Reference Info**     | `ReferenceInfo.cs`                      | Reference occurrence tracking with read/write/call/type-use distinction                              |
+| **Analysis Result**    | `AnalysisResult.cs`                     | Complete analysis output per document (tokens, AST, errors, scope tree, imports)                     |
+
+### Analysis Pipeline
+
+The analysis engine runs a full pipeline on each document change (debounced at 150ms):
+
+```
+Document text
+    ↓
+Lexer (preserveTrivia=true, non-fatal errors)
+    ↓
+Parser (error recovery, partial AST)
+    ↓
+SymbolCollector (AST visitor)
+    ├→ ScopeTree built (hierarchical scope nodes)
+    └→ ReferenceInfo list (all symbol usages with read/write/call kind)
+    ↓
+ImportResolver (cross-file)
+    ├→ Resolves import paths, loads & caches modules
+    └→ Enriches global scope with imported symbols
+    ↓
+TypeInferenceEngine
+    └→ Deduces types from struct init, literals, function returns
+    ↓
+SemanticValidator (AST visitor)
+    ├→ Undefined variables, const reassignment, wrong arity
+    ├→ Misplaced break/continue/return
+    └→ Unreachable code detection
+    ↓
+AnalysisResult (cached per document URI)
+    ├→ Tokens, AST statements
+    ├→ Lex/parse/semantic errors
+    ├→ ScopeTree with symbols
+    └→ Namespace imports map
+```
 
 ---
 
-## 4. Implementation Phases
+## 4. Implementation Status
 
-### Phase A: Foundation — Diagnostics + Document Sync
+All originally planned phases are complete, plus additional features beyond the original roadmap.
 
-**Goal:** Red squiggles for syntax errors as you type. Establishes the full client ↔ server pipeline.
+### Phase A: Foundation — Diagnostics + Document Sync ✅
+
+**Status**: Complete
+
+Establishes the full client ↔ server pipeline with real-time diagnostic reporting.
 
 **LSP Methods:**
 
 - `initialize` / `initialized` — capability negotiation
 - `textDocument/didOpen` — receive file contents
-- `textDocument/didChange` — receive edits (full document sync)
+- `textDocument/didChange` — receive edits (incremental sync supported)
 - `textDocument/didClose` — cleanup
-- `textDocument/publishDiagnostics` — push errors to client
+- `textDocument/publishDiagnostics` — push lex, parse, and semantic errors to client
 
-**Implementation:**
+**Implementation notes:**
 
-1. Set up `Stash.Lsp` project with `OmniSharp.Extensions.LanguageServer` NuGet package
-2. Create `DocumentManager` to store document text by URI
-3. On each `didOpen`/`didChange`: re-run `Lexer.ScanTokens()` + `Parser.ParseProgram()`
-4. Map `Lexer.Errors` and `Parser.Errors` to LSP `Diagnostic` objects using `SourceSpan`
-5. Publish diagnostics back to client
-
-**VS Code client:**
-
-1. Add `vscode-languageclient` npm dependency
-2. Write `extension.ts` that spawns the LSP server process
-3. Register `onLanguage:stash` activation event
-
-**Success Criteria:** Opening a `.stash` file with a syntax error shows a red squiggle with error message.
+- Diagnostics are published inline by `TextDocumentSyncHandler` with a 150ms debounce
+- No separate `DiagnosticsHandler` — publication is integrated into the sync handler
+- Three diagnostic stages: lexer errors, parser errors, and semantic diagnostics
+- Incremental document sync is supported via `DocumentManager.ApplyIncrementalChanges()`
 
 ---
 
-### Phase B: Navigation — Symbols, Go-to-Definition, Hover
+### Phase B: Navigation — Symbols, Go-to-Definition, Hover ✅
 
-**Goal:** Outline view, click-to-jump to definitions, hover info.
+**Status**: Complete
 
 **LSP Methods:**
 
-- `textDocument/documentSymbol` — outline / breadcrumbs
-- `textDocument/definition` — go-to-definition
-- `textDocument/hover` — hover info popup
+- `textDocument/documentSymbol` — hierarchical outline / breadcrumbs
+- `textDocument/definition` — go-to-definition (same-file + cross-file via imports)
+- `textDocument/hover` — hover info with Markdown formatting
 
-**Implementation:**
+**Implementation notes:**
 
-1. Build `SymbolTable` — an AST visitor that collects all declarations:
-   - Functions: name, parameter names, span
-   - Structs: name, field names, span
-   - Enums: name, member names, span
-   - Variables/Constants: name, span, const flag
-   - Parameters: name, span, owning function
-2. `DocumentSymbolHandler`: Walk AST, emit `SymbolInformation` for each top-level declaration
-3. `DefinitionHandler`: At cursor position, find the `IdentifierExpr` under cursor; look up its declaration in `SymbolTable`
-4. `HoverHandler`: Same lookup; format declaration info as Markdown
-
-**Key challenge:** Building a scope-aware symbol resolver that handles:
-
-- Block scoping (`{ let x = ...; }` — `x` not visible outside)
-- Function closures
-- Shadowing (inner scope redefines outer name)
-- Struct field access (`srv.host` — need to know `srv` is a `Server` to suggest `host`)
-
-**Success Criteria:** Outline shows all functions/structs/enums. Ctrl+click on a variable jumps to its `let`/`const` declaration. Hover shows declaration signature.
+- Symbol resolution uses `ScopeTree` (hierarchical scope tree) instead of a flat `SymbolTable`
+- `DefinitionHandler` supports cross-file go-to-definition through `ImportResolver`
+- `HoverHandler` resolves symbols, namespaces, and built-in constants
+- `DocumentSymbolHandler` produces hierarchical symbols; skips built-ins and loop variables
 
 ---
 
-### Phase C: Editing Assistance — Completion, Signature Help
+### Phase C: Editing Assistance — Completion, Signature Help ✅
 
-**Goal:** Autocomplete and parameter hints.
+**Status**: Complete
 
 **LSP Methods:**
 
-- `textDocument/completion` — autocomplete suggestions
-- `textDocument/signatureHelp` — parameter hints inside function calls
+- `textDocument/completion` — autocomplete (keywords, in-scope symbols, dot-completion)
+- `textDocument/signatureHelp` — parameter hints (built-in + user-defined functions)
 
-**Implementation:**
+**Implementation notes:**
 
-1. `CompletionHandler`: Based on cursor context, offer:
-   - **Keywords:** `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `while`, `for`, `return`, `break`, `continue`, `try`, `import`, `from`, `true`, `false`, `null`
-   - **In-scope variables:** Walk symbol table from cursor scope outward
-   - **Built-in functions:** `println`, `print`, `typeof`, `len`, `toStr`, `toInt`, `toFloat`, `readFile`, `writeFile`, `exit`, `lastError`, `env`, `setEnv`
-   - **Struct fields:** After `.` on a struct instance, suggest field names
-   - **Enum members:** After `.` on an enum type, suggest member names
-2. `SignatureHelpHandler`: When cursor is inside `name(` ... `)`, look up `name` as function, show parameter list with active parameter highlighted
-
-**Key challenge:** Dot-completion requires type inference — knowing that `srv` is a `Server` instance so you can suggest `.host`, `.port`, `.status`. In a dynamically typed language, this requires tracking assignments: `let srv = Server { ... }` → `srv` has type `Server`.
-
-**Success Criteria:** Typing `pr` suggests `println`, `print`. Typing `srv.` after `let srv = Server {...}` suggests `host`, `port`, `status`. Typing inside `println(` shows signature hint.
+- `CompletionHandler` supports dot-completion for namespace members and struct fields
+- Completions are suppressed inside string literals
+- `SignatureHelpHandler` handles both built-in and user-defined function signatures
+- Built-in function metadata comes from `BuiltInRegistry`
 
 ---
 
-### Phase D: Polish — Semantic Tokens, Rename, Folding, References
+### Phase D: Polish — Semantic Tokens, Rename, Folding, References ✅
 
-**Goal:** Richer highlighting, rename refactoring, code folding.
+**Status**: Complete
 
 **LSP Methods:**
 
-- `textDocument/semanticTokens/full` — semantic token data
-- `textDocument/references` — find all references
-- `textDocument/rename` — rename symbol everywhere
-- `textDocument/foldingRange` — collapsible regions
+- `textDocument/semanticTokens/full` — 12 token types + 2 modifiers (declaration, readonly)
+- `textDocument/references` — find all references (same-file + cross-file)
+- `textDocument/rename` + `textDocument/prepareRename` — rename with validation
+- `textDocument/foldingRange` — block and consecutive comment folding
 
-**Implementation:**
+**Implementation notes:**
 
-1. `SemanticTokensHandler`: Walk AST, emit semantic token for each node with type+modifiers:
-   - `variable` (with `declaration` modifier for `let`/`const`)
-   - `function` (with `declaration` modifier for `fn`)
-   - `struct`, `enum`, `parameter`, `property`, `enumMember`
-2. `ReferencesHandler`: Walk entire AST, collect all `IdentifierExpr` nodes matching target name in compatible scope
-3. `RenameHandler`: Same as references + generate `TextEdit` for each location
-4. `FoldingRangeHandler`: Emit folding ranges for `BlockStmt`, multi-line comments, multi-line arrays
-
-**Success Criteria:** Variables, functions, types get distinct colors even within same keyword category. F2 rename works across file. Blocks can be collapsed.
+- `RenameHandler` returns `WorkspaceEdit` across all references
+- `PrepareRenameHandler` validates the rename target and returns a placeholder
+- References include cross-file references via `AnalysisEngine.FindCrossFileReferences()`
 
 ---
 
-### Phase E (Future): Cross-File Intelligence
+### Phase E: Cross-File Intelligence ✅
 
-**Goal:** Go-to-definition and completions across `import` boundaries.
+**Status**: Complete (was originally marked as "Future")
 
-**Implementation:**
+Cross-file analysis is implemented via `ImportResolver`:
 
-- Parse `ImportStmt` to resolve file paths
-- Analyze imported files, build combined symbol table
-- Cross-file go-to-definition, hover, references
+- Resolves selective imports: `import { name1, name2 } from "file.stash"`
+- Resolves namespace imports: `import "file.stash" as alias`
+- Module caching with cache invalidation on file changes
+- Cross-file go-to-definition, hover, and references
+- Dependency tracking (`GetDependents()` returns files that import a given module)
+- Import error diagnostics (missing files, unresolved names)
+
+---
+
+### Beyond Original Roadmap
+
+The following features were implemented beyond the original Phase A–E plan:
+
+| Feature                  | Handler                     | Description                                                                             |
+| ------------------------ | --------------------------- | --------------------------------------------------------------------------------------- |
+| **Document Highlight**   | `DocumentHighlightHandler`  | Highlights all read/write references of a symbol in the current document                |
+| **Selection Range**      | `SelectionRangeHandler`     | Expand/shrink selection through nested AST ranges                                       |
+| **Document Links**       | `DocumentLinkHandler`       | Makes `import` file paths clickable, resolving to actual file URIs                      |
+| **Code Actions**         | `CodeActionHandler`         | Quick-fix suggestions — "Did you mean?" for undefined variables (Levenshtein distance)  |
+| **Workspace Symbols**    | `WorkspaceSymbolHandler`    | Workspace-wide symbol search with case-insensitive substring matching                   |
+| **Inlay Hints**          | `InlayHintHandler`          | Inline type and parameter name hints                                                    |
+| **Code Lens**            | `CodeLensHandler`           | Reference counts displayed above functions, structs, and enums                          |
+| **Formatting**           | `FormattingHandler`         | Full document formatting with configurable indent size and tab/space preference         |
+| **Call Hierarchy**       | `CallHierarchyHandler`      | Incoming/outgoing call hierarchy for functions                                          |
+| **Linked Editing Range** | `LinkedEditingRangeHandler` | Linked editing for symbol occurrences (renames all when 2+ references exist)            |
+| **Type Inference**       | `TypeInferenceEngine`       | Static type deduction from struct init, command expressions, function returns, literals |
+| **Semantic Validation**  | `SemanticValidator`         | Catches undefined variables, const reassignment, wrong arity, misplaced control flow    |
 
 ---
 
 ## 5. Technical Decisions
 
-| Decision                    | Choice                                        | Rationale                                                                                                |
-| --------------------------- | --------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| **LSP library**             | `OmniSharp.Extensions.LanguageServer` (NuGet) | De facto .NET LSP library; handles JSON-RPC, serialization, protocol negotiation                         |
-| **Transport**               | stdio                                         | Simplest, universally supported, standard for VS Code extensions                                         |
-| **Analysis strategy**       | Full re-lex + re-parse on every change        | Stash scripts are small; lexer+parser are fast; incremental parsing adds huge complexity for little gain |
-| **Document sync mode**      | Full document sync (not incremental)          | Simpler; re-receive entire document on each change                                                       |
-| **Symbol resolution**       | Static AST walk (no execution)                | LSP must work without running code; build scope tree from AST declarations                               |
-| **VS Code client language** | TypeScript                                    | Best practice; `vscode-languageclient` is TypeScript-native                                              |
-| **Multi-file support**      | Deferred to Phase E                           | Single-file analysis first; cross-file adds significant complexity                                       |
+| Decision                    | Choice                                        | Rationale                                                                                                          |
+| --------------------------- | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **LSP library**             | `OmniSharp.Extensions.LanguageServer` (NuGet) | De facto .NET LSP library; handles JSON-RPC, serialization, protocol negotiation                                   |
+| **Transport**               | stdio                                         | Simplest, universally supported, standard for VS Code extensions                                                   |
+| **Analysis strategy**       | Full re-lex + re-parse on every change        | Stash scripts are small; lexer+parser are fast; incremental parsing adds huge complexity for little gain           |
+| **Document sync mode**      | Full and incremental document sync            | Both modes supported; incremental changes applied via `DocumentManager.ApplyIncrementalChanges()`                  |
+| **Symbol resolution**       | Static AST walk with type inference           | `ScopeTree` for scope-aware resolution; `TypeInferenceEngine` deduces types from assignments; no runtime execution |
+| **VS Code client language** | TypeScript                                    | Best practice; `vscode-languageclient` is TypeScript-native                                                        |
+| **Multi-file support**      | Implemented                                   | `ImportResolver` provides cross-file definition, references, hover, and module caching                             |
 
 ---
 
 ## 6. LSP Feature Reference
 
-Quick reference of all LSP methods and their Stash applicability:
+All features below marked ✅ are fully implemented and tested.
 
-| LSP Method                                | Phase  | Priority  |
-| ----------------------------------------- | ------ | --------- |
-| `textDocument/publishDiagnostics`         | A      | Must-have |
-| `textDocument/didOpen/didChange/didClose` | A      | Must-have |
-| `textDocument/documentSymbol`             | B      | High      |
-| `textDocument/definition`                 | B      | High      |
-| `textDocument/hover`                      | B      | High      |
-| `textDocument/completion`                 | C      | High      |
-| `textDocument/signatureHelp`              | C      | Medium    |
-| `textDocument/references`                 | D      | Medium    |
-| `textDocument/semanticTokens`             | D      | Medium    |
-| `textDocument/rename`                     | D      | Medium    |
-| `textDocument/foldingRange`               | D      | Low       |
-| `textDocument/formatting`                 | Future | Low       |
-| `textDocument/codeAction`                 | Future | Low       |
-| `workspace/symbol`                        | Future | Low       |
+### Implemented Features
+
+| LSP Method                                | Handler                     | Status |
+| ----------------------------------------- | --------------------------- | ------ |
+| `textDocument/didOpen/didChange/didClose` | `TextDocumentSyncHandler`   | ✅     |
+| `textDocument/publishDiagnostics`         | (inline in sync handler)    | ✅     |
+| `textDocument/documentSymbol`             | `DocumentSymbolHandler`     | ✅     |
+| `textDocument/definition`                 | `DefinitionHandler`         | ✅     |
+| `textDocument/hover`                      | `HoverHandler`              | ✅     |
+| `textDocument/completion`                 | `CompletionHandler`         | ✅     |
+| `textDocument/signatureHelp`              | `SignatureHelpHandler`      | ✅     |
+| `textDocument/references`                 | `ReferencesHandler`         | ✅     |
+| `textDocument/documentHighlight`          | `DocumentHighlightHandler`  | ✅     |
+| `textDocument/rename`                     | `RenameHandler`             | ✅     |
+| `textDocument/prepareRename`              | `PrepareRenameHandler`      | ✅     |
+| `textDocument/semanticTokens/full`        | `SemanticTokensHandler`     | ✅     |
+| `textDocument/foldingRange`               | `FoldingRangeHandler`       | ✅     |
+| `textDocument/selectionRange`             | `SelectionRangeHandler`     | ✅     |
+| `textDocument/documentLink`               | `DocumentLinkHandler`       | ✅     |
+| `textDocument/codeAction`                 | `CodeActionHandler`         | ✅     |
+| `textDocument/formatting`                 | `FormattingHandler`         | ✅     |
+| `textDocument/inlayHint`                  | `InlayHintHandler`          | ✅     |
+| `textDocument/codeLens`                   | `CodeLensHandler`           | ✅     |
+| `textDocument/callHierarchy`              | `CallHierarchyHandler`      | ✅     |
+| `textDocument/linkedEditingRange`         | `LinkedEditingRangeHandler` | ✅     |
+| `textDocument/typeDefinition`             | `TypeDefinitionHandler`     | ✅     |
+| `textDocument/implementation`             | `ImplementationHandler`     | ✅     |
+| `workspace/symbol`                        | `WorkspaceSymbolHandler`    | ✅     |
+
+### Not Yet Implemented
+
+| LSP Method                        | Notes                                                   |
+| --------------------------------- | ------------------------------------------------------- |
+| `textDocument/rangeFormatting`    | Format selection only (full document formatting exists) |
+| `textDocument/onTypeFormatting`   | Auto-format on typing trigger characters                |
+| `textDocument/colorPresentation`  | Color picker support (not applicable)                   |
+| `workspace/didChangeWatchedFiles` | File watcher for external changes                       |
 
 ---
 
