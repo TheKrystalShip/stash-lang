@@ -10,6 +10,7 @@ export interface TapFailureDetails {
 export interface TapParserCallbacks {
     onTestPass?: (name: string, testNumber: number) => void;
     onTestFail?: (name: string, testNumber: number, details: TapFailureDetails) => void;
+    onTestSkip?: (name: string, testNumber: number, reason?: string) => void;
     onTestDiscovered?: (name: string, file: string, line: number, column: number) => void;
     onSuiteStart?: (name: string) => void;
     onComplete?: (planned: number, total: number) => void;
@@ -86,13 +87,22 @@ export class TapParser {
             return;
         }
 
-        // ok N - name
+        // ok N - name  OR  ok N - name # SKIP reason
         const passMatch = /^ok (\d+)(?: - (.*))?$/.exec(line);
         if (passMatch) {
             const testNumber = parseInt(passMatch[1], 10);
-            const name = (passMatch[2] ?? '').trim();
+            const rawName = (passMatch[2] ?? '').trim();
             this.total++;
-            this.callbacks.onTestPass?.(name, testNumber);
+
+            // Check for SKIP directive
+            const skipMatch = /^(.*?)\s*#\s*SKIP\s*(.*)$/.exec(rawName);
+            if (skipMatch) {
+                const name = skipMatch[1].trim();
+                const reason = skipMatch[2].trim() || undefined;
+                this.callbacks.onTestSkip?.(name, testNumber, reason);
+            } else {
+                this.callbacks.onTestPass?.(rawName, testNumber);
+            }
             return;
         }
 

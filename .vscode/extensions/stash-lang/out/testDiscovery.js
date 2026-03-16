@@ -13,7 +13,7 @@ const tapParser_1 = require("./tapParser");
  * Group 2: the string delimiter (' " `)
  * Group 3: the literal name
  */
-const CALL_RE = /\b(describe|test)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
+const CALL_RE = /\b(describe|test|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
 /**
  * Scan `text` for describe/test patterns and return discovered tests.
  * Line numbers are 0-based (VS Code convention).
@@ -167,11 +167,24 @@ function parseTestsFromText(text, fileName) {
             // Now push the describe onto the stack. After advancing past `{`,
             // braceDepth will be incremented — record the depth *before* that.
             describeStack.push({ name, entryDepth: braceDepth });
+            // Emit a describe entry so buildTestItems can set its range
+            results.push({
+                fullName: [fileName, ...describeStack.map(d => d.name)].join(' > '),
+                label: name,
+                ancestors: [
+                    fileName,
+                    ...describeStack.slice(0, -1).map(d => d.name),
+                ],
+                uri: fileName,
+                line: pos.line,
+                column: pos.column,
+                kind: 'describe',
+            });
             // CALL_RE continues from after the match; cursor will catch up on the
             // next iteration.
         }
         else {
-            // kind === 'test'
+            // kind === 'test' or 'skip'
             const ancestors = [
                 fileName,
                 ...describeStack.map(d => d.name),
@@ -184,6 +197,7 @@ function parseTestsFromText(text, fileName) {
                 uri: fileName,
                 line: pos.line,
                 column: pos.column,
+                kind,
             });
         }
     }
@@ -222,6 +236,7 @@ async function discoverTestsDynamic(filePath, interpreterPath) {
                     uri: file,
                     line: line - 1, // convert 1-based → 0-based
                     column: column - 1, // convert 1-based → 0-based
+                    kind: 'test',
                 });
             },
         });

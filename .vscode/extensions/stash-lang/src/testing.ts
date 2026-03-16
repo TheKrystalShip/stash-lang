@@ -3,6 +3,7 @@ import * as path from 'path';
 import { spawn } from 'child_process';
 import { TapParser, TapFailureDetails } from './tapParser';
 import { parseTestsFromText, discoverTestsDynamic, DiscoveredTest } from './testDiscovery';
+import { StashTestCodeLensProvider } from './codeLensProvider';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -54,6 +55,41 @@ export function activateTesting(context: vscode.ExtensionContext): void {
         /* isDefault */ false,
     );
     context.subscriptions.push(debugProfile);
+
+    // -- CodeLens provider ----------------------------------------------------
+    const codeLensProvider = new StashTestCodeLensProvider();
+    context.subscriptions.push(
+        vscode.languages.registerCodeLensProvider(
+            { language: 'stash', pattern: '**/*.test.stash' },
+            codeLensProvider,
+        ),
+    );
+
+    // -- CodeLens commands ----------------------------------------------------
+    context.subscriptions.push(
+        vscode.commands.registerCommand(
+            'stash.runTestByName',
+            async (filePath: string, name: string, line: number) => {
+                const item = await resolveTestItem(controller, filePath, name, line);
+                if (!item) {
+                    return;
+                }
+                const request = new vscode.TestRunRequest([item], undefined, runProfile);
+                await runHandler(controller, request, new vscode.CancellationTokenSource().token);
+            },
+        ),
+        vscode.commands.registerCommand(
+            'stash.debugTestByName',
+            async (filePath: string, name: string, line: number) => {
+                const item = await resolveTestItem(controller, filePath, name, line);
+                if (!item) {
+                    return;
+                }
+                const request = new vscode.TestRunRequest([item], undefined, debugProfile);
+                await debugHandler(controller, request, new vscode.CancellationTokenSource().token);
+            },
+        ),
+    );
 
     // -- File watcher ---------------------------------------------------------
     const pattern = getFilePattern();
@@ -321,6 +357,12 @@ function runTestFile(
                     run.failed(item, msg, Date.now() - startTime);
                 }
             },
+            onTestSkip(name, _testNumber, _reason) {
+                const item = findItem(name, tests);
+                if (item) {
+                    run.skipped(item);
+                }
+            },
         });
 
         token.onCancellationRequested(() => {
@@ -457,6 +499,12 @@ async function debugHandler(
                 run.failed(item, msg);
             }
         },
+        onTestSkip(name, _testNumber, _reason) {
+            const item = findItem(name, tests);
+            if (item) {
+                run.skipped(item);
+            }
+        },
     });
 
     // Register a tracker factory to intercept DAP stdout output events
@@ -520,6 +568,47 @@ async function debugHandler(
 // ---------------------------------------------------------------------------
 // Utilities
 // ---------------------------------------------------------------------------
+
+/**
+ * Look up a TestItem by file path, label, and line number.
+ * If not found, trigger discovery and retry once.
+ */
+async function resolveTestItem(
+    controller: vscode.TestController,
+    filePath: string,
+    name: string,
+    line: number,
+): Promise<vscode.TestItem | undefined> {
+    let item = findItemByPosition(filePath, name, line);
+    if (!item) {
+        // Discovery may not have run yet — trigger it and retry
+        await discoverTestsInFile(controller, vscode.Uri.file(filePath));
+        item = findItemByPosition(filePath, name, line);
+    }
+    if (!item) {
+        vscode.window.showWarningMessage(
+            `Could not find test "${name}". Try saving the file first.`,
+        );
+    }
+    return item;
+}
+
+function findItemByPosition(
+    filePath: string,
+    name: string,
+    line: number,
+): vscode.TestItem | undefined {
+    let fallback: vscode.TestItem | undefined;
+    for (const item of itemMap.values()) {
+        if (item.label === name && item.uri?.fsPath === filePath) {
+            if (item.range?.start.line === line) {
+                return item;
+            }
+            fallback ??= item;
+        }
+    }
+    return fallback;
+}
 
 /** Flatten a TestItemCollection into a plain array. */
 function allItems(controller: vscode.TestController): vscode.TestItem[] {

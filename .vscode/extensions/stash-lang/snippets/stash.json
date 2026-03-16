@@ -181,5 +181,78 @@
       "\"\"\""
     ],
     "description": "Interpolated triple-quoted multi-line string"
+  },
+  "Test Case": {
+    "prefix": "test",
+    "body": [
+      "test(\"${1:test name}\", () => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "Define a test case"
+  },
+  "Test Describe": {
+    "prefix": "describe",
+    "body": [
+      "describe(\"${1:group name}\", () => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "Group tests under a descriptive name"
+  },
+  "Skip Test": {
+    "prefix": "skip",
+    "body": [
+      "skip(\"${1:test name}\", () => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "Skip a test (body is not executed)"
+  },
+  "Before All Hook": {
+    "prefix": "beforeAll",
+    "body": [
+      "beforeAll(() => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "Run once before all tests in the describe block"
+  },
+  "After All Hook": {
+    "prefix": "afterAll",
+    "body": [
+      "afterAll(() => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "Run once after all tests in the describe block"
+  },
+  "Before Each Hook": {
+    "prefix": "beforeEach",
+    "body": [
+      "beforeEach(() => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "Run before each test in the describe block"
+  },
+  "After Each Hook": {
+    "prefix": "afterEach",
+    "body": [
+      "afterEach(() => {",
+      "\t$0",
+      "});"
+    ],
+    "description": "Run after each test in the describe block"
+  },
+  "Assert Equal": {
+    "prefix": "aeq",
+    "body": "assert.equal(${1:actual}, ${2:expected});$0",
+    "description": "Assert actual equals expected"
+  },
+  "Assert True": {
+    "prefix": "atrue",
+    "body": "assert.true(${1:value});$0",
+    "description": "Assert value is truthy"
   }
 }

@@ -14,6 +14,8 @@ export interface DiscoveredTest {
     line: number;
     /** 0-based column number */
     column: number;
+    /** Entry kind — describes are containers, test/skip are leaf tests */
+    kind: 'describe' | 'test' | 'skip';
 }
 
 // ---------------------------------------------------------------------------
@@ -26,7 +28,7 @@ export interface DiscoveredTest {
  * Group 2: the string delimiter (' " `)
  * Group 3: the literal name
  */
-const CALL_RE = /\b(describe|test)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
+const CALL_RE = /\b(describe|test|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
 
 /**
  * Scan `text` for describe/test patterns and return discovered tests.
@@ -134,7 +136,7 @@ export function parseTestsFromText(text: string, fileName: string): DiscoveredTe
 
     while ((match = CALL_RE.exec(text)) !== null) {
         const matchStart = match.index;
-        const kind = match[1] as 'describe' | 'test';
+        const kind = match[1] as 'describe' | 'test' | 'skip';
         const name = match[3].replace(/\\(['"`\\])/g, '$1');
 
         // Advance the brace-depth cursor up to (but not including) this match.
@@ -198,11 +200,24 @@ export function parseTestsFromText(text: string, fileName: string): DiscoveredTe
             // Now push the describe onto the stack. After advancing past `{`,
             // braceDepth will be incremented — record the depth *before* that.
             describeStack.push({ name, entryDepth: braceDepth });
+            // Emit a describe entry so buildTestItems can set its range
+            results.push({
+                fullName: [fileName, ...describeStack.map(d => d.name)].join(' > '),
+                label: name,
+                ancestors: [
+                    fileName,
+                    ...describeStack.slice(0, -1).map(d => d.name),
+                ],
+                uri: fileName,
+                line: pos.line,
+                column: pos.column,
+                kind: 'describe',
+            });
             // CALL_RE continues from after the match; cursor will catch up on the
             // next iteration.
 
         } else {
-            // kind === 'test'
+            // kind === 'test' or 'skip'
             const ancestors: string[] = [
                 fileName,
                 ...describeStack.map(d => d.name),
@@ -216,6 +231,7 @@ export function parseTestsFromText(text: string, fileName: string): DiscoveredTe
                 uri: fileName,
                 line: pos.line,
                 column: pos.column,
+                kind,
             });
         }
     }
@@ -263,6 +279,7 @@ export async function discoverTestsDynamic(
                     uri: file,
                     line: line - 1,     // convert 1-based → 0-based
                     column: column - 1, // convert 1-based → 0-based
+                    kind: 'test',
                 });
             },
         });
