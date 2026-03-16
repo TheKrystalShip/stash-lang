@@ -216,12 +216,27 @@ public class Lexer
             case '[': AddToken(TokenType.LeftBracket); break;
             case ']': AddToken(TokenType.RightBracket); break;
             case ',': AddToken(TokenType.Comma); break;
-            case '.': AddToken(TokenType.Dot); break;
+            case '.':
+                if (Match('.'))
+                {
+                    AddToken(TokenType.DotDot);
+                }
+                else
+                {
+                    AddToken(TokenType.Dot);
+                }
+                break;
             case ';': AddToken(TokenType.Semicolon); break;
             case ':': AddToken(TokenType.Colon); break;
             case '%': AddToken(Match('=') ? TokenType.PercentEqual : TokenType.Percent); break;
             case '$':
-                if (Match('"'))
+                if (_current + 2 < _source.Length && _source[_current] == '"' && _source[_current + 1] == '"' && _source[_current + 2] == '"')
+                {
+                    _current += 3;
+                    _column += 3;
+                    ScanTripleQuotedString(prefixed: true);
+                }
+                else if (Match('"'))
                 {
                     ScanInterpolatedString(prefixed: true);
                 }
@@ -236,9 +251,19 @@ public class Lexer
                 break;
 
             case '+':
-                if (Match('+')) AddToken(TokenType.PlusPlus);
-                else if (Match('=')) AddToken(TokenType.PlusEqual);
-                else AddToken(TokenType.Plus);
+                if (Match('+'))
+                {
+                    AddToken(TokenType.PlusPlus);
+                }
+                else if (Match('='))
+                {
+                    AddToken(TokenType.PlusEqual);
+                }
+                else
+                {
+                    AddToken(TokenType.Plus);
+                }
+
                 break;
             case '-':
                 if (Match('-'))
@@ -373,7 +398,16 @@ public class Lexer
                 break;
 
             case '"':
-                ScanString();
+                if (_current + 1 < _source.Length && _source[_current] == '"' && _source[_current + 1] == '"')
+                {
+                    _current += 2;
+                    _column += 2;
+                    ScanTripleQuotedString(prefixed: false);
+                }
+                else
+                {
+                    ScanString();
+                }
                 break;
 
             default:
@@ -575,6 +609,391 @@ public class Lexer
 
         string lexeme = _source[_start.._current];
         AddToken(TokenType.StringLiteral, sb.ToString(), lexeme);
+    }
+
+    private void ScanTripleQuotedString(bool prefixed)
+    {
+        // Skip leading newline immediately after opening """
+        if (!IsAtEnd && _source[_current] == '\n')
+        {
+            _current++;
+            _line++;
+            _column = 1;
+        }
+        else if (_current + 1 < _source.Length && _source[_current] == '\r' && _source[_current + 1] == '\n')
+        {
+            _current += 2;
+            _line++;
+            _column = 1;
+        }
+
+        // Pre-scan to determine if interpolation markers exist
+        bool hasInterpolation = false;
+        int scanPos = _current;
+        while (scanPos + 2 < _source.Length)
+        {
+            if (_source[scanPos] == '"' && _source[scanPos + 1] == '"' && _source[scanPos + 2] == '"')
+            {
+                break;
+            }
+
+            if (_source[scanPos] == '\\')
+            {
+                scanPos += 2;
+                continue;
+            }
+            if (!prefixed && _source[scanPos] == '$' && scanPos + 1 < _source.Length && _source[scanPos + 1] == '{')
+            {
+                hasInterpolation = true;
+                break;
+            }
+            if (prefixed && _source[scanPos] == '{')
+            {
+                hasInterpolation = true;
+                break;
+            }
+            scanPos++;
+        }
+
+        if (hasInterpolation)
+        {
+            ScanTripleQuotedInterpolated(prefixed);
+            return;
+        }
+
+        // Plain triple-quoted string
+        var sb = new StringBuilder();
+        while (!IsAtEnd)
+        {
+            if (_current + 2 < _source.Length && _source[_current] == '"' && _source[_current + 1] == '"' && _source[_current + 2] == '"')
+            {
+                break;
+            }
+
+            if (_source[_current] == '\n')
+            {
+                sb.Append('\n');
+                _current++;
+                _line++;
+                _column = 1;
+            }
+            else if (_source[_current] == '\\')
+            {
+                _current++;
+                _column++;
+                if (IsAtEnd)
+                {
+                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated triple-quoted string.");
+                    _structuredErrors.Add(new DiagnosticError(
+                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                        "Unterminated triple-quoted string."));
+                    return;
+                }
+                char escaped = _source[_current];
+                _current++;
+                _column++;
+                switch (escaped)
+                {
+                    case '\\': sb.Append('\\'); break;
+                    case '"': sb.Append('"'); break;
+                    case 'n': sb.Append('\n'); break;
+                    case 't': sb.Append('\t'); break;
+                    case 'r': sb.Append('\r'); break;
+                    case '0': sb.Append('\0'); break;
+                    default:
+                        _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
+                        _structuredErrors.Add(new DiagnosticError(
+                            new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
+                            $"Invalid escape sequence '\\{escaped}'."));
+                        sb.Append(escaped);
+                        break;
+                }
+            }
+            else
+            {
+                sb.Append(_source[_current]);
+                _current++;
+                _column++;
+            }
+        }
+
+        if (IsAtEnd)
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated triple-quoted string.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unterminated triple-quoted string."));
+            return;
+        }
+
+        _current += 3;
+        _column += 3;
+
+        string content = StripCommonIndent(sb.ToString());
+        string lexeme = _source[_start.._current];
+        AddToken(TokenType.StringLiteral, content, lexeme);
+    }
+
+    private void ScanTripleQuotedInterpolated(bool prefixed)
+    {
+        var parts = new List<object>();
+        var textSegment = new StringBuilder();
+
+        while (!IsAtEnd)
+        {
+            if (_current + 2 < _source.Length && _source[_current] == '"' && _source[_current + 1] == '"' && _source[_current + 2] == '"')
+            {
+                break;
+            }
+
+            if (_source[_current] == '\n')
+            {
+                textSegment.Append('\n');
+                _current++;
+                _line++;
+                _column = 1;
+            }
+            else if (_source[_current] == '\\')
+            {
+                _current++;
+                _column++;
+                if (IsAtEnd)
+                {
+                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated triple-quoted string.");
+                    _structuredErrors.Add(new DiagnosticError(
+                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                        "Unterminated triple-quoted string."));
+                    return;
+                }
+                char escaped = _source[_current];
+                _current++;
+                _column++;
+                switch (escaped)
+                {
+                    case '\\': textSegment.Append('\\'); break;
+                    case '"': textSegment.Append('"'); break;
+                    case 'n': textSegment.Append('\n'); break;
+                    case 't': textSegment.Append('\t'); break;
+                    case 'r': textSegment.Append('\r'); break;
+                    case '0': textSegment.Append('\0'); break;
+                    case '{': textSegment.Append('{'); break;
+                    case '$': textSegment.Append('$'); break;
+                    default:
+                        _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
+                        _structuredErrors.Add(new DiagnosticError(
+                            new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
+                            $"Invalid escape sequence '\\{escaped}'."));
+                        textSegment.Append(escaped);
+                        break;
+                }
+            }
+            else if (prefixed && _source[_current] == '{')
+            {
+                if (textSegment.Length > 0)
+                {
+                    parts.Add(textSegment.ToString());
+                    textSegment.Clear();
+                }
+                _current++;
+                _column++;
+                ScanInterpolatedExpression(parts);
+            }
+            else if (!prefixed && _source[_current] == '$' && _current + 1 < _source.Length && _source[_current + 1] == '{')
+            {
+                if (textSegment.Length > 0)
+                {
+                    parts.Add(textSegment.ToString());
+                    textSegment.Clear();
+                }
+                _current += 2;
+                _column += 2;
+                ScanInterpolatedExpression(parts);
+            }
+            else
+            {
+                textSegment.Append(_source[_current]);
+                _current++;
+                _column++;
+            }
+        }
+
+        if (IsAtEnd)
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated triple-quoted string.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unterminated triple-quoted string."));
+            return;
+        }
+
+        if (textSegment.Length > 0)
+        {
+            parts.Add(textSegment.ToString());
+        }
+
+        _current += 3;
+        _column += 3;
+
+        parts = StripCommonIndentParts(parts);
+
+        string lexeme = _source[_start.._current];
+        AddToken(TokenType.InterpolatedString, parts, lexeme);
+    }
+
+    private static string StripCommonIndent(string text)
+    {
+        if (text.EndsWith('\n'))
+        {
+            text = text[..^1];
+        }
+
+        string[] lines = text.Split('\n');
+        int minIndent = int.MaxValue;
+        foreach (string line in lines)
+        {
+            if (string.IsNullOrWhiteSpace(line))
+            {
+                continue;
+            }
+
+            int indent = 0;
+            foreach (char c in line)
+            {
+                if (c is ' ' or '\t')
+                {
+                    indent++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            minIndent = Math.Min(minIndent, indent);
+        }
+
+        if (minIndent is int.MaxValue or 0)
+        {
+            return text;
+        }
+
+        var sb = new StringBuilder();
+        for (int i = 0; i < lines.Length; i++)
+        {
+            string line = lines[i];
+            sb.Append(string.IsNullOrWhiteSpace(line)
+                ? (line.Length > minIndent ? line[minIndent..] : "")
+                : line[minIndent..]);
+            if (i < lines.Length - 1)
+            {
+                sb.Append('\n');
+            }
+        }
+        return sb.ToString();
+    }
+
+    private static List<object> StripCommonIndentParts(List<object> parts)
+    {
+        var fullText = new StringBuilder();
+        foreach (var part in parts)
+        {
+            if (part is string text)
+            {
+                fullText.Append(text);
+            }
+            else
+            {
+                fullText.Append('\x00');
+            }
+        }
+
+        string combined = fullText.ToString();
+        bool hadTrailingNewline = combined.EndsWith('\n');
+        string forIndent = hadTrailingNewline ? combined[..^1] : combined;
+
+        string[] lines = forIndent.Split('\n');
+        int minIndent = int.MaxValue;
+        foreach (string line in lines)
+        {
+            bool allWhitespace = true;
+            foreach (char c in line)
+            {
+                if (c != ' ' && c != '\t' && c != '\x00') { allWhitespace = false; break; }
+            }
+            if (string.IsNullOrEmpty(line) || allWhitespace)
+            {
+                continue;
+            }
+
+            int indent = 0;
+            foreach (char c in line)
+            {
+                if (c is ' ' or '\t')
+                {
+                    indent++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            minIndent = Math.Min(minIndent, indent);
+        }
+
+        if (minIndent is int.MaxValue or 0)
+        {
+            if (hadTrailingNewline && parts.Count > 0 && parts[^1] is string lastText && lastText.EndsWith('\n'))
+            {
+                parts[^1] = lastText[..^1];
+            }
+
+            return parts;
+        }
+
+        var result = new List<object>();
+        bool atLineStart = true;
+        int indentRemaining = minIndent;
+
+        for (int partIdx = 0; partIdx < parts.Count; partIdx++)
+        {
+            if (parts[partIdx] is string text)
+            {
+                if (partIdx == parts.Count - 1 && hadTrailingNewline && text.EndsWith('\n'))
+                {
+                    text = text[..^1];
+                }
+
+                var sb = new StringBuilder();
+                foreach (char c in text)
+                {
+                    if (c == '\n')
+                    {
+                        sb.Append('\n');
+                        atLineStart = true;
+                        indentRemaining = minIndent;
+                    }
+                    else if (atLineStart && indentRemaining > 0 && c is ' ' or '\t')
+                    {
+                        indentRemaining--;
+                    }
+                    else
+                    {
+                        atLineStart = false;
+                        sb.Append(c);
+                    }
+                }
+                if (sb.Length > 0)
+                {
+                    result.Add(sb.ToString());
+                }
+            }
+            else
+            {
+                atLineStart = false;
+                result.Add(parts[partIdx]);
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

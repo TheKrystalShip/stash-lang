@@ -14,6 +14,8 @@
     { "include": "#constants" },
     { "include": "#return-type-annotation" },
     { "include": "#command-literal" },
+    { "include": "#triple-quoted-interpolated-string" },
+    { "include": "#triple-quoted-string" },
     { "include": "#interpolated-string-prefix" },
     { "include": "#string" },
     { "include": "#numbers" },
@@ -71,13 +73,31 @@
     },
 
     "variable-declaration": {
-      "match": "\\b(let|const)\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*(:)\\s*([a-zA-Z_][a-zA-Z0-9_]*))?",
-      "captures": {
-        "1": { "name": "keyword.control.stash" },
-        "2": { "name": "variable.other.readwrite.stash" },
-        "3": { "name": "punctuation.separator.type.stash" },
-        "4": { "name": "entity.name.type.stash" }
-      }
+      "patterns": [
+        {
+          "match": "\\b(let|const)\\s+(\\[)",
+          "captures": {
+            "1": { "name": "keyword.control.stash" },
+            "2": { "name": "punctuation.definition.destructure.begin.stash" }
+          }
+        },
+        {
+          "match": "\\b(let|const)\\s+(\\{)",
+          "captures": {
+            "1": { "name": "keyword.control.stash" },
+            "2": { "name": "punctuation.definition.destructure.begin.stash" }
+          }
+        },
+        {
+          "match": "\\b(let|const)\\s+([a-zA-Z_][a-zA-Z0-9_]*)(?:\\s*(:)\\s*([a-zA-Z_][a-zA-Z0-9_]*))?",
+          "captures": {
+            "1": { "name": "keyword.control.stash" },
+            "2": { "name": "variable.other.readwrite.stash" },
+            "3": { "name": "punctuation.separator.type.stash" },
+            "4": { "name": "entity.name.type.stash" }
+          }
+        }
+      ]
     },
 
     "function-declaration": {
@@ -306,6 +326,50 @@
       ]
     },
 
+    "triple-quoted-interpolated-string": {
+      "name": "string.quoted.triple.interpolated.stash",
+      "begin": "\\$\"\"\"",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.stash" }
+      },
+      "end": "\"\"\"",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.stash" }
+      },
+      "patterns": [
+        { "include": "#string-interpolation-bare" },
+        { "include": "#string-escape" },
+        {
+          "name": "string.quoted.triple.interpolated.stash",
+          "match": "[^\"\\\\{}]+"
+        }
+      ]
+    },
+
+    "triple-quoted-string": {
+      "name": "string.quoted.triple.stash",
+      "begin": "\"\"\"",
+      "beginCaptures": {
+        "0": { "name": "punctuation.definition.string.begin.stash" }
+      },
+      "end": "\"\"\"",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.string.end.stash" }
+      },
+      "patterns": [
+        { "include": "#string-interpolation-dollar" },
+        { "include": "#string-escape" },
+        {
+          "name": "string.quoted.triple.stash",
+          "match": "[^\"\\\\$]+"
+        },
+        {
+          "name": "string.quoted.triple.stash",
+          "match": "\\$(?!\\{)"
+        }
+      ]
+    },
+
     "interpolated-string-prefix": {
       "name": "string.interpolated.stash",
       "begin": "\\$\"",
@@ -384,6 +448,8 @@
       "patterns": [
         { "include": "#comments" },
         { "include": "#constants" },
+        { "include": "#triple-quoted-interpolated-string" },
+        { "include": "#triple-quoted-string" },
         { "include": "#interpolated-string-prefix" },
         { "include": "#string" },
         { "include": "#numbers" },
@@ -444,8 +510,16 @@
           "match": "=>"
         },
         {
+          "name": "keyword.operator.assignment.compound.stash",
+          "match": "\\+\\=|-\\=|\\*\\=|/\\=|%\\=|\\?\\?\\="
+        },
+        {
           "name": "keyword.operator.assignment.stash",
           "match": "="
+        },
+        {
+          "name": "keyword.operator.range.stash",
+          "match": "\\.\\."
         },
         {
           "name": "keyword.operator.arithmetic.stash",
@@ -470,7 +544,7 @@
         },
         {
           "name": "punctuation.accessor.dot.stash",
-          "match": "\\."
+          "match": "(?<!\\.)\\.(?!\\.)"
         }
       ]
     },

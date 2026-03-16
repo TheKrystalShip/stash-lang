@@ -175,4 +175,11 @@ public interface IExprVisitor<T>
     /// <param name="expr">The redirect expression node to visit.</param>
     /// <returns>The result of executing the command with redirected output.</returns>
     T VisitRedirectExpr(RedirectExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="RangeExpr"/> node (range expression <c>start..end</c> or <c>start..end..step</c>).
+    /// </summary>
+    /// <param name="expr">The range expression node to visit.</param>
+    /// <returns>The result of evaluating the range.</returns>
+    T VisitRangeExpr(RangeExpr expr);
 }

@@ -479,9 +479,27 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             case TokenType.GreaterEqual:
                 return CompareNumeric(leftVal, rightVal, expr, (a, b) => a >= b, (a, b) => a >= b);
 
+            case TokenType.In:
+                return EvaluateIn(leftVal, rightVal, expr);
+
             default:
                 throw new RuntimeError($"Unknown binary operator '{expr.Operator.Lexeme}'.", expr.Operator.Span);
         }
+    }
+
+    private static bool EvaluateIn(object? left, object? right, BinaryExpr expr)
+    {
+        return right switch
+        {
+            List<object?> list => list.Any(item => RuntimeValues.IsEqual(left, item)),
+            string str when left is string sub => str.Contains(sub),
+            StashDictionary dict => left is not null && dict.Has(left),
+            StashRange range when left is long l => range.Contains(l),
+            StashRange range when left is double d && d == Math.Floor(d) => range.Contains((long)d),
+            StashRange => throw new RuntimeError("Left operand of 'in' must be an integer when checking range membership.", expr.Span),
+            string => throw new RuntimeError("Left operand of 'in' must be a string when checking string containment.", expr.Span),
+            _ => throw new RuntimeError("Right operand of 'in' must be an array, string, dictionary, or range.", expr.Span)
+        };
     }
 
     /// <summary>
@@ -551,6 +569,41 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             return left;
         }
         return expr.Right.Accept(this);
+    }
+
+    public object? VisitRangeExpr(RangeExpr expr)
+    {
+        object? startVal = expr.Start.Accept(this);
+        object? endVal = expr.End.Accept(this);
+
+        if (startVal is not long start)
+        {
+            throw new RuntimeError("Range start must be an integer.", expr.Start.Span);
+        }
+
+        if (endVal is not long end)
+        {
+            throw new RuntimeError("Range end must be an integer.", expr.End.Span);
+        }
+
+        long step = start <= end ? 1 : -1;
+        if (expr.Step is not null)
+        {
+            object? stepVal = expr.Step.Accept(this);
+            if (stepVal is not long s)
+            {
+                throw new RuntimeError("Range step must be an integer.", expr.Step.Span);
+            }
+
+            if (s == 0)
+            {
+                throw new RuntimeError("Range step cannot be zero.", expr.Step.Span);
+            }
+
+            step = s;
+        }
+
+        return new StashRange(start, end, step);
     }
 
     private bool IsTruthy(object? value) => RuntimeValues.IsTruthy(value);
@@ -763,11 +816,17 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     internal static string ExpandTilde(string path)
     {
         if (path == "~")
+        {
             return System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        }
+
         if (path.StartsWith("~/") || path.StartsWith("~\\"))
+        {
             return System.IO.Path.Combine(
                 System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile),
                 path.Substring(2));
+        }
+
         return path;
     }
 
@@ -1009,6 +1068,64 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
+    public object? VisitDestructureStmt(DestructureStmt stmt)
+    {
+        object? value = stmt.Initializer.Accept(this);
+
+        if (stmt.Kind == DestructureStmt.PatternKind.Array)
+        {
+            if (value is not List<object?> list)
+            {
+                throw new RuntimeError("Cannot destructure non-array value with array pattern.", stmt.Initializer.Span);
+            }
+
+            for (int i = 0; i < stmt.Names.Count; i++)
+            {
+                object? element = i < list.Count ? list[i] : null;
+                if (stmt.IsConst)
+                {
+                    _environment.DefineConstant(stmt.Names[i].Lexeme, element);
+                }
+                else
+                {
+                    _environment.Define(stmt.Names[i].Lexeme, element);
+                }
+            }
+        }
+        else // Object pattern
+        {
+            for (int i = 0; i < stmt.Names.Count; i++)
+            {
+                string fieldName = stmt.Names[i].Lexeme;
+                object? fieldValue;
+
+                if (value is StashInstance instance)
+                {
+                    fieldValue = instance.GetField(fieldName, stmt.Names[i].Span);
+                }
+                else if (value is StashDictionary dict)
+                {
+                    fieldValue = dict.Get(fieldName);
+                }
+                else
+                {
+                    throw new RuntimeError("Cannot destructure value with object pattern. Expected a struct instance or dictionary.", stmt.Initializer.Span);
+                }
+
+                if (stmt.IsConst)
+                {
+                    _environment.DefineConstant(fieldName, fieldValue);
+                }
+                else
+                {
+                    _environment.Define(fieldName, fieldValue);
+                }
+            }
+        }
+
+        return null;
+    }
+
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         ExecuteBlock(stmt.Statements, new Environment(_environment));
@@ -1067,9 +1184,13 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             items = dict.IterableKeys().ToList();
         }
+        else if (iterable is StashRange range)
+        {
+            items = range.Iterate();
+        }
         else
         {
-            throw new RuntimeError("Can only iterate over arrays, strings, and dictionaries.", stmt.Iterable.Span);
+            throw new RuntimeError("Can only iterate over arrays, strings, dictionaries, and ranges.", stmt.Iterable.Span);
         }
 
         foreach (object? item in items)

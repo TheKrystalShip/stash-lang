@@ -360,7 +360,7 @@ public static class BuiltInRegistry
     public static readonly HashSet<string> ValidTypes = new()
     {
         "string", "int", "float", "bool", "null", "array",
-        "dict", "function", "namespace"
+        "dict", "function", "namespace", "range"
     };
 
     // ── Known names for semantic validation (don't warn as undefined) ──

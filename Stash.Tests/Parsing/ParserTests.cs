@@ -1764,4 +1764,75 @@ public class ParserTests
         Assert.Null(lambda.DefaultValues[0]);
         Assert.NotNull(lambda.DefaultValues[1]);
     }
+
+    [Fact]
+    public void Parse_InOperator_ReturnsBinaryExpr()
+    {
+        var result = ParseExpr("x in arr");
+        var binary = Assert.IsType<BinaryExpr>(result);
+        Assert.Equal(TokenType.In, binary.Operator.Type);
+    }
+
+    [Fact]
+    public void Parse_RangeExpression_ReturnsRangeExpr()
+    {
+        var result = ParseExpr("0..10");
+        var range = Assert.IsType<RangeExpr>(result);
+        Assert.IsType<LiteralExpr>(range.Start);
+        Assert.IsType<LiteralExpr>(range.End);
+        Assert.Null(range.Step);
+    }
+
+    [Fact]
+    public void Parse_RangeExpressionWithStep_ReturnsRangeExprWithStep()
+    {
+        var result = ParseExpr("0..10..2");
+        var range = Assert.IsType<RangeExpr>(result);
+        Assert.NotNull(range.Step);
+    }
+
+    // Destructuring
+
+    [Fact]
+    public void Parse_ArrayDestructure_ReturnsDestructureStmt()
+    {
+        var stmts = ParseProgram("let [a, b] = [1, 2];");
+        var destructure = Assert.IsType<DestructureStmt>(Assert.Single(stmts));
+        Assert.Equal(DestructureStmt.PatternKind.Array, destructure.Kind);
+        Assert.False(destructure.IsConst);
+        Assert.Equal(2, destructure.Names.Count);
+        Assert.Equal("a", destructure.Names[0].Lexeme);
+        Assert.Equal("b", destructure.Names[1].Lexeme);
+        Assert.NotNull(destructure.Initializer);
+    }
+
+    [Fact]
+    public void Parse_ObjectDestructure_ReturnsDestructureStmt()
+    {
+        var stmts = ParseProgram("let { x, y } = p;");
+        var destructure = Assert.IsType<DestructureStmt>(Assert.Single(stmts));
+        Assert.Equal(DestructureStmt.PatternKind.Object, destructure.Kind);
+        Assert.False(destructure.IsConst);
+        Assert.Equal(2, destructure.Names.Count);
+        Assert.Equal("x", destructure.Names[0].Lexeme);
+        Assert.Equal("y", destructure.Names[1].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_ConstArrayDestructure_IsConst()
+    {
+        var stmts = ParseProgram("const [a, b] = [1, 2];");
+        var destructure = Assert.IsType<DestructureStmt>(Assert.Single(stmts));
+        Assert.Equal(DestructureStmt.PatternKind.Array, destructure.Kind);
+        Assert.True(destructure.IsConst);
+    }
+
+    [Fact]
+    public void Parse_ConstObjectDestructure_IsConst()
+    {
+        var stmts = ParseProgram("const { x } = p;");
+        var destructure = Assert.IsType<DestructureStmt>(Assert.Single(stmts));
+        Assert.Equal(DestructureStmt.PatternKind.Object, destructure.Kind);
+        Assert.True(destructure.IsConst);
+    }
 }

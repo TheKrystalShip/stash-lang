@@ -162,12 +162,44 @@ Stash is dynamically typed. Values carry their type at runtime:
 | `null`   | `null`                   | Absence of value      |
 | `array`  | `[1, "two", true]`       | Ordered, mixed-type   |
 | `dict`   | `dict.new()`             | Key-value pairs       |
+| `range`  | `1..10`, `0..100..5`     | Integer range (lazy)  |
 | `struct` | `Server { host: "..." }` | Named structured data |
 | `enum`   | `Status.Active`          | Named constants       |
 
 ### Operators
 
 Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `++`, `--`.
+
+Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=`.
+
+```stash
+let count = 10;
+count += 5;        // 15
+count -= 3;        // 12
+count *= 2;        // 24
+count /= 4;        // 6
+count %= 4;        // 2
+
+let name = null;
+name ??= "default";  // "default" (assigns only if null)
+```
+
+Membership: `in` — test if a value exists in an array, string, dict, or range.
+
+```stash
+println(3 in [1, 2, 3]);           // true
+println("x" in "text");            // true
+println("host" in config);         // true (dict key lookup)
+println(5 in 1..10);               // true (range membership)
+```
+
+Range: `..` — create a range of integers. Optionally specify a step with `..step`.
+
+```stash
+let r = 1..5;          // range from 1 to 5 (exclusive: 1, 2, 3, 4)
+let r2 = 0..10..2;     // range with step 2: 0, 2, 4, 6, 8
+let r3 = 10..0;        // descending: 10, 9, 8, ..., 1
+```
 
 ### String Interpolation
 
@@ -176,6 +208,27 @@ let name = "world";
 let a = "Hello ${name}";        // embedded syntax
 let b = $"Hello {name}";        // prefixed syntax (C#-style)
 let c = "Hello " + name;        // concatenation
+```
+
+### Multi-line Strings
+
+Triple-quoted strings preserve newlines and handle indentation automatically:
+
+```stash
+let sql = """
+    SELECT *
+    FROM users
+    WHERE active = true
+""";
+// Leading indentation is stripped based on the least-indented line
+
+// Interpolation works too
+let table = "users";
+let query = $"""
+    SELECT *
+    FROM {table}
+    WHERE active = true
+""";
 ```
 
 ### Functions & Closures
@@ -275,6 +328,51 @@ let nums = [1, 2, 3];
 println(nums[0]);           // 1
 nums[2] = 99;               // index assignment
 println(len(nums));         // 3
+```
+
+### Ranges
+
+Ranges represent a sequence of integers, created with the `..` operator:
+
+```stash
+let r = 1..5;          // 1, 2, 3, 4 (end-exclusive, like Python)
+let r2 = 0..10..2;     // step of 2: 0, 2, 4, 6, 8
+let r3 = 5..0;         // descending: 5, 4, 3, 2, 1 (auto step -1)
+
+// Iterate over a range
+for (let i in 1..5) {
+    println(i);         // 1, 2, 3, 4
+}
+
+// Membership testing
+println(3 in 1..10);   // true
+println(10 in 1..10);  // false (end-exclusive)
+
+// Type checking
+println(typeof(1..5)); // "range"
+```
+
+Ranges are lazy — they don't allocate an array. Use them in `for-in` loops and `in` membership tests.
+
+### Destructuring
+
+Unpack arrays and dictionaries into individual variables in a single declaration:
+
+```stash
+// Array destructuring — binds by position
+let [first, second, third] = [1, 2, 3];
+println(first);         // 1
+
+// Dictionary destructuring — binds by key name
+let {host, port} = config;
+println(host);          // value of config["host"]
+
+// Works with const too
+const [x, y] = [10, 20];
+
+// Extra elements are ignored, missing elements become null
+let [a, b] = [1, 2, 3, 4];    // a=1, b=2 (3, 4 ignored)
+let [p, q, r] = [1];           // p=1, q=null, r=null
 ```
 
 ### Dictionaries
@@ -381,6 +479,11 @@ for (let item in [1, 2, 3]) {
 
 for (let ch in "hello") {
     print(ch);  // h e l l o
+}
+
+// Iterate over a range
+for (let i in 1..5) {
+    print(i + " ");     // 1 2 3 4
 }
 
 // Break and continue
@@ -816,6 +919,8 @@ Beyond raw speed, several Stash features have no Bash equivalent at all:
 | **Imports**              | `import { fn } from "lib.stash"`        | `source lib.sh` (pollutes global namespace)                           |
 | **Error handling**       | `try expr ?? fallback`                  | `cmd                                                                  |     | fallback` (no expression-level try) |
 | **Lambdas**              | `(x) => x * 2`                          | Not available                                                         |
+| **Ranges**               | `for (let i in 1..100) { ... }`         | `for ((i=1; i<=100; i++)); do ...; done` — verbose C-style loop       |
+| **Destructuring**        | `let [a, b] = arr;`                     | `a=${arr[0]}; b=${arr[1]}` — manual index extraction                  |
 | **Type checking**        | `typeof(val) == "int"`                  | `[[ "$val" =~ ^[0-9]+$ ]]`                                            |
 | **Dictionaries**         | `dict.merge(a, b)`, `dict.pairs(d)`     | Associative arrays (no merge, no iteration helpers)                   |
 

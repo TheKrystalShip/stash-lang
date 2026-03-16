@@ -33,9 +33,13 @@ public class StashFunction : IStashCallable
             for (int i = 0; i < _declaration.DefaultValues.Count; i++)
             {
                 if (_declaration.DefaultValues[i] == null)
+                {
                     required++;
+                }
                 else
+                {
                     break;
+                }
             }
             return required;
         }

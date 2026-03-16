@@ -126,6 +126,11 @@ public static class RuntimeValues
             return sb.ToString();
         }
 
+        if (value is StashRange range)
+        {
+            return range.ToString();
+        }
+
         return value.ToString()!;
     }
 

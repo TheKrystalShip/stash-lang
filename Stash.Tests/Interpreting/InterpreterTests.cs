@@ -45,6 +45,27 @@ public class InterpreterTests
         Assert.Equal("hello", Eval("\"hello\""));
     }
 
+    // 3a. Triple-quoted strings
+    [Fact]
+    public void TripleQuotedString_ReturnsCorrectValue()
+    {
+        Assert.Equal("hello world", Eval("\"\"\"hello world\"\"\""));
+    }
+
+    [Fact]
+    public void TripleQuotedString_InterpolationEndToEnd()
+    {
+        var source = "let name = \"world\"; let result = \"\"\"\nhello ${name}\n\"\"\";";
+        Assert.Equal("hello world", Run(source));
+    }
+
+    [Fact]
+    public void TripleQuotedString_MultiLineDedent()
+    {
+        var source = "\"\"\"\n    line1\n    line2\n\"\"\"";
+        Assert.Equal("line1\nline2", Eval(source));
+    }
+
     // 4. Boolean literals
     [Fact]
     public void BooleanLiteral_True()
@@ -5609,4 +5630,177 @@ public class InterpreterTests
     }
 
 
+    // ── In operator ───────────────────────────────────────────────────
+
+    [Fact]
+    public void InOperator_Array_ContainsElement_ReturnsTrue()
+    {
+        Assert.Equal(true, Eval("42 in [1, 42, 99]"));
+    }
+
+    [Fact]
+    public void InOperator_Array_DoesNotContain_ReturnsFalse()
+    {
+        Assert.Equal(false, Eval("5 in [1, 42, 99]"));
+    }
+
+    [Fact]
+    public void InOperator_String_ContainsSubstring_ReturnsTrue()
+    {
+        Assert.Equal(true, Eval("\"error\" in \"file error found\""));
+    }
+
+    [Fact]
+    public void InOperator_String_DoesNotContain_ReturnsFalse()
+    {
+        Assert.Equal(false, Eval("\"warning\" in \"file error found\""));
+    }
+
+    [Fact]
+    public void InOperator_Dict_ContainsKey_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let d = dict.new(); dict.set(d, \"host\", \"localhost\"); let result = \"host\" in d;"));
+    }
+
+    [Fact]
+    public void InOperator_Dict_MissingKey_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let d = dict.new(); dict.set(d, \"host\", \"localhost\"); let result = \"port\" in d;"));
+    }
+
+    [Fact]
+    public void InOperator_WithLogicalAnd()
+    {
+        Assert.Equal(true, Eval("1 in [1, 2] && 3 in [3, 4]"));
+    }
+
+    [Fact]
+    public void InOperator_NegationWithBang()
+    {
+        Assert.Equal(true, Eval("!(5 in [1, 2, 3])"));
+    }
+
+    [Fact]
+    public void InOperator_WrongRightType_ThrowsRuntimeError()
+    {
+        Assert.Throws<RuntimeError>(() => Eval("1 in 42"));
+    }
+
+    [Fact]
+    public void InOperator_String_NonStringLeft_ThrowsRuntimeError()
+    {
+        Assert.Throws<RuntimeError>(() => Eval("42 in \"hello\""));
+    }
+
+    // ===== Range expressions =====
+
+    [Fact]
+    public void ForIn_Range_IteratesCorrectly()
+    {
+        Assert.Equal("01234", Run("let result = \"\"; for (let i in 0..5) { result = result + conv.toStr(i); }"));
+    }
+
+    [Fact]
+    public void ForIn_RangeWithStep_IteratesCorrectly()
+    {
+        Assert.Equal("02468", Run("let result = \"\"; for (let i in 0..10..2) { result = result + conv.toStr(i); }"));
+    }
+
+    [Fact]
+    public void ForIn_RangeDescending_IteratesCorrectly()
+    {
+        Assert.Equal("54321", Run("let result = \"\"; for (let i in 5..0) { result = result + conv.toStr(i); }"));
+    }
+
+    [Fact]
+    public void Range_TypeError_NonIntegerStart_ThrowsRuntimeError()
+    {
+        RunExpectingError("for (let i in 0.0..10) { }");
+    }
+
+    [Fact]
+    public void Range_TypeError_NonIntegerEnd_ThrowsRuntimeError()
+    {
+        RunExpectingError("for (let i in 0..10.0) { }");
+    }
+
+    [Fact]
+    public void Range_StepZero_ThrowsRuntimeError()
+    {
+        RunExpectingError("for (let i in 0..10..0) { }");
+    }
+
+    // ===== Destructuring =====
+
+    [Fact]
+    public void Destructure_Array_BindsVariables()
+    {
+        Assert.Equal(1L, Run("let [a, b, c] = [1, 2, 3]; let result = a;"));
+    }
+
+    [Fact]
+    public void Destructure_Array_SecondVariable()
+    {
+        Assert.Equal(2L, Run("let [a, b] = [1, 2]; let result = b;"));
+    }
+
+    [Fact]
+    public void Destructure_Array_PartialBinding()
+    {
+        Assert.Equal(1L, Run("let [a, b] = [1, 2, 3]; let result = a;"));
+    }
+
+    [Fact]
+    public void Destructure_Array_ExcessNames_Null()
+    {
+        Assert.Null(Run("let [a, b, c] = [1]; let result = c;"));
+    }
+
+    [Fact]
+    public void Destructure_Array_OnNonArray_Throws()
+    {
+        RunExpectingError("let [a, b] = \"hello\";");
+    }
+
+    [Fact]
+    public void Destructure_Const_Array()
+    {
+        Assert.Equal(1L, Run("const [a, b] = [1, 2]; let result = a;"));
+    }
+
+    [Fact]
+    public void Destructure_Const_Array_ReassignThrows()
+    {
+        RunExpectingError("const [a, b] = [1, 2]; a = 99;");
+    }
+
+    [Fact]
+    public void Destructure_Object_BindsFromDict()
+    {
+        Assert.Equal("Alice", Run("let d = dict.new(); d[\"name\"] = \"Alice\"; d[\"age\"] = 30; let { name, age } = d; let result = name;"));
+    }
+
+    [Fact]
+    public void Destructure_Object_BindsFromDict_SecondField()
+    {
+        Assert.Equal(30L, Run("let d = dict.new(); d[\"name\"] = \"Alice\"; d[\"age\"] = 30; let { name, age } = d; let result = age;"));
+    }
+
+    [Fact]
+    public void Destructure_Object_BindsFromStruct()
+    {
+        Assert.Equal(10L, Run("struct Point { x, y } let p = Point { x: 10, y: 20 }; let { x, y } = p; let result = x;"));
+    }
+
+    [Fact]
+    public void Destructure_Object_BindsFromStruct_SecondField()
+    {
+        Assert.Equal(20L, Run("struct Point { x, y } let p = Point { x: 10, y: 20 }; let { x, y } = p; let result = y;"));
+    }
+
+    [Fact]
+    public void Destructure_Object_OnNonObject_Throws()
+    {
+        RunExpectingError("let { a } = 42;");
+    }
 }

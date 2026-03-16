@@ -144,5 +144,42 @@
       "}"
     ],
     "description": "Switch expression with pattern matching"
+  },
+  "For-In Range Loop": {
+    "prefix": "forr",
+    "body": [
+      "for (let ${1:i} in ${2:0}..${3:10}) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "For-in loop over a range"
+  },
+  "Array Destructuring": {
+    "prefix": "letd",
+    "body": "let [${1:a}, ${2:b}] = ${3:array};$0",
+    "description": "Destructure an array into variables"
+  },
+  "Dict Destructuring": {
+    "prefix": "letdd",
+    "body": "let {${1:key1}, ${2:key2}} = ${3:dict};$0",
+    "description": "Destructure a dictionary into variables"
+  },
+  "Multi-line String": {
+    "prefix": "ml",
+    "body": [
+      "\"\"\"",
+      "    $0",
+      "\"\"\""
+    ],
+    "description": "Triple-quoted multi-line string"
+  },
+  "Interpolated Multi-line String": {
+    "prefix": "mli",
+    "body": [
+      "\\$\"\"\"",
+      "    $0",
+      "\"\"\""
+    ],
+    "description": "Interpolated triple-quoted multi-line string"
   }
 }

@@ -176,6 +176,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitDestructureStmt(DestructureStmt stmt)
+    {
+        stmt.Initializer.Accept(this);
+        return null;
+    }
+
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         CheckUnreachableStatements(stmt.Statements);
@@ -466,6 +472,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         expr.Left.Accept(this);
         expr.Right.Accept(this);
+        return null;
+    }
+
+    public object? VisitRangeExpr(RangeExpr expr)
+    {
+        expr.Start.Accept(this);
+        expr.End.Accept(this);
+        expr.Step?.Accept(this);
         return null;
     }
 

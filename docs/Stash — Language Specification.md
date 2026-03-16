@@ -23,7 +23,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -76,7 +76,7 @@ Variables declared with `let` are **mutable** — they can be reassigned after d
 
 ### Operators
 
-Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `++` (increment), `--` (decrement).
+Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `++` (increment), `--` (decrement). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)).
 
 The `++` and `--` operators work on numeric variables, both as prefix and postfix:
 
@@ -192,17 +192,18 @@ $(cat /tmp/listing.txt) | $(grep app) >> "/tmp/matches.txt";
 
 Dynamically typed. Values carry their type at runtime. The following built-in types exist:
 
-| Type     | Examples                       | Notes                                 |
-| -------- | ------------------------------ | ------------------------------------- |
-| `int`    | `42`, `-7`, `0`                | Integer numbers                       |
-| `float`  | `3.14`, `-0.5`                 | Floating-point numbers                |
-| `string` | `"hello"`, `""`                | Immutable strings                     |
-| `bool`   | `true`, `false`                |                                       |
-| `null`   | `null`                         | Absence of value                      |
-| `array`  | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size     |
-| `struct` | `Server { host: "...", ... }`  | Named structured data (see Section 5) |
-| `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)      |
-| `dict`   | `dict.new()`                   | Key-value map (see Section 5c)        |
+| Type     | Examples                       | Notes                                     |
+| -------- | ------------------------------ | ----------------------------------------- |
+| `int`    | `42`, `-7`, `0`                | Integer numbers                           |
+| `float`  | `3.14`, `-0.5`                 | Floating-point numbers                    |
+| `string` | `"hello"`, `""`                | Immutable strings                         |
+| `bool`   | `true`, `false`                |                                           |
+| `null`   | `null`                         | Absence of value                          |
+| `array`  | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size         |
+| `struct` | `Server { host: "...", ... }`  | Named structured data (see Section 5)     |
+| `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)          |
+| `dict`   | `dict.new()`                   | Key-value map (see Section 5c)            |
+| `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d)    |
 
 ### Type Coercion & Truthiness
 
@@ -262,6 +263,266 @@ A struct instance is a **dictionary/hash map with a type tag**:
 - **Methods:** Functions defined inside a struct that receive an implicit `self` parameter.
 - **Nested structs:** Structs as field values of other structs.
 - **Default values:** Field declarations with default values.
+
+---
+
+## 3b. Compound Assignment Operators
+
+Compound assignment operators combine an arithmetic or null-coalescing operation with assignment:
+
+```stash
+let count = 10;
+count += 5;        // count = count + 5  → 15
+count -= 3;        // count = count - 3  → 12
+count *= 2;        // count = count * 2  → 24
+count /= 4;        // count = count / 4  → 6
+count %= 4;        // count = count % 4  → 2
+```
+
+The `??=` (null-coalescing assignment) assigns only if the variable is currently `null`:
+
+```stash
+let name = null;
+name ??= "default";   // name is now "default"
+name ??= "other";     // name is still "default" (was not null)
+```
+
+### Supported Operators
+
+| Operator | Equivalent          | Description                     |
+| -------- | ------------------- | ------------------------------- |
+| `+=`     | `x = x + y`         | Add and assign                  |
+| `-=`     | `x = x - y`         | Subtract and assign             |
+| `*=`     | `x = x * y`         | Multiply and assign             |
+| `/=`     | `x = x / y`         | Divide and assign               |
+| `%=`     | `x = x % y`         | Modulo and assign               |
+| `??=`    | `x = x ?? y`        | Null-coalesce and assign        |
+
+### Semantics
+
+Compound assignment is **desugared by the parser** into the equivalent assignment. `x += 1` is parsed as `x = x + 1`. This means compound assignment shares all the validation and behavior of regular assignment — it cannot reassign `const` variables, and it follows the same scoping rules.
+
+Compound assignment works on variables, struct fields, dictionary entries, and array elements:
+
+```stash
+srv.port += 1;          // struct field
+config["retries"] -= 1; // dict entry by index
+nums[0] *= 10;          // array element
+```
+
+---
+
+## 3c. Multi-line Strings
+
+Triple-quoted strings (`"""..."""`) allow string literals that span multiple lines, preserving newlines and automatically handling indentation.
+
+### Basic Usage
+
+```stash
+let text = """
+    Hello,
+    World!
+""";
+// Result: "Hello,\nWorld!\n"
+```
+
+The opening `"""` must be followed by a newline. The closing `"""` must appear on its own line. Leading whitespace is stripped based on the common indentation of all non-empty lines.
+
+### Indentation Stripping
+
+The lexer determines the minimum indentation across all non-empty lines and strips that prefix from every line:
+
+```stash
+let sql = """
+    SELECT *
+    FROM users
+    WHERE active = true
+""";
+// Each line has 4 spaces of indent stripped → no leading spaces in the result
+```
+
+Lines with deeper indentation retain the extra spaces:
+
+```stash
+let code = """
+    fn main() {
+        println("hello");
+    }
+""";
+// "fn main() {\n    println(\"hello\");\n}\n"
+```
+
+### Interpolation
+
+Use the `$"""..."""` prefix for interpolation within multi-line strings:
+
+```stash
+let table = "users";
+let query = $"""
+    SELECT *
+    FROM {table}
+    WHERE active = true
+""";
+```
+
+This follows the same `{expr}` interpolation syntax as `$"..."` strings.
+
+### Implementation
+
+Multi-line strings are handled entirely in the lexer. The lexer detects `"""` (or `$"""`) and scans until the closing `"""`. The `StripCommonIndent` method removes the shared whitespace prefix. The result is a standard `String` or `InterpolatedString` token — no parser or interpreter changes required.
+
+---
+
+## 3d. Range Expressions
+
+Range expressions create lazy integer sequences using the `..` operator:
+
+```stash
+let r = 1..5;        // range: 1, 2, 3, 4 (end-exclusive)
+let r2 = 0..10..2;   // range with step: 0, 2, 4, 6, 8
+let r3 = 5..0;       // descending: 5, 4, 3, 2, 1 (auto step -1)
+```
+
+### Syntax
+
+```
+start..end             // step defaults to 1 (or -1 if start > end)
+start..end..step       // explicit step
+```
+
+Both `start` and `end` must evaluate to integers. `step`, if provided, must also be an integer and must not be zero.
+
+### Semantics
+
+1. Ranges are **end-exclusive** — `1..5` produces `1, 2, 3, 4` (not including 5). This matches Python's `range()` behavior.
+2. If `start > end` and no step is given, the step defaults to `-1` (automatic descending).
+3. An explicit step of 0 is a runtime error.
+4. Ranges are a distinct runtime type (`"range"` via `typeof()`).
+5. Ranges are **lazy** — they do not allocate an array. Values are generated on demand during iteration.
+
+### Iteration
+
+Ranges are iterable with `for-in`:
+
+```stash
+for (let i in 1..5) {
+    io.println(i);    // 1, 2, 3, 4
+}
+
+for (let i in 0..10..2) {
+    io.println(i);    // 0, 2, 4, 6, 8
+}
+
+for (let i in 10..0) {
+    io.println(i);    // 10, 9, 8, ..., 1
+}
+```
+
+### Membership
+
+The `in` operator tests whether an integer falls within a range:
+
+```stash
+println(3 in 1..10);    // true
+println(10 in 1..10);   // false (end-exclusive)
+println(5 in 0..10..2); // false (5 is not a step multiple)
+```
+
+### Precedence
+
+The `..` operator sits between comparison and addition in the precedence table:
+
+```
+... → Comparison → Range → Term → ...
+```
+
+This means `1..2+3` parses as `1..(2+3)` → `1..5`, and `x in 1..10` parses as `x in (1..10)`.
+
+### Internal Representation
+
+A range is backed by a `StashRange` class holding `Start`, `End`, and `Step` values (all `long`). The `Iterate()` method yields values lazily. `ToString()` formats as `start..end` or `start..end..step`.
+
+---
+
+## 3e. Destructuring Assignment
+
+Destructuring allows unpacking arrays and dictionaries into individual variables in a single declaration:
+
+### Array Destructuring
+
+```stash
+let [a, b, c] = [1, 2, 3];
+io.println(a);  // 1
+io.println(b);  // 2
+io.println(c);  // 3
+```
+
+Binds variables by **position** — the first variable gets the first element, and so on.
+
+### Dictionary Destructuring
+
+```stash
+let config = dict.new();
+config["host"] = "localhost";
+config["port"] = 8080;
+
+let {host, port} = config;
+io.println(host);  // "localhost"
+io.println(port);  // 8080
+```
+
+Binds variables by **key name** — the variable name is used as the dictionary key for lookup.
+
+### Const Destructuring
+
+```stash
+const [x, y] = [10, 20];
+// x and y are immutable — reassignment is a runtime error
+```
+
+### Partial Destructuring
+
+```stash
+// Extra elements are ignored
+let [first, second] = [1, 2, 3, 4];    // first=1, second=2
+
+// Missing elements become null
+let [a, b, c] = [1];                    // a=1, b=null, c=null
+```
+
+### Implementation
+
+Destructuring is a dedicated AST node (`DestructureStmt`) with a `PatternKind` (Array or Object), a list of variable names, a `const` flag, and an initializer expression. The parser detects destructuring when it sees `let [` or `let {` (similarly for `const`). At runtime, the interpreter evaluates the initializer and distributes values to each named variable.
+
+---
+
+## 4b. The `in` Operator
+
+The `in` operator tests membership or containment:
+
+```stash
+println(3 in [1, 2, 3, 4]);     // true  — array membership
+println(5 in [1, 2, 3, 4]);     // false
+println("o" in "hello");        // true  — substring/char check
+println("key" in myDict);       // true  — dictionary key existence
+println(3 in 1..10);            // true  — range membership
+println(10 in 1..10);           // false (end-exclusive)
+```
+
+### Semantics by Type
+
+| Right-hand side | Test performed                                      |
+| --------------- | --------------------------------------------------- |
+| `array`         | Element equality (`==`) against each item           |
+| `string`        | Substring / character containment                   |
+| `dict`          | Key existence (equivalent to `dict.has(d, key)`)    |
+| `range`         | Integer falls within the range respecting the step  |
+
+Using `in` against any other type is a runtime error.
+
+### Precedence
+
+`in` has the same precedence as the comparison operators (`<`, `>`, `<=`, `>=`) and is non-associative with them. `x in a..b` is parsed as `x in (a..b)` because `..` binds tighter.
 
 ---
 
@@ -673,8 +934,9 @@ Only the `for-in` form is supported. C-style `for (init; condition; increment)` 
 - **`array`** — iterates over elements in order: `for (let item in [1, 2, 3]) { ... }`
 - **`string`** — iterates over characters: `for (let ch in "hello") { ... }` yields `"h"`, `"e"`, `"l"`, `"l"`, `"o"`
 - **`dict`** — iterates over keys: `for (let key in myDict) { ... }`
+- **`range`** — iterates over integer values: `for (let i in 1..10) { ... }` yields `1` through `9` (end-exclusive)
 
-All other types produce a runtime error when used as the right-hand side of `for-in`. Iteration over struct fields and enum members may be added in a future version.
+All other types produce a runtime error when used as the right-hand side of `for-in`.
 
 ### Break / Continue
 
@@ -1457,7 +1719,8 @@ declaration    → structDecl | enumDecl | fnDecl | varDecl | importDecl | state
 structDecl     → "struct" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
 enumDecl       → "enum" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
 fnDecl         → "fn" IDENTIFIER "(" parameters? ")" block ;
-varDecl        → "let" IDENTIFIER "=" expression ";" ;
+varDecl        → "let" ( IDENTIFIER | destructurePattern ) "=" expression ";" ;
+destructurePattern → "[" IDENTIFIER ("," IDENTIFIER)* "]" | "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
 importDecl     → "import" "{" IDENTIFIER ("," IDENTIFIER)* "}" "from" STRING ";"
                | "import" STRING "as" IDENTIFIER ";" ;
 
@@ -1473,7 +1736,7 @@ continueStmt   → "continue" ";" ;
 block          → "{" declaration* "}" ;
 
 expression     → assignment ;
-assignment     → (call ".")? IDENTIFIER "=" assignment | ternary ;
+assignment     → (call ".")? IDENTIFIER ("=" | "+=" | "-=" | "*=" | "/=" | "%=" | "??=") assignment | ternary ;
 ternary        → nullCoalesce ( "?" expression ":" ternary )? ;
 nullCoalesce   → redirect ( "??" redirect )* ;
 redirect       → pipe ( redirectOp expression )* ;
@@ -1482,7 +1745,8 @@ pipe           → logic_or ( "|" logic_or )* ;
 logic_or       → logic_and ( "||" logic_and )* ;
 logic_and      → equality ( "&&" equality )* ;
 equality       → comparison ( ("==" | "!=") comparison )* ;
-comparison     → term ( ("<" | ">" | "<=" | ">=") term )* ;
+comparison     → range ( ("<" | ">" | "<=" | ">=" | "in") range )* ;
+range          → term ( ".." term ( ".." term )? )? ;
 term           → factor ( ("+" | "-") factor )* ;
 factor         → unary ( ("*" | "/" | "%") unary )* ;
 unary          → ("!" | "-") unary | prefix ;

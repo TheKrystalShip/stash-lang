@@ -348,7 +348,10 @@ public static class FsBuiltIns
             try
             {
                 if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                {
                     return false;
+                }
+
                 using var stream = System.IO.File.OpenRead(path);
                 return true;
             }
@@ -367,7 +370,10 @@ public static class FsBuiltIns
             try
             {
                 if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                {
                     return false;
+                }
+
                 if (System.IO.File.Exists(path))
                 {
                     using var stream = System.IO.File.OpenWrite(path);
@@ -394,7 +400,10 @@ public static class FsBuiltIns
             try
             {
                 if (!System.IO.File.Exists(path))
+                {
                     return false;
+                }
+
                 if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                     System.Runtime.InteropServices.OSPlatform.Windows))
                 {

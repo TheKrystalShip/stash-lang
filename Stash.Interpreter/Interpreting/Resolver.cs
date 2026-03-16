@@ -53,13 +53,21 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private void Declare(string name)
     {
-        if (_scopes.Count == 0) return;
+        if (_scopes.Count == 0)
+        {
+            return;
+        }
+
         _scopes.Peek()[name] = false;
     }
 
     private void Define(string name)
     {
-        if (_scopes.Count == 0) return;
+        if (_scopes.Count == 0)
+        {
+            return;
+        }
+
         _scopes.Peek()[name] = true;
     }
 
@@ -130,6 +138,20 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         Declare(stmt.Name.Lexeme);
         Resolve(stmt.Initializer);
         Define(stmt.Name.Lexeme);
+        return null;
+    }
+
+    public object? VisitDestructureStmt(DestructureStmt stmt)
+    {
+        foreach (Token name in stmt.Names)
+        {
+            Declare(name.Lexeme);
+        }
+        Resolve(stmt.Initializer);
+        foreach (Token name in stmt.Names)
+        {
+            Define(name.Lexeme);
+        }
         return null;
     }
 
@@ -364,6 +386,18 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         Resolve(expr.Condition);
         Resolve(expr.ThenBranch);
         Resolve(expr.ElseBranch);
+        return null;
+    }
+
+    public object? VisitRangeExpr(RangeExpr expr)
+    {
+        Resolve(expr.Start);
+        Resolve(expr.End);
+        if (expr.Step is not null)
+        {
+            Resolve(expr.Step);
+        }
+
         return null;
     }
 

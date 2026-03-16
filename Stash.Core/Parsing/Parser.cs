@@ -191,6 +191,18 @@ public class Parser
     private Stmt VarDeclaration()
     {
         Token letToken = Previous();
+
+        // Check for destructuring pattern
+        if (Check(TokenType.LeftBracket))
+        {
+            return DestructureDeclaration(letToken, isConst: false);
+        }
+        if (Check(TokenType.LeftBrace))
+        {
+            return DestructureDeclaration(letToken, isConst: false);
+        }
+
+        // Normal variable declaration
         Token name = Consume(TokenType.Identifier, "Expected variable name.");
         Token? typeHint = null;
         if (Match(TokenType.Colon))
@@ -215,6 +227,18 @@ public class Parser
     private Stmt ConstDeclaration()
     {
         Token constToken = Previous();
+
+        // Check for destructuring pattern
+        if (Check(TokenType.LeftBracket))
+        {
+            return DestructureDeclaration(constToken, isConst: true);
+        }
+        if (Check(TokenType.LeftBrace))
+        {
+            return DestructureDeclaration(constToken, isConst: true);
+        }
+
+        // Normal constant declaration
         Token name = Consume(TokenType.Identifier, "Expected constant name.");
         Token? typeHint = null;
         if (Match(TokenType.Colon))
@@ -225,6 +249,55 @@ public class Parser
         Expr initializer = Expression();
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after constant declaration.");
         return new ConstDeclStmt(name, typeHint, initializer, MakeSpan(constToken.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a destructuring declaration: <c>let [a, b, c] = expr;</c> or <c>let { x, y } = expr;</c>
+    /// The <c>let</c>/<c>const</c> token has already been consumed.
+    /// </summary>
+    private Stmt DestructureDeclaration(Token keyword, bool isConst)
+    {
+        DestructureStmt.PatternKind kind;
+        var names = new List<Token>();
+
+        if (Match(TokenType.LeftBracket))
+        {
+            // Array destructuring: let [a, b, c] = ...
+            kind = DestructureStmt.PatternKind.Array;
+            if (!Check(TokenType.RightBracket))
+            {
+                do
+                {
+                    names.Add(Consume(TokenType.Identifier, "Expected variable name in destructuring pattern."));
+                } while (Match(TokenType.Comma));
+            }
+            Consume(TokenType.RightBracket, "Expected ']' after destructuring pattern.");
+        }
+        else
+        {
+            // Object destructuring: let { x, y } = ...
+            Match(TokenType.LeftBrace); // consume the '{'
+            kind = DestructureStmt.PatternKind.Object;
+            if (!Check(TokenType.RightBrace))
+            {
+                do
+                {
+                    names.Add(Consume(TokenType.Identifier, "Expected property name in destructuring pattern."));
+                } while (Match(TokenType.Comma));
+            }
+            Consume(TokenType.RightBrace, "Expected '}' after destructuring pattern.");
+        }
+
+        if (names.Count == 0)
+        {
+            Error(Previous(), "Destructuring pattern must contain at least one name.");
+        }
+
+        Consume(TokenType.Equal, "Expected '=' after destructuring pattern.");
+        Expr initializer = Expression();
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after destructuring declaration.");
+
+        return new DestructureStmt(kind, names, isConst, initializer, MakeSpan(keyword.Span, semi.Span));
     }
 
     /// <summary>
@@ -879,7 +952,7 @@ public class Parser
     /// </remarks>
     private Expr Comparison()
     {
-        Expr expr = Term();
+        Expr expr = Range();
 
         while (true)
         {
@@ -896,8 +969,33 @@ public class Parser
             }
 
             Token op = Previous();
-            Expr right = Term();
+            Expr right = Range();
             expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
+        }
+
+        while (Match(TokenType.In))
+        {
+            Token op = Previous();
+            Expr right = Range();
+            expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
+        }
+
+        return expr;
+    }
+
+    private Expr Range()
+    {
+        Expr expr = Term();
+
+        if (Match(TokenType.DotDot))
+        {
+            Expr end = Term();
+            Expr? step = null;
+            if (Match(TokenType.DotDot))
+            {
+                step = Term();
+            }
+            return new RangeExpr(expr, end, step, MakeSpan(expr.Span, (step ?? end).Span));
         }
 
         return expr;
@@ -1312,12 +1410,20 @@ public class Parser
                         }
                         else if (Check(TokenType.RightBrace) || Check(TokenType.RightBracket))
                         {
-                            if (depth == 0) return false;
+                            if (depth == 0)
+                            {
+                                return false;
+                            }
+
                             depth--;
                         }
                         else if (Check(TokenType.RightParen))
                         {
-                            if (depth == 0) break;
+                            if (depth == 0)
+                            {
+                                break;
+                            }
+
                             depth--;
                         }
                         else if (Check(TokenType.Comma) && depth == 0)

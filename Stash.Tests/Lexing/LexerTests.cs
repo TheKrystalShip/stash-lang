@@ -62,6 +62,7 @@ public class LexerTests
     [InlineData("/=", TokenType.SlashEqual)]
     [InlineData("%=", TokenType.PercentEqual)]
     [InlineData("??=", TokenType.QuestionQuestionEqual)]
+    [InlineData("..", TokenType.DotDot)]
     public void ScanTokens_TwoCharOrAssignToken_ProducesCorrectType(string source, TokenType expected)
     {
         var tokens = Scan(source);
@@ -693,6 +694,77 @@ public class LexerTests
         var exprTokens = Assert.IsType<List<Token>>(parts[0]);
         Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
         Assert.Equal("x", exprTokens[0].Lexeme);
+    }
+
+    // ── 23. Triple-quoted strings ────────────────────────────────────────
+
+    [Fact]
+    public void TripleQuotedString_Basic_ReturnsStringLiteral()
+    {
+        var tokens = Scan("\"\"\"hello world\"\"\"");
+        Assert.Equal(2, tokens.Count); // string + EOF
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+        Assert.Equal("hello world", tokens[0].Literal);
+    }
+
+    [Fact]
+    public void TripleQuotedString_MultiLine_StripsCommonIndent()
+    {
+        var source = "\"\"\"\n    hello\n    world\n\"\"\"";
+        var tokens = Scan(source);
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+        Assert.Equal("hello\nworld", tokens[0].Literal);
+    }
+
+    [Fact]
+    public void TripleQuotedString_PreservesRelativeIndent()
+    {
+        var source = "\"\"\"\n    line1\n        indented\n    line3\n\"\"\"";
+        var tokens = Scan(source);
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+        Assert.Equal("line1\n    indented\nline3", tokens[0].Literal);
+    }
+
+    [Fact]
+    public void TripleQuotedString_EmptyLinesPreserved()
+    {
+        var source = "\"\"\"\n    hello\n\n    world\n\"\"\"";
+        var tokens = Scan(source);
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+        Assert.Equal("hello\n\nworld", tokens[0].Literal);
+    }
+
+    [Fact]
+    public void TripleQuotedString_EmbeddedInterpolation()
+    {
+        var source = "\"\"\"\nhello ${name}\n\"\"\"";
+        var tokens = Scan(source);
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+    }
+
+    [Fact]
+    public void TripleQuotedString_PrefixedInterpolation()
+    {
+        var source = "$\"\"\"\nhello {name}\n\"\"\"";
+        var tokens = Scan(source);
+        Assert.Equal(TokenType.InterpolatedString, tokens[0].Type);
+    }
+
+    [Fact]
+    public void TripleQuotedString_Unterminated_ReportsError()
+    {
+        var lexer = new Lexer("\"\"\"hello world");
+        lexer.ScanTokens();
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Fact]
+    public void TripleQuotedString_EscapeSequences()
+    {
+        var source = "\"\"\"hello\\nworld\"\"\"";
+        var tokens = Scan(source);
+        Assert.Equal(TokenType.StringLiteral, tokens[0].Type);
+        Assert.Equal("hello\nworld", tokens[0].Literal);
     }
 
     // ── Phase 4: Command Literal Tokens ──────────────────────────────────

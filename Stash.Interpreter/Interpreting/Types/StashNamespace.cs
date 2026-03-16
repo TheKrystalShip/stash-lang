@@ -22,7 +22,9 @@ public class StashNamespace
     public void Define(string name, object? value)
     {
         if (_mutableMembers is null)
+        {
             throw new InvalidOperationException($"Namespace '{Name}' is frozen and cannot be modified.");
+        }
 
         _mutableMembers[name] = value;
     }
@@ -42,7 +44,11 @@ public class StashNamespace
 
     public bool HasMember(string name)
     {
-        if (_frozenMembers is not null) return _frozenMembers.ContainsKey(name);
+        if (_frozenMembers is not null)
+        {
+            return _frozenMembers.ContainsKey(name);
+        }
+
         return _mutableMembers!.ContainsKey(name);
     }
 
@@ -51,7 +57,9 @@ public class StashNamespace
         if (_frozenMembers is not null)
         {
             if (_frozenMembers.TryGetValue(name, out var frozenValue))
+            {
                 return frozenValue;
+            }
         }
         else if (_mutableMembers!.TryGetValue(name, out var value))
         {
@@ -63,7 +71,11 @@ public class StashNamespace
 
     public IReadOnlyDictionary<string, object?> GetAllMembers()
     {
-        if (_frozenMembers is not null) return _frozenMembers;
+        if (_frozenMembers is not null)
+        {
+            return _frozenMembers;
+        }
+
         return _mutableMembers!;
     }
 

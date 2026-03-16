@@ -229,6 +229,18 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitDestructureStmt(DestructureStmt stmt)
+    {
+        foreach (var name in stmt.Names)
+        {
+            var symbolKind = stmt.IsConst ? SymbolKind.Constant : SymbolKind.Variable;
+            var detail = stmt.IsConst ? $"const {name.Lexeme}" : $"let {name.Lexeme}";
+            _currentScope.AddSymbol(new SymbolInfo(name.Lexeme, symbolKind, name.Span, stmt.Span, detail));
+        }
+        stmt.Initializer.Accept(this);
+        return null;
+    }
+
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         PushScope(ScopeKind.Block, stmt.Span);
@@ -484,6 +496,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         expr.Left.Accept(this);
         expr.Right.Accept(this);
+        return null;
+    }
+
+    public object? VisitRangeExpr(RangeExpr expr)
+    {
+        expr.Start.Accept(this);
+        expr.End.Accept(this);
+        expr.Step?.Accept(this);
         return null;
     }
 

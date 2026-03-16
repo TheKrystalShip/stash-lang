@@ -68,6 +68,11 @@ public static class GlobalBuiltIns
                 return "dict";
             }
 
+            if (val is StashRange)
+            {
+                return "range";
+            }
+
             if (val is StashNamespace)
             {
                 return "namespace";

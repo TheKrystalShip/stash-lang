@@ -36,6 +36,9 @@ public enum TokenType
     /// <summary>The <c>.</c> character. Used for member access (e.g. <c>obj.field</c>).</summary>
     Dot,
 
+    /// <summary>The <c>..</c> operator. Used to construct range expressions (e.g. <c>0..10</c> or <c>0..20..2</c>).</summary>
+    DotDot,
+
     /// <summary>The <c>;</c> character. Terminates statements.</summary>
     Semicolon,
 
