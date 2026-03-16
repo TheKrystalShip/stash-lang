@@ -11,11 +11,13 @@ public class DotExpr : Expr
 {
     public Expr Object { get; }
     public Token Name { get; }
+    public bool IsOptional { get; }
 
-    public DotExpr(Expr obj, Token name, SourceSpan span) : base(span)
+    public DotExpr(Expr obj, Token name, SourceSpan span, bool isOptional = false) : base(span)
     {
         Object = obj;
         Name = name;
+        IsOptional = isOptional;
     }
 
     public override T Accept<T>(IExprVisitor<T> visitor) => visitor.VisitDotExpr(this);

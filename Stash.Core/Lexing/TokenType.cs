@@ -98,6 +98,9 @@ public enum TokenType
     /// <summary>The <c>??</c> operator. Null-coalescing — returns the left operand if non-null, otherwise the right.</summary>
     QuestionQuestion,
 
+    /// <summary>The <c>?.</c> operator. Optional chaining — short-circuits to null if the left operand is null.</summary>
+    QuestionDot,
+
     /// <summary>The <c>++</c> operator. Increment operator for numeric values.</summary>
     PlusPlus,
 

@@ -498,6 +498,10 @@
           "match": "\\?\\?"
         },
         {
+          "name": "keyword.operator.optional-chaining.stash",
+          "match": "\\?\\."
+        },
+        {
           "name": "keyword.operator.ternary.stash",
           "match": "\\?"
         },

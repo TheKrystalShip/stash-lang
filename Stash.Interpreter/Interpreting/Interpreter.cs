@@ -1215,9 +1215,14 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             throw new RuntimeError("Can only iterate over arrays, strings, dictionaries, and ranges.", stmt.Iterable.Span);
         }
 
+        long idx = 0;
         foreach (object? item in items)
         {
             var loopEnv = new Environment(_environment);
+            if (stmt.IndexName is not null)
+            {
+                loopEnv.Define(stmt.IndexName.Lexeme, idx);
+            }
             loopEnv.Define(stmt.VariableName.Lexeme, item);
 
             try
@@ -1232,6 +1237,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             {
                 // Continue to next iteration
             }
+            idx++;
         }
 
         return null;
@@ -1483,6 +1489,12 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     public object? VisitDotExpr(DotExpr expr)
     {
         object? obj = expr.Object.Accept(this);
+
+        // Optional chaining: a?.b returns null if a is null
+        if (expr.IsOptional && obj is null)
+        {
+            return null;
+        }
 
         if (obj is StashInstance instance)
         {

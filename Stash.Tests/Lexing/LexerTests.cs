@@ -1001,4 +1001,23 @@ public class LexerTests
         Assert.Equal(TokenType.LessEqual, tokens[1].Type);
         Assert.Equal(TokenType.IntegerLiteral, tokens[2].Type);
     }
+
+    // ── Optional Chaining Token ─────────────────────────────────────────
+
+    [Fact]
+    public void QuestionDot_ScansAsQuestionDotToken()
+    {
+        var tokens = Scan("a?.b");
+        Assert.Equal(TokenType.Identifier, tokens[0].Type);
+        Assert.Equal(TokenType.QuestionDot, tokens[1].Type);
+        Assert.Equal(TokenType.Identifier, tokens[2].Type);
+    }
+
+    [Fact]
+    public void QuestionDot_DistinguishedFromQuestionQuestion()
+    {
+        var tokens = Scan("a ?? b?.c");
+        Assert.Equal(TokenType.QuestionQuestion, tokens[1].Type);
+        Assert.Equal(TokenType.QuestionDot, tokens[3].Type);
+    }
 }

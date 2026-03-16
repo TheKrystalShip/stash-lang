@@ -5831,4 +5831,142 @@ public class InterpreterTests
     {
         RunExpectingError("let { a } = 42;");
     }
+
+    // ── Optional Chaining (?.) ──────────────────────────────────────────
+
+    [Fact]
+    public void OptionalChaining_NullObject_ReturnsNull()
+    {
+        Assert.Null(Run("let x = null; let result = x?.name;"));
+    }
+
+    [Fact]
+    public void OptionalChaining_NonNullStruct_ReturnsField()
+    {
+        Assert.Equal("hello", Run("struct S { name } let x = S { name: \"hello\" }; let result = x?.name;"));
+    }
+
+    [Fact]
+    public void OptionalChaining_NonNullDict_ReturnsValue()
+    {
+        Assert.Equal(42L, Run("let d = dict.new(); d[\"x\"] = 42; let result = d?.x;"));
+    }
+
+    [Fact]
+    public void OptionalChaining_ChainedNullFirst_ReturnsNull()
+    {
+        Assert.Null(Run("let x = null; let result = x?.a?.b;"));
+    }
+
+    [Fact]
+    public void OptionalChaining_ChainedNullMiddle_ReturnsNull()
+    {
+        Assert.Null(Run("let d = dict.new(); d[\"a\"] = null; let result = d?.a?.b;"));
+    }
+
+    [Fact]
+    public void OptionalChaining_WithNullCoalescing_ReturnsDefault()
+    {
+        Assert.Equal("default", Run("let x = null; let result = x?.name ?? \"default\";"));
+    }
+
+    [Fact]
+    public void OptionalChaining_NonNull_WithNullCoalescing_ReturnsValue()
+    {
+        Assert.Equal("hello", Run("struct S { name } let x = S { name: \"hello\" }; let result = x?.name ?? \"default\";"));
+    }
+
+    [Fact]
+    public void OptionalChaining_RegularDotOnNull_Throws()
+    {
+        RunExpectingError("let x = null; let y = x.name;");
+    }
+
+    // ── Shorthand Struct Init ───────────────────────────────────────────
+
+    [Fact]
+    public void ShorthandStructInit_SingleField()
+    {
+        Assert.Equal("localhost", Run("struct S { host } let host = \"localhost\"; let s = S { host }; let result = s.host;"));
+    }
+
+    [Fact]
+    public void ShorthandStructInit_MultipleFields()
+    {
+        Assert.Equal(8080L, Run("struct S { host, port } let host = \"localhost\"; let port = 8080; let s = S { host, port }; let result = s.port;"));
+    }
+
+    [Fact]
+    public void ShorthandStructInit_MixedWithFull()
+    {
+        Assert.Equal("localhost", Run("struct S { host, port } let host = \"localhost\"; let s = S { host, port: 3000 }; let result = s.host;"));
+    }
+
+    [Fact]
+    public void ShorthandStructInit_MixedWithFull_FullFirst()
+    {
+        Assert.Equal(9090L, Run("struct S { host, port } let port = 9090; let s = S { host: \"10.0.0.1\", port }; let result = s.port;"));
+    }
+
+    [Fact]
+    public void ShorthandStructInit_UnknownField_Throws()
+    {
+        RunExpectingError("struct S { x } let y = 1; let s = S { y };");
+    }
+
+    [Fact]
+    public void ShorthandStructInit_UndefinedVariable_Throws()
+    {
+        RunExpectingError("struct S { x } let s = S { x };");
+    }
+
+    // ── For-in with Index ───────────────────────────────────────────────
+
+    [Fact]
+    public void ForInIndex_Array_IndexStartsAtZero()
+    {
+        Assert.Equal(0L, Run("let result = -1; for (let i, item in [\"a\", \"b\", \"c\"]) { if (item == \"a\") { result = i; } }"));
+    }
+
+    [Fact]
+    public void ForInIndex_Array_CorrectIndices()
+    {
+        Assert.Equal(6L, Run("let result = 0; for (let i, item in [10, 20, 30, 40]) { result = result + i; }"));
+    }
+
+    [Fact]
+    public void ForInIndex_String_IteratesWithIndex()
+    {
+        Assert.Equal(2L, Run("let result = -1; for (let i, ch in \"hello\") { if (ch == \"l\") { result = i; break; } }"));
+    }
+
+    [Fact]
+    public void ForInIndex_Range_IndexIsSeparateFromValue()
+    {
+        Assert.Equal(21L, Run("let result = 0; for (let i, val in 5..8) { result = result + i + val; }"));
+    }
+
+    [Fact]
+    public void ForInIndex_Dict_IndexTracksIteration()
+    {
+        Assert.Equal(2L, Run("let d = dict.new(); d[\"a\"] = 1; d[\"b\"] = 2; d[\"c\"] = 3; let result = 0; for (let i, key in d) { result = i; }"));
+    }
+
+    [Fact]
+    public void ForInIndex_WithBreak_IndexCorrect()
+    {
+        Assert.Equal(1L, Run("let result = 0; for (let i, item in [10, 20, 30]) { result = i; if (item == 20) { break; } }"));
+    }
+
+    [Fact]
+    public void ForInIndex_WithContinue_IndexStillIncrements()
+    {
+        Assert.Equal(5L, Run("let result = 0; for (let i, item in [10, 20, 30, 40]) { if (item == 20) { continue; } result = result + i; }"));
+    }
+
+    [Fact]
+    public void ForInIndex_WithoutIndex_StillWorks()
+    {
+        Assert.Equal(6L, Run("let result = 0; for (let item in [1, 2, 3]) { result = result + item; }"));
+    }
 }

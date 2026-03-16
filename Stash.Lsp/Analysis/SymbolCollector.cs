@@ -278,6 +278,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         stmt.Iterable.Accept(this);
         PushScope(ScopeKind.Loop, stmt.Body.Span);
+
+        // Register index variable if present (for-in with index: for (let i, item in ...))
+        if (stmt.IndexName is not null)
+        {
+            _currentScope.AddSymbol(new SymbolInfo(stmt.IndexName.Lexeme, SymbolKind.LoopVariable, stmt.IndexName.Span, detail: "loop index", typeHint: "int"));
+        }
+
         var typeStr = stmt.TypeHint?.Lexeme;
         var detail = typeStr != null ? $"loop variable: {typeStr}" : "loop variable";
         _currentScope.AddSymbol(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: detail, typeHint: typeStr));

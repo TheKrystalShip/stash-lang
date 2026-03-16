@@ -559,6 +559,15 @@ public class Parser
         Consume(TokenType.LeftParen, "Expected '(' after 'for'.");
         Consume(TokenType.Let, "Expected 'let' after '(' in for-in loop.");
         Token varName = Consume(TokenType.Identifier, "Expected variable name in for-in loop.");
+        Token? indexName = null;
+
+        // Check for two-variable form: for (let i, item in collection)
+        if (Match(TokenType.Comma))
+        {
+            indexName = varName;  // First variable is the index
+            varName = Consume(TokenType.Identifier, "Expected variable name after ',' in for-in loop.");
+        }
+
         Token? typeHint = null;
         if (Match(TokenType.Colon))
         {
@@ -568,7 +577,7 @@ public class Parser
         Expr iterable = Expression();
         Consume(TokenType.RightParen, "Expected ')' after for-in clause.");
         BlockStmt body = ParseBlock();
-        return new ForInStmt(varName, typeHint, iterable, body, MakeSpan(forToken.Span, body.Span));
+        return new ForInStmt(indexName, varName, typeHint, iterable, body, MakeSpan(forToken.Span, body.Span));
     }
 
     /// <summary>
@@ -1104,13 +1113,15 @@ public class Parser
                 Token close = Consume(TokenType.RightBracket, "Expected ']' after index.");
                 expr = new IndexExpr(expr, index, bracket.Span, MakeSpan(expr.Span, close.Span));
             }
-            else if (Match(TokenType.Dot))
+            else if (Match(TokenType.Dot) || Match(TokenType.QuestionDot))
             {
+                bool isOptional = Previous().Type == TokenType.QuestionDot;
                 Token name = ConsumePropertyName();
-                Expr dotExpr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span));
+                Expr dotExpr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span), isOptional);
 
                 // Check for namespaced struct init: ns.StructName { field: value, ... }
-                if (Check(TokenType.LeftBrace))
+                // (only for regular dot, not optional chaining)
+                if (!isOptional && Check(TokenType.LeftBrace))
                 {
                     int savedPosition = _current;
                     Advance(); // consume '{'
@@ -1118,14 +1129,25 @@ public class Parser
                     if (Check(TokenType.Identifier))
                     {
                         int peekAhead = _current;
-                        if (peekAhead + 1 < _tokens.Count && _tokens[peekAhead + 1].Type == TokenType.Colon)
+                        if (peekAhead + 1 < _tokens.Count &&
+                            (_tokens[peekAhead + 1].Type == TokenType.Colon ||
+                             _tokens[peekAhead + 1].Type == TokenType.Comma ||
+                             _tokens[peekAhead + 1].Type == TokenType.RightBrace))
                         {
                             List<(Token Field, Expr Value)> fieldValues = new();
                             do
                             {
                                 Token field = Consume(TokenType.Identifier, "Expected field name.");
-                                Consume(TokenType.Colon, "Expected ':' after field name.");
-                                Expr value = Expression();
+                                Expr value;
+                                if (Match(TokenType.Colon))
+                                {
+                                    value = Expression();
+                                }
+                                else
+                                {
+                                    // Shorthand: { host } is equivalent to { host: host }
+                                    value = new IdentifierExpr(field, field.Span);
+                                }
                                 fieldValues.Add((field, value));
                             } while (Match(TokenType.Comma));
 
@@ -1303,19 +1325,30 @@ public class Parser
 
                 Advance(); // consume '{'
 
-                // It's a struct init if we see: Identifier ':'
+                // It's a struct init if we see: Identifier ':', Identifier ',', or Identifier '}'
                 if (Check(TokenType.Identifier))
                 {
                     int peekAhead = _current;
-                    if (peekAhead + 1 < _tokens.Count && _tokens[peekAhead + 1].Type == TokenType.Colon)
+                    if (peekAhead + 1 < _tokens.Count &&
+                        (_tokens[peekAhead + 1].Type == TokenType.Colon ||
+                         _tokens[peekAhead + 1].Type == TokenType.Comma ||
+                         _tokens[peekAhead + 1].Type == TokenType.RightBrace))
                     {
-                        // This is a struct init: Name { field: value, ... }
+                        // This is a struct init: Name { field: value, ... } or shorthand Name { field, ... }
                         List<(Token Field, Expr Value)> fieldValues = new();
                         do
                         {
                             Token field = Consume(TokenType.Identifier, "Expected field name.");
-                            Consume(TokenType.Colon, "Expected ':' after field name.");
-                            Expr value = Expression();
+                            Expr value;
+                            if (Match(TokenType.Colon))
+                            {
+                                value = Expression();
+                            }
+                            else
+                            {
+                                // Shorthand: { host } is equivalent to { host: host }
+                                value = new IdentifierExpr(field, field.Span);
+                            }
                             fieldValues.Add((field, value));
                         } while (Match(TokenType.Comma));
 

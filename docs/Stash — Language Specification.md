@@ -23,7 +23,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -76,7 +76,7 @@ Variables declared with `let` are **mutable** — they can be reassigned after d
 
 ### Operators
 
-Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `++` (increment), `--` (decrement). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)).
+Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `?.` (optional chaining, see [Section 5e](#5e-optional-chaining)), `++` (increment), `--` (decrement). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)).
 
 The `++` and `--` operators work on numeric variables, both as prefix and postfix:
 
@@ -238,6 +238,24 @@ let srv = Server { host: "10.0.0.1", port: 22, status: "unknown" };
 ```
 
 Creates a new instance with the given field values.
+
+#### Shorthand Initialization
+
+When a variable name matches the field name, the value can be omitted:
+
+```stash
+let host = "10.0.0.1";
+let port = 22;
+let status = "unknown";
+
+// Shorthand — equivalent to { host: host, port: port, status: status }
+let srv = Server { host, port, status };
+
+// Mixed — shorthand and explicit values can be combined
+let srv2 = Server { host, port: 8080, status };
+```
+
+This is purely syntactic sugar — the parser generates the same `(field, value)` pairs as explicit initialization. The field name is used as an identifier expression for the value.
 
 ### Field Access
 
@@ -701,6 +719,53 @@ Dot notation works on **dictionaries**, **struct instances**, **enums**, and **n
 
 ---
 
+## 5e. Optional Chaining
+
+The `?.` operator provides safe member access on potentially-null values. If the left-hand side is `null`, the expression short-circuits to `null` instead of throwing a runtime error:
+
+```stash
+let port = config?.database?.port;       // null if config or database is null
+let port = config?.database?.port ?? 3306;  // with default via null-coalescing
+```
+
+### Semantics
+
+1. `a?.b` evaluates `a`. If `a` is `null`, the result is `null` — `b` is never accessed.
+2. If `a` is not `null`, `a?.b` behaves identically to `a.b` — field access on struct instances, key lookup on dictionaries, member access on enums and namespaces.
+3. Multiple `?.` operators can be chained: `a?.b?.c` — each link independently checks for `null`.
+4. Composes naturally with `??` (null-coalescing): `a?.b ?? default` returns `default` when any step is `null`.
+
+### Comparison with Regular Dot
+
+| Syntax | Left is `null` | Left is non-null |
+| ------ | --------------- | ---------------- |
+| `a.b`  | Runtime error   | Field/key access |
+| `a?.b` | Returns `null`  | Field/key access |
+
+### Examples
+
+```stash
+// Safe navigation through nested config
+let d = dict.new();
+d["db"] = null;
+let host = d?.db?.host;       // null (db is null, no error)
+let host2 = d?.db?.host ?? "localhost";  // "localhost"
+
+// Struct field access
+struct Server { host, port }
+let srv = Server { host: "10.0.0.1", port: 22 };
+let h = srv?.host;            // "10.0.0.1"
+
+let empty = null;
+let h2 = empty?.host;         // null (no error)
+```
+
+### Implementation
+
+The `?.` operator is implemented as a `QuestionDot` token type. `DotExpr` has an `IsOptional` boolean flag (default `false`). When the parser encounters `?.`, it creates a `DotExpr` with `IsOptional = true`. At runtime, the interpreter checks this flag: if the object evaluates to `null` and `IsOptional` is `true`, it returns `null` immediately instead of throwing.
+
+---
+
 ## 6. Shell Integration
 
 ### Process Execution
@@ -928,6 +993,40 @@ for (let item in collection) {
 ```
 
 Only the `for-in` form is supported. C-style `for (init; condition; increment)` is intentionally excluded — it adds complexity without significant benefit for a scripting language. May be reconsidered in a future version.
+
+#### For-in with Index
+
+A two-variable form provides the iteration index alongside each value:
+
+```stash
+for (let i, item in ["a", "b", "c"]) {
+    io.println($"{i}: {item}");
+}
+// Output: 0: a, 1: b, 2: c
+```
+
+The first variable (`i`) receives the zero-based index (as an integer), and the second variable (`item`) receives the element value. This works with all iterable types — arrays, strings, dictionaries, and ranges:
+
+```stash
+for (let i, ch in "hello") {
+    io.println($"{i}: {ch}");   // 0: h, 1: e, 2: l, ...
+}
+
+for (let i, key in myDict) {
+    io.println($"{i}: {key}");  // tracks iteration order
+}
+```
+
+The index is independent of the collection's values — for ranges, the index counts iterations while the value yields range elements:
+
+```stash
+for (let i, val in 5..8) {
+    io.println($"index={i}, value={val}");
+}
+// index=0, value=5
+// index=1, value=6
+// index=2, value=7
+```
 
 #### Iterable Types
 

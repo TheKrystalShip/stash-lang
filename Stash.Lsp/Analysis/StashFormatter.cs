@@ -327,8 +327,9 @@ public class StashFormatter
             return Whitespace.None;
         }
 
-        // Rule 19: cur == Dot || prev == Dot
-        if (cur == TokenType.Dot || prev == TokenType.Dot)
+        // Rule 19: cur == Dot/QuestionDot || prev == Dot/QuestionDot
+        if (cur == TokenType.Dot || prev == TokenType.Dot ||
+            cur == TokenType.QuestionDot || prev == TokenType.QuestionDot)
         {
             return Whitespace.None;
         }

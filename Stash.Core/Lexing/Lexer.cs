@@ -382,6 +382,10 @@ public class Lexer
                 {
                     AddToken(Match('=') ? TokenType.QuestionQuestionEqual : TokenType.QuestionQuestion);
                 }
+                else if (Match('.'))
+                {
+                    AddToken(TokenType.QuestionDot);
+                }
                 else
                 {
                     AddToken(TokenType.QuestionMark);
