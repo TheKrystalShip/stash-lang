@@ -333,7 +333,7 @@ public class TestBuiltInsTests
             test("my test", () => { assert.equal(1, 1); });
             """);
 
-        Assert.Contains("ok 1 - my test", output);
+        Assert.Contains("ok 1 - unknown > my test", output);
     }
 
     [Fact]
@@ -343,7 +343,7 @@ public class TestBuiltInsTests
             test("bad test", () => { assert.equal(1, 2); });
             """);
 
-        Assert.Contains("not ok 1 - bad test", output);
+        Assert.Contains("not ok 1 - unknown > bad test", output);
     }
 
     [Fact]
@@ -391,7 +391,7 @@ public class TestBuiltInsTests
             });
             """);
 
-        Assert.Contains("# my suite", output);
+        Assert.Contains("# unknown > my suite", output);
     }
 
     // ── 7. test() without harness ─────────────────────────────────────────────

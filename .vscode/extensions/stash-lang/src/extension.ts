@@ -5,6 +5,7 @@ import {
   LanguageClientOptions,
   ServerOptions,
 } from "vscode-languageclient/node";
+import { activateTesting } from "./testing";
 
 let client: LanguageClient | undefined;
 let debugOutput: vscode.OutputChannel | undefined;
@@ -56,6 +57,14 @@ export function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(showRefsDisposable);
 
   client.start();
+
+  // ── Test Explorer ─────────────────────────────────────────────────────────
+
+  try {
+    activateTesting(context);
+  } catch (err) {
+    debugOutput?.appendLine(`Failed to activate testing: ${err}`);
+  }
 
   // ── DAP Debug Adapter ─────────────────────────────────────────────────────
 

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using Stash.Common;
 using Stash.Interpreting.Types;
 using Stash.Testing;
@@ -157,12 +158,25 @@ public static class TestBuiltIns
             }
 
             var harness = interp.TestHarness;
-            var span = interp.CurrentSpan ?? new SourceSpan("<unknown>", 0, 0, 0, 0);
+            var span = interp.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
 
             // Build the fully qualified test name from describe context
-            string fullName = interp.CurrentDescribe is not null
-                ? $"{interp.CurrentDescribe} > {name}"
-                : name;
+            string fullName = BuildFullName(interp, interp.CurrentDescribe, name);
+
+            // Check test filter
+            if (interp.TestFilter is not null)
+            {
+                bool matches = interp.TestFilter.Any(f => fullName.StartsWith(f));
+                if (!matches)
+                    return null; // Silent — filtered-out tests emit nothing
+            }
+
+            // Discovery mode — record but don't execute
+            if (interp.DiscoveryMode)
+            {
+                interp.TestHarness?.OnTestDiscovered(fullName, span);
+                return null;
+            }
 
             harness?.OnTestStart(fullName, span);
             var sw = Stopwatch.StartNew();
@@ -219,7 +233,15 @@ public static class TestBuiltIns
             // Build the fully qualified suite name from nested describes
             string fullName = interp.CurrentDescribe is not null
                 ? $"{interp.CurrentDescribe} > {name}"
-                : name;
+                : $"{Path.GetFileName(interp.CurrentFile ?? "unknown")} > {name}";
+
+            // Check test filter
+            if (interp.TestFilter is not null)
+            {
+                bool anyMatch = interp.TestFilter.Any(f => f.StartsWith(fullName) || fullName.StartsWith(f));
+                if (!anyMatch)
+                    return null; // Skip entire describe block
+            }
 
             string? previousDescribe = interp.CurrentDescribe;
             interp.CurrentDescribe = fullName;
@@ -268,6 +290,14 @@ public static class TestBuiltIns
             }
             return sw.ToString();
         }));
+    }
+
+    private static string BuildFullName(Interpreter interp, string? currentDescribe, string testName)
+    {
+        if (currentDescribe is not null)
+            return $"{currentDescribe} > {testName}";  // currentDescribe already has filename prefix
+        string fileName = Path.GetFileName(interp.CurrentFile ?? "unknown");
+        return $"{fileName} > {testName}";
     }
 
     private static double ToDouble(object? value, string funcName, SourceSpan? span)

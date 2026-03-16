@@ -92,6 +92,12 @@ public class TapReporter : ITestHarness
         _output.WriteLine($"1..{_testNumber}");
     }
 
+    public void OnTestDiscovered(string name, SourceSpan span)
+    {
+        EnsureHeader();
+        _output.WriteLine($"# discovered: {name} [{span.File}:{span.StartLine}:{span.StartColumn}]");
+    }
+
     private static string EscapeYaml(string value)
     {
         return value.Replace("\\", "\\\\").Replace("\"", "\\\"");

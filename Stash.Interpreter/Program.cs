@@ -42,6 +42,8 @@ public class Program
 
         bool debug = false;
         bool test = false;
+        bool testList = false;
+        string? testFilter = null;
         string? scriptPath = null;
         int scriptArgStart = -1;
 
@@ -54,6 +56,15 @@ public class Program
             else if (args[i] == "--test" && scriptPath is null)
             {
                 test = true;
+            }
+            else if (args[i] == "--test-list" && scriptPath is null)
+            {
+                testList = true;
+                test = true;  // --test-list implies --test
+            }
+            else if (args[i].StartsWith("--test-filter=") && scriptPath is null)
+            {
+                testFilter = args[i]["--test-filter=".Length..];
             }
             else if (scriptPath is null)
             {
@@ -93,7 +104,7 @@ public class Program
 
         if (debug && test)
         {
-            RunFileWithDebuggerAndTests(scriptPath, scriptArgs);
+            RunFileWithDebuggerAndTests(scriptPath, scriptArgs, testFilter, testList);
         }
         else if (debug)
         {
@@ -101,7 +112,7 @@ public class Program
         }
         else if (test)
         {
-            RunFileWithTests(scriptPath, scriptArgs);
+            RunFileWithTests(scriptPath, scriptArgs, testFilter, testList);
         }
         else
         {
@@ -230,7 +241,7 @@ public class Program
         Console.WriteLine("Script execution completed.");
     }
 
-    private static void RunFileWithDebuggerAndTests(string path, string[] scriptArgs)
+    private static void RunFileWithDebuggerAndTests(string path, string[] scriptArgs, string? testFilter = null, bool testList = false)
     {
         if (!System.IO.File.Exists(path))
         {
@@ -280,6 +291,15 @@ public class Program
         var reporter = new TapReporter();
         interpreter.TestHarness = reporter;
 
+        if (testFilter is not null)
+        {
+            interpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        }
+        if (testList)
+        {
+            interpreter.DiscoveryMode = true;
+        }
+
         try
         {
             interpreter.Interpret(statements);
@@ -305,7 +325,7 @@ public class Program
         }
     }
 
-    private static void RunFileWithTests(string path, string[] scriptArgs)
+    private static void RunFileWithTests(string path, string[] scriptArgs, string? testFilter = null, bool testList = false)
     {
         if (!System.IO.File.Exists(path))
         {
@@ -351,6 +371,15 @@ public class Program
 
         var reporter = new TapReporter();
         interpreter.TestHarness = reporter;
+
+        if (testFilter is not null)
+        {
+            interpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
+        }
+        if (testList)
+        {
+            interpreter.DiscoveryMode = true;
+        }
 
         try
         {

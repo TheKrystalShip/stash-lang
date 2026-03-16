@@ -29,9 +29,12 @@ public class StashLaunchHandler : LaunchHandlerBase
             var argsToken = json["args"];
             string[]? args = argsToken != null ? argsToken.ToObject<string[]>() : null;
 
-            DebugSession.TraceStatic($"Launch extracted: program=\"{program}\", stopOnEntry={stopOnEntry}, cwd=\"{cwd}\", args={args?.Length ?? 0}");
+            var testMode = json["__testMode"]?.Value<bool>() ?? false;
+            var testFilter = json["__testFilter"]?.ToString();
 
-            _session.Launch(program, cwd, stopOnEntry, args);
+            DebugSession.TraceStatic($"Launch extracted: program=\"{program}\", stopOnEntry={stopOnEntry}, cwd=\"{cwd}\", args={args?.Length ?? 0}, testMode={testMode}");
+
+            _session.Launch(program, cwd, stopOnEntry, args, testMode, testFilter);
             DebugSession.TraceStatic("Launch completed");
 
             return Task.FromResult(new LaunchResponse());

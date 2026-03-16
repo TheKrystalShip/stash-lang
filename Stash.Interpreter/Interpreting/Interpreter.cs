@@ -74,6 +74,8 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private readonly HashSet<string> _loadedSources = new(StringComparer.OrdinalIgnoreCase);
     private Stash.Testing.ITestHarness? _testHarness;
     private string? _currentDescribe;
+    private string[]? _testFilter;
+    private bool _discoveryMode;
     private SourceSpan? _currentSpan;
     internal string[] ScriptArgs = Array.Empty<string>();
     internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
@@ -126,6 +128,26 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         get => _currentDescribe;
         set => _currentDescribe = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the test filter patterns. When set, only tests whose fully
+    /// qualified name matches one of the patterns will execute.
+    /// </summary>
+    public string[]? TestFilter
+    {
+        get => _testFilter;
+        set => _testFilter = value;
+    }
+
+    /// <summary>
+    /// Gets or sets whether the interpreter is in test discovery mode.
+    /// In discovery mode, test() records names and locations but does not execute test bodies.
+    /// </summary>
+    public bool DiscoveryMode
+    {
+        get => _discoveryMode;
+        set => _discoveryMode = value;
     }
 
     /// <summary>

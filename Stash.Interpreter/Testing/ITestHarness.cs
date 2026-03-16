@@ -61,4 +61,10 @@ public interface ITestHarness
     /// Gets the number of tests that have been skipped so far.
     /// </summary>
     int SkippedCount => 0;
+
+    /// <summary>
+    /// Called when a test is discovered (discovery mode only).
+    /// Emits a TAP comment line with the test name and location.
+    /// </summary>
+    void OnTestDiscovered(string name, SourceSpan span) { }
 }

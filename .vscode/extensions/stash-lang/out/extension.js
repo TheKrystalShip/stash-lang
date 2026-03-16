@@ -38,6 +38,7 @@ exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const fs = __importStar(require("fs"));
 const node_1 = require("vscode-languageclient/node");
+const testing_1 = require("./testing");
 let client;
 let debugOutput;
 function activate(context) {
@@ -63,6 +64,13 @@ function activate(context) {
     });
     context.subscriptions.push(showRefsDisposable);
     client.start();
+    // ── Test Explorer ─────────────────────────────────────────────────────────
+    try {
+        (0, testing_1.activateTesting)(context);
+    }
+    catch (err) {
+        debugOutput?.appendLine(`Failed to activate testing: ${err}`);
+    }
     // ── DAP Debug Adapter ─────────────────────────────────────────────────────
     debugOutput.appendLine("Registering debug adapter descriptor factory for type 'stash'");
     const factory = new StashDebugAdapterFactory(debugOutput);

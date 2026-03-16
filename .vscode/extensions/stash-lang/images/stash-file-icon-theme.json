@@ -1,0 +1,13 @@
+{
+  "iconDefinitions": {
+    "stash-file": {
+      "iconPath": "./stash-file-icon.svg"
+    }
+  },
+  "fileExtensions": {
+    "stash": "stash-file"
+  },
+  "languageIds": {
+    "stash": "stash-file"
+  }
+}

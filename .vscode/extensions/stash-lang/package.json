@@ -4,6 +4,7 @@
   "description": "Full language support for the Stash scripting language — syntax highlighting, LSP-powered diagnostics, autocomplete, formatting, navigation, and more",
   "version": "0.1.0",
   "publisher": "TheKrystalShip",
+  "icon": "images/stash-icon.png",
   "main": "./out/extension.js",
   "repository": {
     "type": "git",
@@ -18,7 +19,8 @@
     "Snippets",
     "Formatters",
     "Linters",
-    "Debuggers"
+    "Debuggers",
+    "Testing"
   ],
   "contributes": {
     "languages": [
@@ -45,7 +47,9 @@
       {
         "scopeName": "markdown.stash.codeblock",
         "path": "./syntaxes/stash-markdown-injection.tmLanguage.json",
-        "injectTo": ["text.html.markdown"],
+        "injectTo": [
+          "text.html.markdown"
+        ],
         "embeddedLanguages": {
           "meta.embedded.block.stash": "stash"
         }
@@ -128,6 +132,21 @@
           "type": "string",
           "default": "",
           "description": "Absolute path to the Stash DAP debug adapter binary. If empty, the extension looks for 'stash-dap' on the system PATH."
+        },
+        "stash.interpreterPath": {
+          "type": "string",
+          "default": "",
+          "description": "Absolute path to the Stash interpreter binary. If empty, the extension looks for 'stash' on the system PATH."
+        },
+        "stash.testing.filePattern": {
+          "type": "string",
+          "default": "**/*.test.stash",
+          "description": "Glob pattern for auto-discovering test files."
+        },
+        "stash.testing.autoDiscover": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically discover tests in matching files."
         }
       }
     },
@@ -140,6 +159,13 @@
       {
         "command": "stash.showReferences",
         "title": "Show References"
+      }
+    ],
+    "iconThemes": [
+      {
+        "id": "stash-icons",
+        "label": "Stash File Icons",
+        "path": "./images/stash-file-icon-theme.json"
       }
     ],
     "debuggers": [
@@ -201,18 +227,6 @@
               "name": "Debug ${1:script}",
               "program": "^\"\\${file}\"",
               "stopOnEntry": false,
-              "cwd": "^\"\\${workspaceFolder}\""
-            }
-          },
-          {
-            "label": "Stash: Launch with Stop on Entry",
-            "description": "Launch a Stash script and pause at the first statement",
-            "body": {
-              "type": "stash",
-              "request": "launch",
-              "name": "Debug ${1:script} (stop on entry)",
-              "program": "^\"\\${file}\"",
-              "stopOnEntry": true,
               "cwd": "^\"\\${workspaceFolder}\""
             }
           }

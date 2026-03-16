@@ -102,6 +102,35 @@ public class DebugSession : IDebugger
         public bool ExcludeBuiltIns { get; init; }
     }
 
+    /// <summary>
+    /// TextWriter that forwards writes to DAP output events.
+    /// Used to redirect interpreter stdout/stderr through the debug adapter.
+    /// </summary>
+    private sealed class DapOutputWriter : TextWriter
+    {
+        private readonly DebugSession _session;
+        private readonly string _category;
+
+        public DapOutputWriter(DebugSession session, string category)
+        {
+            _session = session;
+            _category = category;
+        }
+
+        public override Encoding Encoding => Encoding.UTF8;
+
+        public override void Write(string? value)
+        {
+            if (value != null)
+                _session.SendOutput(_category, value);
+        }
+
+        public override void WriteLine(string? value)
+        {
+            _session.SendOutput(_category, (value ?? "") + "\n");
+        }
+    }
+
     // ── IDebugger properties ──────────────────────────────────────────────────
 
     public bool StopOnEntry => _stopOnEntry;
@@ -136,7 +165,7 @@ public class DebugSession : IDebugger
     /// Starts a debug session: creates the interpreter, then launches the interpreter
     /// thread which waits for ConfigurationDone before executing the script.
     /// </summary>
-    public void Launch(string scriptPath, string? workingDirectory, bool stopOnEntry, string[]? args)
+    public void Launch(string scriptPath, string? workingDirectory, bool stopOnEntry, string[]? args, bool testMode = false, string? testFilter = null)
     {
         if (string.IsNullOrWhiteSpace(scriptPath))
         {
@@ -155,6 +184,20 @@ public class DebugSession : IDebugger
         if (args is { Length: > 0 })
         {
             _interpreter.SetScriptArgs(args);
+        }
+
+        // Redirect interpreter output through DAP
+        _interpreter.Output = new DapOutputWriter(this, "stdout");
+        _interpreter.ErrorOutput = new DapOutputWriter(this, "stderr");
+
+        // Configure test mode if requested
+        if (testMode)
+        {
+            var reporter = new Stash.Testing.TapReporter(_interpreter.Output);
+            _interpreter.TestHarness = reporter;
+
+            if (testFilter is not null)
+                _interpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
         }
 
         _interpreterThread = new System.Threading.Thread(() =>
@@ -198,6 +241,12 @@ public class DebugSession : IDebugger
                 }
 
                 _interpreter.Interpret(stmts);
+
+                // If running in test mode, emit TAP plan
+                if (_interpreter.TestHarness is Stash.Testing.TapReporter tapReporter)
+                {
+                    tapReporter.OnRunComplete(tapReporter.Passed, tapReporter.Failed, tapReporter.Skipped);
+                }
             }
             catch (RuntimeError ex)
             {
