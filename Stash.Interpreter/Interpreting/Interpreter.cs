@@ -276,7 +276,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             return _environment.Get(expr.Name.Lexeme, expr.Span);
         }
-        return _globals.Get(expr.Name.Lexeme, expr.Span);
+        return _environment.Get(expr.Name.Lexeme, expr.Span);
     }
 
     /// <summary>
@@ -362,7 +362,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             }
             else
             {
-                _globals.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+                _environment.Assign(id.Name.Lexeme, newValue, id.Name.Span);
             }
         }
         else if (expr.Operand is DotExpr dot)
@@ -900,7 +900,7 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
         else
         {
-            _globals.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+            _environment.Assign(expr.Name.Lexeme, value, expr.Name.Span);
         }
         return value;
     }
