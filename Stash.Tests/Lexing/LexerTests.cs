@@ -56,6 +56,12 @@ public class LexerTests
     [InlineData("--", TokenType.MinusMinus)]
     [InlineData("=", TokenType.Equal)]
     [InlineData("=>", TokenType.FatArrow)]
+    [InlineData("+=", TokenType.PlusEqual)]
+    [InlineData("-=", TokenType.MinusEqual)]
+    [InlineData("*=", TokenType.StarEqual)]
+    [InlineData("/=", TokenType.SlashEqual)]
+    [InlineData("%=", TokenType.PercentEqual)]
+    [InlineData("??=", TokenType.QuestionQuestionEqual)]
     public void ScanTokens_TwoCharOrAssignToken_ProducesCorrectType(string source, TokenType expected)
     {
         var tokens = Scan(source);

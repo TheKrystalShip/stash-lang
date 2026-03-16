@@ -219,7 +219,7 @@ public class Lexer
             case '.': AddToken(TokenType.Dot); break;
             case ';': AddToken(TokenType.Semicolon); break;
             case ':': AddToken(TokenType.Colon); break;
-            case '%': AddToken(TokenType.Percent); break;
+            case '%': AddToken(Match('=') ? TokenType.PercentEqual : TokenType.Percent); break;
             case '$':
                 if (Match('"'))
                 {
@@ -236,7 +236,9 @@ public class Lexer
                 break;
 
             case '+':
-                AddToken(Match('+') ? TokenType.PlusPlus : TokenType.Plus);
+                if (Match('+')) AddToken(TokenType.PlusPlus);
+                else if (Match('=')) AddToken(TokenType.PlusEqual);
+                else AddToken(TokenType.Plus);
                 break;
             case '-':
                 if (Match('-'))
@@ -247,6 +249,10 @@ public class Lexer
                 {
                     AddToken(TokenType.Arrow);
                 }
+                else if (Match('='))
+                {
+                    AddToken(TokenType.MinusEqual);
+                }
                 else
                 {
                     AddToken(TokenType.Minus);
@@ -254,7 +260,7 @@ public class Lexer
 
                 break;
             case '*':
-                AddToken(TokenType.Star);
+                AddToken(Match('=') ? TokenType.StarEqual : TokenType.Star);
                 break;
             case '/':
                 if (Match('/'))
@@ -264,6 +270,10 @@ public class Lexer
                 else if (Match('*'))
                 {
                     MultiLineComment();
+                }
+                else if (Match('='))
+                {
+                    AddToken(TokenType.SlashEqual);
                 }
                 else
                 {
@@ -343,7 +353,14 @@ public class Lexer
                 AddToken(Match('|') ? TokenType.PipePipe : TokenType.Pipe);
                 break;
             case '?':
-                AddToken(Match('?') ? TokenType.QuestionQuestion : TokenType.QuestionMark);
+                if (Match('?'))
+                {
+                    AddToken(Match('=') ? TokenType.QuestionQuestionEqual : TokenType.QuestionQuestion);
+                }
+                else
+                {
+                    AddToken(TokenType.QuestionMark);
+                }
                 break;
 
             case ' ':

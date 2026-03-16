@@ -596,7 +596,57 @@ public class Parser
             Error(equals, "Invalid assignment target.");
         }
 
+        if (Match(TokenType.PlusEqual, TokenType.MinusEqual, TokenType.StarEqual,
+                  TokenType.SlashEqual, TokenType.PercentEqual, TokenType.QuestionQuestionEqual))
+        {
+            Token op = Previous();
+            Expr value = Assignment();
+
+            if (expr is IdentifierExpr id)
+            {
+                Expr compoundValue = DesugarCompoundAssignment(op, new IdentifierExpr(id.Name, id.Span), value);
+                return new AssignExpr(id.Name, compoundValue, MakeSpan(id.Span, value.Span));
+            }
+            else if (expr is IndexExpr indexExpr)
+            {
+                Expr compoundValue = DesugarCompoundAssignment(op, indexExpr, value);
+                return new IndexAssignExpr(indexExpr.Object, indexExpr.Index, compoundValue,
+                    indexExpr.BracketSpan, MakeSpan(indexExpr.Span, value.Span));
+            }
+            else if (expr is DotExpr dotExpr)
+            {
+                Expr compoundValue = DesugarCompoundAssignment(op, dotExpr, value);
+                return new DotAssignExpr(dotExpr.Object, dotExpr.Name, compoundValue,
+                    MakeSpan(dotExpr.Span, value.Span));
+            }
+
+            Error(op, "Invalid assignment target.");
+        }
+
         return expr;
+    }
+
+    private Expr DesugarCompoundAssignment(Token compoundOp, Expr target, Expr value)
+    {
+        SourceSpan span = MakeSpan(target.Span, value.Span);
+
+        if (compoundOp.Type == TokenType.QuestionQuestionEqual)
+        {
+            return new NullCoalesceExpr(target, value, span);
+        }
+
+        TokenType binaryOp = compoundOp.Type switch
+        {
+            TokenType.PlusEqual => TokenType.Plus,
+            TokenType.MinusEqual => TokenType.Minus,
+            TokenType.StarEqual => TokenType.Star,
+            TokenType.SlashEqual => TokenType.Slash,
+            TokenType.PercentEqual => TokenType.Percent,
+            _ => throw new InvalidOperationException($"Unexpected compound operator: {compoundOp.Type}")
+        };
+
+        Token syntheticOp = new Token(binaryOp, compoundOp.Lexeme, null, compoundOp.Span);
+        return new BinaryExpr(target, syntheticOp, value, span);
     }
 
     /// <summary>

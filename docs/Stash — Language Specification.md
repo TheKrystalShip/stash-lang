@@ -854,6 +854,45 @@ fn add(a, b) {
 }
 ```
 
+### Default Parameter Values
+
+Function parameters can have **default values** — if the caller omits an argument, the default is used instead. Default parameters must be **trailing** (right-to-left), same as C#.
+
+```stash
+fn greet(name, greeting = "Hello") {
+    io.println(greeting + ", " + name);
+}
+
+greet("Alice");           // "Hello, Alice"
+greet("Alice", "Hi");     // "Hi, Alice"
+```
+
+Default values work with optional type annotations:
+
+```stash
+fn connect(host: string, port: int = 8080, secure: bool = false) {
+    io.println("Connecting to " + host + ":" + conv.toStr(port));
+}
+
+connect("localhost");                  // port=8080, secure=false
+connect("localhost", 443);             // secure=false
+connect("localhost", 443, true);       // all provided
+```
+
+**Rules:**
+- Once a parameter has a default value, all subsequent parameters must also have defaults
+- Default values are expressions evaluated at **call time** (not definition time)
+- Calling with too few required arguments or too many total arguments is a runtime error
+
+```stash
+// Parse error — non-default after default
+fn bad(a = 1, b) { }
+
+// Runtime error — 'a' is required
+fn f(a, b = 5) { return a + b; }
+f();  // Error: Expected 1 to 2 arguments but got 0
+```
+
 ### Implicit Return Value
 
 Functions that do not execute a `return` statement implicitly return `null`:
@@ -938,12 +977,21 @@ let abs = (x) => {
 
 ### Parameters
 
-Lambdas support zero or more parameters, with optional type annotations:
+Lambdas support zero or more parameters, with optional type annotations and default values:
 
 ```stash
 let noParams = () => 42;
 let oneParam = (x) => x + 1;
 let typed = (x: int, y: int) => x + y;
+let withDefault = (x, factor = 2) => x * factor;
+```
+
+Default values follow the same trailing-only rules as named functions:
+
+```stash
+let connect = (host: string, port: int = 8080) => host + ":" + conv.toStr(port);
+connect("localhost");        // "localhost:8080"
+connect("localhost", 443);   // "localhost:443"
 ```
 
 ### Closures
@@ -1266,19 +1314,19 @@ Execution:       ~80-90%  (runs repeatedly)
 
 #### Tier 1 — Easy Wins (Apply During Development)
 
-| Optimization                             | Where              | Impact  | Status                                            |
-| ---------------------------------------- | ------------------ | ------- | ------------------------------------------------- |
-| String interning                         | Lexer              | High    | ✅ Done — `string.Intern()` in `ScanIdentifier()` |
-| `FrozenDictionary` for keywords/builtins | Lexer, Interpreter | Low-Med | ⚡ Partial — Lexer uses it; Interpreter does not  |
-| `ReadOnlySpan<char>` in lexer            | Lexer              | High    | ❌ Not started                                    |
+| Optimization                             | Where              | Impact  | Status                                                                            |
+| ---------------------------------------- | ------------------ | ------- | --------------------------------------------------------------------------------- |
+| String interning                         | Lexer              | High    | ✅ Done — `string.Intern()` in `ScanIdentifier()`                                 |
+| `FrozenDictionary` for keywords/builtins | Lexer, Interpreter | Low-Med | ✅ Done — Lexer keywords + `StashNamespace.Freeze()` for all built-in namespaces  |
+| `ReadOnlySpan<char>` in lexer            | Lexer              | Medium  | ✅ Done — Span-based `ScanNumber()` parsing + `GetAlternateLookup` keyword lookup |
 
 #### Tier 2 — Architectural (Apply After v1 Works)
 
-| Optimization                                      | Where                  | Impact  | Status                                                         |
-| ------------------------------------------------- | ---------------------- | ------- | -------------------------------------------------------------- |
-| Variable resolution at parse time (resolver pass) | Resolver + Interpreter | Highest | ❌ Not started — `GetAt()`/`AssignAt()` exist but are unused   |
-| Slot-based environments (array, not dictionary)   | Environment            | High    | ❌ Not started — `Dictionary<string, object?>` backing         |
-| `ArrayPool<T>` for function call argument arrays  | Interpreter            | Medium  | ❌ Not started                                                 |
+| Optimization                                      | Where                  | Impact  | Status                                                                                      |
+| ------------------------------------------------- | ---------------------- | ------- | ------------------------------------------------------------------------------------------- |
+| Variable resolution at parse time (resolver pass) | Resolver + Interpreter | Highest | ✅ Done — `Resolver` class computes scope distances; `GetAt()`/`AssignAt()` used at runtime |
+| Slot-based environments (array, not dictionary)   | Environment            | High    | ❌ Not started — `Dictionary<string, object?>` backing                                      |
+| Pre-sized argument lists for function calls       | Interpreter            | Low     | ✅ Done — `List<object?>(expr.Arguments.Count)` pre-allocation                              |
 
 #### Tier 3 — Nuclear Option
 
@@ -1351,11 +1399,9 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 ### Phase 6 — Future
 
 - Bytecode VM (if performance requires it)
-- DAP adapter (VS Code debugging)
 - Methods on structs
 - C-style `for(;;)` loops
 - Regular expressions
-- Standard library expansion
 
 ---
 
@@ -1452,7 +1498,8 @@ primary        → NUMBER | STRING | INTERPOLATED_STRING | "true" | "false" | "n
                | "$(" COMMAND_TEXT ")" ;
 lambdaExpr     → "(" parameters? ")" "=>" ( block | assignment ) ;
 
-parameters     → IDENTIFIER ( "," IDENTIFIER )* ;
+parameter      → IDENTIFIER ( ":" IDENTIFIER )? ( "=" expression )? ;
+parameters     → parameter ( "," parameter )* ;
 arguments      → expression ( "," expression )* ;
 ```
 

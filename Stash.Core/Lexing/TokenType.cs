@@ -125,6 +125,24 @@ public enum TokenType
     /// <summary>The <c>=</c> operator. Assignment — binds a value to a variable.</summary>
     Equal,
 
+    /// <summary>The <c>+=</c> operator. Compound addition assignment.</summary>
+    PlusEqual,
+
+    /// <summary>The <c>-=</c> operator. Compound subtraction assignment.</summary>
+    MinusEqual,
+
+    /// <summary>The <c>*=</c> operator. Compound multiplication assignment.</summary>
+    StarEqual,
+
+    /// <summary>The <c>/=</c> operator. Compound division assignment.</summary>
+    SlashEqual,
+
+    /// <summary>The <c>%=</c> operator. Compound modulo assignment.</summary>
+    PercentEqual,
+
+    /// <summary>The <c>??=</c> operator. Null-coalescing assignment — assigns only if the target is null.</summary>
+    QuestionQuestionEqual,
+
     // ── Literals ─────────────────────────────────────────────────────
 
     /// <summary>An integer literal (e.g. <c>42</c>, <c>0</c>). The <see cref="Token.Literal"/> value is a <see cref="long"/>.</summary>

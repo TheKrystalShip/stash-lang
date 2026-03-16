@@ -2339,6 +2339,68 @@ public class InterpreterTests
         Assert.Equal(8L, Run("let x = 5; x++; x++; x++; let result = x;"));
     }
 
+    // --- Compound Assignment Operators (+=, -=, *=, /=, %=, ??=) ---
+
+    [Fact]
+    public void CompoundAdd_AddsAndAssigns()
+    {
+        Assert.Equal(8L, Run("let x = 5; x += 3; let result = x;"));
+    }
+
+    [Fact]
+    public void CompoundSubtract_SubtractsAndAssigns()
+    {
+        Assert.Equal(6L, Run("let x = 10; x -= 4; let result = x;"));
+    }
+
+    [Fact]
+    public void CompoundMultiply_MultipliesAndAssigns()
+    {
+        Assert.Equal(12L, Run("let x = 3; x *= 4; let result = x;"));
+    }
+
+    [Fact]
+    public void CompoundDivide_DividesAndAssigns()
+    {
+        Assert.Equal(4L, Run("let x = 20; x /= 5; let result = x;"));
+    }
+
+    [Fact]
+    public void CompoundModulo_ModuloAndAssigns()
+    {
+        Assert.Equal(2L, Run("let x = 17; x %= 5; let result = x;"));
+    }
+
+    [Fact]
+    public void CompoundNullCoalesce_AssignsWhenNull()
+    {
+        Assert.Equal("default", Run("let x = null; x ??= \"default\"; let result = x;"));
+    }
+
+    [Fact]
+    public void CompoundNullCoalesce_DoesNotAssignWhenNonNull()
+    {
+        Assert.Equal("hello", Run("let x = \"hello\"; x ??= \"default\"; let result = x;"));
+    }
+
+    [Fact]
+    public void CompoundAdd_StringConcatenation()
+    {
+        Assert.Equal("hello world", Run("let s = \"hello\"; s += \" world\"; let result = s;"));
+    }
+
+    [Fact]
+    public void CompoundAdd_OnStructField()
+    {
+        Assert.Equal(8L, Run("struct Foo { count } let f = Foo { count: 5 }; f.count += 3; let result = f.count;"));
+    }
+
+    [Fact]
+    public void CompoundAdd_OnArrayIndex()
+    {
+        Assert.Equal(11L, Run("let arr = [1, 2, 3]; arr[0] += 10; let result = arr[0];"));
+    }
+
     // --- Operator Precedence End-to-End ---
 
     [Fact]
