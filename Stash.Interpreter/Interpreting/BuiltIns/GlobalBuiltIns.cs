@@ -14,77 +14,25 @@ public static class GlobalBuiltIns
         globals.Define("typeof", new BuiltInFunction("typeof", 1, (_, args) =>
         {
             object? val = args[0];
-            if (val is null)
-            {
-                return "null";
-            }
 
-            if (val is long)
+            return val switch
             {
-                return "int";
-            }
-
-            if (val is double)
-            {
-                return "float";
-            }
-
-            if (val is string)
-            {
-                return "string";
-            }
-
-            if (val is bool)
-            {
-                return "bool";
-            }
-
-            if (val is List<object?>)
-            {
-                return "array";
-            }
-
-            if (val is StashInstance)
-            {
-                return "struct";
-            }
-
-            if (val is StashStruct)
-            {
-                return "struct";
-            }
-
-            if (val is StashEnumValue)
-            {
-                return "enum";
-            }
-
-            if (val is StashEnum)
-            {
-                return "enum";
-            }
-
-            if (val is StashDictionary)
-            {
-                return "dict";
-            }
-
-            if (val is StashRange)
-            {
-                return "range";
-            }
-
-            if (val is StashNamespace)
-            {
-                return "namespace";
-            }
-
-            if (val is IStashCallable)
-            {
-                return "function";
-            }
-
-            return "unknown";
+                null => "null",
+                long => "int",
+                double => "float",
+                string => "string",
+                bool => "bool",
+                List<object?> => "array",
+                StashInstance => "struct",
+                StashStruct => "struct",
+                StashEnumValue => "enum",
+                StashEnum => "enum",
+                StashDictionary => "dict",
+                StashRange => "range",
+                StashNamespace => "namespace",
+                IStashCallable => "function",
+                _ => "unknown"
+            };
         }));
 
         globals.Define("len", new BuiltInFunction("len", 1, (_, args) =>

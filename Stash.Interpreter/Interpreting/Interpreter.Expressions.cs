@@ -1,0 +1,808 @@
+namespace Stash.Interpreting;
+
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Stash.Common;
+using Stash.Debugging;
+using Stash.Lexing;
+using Stash.Parsing.AST;
+using Stash.Interpreting.Types;
+
+public partial class Interpreter
+{
+    public object? VisitLiteralExpr(LiteralExpr expr)
+    {
+        return expr.Value;
+    }
+
+    public object? VisitIdentifierExpr(IdentifierExpr expr)
+    {
+        if (_locals.TryGetValue(expr, out int distance))
+        {
+            return _environment.GetAt(distance, expr.Name.Lexeme);
+        }
+        if (_isAdHocEval)
+        {
+            return _environment.Get(expr.Name.Lexeme, expr.Span);
+        }
+        return _environment.Get(expr.Name.Lexeme, expr.Span);
+    }
+
+    public object? VisitGroupingExpr(GroupingExpr expr)
+    {
+        return expr.Expression.Accept(this);
+    }
+
+    public object? VisitUnaryExpr(UnaryExpr expr)
+    {
+        object? right = expr.Right.Accept(this);
+
+        switch (expr.Operator.Type)
+        {
+            case TokenType.Bang:
+                return !IsTruthy(right);
+
+            case TokenType.Minus:
+                if (right is long i)
+                {
+                    return -i;
+                }
+
+                if (right is double d)
+                {
+                    return -d;
+                }
+
+                throw new RuntimeError("Operand must be a number.", expr.Operator.Span);
+
+            default:
+                throw new RuntimeError($"Unknown unary operator '{expr.Operator.Lexeme}'.", expr.Operator.Span);
+        }
+    }
+
+    public object? VisitUpdateExpr(UpdateExpr expr)
+    {
+        object? oldValue = expr.Operand.Accept(this);
+
+        if (oldValue is not long && oldValue is not double)
+        {
+            throw new RuntimeError("Operand of '++' or '--' must be a number.", expr.Operator.Span);
+        }
+
+        object newValue;
+        if (expr.Operator.Type == TokenType.PlusPlus)
+        {
+            newValue = oldValue is long l ? (object)(l + 1) : (object)((double)oldValue + 1.0);
+        }
+        else
+        {
+            newValue = oldValue is long l ? (object)(l - 1) : (object)((double)oldValue - 1.0);
+        }
+
+        // Write back
+        if (expr.Operand is IdentifierExpr id)
+        {
+            if (_locals.TryGetValue(expr, out int distance))
+            {
+                _environment.AssignAt(distance, id.Name.Lexeme, newValue, id.Name.Span);
+            }
+            else if (_isAdHocEval)
+            {
+                _environment.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+            }
+            else
+            {
+                _environment.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+            }
+        }
+        else if (expr.Operand is DotExpr dot)
+        {
+            object? obj = dot.Object.Accept(this);
+            if (obj is StashInstance instance)
+            {
+                instance.SetField(dot.Name.Lexeme, newValue, dot.Name.Span);
+            }
+            else
+            {
+                throw new RuntimeError("Only struct instances have fields.", dot.Name.Span);
+            }
+        }
+        else if (expr.Operand is IndexExpr idx)
+        {
+            object? collection = idx.Object.Accept(this);
+            object? index = idx.Index.Accept(this);
+            if (collection is List<object?> list && index is long i)
+            {
+                list[(int)i] = newValue;
+            }
+            else
+            {
+                throw new RuntimeError("Invalid target for increment/decrement.", expr.Operator.Span);
+            }
+        }
+        else
+        {
+            throw new RuntimeError("Invalid target for increment/decrement.", expr.Operator.Span);
+        }
+
+        return expr.IsPrefix ? newValue : oldValue;
+    }
+
+    public object? VisitBinaryExpr(BinaryExpr expr)
+    {
+        // Short-circuit operators evaluate left first, then conditionally evaluate right.
+        if (expr.Operator.Type == TokenType.AmpersandAmpersand)
+        {
+            object? left = expr.Left.Accept(this);
+            return !IsTruthy(left) ? left : expr.Right.Accept(this);
+        }
+
+        if (expr.Operator.Type == TokenType.PipePipe)
+        {
+            object? left = expr.Left.Accept(this);
+            return IsTruthy(left) ? left : expr.Right.Accept(this);
+        }
+
+        // Non-short-circuit operators evaluate both sides.
+        object? leftVal = expr.Left.Accept(this);
+        object? rightVal = expr.Right.Accept(this);
+
+        switch (expr.Operator.Type)
+        {
+            case TokenType.Plus:
+                return EvaluatePlus(leftVal, rightVal, expr);
+
+            case TokenType.Minus:
+                return EvaluateArithmetic(leftVal, rightVal, expr, (a, b) => a - b, (a, b) => a - b);
+
+            case TokenType.Star:
+                if (leftVal is string ls && rightVal is long ri)
+                {
+                    if (ri < 0)
+                    {
+                        throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    }
+
+                    return ri == 0 ? "" : string.Concat(Enumerable.Repeat(ls, (int)ri));
+                }
+                if (leftVal is long li2 && rightVal is string rs)
+                {
+                    if (li2 < 0)
+                    {
+                        throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    }
+
+                    return li2 == 0 ? "" : string.Concat(Enumerable.Repeat(rs, (int)li2));
+                }
+                return EvaluateArithmetic(leftVal, rightVal, expr, (a, b) => a * b, (a, b) => a * b);
+
+            case TokenType.Slash:
+                return EvaluateDivision(leftVal, rightVal, expr);
+
+            case TokenType.Percent:
+                return EvaluateModulo(leftVal, rightVal, expr);
+
+            case TokenType.EqualEqual:
+                return IsEqual(leftVal, rightVal);
+
+            case TokenType.BangEqual:
+                return !IsEqual(leftVal, rightVal);
+
+            case TokenType.Less:
+                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a < b, (a, b) => a < b);
+
+            case TokenType.Greater:
+                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a > b, (a, b) => a > b);
+
+            case TokenType.LessEqual:
+                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a <= b, (a, b) => a <= b);
+
+            case TokenType.GreaterEqual:
+                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a >= b, (a, b) => a >= b);
+
+            case TokenType.In:
+                return EvaluateIn(leftVal, rightVal, expr);
+
+            default:
+                throw new RuntimeError($"Unknown binary operator '{expr.Operator.Lexeme}'.", expr.Operator.Span);
+        }
+    }
+
+    private static bool EvaluateIn(object? left, object? right, BinaryExpr expr)
+    {
+        return right switch
+        {
+            List<object?> list => list.Any(item => RuntimeValues.IsEqual(left, item)),
+            string str when left is string sub => str.Contains(sub),
+            StashDictionary dict => left is not null && dict.Has(left),
+            StashRange range when left is long l => range.Contains(l),
+            StashRange range when left is double d && d == Math.Floor(d) => range.Contains((long)d),
+            StashRange => throw new RuntimeError("Left operand of 'in' must be an integer when checking range membership.", expr.Span),
+            string => throw new RuntimeError("Left operand of 'in' must be a string when checking string containment.", expr.Span),
+            _ => throw new RuntimeError("Right operand of 'in' must be an array, string, dictionary, or range.", expr.Span)
+        };
+    }
+
+    public object? VisitTernaryExpr(TernaryExpr expr)
+    {
+        object? condition = expr.Condition.Accept(this);
+        return IsTruthy(condition)
+            ? expr.ThenBranch.Accept(this)
+            : expr.ElseBranch.Accept(this);
+    }
+
+    public object? VisitSwitchExpr(SwitchExpr expr)
+    {
+        object? subject = expr.Subject.Accept(this);
+        foreach (var arm in expr.Arms)
+        {
+            if (arm.IsDiscard)
+            {
+                return arm.Body.Accept(this);
+            }
+            object? pattern = arm.Pattern!.Accept(this);
+            if (IsEqual(subject, pattern))
+            {
+                return arm.Body.Accept(this);
+            }
+        }
+        throw new RuntimeError("No matching arm in switch expression.", expr.Span);
+    }
+
+    public object? VisitTryExpr(TryExpr expr)
+    {
+        try
+        {
+            return expr.Expression.Accept(this);
+        }
+        catch (RuntimeError e)
+        {
+            LastError = e.Message;
+            return null;
+        }
+    }
+
+    public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
+    {
+        object? left = expr.Left.Accept(this);
+        if (left is not null)
+        {
+            return left;
+        }
+        return expr.Right.Accept(this);
+    }
+
+    public object? VisitRangeExpr(RangeExpr expr)
+    {
+        object? startVal = expr.Start.Accept(this);
+        object? endVal = expr.End.Accept(this);
+
+        if (startVal is not long start)
+        {
+            throw new RuntimeError("Range start must be an integer.", expr.Start.Span);
+        }
+
+        if (endVal is not long end)
+        {
+            throw new RuntimeError("Range end must be an integer.", expr.End.Span);
+        }
+
+        long step = start <= end ? 1 : -1;
+        if (expr.Step is not null)
+        {
+            object? stepVal = expr.Step.Accept(this);
+            if (stepVal is not long s)
+            {
+                throw new RuntimeError("Range step must be an integer.", expr.Step.Span);
+            }
+
+            if (s == 0)
+            {
+                throw new RuntimeError("Range step cannot be zero.", expr.Step.Span);
+            }
+
+            step = s;
+        }
+
+        return new StashRange(start, end, step);
+    }
+
+    public object? VisitAssignExpr(AssignExpr expr)
+    {
+        object? value = expr.Value.Accept(this);
+        if (_locals.TryGetValue(expr, out int distance))
+        {
+            _environment.AssignAt(distance, expr.Name.Lexeme, value, expr.Name.Span);
+        }
+        else if (_isAdHocEval)
+        {
+            _environment.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+        }
+        else
+        {
+            _environment.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+        }
+        return value;
+    }
+
+    public object? VisitCallExpr(CallExpr expr)
+    {
+        object? callee = expr.Callee.Accept(this);
+
+        var arguments = new List<object?>(expr.Arguments.Count);
+        foreach (Expr argument in expr.Arguments)
+        {
+            arguments.Add(argument.Accept(this));
+        }
+
+        if (callee is not IStashCallable function)
+        {
+            throw new RuntimeError("Can only call functions.", expr.Paren.Span);
+        }
+
+        if (function.Arity != -1)
+        {
+            int minArity = function.MinArity;
+            if (arguments.Count < minArity || arguments.Count > function.Arity)
+            {
+                string expected = minArity == function.Arity
+                    ? $"{function.Arity}"
+                    : $"{minArity} to {function.Arity}";
+                throw new RuntimeError(
+                    $"Expected {expected} arguments but got {arguments.Count}.",
+                    expr.Paren.Span);
+            }
+        }
+
+        string functionName = callee is StashFunction sf ? sf.ToString() : callee.ToString() ?? "<unknown>";
+        if (functionName.StartsWith("<fn ") && functionName.EndsWith(">"))
+        {
+            functionName = functionName.Substring(4, functionName.Length - 5);
+        }
+        else if (functionName.StartsWith("<built-in fn ") && functionName.EndsWith(">"))
+        {
+            functionName = functionName.Substring(13, functionName.Length - 14);
+        }
+
+        SourceSpan? functionSpan = callee switch
+        {
+            StashFunction fn => fn.DefinitionSpan,
+            StashLambda lm => lm.DefinitionSpan,
+            _ => null
+        };
+
+        var callFrame = new CallFrame
+        {
+            FunctionName = functionName,
+            CallSite = expr.Span,
+            LocalScope = _environment,
+            FunctionSpan = functionSpan
+        };
+        _callStack.Add(callFrame);
+        _debugger?.OnFunctionEnter(functionName, expr.Span, _environment);
+
+        try
+        {
+            object? result = function.Call(this, arguments);
+            return result;
+        }
+        finally
+        {
+            _callStack.RemoveAt(_callStack.Count - 1);
+            _debugger?.OnFunctionExit(functionName);
+        }
+    }
+
+    public object? VisitLambdaExpr(LambdaExpr expr)
+    {
+        return new StashLambda(expr, _environment);
+    }
+
+    public object? VisitStructInitExpr(StructInitExpr expr)
+    {
+        object? structDef = expr.Target is not null
+            ? expr.Target.Accept(this)
+            : _environment.Get(expr.Name.Lexeme, expr.Span);
+
+        if (structDef is not StashStruct template)
+        {
+            throw new RuntimeError($"'{expr.Name.Lexeme}' is not a struct.", expr.Name.Span);
+        }
+
+        var fieldValues = new Dictionary<string, object?>();
+
+        // Initialize all fields to null
+        foreach (string field in template.Fields)
+        {
+            fieldValues[field] = null;
+        }
+
+        // Set provided field values
+        var seenFields = new HashSet<string>();
+        foreach (var (fieldToken, valueExpr) in expr.FieldValues)
+        {
+            string fieldName = fieldToken.Lexeme;
+            if (!fieldValues.ContainsKey(fieldName))
+            {
+                throw new RuntimeError($"Unknown field '{fieldName}' for struct '{template.Name}'.", fieldToken.Span);
+            }
+
+            if (!seenFields.Add(fieldName))
+            {
+                throw new RuntimeError($"Duplicate field '{fieldName}' in struct initializer.", fieldToken.Span);
+            }
+
+            fieldValues[fieldName] = valueExpr.Accept(this);
+        }
+
+        return new StashInstance(template.Name, template, fieldValues);
+    }
+
+    public object? VisitDotExpr(DotExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+
+        // Optional chaining: a?.b returns null if a is null
+        if (expr.IsOptional && obj is null)
+        {
+            return null;
+        }
+
+        if (obj is StashInstance instance)
+        {
+            return instance.GetField(expr.Name.Lexeme, expr.Name.Span);
+        }
+
+        if (obj is StashDictionary dict)
+        {
+            return dict.Get(expr.Name.Lexeme);
+        }
+
+        if (obj is StashEnum enumDef)
+        {
+            StashEnumValue? value = enumDef.GetMember(expr.Name.Lexeme) ?? throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{expr.Name.Lexeme}'.", expr.Name.Span);
+            return value;
+        }
+
+        if (obj is StashNamespace ns)
+        {
+            return ns.GetMember(expr.Name.Lexeme, expr.Name.Span);
+        }
+
+        throw new RuntimeError("Only struct instances, dictionaries, enums, and namespaces have members.", expr.Name.Span);
+    }
+
+    public object? VisitDotAssignExpr(DotAssignExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+
+        if (obj is StashNamespace)
+        {
+            throw new RuntimeError("Cannot assign to namespace members.", expr.Name.Span);
+        }
+
+        if (obj is StashDictionary dict)
+        {
+            object? value = expr.Value.Accept(this);
+            dict.Set(expr.Name.Lexeme, value);
+            return value;
+        }
+
+        if (obj is not StashInstance instance)
+        {
+            throw new RuntimeError("Only struct instances and dictionaries have fields.", expr.Name.Span);
+        }
+
+        object? assignValue = expr.Value.Accept(this);
+        instance.SetField(expr.Name.Lexeme, assignValue, expr.Name.Span);
+        return assignValue;
+    }
+
+    public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
+    {
+        var sb = new System.Text.StringBuilder();
+        foreach (Expr part in expr.Parts)
+        {
+            object? value = part.Accept(this);
+            sb.Append(Stringify(value));
+        }
+        return sb.ToString();
+    }
+
+    public object? VisitArrayExpr(ArrayExpr expr)
+    {
+        var elements = new List<object?>();
+        foreach (Expr element in expr.Elements)
+        {
+            elements.Add(element.Accept(this));
+        }
+        return elements;
+    }
+
+    public object? VisitIndexExpr(IndexExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+        object? index = expr.Index.Accept(this);
+
+        if (obj is List<object?> list)
+        {
+            if (index is not long i)
+            {
+                throw new RuntimeError("Array index must be an integer.", expr.BracketSpan);
+            }
+
+            if (i < 0 || i >= list.Count)
+            {
+                throw new RuntimeError($"Array index {i} out of bounds (length {list.Count}).", expr.BracketSpan);
+            }
+
+            return list[(int)i];
+        }
+
+        if (obj is string str)
+        {
+            if (index is not long i)
+            {
+                throw new RuntimeError("String index must be an integer.", expr.BracketSpan);
+            }
+
+            if (i < 0 || i >= str.Length)
+            {
+                throw new RuntimeError($"String index {i} out of bounds (length {str.Length}).", expr.BracketSpan);
+            }
+
+            return str[(int)i].ToString();
+        }
+
+        if (obj is StashDictionary dict)
+        {
+            if (index is null)
+            {
+                throw new RuntimeError("Dictionary key cannot be null.", expr.BracketSpan);
+            }
+
+            return dict.Get(index);
+        }
+
+        throw new RuntimeError("Only arrays, strings, and dictionaries can be indexed.", expr.BracketSpan);
+    }
+
+    public object? VisitIndexAssignExpr(IndexAssignExpr expr)
+    {
+        object? obj = expr.Object.Accept(this);
+        object? index = expr.Index.Accept(this);
+        object? value = expr.Value.Accept(this);
+
+        if (obj is StashDictionary dict)
+        {
+            if (index is null)
+            {
+                throw new RuntimeError("Dictionary key cannot be null.", expr.BracketSpan);
+            }
+
+            dict.Set(index, value);
+            return value;
+        }
+
+        if (obj is not List<object?> list)
+        {
+            throw new RuntimeError("Only arrays and dictionaries can be assigned to by index.", expr.BracketSpan);
+        }
+
+        if (index is not long i)
+        {
+            throw new RuntimeError("Array index must be an integer.", expr.BracketSpan);
+        }
+
+        if (i < 0 || i >= list.Count)
+        {
+            throw new RuntimeError($"Array index {i} out of bounds (length {list.Count}).", expr.BracketSpan);
+        }
+
+        list[(int)i] = value;
+        return value;
+    }
+
+    private bool IsTruthy(object? value) => RuntimeValues.IsTruthy(value);
+
+    public string Stringify(object? value) => RuntimeValues.Stringify(value);
+
+    /// <summary>
+    /// Evaluates the <c>+</c> operator, which supports both numeric addition and string concatenation.
+    /// </summary>
+    /// <param name="left">The evaluated left operand.</param>
+    /// <param name="right">The evaluated right operand.</param>
+    /// <param name="expr">The <see cref="BinaryExpr"/> node, used for error-location reporting.</param>
+    /// <returns>
+    /// If both operands are numeric: the sum as <see cref="long"/> (when both are <c>long</c>) or
+    /// <see cref="double"/> (when at least one is <c>double</c>). If either operand is a
+    /// <see cref="string"/>: a concatenated string where the non-string operand is converted
+    /// via <see cref="Stringify"/>.
+    /// </returns>
+    /// <exception cref="RuntimeError">
+    /// Thrown when neither numeric addition nor string concatenation applies (e.g., <c>true + false</c>).
+    /// </exception>
+    private object? EvaluatePlus(object? left, object? right, BinaryExpr expr)
+    {
+        // Both numeric — add with promotion.
+        if (left is long li && right is long ri)
+        {
+            return li + ri;
+        }
+
+        if (IsNumeric(left) && IsNumeric(right))
+        {
+            return ToDouble(left) + ToDouble(right);
+        }
+
+        // String concatenation — if either side is a string.
+        if (left is string || right is string)
+        {
+            return Stringify(left) + Stringify(right);
+        }
+
+        throw new RuntimeError("Operands must be numbers or strings.", expr.Operator.Span);
+    }
+
+    /// <summary>
+    /// Evaluates a generic arithmetic binary operation (<c>-</c>, <c>*</c>) using separate
+    /// functions for integer and floating-point arithmetic.
+    /// </summary>
+    /// <param name="left">The evaluated left operand.</param>
+    /// <param name="right">The evaluated right operand.</param>
+    /// <param name="expr">The <see cref="BinaryExpr"/> node, used for error-location reporting.</param>
+    /// <param name="intOp">
+    /// The operation to apply when both operands are <see cref="long"/> (e.g., <c>(a, b) =&gt; a - b</c>).
+    /// </param>
+    /// <param name="doubleOp">
+    /// The operation to apply when at least one operand is <see cref="double"/> and the other
+    /// is numeric. The <c>long</c> operand is promoted to <c>double</c> via <see cref="ToDouble"/>.
+    /// </param>
+    /// <returns>
+    /// A <see cref="long"/> when both operands are <c>long</c>, or a <see cref="double"/> when
+    /// type promotion occurs.
+    /// </returns>
+    /// <exception cref="RuntimeError">
+    /// Thrown when either operand is not a number (e.g., <c>"hello" - 1</c>).
+    /// </exception>
+    private object? EvaluateArithmetic(
+        object? left, object? right, BinaryExpr expr,
+        Func<long, long, long> intOp, Func<double, double, double> doubleOp)
+    {
+        if (left is long li && right is long ri)
+        {
+            return intOp(li, ri);
+        }
+
+        if (IsNumeric(left) && IsNumeric(right))
+        {
+            return doubleOp(ToDouble(left), ToDouble(right));
+        }
+
+        throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+    }
+
+    /// <summary>
+    /// Evaluates the <c>/</c> (division) operator with division-by-zero checking.
+    /// </summary>
+    /// <param name="left">The evaluated left operand (dividend).</param>
+    /// <param name="right">The evaluated right operand (divisor).</param>
+    /// <param name="expr">The <see cref="BinaryExpr"/> node, used for error-location reporting.</param>
+    /// <returns>
+    /// A <see cref="long"/> when both operands are <c>long</c> (truncating integer division),
+    /// or a <see cref="double"/> when at least one operand is <c>double</c>.
+    /// </returns>
+    /// <remarks>
+    /// Integer division truncates toward zero (C# default for <c>long / long</c>).
+    /// Division by zero is always a <see cref="RuntimeError"/> — Stash does not produce
+    /// <c>Infinity</c> or <c>NaN</c>.
+    /// </remarks>
+    /// <exception cref="RuntimeError">
+    /// Thrown when either operand is not numeric, or when the divisor is zero.
+    /// </exception>
+    private object? EvaluateDivision(object? left, object? right, BinaryExpr expr)
+    {
+        if (!IsNumeric(left) || !IsNumeric(right))
+        {
+            throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+        }
+
+        if (left is long li && right is long ri)
+        {
+            if (ri == 0)
+            {
+                throw new RuntimeError("Division by zero.", expr.Operator.Span);
+            }
+
+            return li / ri;
+        }
+
+        double dr = ToDouble(right);
+        if (dr == 0.0)
+        {
+            throw new RuntimeError("Division by zero.", expr.Operator.Span);
+        }
+
+        return ToDouble(left) / dr;
+    }
+
+    /// <summary>
+    /// Evaluates the <c>%</c> (modulo) operator with division-by-zero checking.
+    /// </summary>
+    /// <param name="left">The evaluated left operand.</param>
+    /// <param name="right">The evaluated right operand (modulus).</param>
+    /// <param name="expr">The <see cref="BinaryExpr"/> node, used for error-location reporting.</param>
+    /// <returns>
+    /// The remainder as <see cref="long"/> when both operands are <c>long</c>, or
+    /// <see cref="double"/> when type promotion occurs.
+    /// </returns>
+    /// <exception cref="RuntimeError">
+    /// Thrown when either operand is not numeric, or when the modulus is zero.
+    /// </exception>
+    private object? EvaluateModulo(object? left, object? right, BinaryExpr expr)
+    {
+        if (!IsNumeric(left) || !IsNumeric(right))
+        {
+            throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+        }
+
+        if (left is long li && right is long ri)
+        {
+            if (ri == 0)
+            {
+                throw new RuntimeError("Division by zero.", expr.Operator.Span);
+            }
+
+            return li % ri;
+        }
+
+        double dr = ToDouble(right);
+        if (dr == 0.0)
+        {
+            throw new RuntimeError("Division by zero.", expr.Operator.Span);
+        }
+
+        return ToDouble(left) % dr;
+    }
+
+    private bool IsEqual(object? left, object? right) => RuntimeValues.IsEqual(left, right);
+
+    /// <summary>
+    /// Evaluates a numeric comparison operator (<c>&lt;</c>, <c>&gt;</c>, <c>&lt;=</c>, <c>&gt;=</c>).
+    /// </summary>
+    /// <param name="left">The evaluated left operand.</param>
+    /// <param name="right">The evaluated right operand.</param>
+    /// <param name="expr">The <see cref="BinaryExpr"/> node, used for error-location reporting.</param>
+    /// <param name="intOp">
+    /// The comparison to apply when both operands are <see cref="long"/>.
+    /// </param>
+    /// <param name="doubleOp">
+    /// The comparison to apply when at least one operand is <see cref="double"/>.
+    /// The <c>long</c> operand is promoted via <see cref="ToDouble"/>.
+    /// </param>
+    /// <returns><c>true</c> or <c>false</c> based on the comparison result.</returns>
+    /// <exception cref="RuntimeError">
+    /// Thrown when either operand is not numeric (e.g., <c>"a" &lt; "b"</c> is not supported).
+    /// </exception>
+    private bool CompareNumeric(
+        object? left, object? right, BinaryExpr expr,
+        Func<long, long, bool> intOp, Func<double, double, bool> doubleOp)
+    {
+        if (left is long li && right is long ri)
+        {
+            return intOp(li, ri);
+        }
+
+        if (IsNumeric(left) && IsNumeric(right))
+        {
+            return doubleOp(ToDouble(left), ToDouble(right));
+        }
+
+        throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+    }
+
+    private static bool IsNumeric(object? value) => RuntimeValues.IsNumeric(value);
+
+    private static double ToDouble(object? value) => RuntimeValues.ToDouble(value);
+}
