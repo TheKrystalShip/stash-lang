@@ -1,0 +1,225 @@
+namespace Stash.Interpreting;
+
+using System;
+
+using System.IO;
+using System.Collections.Generic;
+using Stash.Lexing;
+using Stash.Parsing;
+using Stash.Parsing.AST;
+using Stash.Interpreting.Types;
+
+/// <summary>
+/// High-level API for embedding the Stash scripting language in a C# application.
+/// Wraps the lexer, parser, and interpreter into a single easy-to-use interface.
+/// </summary>
+/// <example>
+/// <code>
+/// var engine = new StashEngine();
+/// engine.SetGlobal("playerName", "Alice");
+/// engine.SetGlobal("getHealth", engine.CreateFunction("getHealth", 0,
+///     (args) => player.Health));
+/// 
+/// var result = engine.Execute("'Hello, ' + playerName");
+/// var greeting = engine.GetGlobal("greeting");
+/// </code>
+/// </example>
+public class StashEngine
+{
+    private readonly Interpreter _interpreter;
+
+    /// <summary>
+    /// Creates a new Stash scripting engine with all capabilities enabled.
+    /// </summary>
+    public StashEngine() : this(StashCapabilities.All)
+    {
+    }
+
+    /// <summary>
+    /// Creates a new Stash scripting engine with the specified capabilities.
+    /// Use <see cref="StashCapabilities.None"/> for a fully sandboxed environment.
+    /// </summary>
+    public StashEngine(StashCapabilities capabilities)
+    {
+        _interpreter = new Interpreter(capabilities);
+        _interpreter.EmbeddedMode = true;
+    }
+
+    /// <summary>
+    /// Gets or sets the text writer used for script output (io.println, io.print).
+    /// Defaults to <see cref="Console.Out"/>.
+    /// </summary>
+    public TextWriter Output
+    {
+        get => _interpreter.Output;
+        set => _interpreter.Output = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the text writer used for error output.
+    /// Defaults to <see cref="Console.Error"/>.
+    /// </summary>
+    public TextWriter ErrorOutput
+    {
+        get => _interpreter.ErrorOutput;
+        set => _interpreter.ErrorOutput = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the text reader used for script input (io.readLine).
+    /// Defaults to <see cref="Console.In"/>.
+    /// </summary>
+    public TextReader Input
+    {
+        get => _interpreter.Input;
+        set => _interpreter.Input = value;
+    }
+
+    /// <summary>
+    /// Provides direct access to the underlying interpreter for advanced scenarios.
+    /// </summary>
+    public Interpreter Interpreter => _interpreter;
+
+    /// <summary>
+    /// Executes Stash source code as statements (e.g., variable declarations, function
+    /// definitions, control flow). Returns null for statements.
+    /// </summary>
+    /// <param name="source">Stash source code to execute.</param>
+    /// <returns>A result containing any errors that occurred, or success.</returns>
+    public ExecutionResult Run(string source)
+    {
+        var (statements, errors) = ParseStatements(source);
+        if (errors.Count > 0)
+            return new ExecutionResult(null, errors);
+
+        try
+        {
+            _interpreter.Interpret(statements);
+            return new ExecutionResult(null, []);
+        }
+        catch (ExitException ex)
+        {
+            return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
+        }
+        catch (RuntimeError ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+    }
+
+    /// <summary>
+    /// Evaluates a Stash expression and returns its value.
+    /// </summary>
+    /// <param name="expression">A Stash expression (e.g., "2 + 2", "playerName").</param>
+    /// <returns>A result containing the computed value or any errors.</returns>
+    public ExecutionResult Evaluate(string expression)
+    {
+        var lexer = new Lexer(expression);
+        var tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
+            return new ExecutionResult(null, lexer.Errors);
+
+        var parser = new Parser(tokens);
+        var expr = parser.Parse();
+
+        if (parser.Errors.Count > 0)
+            return new ExecutionResult(null, parser.Errors);
+
+        try
+        {
+            var value = _interpreter.Interpret(expr);
+            return new ExecutionResult(value, []);
+        }
+        catch (ExitException ex)
+        {
+            return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
+        }
+        catch (RuntimeError ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+    }
+
+    /// <summary>
+    /// Sets a global variable accessible to Stash scripts.
+    /// Supports CLR types: long, double, string, bool, null, List&lt;object?&gt;.
+    /// </summary>
+    public void SetGlobal(string name, object? value)
+    {
+        _interpreter.Globals.Define(name, value);
+    }
+
+    /// <summary>
+    /// Gets the value of a global variable set by a Stash script.
+    /// Returns null if the variable doesn't exist.
+    /// </summary>
+    public object? GetGlobal(string name)
+    {
+        return _interpreter.Globals.TryGet(name, out var value) ? value : null;
+    }
+
+    /// <summary>
+    /// Creates a built-in function that can be registered as a global.
+    /// </summary>
+    /// <param name="name">Function name (for error messages).</param>
+    /// <param name="arity">Number of parameters (-1 for variadic).</param>
+    /// <param name="body">The C# implementation. Receives a list of arguments and returns a value.</param>
+    /// <returns>A function object that can be passed to <see cref="SetGlobal"/>.</returns>
+    public BuiltInFunction CreateFunction(string name, int arity, Func<List<object?>, object?> body)
+    {
+        return new BuiltInFunction(name, arity, (interp, args) => body(args));
+    }
+
+    /// <summary>
+    /// Creates a built-in function with access to the interpreter instance.
+    /// Use this when the function needs to call interpreter methods (e.g., output, stringify).
+    /// </summary>
+    public BuiltInFunction CreateFunction(string name, int arity, Func<Interpreter, List<object?>, object?> body)
+    {
+        return new BuiltInFunction(name, arity, body);
+    }
+
+    /// <summary>
+    /// Converts a Stash runtime value to its string representation.
+    /// </summary>
+    public string Stringify(object? value) => _interpreter.Stringify(value);
+
+    private (List<Stmt> Statements, List<string> Errors) ParseStatements(string source)
+    {
+        var lexer = new Lexer(source);
+        var tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
+            return ([], lexer.Errors);
+
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+
+        if (parser.Errors.Count > 0)
+            return ([], parser.Errors);
+
+        return (statements, []);
+    }
+}
+
+/// <summary>
+/// The result of executing or evaluating Stash code.
+/// </summary>
+public class ExecutionResult
+{
+    /// <summary>The return value (for expressions) or null (for statements).</summary>
+    public object? Value { get; }
+
+    /// <summary>Any errors that occurred during lexing, parsing, or execution.</summary>
+    public IReadOnlyList<string> Errors { get; }
+
+    /// <summary>True if execution completed without errors.</summary>
+    public bool Success => Errors.Count == 0;
+
+    public ExecutionResult(object? value, List<string> errors)
+    {
+        Value = value;
+        Errors = errors;
+    }
+}

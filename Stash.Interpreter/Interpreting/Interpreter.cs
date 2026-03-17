@@ -87,6 +87,8 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private bool _isAdHocEval = false;
     private TextWriter _output = Console.Out;
     private TextWriter _errorOutput = Console.Error;
+    private TextReader _input = Console.In;
+    private readonly StashCapabilities _capabilities;
 
     /// <summary>
     /// Gets or sets the current file path being executed.
@@ -178,6 +180,23 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <summary>
+    /// Gets or sets the input reader used by io.readLine.
+    /// Defaults to Console.In. Override to supply input programmatically.
+    /// </summary>
+    public TextReader Input
+    {
+        get => _input;
+        set => _input = value;
+    }
+
+    /// <summary>
+    /// When true, process.exit() throws <see cref="ExitException"/> instead of
+    /// terminating the host process, and process.exec() is disabled.
+    /// Set this to true when embedding the interpreter in another application.
+    /// </summary>
+    public bool EmbeddedMode { get; set; }
+
+    /// <summary>
     /// Gets the current call stack as a read-only list.
     /// </summary>
     public IReadOnlyList<CallFrame> CallStack => _callStack;
@@ -200,8 +219,13 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public Environment Globals => _globals;
 
-    public Interpreter()
+    public Interpreter() : this(StashCapabilities.All)
     {
+    }
+
+    public Interpreter(StashCapabilities capabilities)
+    {
+        _capabilities = capabilities;
         _globals = new Environment();
         _environment = _globals;
         DefineBuiltIns();
@@ -1932,13 +1956,12 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private void DefineBuiltIns()
     {
-        GlobalBuiltIns.Register(_globals);
+        // Core built-ins are always registered (typeof, len, hash, range, etc.)
+        GlobalBuiltIns.Register(_globals, _capabilities);
+
+        // Safe built-ins — always available (pure computation, no system access)
         IoBuiltIns.Register(_globals);
         ConvBuiltIns.Register(_globals);
-        EnvBuiltIns.Register(_globals);
-        ProcessBuiltIns.Register(_globals);
-        FsBuiltIns.Register(_globals);
-        PathBuiltIns.Register(_globals);
         ArrBuiltIns.Register(_globals);
         DictBuiltIns.Register(_globals);
         StrBuiltIns.Register(_globals);
@@ -1947,8 +1970,21 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         JsonBuiltIns.Register(_globals);
         IniBuiltIns.Register(_globals);
         ConfigBuiltIns.Register(_globals);
-        HttpBuiltIns.Register(_globals);
         TestBuiltIns.Register(_globals);
+        PathBuiltIns.Register(_globals);
+
+        // Capability-gated built-ins
+        if (_capabilities.HasFlag(StashCapabilities.Environment))
+            EnvBuiltIns.Register(_globals);
+
+        if (_capabilities.HasFlag(StashCapabilities.Process))
+            ProcessBuiltIns.Register(_globals);
+
+        if (_capabilities.HasFlag(StashCapabilities.FileSystem))
+            FsBuiltIns.Register(_globals);
+
+        if (_capabilities.HasFlag(StashCapabilities.Network))
+            HttpBuiltIns.Register(_globals);
 
         // Freeze all built-in namespaces for optimal read performance.
         foreach (var binding in _globals.GetAllBindings())

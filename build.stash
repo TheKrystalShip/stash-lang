@@ -12,7 +12,7 @@ const DAP_SOURCE: string = $"./Stash.Dap/bin/Release/net10.0/{RUNTIME}/publish/S
 
 const DAP_DEST: string = $"{homeDir}/.local/bin/stash-dap";
 
-const INTERPRETER_SOURCE: string = $"./Stash.Interpreter/bin/Release/net10.0/{RUNTIME}/publish/Stash";
+const INTERPRETER_SOURCE: string = $"./Stash.Cli/bin/Release/net10.0/{RUNTIME}/publish/Stash";
 
 const INTERPRETER_DEST: string = $"{homeDir}/.local/bin/stash";
 
@@ -31,14 +31,14 @@ fn cleanBuild() {
   }
   io.println("Clean complete. Starting build...");
 
-  // Interpreter — Native AOT
-  result = $(dotnet publish Stash.Interpreter -c Release -r {RUNTIME} -p:PublishAot=true);
+  // CLI — Native AOT
+  result = $(dotnet publish Stash.Cli -c Release -r {RUNTIME} -p:PublishAot=true);
   if (result.exitCode != 0) {
-    io.println("Interpreter build failed:");
+    io.println("CLI build failed:");
     io.println(result.stderr);
     process.exit(1);
   }
-  io.println("Interpreter build complete.");
+  io.println("CLI build complete.");
 
   // LSP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
   result = $(dotnet publish Stash.Lsp -c Release -r {RUNTIME});

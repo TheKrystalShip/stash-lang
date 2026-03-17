@@ -8,7 +8,7 @@ using Stash.Interpreting.Types;
 /// </summary>
 public static class GlobalBuiltIns
 {
-    public static void Register(Environment globals)
+    public static void Register(Environment globals, StashCapabilities capabilities)
     {
         globals.Define("typeof", new BuiltInFunction("typeof", 1, (_, args) =>
         {
@@ -112,23 +112,6 @@ public static class GlobalBuiltIns
             return interpreter.LastError;
         }));
 
-        // Built-in structs for argument parsing
-        globals.Define("ArgTree", new StashStruct("ArgTree", new List<string>
-        {
-            "name", "version", "description", "flags", "options", "commands", "positionals"
-        }, new Dictionary<string, StashFunction>()));
-
-        globals.Define("ArgDef", new StashStruct("ArgDef", new List<string>
-        {
-            "name", "short", "type", "default", "description", "required", "args"
-        }, new Dictionary<string, StashFunction>()));
-
-        // parseArgs built-in function
-        globals.Define("parseArgs", new BuiltInFunction("parseArgs", 1, (interpreter, fnArgs) =>
-        {
-            return new ArgumentParser(interpreter.ScriptArgs).Parse(fnArgs[0]);
-        }));
-
         globals.Define("range", new BuiltInFunction("range", -1, (_, args) =>
         {
             if (args.Count < 1 || args.Count > 3)
@@ -203,17 +186,43 @@ public static class GlobalBuiltIns
             return result;
         }));
 
-        globals.Define("exit", new BuiltInFunction("exit", 1, (interp, args) =>
+        if (capabilities.HasFlag(StashCapabilities.Process))
         {
-            if (args[0] is not long code)
+            // Built-in structs for argument parsing
+            globals.Define("ArgTree", new StashStruct("ArgTree", new List<string>
             {
-                throw new RuntimeError("Argument to 'exit' must be an integer.");
-            }
+                "name", "version", "description", "flags", "options", "commands", "positionals"
+            }, new Dictionary<string, StashFunction>()));
 
-            interp.CleanupTrackedProcesses();
-            System.Environment.Exit((int)code);
-            return null;
-        }));
+            globals.Define("ArgDef", new StashStruct("ArgDef", new List<string>
+            {
+                "name", "short", "type", "default", "description", "required", "args"
+            }, new Dictionary<string, StashFunction>()));
+
+            // parseArgs built-in function
+            globals.Define("parseArgs", new BuiltInFunction("parseArgs", 1, (interpreter, fnArgs) =>
+            {
+                return new ArgumentParser(interpreter.ScriptArgs).Parse(fnArgs[0]);
+            }));
+
+            globals.Define("exit", new BuiltInFunction("exit", 1, (interp, args) =>
+            {
+                if (args[0] is not long code)
+                {
+                    throw new RuntimeError("Argument to 'exit' must be an integer.");
+                }
+
+                interp.CleanupTrackedProcesses();
+
+                if (interp.EmbeddedMode)
+                {
+                    throw new ExitException((int)code);
+                }
+
+                System.Environment.Exit((int)code);
+                return null;
+            }));
+        }
 
         globals.Define("hash", new BuiltInFunction("hash", 1, (_, args) =>
         {

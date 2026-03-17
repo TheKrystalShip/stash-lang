@@ -41,7 +41,7 @@ public static class IoBuiltIns
                 string prompt = RuntimeValues.Stringify(args[0]);
                 interp.Output.Write(prompt);
             }
-            return Console.ReadLine();
+            return interp.Input.ReadLine();
         }));
 
         globals.Define("io", io);

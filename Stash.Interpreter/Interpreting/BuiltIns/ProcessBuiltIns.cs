@@ -33,12 +33,23 @@ public static class ProcessBuiltIns
             }
 
             interp.CleanupTrackedProcesses();
+
+            if (interp.EmbeddedMode)
+            {
+                throw new ExitException((int)code);
+            }
+
             System.Environment.Exit((int)code);
             return null;
         }));
 
         process.Define("exec", new BuiltInFunction("process.exec", 1, (interp, args) =>
         {
+            if (interp.EmbeddedMode)
+            {
+                throw new RuntimeError("'process.exec' is not available in embedded mode.");
+            }
+
             if (args[0] is not string command)
             {
                 throw new RuntimeError("Argument to 'process.exec' must be a string.");

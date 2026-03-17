@@ -146,10 +146,10 @@ For the full language reference, see the [Language Specification](docs/Stash%20�
 ## Getting Started
 
 ```bash
-dotnet build                                             # Build
-dotnet run --project Stash.Interpreter/                  # Start the REPL
-dotnet run --project Stash.Interpreter/ -- script.stash  # Run a script
-dotnet test                                              # Run the test suite
+dotnet build                                         # Build
+dotnet run --project Stash.Cli/                      # Start the REPL
+dotnet run --project Stash.Cli/ -- script.stash      # Run a script
+dotnet test                                          # Run the test suite
 ```
 
 Make scripts directly executable with a shebang:
@@ -173,6 +173,42 @@ Stash ships with a full toolchain — no plugins or third-party tools required:
 - **Debug Adapter (DAP)** — breakpoints, stepping, variable inspection for VS Code and other DAP clients. See [docs/DAP — Debug Adapter Protocol.md](docs/DAP%20—%20Debug%20Adapter%20Protocol.md).
 - **Built-in Test Runner** — `test()`, `describe()`, `assert.*` with TAP output. No external framework needed. See [docs/TAP — Testing Infrastructure.md](docs/TAP%20—%20Testing%20Infrastructure.md).
 - **CLI Debugger** — built-in step debugger with breakpoints, call stack inspection, and variable printing. Run any script with `--debug`.
+
+---
+
+## Embedding
+
+Stash can be embedded into any .NET application as a scripting engine — similar to how Lua is embedded in games. The `Stash.Interpreter` library provides a clean `StashEngine` API:
+
+```csharp
+using Stash.Interpreting;
+
+var engine = new StashEngine(StashCapabilities.None); // sandboxed
+
+// Inject host variables and functions
+engine.SetGlobal("playerName", "Alice");
+engine.SetGlobal("getHealth", engine.CreateFunction("getHealth", 0,
+    (args) => 100L));
+
+// Run Stash code
+engine.Run("io.println(\"Hello, \" + playerName);");
+
+// Evaluate expressions and read values back
+var result = engine.Evaluate("playerName");
+```
+
+**Sandboxing** — Use `StashCapabilities` flags to control what scripts can access:
+
+| Flag | Controls |
+|------|----------|
+| `FileSystem` | `fs.*` — file/directory operations |
+| `Network` | `http.*` — HTTP requests |
+| `Process` | `process.*`, `exit()` — process management |
+| `Environment` | `env.*` — environment variables |
+
+`StashCapabilities.None` disables all system access. `StashCapabilities.All` enables everything (default for CLI).
+
+See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 ---
 
@@ -201,11 +237,15 @@ Stash.Core/
 └── Parsing/         # Recursive descent parser
     └── AST/         # All expression and statement node types
 
-Stash.Interpreter/
+Stash.Interpreter/   # Embeddable runtime library
 ├── Interpreting/    # Tree-walk interpreter, Environment, runtime types
+│   └── BuiltIns/   # Standard library (io, fs, str, math, process, etc.)
 ├── Debugging/       # IDebugger interface, CallFrame, CLI debugger
-├── Testing/         # ITestHarness interface, TapReporter
-└── Program.cs       # Entry point (REPL + file execution)
+└── Testing/         # ITestHarness interface, TapReporter
+
+Stash.Cli/           # Command-line interface (thin wrapper)
+├── Program.cs       # Entry point (REPL + file execution)
+└── LineEditor.cs    # REPL line editing with history
 
 Stash.Lsp/           # Language Server Protocol implementation
 ├── Analysis/        # Semantic analysis, symbol collection, formatting
@@ -214,7 +254,7 @@ Stash.Lsp/           # Language Server Protocol implementation
 Stash.Dap/           # Debug Adapter Protocol implementation
 └── Handlers/        # DAP request handlers
 
-Stash.Tests/         # xUnit test suite (~1,100 tests)
+Stash.Tests/         # xUnit test suite (~1,700 tests)
 ├── Lexing/          # Lexer tests
 ├── Parsing/         # Parser tests
 ├── Interpreting/    # Interpreter + Environment tests
