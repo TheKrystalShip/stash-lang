@@ -30,7 +30,8 @@
 14. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
 15. [`http` — HTTP Requests](#http--http-requests)
 16. [`process` — Process Management](#process--process-management)
-17. [Argument Parsing](#argument-parsing)
+17. [`tpl` — Templating](#tpl--templating)
+18. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -837,6 +838,107 @@ io.println("Server stopped");
 - **`process.exists(pid)`** — Check if an arbitrary system process exists by PID.
 - **`process.waitAll(procs)`** — Wait for multiple processes to all exit.
 - **`process.waitAny(procs)`** — Wait for the first of multiple processes to exit.
+
+---
+
+## `tpl` — Templating
+
+Stash provides a built-in Jinja2-style templating engine via the `tpl` namespace. Templates use `{{ }}` for output, `{% %}` for logic, and `{# #}` for comments. Expressions inside templates are evaluated by the Stash interpreter, giving templates access to the full expression language — arithmetic, ternary, null-coalescing, function calls, and namespace access.
+
+For complete documentation — template syntax, all 19 built-in filters, conditionals, loops, includes, whitespace control, raw blocks, and architecture details — see [TPL — Templating Engine](TPL%20—%20Templating%20Engine.md).
+
+### Quick Reference
+
+| Function                     | Description                                                            |
+| ---------------------------- | ---------------------------------------------------------------------- |
+| `tpl.render(tmpl, data)`     | Render a template string (or compiled template) with a data dictionary |
+| `tpl.renderFile(path, data)` | Render a template file; path supports `~` expansion                    |
+| `tpl.compile(tmpl)`          | Pre-compile a template for repeated rendering                          |
+
+### Template Syntax
+
+| Delimiter       | Purpose                        | Example           |
+| --------------- | ------------------------------ | ----------------- |
+| `{{ expr }}`    | Output expression              | `{{ user.name }}` |
+| `{% tag %}`     | Logic/control flow             | `{% if active %}` |
+| `{# comment #}` | Comment (stripped from output) | `{# TODO #}`      |
+
+### Built-in Filters
+
+Filters transform values using pipe syntax: `{{ name | upper }}`. Filters can be chained: `{{ name | trim | upper | default("N/A") }}`.
+
+| Filter              | Description                |
+| ------------------- | -------------------------- |
+| `upper`             | Uppercase string           |
+| `lower`             | Lowercase string           |
+| `trim`              | Strip whitespace           |
+| `capitalize`        | Capitalize first letter    |
+| `title`             | Title Case each word       |
+| `length`            | Length of string or array  |
+| `reverse`           | Reverse string or array    |
+| `first`             | First element of array     |
+| `last`              | Last element of array      |
+| `sort`              | Sort array                 |
+| `join(sep)`         | Join array to string       |
+| `split(sep)`        | Split string into array    |
+| `replace(old, new)` | Replace substring          |
+| `default(val)`      | Fallback for null values   |
+| `round`             | Round to nearest integer   |
+| `abs`               | Absolute value             |
+| `keys`              | Dictionary keys as array   |
+| `values`            | Dictionary values as array |
+| `json`              | JSON-encode value          |
+
+### Conditionals
+
+```
+{% if user.isAdmin %}
+  Welcome, admin!
+{% elif user.isActive %}
+  Welcome back, {{ user.name }}.
+{% else %}
+  Please log in.
+{% endif %}
+```
+
+### Loops
+
+```
+{% for server in servers %}
+  {{ server.host }}: {{ server.status }}
+{% endfor %}
+```
+
+Loop metadata is available inside `{% for %}` blocks via the `loop` variable: `loop.index` (1-based), `loop.index0` (0-based), `loop.first`, `loop.last`, `loop.length`.
+
+### Includes, Whitespace Control, and Raw Blocks
+
+```
+{% include "header.tpl" %}            {# include another template file #}
+{%- for item in items -%}            {# whitespace-trimming markers #}
+{% raw %}{{ not parsed }}{% endraw %} {# literal output, no processing #}
+```
+
+### Examples
+
+```stash
+// Simple render
+let data = dict.new();
+data["name"] = "Alice";
+data["items"] = ["one", "two", "three"];
+
+let result = tpl.render("""
+Hello, {{ name }}!
+Items: {{ items | join(", ") }}
+""", data);
+
+// File-based rendering
+let output = tpl.renderFile("templates/report.tpl", data);
+
+// Pre-compile for repeated use
+let compiled = tpl.compile("{{ name | upper }}");
+let r1 = tpl.render(compiled, data);
+```
 
 ---
 

@@ -117,18 +117,18 @@ Stash.Lsp/                         # LSP server
     ├── TypeDefinitionHandler.cs    # Go to type definition (struct/enum of a variable)
     └── ImplementationHandler.cs    # Find all instantiations of a struct/enum
 
-.vscode/extensions/stash-lang/      # VS Code extension
-├── package.json                     # activationEvents, LSP client deps
+.vscode/extensions/stash-lang/        # VS Code extension
+├── package.json                      # activationEvents, LSP client deps
 ├── src/
-│   └── extension.ts                 # Start LSP server, create LanguageClient
+│   └── extension.ts                  # Start LSP server, create LanguageClient
 ├── tsconfig.json
 ├── syntaxes/
-│   └── stash.tmLanguage.json        # TextMate grammar
+│   └── stash.tmLanguage.json         # TextMate grammar
 ├── snippets/
-│   └── stash.json                   # Code snippets
-└── language-configuration.json      # Brackets, comments, auto-closing pairs
+│   └── stash.json                    # Code snippets
+└── stash-language-configuration.json # Brackets, comments, auto-closing pairs
 
-Stash.Tests/                        # Test project (references Stash.Core)
+Stash.Tests/                          # Test project (references Stash.Core)
 ```
 
 ---

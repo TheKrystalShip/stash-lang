@@ -33,8 +33,19 @@
         "extensions": [
           ".stash"
         ],
-        "configuration": "./language-configuration.json",
+        "configuration": "./stash-language-configuration.json",
         "firstLine": "^#!.*\\bstash\\b"
+      },
+      {
+        "id": "stash-tpl",
+        "aliases": [
+          "Stash Template",
+          "stash-tpl"
+        ],
+        "extensions": [
+          ".tpl"
+        ],
+        "configuration": "./tpl-language-configuration.json"
       }
     ],
     "grammars": [
@@ -53,12 +64,21 @@
         "embeddedLanguages": {
           "meta.embedded.block.stash": "stash"
         }
+      },
+      {
+        "language": "stash-tpl",
+        "scopeName": "source.stash-tpl",
+        "path": "./syntaxes/stash-tpl.tmLanguage.json"
       }
     ],
     "snippets": [
       {
         "language": "stash",
         "path": "./snippets/stash.json"
+      },
+      {
+        "language": "stash-tpl",
+        "path": "./snippets/stash-tpl.json"
       }
     ],
     "semanticTokenScopes": [
@@ -105,6 +125,10 @@
       }
     ],
     "configurationDefaults": {
+      "[stash-tpl]": {
+        "editor.tabSize": 2,
+        "editor.insertSpaces": true
+      },
       "[stash]": {
         "editor.semanticHighlighting.enabled": true,
         "editor.formatOnSave": false,

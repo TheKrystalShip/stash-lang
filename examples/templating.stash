@@ -1,0 +1,164 @@
+#!/usr/bin/env stash
+
+// Templating Engine Demo
+// Demonstrates tpl.render, tpl.renderFile, tpl.compile, filters, and template logic
+
+io.println("=" * 56);
+io.println("  Stash Templating Engine Demo");
+io.println("=" * 56);
+io.println("");
+
+// ─── 1. Inline Template Rendering ───────────────────────
+
+io.println("=== 1. Inline Template Rendering ===");
+
+let data = dict.new();
+data["name"] = "Stash";
+data["version"] = "1.0";
+
+let greeting = tpl.render("Hello, {{ name }}! Welcome to version {{ version }}.", data);
+io.println(greeting);
+io.println("");
+
+// ─── 2. Filters ─────────────────────────────────────────
+
+io.println("=== 2. Filters ===");
+
+let filter_data = dict.new();
+filter_data["title"] = "  hello world  ";
+filter_data["items"] = ["apple", "banana", "cherry"];
+filter_data["price"] = 19.7;
+filter_data["missing"] = null;
+
+let filter_template = """
+  Raw:         '{{ title }}'
+  Trimmed:     '{{ title | trim }}'
+  Upper:       '{{ title | trim | upper }}'
+  Title Case:  '{{ title | trim | title }}'
+  Joined:      '{{ items | join(" | ") }}'
+  Sorted:      '{{ items | sort | join(", ") }}'
+  First:       '{{ items | first }}'
+  Last:        '{{ items | last }}'
+  Length:      '{{ items | length }}'
+  Reversed:    '{{ items | reverse | join(", ") }}'
+  Rounded:     '{{ price | round }}'
+  Default:     '{{ missing | default("N/A") }}'
+""";
+
+io.println(tpl.render(filter_template, filter_data));
+
+// ─── 3. Conditionals ────────────────────────────────────
+
+io.println("=== 3. Conditionals ===");
+
+let user_data = dict.new();
+user_data["role"] = "admin";
+user_data["name"] = "Alice";
+user_data["login_count"] = 42;
+
+let cond_template = """
+{%- if role == "admin" -%}
+  Welcome back, Admin {{ name }}! ({{ login_count }} logins)
+{%- elif role == "user" -%}
+  Hello, {{ name }}.
+{%- else -%}
+  Access denied.
+{%- endif -%}
+""";
+
+io.println(tpl.render(cond_template, user_data));
+io.println("");
+
+// ─── 4. Loops with Metadata ─────────────────────────────
+
+io.println("=== 4. Loops with Metadata ===");
+
+struct Task {
+  name,
+  status
+}
+
+let loop_data = dict.new();
+loop_data["tasks"] = [
+  Task { name: "Build project",   status: "done" },
+  Task { name: "Run tests",       status: "done" },
+  Task { name: "Deploy staging",  status: "in-progress" },
+  Task { name: "Deploy prod",     status: "pending" }
+];
+
+let loop_template = """
+Task List:
+{% for task in tasks -%}
+  {{ loop.index }}/{{ loop.length }}  [{{ task.status | upper }}]  {{ task.name }}
+{% endfor -%}
+""";
+
+io.println(tpl.render(loop_template, loop_data));
+
+// ─── 5. Pre-compiled Templates ──────────────────────────
+
+io.println("=== 5. Pre-compiled Templates ===");
+
+let row_tpl = tpl.compile("  {{ name }} ({{ role }}) — {{ email }}");
+
+struct User {
+  name,
+  role,
+  email
+}
+
+let users = [
+  User { name: "Alice",   role: "admin",   email: "alice@example.com" },
+  User { name: "Bob",     role: "editor",  email: "bob@example.com" },
+  User { name: "Charlie", role: "viewer",  email: "charlie@example.com" }
+];
+
+io.println("Team Directory:");
+for (let user in users) {
+  let row_data = dict.new();
+  row_data["name"] = user.name;
+  row_data["role"] = user.role;
+  row_data["email"] = user.email;
+  io.println(tpl.render(row_tpl, row_data));
+}
+io.println("");
+
+// ─── 6. File-Based Template ─────────────────────────────
+
+io.println("=== 6. File-Based Template (Report) ===");
+io.println("");
+
+struct Server {
+  name,
+  host,
+  port,
+  status,
+  uptime,
+  load
+}
+
+let servers = [
+  Server { name: "web-01",   host: "10.0.1.10", port: 443,  status: "up",       uptime: "45d 12h", load: "0.42" },
+  Server { name: "web-02",   host: "10.0.1.11", port: 443,  status: "up",       uptime: "45d 12h", load: "0.38" },
+  Server { name: "api-01",   host: "10.0.2.10", port: 8080, status: "degraded", uptime: "12d 3h",  load: "0.91" },
+  Server { name: "db-01",    host: "10.0.3.10", port: 5432, status: "up",       uptime: "90d 1h",  load: "0.65" },
+  Server { name: "cache-01", host: "10.0.4.10", port: 6379, status: "down",     uptime: null,      load: null }
+];
+
+let healthy = arr.filter(servers, (s) => s.status == "up");
+let unhealthy = arr.filter(servers, (s) => s.status != "up");
+
+let report_data = dict.new();
+report_data["title"] = "Server Health Report";
+report_data["generated"] = time.date();
+report_data["servers"] = servers;
+report_data["healthy_count"] = len(healthy);
+report_data["unhealthy_count"] = len(unhealthy);
+report_data["health_pct"] = (len(healthy) * 100) / len(servers);
+report_data["tags"] = ["production", "us-east-1", "monitoring"];
+
+// Render the template file
+let report = tpl.renderFile("templates/report.tpl", report_data);
+io.println(report);
+
+io.println("=== Demo Complete ===");

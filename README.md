@@ -173,6 +173,7 @@ Stash ships with a full toolchain — no plugins or third-party tools required:
 - **Debug Adapter (DAP)** — breakpoints, stepping, variable inspection for VS Code and other DAP clients. See [docs/DAP — Debug Adapter Protocol.md](docs/DAP%20—%20Debug%20Adapter%20Protocol.md).
 - **Built-in Test Runner** — `test()`, `describe()`, `assert.*` with TAP output. No external framework needed. See [docs/TAP — Testing Infrastructure.md](docs/TAP%20—%20Testing%20Infrastructure.md).
 - **CLI Debugger** — built-in step debugger with breakpoints, call stack inspection, and variable printing. Run any script with `--debug`.
+- **Templating Engine** — Jinja2-style templates with variable interpolation, filters, conditionals, loops, includes, and whitespace control via the `tpl` namespace. See [docs/TPL — Templating Engine.md](docs/TPL%20—%20Templating%20Engine.md).
 
 ---
 
@@ -254,7 +255,7 @@ Stash.Lsp/           # Language Server Protocol implementation
 Stash.Dap/           # Debug Adapter Protocol implementation
 └── Handlers/        # DAP request handlers
 
-Stash.Tests/         # xUnit test suite (~1,700 tests)
+Stash.Tests/         # xUnit test suite (~1,800 tests)
 ├── Lexing/          # Lexer tests
 ├── Parsing/         # Parser tests
 ├── Interpreting/    # Interpreter + Environment tests
@@ -278,6 +279,7 @@ Example scripts are in [`examples/`](examples/).
 | [Language Server Protocol](docs/LSP%20—%20Language%20Server%20Protocol.md)       | LSP architecture and supported features           |
 | [Debug Adapter Protocol](docs/DAP%20—%20Debug%20Adapter%20Protocol.md)           | DAP implementation and debugging support          |
 | [Testing Infrastructure](docs/TAP%20—%20Testing%20Infrastructure.md)             | Built-in test runner and TAP output               |
+| [Templating Engine](docs/TPL%20—%20Templating%20Engine.md)                       | Jinja2-style template rendering and `tpl` namespace |
 
 ---
 

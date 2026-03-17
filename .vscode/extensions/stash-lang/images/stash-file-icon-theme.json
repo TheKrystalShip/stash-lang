@@ -5,7 +5,8 @@
     }
   },
   "fileExtensions": {
-    "stash": "stash-file"
+    "stash": "stash-file",
+    "tpl": "stash-file"
   },
   "languageIds": {
     "stash": "stash-file"

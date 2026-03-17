@@ -327,6 +327,11 @@ public static class BuiltInRegistry
         new NamespaceFunction("config", "write", new[] { new BuiltInParam("path", "string"), new BuiltInParam("data"), new BuiltInParam("format", "string") }, null, IsVariadic: true),
         new NamespaceFunction("config", "parse", new[] { new BuiltInParam("text", "string"), new BuiltInParam("format", "string") }, "dict"),
         new NamespaceFunction("config", "stringify", new[] { new BuiltInParam("data"), new BuiltInParam("format", "string") }, "string"),
+
+        // tpl namespace
+        new NamespaceFunction("tpl", "render", new[] { new BuiltInParam("template", "string"), new BuiltInParam("data", "dict") }, "string"),
+        new NamespaceFunction("tpl", "renderFile", new[] { new BuiltInParam("path", "string"), new BuiltInParam("data", "dict") }, "string"),
+        new NamespaceFunction("tpl", "compile", new[] { new BuiltInParam("template", "string") }),
     };
 
     // ── Built-in Namespace Constants ──
@@ -348,7 +353,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl"
     };
 
     // ── Keywords ──

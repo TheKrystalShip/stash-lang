@@ -1,0 +1,92 @@
+{
+  "Template Expression": {
+    "prefix": "expr",
+    "body": "{{ ${1:expression} }}$0",
+    "description": "Insert a template expression {{ }}"
+  },
+  "Template Expression with Filter": {
+    "prefix": "filter",
+    "body": "{{ ${1:value} | ${2:filter} }}$0",
+    "description": "Insert a template expression with a filter"
+  },
+  "Template Comment": {
+    "prefix": "comment",
+    "body": "{# ${1:comment} #}$0",
+    "description": "Insert a template comment {# #}"
+  },
+  "If Block": {
+    "prefix": "if",
+    "body": [
+      "{% if ${1:condition} %}",
+      "\t$0",
+      "{% endif %}"
+    ],
+    "description": "Insert an if block"
+  },
+  "If/Else Block": {
+    "prefix": "ifelse",
+    "body": [
+      "{% if ${1:condition} %}",
+      "\t$2",
+      "{% else %}",
+      "\t$0",
+      "{% endif %}"
+    ],
+    "description": "Insert an if/else block"
+  },
+  "If/Elif/Else Block": {
+    "prefix": "ifelif",
+    "body": [
+      "{% if ${1:condition1} %}",
+      "\t$2",
+      "{% elif ${3:condition2} %}",
+      "\t$4",
+      "{% else %}",
+      "\t$0",
+      "{% endif %}"
+    ],
+    "description": "Insert an if/elif/else block"
+  },
+  "For Loop": {
+    "prefix": "for",
+    "body": [
+      "{% for ${1:item} in ${2:items} %}",
+      "\t$0",
+      "{% endfor %}"
+    ],
+    "description": "Insert a for loop"
+  },
+  "For Loop (trimmed)": {
+    "prefix": "fort",
+    "body": [
+      "{% for ${1:item} in ${2:items} -%}",
+      "\t$0",
+      "{%- endfor %}"
+    ],
+    "description": "Insert a for loop with whitespace trimming"
+  },
+  "Include": {
+    "prefix": "include",
+    "body": "{% include \"${1:filename.tpl}\" %}$0",
+    "description": "Include another template file"
+  },
+  "Raw Block": {
+    "prefix": "raw",
+    "body": [
+      "{% raw %}",
+      "\t$0",
+      "{% endraw %}"
+    ],
+    "description": "Insert a raw block (no template processing)"
+  },
+  "Loop Index": {
+    "prefix": "loopi",
+    "body": "{{ loop.index }}$0",
+    "description": "Insert loop.index (1-based iteration count)"
+  },
+  "Default Filter": {
+    "prefix": "default",
+    "body": "{{ ${1:value} | default(${2:\"fallback\"}) }}$0",
+    "description": "Insert expression with default filter"
+  }
+}
