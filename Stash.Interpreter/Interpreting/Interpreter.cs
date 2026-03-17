@@ -15,6 +15,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting.Types;
+using Stash.Interpreting.Exceptions;
 
 /// <summary>
 /// Tree-walk interpreter that evaluates a Stash AST by visiting each expression node

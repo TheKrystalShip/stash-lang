@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading.Tasks;
+using Stash.Interpreting.Exceptions;
 using Stash.Interpreting.Types;
 
 /// <summary>

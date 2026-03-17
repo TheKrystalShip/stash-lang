@@ -1,6 +1,7 @@
 namespace Stash.Interpreting.Types;
 
 using System.Collections.Generic;
+using Stash.Interpreting.Exceptions;
 using Stash.Parsing.AST;
 
 /// <summary>

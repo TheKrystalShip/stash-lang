@@ -9,6 +9,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting.Types;
+using Stash.Interpreting.Exceptions;
 
 /// <summary>
 /// High-level API for embedding the Stash scripting language in a C# application.
@@ -20,7 +21,7 @@ using Stash.Interpreting.Types;
 /// engine.SetGlobal("playerName", "Alice");
 /// engine.SetGlobal("getHealth", engine.CreateFunction("getHealth", 0,
 ///     (args) => player.Health));
-/// 
+///
 /// var result = engine.Execute("'Hello, ' + playerName");
 /// var greeting = engine.GetGlobal("greeting");
 /// </code>

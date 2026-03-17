@@ -1,6 +1,7 @@
 namespace Stash.Interpreting.BuiltIns;
 
 using System.Collections.Generic;
+using Stash.Interpreting.Exceptions;
 using Stash.Interpreting.Types;
 
 /// <summary>
