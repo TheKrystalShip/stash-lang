@@ -27,7 +27,9 @@ public class ImplementationHandler : ImplementationHandlerBase
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
         if (ctx == null)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         var (result, word) = ctx.Value;
         var line = request.Position.Line + 1;
@@ -35,7 +37,9 @@ public class ImplementationHandler : ImplementationHandlerBase
 
         var symbol = result.Symbols.FindDefinition(word, line, col);
         if (symbol == null)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         // Determine the target type name
         string? typeName = null;
@@ -50,11 +54,15 @@ public class ImplementationHandler : ImplementationHandlerBase
             var typeSymbol = result.Symbols.All
                 .FirstOrDefault(s => s.Name == symbol.TypeHint && s.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum);
             if (typeSymbol != null)
+            {
                 typeName = typeSymbol.Name;
+            }
         }
 
         if (typeName == null)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         var locations = new List<LocationOrLocationLink>();
 
@@ -83,7 +91,9 @@ public class ImplementationHandler : ImplementationHandlerBase
         }
 
         if (locations.Count == 0)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(locations));
     }

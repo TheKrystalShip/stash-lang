@@ -367,7 +367,11 @@ public class Parser
         {
             do
             {
-                if (Check(TokenType.Fn)) break;
+                if (Check(TokenType.Fn))
+                {
+                    break;
+                }
+
                 fields.Add(Consume(TokenType.Identifier, "Expected field name."));
                 Token? fieldType = null;
                 if (Match(TokenType.Colon))

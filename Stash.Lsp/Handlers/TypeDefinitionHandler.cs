@@ -26,7 +26,9 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
         if (ctx == null)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         var (result, word) = ctx.Value;
         var line = request.Position.Line + 1;
@@ -39,27 +41,37 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         {
             var nsMember = result.ResolveNamespaceMember(text!, (int)request.Position.Line, (int)request.Position.Character, word);
             if (nsMember != null)
+            {
                 symbol = nsMember.Value.Symbol;
+            }
         }
 
         if (symbol == null)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         // If the symbol IS a struct or enum, return its own location
         if (symbol.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum)
+        {
             return MakeLocation(request.TextDocument.Uri, symbol, result);
+        }
 
         // For variables, constants, parameters, loop variables — look up the TypeHint
         var typeName = symbol.TypeHint;
         if (typeName == null)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         // Search for the type declaration in the scope tree
         var typeSymbol = result.Symbols.All
             .FirstOrDefault(s => s.Name == typeName && s.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum);
 
         if (typeSymbol != null)
+        {
             return MakeLocation(request.TextDocument.Uri, typeSymbol, result);
+        }
 
         return Task.FromResult<LocationOrLocationLinks?>(null);
     }
@@ -88,7 +100,9 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
 
         // Built-in types (line 0) have no navigable source
         if (symbol.Span.StartLine == 0)
+        {
             return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
 
         var loc = new Location
         {

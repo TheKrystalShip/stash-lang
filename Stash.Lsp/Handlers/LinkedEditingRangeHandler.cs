@@ -28,7 +28,9 @@ public class LinkedEditingRangeHandler : LinkedEditingRangeHandlerBase
 
         var ctx = _analysis.GetContextAt(uri, text, lspLine, lspCharacter);
         if (ctx == null)
+        {
             return Task.FromResult<LinkedEditingRanges>(null!);
+        }
 
         var (result, word) = ctx.Value;
         var line = lspLine + 1;
@@ -36,11 +38,15 @@ public class LinkedEditingRangeHandler : LinkedEditingRangeHandlerBase
 
         var references = result.Symbols.FindReferences(word, line, col);
         if (references.Count < 2)
+        {
             return Task.FromResult<LinkedEditingRanges>(null!);
+        }
 
         var ranges = new List<Range>();
         foreach (var reference in references)
+        {
             ranges.Add(reference.Span.ToLspRange());
+        }
 
         return Task.FromResult<LinkedEditingRanges>(new LinkedEditingRanges
         {

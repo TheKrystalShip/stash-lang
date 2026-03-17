@@ -20,10 +20,26 @@ public class CallHierarchyAndLinkedEditingTests
 
     private static bool IsInsideSpan(SourceSpan? span, SourceSpan target)
     {
-        if (span == null) return false;
-        if (target.StartLine < span.StartLine || target.EndLine > span.EndLine) return false;
-        if (target.StartLine == span.StartLine && target.StartColumn < span.StartColumn) return false;
-        if (target.EndLine == span.EndLine && target.EndColumn > span.EndColumn) return false;
+        if (span == null)
+        {
+            return false;
+        }
+
+        if (target.StartLine < span.StartLine || target.EndLine > span.EndLine)
+        {
+            return false;
+        }
+
+        if (target.StartLine == span.StartLine && target.StartColumn < span.StartColumn)
+        {
+            return false;
+        }
+
+        if (target.EndLine == span.EndLine && target.EndColumn > span.EndColumn)
+        {
+            return false;
+        }
+
         return true;
     }
 

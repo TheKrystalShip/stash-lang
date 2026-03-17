@@ -16,7 +16,10 @@ public class TestDiscoveryTests
         var statements = parser.ParseProgram();
         var interpreter = new Interpreter();
         if (currentFile is not null)
+        {
             interpreter.CurrentFile = currentFile;
+        }
+
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
         interpreter.TestHarness = reporter;
@@ -35,7 +38,10 @@ public class TestDiscoveryTests
         var statements = parser.ParseProgram();
         var interpreter = new Interpreter();
         if (currentFile is not null)
+        {
             interpreter.CurrentFile = currentFile;
+        }
+
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
         interpreter.TestHarness = reporter;

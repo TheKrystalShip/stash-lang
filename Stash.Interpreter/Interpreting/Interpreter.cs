@@ -606,12 +606,20 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             case TokenType.Star:
                 if (leftVal is string ls && rightVal is long ri)
                 {
-                    if (ri < 0) throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    if (ri < 0)
+                    {
+                        throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    }
+
                     return ri == 0 ? "" : string.Concat(Enumerable.Repeat(ls, (int)ri));
                 }
                 if (leftVal is long li2 && rightVal is string rs)
                 {
-                    if (li2 < 0) throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    if (li2 < 0)
+                    {
+                        throw new RuntimeError("String repeat count must be non-negative.", expr.Operator.Span);
+                    }
+
                     return li2 == 0 ? "" : string.Concat(Enumerable.Repeat(rs, (int)li2));
                 }
                 return EvaluateArithmetic(leftVal, rightVal, expr, (a, b) => a * b, (a, b) => a * b);
@@ -2073,16 +2081,24 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
         // Capability-gated built-ins
         if (_capabilities.HasFlag(StashCapabilities.Environment))
+        {
             EnvBuiltIns.Register(_globals);
+        }
 
         if (_capabilities.HasFlag(StashCapabilities.Process))
+        {
             ProcessBuiltIns.Register(_globals);
+        }
 
         if (_capabilities.HasFlag(StashCapabilities.FileSystem))
+        {
             FsBuiltIns.Register(_globals);
+        }
 
         if (_capabilities.HasFlag(StashCapabilities.Network))
+        {
             HttpBuiltIns.Register(_globals);
+        }
 
         // Freeze all built-in namespaces for optimal read performance.
         foreach (var binding in _globals.GetAllBindings())

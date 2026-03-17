@@ -30,7 +30,9 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
         if (ctx == null)
+        {
             return Task.FromResult<Container<CallHierarchyItem>?>(null);
+        }
 
         var (result, word) = ctx.Value;
         var line = (int)request.Position.Line + 1;
@@ -38,7 +40,9 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
 
         var symbol = result.Symbols.FindDefinition(word, line, col);
         if (symbol == null || symbol.Kind != StashSymbolKind.Function)
+        {
             return Task.FromResult<Container<CallHierarchyItem>?>(null);
+        }
 
         var item = BuildItem(symbol, request.TextDocument.Uri);
         return Task.FromResult<Container<CallHierarchyItem>?>(new Container<CallHierarchyItem>(item));
@@ -53,7 +57,9 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
         {
             var docResult = _analysis.GetCachedResult(docUri);
             if (docResult == null)
+            {
                 continue;
+            }
 
             // Find all Call references to the target function in this document
             var callSites = docResult.Symbols.References
@@ -61,7 +67,9 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
                 .ToList();
 
             if (callSites.Count == 0)
+            {
                 continue;
+            }
 
             // Group call sites by their enclosing function
             var allSymbols = docResult.Symbols.All;
@@ -71,7 +79,9 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
             {
                 var enclosingFn = FindEnclosingFunction(allSymbols, callSite.Span.StartLine, callSite.Span.StartColumn);
                 if (enclosingFn == null)
+                {
                     continue;
+                }
 
                 if (!callerGroups.TryGetValue(enclosingFn, out var siteList))
                 {
@@ -103,13 +113,17 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
 
         var sourceResult = _analysis.GetCachedResult(sourceUri);
         if (sourceResult == null)
+        {
             return Task.FromResult<Container<CallHierarchyOutgoingCall>?>(null);
+        }
 
         // Find the source function symbol
         var allSymbols = sourceResult.Symbols.All;
         var sourceSymbol = allSymbols.FirstOrDefault(s => s.Kind == StashSymbolKind.Function && s.Name == sourceName);
         if (sourceSymbol?.FullSpan == null)
+        {
             return Task.FromResult<Container<CallHierarchyOutgoingCall>?>(null);
+        }
 
         var bodySpan = sourceSymbol.FullSpan;
 
@@ -149,7 +163,9 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
             }
 
             if (calleeSymbol == null)
+            {
                 continue;
+            }
 
             var fromRanges = sites.Select(s => s.Span.ToLspRange()).ToArray();
             outgoingCalls.Add(new CallHierarchyOutgoingCall
@@ -188,11 +204,15 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
         foreach (var sym in symbols)
         {
             if (sym.Kind != StashSymbolKind.Function || sym.FullSpan == null)
+            {
                 continue;
+            }
 
             var span = sym.FullSpan;
             if (!IsInsideSpan(span, line, col))
+            {
                 continue;
+            }
 
             // Prefer the smallest enclosing function (innermost)
             int size = (span.EndLine - span.StartLine) * 10000 + (span.EndColumn - span.StartColumn);
@@ -209,14 +229,24 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
     private static bool IsInsideSpan(Stash.Common.SourceSpan? span, int line, int col)
     {
         if (span == null)
+        {
             return false;
+        }
 
         if (line < span.StartLine || line > span.EndLine)
+        {
             return false;
+        }
+
         if (line == span.StartLine && col < span.StartColumn)
+        {
             return false;
+        }
+
         if (line == span.EndLine && col > span.EndColumn)
+        {
             return false;
+        }
 
         return true;
     }

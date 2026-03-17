@@ -168,7 +168,9 @@ public static class TestBuiltIns
             {
                 bool matches = interp.TestFilter.Any(f => fullName.StartsWith(f));
                 if (!matches)
+                {
                     return null; // Silent — filtered-out tests emit nothing
+                }
             }
 
             // Discovery mode — record but don't execute
@@ -254,7 +256,9 @@ public static class TestBuiltIns
             {
                 bool matches = interp.TestFilter.Any(f => fullName.StartsWith(f));
                 if (!matches)
+                {
                     return null;
+                }
             }
 
             // Discovery mode — record but don't execute
@@ -293,7 +297,9 @@ public static class TestBuiltIns
             {
                 bool anyMatch = interp.TestFilter.Any(f => f.StartsWith(fullName) || fullName.StartsWith(f));
                 if (!anyMatch)
+                {
                     return null; // Skip entire describe block
+                }
             }
 
             string? previousDescribe = interp.CurrentDescribe;
@@ -424,7 +430,10 @@ public static class TestBuiltIns
     private static string BuildFullName(Interpreter interp, string? currentDescribe, string testName)
     {
         if (currentDescribe is not null)
+        {
             return $"{currentDescribe} > {testName}";  // currentDescribe already has filename prefix
+        }
+
         string fileName = Path.GetFileName(interp.CurrentFile ?? "unknown");
         return $"{fileName} > {testName}";
     }

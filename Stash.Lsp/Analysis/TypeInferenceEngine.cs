@@ -26,29 +26,49 @@ public static class TypeInferenceEngine
                 break;
             case FnDeclStmt fnDecl:
                 foreach (var s in fnDecl.Body.Statements)
+                {
                     InferFromStatement(scopeTree, s);
+                }
+
                 break;
             case StructDeclStmt structDecl:
                 foreach (var method in structDecl.Methods)
+                {
                     foreach (var s in method.Body.Statements)
+                    {
                         InferFromStatement(scopeTree, s);
+                    }
+                }
+
                 break;
             case BlockStmt block:
                 foreach (var s in block.Statements)
+                {
                     InferFromStatement(scopeTree, s);
+                }
+
                 break;
             case IfStmt ifStmt:
                 InferFromStatement(scopeTree, ifStmt.ThenBranch);
                 if (ifStmt.ElseBranch != null)
+                {
                     InferFromStatement(scopeTree, ifStmt.ElseBranch);
+                }
+
                 break;
             case WhileStmt whileStmt:
                 foreach (var s in whileStmt.Body.Statements)
+                {
                     InferFromStatement(scopeTree, s);
+                }
+
                 break;
             case ForInStmt forInStmt:
                 foreach (var s in forInStmt.Body.Statements)
+                {
                     InferFromStatement(scopeTree, s);
+                }
+
                 break;
             case ExprStmt:
             default:
@@ -59,11 +79,15 @@ public static class TypeInferenceEngine
     private static void InferVariableType(ScopeTree scopeTree, string name, SourceSpan nameSpan, Expr? initializer)
     {
         if (initializer == null)
+        {
             return;
+        }
 
         var symbol = scopeTree.FindDefinition(name, nameSpan.StartLine, nameSpan.StartColumn);
         if (symbol == null || symbol.TypeHint != null)
+        {
             return;
+        }
 
         var inferredType = InferExpressionType(scopeTree, initializer, nameSpan.StartLine, nameSpan.StartColumn);
         if (inferredType != null)
@@ -136,7 +160,9 @@ public static class TypeInferenceEngine
         {
             var qualified = $"{nsIdent.Name.Lexeme}.{dotExpr.Name.Lexeme}";
             if (BuiltInRegistry.TryGetNamespaceFunction(qualified, out var nsFunc) && nsFunc.ReturnType != null)
+            {
                 return nsFunc.ReturnType;
+            }
         }
 
         return null;

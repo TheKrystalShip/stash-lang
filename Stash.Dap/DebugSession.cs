@@ -122,7 +122,9 @@ public class DebugSession : IDebugger
         public override void Write(string? value)
         {
             if (value != null)
+            {
                 _session.SendOutput(_category, value);
+            }
         }
 
         public override void WriteLine(string? value)
@@ -197,7 +199,9 @@ public class DebugSession : IDebugger
             _interpreter.TestHarness = reporter;
 
             if (testFilter is not null)
+            {
                 _interpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            }
         }
 
         _interpreterThread = new System.Threading.Thread(() =>

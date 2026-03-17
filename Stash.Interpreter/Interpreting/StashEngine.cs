@@ -120,7 +120,9 @@ public class StashEngine
         _interpreter.ResetStepCount();
         var (statements, errors) = ParseStatements(source);
         if (errors.Count > 0)
+        {
             return new ExecutionResult(null, errors);
+        }
 
         try
         {
@@ -157,13 +159,17 @@ public class StashEngine
         var tokens = lexer.ScanTokens();
 
         if (lexer.Errors.Count > 0)
+        {
             return new ExecutionResult(null, lexer.Errors);
+        }
 
         var parser = new Parser(tokens);
         var expr = parser.Parse();
 
         if (parser.Errors.Count > 0)
+        {
             return new ExecutionResult(null, parser.Errors);
+        }
 
         try
         {
@@ -199,7 +205,9 @@ public class StashEngine
     {
         var (statements, errors) = ParseStatements(source);
         if (errors.Count > 0)
+        {
             return null;
+        }
 
         return new StashScript(statements);
     }
@@ -212,7 +220,9 @@ public class StashEngine
         var (statements, parseErrors) = ParseStatements(source);
         errors = parseErrors;
         if (parseErrors.Count > 0)
+        {
             return null;
+        }
 
         return new StashScript(statements);
     }
@@ -263,7 +273,9 @@ public class StashEngine
         string fullPath = Path.GetFullPath(filePath);
 
         if (!File.Exists(fullPath))
+        {
             return new ExecutionResult(null, [$"File not found: {fullPath}"]);
+        }
 
         string source = File.ReadAllText(fullPath);
         _interpreter.CurrentFile = fullPath;
@@ -321,7 +333,9 @@ public class StashEngine
     public Dictionary<string, object?> ToDictionary(object? value)
     {
         if (value is not StashDictionary dict)
+        {
             throw new ArgumentException($"Expected a Stash dictionary, got {value?.GetType().Name ?? "null"}.");
+        }
 
         var result = new Dictionary<string, object?>();
         foreach (var entry in dict.RawEntries())
@@ -337,7 +351,9 @@ public class StashEngine
     public Dictionary<string, object?> ToFieldDictionary(object? value)
     {
         if (value is not StashInstance instance)
+        {
             throw new ArgumentException($"Expected a Stash struct instance, got {value?.GetType().Name ?? "null"}.");
+        }
 
         return new Dictionary<string, object?>(instance.GetFields());
     }
@@ -348,7 +364,9 @@ public class StashEngine
     public List<object?> ToList(object? value)
     {
         if (value is not List<object?> list)
+        {
             throw new ArgumentException($"Expected a Stash array, got {value?.GetType().Name ?? "null"}.");
+        }
 
         return new List<object?>(list);
     }
@@ -372,13 +390,17 @@ public class StashEngine
         var tokens = lexer.ScanTokens();
 
         if (lexer.Errors.Count > 0)
+        {
             return ([], lexer.Errors);
+        }
 
         var parser = new Parser(tokens);
         var statements = parser.ParseProgram();
 
         if (parser.Errors.Count > 0)
+        {
             return ([], parser.Errors);
+        }
 
         return (statements, []);
     }
