@@ -5,6 +5,7 @@
 > **Purpose:** Source of truth for the design and implementation of **Stash**, a C-style interpreted shell scripting language.
 >
 > **Companion documents:**
+>
 > - [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md) — built-in namespace functions and argument parsing
 > - [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md) — debug adapter server implementation
 > - [LSP — Language Server Protocol](specs/LSP%20—%20Language%20Server%20Protocol.md) — language server implementation
@@ -198,18 +199,18 @@ $(cat /tmp/listing.txt) | $(grep app) >> "/tmp/matches.txt";
 
 Dynamically typed. Values carry their type at runtime. The following built-in types exist:
 
-| Type     | Examples                       | Notes                                     |
-| -------- | ------------------------------ | ----------------------------------------- |
-| `int`    | `42`, `-7`, `0`                | Integer numbers                           |
-| `float`  | `3.14`, `-0.5`                 | Floating-point numbers                    |
-| `string` | `"hello"`, `""`                | Immutable strings                         |
-| `bool`   | `true`, `false`                |                                           |
-| `null`   | `null`                         | Absence of value                          |
-| `array`  | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size         |
-| `struct` | `Server { host: "...", ... }`  | Named structured data (see Section 5)     |
-| `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)          |
-| `dict`   | `dict.new()`                   | Key-value map (see Section 5c)            |
-| `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d)    |
+| Type     | Examples                       | Notes                                  |
+| -------- | ------------------------------ | -------------------------------------- |
+| `int`    | `42`, `-7`, `0`                | Integer numbers                        |
+| `float`  | `3.14`, `-0.5`                 | Floating-point numbers                 |
+| `string` | `"hello"`, `""`                | Immutable strings                      |
+| `bool`   | `true`, `false`                |                                        |
+| `null`   | `null`                         | Absence of value                       |
+| `array`  | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size      |
+| `struct` | `Server { host: "...", ... }`  | Named structured data (see Section 5)  |
+| `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)       |
+| `dict`   | `dict.new()`                   | Key-value map (see Section 5c)         |
+| `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d) |
 
 ### Type Coercion & Truthiness
 
@@ -390,14 +391,14 @@ name ??= "other";     // name is still "default" (was not null)
 
 ### Supported Operators
 
-| Operator | Equivalent          | Description                     |
-| -------- | ------------------- | ------------------------------- |
-| `+=`     | `x = x + y`         | Add and assign                  |
-| `-=`     | `x = x - y`         | Subtract and assign             |
-| `*=`     | `x = x * y`         | Multiply and assign             |
-| `/=`     | `x = x / y`         | Divide and assign               |
-| `%=`     | `x = x % y`         | Modulo and assign               |
-| `??=`    | `x = x ?? y`        | Null-coalesce and assign        |
+| Operator | Equivalent   | Description              |
+| -------- | ------------ | ------------------------ |
+| `+=`     | `x = x + y`  | Add and assign           |
+| `-=`     | `x = x - y`  | Subtract and assign      |
+| `*=`     | `x = x * y`  | Multiply and assign      |
+| `/=`     | `x = x / y`  | Divide and assign        |
+| `%=`     | `x = x % y`  | Modulo and assign        |
+| `??=`    | `x = x ?? y` | Null-coalesce and assign |
 
 ### Semantics
 
@@ -612,12 +613,12 @@ println(10 in 1..10);           // false (end-exclusive)
 
 ### Semantics by Type
 
-| Right-hand side | Test performed                                      |
-| --------------- | --------------------------------------------------- |
-| `array`         | Element equality (`==`) against each item           |
-| `string`        | Substring / character containment                   |
-| `dict`          | Key existence (equivalent to `dict.has(d, key)`)    |
-| `range`         | Integer falls within the range respecting the step  |
+| Right-hand side | Test performed                                     |
+| --------------- | -------------------------------------------------- |
+| `array`         | Element equality (`==`) against each item          |
+| `string`        | Substring / character containment                  |
+| `dict`          | Key existence (equivalent to `dict.has(d, key)`)   |
+| `range`         | Integer falls within the range respecting the step |
 
 Using `in` against any other type is a runtime error.
 
@@ -821,9 +822,9 @@ let port = config?.database?.port ?? 3306;  // with default via null-coalescing
 ### Comparison with Regular Dot
 
 | Syntax | Left is `null` | Left is non-null |
-| ------ | --------------- | ---------------- |
-| `a.b`  | Runtime error   | Field/key access |
-| `a?.b` | Returns `null`  | Field/key access |
+| ------ | -------------- | ---------------- |
+| `a.b`  | Runtime error  | Field/key access |
+| `a?.b` | Returns `null` | Field/key access |
 
 ### Examples
 
@@ -1356,6 +1357,7 @@ connect("localhost", 443, true);       // all provided
 ```
 
 **Rules:**
+
 - Once a parameter has a default value, all subsequent parameters must also have defaults
 - Default values are expressions evaluated at **call time** (not definition time)
 - Calling with too few required arguments or too many total arguments is a runtime error
@@ -1905,11 +1907,11 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 
 ### Specifications & Protocols
 
-| Resource                                                                  | Description                                                  |
-| ------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md)  | Stash debug adapter server — breakpoints, stepping, variables |
+| Resource                                                                          | Description                                                   |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| [DAP — Debug Adapter Protocol](specs/DAP%20—%20Debug%20Adapter%20Protocol.md)     | Stash debug adapter server — breakpoints, stepping, variables |
 | [LSP — Language Server Protocol](specs/LSP%20—%20Language%20Server%20Protocol.md) | Stash language server — diagnostics, completion, navigation   |
-| [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md)    | Testing primitives, assert namespace, TAP output              |
+| [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md)       | Testing primitives, assert namespace, TAP output              |
 
 ---
 
