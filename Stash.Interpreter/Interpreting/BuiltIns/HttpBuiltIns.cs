@@ -7,13 +7,24 @@ using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Stash.Interpreting.Types;
 
+/// <summary>
+/// Registers the <c>http</c> namespace providing HTTP client functions (get, post, put, delete, request).
+/// All requests return a response object with status, body, and headers fields.
+/// </summary>
 public static class HttpBuiltIns
 {
+    /// <summary>
+    /// Shared HTTP client instance with a 30-second timeout. Reused across all requests for connection pooling.
+    /// </summary>
     private static readonly HttpClient _client = new HttpClient
     {
         Timeout = TimeSpan.FromSeconds(30)
     };
 
+    /// <summary>
+    /// Registers the <c>http</c> namespace and all its functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global environment to register into.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var http = new StashNamespace("http");
@@ -181,6 +192,12 @@ public static class HttpBuiltIns
         globals.Define("http", http);
     }
 
+    /// <summary>
+    /// Converts an <see cref="HttpResponseMessage"/> into a Stash <see cref="StashInstance"/>
+    /// with status, body, and headers fields.
+    /// </summary>
+    /// <param name="response">The HTTP response message to convert.</param>
+    /// <returns>A <see cref="StashInstance"/> with <c>status</c>, <c>body</c>, and <c>headers</c> fields.</returns>
     private static StashInstance MakeResponse(HttpResponseMessage response)
     {
         var body = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
@@ -204,6 +221,11 @@ public static class HttpBuiltIns
         });
     }
 
+    /// <summary>
+    /// Validates that a URL uses the <c>http://</c> or <c>https://</c> scheme to prevent SSRF attacks.
+    /// </summary>
+    /// <param name="url">The URL to validate.</param>
+    /// <param name="funcName">The calling function name, used in error messages.</param>
     private static void ValidateUrl(string url, string funcName)
     {
         if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) &&

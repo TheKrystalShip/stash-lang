@@ -11,11 +11,13 @@ using Stash.Interpreting.Types;
 
 public partial class Interpreter
 {
+    /// <inheritdoc />
     public object? VisitLiteralExpr(LiteralExpr expr)
     {
         return expr.Value;
     }
 
+    /// <inheritdoc />
     public object? VisitIdentifierExpr(IdentifierExpr expr)
     {
         if (_locals.TryGetValue(expr, out int distance))
@@ -29,11 +31,13 @@ public partial class Interpreter
         return _environment.Get(expr.Name.Lexeme, expr.Span);
     }
 
+    /// <inheritdoc />
     public object? VisitGroupingExpr(GroupingExpr expr)
     {
         return expr.Expression.Accept(this);
     }
 
+    /// <inheritdoc />
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
         object? right = expr.Right.Accept(this);
@@ -61,6 +65,7 @@ public partial class Interpreter
         }
     }
 
+    /// <inheritdoc />
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
         object? oldValue = expr.Operand.Accept(this);
@@ -129,6 +134,7 @@ public partial class Interpreter
         return expr.IsPrefix ? newValue : oldValue;
     }
 
+    /// <inheritdoc />
     public object? VisitBinaryExpr(BinaryExpr expr)
     {
         // Short-circuit operators evaluate left first, then conditionally evaluate right.
@@ -209,6 +215,7 @@ public partial class Interpreter
         }
     }
 
+    /// <summary>Evaluates the <c>in</c> operator for membership testing across arrays, strings, dictionaries, and ranges.</summary>
     private static bool EvaluateIn(object? left, object? right, BinaryExpr expr)
     {
         return right switch
@@ -224,6 +231,7 @@ public partial class Interpreter
         };
     }
 
+    /// <inheritdoc />
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
         object? condition = expr.Condition.Accept(this);
@@ -232,6 +240,7 @@ public partial class Interpreter
             : expr.ElseBranch.Accept(this);
     }
 
+    /// <inheritdoc />
     public object? VisitSwitchExpr(SwitchExpr expr)
     {
         object? subject = expr.Subject.Accept(this);
@@ -250,6 +259,7 @@ public partial class Interpreter
         throw new RuntimeError("No matching arm in switch expression.", expr.Span);
     }
 
+    /// <inheritdoc />
     public object? VisitTryExpr(TryExpr expr)
     {
         try
@@ -263,6 +273,7 @@ public partial class Interpreter
         }
     }
 
+    /// <inheritdoc />
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         object? left = expr.Left.Accept(this);
@@ -273,6 +284,7 @@ public partial class Interpreter
         return expr.Right.Accept(this);
     }
 
+    /// <inheritdoc />
     public object? VisitRangeExpr(RangeExpr expr)
     {
         object? startVal = expr.Start.Accept(this);
@@ -308,6 +320,7 @@ public partial class Interpreter
         return new StashRange(start, end, step);
     }
 
+    /// <inheritdoc />
     public object? VisitAssignExpr(AssignExpr expr)
     {
         object? value = expr.Value.Accept(this);
@@ -326,6 +339,7 @@ public partial class Interpreter
         return value;
     }
 
+    /// <inheritdoc />
     public object? VisitCallExpr(CallExpr expr)
     {
         object? callee = expr.Callee.Accept(this);
@@ -394,11 +408,13 @@ public partial class Interpreter
         }
     }
 
+    /// <inheritdoc />
     public object? VisitLambdaExpr(LambdaExpr expr)
     {
         return new StashLambda(expr, _environment);
     }
 
+    /// <inheritdoc />
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
         object? structDef = expr.Target is not null
@@ -439,6 +455,7 @@ public partial class Interpreter
         return new StashInstance(template.Name, template, fieldValues);
     }
 
+    /// <inheritdoc />
     public object? VisitDotExpr(DotExpr expr)
     {
         object? obj = expr.Object.Accept(this);
@@ -473,6 +490,7 @@ public partial class Interpreter
         throw new RuntimeError("Only struct instances, dictionaries, enums, and namespaces have members.", expr.Name.Span);
     }
 
+    /// <inheritdoc />
     public object? VisitDotAssignExpr(DotAssignExpr expr)
     {
         object? obj = expr.Object.Accept(this);
@@ -499,6 +517,7 @@ public partial class Interpreter
         return assignValue;
     }
 
+    /// <inheritdoc />
     public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
     {
         var sb = new System.Text.StringBuilder();
@@ -510,6 +529,7 @@ public partial class Interpreter
         return sb.ToString();
     }
 
+    /// <inheritdoc />
     public object? VisitArrayExpr(ArrayExpr expr)
     {
         var elements = new List<object?>();
@@ -520,6 +540,7 @@ public partial class Interpreter
         return elements;
     }
 
+    /// <inheritdoc />
     public object? VisitIndexExpr(IndexExpr expr)
     {
         object? obj = expr.Object.Accept(this);
@@ -568,6 +589,7 @@ public partial class Interpreter
         throw new RuntimeError("Only arrays, strings, and dictionaries can be indexed.", expr.BracketSpan);
     }
 
+    /// <inheritdoc />
     public object? VisitIndexAssignExpr(IndexAssignExpr expr)
     {
         object? obj = expr.Object.Accept(this);
@@ -604,8 +626,10 @@ public partial class Interpreter
         return value;
     }
 
+    /// <summary>Determines whether a value is truthy per Stash semantics.</summary>
     private bool IsTruthy(object? value) => RuntimeValues.IsTruthy(value);
 
+    /// <summary>Converts a runtime value to its string representation for display.</summary>
     public string Stringify(object? value) => RuntimeValues.Stringify(value);
 
     /// <summary>
@@ -766,6 +790,7 @@ public partial class Interpreter
         return ToDouble(left) % dr;
     }
 
+    /// <summary>Compares two values for equality without type coercion.</summary>
     private bool IsEqual(object? left, object? right) => RuntimeValues.IsEqual(left, right);
 
     /// <summary>
@@ -802,7 +827,9 @@ public partial class Interpreter
         throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
     }
 
+    /// <summary>Returns whether a value is a numeric type (<see cref="long"/> or <see cref="double"/>).</summary>
     private static bool IsNumeric(object? value) => RuntimeValues.IsNumeric(value);
 
+    /// <summary>Converts a numeric value to <see cref="double"/> for type promotion.</summary>
     private static double ToDouble(object? value) => RuntimeValues.ToDouble(value);
 }

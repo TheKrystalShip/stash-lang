@@ -8,8 +8,16 @@ using System.Text;
 using System.Text.Json;
 using Stash.Interpreting.Types;
 
+/// <summary>
+/// Registers the <c>config</c> namespace providing unified configuration file reading and writing
+/// across formats (read, write, parse, stringify). Supports JSON and INI formats.
+/// </summary>
 public static class ConfigBuiltIns
 {
+    /// <summary>
+    /// Registers the <c>config</c> namespace and all its functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global environment to register into.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var config = new StashNamespace("config");
@@ -105,6 +113,9 @@ public static class ConfigBuiltIns
         globals.Define("config", config);
     }
 
+    /// <summary>Detects the configuration format from a file extension (.json, .ini, .cfg, .conf, .properties).</summary>
+    /// <param name="path">The file path whose extension is inspected.</param>
+    /// <returns><c>"json"</c> or <c>"ini"</c> based on the extension.</returns>
     private static string DetectFormat(string path)
     {
         string ext = Path.GetExtension(path).ToLowerInvariant();
@@ -116,6 +127,11 @@ public static class ConfigBuiltIns
         };
     }
 
+    /// <summary>Parses configuration text using the specified format.</summary>
+    /// <param name="text">The configuration text to parse.</param>
+    /// <param name="format">The format name (<c>"json"</c> or <c>"ini"</c>).</param>
+    /// <param name="callerName">The calling function name, used in error messages.</param>
+    /// <returns>A parsed Stash value.</returns>
     private static object? ParseByFormat(string text, string format, string callerName)
     {
         return format.ToLowerInvariant() switch
@@ -126,6 +142,11 @@ public static class ConfigBuiltIns
         };
     }
 
+    /// <summary>Serializes a Stash value to the specified configuration format.</summary>
+    /// <param name="data">The Stash value to serialize.</param>
+    /// <param name="format">The format name (<c>"json"</c> or <c>"ini"</c>).</param>
+    /// <param name="callerName">The calling function name, used in error messages.</param>
+    /// <returns>A serialized configuration string.</returns>
     private static string StringifyByFormat(object? data, string format, string callerName)
     {
         return format.ToLowerInvariant() switch
@@ -138,6 +159,10 @@ public static class ConfigBuiltIns
         };
     }
 
+    /// <summary>Parses a JSON string to Stash runtime values.</summary>
+    /// <param name="text">The JSON string to parse.</param>
+    /// <param name="callerName">The calling function name, used in error messages.</param>
+    /// <returns>A parsed Stash value.</returns>
     private static object? ParseJson(string text, string callerName)
     {
         try
@@ -151,6 +176,9 @@ public static class ConfigBuiltIns
         }
     }
 
+    /// <summary>Recursively converts a <see cref="System.Text.Json.JsonElement"/> to a Stash runtime value.</summary>
+    /// <param name="element">The JSON element to convert.</param>
+    /// <returns>A Stash runtime value.</returns>
     private static object? ConvertJsonElement(JsonElement element)
     {
         return element.ValueKind switch
@@ -166,6 +194,9 @@ public static class ConfigBuiltIns
         };
     }
 
+    /// <summary>Converts a JSON array element to a <c>List&lt;object?&gt;</c>.</summary>
+    /// <param name="element">The JSON array element to convert.</param>
+    /// <returns>A list of converted Stash values.</returns>
     private static List<object?> ConvertJsonArray(JsonElement element)
     {
         var list = new List<object?>();
@@ -177,6 +208,9 @@ public static class ConfigBuiltIns
         return list;
     }
 
+    /// <summary>Converts a JSON object element to a <see cref="StashDictionary"/>.</summary>
+    /// <param name="element">The JSON object element to convert.</param>
+    /// <returns>A <see cref="StashDictionary"/> with string keys and converted values.</returns>
     private static StashDictionary ConvertJsonObject(JsonElement element)
     {
         var dict = new StashDictionary();
@@ -188,6 +222,10 @@ public static class ConfigBuiltIns
         return dict;
     }
 
+    /// <summary>Converts a Stash runtime value to a pretty-printed JSON string with indentation.</summary>
+    /// <param name="value">The Stash value to serialize.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON string.</returns>
     private static string PrettyValue(object? value, int indent)
     {
         return value switch
@@ -204,6 +242,10 @@ public static class ConfigBuiltIns
         };
     }
 
+    /// <summary>Pretty-prints a Stash array as a JSON array with indentation.</summary>
+    /// <param name="arr">The array to pretty-print.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON array string.</returns>
     private static string PrettyArray(List<object?> arr, int indent)
     {
         if (arr.Count == 0)
@@ -230,6 +272,10 @@ public static class ConfigBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Pretty-prints a <see cref="StashDictionary"/> as a JSON object with indentation.</summary>
+    /// <param name="dict">The dictionary to pretty-print.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON object string.</returns>
     private static string PrettyDict(StashDictionary dict, int indent)
     {
         var keys = dict.Keys();
@@ -263,6 +309,10 @@ public static class ConfigBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Pretty-prints a <see cref="StashInstance"/> as a JSON object with indentation.</summary>
+    /// <param name="inst">The struct instance to pretty-print.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON object string.</returns>
     private static string PrettyInstance(StashInstance inst, int indent)
     {
         var fields = inst.GetFields();
@@ -294,6 +344,9 @@ public static class ConfigBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Converts a dictionary key to a JSON-quoted string.</summary>
+    /// <param name="key">The dictionary key to convert.</param>
+    /// <returns>A JSON-quoted string representation of the key.</returns>
     private static string PrettyKey(object key)
     {
         return key switch

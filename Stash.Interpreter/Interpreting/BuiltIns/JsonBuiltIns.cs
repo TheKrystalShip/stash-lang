@@ -7,8 +7,11 @@ using System.Text;
 using System.Text.Json;
 using Stash.Interpreting.Types;
 
+/// <summary>Registers the <c>json</c> namespace providing JSON parsing and serialization (parse, stringify, pretty).</summary>
 public static class JsonBuiltIns
 {
+    /// <summary>Registers the <c>json</c> namespace and all its functions into the global environment.</summary>
+    /// <param name="globals">The global environment to register into.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var json = new StashNamespace("json");
@@ -44,6 +47,9 @@ public static class JsonBuiltIns
         globals.Define("json", json);
     }
 
+    /// <summary>Recursively converts a <see cref="System.Text.Json.JsonElement"/> to a Stash runtime value.</summary>
+    /// <param name="element">The JSON element to convert.</param>
+    /// <returns>A Stash runtime value: <c>string</c>, <c>long</c>, <c>double</c>, <c>bool</c>, <c>null</c>, <c>List&lt;object?&gt;</c>, or <see cref="StashDictionary"/>.</returns>
     private static object? ConvertElement(JsonElement element)
     {
         return element.ValueKind switch
@@ -59,6 +65,9 @@ public static class JsonBuiltIns
         };
     }
 
+    /// <summary>Converts a JSON array element to a <c>List&lt;object?&gt;</c>.</summary>
+    /// <param name="element">The JSON array element to convert.</param>
+    /// <returns>A list of converted Stash values.</returns>
     private static List<object?> ConvertArray(JsonElement element)
     {
         var list = new List<object?>();
@@ -70,6 +79,9 @@ public static class JsonBuiltIns
         return list;
     }
 
+    /// <summary>Converts a JSON object element to a <see cref="StashDictionary"/>.</summary>
+    /// <param name="element">The JSON object element to convert.</param>
+    /// <returns>A <see cref="StashDictionary"/> with string keys and converted values.</returns>
     private static StashDictionary ConvertObject(JsonElement element)
     {
         var dict = new StashDictionary();
@@ -81,6 +93,9 @@ public static class JsonBuiltIns
         return dict;
     }
 
+    /// <summary>Converts a Stash runtime value to its compact JSON string representation.</summary>
+    /// <param name="value">The Stash value to serialize.</param>
+    /// <returns>A compact JSON string.</returns>
     private static string StringifyValue(object? value)
     {
         return value switch
@@ -97,6 +112,9 @@ public static class JsonBuiltIns
         };
     }
 
+    /// <summary>Serializes a Stash array to a compact JSON array string.</summary>
+    /// <param name="arr">The array to serialize.</param>
+    /// <returns>A compact JSON array string.</returns>
     private static string StringifyArray(List<object?> arr)
     {
         var sb = new StringBuilder("[");
@@ -113,6 +131,9 @@ public static class JsonBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Serializes a <see cref="StashDictionary"/> to a compact JSON object string.</summary>
+    /// <param name="dict">The dictionary to serialize.</param>
+    /// <returns>A compact JSON object string.</returns>
     private static string StringifyDict(StashDictionary dict)
     {
         var sb = new StringBuilder("{");
@@ -134,6 +155,9 @@ public static class JsonBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Serializes a <see cref="StashInstance"/> to a compact JSON object string using its fields.</summary>
+    /// <param name="inst">The struct instance to serialize.</param>
+    /// <returns>A compact JSON object string.</returns>
     private static string StringifyInstance(StashInstance inst)
     {
         var sb = new StringBuilder("{");
@@ -154,6 +178,9 @@ public static class JsonBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Converts a dictionary key to a JSON-quoted string.</summary>
+    /// <param name="key">The dictionary key to convert.</param>
+    /// <returns>A JSON-quoted string representation of the key.</returns>
     private static string StringifyKey(object key)
     {
         return key switch
@@ -166,6 +193,10 @@ public static class JsonBuiltIns
         };
     }
 
+    /// <summary>Converts a Stash runtime value to a pretty-printed JSON string with indentation.</summary>
+    /// <param name="value">The Stash value to serialize.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON string.</returns>
     private static string PrettyValue(object? value, int indent)
     {
         return value switch
@@ -182,6 +213,10 @@ public static class JsonBuiltIns
         };
     }
 
+    /// <summary>Pretty-prints a Stash array as a JSON array with indentation.</summary>
+    /// <param name="arr">The array to pretty-print.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON array string.</returns>
     private static string PrettyArray(List<object?> arr, int indent)
     {
         if (arr.Count == 0)
@@ -208,6 +243,10 @@ public static class JsonBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Pretty-prints a <see cref="StashDictionary"/> as a JSON object with indentation.</summary>
+    /// <param name="dict">The dictionary to pretty-print.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON object string.</returns>
     private static string PrettyDict(StashDictionary dict, int indent)
     {
         var keys = dict.Keys();
@@ -241,6 +280,10 @@ public static class JsonBuiltIns
         return sb.ToString();
     }
 
+    /// <summary>Pretty-prints a <see cref="StashInstance"/> as a JSON object with indentation.</summary>
+    /// <param name="inst">The struct instance to pretty-print.</param>
+    /// <param name="indent">The current indentation level.</param>
+    /// <returns>A pretty-printed JSON object string.</returns>
     private static string PrettyInstance(StashInstance inst, int indent)
     {
         var fields = inst.GetFields();

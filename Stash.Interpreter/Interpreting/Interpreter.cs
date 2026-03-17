@@ -60,35 +60,65 @@ using Stash.Interpreting.Exceptions;
 /// </remarks>
 public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 {
+    /// <summary>The global scope environment containing built-in functions and top-level declarations.</summary>
     private readonly Environment _globals;
+    /// <summary>The current lexical scope. Changes as the interpreter enters and exits blocks.</summary>
     private Environment _environment;
+    /// <summary>Pending standard input to pipe into the next command execution.</summary>
     private string? _pendingStdin;
+    /// <summary>The message from the last caught <see cref="RuntimeError"/> in a <c>try?</c> expression. Exposed via <c>err.last()</c>.</summary>
     internal string? LastError;
+    /// <summary>Cache of already-loaded modules, keyed by resolved absolute path. Prevents re-execution on repeated imports.</summary>
     private readonly Dictionary<string, Environment> _moduleCache = new();
+    /// <summary>Set of module paths currently being imported, used to detect circular imports.</summary>
     private readonly HashSet<string> _importStack = new();
+    /// <summary>The file path of the script currently being executed. Used for resolving relative imports.</summary>
     private string? _currentFile;
+    /// <summary>The runtime call stack, tracking active function invocations for debugging and error reporting.</summary>
     private readonly List<CallFrame> _callStack = new();
+    /// <summary>The attached debugger, if any. When non-null, debug hooks are invoked during execution.</summary>
     private IDebugger? _debugger;
+    /// <summary>Set of all source file paths loaded during execution (main script + imports). Used for DAP "loadedSources".</summary>
     private readonly HashSet<string> _loadedSources = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The test harness for reporting test results. When set, <c>test()</c> and <c>describe()</c> report to it.</summary>
     private Stash.Testing.ITestHarness? _testHarness;
+    /// <summary>The name of the current <c>describe</c> block, used to namespace test names.</summary>
     private string? _currentDescribe;
+    /// <summary>Optional test name filter patterns. When set, only matching tests execute.</summary>
     private string[]? _testFilter;
+    /// <summary>When true, <c>test()</c> records names and locations without executing test bodies.</summary>
     private bool _discoveryMode;
+    /// <summary>Stack of <c>beforeEach</c> hook lists, one per nested <c>describe</c> block.</summary>
     private readonly List<List<IStashCallable>> _beforeEachHooks = new();
+    /// <summary>Stack of <c>afterEach</c> hook lists, one per nested <c>describe</c> block.</summary>
     private readonly List<List<IStashCallable>> _afterEachHooks = new();
+    /// <summary>Stack of <c>afterAll</c> hook lists, one per nested <c>describe</c> block.</summary>
     private readonly List<List<IStashCallable>> _afterAllHooks = new();
+    /// <summary>The source span of the statement currently being executed. Used by the debugger to track position.</summary>
     private SourceSpan? _currentSpan;
+    /// <summary>The raw script arguments, parsed by <c>args</c> declarations.</summary>
     internal string[] ScriptArgs = Array.Empty<string>();
+    /// <summary>Background processes launched by <c>process.spawn()</c>, tracked for cleanup on script exit.</summary>
     internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
+    /// <summary>Cache mapping process handles to their wait results, preventing duplicate <c>process.wait()</c> calls.</summary>
     internal readonly Dictionary<StashInstance, StashInstance> ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime.</summary>
     private readonly Dictionary<Expr, int> _locals = new(ReferenceEqualityComparer.Instance);
+    /// <summary>When true, variable lookups walk the scope chain instead of using resolver distances. Set during DAP evaluate requests.</summary>
     private bool _isAdHocEval = false;
+    /// <summary>The output writer for <c>io.println</c> and <c>io.print</c>. Defaults to <see cref="Console.Out"/>.</summary>
     private TextWriter _output = Console.Out;
+    /// <summary>The error output writer. Defaults to <see cref="Console.Error"/>.</summary>
     private TextWriter _errorOutput = Console.Error;
+    /// <summary>The input reader for <c>io.readLine</c>. Defaults to <see cref="Console.In"/>.</summary>
     private TextReader _input = Console.In;
+    /// <summary>The capability flags controlling which built-in namespaces are available.</summary>
     private readonly StashCapabilities _capabilities;
+    /// <summary>Token checked at each statement boundary to support cooperative cancellation.</summary>
     private CancellationToken _cancellationToken;
+    /// <summary>Number of statements executed since the last reset.</summary>
     private long _stepCount;
+    /// <summary>Maximum allowed statement count. Zero means unlimited.</summary>
     private long _stepLimit;
 
     /// <summary>
@@ -156,8 +186,11 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         set => _discoveryMode = value;
     }
 
+    /// <summary>Gets the stack of <c>beforeEach</c> hook lists.</summary>
     internal List<List<IStashCallable>> BeforeEachHooks => _beforeEachHooks;
+    /// <summary>Gets the stack of <c>afterEach</c> hook lists.</summary>
     internal List<List<IStashCallable>> AfterEachHooks => _afterEachHooks;
+    /// <summary>Gets the stack of <c>afterAll</c> hook lists.</summary>
     internal List<List<IStashCallable>> AfterAllHooks => _afterAllHooks;
 
     /// <summary>
@@ -247,10 +280,13 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public Environment Globals => _globals;
 
+    /// <summary>Creates a new interpreter with all capabilities enabled.</summary>
     public Interpreter() : this(StashCapabilities.All)
     {
     }
 
+    /// <summary>Creates a new interpreter with the specified capability restrictions.</summary>
+    /// <param name="capabilities">The capability flags controlling which built-in namespaces are registered.</param>
     public Interpreter(StashCapabilities capabilities)
     {
         _capabilities = capabilities;
@@ -283,6 +319,9 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         return expression.Accept(this);
     }
 
+    /// <summary>Interprets a list of statements: resolves variable references, then executes each statement sequentially.</summary>
+    /// <param name="statements">The top-level statements to execute.</param>
+    /// <exception cref="RuntimeError">Thrown on runtime errors, including misplaced <c>break</c>, <c>continue</c>, or <c>return</c> at the top level.</exception>
     public void Interpret(List<Stmt> statements)
     {
         // Track loaded source
@@ -322,6 +361,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
     }
 
+    /// <summary>Executes a single statement, checking for cancellation and step limits, invoking debug hooks, and dispatching to the visitor.</summary>
+    /// <param name="stmt">The statement to execute.</param>
     private void Execute(Stmt stmt)
     {
         if (_cancellationToken.IsCancellationRequested)
@@ -395,6 +436,9 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         _stepCount = 0;
     }
 
+    /// <summary>Executes a list of statements in the given environment, restoring the previous environment afterwards.</summary>
+    /// <param name="statements">The statements to execute.</param>
+    /// <param name="environment">The environment (scope) to execute in.</param>
     public void ExecuteBlock(List<Stmt> statements, Environment environment)
     {
         Environment previous = _environment;
@@ -465,6 +509,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
     }
 
+    /// <summary>Registers all built-in function namespaces into the global environment, respecting capability flags.</summary>
     private void DefineBuiltIns()
     {
         // Core built-ins are always registered (typeof, len, hash, range, etc.)

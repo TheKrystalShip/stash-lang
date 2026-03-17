@@ -15,15 +15,25 @@ using Stash.Interpreting.Types;
 /// </summary>
 public class CliDebugger : IDebugger
 {
+    /// <summary>The list of user-defined breakpoints.</summary>
     private readonly List<Breakpoint> _breakpoints = new();
+    /// <summary>When true, pause at the very next statement (step-into mode).</summary>
     private bool _stepInto;
+    /// <summary>When true, pause at the next statement at the same or shallower call depth (step-over mode).</summary>
     private bool _stepOver;
+    /// <summary>When true, pause when returning to a shallower call depth (step-out mode).</summary>
     private bool _stepOut;
+    /// <summary>The call depth at which the debugger last paused, used for step-over and step-out logic.</summary>
     private int _pausedDepth;
+    /// <summary>The current call stack depth, incremented on function entry and decremented on exit.</summary>
     private int _currentDepth;
+    /// <summary>The source span of the most recently executed statement.</summary>
     private SourceSpan? _currentSpan;
+    /// <summary>The environment (scope) at the most recently executed statement.</summary>
     private StashEnv? _currentEnv;
+    /// <summary>The current call stack, set by the interpreter via <see cref="SetCallStack"/>.</summary>
     private IReadOnlyList<CallFrame>? _callStack;
+    /// <summary>The interpreter instance, used for evaluating expressions in conditional breakpoints and the <c>eval</c> command.</summary>
     private Interpreter? _interpreter;
 
     /// <summary>
@@ -35,6 +45,7 @@ public class CliDebugger : IDebugger
         Prompt();
     }
 
+    /// <inheritdoc />
     public void OnBeforeExecute(SourceSpan span, StashEnv env)
     {
         _currentSpan = span;
@@ -105,16 +116,19 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <inheritdoc />
     public void OnFunctionEnter(string name, SourceSpan callSite, StashEnv env)
     {
         _currentDepth++;
     }
 
+    /// <inheritdoc />
     public void OnFunctionExit(string name)
     {
         _currentDepth--;
     }
 
+    /// <inheritdoc />
     public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack)
     {
         _callStack = callStack;
@@ -143,6 +157,7 @@ public class CliDebugger : IDebugger
         _interpreter = interpreter;
     }
 
+    /// <summary>Runs the interactive debugger REPL loop, reading and executing user commands until execution resumes.</summary>
     private void Prompt()
     {
         while (true)
@@ -261,6 +276,7 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Handles the <c>break</c> command: sets a breakpoint at the specified location with an optional condition.</summary>
     private void HandleBreakpoint(string[] parts)
     {
         if (parts.Length < 2)
@@ -334,6 +350,7 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Handles the <c>clear</c> command: removes breakpoints by ID, location, or clears all.</summary>
     private void HandleClearBreakpoint(string[] parts)
     {
         if (parts.Length < 2)
@@ -394,6 +411,7 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Handles the <c>print</c> command: looks up a variable by name and displays its value.</summary>
     private void HandlePrint(string[] parts)
     {
         if (parts.Length < 2)
@@ -428,6 +446,7 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Walks the scope chain looking for a variable by name.</summary>
     private bool TryGetFromChain(string name, out object? value)
     {
         foreach (var scope in _currentEnv!.GetScopeChain())
@@ -441,6 +460,7 @@ public class CliDebugger : IDebugger
         return false;
     }
 
+    /// <summary>Handles the <c>eval</c> command: evaluates an arbitrary expression in the current scope.</summary>
     private void HandleEval(string[] parts, string fullInput)
     {
         if (_interpreter is null || _currentEnv is null)
@@ -470,6 +490,7 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Handles the <c>scopes</c> command: displays all scopes in the scope chain with their variables.</summary>
     private void HandleScopes()
     {
         if (_currentEnv is null)
@@ -493,6 +514,7 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Handles the <c>locals</c> command: displays variables in the current (innermost) scope.</summary>
     private void HandleLocals()
     {
         if (_currentEnv is null)
@@ -515,6 +537,9 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Formats a Stash runtime value for display in the debugger REPL.</summary>
+    /// <param name="value">The value to format.</param>
+    /// <returns>A human-readable string representation.</returns>
     public static string FormatValue(object? value)
     {
         if (value is null)
@@ -576,6 +601,7 @@ public class CliDebugger : IDebugger
         return value.ToString() ?? "null";
     }
 
+    /// <summary>Prints the call stack to the console, most recent frame first.</summary>
     private static void PrintCallStack(IReadOnlyList<CallFrame> callStack)
     {
         if (callStack.Count == 0)
@@ -592,6 +618,7 @@ public class CliDebugger : IDebugger
         }
     }
 
+    /// <summary>Prints the list of available debugger commands to the console.</summary>
     private static void PrintHelp()
     {
         Console.WriteLine("Debugger commands:");

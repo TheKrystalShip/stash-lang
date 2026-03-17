@@ -28,6 +28,7 @@ using Stash.Interpreting.Exceptions;
 /// </example>
 public class StashEngine
 {
+    /// <summary>The underlying interpreter instance that executes Stash code.</summary>
     private readonly Interpreter _interpreter;
 
     /// <summary>
@@ -384,6 +385,9 @@ public class StashEngine
         return dict;
     }
 
+    /// <summary>Lexes and parses Stash source code into a list of statements, collecting any errors.</summary>
+    /// <param name="source">The Stash source code to parse.</param>
+    /// <returns>A tuple of parsed statements and any lex/parse error messages.</returns>
     private (List<Stmt> Statements, List<string> Errors) ParseStatements(string source)
     {
         var lexer = new Lexer(source);
@@ -420,6 +424,9 @@ public class ExecutionResult
     /// <summary>True if execution completed without errors.</summary>
     public bool Success => Errors.Count == 0;
 
+    /// <summary>Creates a new execution result.</summary>
+    /// <param name="value">The result value (for expressions) or null (for statements).</param>
+    /// <param name="errors">Any error messages from lexing, parsing, or execution.</param>
     public ExecutionResult(object? value, List<string> errors)
     {
         Value = value;
@@ -433,9 +440,13 @@ public class ExecutionResult
 /// </summary>
 public class StashScript
 {
+    /// <summary>Gets the pre-parsed AST statements.</summary>
     internal List<Stmt> Statements { get; }
+    /// <summary>Gets or sets whether the resolver has been run on these statements.</summary>
     internal bool IsResolved { get; set; }
 
+    /// <summary>Creates a new pre-compiled script from parsed statements.</summary>
+    /// <param name="statements">The parsed AST statements.</param>
     internal StashScript(List<Stmt> statements)
     {
         Statements = statements;

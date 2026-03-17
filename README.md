@@ -199,12 +199,12 @@ var result = engine.Evaluate("playerName");
 
 **Sandboxing** — Use `StashCapabilities` flags to control what scripts can access:
 
-| Flag | Controls |
-|------|----------|
-| `FileSystem` | `fs.*` — file/directory operations |
-| `Network` | `http.*` — HTTP requests |
-| `Process` | `process.*`, `exit()` — process management |
-| `Environment` | `env.*` — environment variables |
+| Flag          | Controls                                   |
+| ------------- | ------------------------------------------ |
+| `FileSystem`  | `fs.*` — file/directory operations         |
+| `Network`     | `http.*` — HTTP requests                   |
+| `Process`     | `process.*`, `exit()` — process management |
+| `Environment` | `env.*` — environment variables            |
 
 `StashCapabilities.None` disables all system access. `StashCapabilities.All` enables everything (default for CLI).
 

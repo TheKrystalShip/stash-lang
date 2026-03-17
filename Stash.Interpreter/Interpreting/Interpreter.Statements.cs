@@ -8,12 +8,14 @@ namespace Stash.Interpreting;
 
 public partial class Interpreter
 {
+    /// <inheritdoc />
     public object? VisitExprStmt(ExprStmt stmt)
     {
         stmt.Expression.Accept(this);
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
         object? value = null;
@@ -26,6 +28,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
         object? value = stmt.Initializer.Accept(this);
@@ -33,6 +36,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitDestructureStmt(DestructureStmt stmt)
     {
         object? value = stmt.Initializer.Accept(this);
@@ -91,12 +95,14 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         ExecuteBlock(stmt.Statements, new Environment(_environment));
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitIfStmt(IfStmt stmt)
     {
         if (IsTruthy(stmt.Condition.Accept(this)))
@@ -111,6 +117,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitWhileStmt(WhileStmt stmt)
     {
         while (IsTruthy(stmt.Condition.Accept(this)))
@@ -132,6 +139,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitDoWhileStmt(DoWhileStmt stmt)
     {
         do
@@ -153,6 +161,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitForInStmt(ForInStmt stmt)
     {
         object? iterable = stmt.Iterable.Accept(this);
@@ -233,18 +242,22 @@ public partial class Interpreter
         return null;
     }
 
+    /// <summary>Converts a string to a sequence of single-character strings for iteration.</summary>
     private static IEnumerable<object?> StringToChars(string str) => RuntimeValues.StringToChars(str);
 
+    /// <inheritdoc />
     public object? VisitBreakStmt(BreakStmt stmt)
     {
         throw new BreakException();
     }
 
+    /// <inheritdoc />
     public object? VisitContinueStmt(ContinueStmt stmt)
     {
         throw new ContinueException();
     }
 
+    /// <inheritdoc />
     public object? VisitReturnStmt(ReturnStmt stmt)
     {
         object? value = null;
@@ -256,6 +269,7 @@ public partial class Interpreter
         throw new ReturnException(value);
     }
 
+    /// <inheritdoc />
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
         var function = new StashFunction(stmt, _environment);
@@ -263,6 +277,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitStructDeclStmt(StructDeclStmt stmt)
     {
         var fields = new List<string>();
@@ -282,6 +297,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt)
     {
         var members = new List<string>();

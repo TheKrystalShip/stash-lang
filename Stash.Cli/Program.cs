@@ -30,8 +30,11 @@ using Stash.Testing;
 
 namespace Stash;
 
+/// <summary>CLI entry point for the Stash language: REPL, file execution, debug mode, and test runner.</summary>
 public class Program
 {
+    /// <summary>Parses CLI arguments and dispatches to the appropriate execution mode.</summary>
+    /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
     {
         if (args.Length == 0)
@@ -120,6 +123,9 @@ public class Program
         }
     }
 
+    /// <summary>Executes a Stash script file.</summary>
+    /// <param name="path">Path to the script file.</param>
+    /// <param name="scriptArgs">Arguments to pass to the script.</param>
     private static void RunFile(string path, string[] scriptArgs)
     {
         if (!System.IO.File.Exists(path))
@@ -178,6 +184,9 @@ public class Program
         }
     }
 
+    /// <summary>Executes a script with the interactive CLI debugger attached.</summary>
+    /// <param name="path">Path to the script file.</param>
+    /// <param name="scriptArgs">Arguments to pass to the script.</param>
     private static void RunFileWithDebugger(string path, string[] scriptArgs)
     {
         if (!System.IO.File.Exists(path))
@@ -241,6 +250,11 @@ public class Program
         Console.WriteLine("Script execution completed.");
     }
 
+    /// <summary>Executes a script with debugger and test harness.</summary>
+    /// <param name="path">Path to the script file.</param>
+    /// <param name="scriptArgs">Arguments to pass to the script.</param>
+    /// <param name="testFilter">Optional semicolon-separated test name filter.</param>
+    /// <param name="testList">When true, lists tests without running them.</param>
     private static void RunFileWithDebuggerAndTests(string path, string[] scriptArgs, string? testFilter = null, bool testList = false)
     {
         if (!System.IO.File.Exists(path))
@@ -325,6 +339,11 @@ public class Program
         }
     }
 
+    /// <summary>Executes a test script with TAP harness.</summary>
+    /// <param name="path">Path to the script file.</param>
+    /// <param name="scriptArgs">Arguments to pass to the script.</param>
+    /// <param name="testFilter">Optional semicolon-separated test name filter.</param>
+    /// <param name="testList">When true, lists tests without running them.</param>
     private static void RunFileWithTests(string path, string[] scriptArgs, string? testFilter = null, bool testList = false)
     {
         if (!System.IO.File.Exists(path))
@@ -405,6 +424,7 @@ public class Program
         }
     }
 
+    /// <summary>Starts the interactive REPL.</summary>
     private static void RunRepl()
     {
         Console.WriteLine("Stash v0.5 — Type statements or expressions, or 'exit' to quit.");
@@ -552,6 +572,8 @@ public class Program
         return false;
     }
 
+    /// <summary>Formats and prints a runtime error to stderr.</summary>
+    /// <param name="ex">The runtime error to report.</param>
     private static void PrintRuntimeError(RuntimeError ex)
     {
         if (ex.Span is not null)

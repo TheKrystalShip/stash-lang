@@ -4,17 +4,28 @@ using System.Text;
 
 namespace Stash;
 
+/// <summary>Interactive line editor with history, word-level cursor movement, and inline editing for the REPL.</summary>
 public class LineEditor
 {
+    /// <summary>Previously entered lines.</summary>
     private readonly List<string> _history = new();
+    /// <summary>Current position in history during navigation.</summary>
     private int _historyIndex;
+    /// <summary>Saved in-progress line when navigating history.</summary>
     private string _savedCurrentLine = "";
 
+    /// <summary>Current line content being edited.</summary>
     private StringBuilder _buffer = new();
+    /// <summary>Cursor position within the buffer.</summary>
     private int _cursor;
+    /// <summary>The prompt string displayed before input.</summary>
     private string _prompt = "";
+    /// <summary>Length of previously rendered line for clearing leftovers.</summary>
     private int _previousLength;
 
+    /// <summary>Reads a line with interactive editing (arrows, history, word movement).</summary>
+    /// <param name="prompt">The prompt string to display before input.</param>
+    /// <returns>The entered line, or <c>null</c> on EOF.</returns>
     public string? ReadLine(string prompt)
     {
         _prompt = prompt;
@@ -175,6 +186,7 @@ public class LineEditor
         }
     }
 
+    /// <summary>Re-renders buffer to console.</summary>
     private void Render()
     {
         // Return to column 0
@@ -195,6 +207,7 @@ public class LineEditor
         MoveCursorToPosition();
     }
 
+    /// <summary>Positions console cursor to match buffer cursor.</summary>
     private void MoveCursorToPosition()
     {
         int targetCol = _prompt.Length + _cursor;
@@ -205,6 +218,7 @@ public class LineEditor
         }
     }
 
+    /// <summary>Navigates to previous history entry.</summary>
     private void HistoryPrevious()
     {
         if (_historyIndex <= 0)
@@ -221,6 +235,7 @@ public class LineEditor
         SetBuffer(_history[_historyIndex]);
     }
 
+    /// <summary>Navigates to next history entry or restores saved line.</summary>
     private void HistoryNext()
     {
         if (_historyIndex >= _history.Count)
@@ -239,6 +254,7 @@ public class LineEditor
         }
     }
 
+    /// <summary>Replaces buffer and moves cursor to end.</summary>
     private void SetBuffer(string text)
     {
         _buffer.Clear();
@@ -247,6 +263,7 @@ public class LineEditor
         Render();
     }
 
+    /// <summary>Moves cursor one word left.</summary>
     private void WordLeft()
     {
         if (_cursor == 0)
@@ -267,6 +284,7 @@ public class LineEditor
         Render();
     }
 
+    /// <summary>Moves cursor one word right.</summary>
     private void WordRight()
     {
         if (_cursor >= _buffer.Length)
@@ -287,6 +305,7 @@ public class LineEditor
         Render();
     }
 
+    /// <summary>Deletes one word backward from cursor.</summary>
     private void DeleteWordBackward()
     {
         if (_cursor == 0)

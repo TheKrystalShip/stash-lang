@@ -6,8 +6,11 @@ using System.Globalization;
 using System.Threading;
 using Stash.Interpreting.Types;
 
+/// <summary>Registers the <c>time</c> namespace providing time-related functions (now, millis, sleep, format, parse, date, clock, iso).</summary>
 public static class TimeBuiltIns
 {
+    /// <summary>Registers the <c>time</c> namespace and all its functions into the global environment.</summary>
+    /// <param name="globals">The global environment to register into.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var ns = new StashNamespace("time");

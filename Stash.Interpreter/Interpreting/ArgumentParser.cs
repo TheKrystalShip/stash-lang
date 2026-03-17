@@ -4,10 +4,14 @@ using System;
 using System.Collections.Generic;
 using Stash.Interpreting.Types;
 
+/// <summary>Parses command-line arguments against an <c>ArgTree</c> specification, producing an <c>Args</c> instance with all parsed values.</summary>
 internal sealed class ArgumentParser
 {
+    /// <summary>The raw command-line arguments to parse.</summary>
     private readonly string[] _scriptArgs;
 
+    /// <summary>Creates a new argument parser for the given script arguments.</summary>
+    /// <param name="scriptArgs">The raw command-line arguments.</param>
     public ArgumentParser(string[] scriptArgs)
     {
         _scriptArgs = scriptArgs;
@@ -428,6 +432,11 @@ internal sealed class ArgumentParser
         return new StashInstance("Args", fields);
     }
 
+    /// <summary>Coerces a string argument value to the specified type (string, int, float, bool).</summary>
+    /// <param name="value">The raw string value from the command line.</param>
+    /// <param name="type">The target type name: "string", "int", "float", or "bool". Null defaults to string.</param>
+    /// <param name="argName">The argument name, used in error messages.</param>
+    /// <returns>The coerced value as a <c>long</c>, <c>double</c>, <c>bool</c>, or <c>string</c>.</returns>
     private static object? CoerceArgValue(string value, string? type, string argName)
     {
         if (type is null || type == "string")
@@ -496,6 +505,9 @@ internal sealed class ArgumentParser
         return name;
     }
 
+    /// <summary>Prints formatted help text for the argument specification to the console.</summary>
+    /// <param name="tree">The <c>ArgTree</c> instance containing the argument specification.</param>
+    /// <param name="fields">The parsed fields dictionary (used to resolve default values).</param>
     private void PrintArgsHelp(StashInstance tree, Dictionary<string, object?> fields)
     {
         var sb = new System.Text.StringBuilder();

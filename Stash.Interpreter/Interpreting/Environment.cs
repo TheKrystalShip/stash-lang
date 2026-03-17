@@ -8,7 +8,9 @@ using System.Collections.Generic;
 /// </summary>
 public class Environment
 {
+    /// <summary>The variable bindings in this scope, mapping names to their current values.</summary>
     private readonly Dictionary<string, object?> _values = new();
+    /// <summary>Set of variable names that are constants and cannot be reassigned.</summary>
     private readonly HashSet<string> _constants = new();
 
     /// <summary>

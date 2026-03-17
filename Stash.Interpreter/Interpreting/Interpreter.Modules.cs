@@ -8,6 +8,7 @@ namespace Stash.Interpreting;
 
 public partial class Interpreter
 {
+    /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
         string modulePath = (string)stmt.Path.Literal!;
@@ -34,6 +35,7 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
         string modulePath = (string)stmt.Path.Literal!;
@@ -62,6 +64,10 @@ public partial class Interpreter
         return null;
     }
 
+    /// <summary>Resolves a relative module path to an absolute path, relative to the current file's directory.</summary>
+    /// <param name="modulePath">The module path string as written in the import statement.</param>
+    /// <param name="span">The source span of the path token, used for error reporting.</param>
+    /// <returns>The resolved absolute file path.</returns>
     private string ResolveModulePath(string modulePath, SourceSpan span)
     {
         string basePath;
@@ -84,6 +90,10 @@ public partial class Interpreter
         return fullPath;
     }
 
+    /// <summary>Loads and executes a module file, returning its top-level environment. Results are cached to prevent re-execution on repeated imports.</summary>
+    /// <param name="resolvedPath">The absolute file path of the module to load.</param>
+    /// <param name="span">The source span of the import statement, used for error reporting.</param>
+    /// <returns>The top-level <see cref="Environment"/> of the executed module.</returns>
     private Environment LoadModule(string resolvedPath, SourceSpan span)
     {
         if (_moduleCache.TryGetValue(resolvedPath, out Environment? cached))

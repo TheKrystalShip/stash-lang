@@ -3,10 +3,14 @@ namespace Stash.Interpreting.BuiltIns;
 using System;
 using Stash.Interpreting.Types;
 
+/// <summary>Registers the <c>math</c> namespace providing mathematical functions and constants (abs, ceil, floor, round, min, max, pow, sqrt, log, random, randomInt, clamp, PI, E).</summary>
 public static class MathBuiltIns
 {
+    /// <summary>Shared random number generator for <c>math.random()</c> and <c>math.randomInt()</c>.</summary>
     private static readonly Random _random = new();
 
+    /// <summary>Registers the <c>math</c> namespace and all its functions into the global environment.</summary>
+    /// <param name="globals">The global environment to register into.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var math = new StashNamespace("math");
@@ -129,6 +133,10 @@ public static class MathBuiltIns
         globals.Define("math", math);
     }
 
+    /// <summary>Converts a numeric value to <see cref="double"/>, throwing if the value is not a number.</summary>
+    /// <param name="val">The value to convert.</param>
+    /// <param name="funcName">The calling function name, used in error messages.</param>
+    /// <returns>The numeric value as a <see cref="double"/>.</returns>
     private static double ToDouble(object? val, string funcName)
     {
         if (val is long l)

@@ -6,8 +6,11 @@ using System.Globalization;
 using System.Text;
 using Stash.Interpreting.Types;
 
+/// <summary>Registers the <c>ini</c> namespace providing INI format parsing and serialization (parse, stringify).</summary>
 public static class IniBuiltIns
 {
+    /// <summary>Registers the <c>ini</c> namespace and all its functions into the global environment.</summary>
+    /// <param name="globals">The global environment to register into.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var ini = new StashNamespace("ini");
@@ -42,6 +45,9 @@ public static class IniBuiltIns
         globals.Define("ini", ini);
     }
 
+    /// <summary>Parses an INI-format string into a <see cref="StashDictionary"/>. Section headers create nested dictionaries.</summary>
+    /// <param name="text">The INI-format string to parse.</param>
+    /// <returns>A <see cref="StashDictionary"/> representing the parsed INI structure.</returns>
     internal static StashDictionary ParseIni(string text)
     {
         var root = new StashDictionary();
@@ -101,6 +107,9 @@ public static class IniBuiltIns
         return root;
     }
 
+    /// <summary>Coerces a raw INI value string to the appropriate Stash type (long, double, bool, or string).</summary>
+    /// <param name="raw">The raw string value from the INI file.</param>
+    /// <returns>A <c>long</c>, <c>double</c>, <c>bool</c>, or <c>string</c> value.</returns>
     private static object? CoerceValue(string raw)
     {
         // Strip surrounding double quotes
@@ -135,6 +144,9 @@ public static class IniBuiltIns
         return raw;
     }
 
+    /// <summary>Serializes a <see cref="StashDictionary"/> to an INI-format string. Nested dictionaries become sections.</summary>
+    /// <param name="dict">The dictionary to serialize.</param>
+    /// <returns>An INI-format string.</returns>
     internal static string StringifyIni(StashDictionary dict)
     {
         var sb = new StringBuilder();
@@ -194,6 +206,9 @@ public static class IniBuiltIns
         return sb.ToString().TrimEnd('\r', '\n');
     }
 
+    /// <summary>Formats a single value for INI output, quoting strings with leading/trailing spaces.</summary>
+    /// <param name="value">The value to format.</param>
+    /// <returns>A string representation suitable for INI output.</returns>
     private static string FormatValue(object? value)
     {
         return value switch
