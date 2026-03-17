@@ -71,6 +71,7 @@ public class Parser
     /// Each entry includes the file name, line, column, and a description of the problem.
     /// </summary>
     public List<string> Errors { get; } = new();
+    /// <summary>Gets the list of structured diagnostic errors with full <see cref="SourceSpan"/> location information, accumulated during parsing.</summary>
     public List<DiagnosticError> StructuredErrors { get; } = new();
 
     /// <summary>
@@ -352,6 +353,8 @@ public class Parser
         return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(fnToken.Span, body.Span));
     }
 
+    /// <summary>Parses a struct declaration: <c>struct Name { field1, field2, fn method() { ... } }</c>.</summary>
+    /// <returns>A <see cref="StructDeclStmt"/> node.</returns>
     private Stmt StructDeclaration()
     {
         Token structToken = Previous();
@@ -392,6 +395,8 @@ public class Parser
         return new StructDeclStmt(name, fields, fieldTypes, methods, MakeSpan(structToken.Span, close.Span));
     }
 
+    /// <summary>Parses an enum declaration: <c>enum Name { Member1, Member2, ... }</c>.</summary>
+    /// <returns>An <see cref="EnumDeclStmt"/> node.</returns>
     private Stmt EnumDeclaration()
     {
         Token enumToken = Previous();
@@ -744,6 +749,11 @@ public class Parser
         return expr;
     }
 
+    /// <summary>Desugars a compound assignment operator (e.g. <c>+=</c>, <c>-=</c>) into a binary expression wrapped in an assignment.</summary>
+    /// <param name="compoundOp">The compound assignment operator token.</param>
+    /// <param name="target">The assignment target expression.</param>
+    /// <param name="value">The right-hand side expression.</param>
+    /// <returns>An assignment expression node wrapping the desugared binary operation.</returns>
     private Expr DesugarCompoundAssignment(Token compoundOp, Expr target, Expr value)
     {
         SourceSpan span = MakeSpan(target.Span, value.Span);
@@ -1225,6 +1235,9 @@ public class Parser
         return expr;
     }
 
+    /// <summary>Parses the arms of a <c>switch</c> expression after the subject has been parsed.</summary>
+    /// <param name="subject">The switch subject expression.</param>
+    /// <returns>A <see cref="SwitchExpr"/> node containing all parsed arms.</returns>
     private Expr ParseSwitchArms(Expr subject)
     {
         Consume(TokenType.LeftBrace, "Expected '{' after 'switch'.");

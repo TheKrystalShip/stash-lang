@@ -62,6 +62,7 @@ public class Lexer
     /// <summary>The 1-based column number captured at <see cref="_start"/> when a new token begins.</summary>
     private int _startColumn;
 
+    /// <summary>When <c>true</c>, whitespace and comment tokens are emitted instead of being discarded.</summary>
     private readonly bool _preserveTrivia;
 
     /// <summary>
@@ -101,6 +102,7 @@ public class Lexer
             ["switch"] = TokenType.Switch,
         }.ToFrozenDictionary();
 
+    /// <summary>Alternate lookup handle for <see cref="_keywords"/>, enabling keyword matching directly from <see cref="ReadOnlySpan{T}"/> slices without allocating a string.</summary>
     private static readonly FrozenDictionary<string, TokenType>.AlternateLookup<ReadOnlySpan<char>> _keywordLookup =
         _keywords.GetAlternateLookup<ReadOnlySpan<char>>();
 
@@ -114,7 +116,9 @@ public class Lexer
     /// </remarks>
     public List<string> Errors => _errors;
 
+    /// <summary>Backing store for <see cref="StructuredErrors"/>.</summary>
     private readonly List<DiagnosticError> _structuredErrors = new();
+    /// <summary>Gets the list of structured diagnostic errors encountered during scanning, with full <see cref="SourceSpan"/> location information.</summary>
     public List<DiagnosticError> StructuredErrors => _structuredErrors;
 
     /// <summary>
@@ -616,6 +620,8 @@ public class Lexer
         AddToken(TokenType.StringLiteral, sb.ToString(), lexeme);
     }
 
+    /// <summary>Scans a triple-quoted (multi-line) string literal, stripping common leading indentation.</summary>
+    /// <param name="prefixed">Whether the string is a raw-prefixed triple-quoted literal.</param>
     private void ScanTripleQuotedString(bool prefixed)
     {
         // Skip leading newline immediately after opening """
@@ -739,6 +745,8 @@ public class Lexer
         AddToken(TokenType.StringLiteral, content, lexeme);
     }
 
+    /// <summary>Scans a triple-quoted interpolated string literal, handling embedded <c>${...}</c> expressions while stripping common indentation.</summary>
+    /// <param name="prefixed">Whether the string is a raw-prefixed triple-quoted literal.</param>
     private void ScanTripleQuotedInterpolated(bool prefixed)
     {
         var parts = new List<object>();
@@ -845,6 +853,9 @@ public class Lexer
         AddToken(TokenType.InterpolatedString, parts, lexeme);
     }
 
+    /// <summary>Strips the common leading whitespace indentation from a multi-line string.</summary>
+    /// <param name="text">The raw multi-line string content.</param>
+    /// <returns>The string with common indentation removed from each line.</returns>
     private static string StripCommonIndent(string text)
     {
         if (text.EndsWith('\n'))
@@ -896,6 +907,9 @@ public class Lexer
         return sb.ToString();
     }
 
+    /// <summary>Strips the common leading whitespace indentation from the parts of a triple-quoted interpolated string.</summary>
+    /// <param name="parts">The list of string segments and interpolation expression tokens.</param>
+    /// <returns>A new list with indentation-stripped string segments.</returns>
     private static List<object> StripCommonIndentParts(List<object> parts)
     {
         var fullText = new StringBuilder();
