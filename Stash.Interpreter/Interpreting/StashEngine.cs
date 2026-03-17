@@ -3,6 +3,7 @@ namespace Stash.Interpreting;
 using System;
 
 using System.IO;
+using System.Threading;
 using System.Collections.Generic;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -76,6 +77,33 @@ public class StashEngine
     }
 
     /// <summary>
+    /// Gets or sets a cancellation token to abort script execution.
+    /// When cancelled, the engine throws <see cref="ScriptCancelledException"/>
+    /// at the next statement boundary.
+    /// </summary>
+    public CancellationToken CancellationToken
+    {
+        get => _interpreter.CancellationToken;
+        set => _interpreter.CancellationToken = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the maximum number of statements the engine will execute
+    /// before throwing <see cref="StepLimitExceededException"/>.
+    /// A value of 0 (default) means no limit.
+    /// </summary>
+    public long StepLimit
+    {
+        get => _interpreter.StepLimit;
+        set => _interpreter.StepLimit = value;
+    }
+
+    /// <summary>
+    /// Gets the number of statements executed since the last reset.
+    /// </summary>
+    public long StepCount => _interpreter.StepCount;
+
+    /// <summary>
     /// Provides direct access to the underlying interpreter for advanced scenarios.
     /// </summary>
     public Interpreter Interpreter => _interpreter;
@@ -88,6 +116,7 @@ public class StashEngine
     /// <returns>A result containing any errors that occurred, or success.</returns>
     public ExecutionResult Run(string source)
     {
+        _interpreter.ResetStepCount();
         var (statements, errors) = ParseStatements(source);
         if (errors.Count > 0)
             return new ExecutionResult(null, errors);
@@ -100,6 +129,14 @@ public class StashEngine
         catch (ExitException ex)
         {
             return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
+        }
+        catch (ScriptCancelledException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+        catch (StepLimitExceededException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
         }
         catch (RuntimeError ex)
         {
@@ -114,6 +151,7 @@ public class StashEngine
     /// <returns>A result containing the computed value or any errors.</returns>
     public ExecutionResult Evaluate(string expression)
     {
+        _interpreter.ResetStepCount();
         var lexer = new Lexer(expression);
         var tokens = lexer.ScanTokens();
 
@@ -135,10 +173,100 @@ public class StashEngine
         {
             return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
         }
+        catch (ScriptCancelledException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+        catch (StepLimitExceededException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
         catch (RuntimeError ex)
         {
             return new ExecutionResult(null, [ex.Message]);
         }
+    }
+
+    /// <summary>
+    /// Pre-compiles Stash source code into a reusable script object.
+    /// The source is lexed and parsed once; the resulting AST can be executed
+    /// multiple times without re-parsing.
+    /// </summary>
+    /// <param name="source">Stash source code to compile.</param>
+    /// <returns>A compiled script, or a result with errors if compilation failed.</returns>
+    public StashScript? Compile(string source)
+    {
+        var (statements, errors) = ParseStatements(source);
+        if (errors.Count > 0)
+            return null;
+
+        return new StashScript(statements);
+    }
+
+    /// <summary>
+    /// Pre-compiles Stash source code, returning a result with errors if compilation failed.
+    /// </summary>
+    public StashScript? Compile(string source, out IReadOnlyList<string> errors)
+    {
+        var (statements, parseErrors) = ParseStatements(source);
+        errors = parseErrors;
+        if (parseErrors.Count > 0)
+            return null;
+
+        return new StashScript(statements);
+    }
+
+    /// <summary>
+    /// Executes a pre-compiled script.
+    /// </summary>
+    public ExecutionResult Run(StashScript script)
+    {
+        _interpreter.ResetStepCount();
+
+        if (!script.IsResolved)
+        {
+            _interpreter.ResolveStatements(script.Statements);
+            script.IsResolved = true;
+        }
+
+        try
+        {
+            _interpreter.InterpretResolved(script.Statements);
+            return new ExecutionResult(null, []);
+        }
+        catch (ExitException ex)
+        {
+            return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
+        }
+        catch (ScriptCancelledException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+        catch (StepLimitExceededException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+        catch (RuntimeError ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+    }
+
+    /// <summary>
+    /// Loads and executes a Stash script file. Sets the file path for import resolution.
+    /// </summary>
+    /// <param name="filePath">Absolute or relative path to the .stash file.</param>
+    /// <returns>A result containing any errors that occurred, or success.</returns>
+    public ExecutionResult RunFile(string filePath)
+    {
+        string fullPath = Path.GetFullPath(filePath);
+
+        if (!File.Exists(fullPath))
+            return new ExecutionResult(null, [$"File not found: {fullPath}"]);
+
+        string source = File.ReadAllText(fullPath);
+        _interpreter.CurrentFile = fullPath;
+        return Run(source);
     }
 
     /// <summary>
@@ -185,6 +313,58 @@ public class StashEngine
     /// </summary>
     public string Stringify(object? value) => _interpreter.Stringify(value);
 
+    /// <summary>
+    /// Converts a Stash dictionary to a .NET dictionary.
+    /// Keys are converted to strings via <see cref="Stringify"/>.
+    /// </summary>
+    public Dictionary<string, object?> ToDictionary(object? value)
+    {
+        if (value is not StashDictionary dict)
+            throw new ArgumentException($"Expected a Stash dictionary, got {value?.GetType().Name ?? "null"}.");
+
+        var result = new Dictionary<string, object?>();
+        foreach (var entry in dict.RawEntries())
+        {
+            result[_interpreter.Stringify(entry.Key)] = entry.Value;
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Converts a Stash struct instance to a .NET dictionary of field name → value.
+    /// </summary>
+    public Dictionary<string, object?> ToFieldDictionary(object? value)
+    {
+        if (value is not StashInstance instance)
+            throw new ArgumentException($"Expected a Stash struct instance, got {value?.GetType().Name ?? "null"}.");
+
+        return new Dictionary<string, object?>(instance.GetFields());
+    }
+
+    /// <summary>
+    /// Converts a Stash array to a .NET list.
+    /// </summary>
+    public List<object?> ToList(object? value)
+    {
+        if (value is not List<object?> list)
+            throw new ArgumentException($"Expected a Stash array, got {value?.GetType().Name ?? "null"}.");
+
+        return new List<object?>(list);
+    }
+
+    /// <summary>
+    /// Creates a Stash dictionary from a .NET dictionary.
+    /// </summary>
+    public StashDictionary CreateDictionary(IDictionary<string, object?> values)
+    {
+        var dict = new StashDictionary();
+        foreach (var kvp in values)
+        {
+            dict.Set(kvp.Key, kvp.Value);
+        }
+        return dict;
+    }
+
     private (List<Stmt> Statements, List<string> Errors) ParseStatements(string source)
     {
         var lexer = new Lexer(source);
@@ -221,5 +401,20 @@ public class ExecutionResult
     {
         Value = value;
         Errors = errors;
+    }
+}
+
+/// <summary>
+/// A pre-compiled Stash script that can be executed multiple times
+/// without re-lexing and re-parsing.
+/// </summary>
+public class StashScript
+{
+    internal List<Stmt> Statements { get; }
+    internal bool IsResolved { get; set; }
+
+    internal StashScript(List<Stmt> statements)
+    {
+        Statements = statements;
     }
 }

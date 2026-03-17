@@ -7,6 +7,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Debugging;
@@ -89,6 +90,9 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private TextWriter _errorOutput = Console.Error;
     private TextReader _input = Console.In;
     private readonly StashCapabilities _capabilities;
+    private CancellationToken _cancellationToken;
+    private long _stepCount;
+    private long _stepLimit;
 
     /// <summary>
     /// Gets or sets the current file path being executed.
@@ -197,6 +201,33 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     public bool EmbeddedMode { get; set; }
 
     /// <summary>
+    /// Gets or sets a cancellation token that can be used to abort script execution.
+    /// When the token is cancelled, the interpreter throws <see cref="ScriptCancelledException"/>
+    /// at the next statement boundary.
+    /// </summary>
+    public CancellationToken CancellationToken
+    {
+        get => _cancellationToken;
+        set => _cancellationToken = value;
+    }
+
+    /// <summary>
+    /// Gets or sets the maximum number of statements the interpreter will execute
+    /// before throwing <see cref="StepLimitExceededException"/>.
+    /// A value of 0 (default) means no limit.
+    /// </summary>
+    public long StepLimit
+    {
+        get => _stepLimit;
+        set => _stepLimit = value;
+    }
+
+    /// <summary>
+    /// Gets the number of statements executed since the last reset or start of execution.
+    /// </summary>
+    public long StepCount => _stepCount;
+
+    /// <summary>
     /// Gets the current call stack as a read-only list.
     /// </summary>
     public IReadOnlyList<CallFrame> CallStack => _callStack;
@@ -296,9 +327,75 @@ public class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private void Execute(Stmt stmt)
     {
+        if (_cancellationToken.IsCancellationRequested)
+        {
+            throw new ScriptCancelledException();
+        }
+
+        if (_stepLimit > 0 && ++_stepCount > _stepLimit)
+        {
+            throw new StepLimitExceededException(_stepLimit);
+        }
+
         _currentSpan = stmt.Span;
         _debugger?.OnBeforeExecute(stmt.Span, _environment);
         stmt.Accept(this);
+    }
+
+    /// <summary>
+    /// Runs the variable resolver on the given statements without executing them.
+    /// </summary>
+    public void ResolveStatements(List<Stmt> statements)
+    {
+        var resolver = new Resolver(this);
+        resolver.Resolve(statements);
+    }
+
+    /// <summary>
+    /// Executes pre-resolved statements, skipping the resolver pass.
+    /// Used by <see cref="StashEngine"/> for pre-compiled scripts.
+    /// </summary>
+    internal void InterpretResolved(List<Stmt> statements)
+    {
+        if (_currentFile is not null && _loadedSources.Add(_currentFile))
+        {
+            _debugger?.OnSourceLoaded(_currentFile);
+        }
+
+        try
+        {
+            foreach (Stmt statement in statements)
+            {
+                Execute(statement);
+            }
+        }
+        catch (BreakException)
+        {
+            var err = new RuntimeError("'break' used outside of a loop.");
+            _debugger?.OnError(err, _callStack);
+            throw err;
+        }
+        catch (ContinueException)
+        {
+            var err = new RuntimeError("'continue' used outside of a loop.");
+            _debugger?.OnError(err, _callStack);
+            throw err;
+        }
+        catch (ReturnException)
+        {
+            // A return at the top level is silently consumed — the value is discarded.
+            // This mirrors function semantics: a bare `return;` outside a function
+            // is harmless rather than an error.
+        }
+    }
+
+    /// <summary>
+    /// Resets the step counter to zero. Call this before re-executing scripts
+    /// with the same interpreter instance.
+    /// </summary>
+    public void ResetStepCount()
+    {
+        _stepCount = 0;
     }
 
     /// <summary>

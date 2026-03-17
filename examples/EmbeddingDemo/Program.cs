@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Collections.Generic;
 using Stash.Interpreting;
 
@@ -88,5 +89,72 @@ Console.WriteLine($"  Division by zero: Success={badResult.Success}, Error={badR
 
 var parseErr = engine.Run("let = ;");
 Console.WriteLine($"  Parse error: Success={parseErr.Success}, Error={parseErr.Errors[0]}");
+
+// ── 8. Step limits ──
+Console.WriteLine("\nStep limits:");
+
+var limitedEngine = new StashEngine(StashCapabilities.None);
+limitedEngine.StepLimit = 100;
+limitedEngine.Output = new StringWriter(); // suppress output
+
+var limitResult = limitedEngine.Run("let x = 0; while (true) { x = x + 1; }");
+Console.WriteLine($"  Infinite loop with StepLimit=100: Success={limitResult.Success}");
+Console.WriteLine($"  Error: {limitResult.Errors[0]}");
+Console.WriteLine($"  Steps executed: {limitedEngine.StepCount}");
+
+// ── 9. Cancellation token ──
+Console.WriteLine("\nCancellation token:");
+
+var cts = new CancellationTokenSource();
+var cancelEngine = new StashEngine(StashCapabilities.None);
+cancelEngine.Output = new StringWriter();
+cancelEngine.CancellationToken = cts.Token;
+
+// Cancel immediately to demonstrate
+cts.Cancel();
+var cancelResult = cancelEngine.Run("let x = 0; while (true) { x = x + 1; }");
+Console.WriteLine($"  Pre-cancelled script: Success={cancelResult.Success}");
+Console.WriteLine($"  Error: {cancelResult.Errors[0]}");
+
+// ── 10. Script pre-compilation ──
+Console.WriteLine("\nScript pre-compilation:");
+
+var compileEngine = new StashEngine(StashCapabilities.None);
+var compileOutput = new StringWriter();
+compileEngine.Output = compileOutput;
+
+var script = compileEngine.Compile("io.println(\"Compiled script executed!\");");
+if (script != null)
+{
+    compileEngine.Run(script);
+    compileEngine.Run(script); // re-execute without re-parsing
+    Console.WriteLine($"  Ran compiled script twice: {compileOutput.ToString().TrimEnd().Replace("\n", ", ")}");
+}
+
+// ── 11. Type marshalling ──
+Console.WriteLine("\nType marshalling:");
+
+var marshalEngine = new StashEngine(StashCapabilities.None);
+marshalEngine.Output = new StringWriter();
+
+marshalEngine.SetGlobal("config", marshalEngine.CreateDictionary(new Dictionary<string, object?>
+{
+    ["host"] = "localhost",
+    ["port"] = 8080L,
+    ["debug"] = true,
+}));
+
+marshalEngine.Run("let port = dict.get(config, \"port\");");
+var portValue = marshalEngine.GetGlobal("port");
+Console.WriteLine($"  Injected dict, read back port: {portValue}");
+
+marshalEngine.Run(@"
+    let serverInfo = dict.new();
+    dict.set(serverInfo, ""name"", ""GameServer-1"");
+    dict.set(serverInfo, ""players"", 12);
+");
+
+var serverDict = marshalEngine.ToDictionary(marshalEngine.GetGlobal("serverInfo"));
+Console.WriteLine($"  Script dict \u2192 C#: name={serverDict["name"]}, players={serverDict["players"]}");
 
 Console.WriteLine("\n=== Demo Complete ===");
