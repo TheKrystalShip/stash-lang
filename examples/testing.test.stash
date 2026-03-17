@@ -3,16 +3,15 @@
 /*
  * Testing Demo
  * ------------
- * Run with: stash --test testing.stash
+ * Run with: stash --test testing.test.stash
  *
- * Showcases the built-in testing infrastructure:
- *   - test() and describe() for organizing tests
- *   - assert namespace for structured assertions
+ * Comprehensive test suite demonstrating the built-in testing infrastructure:
+ *   - describe() / test() for structure
+ *   - assert.* for assertions
  *   - captureOutput() for testing printed output
- *   - Nested describe blocks for hierarchical grouping
  */
 
-// --- Helper functions under test ---
+// --- Helper functions ---
 
 fn factorial(n) {
     if (n <= 1) { return 1; }
@@ -32,21 +31,15 @@ fn to_slug(title) {
     return slug;
 }
 
-fn clamp(value, lo, hi) {
-    if (value < lo) { return lo; }
-    if (value > hi) { return hi; }
-    return value;
-}
-
 // --- Tests ---
 
 describe("math", () => {
-    test("factorial base case", () => {
+    test("factorial base cases", () => {
         assert.equal(factorial(0), 1);
         assert.equal(factorial(1), 1);
     });
 
-    test("factorial computes correctly", () => {
+    test("factorial recursive", () => {
         assert.equal(factorial(5), 120);
         assert.equal(factorial(10), 3628800);
     });
@@ -62,14 +55,28 @@ describe("math", () => {
         assert.equal(10 + 5, 15);
         assert.equal(10 - 5, 5);
         assert.equal(10 * 5, 50);
-        assert.equal(10 / 3, 3);
+        assert.equal(10 / 3, 3);   // integer division
         assert.equal(10 % 3, 1);
     });
 
-    test("clamp constrains values", () => {
-        assert.equal(clamp(5, 0, 10), 5);
-        assert.equal(clamp(-3, 0, 10), 0);
-        assert.equal(clamp(15, 0, 10), 10);
+    test("math.pow and math.sqrt", () => {
+        assert.equal(math.pow(2, 10), 1024.0);
+        assert.equal(math.pow(3, 3), 27.0);
+        assert.equal(math.sqrt(9), 3.0);
+        assert.equal(math.sqrt(4.0), 2.0);
+    });
+
+    test("math.clamp constrains values", () => {
+        assert.equal(math.clamp(5, 0, 10), 5);
+        assert.equal(math.clamp(-3, 0, 10), 0);
+        assert.equal(math.clamp(15, 0, 10), 10);
+    });
+
+    test("math.abs and rounding", () => {
+        assert.equal(math.abs(-7), 7);
+        assert.equal(math.abs(7), 7);
+        assert.equal(math.floor(3.9), 3);
+        assert.equal(math.ceil(3.2), 4);
     });
 });
 
@@ -89,14 +96,27 @@ describe("strings", () => {
         assert.true(str.contains("hello world", "world"));
         assert.false(str.contains("hello world", "xyz"));
         assert.equal(str.indexOf("hello", "ll"), 2);
+        assert.equal(str.indexOf("hello", "xyz"), -1);
+    });
+
+    test("startsWith and endsWith", () => {
+        assert.true(str.startsWith("hello world", "hello"));
+        assert.false(str.startsWith("hello world", "world"));
+        assert.true(str.endsWith("hello world", "world"));
+        assert.false(str.endsWith("hello world", "hello"));
+    });
+
+    test("replace and replaceAll", () => {
+        assert.equal(str.replace("hello world", "world", "Stash"), "hello Stash");
+        assert.equal(str.replaceAll("aabbaa", "a", "x"), "xxbbxx");
     });
 
     test("split and join", () => {
         let parts = str.split("a,b,c", ",");
         assert.equal(len(parts), 3);
         assert.equal(parts[0], "a");
-        assert.equal(parts[1], "b");
         assert.equal(parts[2], "c");
+        assert.equal(arr.join(parts, "-"), "a-b-c");
     });
 
     test("slug generation", () => {
@@ -107,17 +127,19 @@ describe("strings", () => {
 
     test("string interpolation", () => {
         let name = "Stash";
+        let version = 2;
         assert.equal($"Hello, {name}!", "Hello, Stash!");
-        assert.equal("Value: ${1 + 2}", "Value: 3");
+        assert.equal("Version: ${version}", "Version: 2");
+        assert.equal("Sum: ${1 + 2}", "Sum: 3");
     });
 });
 
 describe("arrays", () => {
-    test("basic operations", () => {
-        let a = [1, 2, 3];
+    test("indexing and length", () => {
+        let a = [10, 20, 30];
         assert.equal(len(a), 3);
-        assert.equal(a[0], 1);
-        assert.equal(a[2], 3);
+        assert.equal(a[0], 10);
+        assert.equal(a[2], 30);
     });
 
     test("push and pop", () => {
@@ -143,13 +165,47 @@ describe("arrays", () => {
         let evens = arr.filter(nums, (x) => x % 2 == 0);
         assert.equal(len(evens), 3);
         assert.equal(evens[0], 2);
-        assert.equal(evens[1], 4);
+        assert.equal(evens[2], 6);
     });
 
     test("reduce accumulates", () => {
-        let nums = [1, 2, 3, 4];
+        let nums = [1, 2, 3, 4, 5];
         let sum = arr.reduce(nums, (acc, x) => acc + x, 0);
-        assert.equal(sum, 10);
+        assert.equal(sum, 15);
+        let product = arr.reduce([1, 2, 3, 4], (acc, x) => acc * x, 1);
+        assert.equal(product, 24);
+    });
+
+    test("sort in-place", () => {
+        let nums = [3, 1, 4, 1, 5];
+        arr.sort(nums);
+        assert.equal(nums[0], 1);
+        assert.equal(nums[1], 1);
+        assert.equal(nums[2], 3);
+        assert.equal(nums[4], 5);
+    });
+
+    test("find and indexOf", () => {
+        let nums = [10, 20, 30, 40];
+        let found = arr.find(nums, (x) => x > 25);
+        assert.equal(found, 30);
+        assert.equal(arr.indexOf(nums, 20), 1);
+        assert.equal(arr.indexOf(nums, 99), -1);
+        assert.null(arr.find(nums, (x) => x > 100));
+    });
+
+    test("slice creates sub-array", () => {
+        let nums = [1, 2, 3, 4, 5];
+        let sub = arr.slice(nums, 1, 4);
+        assert.equal(len(sub), 3);
+        assert.equal(sub[0], 2);
+        assert.equal(sub[2], 4);
+    });
+
+    test("in operator checks membership", () => {
+        let fruits = ["apple", "banana", "cherry"];
+        assert.true("banana" in fruits);
+        assert.false("mango" in fruits);
     });
 });
 
@@ -166,6 +222,14 @@ describe("dictionaries", () => {
         assert.false(dict.has(d, "email"));
     });
 
+    test("dot access", () => {
+        let d = dict.new();
+        d["city"] = "Berlin";
+        d["country"] = "Germany";
+        assert.equal(d.city, "Berlin");
+        assert.equal(d.country, "Germany");
+    });
+
     test("merge combines dictionaries", () => {
         let defaults = dict.new();
         defaults["color"] = "blue";
@@ -178,59 +242,199 @@ describe("dictionaries", () => {
         assert.equal(merged["color"], "red");
         assert.equal(merged["timeout"], 30);
     });
-});
 
-describe("types and equality", () => {
-    test("no type coercion on equality", () => {
-        assert.notEqual(5, "5");
-        assert.notEqual(0, false);
-        assert.notEqual(0, null);
-        assert.notEqual("", false);
+    test("keys and values", () => {
+        let d = dict.new();
+        d["x"] = 1;
+        d["y"] = 2;
+        let keys = dict.keys(d);
+        assert.equal(len(keys), 2);
+        assert.true("x" in keys);
+        assert.true("y" in keys);
+        assert.equal(len(dict.values(d)), 2);
     });
 
-    test("typeof returns correct types", () => {
+    test("for-in key-value iteration", () => {
+        let d = dict.new();
+        d["a"] = 1;
+        d["b"] = 2;
+        d["c"] = 3;
+        let total = 0;
+        for (let key, val in d) {
+            total += val;
+        }
+        assert.equal(total, 6);
+    });
+});
+
+describe("types", () => {
+    test("typeof on all core types", () => {
         assert.equal(typeof(42), "int");
         assert.equal(typeof(3.14), "float");
         assert.equal(typeof("hi"), "string");
         assert.equal(typeof(true), "bool");
         assert.equal(typeof(null), "null");
         assert.equal(typeof([1, 2]), "array");
+        assert.equal(typeof(dict.new()), "dict");
+        fn f() {}
+        assert.equal(typeof(f), "function");
+    });
+
+    test("no type coercion on equality", () => {
+        assert.notEqual(5, "5");
+        assert.notEqual(0, false);
+        assert.notEqual(0, null);
+        assert.notEqual("", false);
+        assert.notEqual(1, true);
     });
 
     test("truthiness rules", () => {
-        // Falsy values
+        // falsy values
         assert.false(false);
         assert.false(null);
         assert.false(0);
         assert.false(0.0);
         assert.false("");
 
-        // Truthy values
+        // truthy values
         assert.true(1);
+        assert.true(-1);
         assert.true("hello");
         assert.true([]);
+        assert.true(0.1);
     });
 });
 
-describe("error handling", () => {
-    test("assert.throws catches errors", () => {
+describe("control flow", () => {
+    test("switch expression", () => {
+        let classify = (n) => n switch {
+            0 => "zero",
+            1 => "one",
+            _ => "many"
+        };
+        assert.equal(classify(0), "zero");
+        assert.equal(classify(1), "one");
+        assert.equal(classify(99), "many");
+    });
+
+    test("range iteration", () => {
+        let result = [];
+        for (let i in 1..6) {
+            arr.push(result, i);
+        }
+        assert.equal(len(result), 5);
+        assert.equal(result[0], 1);
+        assert.equal(result[4], 5);
+    });
+
+    test("range with step", () => {
+        let evens = [];
+        for (let i in 0..10..2) {
+            arr.push(evens, i);
+        }
+        assert.equal(len(evens), 5);
+        assert.equal(evens[0], 0);
+        assert.equal(evens[4], 8);
+    });
+
+    test("array destructuring", () => {
+        let [x, y, z] = [10, 20, 30];
+        assert.equal(x, 10);
+        assert.equal(y, 20);
+        assert.equal(z, 30);
+    });
+
+    test("dict destructuring", () => {
+        let d = dict.new();
+        d["host"] = "localhost";
+        d["port"] = 8080;
+        let {host, port} = d;
+        assert.equal(host, "localhost");
+        assert.equal(port, 8080);
+    });
+
+    test("ternary operator", () => {
+        let max = (a, b) => a > b ? a : b;
+        assert.equal(max(3, 7), 7);
+        assert.equal(max(9, 4), 9);
+    });
+
+    test("try and null coalescing", () => {
+        let bad = try conv.toInt("not_a_number");
+        assert.null(bad);
+        assert.equal(bad ?? 42, 42);
+
+        let good = try conv.toInt("123");
+        assert.equal(good, 123);
+    });
+
+    test("assert.throws captures runtime error", () => {
         let msg = assert.throws(() => {
-            let x = 1 / 0;
+            let a = [1, 2, 3];
+            let _ = a[10]; // out-of-bounds
         });
         assert.notNull(msg);
+        assert.greater(len(msg), 0);
+    });
+});
+
+describe("closures and lambdas", () => {
+    test("closure captures enclosing scope", () => {
+        fn makeCounter() {
+            let count = 0;
+            return () => {
+                count += 1;
+                return count;
+            };
+        }
+
+        let counter = makeCounter();
+        assert.equal(counter(), 1);
+        assert.equal(counter(), 2);
+        assert.equal(counter(), 3);
     });
 
-    test("try expression catches errors", () => {
-        let result = try conv.toInt("not_a_number");
-        assert.null(result);
+    test("two closures are independent", () => {
+        fn makeAdder(n) {
+            return (x) => x + n;
+        }
+        let add10 = makeAdder(10);
+        let add20 = makeAdder(20);
+        assert.equal(add10(5), 15);
+        assert.equal(add20(5), 25);
     });
 
-    test("null coalescing provides fallback", () => {
-        let a = null ?? "default";
-        assert.equal(a, "default");
+    test("lambda as argument", () => {
+        fn apply(f, x) { return f(x); }
+        assert.equal(apply((x) => x * x, 6), 36);
+        assert.equal(apply((x) => x + 1, 99), 100);
+    });
 
-        let b = "value" ?? "default";
-        assert.equal(b, "value");
+    test("currying via closures", () => {
+        fn multiply(a) {
+            return (b) => a * b;
+        }
+        let double = multiply(2);
+        let triple = multiply(3);
+        assert.equal(double(7), 14);
+        assert.equal(triple(7), 21);
+    });
+
+    test("default parameters", () => {
+        fn greet(name, greeting = "Hello") {
+            return "${greeting}, ${name}!";
+        }
+        assert.equal(greet("Alice"), "Hello, Alice!");
+        assert.equal(greet("Bob", "Hi"), "Hi, Bob!");
+    });
+
+    test("multiple default parameters", () => {
+        fn connect(host, port = 8080, secure = false) {
+            let scheme = secure ? "https" : "http";
+            return "${scheme}://${host}:${port}";
+        }
+        assert.equal(connect("localhost"), "http://localhost:8080");
+        assert.equal(connect("example.com", 443, true), "https://example.com:443");
     });
 });
 
@@ -249,7 +453,7 @@ describe("output capture", () => {
         assert.equal(output, "no newline");
     });
 
-    test("captures multiple outputs", () => {
+    test("captures multiple print calls", () => {
         let output = captureOutput(() => {
             io.print("one ");
             io.print("two ");
@@ -258,56 +462,23 @@ describe("output capture", () => {
         assert.equal(output, "one two three\n");
     });
 
-    test("returns empty string when no output", () => {
+    test("empty output when nothing printed", () => {
         let output = captureOutput(() => {
             let x = 42;
         });
         assert.equal(output, "");
     });
 
-    test("nested capture works", () => {
+    test("inner output does not leak to outer", () => {
+        let inner_result = "";
         let outer = captureOutput(() => {
             io.print("A");
-            let inner = captureOutput(() => {
+            inner_result = captureOutput(() => {
                 io.print("B");
             });
-            io.print(inner);
+            io.print("C");
         });
-        assert.equal(outer, "AB");
-    });
-});
-
-describe("closures and lambdas", () => {
-    test("closure captures variables", () => {
-        fn makeCounter() {
-            let count = 0;
-            return () => {
-                count = count + 1;
-                return count;
-            };
-        }
-
-        let counter = makeCounter();
-        assert.equal(counter(), 1);
-        assert.equal(counter(), 2);
-        assert.equal(counter(), 3);
-    });
-
-    test("lambda as argument", () => {
-        fn apply(f, x) { return f(x); }
-        assert.equal(apply((x) => x * x, 5), 25);
-        assert.equal(apply((x) => x + 1, 10), 11);
-    });
-
-    test("switch expression", () => {
-        let classify = (n) => n switch {
-            0 => "zero",
-            1 => "one",
-            _ => "other"
-        };
-
-        assert.equal(classify(0), "zero");
-        assert.equal(classify(1), "one");
-        assert.equal(classify(42), "other");
+        assert.equal(inner_result, "B");
+        assert.equal(outer, "AC");
     });
 });

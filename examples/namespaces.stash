@@ -1,160 +1,219 @@
 #!/usr/bin/env stash
 
 // ============================================================
-//  namespaces.stash — Demonstrates Stash namespace capabilities
+//  namespaces.stash — System utilities & namespace showcase
 // ============================================================
 
-// --- Built-in Namespaces: fs & path ---
 
-// The fs namespace provides file system operations.
-// The path namespace provides path manipulation utilities.
+// ─── 1. File Management (fs + path) ─────────────────────────
 
-fn demo_fs_and_path() {
-    io.println("=== Built-in Namespaces ===");
+io.println("=== 1. File Management ===");
 
-    // Create a temp working directory
-    let workDir = path.join("/tmp", "stash_ns_demo");
-    fs.createDir(workDir);
-    io.println($"Created working directory: {workDir}");
+// Create a temp working directory and populate it
+let workDir = fs.tempDir();
+io.println($"Work dir: {workDir}");
 
-    // Write a file
-    let filePath = path.join(workDir, "hello.txt");
-    fs.writeFile(filePath, "Hello from Stash namespaces!\n");
-    io.println($"Wrote: {filePath}");
+let configPath = path.join(workDir, "app.conf");
+fs.writeFile(configPath, "host=localhost\nport=8080\ndebug=true\n");
+fs.appendFile(configPath, "timeout=30\n");
 
-    // Append to the file
-    fs.appendFile(filePath, "This line was appended.\n");
+let content = fs.readFile(configPath);
+io.println($"app.conf ({fs.size(configPath)} bytes):\n{content}");
 
-    // Read it back
-    let content = fs.readFile(filePath);
-    io.println($"Content:\n{content}");
+// Path introspection
+io.println($"  path.dir  : {path.dir(configPath)}");
+io.println($"  path.base : {path.base(configPath)}");
+io.println($"  path.name : {path.name(configPath)}");
+io.println($"  path.ext  : {path.ext(configPath)}");
+io.println($"  path.abs  : {path.abs(configPath)}");
 
-    // Inspect with path utilities
-    io.println($"  Directory : {path.dir(filePath)}");
-    io.println($"  Base name : {path.base(filePath)}");
-    io.println($"  Name only : {path.name(filePath)}");
-    io.println($"  Extension : {path.ext(filePath)}");
-    io.println($"  Absolute  : {path.abs(filePath)}");
+// Copy → move → list directory
+let copyPath = path.join(workDir, "app.conf.copy");
+fs.copy(configPath, copyPath);
 
-    // File metadata
-    io.println($"  Size      : {fs.size(filePath)} bytes");
-    io.println($"  Exists    : {fs.exists(filePath)}");
+let backupDir = path.join(workDir, "backup");
+fs.createDir(backupDir);
+let movedPath = path.join(backupDir, "app.conf.bak");
+fs.move(copyPath, movedPath);
 
-    // Copy and move
-    let copyPath = path.join(workDir, "hello_copy.txt");
-    fs.copy(filePath, copyPath);
-    io.println($"Copied to: {copyPath}");
-
-    let movedPath = path.join(workDir, "hello_moved.txt");
-    fs.move(copyPath, movedPath);
-    io.println($"Moved to: {movedPath}");
-
-    // List directory contents
-    let entries = fs.listDir(workDir);
-    io.println($"\nFiles in {workDir}:");
-    for (let entry in entries) {
-        io.println($"  - {path.base(entry)}");
-    }
-
-    // Clean up
-    fs.delete(workDir);
-    io.println($"\nCleaned up {workDir}");
-    io.println($"  Still exists? {fs.pathExists(workDir)}");
+io.println($"Directory listing for {path.base(workDir)}:");
+let entries = fs.listDir(workDir);
+for (let entry in entries) {
+    let kind = fs.isDir(entry) ? "dir " : "file";
+    io.println($"  [{kind}] {path.base(entry)}");
 }
 
-// --- Module Namespaces: import ... as ---
-
-// You can also import any Stash module as a namespace.
-// All top-level declarations become namespace members.
-//
-// Example (if lib/utils.stash exports functions):
-//
-//   import "lib/utils.stash" as utils;
-//   utils.greet("world");
-//
-// Or access structs through the namespace:
-//
-//   import "lib/utils.stash" as utils;
-//   let cfg = utils.Config { host: "localhost", port: 8080 };
-//
-// Namespaces are first-class values:
-//
-//   io.println(typeof(fs));     // "namespace"
-//   io.println(typeof(utils));  // "namespace"
-
-// --- Namespace introspection ---
-
-fn demo_introspection() {
-    io.println("\n=== Namespace Introspection ===");
-    io.println($"typeof(io)      = {typeof(io)}");
-    io.println($"typeof(conv)    = {typeof(conv)}");
-    io.println($"typeof(env)     = {typeof(env)}");
-    io.println($"typeof(process) = {typeof(process)}");
-    io.println($"typeof(fs)      = {typeof(fs)}");
-    io.println($"typeof(path)    = {typeof(path)}");
-
-    // Namespaces are read-only — assigning to a member is an error:
-    //   fs.exists = 42;  // RuntimeError: Cannot assign to namespace members.
-
-    // Accessing a non-existent member is also an error:
-    //   fs.foobar();     // RuntimeError: Namespace 'fs' has no member 'foobar'.
-}
-
-// --- Practical example: safe file backup ---
-
+// Practical: backup utility
 fn backup_file(src) {
-    if (!fs.exists(src)) {
-        io.println($"Error: source file '{src}' not found.");
-        return null;
-    }
-
-    let dir = path.dir(src);
-    let name = path.name(src);
-    let ext = path.ext(src);
-    let backupPath = path.join(dir, $"{name}.bak{ext}");
-
-    fs.copy(src, backupPath);
-    io.println($"Backed up '{path.base(src)}' -> '{path.base(backupPath)}'");
-    return backupPath;
+    if (!fs.exists(src)) { return null; }
+    let dst = path.join(path.dir(src), $"{path.name(src)}.bak{path.ext(src)}");
+    fs.copy(src, dst);
+    return dst;
 }
 
-fn demo_backup() {
-    io.println("\n=== Practical: File Backup ===");
+let bak = backup_file(configPath);
+let modTs = fs.modifiedAt(bak);
+io.println($"Backup created: {path.base(bak)}");
+io.println($"  Modified at: {time.format(modTs, "yyyy-MM-dd HH:mm:ss")} UTC");
 
-    let tmpFile = "/tmp/stash_ns_important.conf";
-    fs.writeFile(tmpFile, "key=value\nport=8080\n");
-
-    let backed = backup_file(tmpFile);
-    if (backed != null) {
-        io.println($"Backup contents: {fs.readFile(backed)}");
-        fs.delete(backed);
-    }
-    fs.delete(tmpFile);
+// Walk the tree — returns all files recursively
+let allFiles = fs.walk(workDir);
+io.println($"All files under work dir ({len(allFiles)} total):");
+for (let f in allFiles) {
+    io.println($"  {path.base(f)}");
 }
 
-// --- conv & env demo ---
+// Clean up
+fs.delete(workDir);
+io.println($"Cleaned up. Still exists: {fs.exists(workDir)}");
 
-fn demo_conv_and_env() {
-    io.println("\n=== conv & env Namespaces ===");
+io.println("");
 
-    // Type conversions
-    let n = conv.toInt("42");
-    let f = conv.toFloat("3.14");
-    let s = conv.toStr(n);
-    io.println($"conv.toInt(\"42\")   = {n}");
-    io.println($"conv.toFloat(\"3.14\") = {f}");
-    io.println($"conv.toStr(42)     = {s}");
 
-    // Environment variables
-    let home = env.get("HOME") ?? env.get("USERPROFILE") ?? "(unknown)";
-    io.println($"Home directory: {home}");
+// ─── 2. Environment & System Info (env) ──────────────────────
+
+io.println("=== 2. Environment & System Info ===");
+
+// System profile
+io.println($"  User     : {env.user()}");
+io.println($"  Hostname : {env.hostname()}");
+io.println($"  OS       : {env.os()}");
+io.println($"  Arch     : {env.arch()}");
+io.println($"  Home     : {env.home()}");
+io.println($"  CWD      : {env.cwd()}");
+
+// Read / write / check variables
+env.set("STASH_APP", "demo");
+let appName = env.get("STASH_APP");
+io.println($"  STASH_APP set : {env.has("STASH_APP")}");
+io.println($"  STASH_APP val : {appName}");
+
+let shellVar = "SHELL";
+let shell = env.get(shellVar) ?? "(not set)";
+io.println($"  SHELL         : {shell}");
+
+io.println("");
+
+
+// ─── 3. Type Conversions (conv) ──────────────────────────────
+
+io.println("=== 3. Type Conversions ===");
+
+// Basic round-trips
+let n = conv.toInt("42");
+let f = conv.toFloat("3.14");
+io.println($"  toInt(\"42\")       = {n}    (type: {typeof(n)})");
+io.println($"  toFloat(\"3.14\")   = {f}  (type: {typeof(f)})");
+io.println($"  toStr(255)         = {conv.toStr(255)}");
+io.println($"  toBool(0)          = {conv.toBool(0)}");
+io.println($"  toBool(1)          = {conv.toBool(1)}");
+
+// Hex encoding/decoding
+let hex = conv.toHex(255);
+io.println($"  toHex(255)         = {hex}");
+io.println($"  fromHex(\"ff\")      = {conv.fromHex("ff")}");
+
+// Character encoding
+let code = conv.charCode("A");
+io.println($"  charCode(\"A\")      = {code}");
+io.println($"  fromCharCode(65)   = {conv.fromCharCode(65)}");
+
+// Safe conversion: bad input returns null via try
+let bad = try conv.toInt("not-a-number");
+io.println($"  try toInt(bad)     = {bad ?? "null (error caught)"}");
+
+io.println("");
+
+
+// ─── 4. Math Utilities (math) ────────────────────────────────
+
+io.println("=== 4. Math Utilities ===");
+
+// Distance formula: d = sqrt((x2-x1)² + (y2-y1)²)
+fn distance(x1, y1, x2, y2) {
+    return math.sqrt(math.pow(x2 - x1, 2) + math.pow(y2 - y1, 2));
+}
+io.println($"  distance(0,0 → 3,4)  = {distance(0, 0, 3, 4)}");
+io.println($"  distance(1,1 → 4,5)  = {distance(1, 1, 4, 5)}");
+
+// Currency rounding (round to 2 decimal places)
+let price = 19.9549;
+let rounded = math.round(price * 100) / 100.0;
+io.println($"  round({price}) → {rounded}");
+
+// Clamping sensor readings into a valid 0–100 range
+let readings = [-3, 0, 42, 101, 87];
+io.println("  Clamped sensor readings (0–100):");
+for (let v in readings) {
+    io.println($"    {v} → {math.clamp(v, 0, 100)}");
 }
 
-// --- Main ---
+// Constants and functions
+io.println($"  math.PI           = {math.PI}");
+io.println($"  math.sqrt(2)      = {math.sqrt(2)}");
+io.println($"  math.log(math.E)  = {math.log(math.E)}");
+io.println($"  math.pow(2, 10)   = {math.pow(2, 10)}");
+io.println($"  randomInt(1, 6)   = {math.randomInt(1, 6)}");
 
-demo_fs_and_path();
-demo_introspection();
-demo_backup();
-demo_conv_and_env();
+io.println("");
+
+
+// ─── 5. Time Operations (time) ───────────────────────────────
+
+io.println("=== 5. Time Operations ===");
+
+io.println($"  time.now()   = {time.now()} (Unix seconds)");
+io.println($"  time.date()  = {time.date()}");
+io.println($"  time.clock() = {time.clock()}");
+io.println($"  time.iso()   = {time.iso()}");
+
+// Timestamp-prefixed logging helper
+fn log_msg(msg) {
+    io.println($"[{time.clock()}] {msg}");
+}
+
+log_msg("Starting timed section...");
+
+// Measure a computation
+let start = time.millis();
+let acc = 0.0;
+let vals = [1, 4, 9, 16, 25, 36, 49, 64, 81, 100];
+for (let v in vals) {
+    acc += math.sqrt(v);
+}
+let elapsed = time.millis() - start;
+log_msg($"sqrt sum = {acc}, took {elapsed}ms");
+
+io.println("");
+
+
+// ─── 6. Namespace Introspection ──────────────────────────────
+
+io.println("=== 6. Namespace Introspection ===");
+
+// typeof() returns "namespace" for every built-in namespace
+let typeofs = [
+    $"fs      → {typeof(fs)}",
+    $"path    → {typeof(path)}",
+    $"env     → {typeof(env)}",
+    $"conv    → {typeof(conv)}",
+    $"math    → {typeof(math)}",
+    $"time    → {typeof(time)}",
+    $"json    → {typeof(json)}",
+    $"io      → {typeof(io)}",
+    $"str     → {typeof(str)}",
+    $"arr     → {typeof(arr)}"
+];
+for (let t in typeofs) {
+    io.println($"  {t}");
+}
+
+// Namespaces are read-only values — assigning to a member is a RuntimeError:
+//   fs.readFile = 42;  // RuntimeError: Cannot assign to namespace members.
+
+// User-defined modules are imported with the same syntax:
+//   import "lib/utils.stash" as utils;
+//   utils.greet("world");  // call an exported function
+//   typeof(utils)          // => "namespace"
 
 io.println("\nDone!");

@@ -1,61 +1,61 @@
 #!/usr/bin/env stash
 
-// service_ctl — manage system services from the command line
+// Service Controller CLI
+// Demonstrates parseArgs for building command-line tools
 //
-// Usage examples:
-//   service_ctl start web --port 9000 --detach
-//   service_ctl start db --env production
-//   service_ctl stop web
-//   service_ctl stop web --force
-//   service_ctl status
-//   service_ctl status --filter running
-//   service_ctl --verbose status
-//   service_ctl --help
+// Usage:
+//   stash service_ctl.stash start web --port 9000 --detach
+//   stash service_ctl.stash stop web --force
+//   stash service_ctl.stash status --filter running
+//   stash service_ctl.stash --help
 
-// ---------------------------------------------------------------------------
-// Argument declaration
-// ---------------------------------------------------------------------------
+// ─── Argument Declaration ────────────────────────────────────
 
 let args = parseArgs(ArgTree {
     name: "service_ctl",
     version: "1.0",
     description: "Start, stop, and inspect managed services",
     flags: [
-        ArgDef { name: "help", short: "h", description: "Show this help message" },
-        ArgDef { name: "verbose", short: "v", description: "Print extra diagnostic output" }
+        ArgDef { name: "help", short: "h", description: "Show help message" },
+        ArgDef { name: "verbose", short: "v", description: "Enable verbose output" }
     ],
     options: [
         ArgDef { name: "config", short: "c", default: "/etc/svc/services.conf", description: "Path to services config file" }
     ],
     commands: [
         ArgDef {
-            name: "start", description: "Start a named service", args: ArgTree {
-                positionals: [ArgDef { name: "service", required: true, description: "Service name to start" }],
-                flags: [ArgDef { name: "detach", short: "d", description: "Run in the background (detached)" }],
+            name: "start",
+            description: "Start a named service",
+            args: ArgTree {
+                positionals: [ ArgDef { name: "service", required: true, description: "Service name" } ],
+                flags: [ ArgDef { name: "detach", short: "d", description: "Run in background" } ],
                 options: [
-                    ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Override listen port" },
+                    ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Listen port" },
                     ArgDef { name: "env", short: "e", default: "development", description: "Runtime environment" }
-                ]}
-        },
-        ArgDef {
-            name: "stop", description: "Stop a running service", args: ArgTree {
-                positionals: [ArgDef { name: "service", required: true, description: "Service name to stop" }],
-                flags: [ArgDef { name: "force", short: "f", description: "Force-kill the process (SIGKILL)" }],
-                options: [ArgDef { name: "timeout", short: "t", type: "int", default: 10, description: "Seconds to wait before giving up" }]
+                ]
             }
         },
         ArgDef {
-            name: "status", description: "Show status of all (or one) service", args: ArgTree {
-                positionals: [ArgDef { name: "service", description: "Service name (omit for all)" }],
-                options: [ArgDef { name: "filter", description: "Filter by state: running, stopped" }]
+            name: "stop",
+            description: "Stop a running service",
+            args: ArgTree {
+                positionals: [ ArgDef { name: "service", required: true, description: "Service name" } ],
+                flags: [ ArgDef { name: "force", short: "f", description: "Force kill (SIGKILL)" } ],
+                options: [ ArgDef { name: "timeout", short: "t", type: "int", default: 10, description: "Shutdown timeout in seconds" } ]
+            }
+        },
+        ArgDef {
+            name: "status",
+            description: "Show service status",
+            args: ArgTree {
+                positionals: [ ArgDef { name: "service", description: "Specific service (omit for all)" } ],
+                options: [ ArgDef { name: "filter", description: "Filter: running, stopped" } ]
             }
         }
     ]
 });
 
-// ---------------------------------------------------------------------------
-// Domain types
-// ---------------------------------------------------------------------------
+// ─── Domain Types ────────────────────────────────────────────
 
 enum ServiceState {
     Running,
@@ -67,117 +67,98 @@ struct ServiceInfo {
     name,
     pid,
     port,
-    state,
-    uptime
+    state
 }
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+// ─── Helpers ─────────────────────────────────────────────────
 
 fn state_label(state) {
-    if (state == ServiceState.Running) {
-        return "RUNNING";
-    } else if (state == ServiceState.Stopped) {
-        return "STOPPED";
-    } else {
-        return "UNKNOWN";
-    }
+    return state switch {
+        ServiceState.Running => "RUNNING",
+        ServiceState.Stopped => "STOPPED",
+        _ => "UNKNOWN"
+    };
 }
 
-fn log_verbose(msg) {
-    // Only emit the message when --verbose was passed
+fn verbose(msg: string) {
     if (args.verbose) {
         io.println($"[verbose] {msg}");
     }
 }
 
-fn probe_service(name) {
-    // Use pgrep to detect whether a process is running
-    let result = $(pgrep -x {name});
-    if (result.exitCode == 0) {
-        let pid = result.stdout;
+fn probe_service(name: string) {
+    let result = try $(pgrep -x {name});
+    if (result != null && result.exitCode == 0) {
         return ServiceInfo {
             name: name,
-            pid: pid,
+            pid: str.trim(result.stdout),
             port: 0,
-            state: ServiceState.Running,
-            uptime: "unknown"
+            state: ServiceState.Running
         };
     }
     return ServiceInfo {
         name: name,
         pid: null,
         port: 0,
-        state: ServiceState.Stopped,
-        uptime: "-"
+        state: ServiceState.Stopped
     };
 }
 
-fn print_service_row(info) {
+fn print_row(info) {
     let label = state_label(info.state);
     let pid_str = info.pid ?? "-";
-    io.println($"  {info.name:<12} [{label}]   pid={pid_str}");
+    io.println($"  {str.padEnd(info.name, 12)} [{label}]  pid={pid_str}");
 }
 
-// ---------------------------------------------------------------------------
-// Subcommand handlers
-// ---------------------------------------------------------------------------
+// ─── Subcommands ─────────────────────────────────────────────
 
 fn cmd_start() {
-    let svc  = args.start.service;
+    let svc = args.start.service;
     let port = args.start.port;
-    let env  = args.start.env;
-    let bg   = args.start.detach;
+    let env_name = args.start.env;
+    let detach = args.start.detach;
 
-    io.println($"Starting service '{svc}' on port {port} (env={env})...");
-    log_verbose($"Config file: {args.config}");
+    io.println($"Starting '{svc}' on port {port} (env={env_name})...");
+    verbose($"Config: {args.config}");
 
-    // Check if already running
     let info = probe_service(svc);
     if (info.state == ServiceState.Running) {
-        io.println($"  '{svc}' is already running (pid={info.pid}). Aborting.");
+        io.println($"  '{svc}' is already running (pid={info.pid})");
         return;
     }
 
-    // Build and execute the start command
-    let start_result = $(echo "start {svc} --port {port} --env {env}");
-
-    if (start_result.exitCode != 0) {
-        io.println($"  Error: failed to start '{svc}': {start_result.stderr}");
-        return;
-    }
-
-    if (bg) {
-        io.println($"  '{svc}' launched in the background.");
+    // Simulate start
+    let result = $(echo "start {svc} --port {port} --env {env_name}");
+    if (result.exitCode == 0) {
+        let mode = detach ? "background" : "foreground";
+        io.println($"  '{svc}' launched in {mode} mode");
     } else {
-        io.println($"  '{svc}' is running in the foreground.");
+        io.println($"  Failed to start '{svc}': {result.stderr}");
     }
 }
 
 fn cmd_stop() {
-    let svc     = args.stop.service;
-    let force   = args.stop.force;
+    let svc = args.stop.service;
+    let force = args.stop.force;
     let timeout = args.stop.timeout;
 
-    io.println($"Stopping service '{svc}'...");
-    log_verbose($"Timeout: {timeout}s, force={force}");
+    io.println($"Stopping '{svc}'...");
+    verbose($"Timeout: {timeout}s, force={force}");
 
     let info = probe_service(svc);
     if (info.state == ServiceState.Stopped) {
-        io.println($"  '{svc}' is not running.");
+        io.println($"  '{svc}' is not running");
         return;
     }
 
     let signal = force ? "SIGKILL" : "SIGTERM";
-    log_verbose($"Sending {signal} to pid {info.pid}");
+    verbose($"Sending {signal} to pid {info.pid}");
 
-    let stop_result = $(echo "kill -{signal} {info.pid}");
-
-    if (stop_result.exitCode == 0) {
-        io.println($"  '{svc}' stopped.");
+    let result = $(echo "kill -{signal} {info.pid}");
+    if (result.exitCode == 0) {
+        io.println($"  '{svc}' stopped");
     } else {
-        io.println($"  Warning: stop command returned non-zero: {stop_result.stderr}");
+        io.println($"  Warning: {result.stderr}");
     }
 }
 
@@ -185,23 +166,21 @@ fn cmd_status() {
     let target = args.status.service;
     let filter = args.status.filter;
 
-    // Known services (in a real script this would be read from args.config)
     let known = ["web", "db", "cache", "worker"];
 
-    io.println("=== Service Status ===");
+    io.println("=" * 40);
+    io.println("  Service Status");
+    io.println("=" * 40);
     io.println("");
 
     let shown = 0;
-
     for (let name in known) {
-        // If a specific service was requested, skip others
         if (target != null && name != target) {
             continue;
         }
 
         let info = probe_service(name);
 
-        // Apply --filter if provided
         if (filter == "running" && info.state != ServiceState.Running) {
             continue;
         }
@@ -209,20 +188,17 @@ fn cmd_status() {
             continue;
         }
 
-        print_service_row(info);
+        print_row(info);
         shown++;
     }
 
     if (shown == 0) {
-        io.println("  (no services match)");
+        io.println("  (no matching services)");
     }
-
     io.println("");
 }
 
-// ---------------------------------------------------------------------------
-// Dispatch
-// ---------------------------------------------------------------------------
+// ─── Dispatch ────────────────────────────────────────────────
 
 let cmd = args.command;
 

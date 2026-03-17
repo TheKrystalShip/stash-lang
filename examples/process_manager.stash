@@ -1,186 +1,151 @@
 #!/usr/bin/env stash
 
-// ============================================================================
-// Process Management Example
-//
-// Demonstrates Stash's process management capabilities:
-//   - Spawning background processes
-//   - Checking process state
-//   - Communicating via stdin/stdout
-//   - Graceful shutdown with signals
-//   - Detaching long-lived processes
-//   - Tracking and cleaning up multiple workers
-//   - arr namespace for functional-style worker management
-//   - dict namespace for structured result tracking
-// ============================================================================
-// ----------------------------------------------------------------------------
-// 1. Basic spawn and lifecycle
-// ----------------------------------------------------------------------------
+// Task Runner — Process Management
+// Demonstrates spawning, monitoring, and managing background processes
 
-io.println("=== 1. Spawn & Lifecycle ===");
+// ─── 1. Spawn & Lifecycle ────────────────────────────────────
 
-let sleeper = process.spawn("sleep 30");
-io.println("Spawned 'sleep 30' with PID: " + sleeper.pid);
-io.println("Command: " + sleeper.command);
-io.println("Is alive: " + process.isAlive(sleeper));
+io.println("=" * 50);
+io.println("  Task Runner — Process Management Demo");
+io.println("=" * 50);
+io.println("");
 
-// Kill it and wait for it to exit
+io.println("--- 1. Basic Spawn & Lifecycle ---");
+io.println("");
 
+let sleeper = process.spawn("sleep 5");
+io.println($"  Spawned 'sleep 5' → PID: {sleeper.pid}");
+io.println($"  Command: {sleeper.command}");
+io.println($"  Alive: {process.isAlive(sleeper)}");
+
+// Kill and wait
 process.kill(sleeper);
-
 let result = process.waitTimeout(sleeper, 3000);
 
 if (result != null) {
-    io.println("Exited with code: " + result.exitCode);
+    io.println($"  Exited with code: {result.exitCode}");
 } else {
-    io.println("Timed out — force killing");
+    io.println("  Timed out — force killing");
     process.signal(sleeper, process.SIGKILL);
     process.wait(sleeper);
 }
 
-io.println("Is alive after kill: " + process.isAlive(sleeper));
+io.println($"  Alive after kill: {process.isAlive(sleeper)}");
 io.println("");
 
-// ----------------------------------------------------------------------------
-// 2. Process I/O — write to a process and capture output
-// ----------------------------------------------------------------------------
+// ─── 2. Process I/O ─────────────────────────────────────────
 
-io.println("=== 2. Process I/O ===");
+io.println("--- 2. Process I/O ---");
+io.println("");
 
-// Spawn a pipeline that reads one line, converts to uppercase, then exits
-
-let upper = process.spawn("head -1 | tr a-z A-Z");
+// Write to stdin, read from stdout
+let upper = process.spawn("tr a-z A-Z");
 process.write(upper, "hello from stash\n");
+let upper_result = process.wait(upper);
+io.println($"  Uppercase: {str.trim(upper_result.stdout)}");
 
-let upperResult = process.wait(upper);
-io.println("Uppercase: " + upperResult.stdout);
+// Quick computation
+let calc = process.spawn("awk 'BEGIN{print 355/113}'");
+let calc_result = process.wait(calc);
+io.println($"  Pi approx: {str.trim(calc_result.stdout)}");
 
-// Spawn a quick computation
-
-let calc = process.spawn("awk 'BEGIN{print 22/7}'");
-
-let calcResult = process.wait(calc);
-io.println("22/7 = " + calcResult.stdout);
+// Multi-line processing
+let sorter = process.spawn("sort -n");
+process.write(sorter, "42\n7\n13\n1\n99\n");
+let sort_result = process.wait(sorter);
+io.println($"  Sorted: {str.replaceAll(str.trim(sort_result.stdout), "\n", ", ")}");
 io.println("");
 
-// ----------------------------------------------------------------------------
-// 3. Multiple workers — spawn, track, and wait
-// ----------------------------------------------------------------------------
+// ─── 3. Worker Pool ─────────────────────────────────────────
 
-io.println("=== 3. Multiple Workers ===");
+io.println("--- 3. Worker Pool ---");
+io.println("");
 
-// Define worker names and spawn each one using arr.map
+let task_names = ["compile", "lint", "test", "bundle"];
 
-let names = ["alpha", "beta", "gamma"];
-
-let workers = arr.map(names, (name) => {
-    let delay = "0." + arr.indexOf(names, name) + "1";
-    let handle = process.spawn("sh -c 'sleep " + delay + " && echo " + name + "_done'");
-    io.println("Launched worker " + name + " (PID: " + handle.pid + ")");
+let workers = arr.map(task_names, (name) => {
+    let handle = process.spawn($"sh -c 'sleep 0.1 && echo {name}_done'");
+    io.println($"  Launched [{name}] → PID: {handle.pid}");
     return handle;
-}
+});
 
-);
-io.println("Tracked processes: " + len(process.list()));
-
-// Wait for each worker and print results
-
-arr.forEach(workers, (w) => {
-    let r = process.wait(w);
-    io.println("Worker PID " + w.pid + " exited: code=" + r.exitCode + " output=" + str.trim(r.stdout));
-}
-
-);
-
-// Collect exit codes and find any failures
-
-let exitCodes = arr.map(workers, (w) => process.waitTimeout(w, 0));
-
-let failures = arr.filter(exitCodes, (r) => r != null && r.exitCode != 0);
-
-if (len(failures) == 0) {
-    io.println("All workers completed successfully.");
-} else {
-    io.println("Workers with failures: " + len(failures));
-}
-
-let summary = arr.join(names, ", ");
-io.println("Workers launched: " + summary);
-io.println("Tracked after wait: " + len(process.list()));
+io.println($"  Active processes: {len(process.list())}");
 io.println("");
 
-// ----------------------------------------------------------------------------
-// 4. Detaching a process
-// ----------------------------------------------------------------------------
+// Wait for all workers
+io.println("  Results:");
+let all_ok = true;
+for (let i, worker in workers) {
+    let r = process.wait(worker);
+    let output = str.trim(r.stdout);
+    let status = r.exitCode == 0 ? "OK" : "FAIL";
+    io.println($"    [{task_names[i]}] {status} → {output}");
+    if (r.exitCode != 0) {
+        all_ok = false;
+    }
+}
 
-io.println("=== 4. Detach ===");
+io.println("");
+io.println($"  All tasks passed: {all_ok}");
+io.println("");
+
+// ─── 4. Detach ──────────────────────────────────────────────
+
+io.println("--- 4. Detach ---");
+io.println("");
 
 let bg = process.spawn("sleep 0.5");
-io.println("Before detach — tracked: " + len(process.list()));
+io.println($"  Before detach — tracked: {len(process.list())}");
 process.detach(bg);
-io.println("After detach  — tracked: " + len(process.list()));
-io.println("PID still accessible: " + bg.pid);
+io.println($"  After detach  — tracked: {len(process.list())}");
+io.println($"  PID still known: {bg.pid}");
 
-// Clean up the detached process manually via command
-
+// Clean up
 $(kill {bg.pid} 2>/dev/null);
 io.println("");
 
-// ----------------------------------------------------------------------------
-// 5. Signal constants
-// ----------------------------------------------------------------------------
+// ─── 5. Signal Constants ────────────────────────────────────
 
-io.println("=== 5. Signal Constants ===");
-
-let signals = dict.new();
-dict.set(signals, "SIGHUP", process.SIGHUP);
-dict.set(signals, "SIGINT", process.SIGINT);
-dict.set(signals, "SIGQUIT", process.SIGQUIT);
-dict.set(signals, "SIGKILL", process.SIGKILL);
-dict.set(signals, "SIGUSR1", process.SIGUSR1);
-dict.set(signals, "SIGUSR2", process.SIGUSR2);
-dict.set(signals, "SIGTERM", process.SIGTERM);
-
-for (let pair in dict.pairs(signals)) {
-    io.println("  " + pair.key + " = " + pair.value);
-}
-
+io.println("--- 5. Signal Constants ---");
 io.println("");
 
-// ----------------------------------------------------------------------------
-// 6. Graceful shutdown pattern
-// ----------------------------------------------------------------------------
+let signals = [
+    ["SIGHUP",  process.SIGHUP],
+    ["SIGINT",  process.SIGINT],
+    ["SIGQUIT", process.SIGQUIT],
+    ["SIGKILL", process.SIGKILL],
+    ["SIGUSR1", process.SIGUSR1],
+    ["SIGUSR2", process.SIGUSR2],
+    ["SIGTERM", process.SIGTERM]
+];
 
-io.println("=== 6. Graceful Shutdown ===");
+for (let sig in signals) {
+    io.println($"  {str.padEnd(sig[0], 10)} = {sig[1]}");
+}
+io.println("");
+
+// ─── 6. Graceful Shutdown ───────────────────────────────────
+
+io.println("--- 6. Graceful Shutdown Pattern ---");
+io.println("");
 
 let server = process.spawn("sleep 60");
-io.println("Server running (PID: " + server.pid + ")");
+io.println($"  Server running → PID: {server.pid}");
 
-// Try graceful shutdown first
-
+// Try SIGTERM first
 process.signal(server, process.SIGTERM);
-
 let shutdown = process.waitTimeout(server, 2000);
 
 if (shutdown != null) {
-    io.println("Server stopped gracefully (code: " + shutdown.exitCode + ")");
+    io.println($"  Graceful shutdown (code: {shutdown.exitCode})");
 } else {
-    io.println("Server did not stop — sending SIGKILL");
+    io.println("  No response — sending SIGKILL");
     process.signal(server, process.SIGKILL);
     let forced = process.wait(server);
-    io.println("Server killed (code: " + forced.exitCode + ")");
+    io.println($"  Force killed (code: {forced.exitCode})");
 }
 
-// Build a summary dict of everything tracked in this session
-
-let sessionSummary = dict.new();
-dict.set(sessionSummary, "workers", arr.join(names, ", "));
-dict.set(sessionSummary, "signals_registered", dict.size(signals));
-dict.set(sessionSummary, "server_pid", server.pid);
 io.println("");
-io.println("Session summary (" + dict.size(sessionSummary) + " entries):");
-
-let trackedKeys = arr.join(dict.keys(sessionSummary), ", ");
-io.println("  Tracked: " + trackedKeys);
-io.println("");
-io.println("All done! Any remaining tracked processes will be cleaned up on exit.");
+io.println("=" * 50);
+io.println("  All process management demos complete.");
+io.println("=" * 50);

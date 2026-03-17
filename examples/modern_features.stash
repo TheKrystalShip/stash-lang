@@ -1,324 +1,239 @@
 #!/usr/bin/env stash
 
-/*
- * Modern Language Features Demo
- * --------------------------------
- * Showcases five new Stash language features:
- *   1. Compound assignment operators (+=, -=, *=, /=, %=, ??=)
- *   2. Multi-line strings (triple-quoted, auto-indent-stripped)
- *   3. Range expressions (start..end, step, descending)
- *   4. The `in` operator (membership for arrays, strings, dicts, ranges)
- *   5. Destructuring assignment (array and dict patterns)
- */
+// Modern Language Features Showcase
+// Compound assignment · Multi-line strings · Ranges · `in` · Destructuring
 
 // ─── 1. Compound Assignment ─────────────────────────────────────
 
-fn demo_compound_assignment() {
-    io.println("=== Compound Assignment ===");
+io.println("=== 1. Compound Assignment ===");
 
-    let count = 10;
-    io.println($"  initial:      {count}");
+// Shopping cart: accumulate a running total
+let prices = [4.50, 8.75, 1.25, 3.00];
+let total = 0.0;
+for (let p in prices) { total += p; }
+io.println($"  Cart total: {total}");
 
-    count += 5;   // same as count = count + 5
-    io.println($"  += 5  →  {count}");
-
-    count -= 3;   // same as count = count - 3
-    io.println($"  -= 3  →  {count}");
-
-    count *= 2;   // same as count = count * 2
-    io.println($"  *= 2  →  {count}");
-
-    count /= 4;   // same as count = count / 4
-    io.println($"  /= 4  →  {count}");
-
-    count %= 4;   // same as count = count % 4
-    io.println($"  %= 4  →  {count}");
-
-    // ??= only assigns when the left-hand side is null
-    let username = null;
-    username ??= "guest";
-    io.println($"  null ??= \"guest\"  →  {username}");
-
-    // Already set — ??= leaves it untouched
-    let role = "admin";
-    role ??= "viewer";
-    io.println($"  \"admin\" ??= \"viewer\"  →  {role}");
-
-    // Works great for accumulation in loops
-    let total = 0;
-    for (let n in [10, 20, 30, 40]) {
-        total += n;
-    }
-    io.println($"  sum of [10,20,30,40]: {total}");
-
-    io.println("");
+// Build a formatted table row dynamically
+let cols = ["Alice", "30", "Berlin"];
+let row = "";
+for (let i, col in cols) {
+    if (i > 0) { row += " | "; }
+    row += col;
 }
+io.println($"  Row:  {row}");
+
+// ??= for lazy defaults — only assigns when the value is null
+let db_url = null;
+db_url ??= "postgres://localhost/dev";
+io.println($"  db_url (null then default): {db_url}");
+
+let env = "production";
+env ??= "development";
+io.println($"  env   (already set):        {env}");
+
+io.println("");
 
 // ─── 2. Multi-line Strings ──────────────────────────────────────
 
-fn demo_multiline_strings() {
-    io.println("=== Multi-line Strings ===");
+io.println("=== 2. Multi-line Strings ===");
 
-    // Basic triple-quoted string — preserves embedded newlines
-    let haiku = """
-        An old silent pond
-        A frog jumps into the pond
-        Splash! Silence again
-        """;
-    io.println("  Haiku:");
-    io.println(haiku);
+// SQL query template — common leading indent is stripped automatically
+let query = """
+    SELECT id, name, email
+    FROM   users
+    WHERE  active = 1
+    ORDER  BY created_at DESC;
+    """;
+io.println("  SQL query:");
+io.println(query);
 
-    // Common leading indentation is stripped automatically,
-    // so indented source code produces clean output
-    let help_text = """
-        Usage: deploy <env> [options]
+// Interpolated email — $"""...""" embeds expressions directly
+let to      = "dev-team";
+let repo    = "stash-lang";
+let version = "1.4.0";
+let email = $"""
+    Hi {to},
 
-        Options:
-          --dry-run    Preview changes without applying
-          --force      Skip confirmation prompts
-        """;
-    io.println("  Help text:");
-    io.println(help_text);
+    Version {version} of {repo} is now available.
+    Run `stash update` to upgrade.
 
-    // Interpolation works with $"""..."""
-    let version = "2.1.0";
-    let released = "2026-01-15";
-    let release_notes = $"""
-        Release Notes — v{version}
-        Released: {released}
-
-        What's new:
-          • Compound assignment operators
-          • Range expressions and the `in` operator
-          • Multi-line strings with auto-indent stripping
-          • Destructuring assignment
-        """;
-    io.println("  Release notes:");
-    io.println(release_notes);
-}
+    Cheers
+    """;
+io.println("  Email template:");
+io.println(email);
 
 // ─── 3. Range Expressions ───────────────────────────────────────
 
-fn demo_ranges() {
-    io.println("=== Range Expressions ===");
+io.println("=== 3. Range Expressions ===");
 
-    // 1..5 is end-exclusive: produces 1, 2, 3, 4
-    io.print("  1..5  →  ");
-    let first = true;
-    for (let i in 1..5) {
-        if (!first) { io.print(", "); }
-        io.print(i);
-        first = false;
-    }
-    io.println("");
+// FizzBuzz — iterate a range end-exclusive
+io.print("  FizzBuzz 1..16:  ");
+let sep = "";
+for (let n in 1..16) {
+    let label = n % 15 == 0 ? "FizzBuzz"
+              : n % 3  == 0 ? "Fizz"
+              : n % 5  == 0 ? "Buzz"
+              : n;
+    io.print(sep + label);
+    sep = ", ";
+}
+io.println("");
 
-    // Inclusive of start, exclusive of end
-    io.println($"  typeof(1..5)  →  {typeof(1..5)}");
+// Pagination — page 3 of 5, 5 items per page
+let page = 3;
+let size = 5;
+let page_start = (page - 1) * size;
+let page_end   = page_start + size;
+io.print($"  Page {page} (items {page_start}..{page_end}): ");
+sep = "";
+for (let i in page_start..page_end) {
+    io.print(sep + i);
+    sep = ", ";
+}
+io.println("");
 
-    // Custom step: 0..10..2 produces every second number
-    io.print("  0..10..2  →  ");
-    first = true;
-    for (let n in 0..10..2) {
-        if (!first) { io.print(", "); }
-        io.print(n);
-        first = false;
-    }
-    io.println("");
+// Stepped range — even numbers only
+io.print("  0..20..2:  ");
+sep = "";
+for (let n in 0..20..2) {
+    io.print(sep + n);
+    sep = ", ";
+}
+io.println("");
 
-    // Descending range: 5..0 auto-detects direction, step defaults to -1
-    io.print("  5..0  →  ");
-    first = true;
-    for (let n in 5..0) {
-        if (!first) { io.print(", "); }
-        io.print(n);
-        first = false;
-    }
-    io.println("");
-
-    // Ranges can be stored and reused
-    let decade = 2020..2030;
-    io.print("  years 2020..2030  →  ");
-    first = true;
-    for (let yr in decade) {
-        if (!first) { io.print(", "); }
-        io.print(yr);
-        first = false;
-    }
-    io.println("");
-
-    // Building a multiplication table with nested ranges
-    io.println("  3×3 multiplication table:");
-    for (let r in 1..4) {
-        io.print("    ");
-        for (let c in 1..4) {
-            let product = r * c;
-            io.print($"{product}\t");
-        }
-        io.println("");
-    }
-
+// Multiplication table with nested ranges
+io.println("  3x3 table:");
+for (let r in 1..4) {
+    io.print("    ");
+    for (let c in 1..4) { io.print($"{r * c}\t"); }
     io.println("");
 }
+
+// Descending range — auto step -1
+io.print("  Countdown:  ");
+sep = "";
+for (let n in 5..0) {
+    io.print(sep + n);
+    sep = " ";
+}
+io.println(" -> launch!");
+io.println("");
 
 // ─── 4. The `in` Operator ───────────────────────────────────────
 
-fn demo_in_operator() {
-    io.println("=== The `in` Operator ===");
+io.println("=== 4. The `in` Operator ===");
 
-    // Array membership
-    let fruits = ["apple", "banana", "cherry"];
-    io.println($"  \"banana\" in fruits        →  {"banana" in fruits}");
-    io.println($"  \"mango\" in fruits         →  {"mango" in fruits}");
+// Role-based access control
+let allowed_roles = ["admin", "editor", "moderator"];
+let user_role = "editor";
+io.println($"  \"{user_role}\" in allowed_roles  ->  {user_role in allowed_roles}");
+io.println($"  \"guest\"  in allowed_roles  ->  {"guest" in allowed_roles}");
 
-    // String substring check
-    let sentence = "the quick brown fox";
-    io.println($"  \"quick\" in sentence       →  {"quick" in sentence}");
-    io.println($"  \"lazy\" in sentence        →  {"lazy" in sentence}");
+// Config key validation before reading
+let config = dict.new();
+config["host"] = "localhost";
+config["port"] = 5432;
+io.println($"  \"port\"    in config  ->  {"port" in config}");
+io.println($"  \"timeout\" in config  ->  {"timeout" in config}");
 
-    // Dict key presence
-    let config = dict.new();
-    config["host"] = "localhost";
-    config["port"] = 8080;
-    io.println($"  \"host\" in config          →  {"host" in config}");
-    io.println($"  \"timeout\" in config       →  {"timeout" in config}");
+// Port range check — user ports are 1024..49152
+let port = 3000;
+io.println($"  port {port} in 1024..49152  ->  {port in 1024..49152}");
+io.println($"  port 80    in 1024..49152  ->  {80 in 1024..49152}");
 
-    // Range membership — great for bounds checks
-    let valid_ports = 1024..65536;
-    io.println($"  3000 in 1024..65536       →  {3000 in valid_ports}");
-    io.println($"  80 in 1024..65536         →  {80 in valid_ports}");
+// Substring detection in a log line
+let log_line = "WARN: disk usage at 91%";
+io.println($"  \"WARN\"  in log  ->  {"WARN" in log_line}");
+io.println($"  \"ERROR\" in log  ->  {"ERROR" in log_line}");
 
-    // Works naturally in conditions
-    let allowed_roles = ["admin", "editor", "viewer"];
-    let user_role = "editor";
-    if (user_role in allowed_roles) {
-        io.println($"  Role \"{user_role}\" is authorised");
-    }
-
-    io.println("");
-}
+io.println("");
 
 // ─── 5. Destructuring ───────────────────────────────────────────
 
-fn demo_destructuring() {
-    io.println("=== Destructuring ===");
+io.println("=== 5. Destructuring ===");
 
-    // Array destructuring — positions map left-to-right
-    let [x, y, z] = [10, 20, 30];
-    io.println($"  [x, y, z] = [10, 20, 30]  →  x={x}, y={y}, z={z}");
+// Parse shell command output — dict destructuring of a command result
+let {stdout, exitCode} = $(echo hello);
+io.println($"  $(echo hello)  ->  stdout=\"{str.trim(stdout)}\", exit={exitCode}");
 
-    // Const destructuring — elements are immutable bindings
-    const [MIN, MAX] = [0, 100];
-    io.println($"  const [MIN, MAX] = [0, 100]  →  MIN={MIN}, MAX={MAX}");
+// Extract fields from a simulated API response
+let resp = dict.new();
+resp["status"]     = 200;
+resp["body"]       = "OK";
+resp["latency_ms"] = 42;
+let {status, body, latency_ms} = resp;
+io.println($"  API response  ->  status={status}, body={body}, latency={latency_ms}ms");
 
-    // Extra elements are ignored
-    let [first, second] = [1, 2, 3, 4, 5];
-    io.println($"  [first, second] = [1..5]  →  first={first}, second={second}");
+// Swap two values via array destructuring
+let a = "left";
+let b = "right";
+let [swapped_a, swapped_b] = [b, a];
+io.println($"  swap({a}, {b})  ->  ({swapped_a}, {swapped_b})");
 
-    // Missing elements become null
-    let [a, b, c, d] = ["alpha", "beta"];
-    io.println($"  [a, b, c, d] = [\"alpha\",\"beta\"]  →  c={c}, d={d}");
+// Const destructuring — immutable bindings from a config dict
+let cfg = dict.new();
+cfg["debug"]     = false;
+cfg["log_level"] = "info";
+const {debug, log_level} = cfg;
+io.println($"  config  ->  debug={debug}, log_level={log_level}");
 
-    // Dictionary destructuring — names match keys
-    let person = dict.new();
-    person["name"] = "Alice";
-    person["age"] = 30;
-    person["city"] = "Berlin";
-
-    let {name, age, city} = person;
-    io.println("  {name, age, city} = person  →  " + name + ", " + age + ", " + city);
-
-    // Useful for pulling fields out of a command result
-    let {stdout, exitCode} = $(echo hello);
-    io.println("  {stdout, exitCode} = $(echo hello)  →  \"" + str.trim(stdout) + "\", " + exitCode);
-
-    // Const dict destructuring
-    let settings = dict.new();
-    settings["debug"] = false;
-    settings["verbose"] = true;
-    const {debug, verbose} = settings;
-    io.println("  const {debug, verbose} from settings  →  debug=" + debug + ", verbose=" + verbose);
-
-    io.println("");
-}
+io.println("");
 
 // ─── 6. Putting It All Together ─────────────────────────────────
 
-fn demo_combined() {
-    io.println("=== Putting It All Together ===");
-    io.println("  Processing a list of tasks with modern features");
-    io.println("");
+io.println("=== 6. Putting It All Together ===");
+io.println("  Processing a task backlog with every feature...");
+io.println("");
 
-    // Multi-line string as a compact data source
-    let raw = """
-        fix-login:critical:open
-        add-dark-mode:low:done
-        update-deps:medium:open
-        write-docs:low:open
-        perf-bench:medium:done
-        """;
+// Multi-line string as a compact data source
+let raw = """
+    fix-auth:critical:open
+    add-dark-mode:low:done
+    update-deps:medium:open
+    write-docs:low:open
+    perf-benchmark:medium:done
+    cache-layer:critical:open
+    """;
 
-    let tasks = arr.filter(
-        arr.map(str.split(str.trim(raw), "\n"), (line) => {
-            let parts = str.split(str.trim(line), ":");
-            let t = dict.new();
-            // Destructure each row into named variables
-            let [id, priority, status] = parts;
-            t["id"]       = id;
-            t["priority"] = priority;
-            t["status"]   = status;
-            return t;
-        }),
-        (t) => t["status"] == "open"   // keep only open tasks
-    );
+// Priority weights for urgency scoring
+let weights = dict.new();
+weights["critical"] = 4;
+weights["medium"]   = 2;
+weights["low"]      = 1;
 
-    io.println($"  Open tasks ({len(tasks)} of 5):");
+// Parse lines -> destructure each row -> filter to open tasks
+let open_tasks = arr.filter(
+    arr.map(str.split(str.trim(raw), "\n"), (line) => {
+        let t = dict.new();
+        let [id, priority, status] = str.split(str.trim(line), ":");
+        t["id"]       = id;
+        t["priority"] = priority;
+        t["status"]   = status;
+        return t;
+    }),
+    (t) => t["status"] == "open"
+);
 
-    // Priority weights — use ??= as a safe default lookup
-    let weights = dict.new();
-    weights["critical"] = 3;
-    weights["medium"]   = 2;
-    weights["low"]      = 1;
+io.println($"  Open tasks ({len(open_tasks)} of 6):");
 
-    let total_weight = 0;
-    for (let t in tasks) {
-        let {id, priority} = t;
-
-        // Accumulate urgency score with +=
-        let w = dict.get(weights, priority);
-        w ??= 0;
-        total_weight += w;
-
-        // Flag critical items differently using `in`
-        let label = priority in ["critical", "medium"] ? "(!)" : "   ";
-        io.println($"    {label} {id}  [{priority}]");
-    }
-
-    io.println($"\n  Total urgency score: {total_weight}");
-
-    // Summarise by priority using a range-based rating
-    let rating = "low";
-    if (total_weight in 5..9) {
-        rating = "moderate";
-    } else if (total_weight in 9..15) {
-        rating = "high";
-    } else if (total_weight >= 15) {
-        rating = "critical";
-    }
-
-    // Compound assignment to build the summary string
-    let summary = "Backlog status: ";
-    summary += rating;
-    summary += $" (score {total_weight})";
-    io.println($"  {summary}");
-
-    io.println("");
+// += to accumulate urgency score, `in` to flag high-priority items
+let score = 0;
+for (let t in open_tasks) {
+    let {id, priority} = t;
+    let w = dict.get(weights, priority);
+    w ??= 0;
+    score += w;
+    let tag = priority in ["critical", "medium"] ? "(!)" : "   ";
+    io.println($"    {tag} {id}  [{priority}]");
 }
 
-// ─── Run All Demos ───────────────────────────────────────────────
+// Range-based urgency rating
+let urgency = score in 1..5  ? "low"
+            : score in 5..12 ? "moderate"
+            : "high";
 
-demo_compound_assignment();
-demo_multiline_strings();
-demo_ranges();
-demo_in_operator();
-demo_destructuring();
-demo_combined();
+// Build the summary report with compound assignment
+let summary = "Backlog: ";
+summary += urgency;
+summary += $" urgency (score {score})";
+io.println($"\n  {summary}");

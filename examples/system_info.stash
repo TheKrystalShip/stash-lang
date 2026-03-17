@@ -1,71 +1,148 @@
 #!/usr/bin/env stash
 
-// System information gatherer
-// Collects and displays system details using common Unix commands
+// System Information Dashboard
+// Gathers and displays system details in a formatted report
 
-struct SystemInfo {
-    hostname,
-    kernel,
-    uptime,
-    cpu_count,
-    memory_total,
-    disk_usage,
-    user
+// ─── Helpers ─────────────────────────────────────────────────
+
+fn run_cmd(cmd_str: string) -> string {
+    let result = try $({cmd_str});
+    if (result == null) { return "N/A"; }
+    if (result.exitCode != 0) { return "N/A"; }
+    return str.trim(result.stdout);
 }
 
-fn run_cmd(cmd_str) {
-    // Execute a command and return trimmed stdout, or "N/A" on failure
-    let result = $({cmd_str});
-    if (result.exitCode != 0) {
-        return "N/A";
-    }
-    return result.stdout;
+fn print_row(label: string, value: string) {
+    io.println($"  {str.padEnd(label, 16)} {value}");
 }
 
-fn gather_info() {
-    return SystemInfo {
-        hostname: run_cmd("hostname"),
-        kernel: run_cmd("uname -r"),
-        uptime: run_cmd("uptime -p"),
-        cpu_count: run_cmd("nproc"),
-        memory_total: run_cmd("free -h | head -2 | tail -1 | awk '{print $2}'"),
-        disk_usage: run_cmd("df -h / | tail -1 | awk '{print $5}'"),
-        user: run_cmd("whoami")
-    };
-}
+// ─── System Info ─────────────────────────────────────────────
 
-// --- Main ---
+io.println("=" * 50);
+io.println("         System Information Dashboard");
+io.println("=" * 50);
+io.println($"  Generated: {time.date()} {time.clock()}");
+io.println("-" * 50);
 
-io.println("╔══════════════════════════════╗");
-io.println("║      System Information      ║");
-io.println("╚══════════════════════════════╝");
+io.println("");
+io.println("  [ Hardware & OS ]");
 io.println("");
 
-let info = gather_info();
+print_row("Hostname:", run_cmd("hostname"));
+print_row("Kernel:", run_cmd("uname -r"));
+print_row("OS:", env.os());
+print_row("Arch:", env.arch());
+print_row("CPU Cores:", run_cmd("nproc"));
 
-io.println($"  Hostname:   {info.hostname}");
-io.println($"  Kernel:     {info.kernel}");
-io.println($"  Uptime:     {info.uptime}");
-io.println($"  CPU Cores:  {info.cpu_count}");
-io.println($"  Memory:     {info.memory_total}");
-io.println($"  Disk Usage: {info.disk_usage} (/)");
-io.println($"  User:       {info.user}");
-io.println("");
-
-// Show environment info
-let shell = env.get("SHELL") ?? "unknown";
-let home = env.get("HOME") ?? "unknown";
-let path = env.get("PATH") ?? "unknown";
-
-io.println("  Environment:");
-io.println($"    SHELL: {shell}");
-io.println($"    HOME:  {home}");
-
-// Count PATH entries
-let path_count = 1;
-for (let ch in path) {
-    if (ch == ":") {
-        path_count++;
+// Memory — extract total from free command
+let mem_line = run_cmd("free -h | head -2 | tail -1");
+let mem_total = "N/A";
+if (mem_line != "N/A") {
+    let parts = str.split(str.trim(mem_line), " ");
+    let non_empty = arr.filter(parts, (p) => p != "");
+    if (len(non_empty) > 1) {
+        mem_total = non_empty[1];
     }
 }
-io.println($"    PATH:  {path_count} entries");
+print_row("Memory:", mem_total);
+
+// Disk usage for root
+let disk_line = run_cmd("df -h / | tail -1");
+let disk_used = "N/A";
+if (disk_line != "N/A") {
+    let parts = str.split(str.trim(disk_line), " ");
+    let non_empty = arr.filter(parts, (p) => p != "");
+    if (len(non_empty) > 4) {
+        disk_used = $"{non_empty[4]} of {non_empty[1]}";
+    }
+}
+print_row("Disk (/):", disk_used);
+
+print_row("Uptime:", run_cmd("uptime -p"));
+
+// ─── User & Environment ─────────────────────────────────────
+
+io.println("");
+io.println("  [ User & Environment ]");
+io.println("");
+
+print_row("User:", env.user());
+print_row("Home:", env.home());
+print_row("CWD:", env.cwd());
+print_row("Shell:", env.get("SHELL") ?? "unknown");
+print_row("Editor:", env.get("EDITOR") ?? env.get("VISUAL") ?? "not set");
+print_row("Language:", env.get("LANG") ?? "not set");
+
+// PATH entry count
+let path_val = env.get("PATH") ?? "";
+let path_entries = arr.filter(str.split(path_val, ":"), (p) => p != "");
+print_row("PATH entries:", conv.toStr(len(path_entries)));
+
+// ─── Network ────────────────────────────────────────────────
+
+io.println("");
+io.println("  [ Network ]");
+io.println("");
+
+// IP addresses
+let ip_output = run_cmd("hostname -I");
+if (ip_output != "N/A" && ip_output != "") {
+    let ips = arr.filter(str.split(ip_output, " "), (ip) => ip != "");
+    for (let i, ip in ips) {
+        let label = i == 0 ? "IP Address:" : "";
+        print_row(label, str.trim(ip));
+    }
+} else {
+    print_row("IP Address:", "N/A");
+}
+
+// Default gateway
+let gw = run_cmd("ip route");
+if (gw != "N/A" && str.contains(gw, "default")) {
+    let gw_parts = str.split(gw, " ");
+    let via_idx = arr.indexOf(gw_parts, "via");
+    if (via_idx >= 0 && via_idx + 1 < len(gw_parts)) {
+        print_row("Gateway:", gw_parts[via_idx + 1]);
+    }
+} else {
+    print_row("Gateway:", "N/A");
+}
+
+print_row("Hostname (DNS):", run_cmd("hostname -f"));
+
+// ─── Running Processes ──────────────────────────────────────
+
+io.println("");
+io.println("  [ Top Processes by Memory ]");
+io.println("");
+
+let ps_output: CommandResult = $(ps aux --sort=-%mem) | $(head -6);
+if (ps_output == null || ps_output.exitCode != 0) {
+    io.println("  N/A");
+} else {
+    let output: string = ps_output.stdout;
+    let ps_lines = str.split(output, "\n");
+    for (let i, line in ps_lines) {
+        let trimmed = str.trim(line);
+        if (trimmed != "" && i < 6) {
+            // First line is header
+            let prefix = i == 0 ? "  " : "  ";
+            io.println($"{prefix}{trimmed}");
+        }
+    }
+}
+
+// ─── Summary ────────────────────────────────────────────────
+
+io.println("");
+io.println("-" * 50);
+
+let load = run_cmd("cat /proc/loadavg");
+if (load != "N/A") {
+    let load_parts = str.split(load, " ");
+    io.println($"  Load Average: {load_parts[0]} {load_parts[1]} {load_parts[2]}");
+}
+
+let proc_count = run_cmd("ls -d /proc/[0-9]* | wc -l");
+io.println($"  Processes:    {proc_count}");
+io.println("=" * 50);

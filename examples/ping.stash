@@ -1,20 +1,164 @@
 #!/usr/bin/env stash
 
-const DEFAULT_ADDRESS: string = "192.168.1.128";
-let localAddress: string = "192.168.1.127";
+// ============================================================
+//  ping.stash — Network Diagnostics Toolkit
+//  Checks connectivity, latency, DNS, and open ports for a
+//  list of target hosts.
+// ============================================================
 
-let servers: array = [ DEFAULT_ADDRESS, localAddress ];
-
-fn pingAddress(address: string) {
-  let result: CommandResult = $(ping -c 1 {address});
-
-  io.println($"Exit code for ping at address {address}: {result.exitCode}");
-
-  if (result.exitCode != 0) {
-    io.println(result.stderr);
-  }
+enum Reachability {
+    Up,
+    Down
 }
 
-for (let address: string in servers) {
-  pingAddress(address);
+struct Host {
+    name, address, description
 }
+
+struct PingResult {
+    host, address, reachable, latency, dns
+
+    fn status_label() {
+        return self.reachable switch {
+            Reachability.Up   => "  UP  ",
+            Reachability.Down => " DOWN ",
+            _                 => "  ??  "
+        };
+    }
+}
+
+// ─── Targets ──────────────────────────────────────────────────
+
+let targets = [
+    Host { name: "localhost",   address: "127.0.0.1",     description: "Local loopback"   },
+    Host { name: "unreachable", address: "192.168.1.127", description: "Unreachable host" },
+    Host { name: "link-local",  address: "192.168.1.1",   description: "Link-local addr"  }
+];
+
+const CHECK_ADDRESS = "127.0.0.1";
+const CHECK_PORT    = "80";
+
+// ─── Ping ─────────────────────────────────────────────────────
+
+fn ping_host(host: Host) -> PingResult {
+    let result = $(ping -c 1 -W 2 {host.address});
+
+    if (result.exitCode != 0) {
+        return PingResult {
+            host: host.name, address: host.address,
+            reachable: Reachability.Down, latency: -1.0, dns: ""
+        };
+    }
+
+    // Extract RTT from "time=0.042 ms" in ping stdout
+    let latency = 0.0;
+    let stdout  = result.stdout;
+    if (str.contains(stdout, "time=")) {
+        let after_eq = str.split(stdout, "time=")[1];
+        let raw      = str.split(after_eq, " ")[0];
+        latency = try conv.toFloat(raw) ?? 0.0;
+    }
+
+    return PingResult {
+        host: host.name, address: host.address,
+        reachable: Reachability.Up, latency: latency, dns: ""
+    };
+}
+
+// ─── DNS Lookup ───────────────────────────────────────────────
+
+fn dns_lookup(address) {
+    let result = try $(nslookup {address});
+    if (result == null || result.exitCode != 0) { return "n/a"; }
+
+    let lines = str.split(result.stdout, "\n");
+    for (let line in lines) {
+        if (str.contains(line, "name =")) {
+            let parts = str.split(line, "= ");
+            if (len(parts) > 1) { return str.trim(parts[1]); }
+        }
+    }
+    return "n/a";
+}
+
+// ─── Port Check ───────────────────────────────────────────────
+
+fn check_port(address, port) {
+    let result = $(bash -c "echo '' > /dev/tcp/{address}/{port}" 2>&1);
+    return result.exitCode == 0;
+}
+
+// ─── Helpers ──────────────────────────────────────────────────
+
+fn latency_str(ms) {
+    if (ms < 0.0) { return "  n/a   "; }
+    let rounded = math.round(ms * 10) / 10.0;
+    return str.padEnd($"{rounded} ms", 8);
+}
+
+fn format_row(r) {
+    return $"[{r.status_label()}] {str.padEnd(r.host, 14)} {str.padEnd(r.address, 16)} {latency_str(r.latency)}  {r.dns}";
+}
+
+// ─── Run Diagnostics ──────────────────────────────────────────
+
+let divider = "=" * 62;
+
+io.println(divider);
+io.println("  Network Diagnostics Toolkit");
+io.println(divider);
+io.println("");
+
+let results = [];
+
+for (let target in targets) {
+    io.print($"  Probing {str.padEnd(target.address, 16)} ({target.description})... ");
+    let r = ping_host(target);
+    r.dns = dns_lookup(target.address);
+    arr.push(results, r);
+    io.println(str.trim(r.status_label()));
+}
+
+// ─── Port Availability ────────────────────────────────────────
+
+io.println("");
+let port_open = check_port(CHECK_ADDRESS, CHECK_PORT);
+let port_label = port_open switch {
+    true  => "open",
+    false => "closed",
+    _     => "unknown"
+};
+io.println($"  Port check {CHECK_ADDRESS}:{CHECK_PORT} → {port_label}");
+
+// ─── Results Table ────────────────────────────────────────────
+
+io.println("");
+io.println("  " + divider);
+io.println($"  [status] {"Host",-0}           {"Address",-0}         Latency   DNS");
+io.println("  " + "-" * 60);
+
+for (let r in results) {
+    io.println("  " + format_row(r));
+}
+
+// ─── Summary Stats ────────────────────────────────────────────
+
+let up_hosts   = arr.filter(results, (r) => r.reachable == Reachability.Up);
+let latencies  = arr.map(up_hosts, (r) => r.latency);
+let up_count   = len(up_hosts);
+let total      = len(results);
+
+io.println("");
+io.println("  " + divider);
+io.println($"  Reachable: {up_count}/{total} hosts");
+
+if (up_count > 0) {
+    let total_ms = arr.reduce(latencies, (acc, x) => acc + x, 0.0);
+    let avg_ms   = total_ms / up_count;
+    let min_ms   = arr.reduce(latencies, (acc, x) => x < acc ? x : acc, latencies[0]);
+    let max_ms   = arr.reduce(latencies, (acc, x) => x > acc ? x : acc, latencies[0]);
+
+    io.println($"  Latency  : avg={math.round(avg_ms * 10) / 10.0} ms  min={math.round(min_ms * 10) / 10.0} ms  max={math.round(max_ms * 10) / 10.0} ms");
+}
+
+io.println("  " + divider);

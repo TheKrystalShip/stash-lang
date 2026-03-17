@@ -1,147 +1,259 @@
 #!/usr/bin/env stash
 
-// Dictionaries example
-// Demonstrates creating, querying, iterating, and merging dictionaries
+// In-Memory Data Store
+// Demonstrates a simple cache/store with CRUD, querying, and aggregation.
 
-// --- Basic Creation and CRUD ---
+io.println("=" * 54);
+io.println("  In-Memory Data Store");
+io.println("=" * 54);
+io.println("");
 
-fn demo_basic_crud() {
-    io.println("=== Basic CRUD ===");
+// --- Simple KV store struct with TTL ---
 
-    let user = dict.new();
-    user["name"] = "Alice";
-    user["age"] = 30;
-    user["city"] = "Berlin";
+struct Store {
+    data,
+    meta
 
-    io.println($"Name:  {user["name"]}");
-    io.println($"Age:   {user["age"]}");
-    io.println($"City:  {user["city"]}");
-
-    // Update
-    user["age"] = 31;
-    io.println($"Birthday! Age is now {user["age"]}");
-
-    // has / get
-    io.println($"Has 'city'?  {dict.has(user, "city")}");
-    io.println($"Has 'email'? {dict.has(user, "email")}");
-    io.println($"Email value: {dict.get(user, "email")}");
-
-    // Remove
-    dict.remove(user, "city");
-    io.println($"After remove — has 'city'? {dict.has(user, "city")}");
-
-    io.println("");
-}
-
-// --- Metadata ---
-
-fn demo_metadata() {
-    io.println("=== Metadata ===");
-
-    let scores = dict.new();
-    scores["alice"] = 95;
-    scores["bob"]   = 87;
-    scores["carol"] = 92;
-
-    io.println($"Type:  {typeof(scores)}");
-    io.println($"len(): {len(scores)}");
-    io.println($"size:  {dict.size(scores)}");
-
-    io.println($"Keys:   {dict.keys(scores)}");
-    io.println($"Values: {dict.values(scores)}");
-
-    io.println("");
-}
-
-// --- Iteration ---
-
-fn demo_iteration() {
-    io.println("=== Iteration ===");
-
-    let capitals = dict.new();
-    capitals["France"]  = "Paris";
-    capitals["Germany"] = "Berlin";
-    capitals["Japan"]   = "Tokyo";
-    capitals["Brazil"]  = "Brasília";
-
-    // for-in iterates over keys
-    io.println("for-in loop:");
-    for (let country in capitals) {
-        io.println($"  {country} -> {capitals[country]}");
+    fn set(key, value, ttl: int = 0) {
+        dict.set(self.data, key, value);
+        let m = dict.new();
+        m["inserted_at"] = time.millis();
+        m["ttl"]         = ttl;
+        dict.set(self.meta, key, m);
     }
 
-    // dict.forEach
-    io.println("dict.forEach:");
-    dict.forEach(capitals, (k, v) => {
-        io.println($"  {k}: {v}");
-    });
-
-    // dict.pairs with .key / .value dot access
-    io.println("dict.pairs:");
-    for (let pair in dict.pairs(capitals)) {
-        io.println($"  {pair.key} => {pair.value}");
-    }
-
-    io.println("");
-}
-
-// --- Merging ---
-
-fn demo_merge() {
-    io.println("=== Merging ===");
-
-    let defaults = dict.new();
-    defaults["color"]   = "blue";
-    defaults["timeout"] = 30;
-    defaults["retries"] = 3;
-
-    let overrides = dict.new();
-    overrides["color"]  = "green";
-    overrides["debug"]  = true;
-
-    let config = dict.merge(defaults, overrides);
-
-    io.println("defaults + overrides (overrides win on conflicts):");
-    for (let key in config) {
-        io.println($"  {key} = {config[key]}");
-    }
-
-    io.println("");
-}
-
-// --- Practical Use Case: Word Frequency Counter ---
-
-fn word_frequency(text: string) {
-    io.println("=== Word Frequency Counter ===");
-
-    let freq = dict.new();
-    let words = str.split(text, " ");
-
-    for (let word in words) {
-        let w = str.lower(str.trim(word));
-        if (w == "") {
-            continue;
+    fn get(key) {
+        if (!(key in self.data)) { return null; }
+        let m = self.meta[key];
+        if (m["ttl"] > 0 && (time.millis() - m["inserted_at"]) > m["ttl"]) {
+            self.evict(key);
+            return null;
         }
-        if (dict.has(freq, w)) {
+        return self.data[key];
+    }
+
+    fn has(key) {
+        return (key in self.data) && self.get(key) != null;
+    }
+
+    fn evict(key) {
+        dict.remove(self.data, key);
+        dict.remove(self.meta, key);
+    }
+
+    fn keys() { return dict.keys(self.data); }
+    fn size() { return dict.size(self.data); }
+
+    fn clear() {
+        dict.clear(self.data);
+        dict.clear(self.meta);
+    }
+}
+
+fn new_store() {
+    return Store { data: dict.new(), meta: dict.new() };
+}
+
+// --- 1. Basic CRUD ---
+
+io.println("=== 1. CRUD Operations ===");
+
+let store = new_store();
+store.set("user:1", "Alice");
+store.set("user:2", "Bob");
+store.set("user:3", "Carol");
+
+io.println($"  user:1 = {store.get("user:1")}");
+io.println($"  user:2 = {store.get("user:2")}");
+io.println($"  has user:3? {store.has("user:3")}");
+io.println($"  has user:4? {store.has("user:4")}");
+io.println($"  size = {store.size()}");
+
+store.evict("user:3");
+io.println($"  after evict user:3 — size = {store.size()}");
+io.println($"  keys: {store.keys()}");
+io.println("");
+
+// --- 2. Nested dicts (dict of dicts) ---
+
+io.println("=== 2. Nested Dicts ===");
+
+fn make_user(name: string, age: int, role: string = "user") {
+    let u = dict.new();
+    u["name"] = name;
+    u["age"]  = age;
+    u["role"] = role;
+    return u;
+}
+
+let users = dict.new();
+users["alice"] = make_user("Alice", 30, "admin");
+users["bob"]   = make_user("Bob",   25);
+users["carol"] = make_user("Carol", 28, "editor");
+users["dave"]  = make_user("Dave",  22);
+
+// Dot notation for nested access
+io.println($"  alice.name = {users.alice.name}, role = {users.alice.role}");
+io.println($"  bob.age    = {users.bob.age}");
+// Bracket notation
+io.println($"  carol role = {users["carol"]["role"]}");
+io.println("");
+
+// --- 3. Iteration: keys, key-value, pairs, forEach ---
+
+io.println("=== 3. Iteration ===");
+
+// for-in over keys
+io.println("  Keys (for-in):");
+for (let k in users) {
+    io.println($"    {k}");
+}
+
+// for-in key-value
+io.println("  Key-value (for-in k, v):");
+for (let k, v in users) {
+    io.println($"    {k} -> {v["name"]} ({v["role"]})");
+}
+
+// dict.forEach
+io.println("  forEach:");
+dict.forEach(users, (k, v) => {
+    io.println($"    {k}: age {v["age"]}");
+});
+
+// dict.pairs
+let pairs = dict.pairs(users);
+io.println($"  Total pairs: {len(pairs)}");
+io.println("");
+
+// --- 4. Membership: in operator ---
+
+io.println("=== 4. Membership (in operator) ===");
+
+io.println($"  'alice' in users? {"alice" in users}");
+io.println($"  'zara'  in users? {"zara" in users}");
+
+let user_keys = dict.keys(users);
+io.println($"  'bob' in keys array? {"bob" in user_keys}");
+io.println("");
+
+// --- 5. Querying with arr.filter, arr.map, arr.reduce ---
+
+io.println("=== 5. Querying with Array Functions ===");
+
+let all_users = dict.values(users);
+
+let seniors = arr.filter(all_users, (u) => u["age"] > 24);
+io.println($"  Users older than 24: {len(seniors)}");
+for (let u in seniors) {
+    io.println($"    {u["name"]} (age {u["age"]})");
+}
+
+let names = arr.map(all_users, (u) => u["name"]);
+io.println($"  All names: {arr.join(names, ", ")}");
+
+let total_age = arr.reduce(all_users, (acc, u) => acc + u["age"], 0);
+io.println($"  Total age: {total_age}, Average: {total_age / len(all_users)}");
+
+let admins = arr.filter(all_users, (u) => u["role"] == "admin");
+io.println($"  Admins: {arr.join(arr.map(admins, (u) => u["name"]), ", ")}");
+io.println("");
+
+// --- 6. Merging dicts ---
+
+io.println("=== 6. Merging Dicts ===");
+
+let default_prefs = dict.new();
+default_prefs["theme"]     = "light";
+default_prefs["lang"]      = "en";
+default_prefs["page_size"] = 20;
+default_prefs["beta"]      = false;
+
+let user_prefs = dict.new();
+user_prefs["theme"]     = "dark";
+user_prefs["page_size"] = 50;
+user_prefs["beta"]      = true;
+
+let settings = dict.merge(default_prefs, user_prefs);
+io.println("  Merged settings (user prefs override defaults):");
+for (let k, v in settings) {
+    io.println($"    {k} = {v}");
+}
+io.println("");
+
+// --- 7. Word Frequency Counter ---
+
+io.println("=== 7. Word Frequency Counter ===");
+
+fn word_freq(text: string) {
+    let freq = dict.new();
+    let words = str.split(str.lower(text), " ");
+    for (let word in words) {
+        let w = str.trim(word);
+        if (w == "") { continue; }
+        if (w in freq) {
             freq[w] = freq[w] + 1;
         } else {
             freq[w] = 1;
         }
     }
-
-    io.println($"Unique words: {dict.size(freq)}");
-    io.println("Frequencies:");
-    for (let pair in dict.pairs(freq)) {
-        io.println($"  \"{pair.key}\": {pair.value}");
-    }
-
-    io.println("");
+    return freq;
 }
 
-// --- Main ---
+let corpus = "the quick brown fox jumps over the lazy dog the fox jumped high";
+let freq = word_freq(corpus);
 
-demo_basic_crud();
-demo_metadata();
-demo_iteration();
-demo_merge();
-word_frequency("the quick brown fox jumps over the lazy dog the fox");
+io.println($"  Unique words: {dict.size(freq)}");
+io.println("  Words appearing more than once:");
+for (let pair in dict.pairs(freq)) {
+    if (pair.value > 1) {
+        io.println($"    \"{pair.key}\": {pair.value}");
+    }
+}
+io.println("");
+
+// --- 8. Inverted Index (word -> document list) ---
+
+io.println("=== 8. Inverted Index ===");
+
+let docs = dict.new();
+docs["doc1"] = "the quick brown fox";
+docs["doc2"] = "the lazy dog slept";
+docs["doc3"] = "a quick brown dog";
+docs["doc4"] = "the fox and the dog";
+
+let index = dict.new();
+for (let doc_id, content in docs) {
+    let words = str.split(str.lower(content), " ");
+    for (let w in words) {
+        if (!(w in index)) {
+            index[w] = [];
+        }
+        if (!(doc_id in index[w])) {
+            arr.push(index[w], doc_id);
+        }
+    }
+}
+
+let fox_docs   = index["fox"]   ?? [];
+let dog_docs   = index["dog"]   ?? [];
+let quick_docs = index["quick"] ?? [];
+io.println($"  Documents containing 'fox':   {arr.join(fox_docs, ", ")}");
+io.println($"  Documents containing 'dog':   {arr.join(dog_docs, ", ")}");
+io.println($"  Documents containing 'quick': {arr.join(quick_docs, ", ")}");
+io.println("");
+
+// --- 9. dict.get with default, dict.clear ---
+
+io.println("=== 9. dict.get with Default & dict.clear ===");
+
+let cache = dict.new();
+cache["key1"] = "value1";
+cache["key2"] = "value2";
+
+io.println($"  cache size before clear: {dict.size(cache)}");
+io.println($"  dict.get existing: {dict.get(cache, "key1")}");
+io.println($"  dict.get missing:  {dict.get(cache, "missing")}");
+
+dict.clear(cache);
+io.println($"  cache size after clear:  {dict.size(cache)}");

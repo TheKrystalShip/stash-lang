@@ -1,62 +1,153 @@
 #!/usr/bin/env stash
 
-// Server monitoring script
-// Checks connectivity to a list of servers and reports their status
+// Infrastructure Health Monitor
+// Checks connectivity to servers and generates a formatted status report
 
-enum Status {
-    Unknown,
-    Online,
-    Offline
+enum Health {
+    Healthy,
+    Degraded,
+    Down,
+    Unknown
+}
+
+struct CheckResult {
+    status,
+    latency,
+    message
 }
 
 struct Server {
     name,
     host,
     port,
-    status
-}
+    role
 
-const PING_COUNT = "1";
-const PING_TIMEOUT = "2";
+    fn label() {
+        return $"{self.name} ({self.host}:{self.port})";
+    }
 
-fn check_server(server) {
-    let result = $(ping -c {PING_COUNT} -W {PING_TIMEOUT} {server.host});
-    return result.exitCode == 0 ? Status.Online : Status.Offline;
-}
+    fn check() {
+        let start = time.millis();
+        let result = try $(ping -c 1 -W 2 {self.host});
+        let elapsed = time.millis() - start;
 
-fn status_label(status) {
-    if (status == Status.Online) {
-        return "ONLINE";
-    } else if (status == Status.Offline) {
-        return "OFFLINE";
-    } else {
-        return "UNKNOWN";
+        if (result == null) {
+            return CheckResult { status: Health.Unknown, latency: -1, message: "ping failed to run" };
+        }
+
+        if (result.exitCode != 0) {
+            return CheckResult { status: Health.Down, latency: -1, message: "host unreachable" };
+        }
+
+        if (elapsed > 500) {
+            return CheckResult { status: Health.Degraded, latency: elapsed, message: "high latency" };
+        }
+
+        return CheckResult { status: Health.Healthy, latency: elapsed, message: "ok" };
     }
 }
 
-// Define our infrastructure
+fn statusTag(status) {
+    return status switch {
+        Health.Healthy  => "  OK  ",
+        Health.Degraded => " WARN ",
+        Health.Down     => " DOWN ",
+        _               => "  ??  "
+    };
+}
+
+fn statusDecorator(status) {
+    return status switch {
+        Health.Healthy  => "✓",
+        Health.Degraded => "~",
+        Health.Down     => "✗",
+        _               => "?"
+    };
+}
+
+struct Entry {
+    server,
+    result
+}
+
+fn latencyStr(ms) {
+    if (ms < 0) {
+        return "   n/a";
+    }
+    return $"{ms}ms";
+}
+
+// Define infrastructure
 let servers = [
-    Server { name: "web-1", host: "127.0.0.1", port: 80, status: Status.Unknown },
-    Server { name: "web-2", host: "192.168.1.100", port: 80, status: Status.Unknown },
-    Server { name: "db-1", host: "192.168.1.200", port: 5432, status: Status.Unknown }
+    Server { name: "web-1",    host: "127.0.0.1",   port: 80,   role: "web"      },
+    Server { name: "web-2",    host: "192.168.1.10", port: 80,   role: "web"      },
+    Server { name: "api-1",    host: "192.168.1.20", port: 8080, role: "api"      },
+    Server { name: "db-1",     host: "192.168.1.30", port: 5432, role: "database" },
+    Server { name: "cache-1",  host: "192.168.1.40", port: 6379, role: "cache"    }
 ];
 
-io.println("=== Server Health Check ===");
-io.println("");
-
-let online_count = 0;
-let total = len(servers);
-
+// Run checks
+let results = [];
 for (let srv in servers) {
-    srv.status = check_server(srv);
-
-    let label = status_label(srv.status);
-    io.println($"  [{label}] {srv.name} ({srv.host}:{srv.port})");
-
-    if (srv.status == Status.Online) {
-        online_count++;
-    }
+    let r = srv.check();
+    arr.push(results, Entry { server: srv, result: r });
 }
 
+// Build report
+const BORDER = "=" * 60;
+const DIVIDER = "-" * 60;
+
+io.println(BORDER);
+io.println("  INFRASTRUCTURE HEALTH MONITOR");
+io.println($"  {time.clock()}");
+io.println(BORDER);
 io.println("");
-io.println($"{online_count}/{total} servers online");
+
+let hServer = str.padEnd("SERVER", 30);
+let hRole   = str.padEnd("ROLE", 10);
+let hStatus = str.padEnd("STATUS", 10);
+io.println($"  {hServer} {hRole} [{hStatus}] LATENCY");
+io.println(DIVIDER);
+
+for (let entry in results) {
+    let srv = entry.server;
+    let res = entry.result;
+    let tag = statusTag(res.status);
+    let dec = statusDecorator(res.status);
+    let lat = latencyStr(res.latency);
+    let nameCol = str.padEnd(srv.label(), 30);
+    let roleCol = str.padEnd(srv.role, 10);
+    io.println($"  {nameCol} {roleCol} [{tag}] {dec}  {lat}");
+}
+
+io.println(DIVIDER);
+
+// Summary counts
+let healthy  = arr.filter(results, (e) => e.result.status == Health.Healthy);
+let degraded = arr.filter(results, (e) => e.result.status == Health.Degraded);
+let down     = arr.filter(results, (e) => e.result.status == Health.Down);
+let unknown  = arr.filter(results, (e) => e.result.status == Health.Unknown);
+
+let total = len(results);
+let healthyCount  = len(healthy);
+let degradedCount = len(degraded);
+let downCount     = len(down);
+let unknownCount  = len(unknown);
+
+io.println("");
+io.println($"  Servers checked : {total}");
+io.println($"  ✓ Healthy       : {healthyCount}");
+io.println($"  ~ Degraded      : {degradedCount}");
+io.println($"  ✗ Down          : {downCount}");
+if (unknownCount > 0) {
+    io.println($"  ? Unknown       : {unknownCount}");
+}
+
+let overallHealth = (downCount + unknownCount) switch {
+    0 => (degradedCount > 0 ? "DEGRADED" : "HEALTHY"),
+    _ => "CRITICAL"
+};
+
+io.println("");
+io.println($"  Overall status  : {overallHealth}");
+io.println(BORDER);

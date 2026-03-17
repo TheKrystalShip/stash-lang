@@ -909,7 +909,7 @@ The **26.6×** speedup on built-in function calls is the most telling result. St
 Beyond raw speed, several Stash features have no Bash equivalent at all:
 
 | Feature                  | Stash                                   | Bash                                                                  |
-| ------------------------ | --------------------------------------- | --------------------------------------------------------------------- | --- | ----------------------------------- |
+| ------------------------ | --------------------------------------- | --------------------------------------------------------------------- |
 | **Structs**              | `struct Server { host, port }`          | Parallel arrays or associative arrays (no type safety, no dot access) |
 | **Enums**                | `enum Status { Active, Inactive }`      | Integer constants by convention                                       |
 | **Floating point**       | Native `double` arithmetic              | Requires `bc` or `awk` subshells                                      |
@@ -917,7 +917,7 @@ Beyond raw speed, several Stash features have no Bash equivalent at all:
 | **String interpolation** | `$"Hello {name}"`                       | `"Hello ${name}"` (no expressions: `$"{x + 1}"` impossible)           |
 | **Switch expressions**   | `x switch { 1 => "one", _ => "other" }` | `case` statement (no expression form)                                 |
 | **Imports**              | `import { fn } from "lib.stash"`        | `source lib.sh` (pollutes global namespace)                           |
-| **Error handling**       | `try expr ?? fallback`                  | `cmd                                                                  |     | fallback` (no expression-level try) |
+| **Error handling**       | `try expr ?? fallback`                  | `cmd fallback` (no expression-level try)                              |
 | **Lambdas**              | `(x) => x * 2`                          | Not available                                                         |
 | **Ranges**               | `for (let i in 1..100) { ... }`         | `for ((i=1; i<=100; i++)); do ...; done` — verbose C-style loop       |
 | **Destructuring**        | `let [a, b] = arr;`                     | `a=${arr[0]}; b=${arr[1]}` — manual index extraction                  |

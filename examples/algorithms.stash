@@ -1,124 +1,224 @@
 #!/usr/bin/env stash
 
-/*
- * Algorithms & Language Feature Demo
- * -----------------------------------
- * Showcases recursion, pipes, print vs println,
- * and assorted operators.
- */
+// examples/algorithms.stash
+// Product catalog analysis: filtering, sorting, searching, and statistics
 
-// --- Recursion ---
+// ─── Data Model ──────────────────────────────────────────────────────────────
 
-fn factorial(n: int) -> int {
-    if (n <= 1) {
-        return 1;
+struct Product {
+    id, name, category, price, stock
+
+    fn display() {
+        return $"#{self.id} {str.padEnd(self.name, 14)} [{self.category}] ${self.price}";
     }
-    return n * factorial(n - 1);
-}
 
-fn fibonacci(n: int) -> int {
-    if (n <= 0) { return 0; }
-    if (n == 1) { return 1; }
-    return fibonacci(n - 1) + fibonacci(n - 2);
-}
-
-io.println("=== Recursion ===");
-io.println($"  factorial(5) = {factorial(5)}");
-io.println($"  factorial(10) = {factorial(10)}");
-
-io.print("  fibonacci(0..10) = ");
-let i: int = 0;
-while (i <= 10) {
-    io.print($"{fibonacci(i)}");
-    if (i < 10) {
-        io.print(", ");
+    fn total_value() {
+        return self.price * self.stock;
     }
-    i++;
 }
 
-io.println("");
-io.println("");
+let catalog = [
+    Product { id: 1,  name: "Resistor",     category: "components", price: 0.15,  stock: 5000 },
+    Product { id: 2,  name: "Arduino Uno",  category: "boards",     price: 28.99, stock: 120  },
+    Product { id: 3,  name: "Raspberry Pi", category: "boards",     price: 59.99, stock: 45   },
+    Product { id: 4,  name: "LED Pack",     category: "components", price: 3.49,  stock: 2000 },
+    Product { id: 5,  name: "Breadboard",   category: "tools",      price: 8.50,  stock: 300  },
+    Product { id: 6,  name: "Multimeter",   category: "tools",      price: 34.95, stock: 60   },
+    Product { id: 7,  name: "Capacitor",    category: "components", price: 0.45,  stock: 3500 },
+    Product { id: 8,  name: "ESP32",        category: "boards",     price: 12.99, stock: 200  },
+    Product { id: 9,  name: "Soldering Iron", category: "tools",    price: 22.00, stock: 85   },
+    Product { id: 10, name: "Wire Spool",   category: "materials",  price: 11.75, stock: 150  }
+];
 
-// --- Sorting (bubble sort, shows >, >=, binary subtraction) ---
+io.println("=" * 54);
+io.println("  Product Catalog Analysis");
+io.println("=" * 54);
 
-fn bubble_sort(arr: array) -> array {
-    let n: int = len(arr);
-    let swapped: bool = true;
+// ─── Filter & Map ─────────────────────────────────────────────────────────────
 
-    while (swapped) {
-        swapped = false;
-        let j: int = 0;
-        while (j < n - 1) {
-            if (arr[j] > arr[j + 1]) {
-                // Swap
-                let temp: int = arr[j];
-                arr[j] = arr[j + 1];
-                arr[j + 1] = temp;
-                swapped = true;
-            }
-            j++;
+io.println("\n-- Filter & Map --");
+
+// Closure factory — returns a predicate for a given category
+fn make_category_filter(cat: string) {
+    return (p) => p.category == cat;
+}
+
+let boards     = arr.filter(catalog, make_category_filter("boards"));
+let components = arr.filter(catalog, make_category_filter("components"));
+let tools      = arr.filter(catalog, make_category_filter("tools"));
+
+io.println($"  Boards ({len(boards)}):     {arr.join(arr.map(boards, (p) => p.name), ", ")}");
+io.println($"  Components ({len(components)}): {arr.join(arr.map(components, (p) => p.name), ", ")}");
+io.println($"  Tools ({len(tools)}):       {arr.join(arr.map(tools, (p) => p.name), ", ")}");
+
+// Low-stock alert using combined filter + map
+let low_stock = arr.filter(catalog, (p) => p.stock < 100);
+io.println($"  Low stock (< 100 units): {arr.join(arr.map(low_stock, (p) => p.name), ", ")}");
+
+// Total inventory value per item
+let values = arr.map(catalog, (p) => p.total_value());
+let grand_total = arr.reduce(values, (acc, x) => acc + x, 0.0);
+io.println($"  Total inventory value: ${math.floor(grand_total * 100) / 100.0}");
+
+// ─── Sorting ─────────────────────────────────────────────────────────────────
+
+io.println("\n-- Sorting --");
+
+// Built-in arr.sort for natural (alphabetical) ordering
+let names = arr.map(catalog, (p) => p.name);
+arr.sort(names);
+io.println($"  Alphabetical: {arr.join(names, ", ")}");
+
+// Recursive quicksort on extracted price values
+fn partition(items: array, lo: int, hi: int) {
+    let pivot = items[hi];
+    let i = lo;
+    let j = lo;
+    while (j < hi) {
+        if (items[j] <= pivot) {
+            let tmp = items[i];
+            items[i] = items[j];
+            items[j] = tmp;
+            i++;
         }
-        n = n - 1;
+        j++;
     }
-    return arr;
+    let tmp = items[i];
+    items[i] = items[hi];
+    items[hi] = tmp;
+    return i;
 }
 
-io.println("=== Bubble Sort ===");
-let nums: array = [64, 34, 25, 12, 22, 11, 90];
-
-io.print("  Before: ");
-for (let n: int in nums) {
-    io.print($"{n} ");
+fn quicksort(items: array, lo: int, hi: int) {
+    if (lo >= hi) { return; }
+    let p = partition(items, lo, hi);
+    quicksort(items, lo, p - 1);
+    quicksort(items, p + 1, hi);
 }
-io.println("");
 
-bubble_sort(nums);
+let prices = arr.map(catalog, (p) => p.price);
+quicksort(prices, 0, len(prices) - 1);
+io.println($"  Prices sorted: {arr.join(arr.map(prices, (x) => conv.toStr(x)), ", ")}");
 
-io.print("  After:  ");
-for (let n: int in nums) {
-    io.print($"{n} ");
+// ─── Binary Search ────────────────────────────────────────────────────────────
+
+io.println("\n-- Binary Search --");
+
+fn binary_search(sorted: array, target, lo: int, hi: int) {
+    if (lo > hi) { return -1; }
+    let mid = (lo + hi) / 2;
+    if (sorted[mid] == target) { return mid; }
+    if (sorted[mid] < target)  { return binary_search(sorted, target, mid + 1, hi); }
+    return binary_search(sorted, target, lo, mid - 1);
 }
-io.println("");
-io.println("");
 
-// --- Max/Min with >= ---
+let search_targets = [0.45, 12.99, 99.99];
+for (let target in search_targets) {
+    let idx = binary_search(prices, target, 0, len(prices) - 1);
+    let result = idx >= 0 ? $"found at index {idx}" : "not found";
+    io.println($"  search({target}) → {result}");
+}
 
-fn find_max(arr: array) -> int {
-    let max: int = arr[0];
-    let i: int = 1;
-    while (i < len(arr)) {
-        if (arr[i] >= max) {
-            max = arr[i];
-        }
-        i++;
+// ─── Statistics ───────────────────────────────────────────────────────────────
+
+io.println("\n-- Statistics --");
+
+let all_prices = arr.map(catalog, (p) => p.price);
+let n         = len(all_prices);
+let total     = arr.reduce(all_prices, (acc, x) => acc + x, 0.0);
+let mean      = total / n;
+let sq_diffs  = arr.map(all_prices, (x) => math.pow(x - mean, 2));
+let variance  = arr.reduce(sq_diffs, (acc, x) => acc + x, 0.0) / n;
+let stddev    = math.sqrt(variance);
+let cheapest  = arr.reduce(all_prices, (acc, x) => math.min(acc, x), all_prices[0]);
+let priciest  = arr.reduce(all_prices, (acc, x) => math.max(acc, x), all_prices[0]);
+
+io.println($"  Count:   {n} products");
+io.println($"  Mean:    ${math.floor(mean * 100) / 100.0}");
+io.println($"  Std Dev: {math.floor(stddev * 100) / 100.0}");
+io.println($"  Range:   ${cheapest}  –  ${priciest}");
+
+// Inventory value grouped by category (arr.reduce into a dict accumulator)
+let by_cat = arr.reduce(catalog, (acc, p) => {
+    let cur = acc[p.category] ?? 0.0;
+    acc[p.category] = cur + p.total_value();
+    return acc;
+}, dict.new());
+
+io.println("  Value by category:");
+for (let cat, val in by_cat) {
+    io.println($"    {str.padEnd(cat, 12)} ${math.floor(val * 100) / 100.0}");
+}
+
+// ─── Switch + For-in with Index (ranked listing) ──────────────────────────────
+
+io.println("\n-- Top 5 by Price (switch + for-in with index) --");
+
+// Insertion sort descending by price
+let ranked = arr.map(catalog, (p) => p);
+let rn = len(ranked);
+let ri = 1;
+while (ri < rn) {
+    let key = ranked[ri];
+    let rj  = ri - 1;
+    while (rj >= 0 && ranked[rj].price < key.price) {
+        ranked[rj + 1] = ranked[rj];
+        rj--;
     }
-    return max;
+    ranked[rj + 1] = key;
+    ri++;
 }
 
-fn find_min(arr: array) -> int {
-    let min: int = arr[0];
-    let i: int = 1;
-    while (i < len(arr)) {
-        if (arr[i] <= min) {
-            min = arr[i];
-        }
-        i++;
-    }
-    return min;
+for (let i, p in ranked) {
+    if (i >= 5) { break; }
+    let dept = p.category switch {
+        "boards"     => "Dev Board",
+        "components" => "Component",
+        "tools"      => "Lab Tool",
+        "materials"  => "Material",
+        _            => "General"
+    };
+    let rank = str.padStart(conv.toStr(i + 1), 2, " ");
+    io.println($"  {rank}. {str.padEnd(p.name, 16)} ${p.price}  [{dept}]");
 }
 
-let sorted: array = [11, 12, 22, 25, 34, 64, 90];
-let range: int = find_max(sorted) - find_min(sorted);
-io.println("=== Array Stats ===");
-io.println($"  Min:   {find_min(sorted)}");
-io.println($"  Max:   {find_max(sorted)}");
-io.println($"  Range: {range}");
-io.println("");
+// ─── Ranges ──────────────────────────────────────────────────────────────────
 
-// --- Pipes (Stash pipe operator) ---
+io.println("\n-- Ranges --");
 
-io.println("=== Pipes ===");
-let result: CommandResult = $(echo "hello world stash language") | $(tr " " "\n") | $(sort);
-io.println($"  Pipe result ({typeof(result)}):");
-io.println($"  stdout: {result.stdout}");
-io.println($"  exit code: {result.exitCode}");
+// Fibonacci sequence via range iteration
+let fib_a = 0;
+let fib_b = 1;
+let fibs  = [];
+for (let _ in 0..10) {
+    arr.push(fibs, fib_a);
+    let next = fib_a + fib_b;
+    fib_a = fib_b;
+    fib_b = next;
+}
+io.println($"  Fibonacci(0..10): {arr.join(arr.map(fibs, (x) => conv.toStr(x)), ", ")}");
+
+// Powers of 2 using range with step
+let pow_parts = [];
+for (let exp in 0..11..2) {
+    arr.push(pow_parts, conv.toStr(conv.toInt(math.pow(2, exp))));
+}
+io.println($"  2^(0,2,4,6,8,10): {arr.join(pow_parts, ", ")}");
+
+// Descending range: countdown
+io.print("  Countdown: ");
+let cd_parts = [];
+for (let t in 5..0) {
+    arr.push(cd_parts, conv.toStr(t));
+}
+io.println(arr.join(cd_parts, "… ") + "… go!");
+
+// ─── Shell Pipes ─────────────────────────────────────────────────────────────
+
+io.println("\n-- Shell Pipes --");
+
+let sorted_words = $(echo "delta alpha gamma beta") | $(tr " " "\n") | $(sort);
+io.println("  Sorted words: " + str.replaceAll(str.trim(sorted_words.stdout), "\n", ", "));
+
+let cpu_model = $(cat /proc/cpuinfo) | $(grep -m1 "model name");
+io.println($"  CPU: {str.trim(str.replace(cpu_model.stdout, "model name\t: ", ""))}");

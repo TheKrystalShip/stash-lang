@@ -1,158 +1,168 @@
 #!/usr/bin/env stash
 
-// Configuration files demo
-// Showcases dict dot access, ini.*, config.*, and json.* built-in functions
-// --- Dict Dot Access ---
+// Config File Toolkit
+// Reads, validates, converts, and merges configuration files across formats.
 
-fn demo_dot_access() {
-  io.println("=== Dict Dot Access ===");
-  let db = dict.new();
-  db["host"] = "localhost";
-  db["port"] = 5432;
-  db["name"] = "myapp";
+io.println("=" * 54);
+io.println("  Config File Toolkit");
+io.println("=" * 54);
+io.println("");
 
-  // Bracket notation (classic)
-  io.println($"  bracket: host = {db["host"]}, port = {db["port"]}");
+// --- Validation rule struct ---
 
-  // Dot notation (sugar)
-  io.println($"  dot:     host = {db.host}, port = {db.port}");
+struct Rule {
+    required,
+    min_num,
+    max_num
 
-  // Dot notation assignment
-  db.port = 3306;
-  io.println($"  updated: port = {db.port}");
-
-  // Nested dict via dot access
-  let cfg = dict.new();
-  cfg["database"] = db;
-  io.println($"  nested:  cfg.database.host = {cfg.database.host}");
-  io.println("");
+    fn check(name, value) {
+        if (self.required && (value == null || value == "")) {
+            return $"[FAIL] {name}: required field is missing";
+        }
+        let n = try conv.toInt(conv.toStr(value ?? ""));
+        if (n != null && self.min_num != null && n < self.min_num) {
+            return $"[FAIL] {name}: {value} < min {self.min_num}";
+        }
+        if (n != null && self.max_num != null && n > self.max_num) {
+            return $"[FAIL] {name}: {value} > max {self.max_num}";
+        }
+        return $"[ OK ] {name} = {value}";
+    }
 }
 
-// --- INI Parsing ---
-
-fn demo_ini_parse() {
-  io.println("=== INI Parsing ===");
-  let text = "[server]\nhost = 0.0.0.0\nport = 8080\n\n[database]\nhost = localhost\nport = 5432\nname = myapp";
-  let settings = ini.parse(text);
-  io.println($"  settings.server.host   = {settings.server.host}");
-
-  // 0.0.0.0
-  io.println($"  settings.server.port   = {settings.server.port}");
-
-  // 8080
-  io.println($"  settings.database.host = {settings.database.host}");
-
-  // localhost
-  io.println($"  settings.database.name = {settings.database.name}");
-
-  // myapp
-  io.println("");
+fn validate_section(section, rules) {
+    for (let field, rule in rules) {
+        let value = section[field];
+        io.println("  " + rule.check(field, value));
+    }
 }
 
-// --- INI Stringify ---
+// --- 1. JSON config: parse, dot/bracket navigation ---
 
-fn demo_ini_stringify() {
-  io.println("=== INI Stringify ===");
-  let text = "[app]\nname = Stash\nversion = 1.0\ndebug = false";
-  let cfg = ini.parse(text);
+io.println("=== 1. JSON Config: Parse & Navigate ===");
 
-  // Modify a value via dot notation
-  cfg.app.version = "2.0";
-  cfg.app.debug = "true";
-  let output = ini.stringify(cfg);
-  io.println("  Serialized INI:");
-  for (let line in str.split(output, "\n")) {
-    io.println($"    {line}");
-  }
-  io.println("");
+let json_str = "{\"app\":{\"name\":\"myservice\",\"port\":8080,\"secret\":\"s3cr3t\"},\"database\":{\"host\":\"localhost\",\"port\":5432,\"name\":\"mydb\"}}";
+let cfg = json.parse(json_str);
+
+// Dot notation for nested access
+io.println($"  app.name     = {cfg.app.name}");
+io.println($"  app.port     = {cfg.app.port}");
+io.println($"  db.host      = {cfg.database.host}");
+io.println($"  db.name      = {cfg.database.name}");
+
+// Optional chaining for missing nested keys — returns null safely
+let region = cfg?.cloud?.region ?? "us-east-1";
+let tls    = cfg?.database?.tls?.enabled ?? false;
+io.println($"  cloud.region = {region}  (defaulted via ??)");
+io.println($"  db.tls       = {tls}  (defaulted via ??)");
+io.println("");
+
+// --- 2. Validate required config fields ---
+
+io.println("=== 2. Config Field Validation ===");
+
+let app_rules = dict.new();
+app_rules["name"]   = Rule { required: true,  min_num: null, max_num: null  };
+app_rules["port"]   = Rule { required: true,  min_num: 1,    max_num: 65535 };
+app_rules["secret"] = Rule { required: true,  min_num: null, max_num: null  };
+app_rules["region"] = Rule { required: false, min_num: null, max_num: null  };
+
+io.println("  Validating [app] section:");
+validate_section(cfg.app, app_rules);
+io.println("");
+
+// --- 3. INI config: parse, modify, stringify ---
+
+io.println("=== 3. INI Config: Parse, Modify, Stringify ===");
+
+let ini_src = "[server]\nhost = 0.0.0.0\nport = 8080\nworkers = 4\n\n[logging]\nlevel = info\nfile = /var/log/app.log";
+let ini_cfg = ini.parse(ini_src);
+
+io.println($"  Before:  server.port={ini_cfg.server.port}  logging.level={ini_cfg.logging.level}");
+
+// Modify fields via dot notation
+ini_cfg.server.port   = "9090";
+ini_cfg.logging.level = "debug";
+
+io.println($"  After:   server.port={ini_cfg.server.port}  logging.level={ini_cfg.logging.level}");
+
+let out_ini = ini.stringify(ini_cfg);
+io.println("  Serialized:");
+for (let line in str.split(out_ini, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+io.println("");
+
+// --- 4. Merge defaults with environment overrides ---
+
+io.println("=== 4. Merging Configs (defaults + env overrides) ===");
+
+let defaults = dict.new();
+defaults["log_level"]       = "info";
+defaults["port"]            = 8080;
+defaults["max_connections"] = 100;
+defaults["timeout"]         = 30;
+defaults["debug"]           = false;
+
+let overrides = dict.new();
+overrides["port"]      = conv.toInt(env.get("APP_PORT") ?? "8080");
+overrides["log_level"] = env.get("LOG_LEVEL") ?? "warn";
+overrides["debug"]     = env.get("APP_DEBUG") == "true";
+
+let merged = dict.merge(defaults, overrides);
+
+io.println("  Merged config (env overrides win on conflicts):");
+for (let k, v in merged) {
+    io.println($"    {k} = {v}");
+}
+io.println("");
+
+// --- 5. Multi-line string config templates ---
+
+io.println("=== 5. Config Templates (Multi-line Strings) ===");
+
+fn make_server_config(host: string, port: int = 8080, workers: int = 4, log_level: string = "info") {
+    return $"""
+[server]
+host    = {host}
+port    = {port}
+workers = {workers}
+
+[logging]
+level = {log_level}
+""";
 }
 
-// --- config.parse / config.stringify (format conversion) ---
+io.println("  Development template:");
+io.println(make_server_config("localhost"));
 
-fn demo_config_convert() {
-  io.println("=== Format Conversion (INI → JSON) ===");
-  let ini_text = "[logging]\nlevel = info\nfile = /var/log/app.log\n\n[cache]\nttl = 300\nenabled = true";
+io.println("  Production template:");
+io.println(make_server_config("0.0.0.0", 443, 16, "warn"));
 
-  // Parse as INI
-  let data = config.parse(ini_text, "ini");
-  io.println($"  parsed.logging.level  = {data.logging.level}");
+// --- 6. INI to JSON format conversion ---
 
-  // info
-  io.println($"  parsed.cache.ttl      = {data.cache.ttl}");
+io.println("=== 6. Format Conversion: INI to JSON ===");
 
-  // 300
-  // Serialize as JSON
-  let json_out = config.stringify(data, "json");
-  io.println("  As JSON:");
-  io.println($"    {json_out}");
+let cache_ini = "[cache]\nttl = 300\nenabled = true\nmax_size = 1000\n\n[database]\nhost = db.internal\nport = 5432\npool = 10";
+let data = ini.parse(cache_ini);
 
-  // Round-trip: JSON → pretty JSON
-  let pretty = json.pretty(data);
-  io.println("  Pretty JSON (first 3 lines):");
-  let lines = str.split(pretty, "\n");
-  io.println($"    {lines[0]}");
-  io.println($"    {lines[1]}");
-  io.println($"    {lines[2]}");
-  io.println("");
+let pretty = json.pretty(data);
+io.println("  INI converted to pretty JSON:");
+for (let line in str.split(pretty, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
 }
+io.println("");
 
-// --- config.read / config.write (file I/O) ---
-
-fn demo_config_file_io() {
-  io.println("=== File I/O (config.read / config.write) ===");
-  let tmp_ini = "/tmp/stash_demo_config.ini";
-  let tmp_json = "/tmp/stash_demo_config.json";
-
-  // Write an INI file
-  let ini_content = "[service]\nname = demo\nport = 9000\nenabled = true";
-  let parsed = ini.parse(ini_content);
-  config.write(tmp_ini, parsed);
-  io.println($"  Wrote INI  → {tmp_ini}");
-
-  // Read it back
-  let loaded = config.read(tmp_ini);
-  io.println($"  Read back: service.name = {loaded.service.name}, port = {loaded.service.port}");
-
-  // Modify and write as JSON (format detected from extension)
-  loaded.service.port = "9001";
-  config.write(tmp_json, loaded);
-  io.println($"  Wrote JSON → {tmp_json}");
-
-  // Read JSON back and verify
-  let from_json = config.read(tmp_json);
-  io.println($"  Read JSON: service.port = {from_json.service.port}");
-  io.println("");
-}
-
-// --- json.parse with nested dot access ---
-
-fn demo_json_parse() {
-  io.println("=== JSON Parsing & Dot Access ===");
-  let text = "{\"app\":{\"name\":\"Stash\",\"version\":\"1.0\"},\"features\":{\"lsp\":true,\"debugger\":true}}";
-  let obj = json.parse(text);
-  io.println($"  obj.app.name          = {obj.app.name}");
-
-  // Stash
-  io.println($"  obj.app.version       = {obj.app.version}");
-
-  // 1.0
-  io.println($"  obj.features.lsp      = {obj.features.lsp}");
-
-  // true
-  io.println($"  obj.features.debugger = {obj.features.debugger}");
-
-  // true
-  // Modify and re-serialize
-  obj.app.version = "2.0";
-  io.println($"  updated:  {json.stringify(obj.app)}");
-  io.println("");
-}
-
-// --- Run all demos ---
-
-demo_dot_access();
-demo_ini_parse();
-demo_ini_stringify();
-demo_config_convert();
-demo_config_file_io();
-demo_json_parse();
+// Optional chaining on parsed INI sections
+let db_section = data?.database;
+let db_host    = db_section?.host ?? "(missing)";
+let db_port    = db_section?.port ?? "(missing)";
+let db_tls     = data?.database?.tls?.enabled ?? false;
+io.println($"  db.host      = {db_host}");
+io.println($"  db.port      = {db_port}");
+io.println($"  db.tls       = {db_tls}  (optional, defaulted)");
+io.println("");

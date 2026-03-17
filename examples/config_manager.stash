@@ -1,97 +1,205 @@
 #!/usr/bin/env stash
 
-// Configuration manager
-// Reads settings from environment variables with typed defaults
+// Application Configuration Manager
+// A typed, environment-based config loader with struct methods and validation.
+
+io.println("=" * 54);
+io.println("  Application Configuration Manager");
+io.println("=" * 54);
+io.println("");
+
+// --- Enums ---
+
+enum LogLevel { Debug, Info, Warn, Error, Silent }
+enum AppEnv   { Development, Staging, Production }
+
+// --- Constants ---
+
+const DEFAULT_PORT    = 8080;
+const DEFAULT_TIMEOUT = 30;
+const DEFAULT_RETRIES = 3;
+
+// --- Config struct with validation and display methods ---
 
 struct Config {
     app_name,
+    app_env,
     port,
-    debug,
+    log_level,
+    db_url,
     max_retries,
-    timeout
-}
+    timeout,
+    debug
 
-fn env_or(name: string, fallback: string) -> string{
-    return env.get(name) ?? fallback;
-}
-
-fn env_int(name: string, fallback: int) -> int {
-    let raw: string = env.get(name);
-    if (raw == null) {
-        return fallback;
+    fn validate() {
+        let errors = [];
+        if (self.app_name == null || self.app_name == "") {
+            arr.push(errors, "APP_NAME is required");
+        }
+        if (self.port < 1 || self.port > 65535) {
+            arr.push(errors, $"PORT {self.port} is out of range (1-65535)");
+        }
+        if (self.max_retries < 0 || self.max_retries > 10) {
+            arr.push(errors, $"MAX_RETRIES {self.max_retries} must be 0-10");
+        }
+        if (self.db_url == null && self.app_env == AppEnv.Production) {
+            arr.push(errors, "DATABASE_URL is required in production");
+        }
+        return errors;
     }
-    let parsed: int = try conv.toInt(raw);
+
+    fn display() {
+        let env_label = self.app_env switch {
+            AppEnv.Development => "development",
+            AppEnv.Staging     => "staging",
+            AppEnv.Production  => "production",
+            _                  => "unknown"
+        };
+        let level_label = self.log_level switch {
+            LogLevel.Debug  => "debug",
+            LogLevel.Info   => "info",
+            LogLevel.Warn   => "warn",
+            LogLevel.Error  => "error",
+            LogLevel.Silent => "silent",
+            _               => "info"
+        };
+        io.println($"  app_name    = {self.app_name}");
+        io.println($"  environment = {env_label}");
+        io.println($"  port        = {self.port}");
+        io.println($"  log_level   = {level_label}");
+        io.println($"  db_url      = {self.db_url ?? "(not set)"}");
+        io.println($"  max_retries = {self.max_retries}");
+        io.println($"  timeout     = {self.timeout}s");
+        io.println($"  debug       = {self.debug}");
+    }
+}
+
+// --- Helpers ---
+
+fn parse_log_level(raw: string) {
+    return str.lower(raw ?? "") switch {
+        "debug"  => LogLevel.Debug,
+        "info"   => LogLevel.Info,
+        "warn"   => LogLevel.Warn,
+        "error"  => LogLevel.Error,
+        "silent" => LogLevel.Silent,
+        _        => LogLevel.Info
+    };
+}
+
+fn parse_env(raw: string) {
+    return str.lower(raw ?? "development") switch {
+        "production" => AppEnv.Production,
+        "staging"    => AppEnv.Staging,
+        _            => AppEnv.Development
+    };
+}
+
+fn env_int(key: string, fallback: int = 0) {
+    let raw = env.get(key);
+    if (raw == null) { return fallback; }
+    let parsed = try conv.toInt(raw);
     if (parsed == null) {
-        io.println($"Warning: {name}='{raw}' is not a valid integer, using default {fallback}");
+        io.println($"  Warning: {key}='{raw}' is not a valid integer, using {fallback}");
         return fallback;
     }
     return parsed;
 }
 
-fn env_bool(name: string, fallback: bool) -> bool {
-    let raw: string = env.get(name);
-    if (raw == null) {
-        return fallback;
-    }
-    return raw == "true" || raw == "1" || raw == "yes";
+fn env_bool(key: string, fallback: bool = false) {
+    let raw = env.get(key);
+    return raw != null ? (raw == "true" || raw == "1" || raw == "yes") : fallback;
 }
 
-fn env_float(name: string, fallback: float) -> float {
-    let raw: string = env.get(name);
-    if (raw == null) {
-        return fallback;
-    }
-    let parsed: float = try conv.toFloat(raw);
-    return parsed ?? fallback;
-}
+// --- Load config from environment variables ---
 
-fn load_config() -> Config {
+fn load_config() {
+    let name = env.get("APP_NAME");
+    name ??= "stash-app";
     return Config {
-        app_name: env_or("APP_NAME", "stash-app"),
-        port: env_int("APP_PORT", 8080),
-        debug: env_bool("APP_DEBUG", false),
-        max_retries: env_int("APP_MAX_RETRIES", 3),
-        timeout: env_float("APP_TIMEOUT", 30.0)
+        app_name:    name,
+        app_env:     parse_env(env.get("APP_ENV")),
+        port:        env_int("APP_PORT", DEFAULT_PORT),
+        log_level:   parse_log_level(env.get("LOG_LEVEL")),
+        db_url:      env.get("DATABASE_URL"),
+        max_retries: env_int("APP_MAX_RETRIES", DEFAULT_RETRIES),
+        timeout:     env_int("APP_TIMEOUT", DEFAULT_TIMEOUT),
+        debug:       env_bool("APP_DEBUG", false)
     };
 }
 
-fn print_config(config: Config) {
-    io.println("=== Application Configuration ===");
-    io.println($"  App Name:    {config.app_name}");
-    io.println($"  Port:        {config.port}");
-    io.println($"  Debug:       {config.debug}");
-    io.println($"  Max Retries: {config.max_retries}");
-    io.println($"  Timeout:     {config.timeout}s");
-    io.println("");
+fn print_errors(errors) {
+    if (len(errors) == 0) {
+        io.println("  Config is valid.");
+    } else {
+        for (let e in errors) {
+            io.println($"  ERROR: {e}");
+        }
+    }
 }
 
-fn describe_value(value: any) -> string {
-    let type: string = typeof(value);
-    let str: string = conv.toStr(value);
-    return $"{str} ({type})";
-}
+// --- 1. Load with defaults ---
 
-// --- Main ---
-
-// Show defaults
-io.println("Loading configuration from environment...");
+io.println("=== 1. Loading with Defaults ===");
+let config = load_config();
+config.display();
 io.println("");
 
-let config: Config = load_config();
-print_config(config);
+// --- 2. Validate (default env — no DATABASE_URL needed) ---
 
-// Demonstrate environment variable manipulation
-io.println("Setting APP_PORT=3000 and APP_DEBUG=true...");
-env.set("APP_PORT", "3000");
-env.set("APP_DEBUG", "true");
+io.println("=== 2. Validation (development — defaults) ===");
+print_errors(config.validate());
+io.println("");
 
-let updated: Config = load_config();
-print_config(updated);
+// --- 3. Override via env vars and reload ---
 
-// Show type information
-io.println("=== Type Inspection ===");
-io.println($"  app_name:    {describe_value(updated.app_name)}");
-io.println($"  port:        {describe_value(updated.port)}");
-io.println($"  debug:       {describe_value(updated.debug)}");
-io.println($"  max_retries: {describe_value(updated.max_retries)}");
-io.println($"  timeout:     {describe_value(updated.timeout)}");
+io.println("=== 3. Override via Environment Variables ===");
+env.set("APP_NAME",        "my-api");
+env.set("APP_PORT",        "3000");
+env.set("APP_ENV",         "production");
+env.set("LOG_LEVEL",       "warn");
+env.set("APP_DEBUG",       "false");
+env.set("APP_MAX_RETRIES", "5");
+
+let prod_config = load_config();
+prod_config.display();
+io.println("");
+
+// --- 4. Validate production config (DATABASE_URL missing) ---
+
+io.println("=== 4. Validation (production — DATABASE_URL missing) ===");
+print_errors(prod_config.validate());
+io.println("");
+
+// --- 5. Fix and revalidate ---
+
+env.set("DATABASE_URL", "postgres://user:pass@db.prod:5432/myapp");
+let final_config = load_config();
+
+io.println("=== 5. Revalidation (after setting DATABASE_URL) ===");
+print_errors(final_config.validate());
+io.println("");
+
+// --- 6. Destructuring config values ---
+
+io.println("=== 6. Destructuring Config Snapshot ===");
+
+let snapshot = dict.new();
+snapshot["app_name"]    = final_config.app_name;
+snapshot["port"]        = final_config.port;
+snapshot["max_retries"] = final_config.max_retries;
+snapshot["timeout"]     = final_config.timeout;
+
+let { app_name, port, max_retries, timeout } = snapshot;
+io.println($"  app_name={app_name}, port={port}, retries={max_retries}, timeout={timeout}s");
+io.println("");
+
+// --- 7. Inspect relevant env vars ---
+
+io.println("=== 7. Active Environment Variables ===");
+let all_env = env.all();
+for (let k, v in all_env) {
+    if (str.startsWith(k, "APP_") || str.startsWith(k, "LOG_") || k == "DATABASE_URL") {
+        io.println($"  {k} = {v}");
+    }
+}

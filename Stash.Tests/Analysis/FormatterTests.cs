@@ -301,14 +301,14 @@ public class FormatterTests
         Assert.Contains("import \"lib/utils.stash\" as utils;", formatted);
         // Enum formatted with members on separate lines
         Assert.Contains("enum DeployResult {\n  Success,\n  Failed,\n  Skipped\n}", formatted);
-        // Struct formatted with fields on separate lines
-        Assert.Contains("struct Target {\n  host: string,\n  user: string,\n  path: string\n}", formatted);
-        // Function with return type
-        Assert.Contains("fn check_host(host: string) -> bool {", formatted);
+        // Struct formatted with fields on separate lines (no type annotations)
+        Assert.Contains("struct Target {\n  host,\n  user,\n  role,\n  env", formatted);
+        // Function without return type annotation
+        Assert.Contains("fn check_host(host: string) {", formatted);
         // Uses 2-space indent
         Assert.Contains("  let result", formatted);
-        // If-else formatting
-        Assert.Contains("} else if", formatted);
+        // Another function present in the file
+        Assert.Contains("fn deploy_to(target, package: string) {", formatted);
     }
 
     [Fact]

@@ -1,104 +1,206 @@
 #!/usr/bin/env stash
 
-// Calculator and type system demo
-// Shows off arithmetic, type coercion, and error handling
+// examples/calculator.stash
+// Unit converter and type system explorer
 
-fn divmod(a: int, b: int) -> int {
-    if (b == 0) {
-        io.println("  Error: division by zero");
-        return null;
-    }
-    let quotient: int = a / b;
-    let remainder: int = a % b;
-    io.println($"  {a} / {b} = {quotient} remainder {remainder}");
-    return quotient;
+io.println("=" * 50);
+io.println("  Unit Converter + Type System Explorer");
+io.println("=" * 50);
+
+// ─── Type System ─────────────────────────────────────────────────────────────
+
+io.println("\n-- All Types --");
+
+enum Direction { North, South, East, West }
+struct Point { x, y }
+fn identity(v) { return v; }
+
+let type_samples = [
+    42, 3.14, "hello", true, null,
+    [1, 2, 3], dict.new(), 1..5,
+    Point { x: 0, y: 0 }, Direction.North, identity
+];
+let type_labels = [
+    "42", "3.14", "\"hello\"", "true", "null",
+    "[1,2,3]", "dict.new()", "1..5",
+    "Point{..}", "Direction.North", "identity"
+];
+for (let i, val in type_samples) {
+    io.println($"  {str.padEnd(type_labels[i], 18)} typeof → {typeof(val)}");
 }
 
-fn show_type_promotion() {
-    io.println("=== Type Promotion ===");
+// ─── Arithmetic & Type Promotion ─────────────────────────────────────────────
 
-    let int_val: int = 10;
-    let float_val: float = 3.14;
+io.println("\n-- Arithmetic & Type Promotion --");
 
-    io.println($"  int + int:     {5 + 3} ({typeof(5 + 3)})");
-    io.println($"  int + float:   {int_val + float_val} ({typeof(int_val + float_val)})");
-    io.println($"  int * float:   {int_val * float_val} ({typeof(int_val * float_val)})");
-    io.println($"  int / int:     {10 / 3} ({typeof(10 / 3)})");
-    io.println($"  float / int:   {float_val / 2} ({typeof(float_val / 2)})");
-    io.println("");
+let a: int   = 10;
+let b: float = 3.0;
+io.println($"  int + int:    {5 + 3}         → {typeof(5 + 3)}");
+io.println($"  int + float:  {a + b}        → {typeof(a + b)}");
+io.println($"  int / int:    {10 / 3}         → {typeof(10 / 3)}  (integer division)");
+io.println($"  int % int:    {10 % 3}         → {typeof(10 % 3)}");
+io.println($"  math.pow(2,10): {conv.toInt(math.pow(2, 10))}    → {typeof(math.pow(2, 10))}");
+io.println($"  math.sqrt(2):  {math.sqrt(2)}  → {typeof(math.sqrt(2))}");
+
+let x = 5;
+io.println($"  x=5, x++ → {x++}  (x now {x})");
+io.println($"  x={x}, ++x → {++x}  (x now {x})");
+io.println($"  x={x}, x-- → {x--}  (x now {x})");
+
+// ─── Truthiness ──────────────────────────────────────────────────────────────
+
+io.println("\n-- Truthiness --");
+
+let falsy_vals   = [false, null, 0, 0.0, ""];
+let falsy_labels = ["false", "null", "0", "0.0", "\"\""];
+io.print("  Falsy: ");
+io.println(arr.join(falsy_labels, ", "));
+io.println("  Truthy: everything else — including [], {}, and non-zero numbers");
+io.println($"  empty array is {[] ? "truthy" : "falsy"}");
+
+// ─── Strict Equality ─────────────────────────────────────────────────────────
+
+io.println("\n-- Strict Equality (no coercion) --");
+
+io.println($"  5 == 5       → {5 == 5}");
+io.println($"  5 == 5.0     → {5 == 5.0}");
+io.println($"  5 == \"5\"     → {5 == "5"}");
+io.println($"  0 == false   → {0 == false}");
+io.println($"  0 == null    → {0 == null}");
+io.println($"  \"\" == null   → {"" == null}");
+io.println($"  null == null → {null == null}");
+
+// ─── Error Handling ──────────────────────────────────────────────────────────
+
+io.println("\n-- Error Handling (try + lastError + ??) --");
+
+let parsed = try conv.toInt("not_a_number");
+if (parsed == null) {
+    io.println($"  conv.toInt(\"not_a_number\") → null  (error: {lastError()})");
 }
 
-fn show_conversions() {
-    io.println("=== Type Conversions ===");
+let hex_bytes = try conv.fromHex("1FA3");
+io.println($"  conv.fromHex(\"1FA3\") → {hex_bytes ?? "parse failed"}");
 
-    // Successful conversions
-    let str_num: string = "42";
-    let parsed: int = conv.toInt(str_num);
-    io.println($"  conv.toInt(\"42\")    = {parsed} ({typeof(parsed)})");
+// try + ?? for safe default
+let cfg_port = try conv.toInt("") ?? 8080;
+io.println($"  port config (bad input ?? 8080) → {cfg_port}");
 
-    let float_str: string = "3.14";
-    let parsed_f: float = conv.toFloat(float_str);
-    io.println($"  conv.toFloat(\"3.14\") = {parsed_f} ({typeof(parsed_f)})");
+// ─── Conv Namespace ───────────────────────────────────────────────────────────
 
-    let num: int = 255;
-    let as_str: string = conv.toStr(num);
-    io.println($"  conv.toStr(255)     = \"{as_str}\" ({typeof(as_str)})");
+io.println("\n-- Conv --");
 
-    // Failed conversion with error handling
-    let bad: int = try conv.toInt("hello");
-    let err: string = lastError();
-    io.println($"  conv.toInt(\"hello\") = {bad} (error: {err})");
-    io.println("");
+io.println($"  conv.toHex(255):         \"{conv.toHex(255)}\"");
+io.println($"  conv.fromHex(\"ff\"):       {conv.fromHex("ff")}");
+io.println($"  conv.charCode(\"A\"):       {conv.charCode("A")}");
+io.println($"  conv.fromCharCode(9829):  {conv.fromCharCode(9829)}");
+io.println($"  conv.toBool(0):           {conv.toBool(0)}");
+io.println($"  conv.toBool(\"yes\"):       {conv.toBool("yes")}");
+io.println($"  conv.toStr(3.14):         \"{conv.toStr(3.14)}\"");
+
+// ─── Unit Converter ──────────────────────────────────────────────────────────
+
+io.println("\n-- Unit Converter --");
+
+fn to_meters(value: float, unit: string) {
+    return unit switch {
+        "km" => value * 1000.0,
+        "m"  => value,
+        "cm" => value / 100.0,
+        "mm" => value / 1000.0,
+        "mi" => value * 1609.344,
+        "ft" => value * 0.3048,
+        "in" => value * 0.0254,
+        _    => null
+    };
 }
 
-fn show_truthiness() {
-    io.println("=== Truthiness ===");
-
-    let values: array = [0, 1, -1, 0.0, 3.14, "", "hello", true, false, null];
-    let labels: array = ["0", "1", "-1", "0.0", "3.14", "\"\"", "\"hello\"", "true", "false", "null"];
-
-    let i: int = 0;
-    while (i < len(values)) {
-        let truthy: string = values[i] ? "truthy" : "falsy";
-        io.println($"  {labels[i]} → {truthy}");
-        i++;
-    }
-    io.println("");
+fn from_meters(meters: float, unit: string) {
+    return unit switch {
+        "km" => meters / 1000.0,
+        "m"  => meters,
+        "cm" => meters * 100.0,
+        "mm" => meters * 1000.0,
+        "mi" => meters / 1609.344,
+        "ft" => meters / 0.3048,
+        "in" => meters / 0.0254,
+        _    => null
+    };
 }
 
-fn show_equality() {
-    io.println("=== Strict Equality (no coercion) ===");
-    io.println($"  5 == 5       → {5 == 5}");
-    io.println($"  5 == 5.0     → {5 == 5.0}");
-    io.println($"  5 == \"5\"     → {5 == "5"}");
-    io.println($"  0 == false   → {0 == false}");
-    io.println($"  0 == null    → {0 == null}");
-    io.println($"  null == null → {null == null}");
-    io.println($"  \"\" == false  → {"" == false}");
-    io.println("");
+fn convert_length(value: float, src: string, to: string) {
+    let m = to_meters(value, src);
+    if (m == null) { return null; }
+    return from_meters(m, to);
 }
 
-fn show_increment_decrement() {
-    io.println("=== Increment / Decrement ===");
-
-    let x = 5;
-    io.println($"  let x = {x}");
-    io.println($"  x++ → {x++} (x is now {x})");
-    io.println($"  ++x → {++x} (x is now {x})");
-    io.println($"  x-- → {x--} (x is now {x})");
-    io.println($"  --x → {--x} (x is now {x})");
-    io.println("");
+fn to_celsius(value: float, unit: string) {
+    return unit switch {
+        "C" => value,
+        "F" => (value - 32.0) * 5.0 / 9.0,
+        "K" => value - 273.15,
+        _   => null
+    };
 }
 
-// --- Main ---
+fn convert_temp(value: float, src: string, to: string) {
+    let c = to_celsius(value, src);
+    if (c == null) { return null; }
+    return to switch {
+        "C" => c,
+        "F" => c * 9.0 / 5.0 + 32.0,
+        "K" => c + 273.15,
+        _   => null
+    };
+}
 
-show_type_promotion();
-show_conversions();
-show_truthiness();
-show_equality();
-show_increment_decrement();
+fn fmt(n: float) {
+    return conv.toStr(math.floor(n * 100) / 100.0);
+}
 
-io.println("=== Division & Modulo ===");
-divmod(17, 5);
-divmod(100, 7);
-divmod(10, 0);
+io.println("  Length:");
+let length_tests = [
+    [1.0, "km", "m"],  [1.0, "mi", "km"],
+    [12.0, "in", "cm"], [5280.0, "ft", "mi"]
+];
+for (let row in length_tests) {
+    let [val, src, to] = row;
+    io.println($"    {val} {str.padEnd(src, 3)} = {fmt(convert_length(val, src, to))} {to}");
+}
+
+io.println("  Temperature:");
+let temp_tests = [
+    [100.0, "C", "F"], [32.0, "F", "C"],
+    [0.0,   "C", "K"], [373.15, "K", "C"]
+];
+for (let row in temp_tests) {
+    let [val, src, to] = row;
+    io.println($"    {val}°{src} = {fmt(convert_temp(val, src, to))}°{to}");
+}
+
+// ─── Ternary, Null-Coalescing, ??= ───────────────────────────────────────────
+
+io.println("\n-- Ternary & Null-Coalescing --");
+
+let score = 73;
+let grade = score >= 90 ? "A" : (score >= 75 ? "B" : (score >= 60 ? "C" : "F"));
+io.println($"  score {score} → grade {grade}");
+
+let user_pref = null;
+let theme = user_pref ?? "dark";
+io.println($"  user_pref ?? \"dark\" → \"{theme}\"");
+
+let timeout = null;
+timeout ??= 30;
+io.println($"  timeout ??= 30 → {timeout}");
+
+// ─── Do-While ────────────────────────────────────────────────────────────────
+
+io.println("\n-- Do-While (countdown) --");
+
+let count = 5;
+do {
+    io.println($"  T-minus {count}...");
+    count--;
+} while (count > 0);
+io.println("  Liftoff!");

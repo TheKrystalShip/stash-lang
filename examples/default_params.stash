@@ -1,84 +1,217 @@
 #!/usr/bin/env stash
 
-// Default Parameter Values
-// Demonstrates default values for function and lambda parameters.
+// HTTP Client Builder
+// Fluent request builder showcasing default parameter values, closures, and structs.
 
-// --- Basic default values ---
+io.println("=" * 54);
+io.println("  HTTP Client Builder");
+io.println("=" * 54);
+io.println("");
 
-fn greet(name, greeting = "Hello") {
-    io.println(greeting + ", " + name + "!");
-}
+// --- Request struct with fluent builder methods ---
 
-greet("Alice");            // "Hello, Alice!"
-greet("Bob", "Hey");       // "Hey, Bob!"
+struct Request {
+    method,
+    base_url,
+    path,
+    headers,
+    params,
+    body,
+    timeout,
+    middlewares
 
-// --- With type annotations ---
+    fn with_header(name, value) {
+        dict.set(self.headers, name, value);
+        return self;
+    }
 
-fn connect(host: string, port: int = 8080, secure: bool = false) {
-    let protocol = secure ? "https" : "http";
-    io.println(protocol + "://" + host + ":" + conv.toStr(port));
-}
+    fn with_param(name, value) {
+        dict.set(self.params, name, conv.toStr(value));
+        return self;
+    }
 
-connect("localhost");                   // http://localhost:8080
-connect("example.com", 443);            // http://example.com:443
-connect("example.com", 443, true);      // https://example.com:443
+    fn with_body(data) {
+        self.body = data;
+        return self;
+    }
 
-// --- Multiple defaults ---
+    fn with_timeout(ms: int) {
+        self.timeout = ms;
+        return self;
+    }
 
-fn createUser(name, role = "viewer", active = true) {
-    io.println("User: " + name + " | Role: " + role + " | Active: " + conv.toStr(active));
-}
+    fn use(middleware) {
+        arr.push(self.middlewares, middleware);
+        return self;
+    }
 
-createUser("Alice");                     // viewer, true
-createUser("Bob", "admin");              // admin, true
-createUser("Charlie", "editor", false);  // editor, false
+    fn build() {
+        let pairs = dict.pairs(self.params);
+        let qs = "";
+        if (len(pairs) > 0) {
+            let parts = arr.map(pairs, (p) => $"{p.key}={p.value}");
+            qs = "?" + arr.join(parts, "&");
+        }
+        let url = self.base_url + self.path + qs;
+        let ctx = dict.new();
+        ctx["method"]  = self.method;
+        ctx["url"]     = url;
+        ctx["headers"] = self.headers;
+        ctx["body"]    = self.body;
+        ctx["timeout"] = self.timeout;
+        for (let mw in self.middlewares) {
+            mw(ctx);
+        }
+        return ctx;
+    }
 
-// --- Defaults with expressions (evaluated at call time) ---
-
-let defaultTimeout = 30;
-
-fn request(url, timeout = defaultTimeout) {
-    io.println("GET " + url + " (timeout: " + conv.toStr(timeout) + "s)");
-}
-
-request("/api/users");           // timeout: 30s
-defaultTimeout = 60;
-request("/api/users");           // timeout: 60s (re-evaluated!)
-request("/api/users", 5);        // timeout: 5s (overridden)
-
-// --- Lambda defaults ---
-
-let multiply = (x, factor = 2) => x * factor;
-io.println(conv.toStr(multiply(5)));       // 10
-io.println(conv.toStr(multiply(5, 3)));    // 15
-
-let formatName = (first, last, separator = " ") => first + separator + last;
-io.println(formatName("John", "Doe"));          // "John Doe"
-io.println(formatName("John", "Doe", ", "));     // "John, Doe"
-
-// --- Practical example: logging utility ---
-
-fn log(message, level = "INFO", timestamp = true) {
-    let prefix = timestamp ? "[" + level + "] " : "";
-    io.println(prefix + message);
-}
-
-log("Server started");                        // [INFO] Server started
-log("Connection refused", "ERROR");            // [ERROR] Connection refused
-log("raw output", "DEBUG", false);             // raw output
-
-// --- With higher-order functions ---
-
-fn repeat(action, times = 3) {
-    let i = 0;
-    while (i < times) {
-        action(i);
-        i++;
+    fn describe() {
+        let req = self.build();
+        let method_label = self.method switch {
+            "GET"    => "GET   ",
+            "POST"   => "POST  ",
+            "PUT"    => "PUT   ",
+            "DELETE" => "DELETE",
+            _        => self.method
+        };
+        io.println($"  {method_label} {req["url"]}");
+        io.println($"  timeout: {self.timeout}ms");
+        if (dict.size(self.headers) > 0) {
+            io.println("  headers:");
+            for (let k, v in self.headers) {
+                io.println($"    {k}: {v}");
+            }
+        }
+        if (self.body != null) {
+            io.println($"  body: {self.body}");
+        }
+        io.println("");
     }
 }
 
-repeat((i) => io.println("  Step " + conv.toStr(i + 1)));
-// Step 1, Step 2, Step 3
+// --- Factory function with default parameters ---
 
-repeat((i) => io.println("  Round " + conv.toStr(i + 1)), 2);
-// Round 1, Round 2
+fn new_request(method: string = "GET", base_url: string = "http://localhost:8080", path: string = "/") {
+    return Request {
+        method:      method,
+        base_url:    base_url,
+        path:        path,
+        headers:     dict.new(),
+        params:      dict.new(),
+        body:        null,
+        timeout:     5000,
+        middlewares: []
+    };
+}
+
+// --- Auth middleware closures ---
+
+fn bearer_auth(token: string) {
+    return (ctx) => {
+        dict.set(ctx["headers"], "Authorization", $"Bearer {token}");
+    };
+}
+
+fn basic_auth(user: string, pass: string) {
+    let credentials = user + ":" + pass;
+    return (ctx) => {
+        dict.set(ctx["headers"], "Authorization", $"Basic {credentials}");
+    };
+}
+
+// --- 1. Simple GET with default base URL ---
+
+io.println("=== 1. Simple GET (default base URL) ===");
+new_request()
+    .with_header("Accept", "application/json")
+    .with_param("page", 1)
+    .with_param("limit", 20)
+    .describe();
+
+// --- 2. Authenticated GET with custom base URL ---
+
+io.println("=== 2. Authenticated GET ===");
+new_request("GET", "https://api.example.com", "/users")
+    .with_header("Accept", "application/json")
+    .with_param("active", "true")
+    .with_timeout(3000)
+    .use(bearer_auth("my-secret-token"))
+    .describe();
+
+// --- 3. POST with JSON body ---
+
+io.println("=== 3. POST with JSON Body ===");
+let user_data = dict.new();
+user_data["name"]  = "Alice";
+user_data["email"] = "alice@example.com";
+user_data["role"]  = "admin";
+
+new_request("POST", "https://api.example.com", "/users")
+    .with_header("Content-Type", "application/json")
+    .with_header("Accept",       "application/json")
+    .with_body(json.stringify(user_data))
+    .with_timeout(10000)
+    .use(bearer_auth("my-secret-token"))
+    .describe();
+
+// --- 4. Reusable api_get helper with default params ---
+
+fn api_get(path: string, token: string = "", timeout: int = 5000, page: int = 1) {
+    let req = new_request("GET", "https://api.example.com", path)
+        .with_param("page", page)
+        .with_param("per_page", 25)
+        .with_header("Accept", "application/json")
+        .with_timeout(timeout);
+    if (token != "") {
+        req.use(bearer_auth(token));
+    }
+    return req;
+}
+
+io.println("=== 4. api_get() with Default Params ===");
+api_get("/posts").describe();
+api_get("/posts", "tok-abc").describe();
+api_get("/posts", "tok-abc", 2000, 3).describe();
+
+// --- 5. Lambda defaults for URL building helpers ---
+
+io.println("=== 5. Lambda Defaults ===");
+
+let make_url = (path, base = "https://api.example.com", version = "v1") =>
+    $"{base}/{version}{path}";
+
+io.println($"  {make_url("/users")}");
+io.println($"  {make_url("/orders", "https://orders.example.com")}");
+io.println($"  {make_url("/reports", "https://bi.example.com", "v2")}");
+io.println("");
+
+let encode_param = (key, value, sep = "=") => key + sep + conv.toStr(value);
+
+let params = [["q", "stash lang"], ["limit", 10], ["page", 2]];
+let qs = arr.join(arr.map(params, (p) => encode_param(p[0], p[1])), "&");
+io.println($"  Query string: ?{qs}");
+io.println("");
+
+// --- 6. Middleware chain with multiple interceptors ---
+
+io.println("=== 6. Middleware Chain ===");
+
+let add_request_id = (ctx) => {
+    dict.set(ctx["headers"], "X-Request-ID", conv.toStr(math.randomInt(100000, 999999)));
+};
+
+let add_user_agent = (ctx) => {
+    dict.set(ctx["headers"], "User-Agent", "stash-http/1.0");
+};
+
+let log_request = (ctx) => {
+    io.println($"    [log] {ctx["method"]} {ctx["url"]}");
+};
+
+new_request("DELETE", "https://api.example.com", "/users/42")
+    .with_timeout(8000)
+    .use(bearer_auth("admin-token"))
+    .use(add_request_id)
+    .use(add_user_agent)
+    .use(log_request)
+    .describe();

@@ -1,127 +1,134 @@
 #!/usr/bin/env stash
 
-// ──────────────────────────────────────────────────────────────
-//  Output Redirection — Showcase
-//
-//  Demonstrates all redirection operators:
-//    >    write stdout to file (overwrite)
-//    >>   append stdout to file
-//    2>   write stderr to file (overwrite)
-//    2>>  append stderr to file
-//    &>   write stdout+stderr to file (overwrite)
-//    &>>  append stdout+stderr to file
-// ──────────────────────────────────────────────────────────────
+// Output Redirection — Shell I/O Management
+// Demonstrates all redirection operators for managing command output
 
-let tmpDir = "/tmp/stash-redirect-demo";
+let tmp = "/tmp/stash-redirect-demo";
+$(mkdir -p {tmp});
 
-// Create a clean working directory
-$(mkdir -p {tmpDir});
-
-// ── 1. Basic stdout redirection (>) ──────────────────────────
-
-io.println("1. Writing directory listing to file...");
-$(ls -la /tmp) > "${tmpDir}/listing.txt";
-
-let content = fs.readFile("${tmpDir}/listing.txt");
-io.println("   Wrote " + conv.toStr(len(content)) + " bytes to listing.txt");
-
-// ── 2. Append stdout (>>) ────────────────────────────────────
-
-io.println("2. Appending to a log file...");
-$(echo "=== Log Entry 1 ===") > "${tmpDir}/app.log";
-$(echo "Started at $(date +%H:%M:%S)") >> "${tmpDir}/app.log";
-$(echo "=== Log Entry 2 ===") >> "${tmpDir}/app.log";
-$(echo "Still running") >> "${tmpDir}/app.log";
-
-let logContent = fs.readFile("${tmpDir}/app.log");
-io.println("   Log file contents:");
-for (let line in logContent) {
-    // iterate characters, but we want lines — use command instead
-}
-let logResult = $(cat {tmpDir}/app.log);
-io.println(logResult.stdout);
-
-// ── 3. Stderr redirection (2>) ───────────────────────────────
-
-io.println("3. Capturing stderr to a file...");
-$(ls /nonexistent/path/that/does/not/exist 2>&1) 2> "${tmpDir}/errors.txt";
-
-if (fs.exists("${tmpDir}/errors.txt")) {
-    let errContent = fs.readFile("${tmpDir}/errors.txt");
-    io.println("   Captured stderr (" + conv.toStr(len(errContent)) + " bytes)");
-}
-
-// ── 4. Stderr append (2>>) ───────────────────────────────────
-
-io.println("4. Appending stderr entries...");
-$(ls /no/such/dir1) 2> "${tmpDir}/all_errors.txt";
-$(ls /no/such/dir2) 2>> "${tmpDir}/all_errors.txt";
-
-if (fs.exists("${tmpDir}/all_errors.txt")) {
-    let allErrors = fs.readFile("${tmpDir}/all_errors.txt");
-    io.println("   Accumulated error log: " + conv.toStr(len(allErrors)) + " bytes");
-}
-
-// ── 5. Combined stdout+stderr (&>) ──────────────────────────
-
-io.println("5. Redirecting both streams to one file...");
-$(echo "This is stdout" && echo "This is stderr" >&2) &> "${tmpDir}/combined.txt";
-
-if (fs.exists("${tmpDir}/combined.txt")) {
-    let combined = fs.readFile("${tmpDir}/combined.txt");
-    io.println("   Combined output: " + conv.toStr(len(combined)) + " bytes");
-}
-
-// ── 6. Combined append (&>>) ─────────────────────────────────
-
-io.println("6. Appending both streams...");
-$(echo "Round 1 output") &> "${tmpDir}/combined_append.txt";
-$(echo "Round 2 output") &>> "${tmpDir}/combined_append.txt";
-
-let combinedAppend = fs.readFile("${tmpDir}/combined_append.txt");
-io.println("   Combined append file:");
-io.println($(cat {tmpDir}/combined_append.txt).stdout);
-
-// ── 7. Pipe chain + redirection ──────────────────────────────
-
-io.println("7. Pipe chain with redirection...");
-$(printf "apple\nbanana\ncherry\napricot\navocado\n") | $(grep "^a") > "${tmpDir}/a_fruits.txt";
-
-let fruits = fs.readFile("${tmpDir}/a_fruits.txt");
-io.println("   Fruits starting with 'a':");
-io.println(fruits);
-
-// ── 8. Separate stdout and stderr redirects ──────────────────
-
-io.println("8. Stdout and stderr to separate files...");
-$(echo "success output" && echo "error output" >&2) > "${tmpDir}/stdout_only.txt" 2> "${tmpDir}/stderr_only.txt";
-
-io.println("   stdout file: " + fs.readFile("${tmpDir}/stdout_only.txt"));
-io.println("   stderr file: " + fs.readFile("${tmpDir}/stderr_only.txt"));
-
-// ── 9. Redirection with interpolated paths ───────────────────
-
-io.println("9. Dynamic file paths...");
-let logName = "dynamic";
-let ext = "log";
-$(echo "Dynamic path content") > "${tmpDir}/${logName}.${ext}";
-
-io.println("   Wrote to ${logName}.${ext}: " + fs.readFile("${tmpDir}/${logName}.${ext}"));
-
-// ── 10. exitCode preserved after redirection ─────────────────
-
-io.println("10. Exit code is preserved through redirection...");
-let result = $(echo "this works fine") > "${tmpDir}/exitcode_test.txt";
-io.println("    Exit code (success): " + conv.toStr(result.exitCode));
-io.println("    stdout (empty after redirect): '" + result.stdout + "'");
-
-let failResult = $(ls /definitely/not/here) 2> "${tmpDir}/fail_stderr.txt";
-io.println("    Exit code (failure): " + conv.toStr(failResult.exitCode));
-
-// ── Cleanup ──────────────────────────────────────────────────
-
+io.println("=" * 50);
+io.println("  Output Redirection Demo");
+io.println("=" * 50);
 io.println("");
-io.println("All redirection scenarios completed.");
-io.println("Output files are in: " + tmpDir);
-$(ls -la {tmpDir});
-io.println($(ls -la {tmpDir}).stdout);
+
+// ─── 1. Write stdout to file (>) ─────────────────────────────
+
+io.println("1. Write stdout to file (>)");
+$(echo "First line of output") > "${tmp}/output.txt";
+$(echo "This overwrites the first line") > "${tmp}/output.txt";
+let content = fs.readFile("${tmp}/output.txt");
+io.println($"   Content: {str.trim(content)}");
+io.println("");
+
+// ─── 2. Append stdout to file (>>) ──────────────────────────
+
+io.println("2. Append stdout to file (>>)");
+$(echo "Line 1: Application started") > "${tmp}/app.log";
+$(echo "Line 2: Listening on port 8080") >> "${tmp}/app.log";
+$(echo "Line 3: Ready for connections") >> "${tmp}/app.log";
+
+let log = fs.readFile("${tmp}/app.log");
+io.println("   Log contents:");
+for (let line in str.split(str.trim(log), "\n")) {
+    io.println($"     {line}");
+}
+io.println("");
+
+// ─── 3. Capture stderr (2>) ─────────────────────────────────
+
+io.println("3. Capture stderr to file (2>)");
+$(ls /nonexistent/path/xyz 2>&1) 2> "${tmp}/errors.txt";
+
+if (fs.exists("${tmp}/errors.txt")) {
+    let err_size = fs.size("${tmp}/errors.txt");
+    io.println($"   Captured {err_size} bytes of stderr");
+}
+io.println("");
+
+// ─── 4. Append stderr (2>>) ─────────────────────────────────
+
+io.println("4. Append stderr (2>>)");
+$(ls /no/such/dir1) 2> "${tmp}/all_errors.txt";
+$(ls /no/such/dir2) 2>> "${tmp}/all_errors.txt";
+
+if (fs.exists("${tmp}/all_errors.txt")) {
+    let err_content = fs.readFile("${tmp}/all_errors.txt");
+    let err_lines = arr.filter(str.split(err_content, "\n"), (l) => l != "");
+    io.println($"   Accumulated {len(err_lines)} error line(s)");
+}
+io.println("");
+
+// ─── 5. Combined stdout+stderr (&>) ─────────────────────────
+
+io.println("5. Both streams to one file (&>)");
+$(sh -c 'echo "stdout output" && echo "stderr output" >&2') &> "${tmp}/combined.txt";
+
+if (fs.exists("${tmp}/combined.txt")) {
+    let combined = str.trim(fs.readFile("${tmp}/combined.txt"));
+    io.println($"   Combined: {combined}");
+}
+io.println("");
+
+// ─── 6. Combined append (&>>) ────────────────────────────────
+
+io.println("6. Combined append (&>>)");
+$(echo "Round 1") &> "${tmp}/combined_log.txt";
+$(echo "Round 2") &>> "${tmp}/combined_log.txt";
+
+let cl = str.trim(fs.readFile("${tmp}/combined_log.txt"));
+for (let line in str.split(cl, "\n")) {
+    io.println($"   {line}");
+}
+io.println("");
+
+// ─── 7. Pipes with redirection ───────────────────────────────
+
+io.println("7. Pipe chain with redirection");
+$(printf "cherry\napple\nbanana\ndate\napricot\n") | $(sort) > "${tmp}/sorted.txt";
+
+let fruits = str.trim(fs.readFile("${tmp}/sorted.txt"));
+io.println($"   Sorted fruits: {str.replaceAll(fruits, "\n", ", ")}");
+io.println("");
+
+// ─── 8. Separate stdout and stderr ───────────────────────────
+
+io.println("8. Stdout and stderr to separate files");
+$(sh -c 'echo "success" && echo "failure" >&2') > "${tmp}/out.txt" 2> "${tmp}/err.txt";
+
+io.println($"   stdout: {str.trim(fs.readFile("${tmp}/out.txt"))}");
+io.println($"   stderr: {str.trim(fs.readFile("${tmp}/err.txt"))}");
+io.println("");
+
+// ─── 9. Dynamic file paths ──────────────────────────────────
+
+io.println("9. Dynamic file paths via interpolation");
+let log_name = "deploy";
+let today = "2026-03-16";
+$(echo "Deployment completed successfully") > "${tmp}/${log_name}-${today}.log";
+
+let dynamic_file = "${tmp}/${log_name}-${today}.log";
+io.println($"   Wrote to: {log_name}-{today}.log");
+io.println($"   Content: {str.trim(fs.readFile(dynamic_file))}");
+io.println("");
+
+// ─── 10. Exit code preserved ─────────────────────────────────
+
+io.println("10. Exit code preserved through redirection");
+let ok = $(echo "success") > "${tmp}/exitcode.txt";
+io.println($"   Success exit code: {ok.exitCode}");
+io.println($"   stdout after redirect: '{ok.stdout}'");
+
+let fail = $(ls /definitely/not/here) 2> "${tmp}/fail.txt";
+io.println($"   Failure exit code: {fail.exitCode}");
+io.println("");
+
+// ─── Cleanup ─────────────────────────────────────────────────
+
+io.println("-" * 50);
+io.println($"  Demo files in: {tmp}");
+let files = fs.listDir(tmp);
+io.println($"  Files created: {len(files)}");
+for (let f in files) {
+    io.println($"    {path.base(f)}");
+}
+io.println("=" * 50);

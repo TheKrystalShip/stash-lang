@@ -1,131 +1,278 @@
 #!/usr/bin/env stash
 
-// String namespace demo
-// Showcases all str.* built-in functions with practical examples
+// examples/strings.stash
+// Text Processing Toolkit — manipulation, formatting, and pattern matching
 
-// --- Case Conversion ---
+io.println("=" * 54);
+io.println("  Text Processing Toolkit");
+io.println("=" * 54);
 
-fn demo_case_conversion() {
-    io.println("=== Case Conversion ===");
+// ─── Interpolation ────────────────────────────────────────────────────────────
 
-    let greeting = "Hello, World!";
-    io.println($"  original:   {greeting}");
-    io.println($"  upper:      {str.upper(greeting)}");   // HELLO, WORLD!
-    io.println($"  lower:      {str.lower(greeting)}");   // hello, world!
-    io.println("");
-}
+io.println("\n-- Interpolation --");
 
-// --- Trimming ---
+let product = "Stash";
+let version = 2;
+let uptime  = 99.97;
 
-fn demo_trimming() {
-    io.println("=== Trimming ===");
+// C#-style prefix syntax: $"...{expr}..."
+io.println($"  Prefix:      {product} v{version} — uptime {uptime}%");
 
-    let padded = "   hello   ";
-    io.println($"  original:   \"{padded}\"");
-    io.println($"  trim:       \"{str.trim(padded)}\"");       // "hello"
-    io.println($"  trimStart:  \"{str.trimStart(padded)}\"");  // "hello   "
-    io.println($"  trimEnd:    \"{str.trimEnd(padded)}\"");    // "   hello"
-    io.println("");
-}
+// Embedded syntax: "...${expr}..."
+io.println("  Embedded:    ${product} v${version} — uptime ${uptime}%");
 
-// --- Searching ---
+// Expressions inside interpolation
+io.println($"  Expression:  2^10 = {conv.toInt(math.pow(2, 10))}");
+io.println($"  Ternary:     status = {uptime > 99.9 ? "green" : "yellow"}");
 
-fn demo_searching() {
-    io.println("=== Searching ===");
+// ─── Multi-line Strings ────────────────────────────────────────────────────────
 
-    let s = "the quick brown fox";
-    io.println($"  text: \"{s}\"");
-    io.println($"  contains \"fox\":       {str.contains(s, "fox")}");      // true
-    io.println($"  contains \"cat\":       {str.contains(s, "cat")}");      // false
-    io.println($"  startsWith \"the\":     {str.startsWith(s, "the")}");    // true
-    io.println($"  endsWith \"fox\":       {str.endsWith(s, "fox")}");      // true
-    io.println($"  indexOf \"quick\":      {str.indexOf(s, "quick")}");     // 4
-    io.println($"  lastIndexOf \"o\":      {str.lastIndexOf(s, "o")}");     // 17
-    io.println("");
-}
+io.println("\n-- Multi-line Strings --");
 
-// --- Extraction & Transformation ---
+let host    = "prod-db-01";
+let port    = 5432;
+let db_name = "app_production";
 
-fn demo_extraction() {
-    io.println("=== Extraction & Transformation ===");
+/* $"""...""" strips common indentation automatically */
+let config_block = $"""
+    [database]
+    host = {host}
+    port = {port}
+    name = {db_name}
+    pool_size = 10
+    """;
+io.println(config_block);
 
-    let s = "Hello, Stash!";
-    io.println($"  original:              \"{s}\"");
-    io.println($"  substring(7, 12):      \"{str.substring(s, 7, 12)}\"");         // Stash
-    io.println($"  replace(\"Stash\",\"World\"): \"{str.replace(s, "Stash", "World")}\"");
+// ─── String Repetition ────────────────────────────────────────────────────────
 
-    let csv_line = "a,b,a,c,a";
-    io.println($"  replaceAll(\",\",\"-\"):   \"{str.replaceAll(csv_line, ",", "-")}\""); // a-b-a-c-a
+io.println("-- String Repetition --");
 
-    io.println($"  reverse(\"racecar\"):    \"{str.reverse("racecar")}\"");   // racecar
-    io.println($"  reverse(\"hello\"):      \"{str.reverse("hello")}\"");     // olleh
-    io.println("");
-}
+io.println("  " + "=" * 40);
+io.println("  " + "ha" * 5 + "!");
+io.println("  " + "-·-" * 10);
 
-// --- Splitting & Joining ---
+// Padding with repetition
+let label = "RESULT";
+let width = 30;
+let side  = (width - len(label)) / 2;
+io.println("  " + ("─" * side) + " " + label + " " + ("─" * side));
+io.println("");
 
-fn demo_split_chars() {
-    io.println("=== Splitting & Chars ===");
+// ─── Case, Trim & Search ──────────────────────────────────────────────────────
 
-    let csv = "alice,bob,carol,dave";
-    let names = str.split(csv, ",");
-    io.println($"  split \"{csv}\" by \",\":");
-    let i = 0;
-    while (i < len(names)) {
-        io.println($"    [{i}] {names[i]}");
-        i++;
+io.println("-- Case, Trim & Search --");
+
+let raw = "  Hello, World!  ";
+io.println($"  original:   \"{raw}\"");
+io.println($"  trim:       \"{str.trim(raw)}\"");
+io.println($"  upper:      \"{str.upper(str.trim(raw))}\"");
+io.println($"  lower:      \"{str.lower(str.trim(raw))}\"");
+
+let sentence = "the quick brown fox jumps over the lazy dog";
+io.println($"  startsWith \"the\":    {str.startsWith(sentence, "the")}");
+io.println($"  endsWith \"dog\":      {str.endsWith(sentence, "dog")}");
+io.println($"  contains \"fox\":      {str.contains(sentence, "fox")}");
+io.println($"  indexOf \"quick\":     {str.indexOf(sentence, "quick")}");
+io.println($"  lastIndexOf \"o\":     {str.lastIndexOf(sentence, "o")}");
+io.println("");
+
+// ─── Slice, Replace & Split ───────────────────────────────────────────────────
+
+io.println("-- Slice, Replace & Split --");
+
+let s = "Hello, Stash Language!";
+io.println($"  original:            \"{s}\"");
+io.println($"  substring(7, 12):    \"{str.substring(s, 7, 12)}\"");
+io.println($"  replace first:       \"{str.replace(s, "Stash", "World")}\"");
+io.println($"  replaceAll \",\":      \"{str.replaceAll("a,b,c,d", ",", " | ")}\"");
+io.println($"  reverse:             \"{str.reverse("racecar")}\"");
+
+let csv_header = "id,name,email,role,active";
+let columns    = str.split(csv_header, ",");
+io.println($"  split csv: {columns}");
+io.println($"  padStart \"7\" → \"{str.padStart("7", 4, "0")}\"");
+io.println($"  padEnd   \"hi\" → \"{str.padEnd("hi", 8, ".")}\"");
+io.println($"  chars(\"Stash\"): {str.chars("Stash")}");
+io.println("");
+
+// ─── 'in' Operator ────────────────────────────────────────────────────────────
+
+io.println("-- 'in' Operator --");
+
+let text = "the quick brown fox";
+io.println($"  \"quick\" in text:       {"quick" in text}");
+io.println($"  \"cat\" in text:         {"cat" in text}");
+
+let tags = ["urgent", "bug", "backend"];
+io.println($"  \"bug\" in tags:         {"bug" in tags}");
+io.println($"  \"frontend\" in tags:    {"frontend" in tags}");
+
+io.println($"  5 in 1..10:            {5 in 1..10}");
+io.println($"  10 in 1..10:           {10 in 1..10}  (end-exclusive)");
+io.println("");
+
+// ─── Character Iteration ──────────────────────────────────────────────────────
+
+io.println("-- Character Iteration (for-in over string) --");
+
+let word = "programming";
+let vowel_count = 0;
+let vowels_found = [];
+for (let ch in word) {
+    if (ch in "aeiou") {
+        vowel_count++;
+        arr.push(vowels_found, ch);
     }
-
-    let word = "rust";
-    let letters = str.chars(word);
-    io.println($"  chars(\"{word}\"): {letters}");   // [r, u, s, t]
-    io.println("");
 }
+io.println($"  \"{word}\" has {vowel_count} vowels: {arr.join(vowels_found, ", ")}");
 
-// --- Padding & Repetition ---
-
-fn demo_padding() {
-    io.println("=== Padding & Repetition ===");
-
-    let s = "42";
-    io.println($"  padStart(\"42\", 6, \"0\"):  \"{str.padStart(s, 6, "0")}\"");  // "000042"
-    io.println($"  padEnd(\"42\", 6, \"..\"):   \"{str.padEnd(s, 6, ".")}\"");    // "42...."
-    io.println($"  repeat(\"ha\", 3):         \"{str.repeat("ha", 3)}\"");        // "hahaha"
-    io.println("");
+// Build a histogram of characters
+let sample = "mississippi";
+let freq = dict.new();
+for (let ch in sample) {
+    freq[ch] ??= 0;
+    freq[ch] += 1;
 }
+io.print($"  \"{sample}\" char freq: ");
+let parts = [];
+for (let ch, cnt in freq) {
+    arr.push(parts, $"{ch}×{cnt}");
+}
+io.println(arr.join(parts, "  "));
+io.println("");
 
-// --- Practical: Slug Generator ---
+// ─── Regex Operations ─────────────────────────────────────────────────────────
 
-fn to_slug(title) {
+io.println("-- Regex Operations --");
+
+let log_line = "2026-03-16 14:23:07 ERROR - failed to connect 192.168.1.100:5432";
+
+let date_match = str.match(log_line, "\\d{4}-\\d{2}-\\d{2}");
+let ip_match   = str.match(log_line, "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}");
+io.println($"  Date matched:   {date_match}");
+io.println($"  IP matched:     {ip_match}");
+io.println($"  Is error line:  {str.isMatch(log_line, "ERROR|FATAL")}");
+
+let all_nums = str.matchAll(log_line, "\\d+");
+io.println($"  All numbers:    {arr.join(all_nums, ", ")}");
+
+let sanitized = str.replaceRegex(log_line, "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}", "[IP_REDACTED]");
+io.println($"  Sanitized:      {sanitized}");
+io.println("");
+
+// ─── Slug Generator ──────────────────────────────────────────────────────────
+
+io.println("-- Slug Generator --");
+
+fn to_slug(title: string) {
     let slug = str.lower(str.trim(title));
-    slug = str.replaceAll(slug, " ", "-");
-    slug = str.replaceAll(slug, "_", "-");
+    slug = str.replaceRegex(slug, "[^a-z0-9\\s-]", "");
+    slug = str.replaceRegex(slug, "\\s+", "-");
+    slug = str.replaceRegex(slug, "-{2,}", "-");
     return slug;
 }
 
-fn demo_slug_generator() {
-    io.println("=== Slug Generator ===");
+let titles = [
+    "Hello World",
+    "  My New Blog Post  ",
+    "10 Tips for Better Code!",
+    "C# vs Stash: A Comparison"
+];
+for (let title in titles) {
+    io.println($"  \"{str.trim(title)}\"");
+    io.println($"    → \"{to_slug(title)}\"");
+}
+io.println("");
 
-    let titles = ["Hello World", "  My New Post  ", "Stash_Lang Tutorial", "10 Tips for Better Code"];
-    let i = 0;
-    while (i < len(titles)) {
-        let slug = to_slug(titles[i]);
-        io.println($"  \"{titles[i]}\"  ->  \"{slug}\"");
-        i++;
+// ─── CSV Parser ───────────────────────────────────────────────────────────────
+
+io.println("-- CSV Parser --");
+
+fn parse_csv(data: string) {
+    let rows    = str.split(data, "\n");
+    let records = [];
+    let headers = null;
+    for (let row in rows) {
+        let line = str.trim(row);
+        if (len(line) == 0) { continue; }
+        let fields = str.split(line, ",");
+        if (headers == null) {
+            headers = arr.map(fields, (f) => str.trim(f));
+            continue;
+        }
+        let record = dict.new();
+        for (let i, field in fields) {
+            if (i < len(headers)) {
+                record[headers[i]] = str.trim(field);
+            }
+        }
+        arr.push(records, record);
     }
-    io.println("");
+    return records;
 }
 
-// --- Main ---
+let csv_data = """
+    name,     age, city
+    Alice,    30,  New York
+    Bob,      25,  London
+    Carol,    35,  Tokyo
+    """;
 
-fn main() {
-    demo_case_conversion();
-    demo_trimming();
-    demo_searching();
-    demo_extraction();
-    demo_split_chars();
-    demo_padding();
-    demo_slug_generator();
+let people = parse_csv(csv_data);
+io.println($"  Parsed {len(people)} records:");
+for (let p in people) {
+    io.println($"    {str.padEnd(p["name"], 8)} age={p["age"]}  city={p["city"]}");
+}
+io.println("");
+
+// ─── Simple Template Engine ───────────────────────────────────────────────────
+
+io.println("-- Template Engine --");
+
+fn render(template: string, vars: dict) {
+    let result = template;
+    for (let key, value in vars) {
+        result = str.replaceAll(result, "{{" + key + "}}", conv.toStr(value));
+    }
+    return result;
 }
 
-main();
+let ctx = dict.new();
+ctx["name"]  = "Alice";
+ctx["role"]  = "Senior Developer";
+ctx["team"]  = "Platform Engineering";
+ctx["tasks"] = 7;
+
+let tmpl = "Hi {{name}}! As a {{role}} on {{team}}, you have {{tasks}} open tasks.";
+io.println($"  {render(tmpl, ctx)}");
+io.println("");
+
+// ─── Word Counter ─────────────────────────────────────────────────────────────
+
+io.println("-- Word Counter --");
+
+fn word_count(text: string) {
+    let normalized = str.replaceRegex(str.lower(str.trim(text)), "\\s+", " ");
+    let words = str.split(normalized, " ");
+    let counts = dict.new();
+    for (let w in words) {
+        let word = str.trim(w);
+        if (len(word) == 0) { continue; }
+        counts[word] ??= 0;
+        counts[word] += 1;
+    }
+    return counts;
+}
+
+let passage = "to be or not to be that is the question whether tis nobler to be";
+let wc      = word_count(passage);
+let total   = arr.reduce(dict.values(wc), (acc, x) => acc + x, 0);
+
+io.println($"  Text: \"{passage}\"");
+io.println($"  Total words: {total},  unique: {dict.size(wc)}");
+io.println("  Words appearing more than once:");
+for (let word, cnt in wc) {
+    if (cnt > 1) {
+        io.println($"    \"{word}\" × {cnt}");
+    }
+}

@@ -1,43 +1,103 @@
 #!/usr/bin/env stash
 
 // examples/lib/utils.stash
-// Shared utilities for deployment scripts
+// Shared utility library — logging, string helpers, array math, and timing
+
+// ─── Logging ─────────────────────────────────────────────────────────────────
 
 enum LogLevel {
-  Info,
-  Warn,
-  Error
+    Debug,
+    Info,
+    Warn,
+    Error
 }
 
 fn log(level, message) {
-  let prefix = "INFO";
-  if (level == LogLevel.Warn) {
-    prefix = "WARN";
-  } else if (level == LogLevel.Error) {
-    prefix = "ERROR";
-  }
-  io.println($"[{prefix}] {message}");
+    let prefix = level switch {
+        LogLevel.Debug => "DEBUG",
+        LogLevel.Info  => "INFO ",
+        LogLevel.Warn  => "WARN ",
+        LogLevel.Error => "ERROR",
+        _              => "LOG  "
+    };
+    io.println($"[{prefix}] {message}");
 }
 
-fn repeat_char(ch: string, count: int) -> string {
-  let result = "";
-  let i = 0;
-  while (i < count) {
-    result = result + ch;
-    i++;
-  }
-  log(LogLevel.Info, $"Generated repeated char string: '{result}'");
-  return result;
+// ─── String Utilities ────────────────────────────────────────────────────────
+
+// Repeat a character (or short string) n times
+fn repeat_char(ch: string, count: int) {
+    return ch * count;
 }
 
-fn banner(text) {
-  let border = repeat_char("=", len(text) + 4);
-  io.println(border);
-  io.println($"  {text}");
-  io.println(border);
+// Pad text to a given width with optional alignment: "left" (default), "right", "center"
+fn pad(text: string, width: int, align = "left") {
+    if (len(text) >= width) { return text; }
+    if (align == "right")  { return str.padStart(text, width, " "); }
+    if (align == "center") {
+        let surplus = width - len(text);
+        let lpad    = surplus / 2;
+        return (" " * lpad) + text + (" " * (surplus - lpad));
+    }
+    return str.padEnd(text, width, " ");
 }
 
-fn callFunctionRef(functionRef: function) {
-  log(LogLevel.Info, "This is a function reference example.");
-  functionRef();
+// Truncate text to max_len characters, appending suffix if cut
+fn truncate(text: string, max_len: int, suffix = "...") {
+    if (len(text) <= max_len) { return text; }
+    return str.substring(text, 0, max_len - len(suffix)) + suffix;
+}
+
+// ─── Array Utilities ─────────────────────────────────────────────────────────
+
+fn sum(numbers: array) {
+    return arr.reduce(numbers, (acc, x) => acc + x, 0);
+}
+
+fn average(numbers: array) {
+    if (len(numbers) == 0) { return 0; }
+    return arr.reduce(numbers, (acc, x) => acc + x, 0.0) / len(numbers);
+}
+
+fn max_of(numbers: array) {
+    if (len(numbers) == 0) { return null; }
+    return arr.reduce(numbers, (acc, x) => x > acc ? x : acc, numbers[0]);
+}
+
+fn min_of(numbers: array) {
+    if (len(numbers) == 0) { return null; }
+    return arr.reduce(numbers, (acc, x) => x < acc ? x : acc, numbers[0]);
+}
+
+// ─── Banner / Section Heading ─────────────────────────────────────────────────
+
+fn banner(title: string) {
+    let border = "=" * (len(title) + 4);
+    io.println(border);
+    io.println($"  {title}");
+    io.println(border);
+}
+
+fn section(title: string) {
+    io.println($"\n-- {title} --");
+}
+
+// ─── Timer ────────────────────────────────────────────────────────────────────
+
+struct Timer {
+    start_ms
+
+    fn elapsed() {
+        return time.millis() - self.start_ms;
+    }
+
+    fn lap(label: string) {
+        let ms = self.elapsed();
+        io.println($"  [timer] {label}: {ms}ms");
+        return ms;
+    }
+}
+
+fn start_timer() {
+    return Timer { start_ms: time.millis() };
 }
