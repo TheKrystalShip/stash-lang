@@ -146,8 +146,7 @@ public static class TypeInferenceEngine
                 var receiverType = InferExpressionType(scopeTree, dotExpr.Object, contextLine, contextCol);
                 if (receiverType != null)
                 {
-                    var field = scopeTree.GlobalScope.Symbols.FirstOrDefault(s =>
-                        s.Kind == SymbolKind.Field && s.ParentName == receiverType && s.Name == dotExpr.Name.Lexeme);
+                    var field = scopeTree.FindField(receiverType, dotExpr.Name.Lexeme);
                     return field?.TypeHint;
                 }
                 return null;

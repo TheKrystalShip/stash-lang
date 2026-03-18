@@ -11,6 +11,7 @@ using Stash.Interpreting.Types;
 
 public partial class Interpreter
 {
+    private static readonly List<object?> _emptyArgs = new(0);
     /// <inheritdoc />
     public object? VisitLiteralExpr(LiteralExpr expr)
     {
@@ -160,7 +161,17 @@ public partial class Interpreter
                 return EvaluatePlus(leftVal, rightVal, expr);
 
             case TokenType.Minus:
-                return EvaluateArithmetic(leftVal, rightVal, expr, (a, b) => a - b, (a, b) => a - b);
+                if (leftVal is long lMinus && rightVal is long rMinus)
+                {
+                    return lMinus - rMinus;
+                }
+
+                if (IsNumeric(leftVal) && IsNumeric(rightVal))
+                {
+                    return ToDouble(leftVal) - ToDouble(rightVal);
+                }
+
+                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
 
             case TokenType.Star:
                 if (leftVal is string ls && rightVal is long ri)
@@ -181,7 +192,17 @@ public partial class Interpreter
 
                     return li2 == 0 ? "" : string.Concat(Enumerable.Repeat(rs, (int)li2));
                 }
-                return EvaluateArithmetic(leftVal, rightVal, expr, (a, b) => a * b, (a, b) => a * b);
+                if (leftVal is long lMul && rightVal is long rMul)
+                {
+                    return lMul * rMul;
+                }
+
+                if (IsNumeric(leftVal) && IsNumeric(rightVal))
+                {
+                    return ToDouble(leftVal) * ToDouble(rightVal);
+                }
+
+                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
 
             case TokenType.Slash:
                 return EvaluateDivision(leftVal, rightVal, expr);
@@ -196,16 +217,56 @@ public partial class Interpreter
                 return !IsEqual(leftVal, rightVal);
 
             case TokenType.Less:
-                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a < b, (a, b) => a < b);
+                if (leftVal is long lLt && rightVal is long rLt)
+                {
+                    return lLt < rLt;
+                }
+
+                if (IsNumeric(leftVal) && IsNumeric(rightVal))
+                {
+                    return ToDouble(leftVal) < ToDouble(rightVal);
+                }
+
+                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
 
             case TokenType.Greater:
-                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a > b, (a, b) => a > b);
+                if (leftVal is long lGt && rightVal is long rGt)
+                {
+                    return lGt > rGt;
+                }
+
+                if (IsNumeric(leftVal) && IsNumeric(rightVal))
+                {
+                    return ToDouble(leftVal) > ToDouble(rightVal);
+                }
+
+                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
 
             case TokenType.LessEqual:
-                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a <= b, (a, b) => a <= b);
+                if (leftVal is long lLe && rightVal is long rLe)
+                {
+                    return lLe <= rLe;
+                }
+
+                if (IsNumeric(leftVal) && IsNumeric(rightVal))
+                {
+                    return ToDouble(leftVal) <= ToDouble(rightVal);
+                }
+
+                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
 
             case TokenType.GreaterEqual:
-                return CompareNumeric(leftVal, rightVal, expr, (a, b) => a >= b, (a, b) => a >= b);
+                if (leftVal is long lGe && rightVal is long rGe)
+                {
+                    return lGe >= rGe;
+                }
+
+                if (IsNumeric(leftVal) && IsNumeric(rightVal))
+                {
+                    return ToDouble(leftVal) >= ToDouble(rightVal);
+                }
+
+                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
 
             case TokenType.In:
                 return EvaluateIn(leftVal, rightVal, expr);
@@ -344,10 +405,18 @@ public partial class Interpreter
     {
         object? callee = expr.Callee.Accept(this);
 
-        var arguments = new List<object?>(expr.Arguments.Count);
-        foreach (Expr argument in expr.Arguments)
+        List<object?> arguments;
+        if (expr.Arguments.Count == 0)
         {
-            arguments.Add(argument.Accept(this));
+            arguments = _emptyArgs;
+        }
+        else
+        {
+            arguments = new List<object?>(expr.Arguments.Count);
+            foreach (Expr argument in expr.Arguments)
+            {
+                arguments.Add(argument.Accept(this));
+            }
         }
 
         if (callee is not IStashCallable function)
@@ -367,6 +436,11 @@ public partial class Interpreter
                     $"Expected {expected} arguments but got {arguments.Count}.",
                     expr.Paren.Span);
             }
+        }
+
+        if (_debugger == null)
+        {
+            return function.Call(this, arguments);
         }
 
         string functionName = callee is StashFunction sf ? sf.ToString() : callee.ToString() ?? "<unknown>";

@@ -97,9 +97,13 @@ public class TemplateRenderer
         if (error is not null)
         {
             if (output.Filters.Any(f => f.Name == "default"))
+            {
                 value = null;
+            }
             else
+            {
                 throw new TemplateException($"Error evaluating expression '{output.Expression}': {error}");
+            }
         }
 
         // Apply filters in order

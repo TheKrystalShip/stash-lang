@@ -19,7 +19,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly AnalysisEngine _analysis;
     private readonly ILanguageServerFacade _server;
     private readonly ConcurrentDictionary<Uri, CancellationTokenSource> _pendingAnalysis = new();
-    private const int DebounceDelayMs = 150;
+    private const int DebounceDelayMs = 50;
 
     public TextDocumentSyncHandler(DocumentManager documents, AnalysisEngine analysis, ILanguageServerFacade server)
     {

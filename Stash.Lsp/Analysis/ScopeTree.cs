@@ -65,6 +65,9 @@ public class ScopeTree
         return result;
     }
 
+    private Dictionary<(string ParentName, string FieldName), SymbolInfo>? _fieldIndex;
+    private Dictionary<string, List<SymbolInfo>>? _childrenByParent;
+
     /// <summary>
     /// Finds the definition of a symbol visible at the given position.
     /// Walks from the innermost scope outward, returning the first match.
@@ -75,11 +78,11 @@ public class ScopeTree
 
         while (scope != null)
         {
-            // Search this scope's symbols in reverse order to find the closest declaration
-            for (int i = scope.Symbols.Count - 1; i >= 0; i--)
+            var candidates = scope.GetSymbolsByName(name);
+            for (int i = candidates.Count - 1; i >= 0; i--)
             {
-                var sym = scope.Symbols[i];
-                if (sym.Name == name && IsBeforeOrAt(sym.Span, line, column))
+                var sym = candidates[i];
+                if (IsBeforeOrAt(sym.Span, line, column))
                 {
                     return sym;
                 }
@@ -89,6 +92,51 @@ public class ScopeTree
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Finds a struct/enum field by parent type name and field name in O(1).
+    /// </summary>
+    public SymbolInfo? FindField(string parentName, string fieldName)
+    {
+        _fieldIndex ??= BuildFieldIndex();
+        return _fieldIndex.TryGetValue((parentName, fieldName), out var field) ? field : null;
+    }
+
+    private Dictionary<(string, string), SymbolInfo> BuildFieldIndex()
+    {
+        var index = new Dictionary<(string, string), SymbolInfo>();
+        foreach (var sym in GlobalScope.Symbols)
+        {
+            if (sym.Kind == SymbolKind.Field && sym.ParentName != null)
+            {
+                index[(sym.ParentName, sym.Name)] = sym;
+            }
+        }
+        return index;
+    }
+
+    private Dictionary<string, List<SymbolInfo>> GetChildrenByParent()
+    {
+        if (_childrenByParent != null)
+        {
+            return _childrenByParent;
+        }
+
+        _childrenByParent = new Dictionary<string, List<SymbolInfo>>();
+        foreach (var sym in GlobalScope.Symbols)
+        {
+            if (sym.ParentName != null && sym.Kind is SymbolKind.Field or SymbolKind.Method or SymbolKind.EnumMember)
+            {
+                if (!_childrenByParent.TryGetValue(sym.ParentName, out var list))
+                {
+                    list = new List<SymbolInfo>();
+                    _childrenByParent[sym.ParentName] = list;
+                }
+                list.Add(sym);
+            }
+        }
+        return _childrenByParent;
     }
 
     /// <summary>
@@ -137,16 +185,13 @@ public class ScopeTree
                 // Find the child scope that corresponds to this symbol (if any)
                 var childSymbols = new List<SymbolInfo>();
 
-                if (sym.Kind is SymbolKind.Struct)
+                if (sym.Kind is SymbolKind.Struct or SymbolKind.Enum)
                 {
-                    // Struct fields and methods are in the global scope
-                    childSymbols.AddRange(GlobalScope.Symbols.Where(s =>
-                        (s.Kind == SymbolKind.Field || s.Kind == SymbolKind.Method) && s.ParentName == sym.Name));
-                }
-                else if (sym.Kind is SymbolKind.Enum)
-                {
-                    childSymbols.AddRange(GlobalScope.Symbols.Where(s =>
-                        s.Kind == SymbolKind.EnumMember && s.ParentName == sym.Name));
+                    var childrenIndex = GetChildrenByParent();
+                    if (childrenIndex.TryGetValue(sym.Name, out var children))
+                    {
+                        childSymbols.AddRange(children);
+                    }
                 }
                 else if (sym.Kind is SymbolKind.Function && sym.FullSpan != null)
                 {

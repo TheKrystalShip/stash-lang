@@ -41,7 +41,9 @@ public class TemplateParser
             var token = Current();
 
             if (token.Type == TemplateTokenType.Eof)
+            {
                 break;
+            }
 
             if (token.Type == TemplateTokenType.Text)
             {
@@ -121,7 +123,9 @@ public class TemplateParser
         // Extract condition from "if condition"
         var condition = firstConditionContent[2..].Trim();
         if (string.IsNullOrEmpty(condition))
+        {
             throw new TemplateException("'if' tag requires a condition.");
+        }
 
         var branches = new List<TemplateBranch>();
         TemplateNode[]? elseBody = null;
@@ -135,7 +139,9 @@ public class TemplateParser
         {
             var token = Current();
             if (token.Type == TemplateTokenType.Eof)
+            {
                 throw new TemplateException("Unterminated 'if' block — expected '{% endif %}'.");
+            }
 
             if (token.Type == TemplateTokenType.TagStart)
             {
@@ -148,7 +154,9 @@ public class TemplateParser
                     var elifContent = tagContent.Trim();
                     var elifCondition = elifContent[4..].Trim(); // skip "elif"
                     if (string.IsNullOrEmpty(elifCondition))
+                    {
                         throw new TemplateException("'elif' tag requires a condition.");
+                    }
 
                     var elifBody = ParseNodes(new[] { "elif", "else", "endif" });
                     branches.Add(new TemplateBranch(elifCondition, elifBody.ToArray()));
@@ -185,15 +193,22 @@ public class TemplateParser
 
         var inIndex = content.IndexOf(" in ", StringComparison.Ordinal);
         if (inIndex < 0)
+        {
             throw new TemplateException("'for' tag requires 'in' keyword: {% for var in iterable %}.");
+        }
 
         var variable = content[..inIndex].Trim();
         var iterable = content[(inIndex + 4)..].Trim();
 
         if (string.IsNullOrEmpty(variable))
+        {
             throw new TemplateException("'for' tag requires a variable name.");
+        }
+
         if (string.IsNullOrEmpty(iterable))
+        {
             throw new TemplateException("'for' tag requires an iterable expression.");
+        }
 
         var body = ParseNodes(new[] { "endfor" });
 
@@ -248,7 +263,9 @@ public class TemplateParser
             var token = Current();
 
             if (token.Type == TemplateTokenType.Eof)
+            {
                 throw new TemplateException("Unterminated 'raw' block — expected '{% endraw %}'.");
+            }
 
             if (token.Type == TemplateTokenType.TagStart)
             {
@@ -313,21 +330,23 @@ public class TemplateParser
     private (string Expression, TemplateFilter[] Filters) ParseExpressionAndFilters(string content)
     {
         var filters = new List<TemplateFilter>();
-        
+
         // Split by single | that is NOT part of || and not inside strings or parentheses
         var parts = SplitByPipe(content);
-        
+
         if (parts.Count == 0)
+        {
             return ("", Array.Empty<TemplateFilter>());
-        
+        }
+
         var expression = parts[0].Trim();
-        
+
         for (int i = 1; i < parts.Count; i++)
         {
             var filterStr = parts[i].Trim();
             filters.Add(ParseSingleFilter(filterStr));
         }
-        
+
         return (expression, filters.ToArray());
     }
 
@@ -378,8 +397,14 @@ public class TemplateParser
             // Track parentheses
             if (!inDoubleQuote && !inSingleQuote)
             {
-                if (c == '(') parenDepth++;
-                else if (c == ')') parenDepth--;
+                if (c == '(')
+                {
+                    parenDepth++;
+                }
+                else if (c == ')')
+                {
+                    parenDepth--;
+                }
             }
 
             // Check for pipe
@@ -393,7 +418,7 @@ public class TemplateParser
                     i += 2;
                     continue;
                 }
-                
+
                 // Single pipe — split here
                 parts.Add(current.ToString());
                 current.Clear();
@@ -422,11 +447,13 @@ public class TemplateParser
         }
 
         var name = filterStr[..parenStart].Trim();
-        
+
         // Find matching closing paren
         int parenEnd = filterStr.LastIndexOf(')');
         if (parenEnd < parenStart)
+        {
             throw new TemplateException($"Filter '{name}' has unmatched parenthesis.");
+        }
 
         var argsStr = filterStr[(parenStart + 1)..parenEnd].Trim();
         if (string.IsNullOrEmpty(argsStr))
@@ -490,7 +517,10 @@ public class TemplateParser
     private TemplateToken Current()
     {
         if (_pos < _tokens.Count)
+        {
             return _tokens[_pos];
+        }
+
         return new TemplateToken(TemplateTokenType.Eof, "", false, false, 0, 0);
     }
 
@@ -498,7 +528,10 @@ public class TemplateParser
     {
         var token = Current();
         if (token.Type != type)
+        {
             throw new TemplateException($"Expected {type} but got {token.Type}.", token.Line, token.Column);
+        }
+
         _pos++;
         return token;
     }
@@ -510,7 +543,10 @@ public class TemplateParser
     private string PeekTagContent()
     {
         if (_pos + 1 < _tokens.Count && _tokens[_pos + 1].Type == TemplateTokenType.Text)
+        {
             return _tokens[_pos + 1].Value;
+        }
+
         return "";
     }
 

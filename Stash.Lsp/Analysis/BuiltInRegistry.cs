@@ -398,6 +398,12 @@ public static class BuiltInRegistry
 
     private static readonly HashSet<string> _namespaceNameSet = new(NamespaceNames);
 
+    private static readonly Dictionary<string, IReadOnlyList<NamespaceFunction>> _namespaceMembersByNamespace =
+        NamespaceFunctions.GroupBy(f => f.Namespace).ToDictionary(g => g.Key, g => (IReadOnlyList<NamespaceFunction>)g.ToList());
+
+    private static readonly Dictionary<string, IReadOnlyList<NamespaceConstant>> _namespaceConstantsByNamespace =
+        NamespaceConstants.GroupBy(c => c.Namespace).ToDictionary(g => g.Key, g => (IReadOnlyList<NamespaceConstant>)g.ToList());
+
     public static bool TryGetFunction(string name, out BuiltInFunction function)
         => _functionsByName.TryGetValue(name, out function!);
 
@@ -405,10 +411,10 @@ public static class BuiltInRegistry
         => _namespaceFunctionsByQualifiedName.TryGetValue(qualifiedName, out function!);
 
     public static IEnumerable<NamespaceFunction> GetNamespaceMembers(string namespaceName)
-        => NamespaceFunctions.Where(f => f.Namespace == namespaceName);
+        => _namespaceMembersByNamespace.TryGetValue(namespaceName, out var members) ? members : [];
 
     public static IEnumerable<NamespaceConstant> GetNamespaceConstants(string namespaceName)
-        => NamespaceConstants.Where(c => c.Namespace == namespaceName);
+        => _namespaceConstantsByNamespace.TryGetValue(namespaceName, out var constants) ? constants : [];
 
     public static bool TryGetNamespaceConstant(string qualifiedName, out NamespaceConstant constant)
         => _namespaceConstantsByQualifiedName.TryGetValue(qualifiedName, out constant!);

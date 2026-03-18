@@ -4,7 +4,6 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -25,7 +24,14 @@ public class AnalysisEngine
         var lexErrors = new List<string>(lexer.Errors);
 
         // Filter out trivia tokens for the parser (it doesn't handle comments)
-        var parserTokens = tokens.Where(t => t.Type is not (TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang)).ToList();
+        var parserTokens = new List<Token>(tokens.Count);
+        foreach (var t in tokens)
+        {
+            if (t.Type is not (TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
+            {
+                parserTokens.Add(t);
+            }
+        }
         var parser = new Parser(parserTokens);
         var statements = parser.ParseProgram();
         var parseErrors = new List<string>(parser.Errors);
@@ -48,7 +54,7 @@ public class AnalysisEngine
                     {
                         break;
                     }
-                    globalSymbols[i] = resolvedSym;
+                    symbols.GlobalScope.ReplaceSymbol(i, resolvedSym);
                     replaced = true;
                     break;
                 }
@@ -66,10 +72,10 @@ public class AnalysisEngine
             {
                 if (globalSymbols[i].Name == alias && globalSymbols[i].Kind == SymbolKind.Namespace)
                 {
-                    globalSymbols[i] = new SymbolInfo(
+                    symbols.GlobalScope.ReplaceSymbol(i, new SymbolInfo(
                         alias, SymbolKind.Namespace, globalSymbols[i].Span,
                         detail: globalSymbols[i].Detail,
-                        sourceUri: moduleInfo.Uri);
+                        sourceUri: moduleInfo.Uri));
                     break;
                 }
             }

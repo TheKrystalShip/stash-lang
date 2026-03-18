@@ -57,16 +57,15 @@ public class Environment
     /// </summary>
     public object? Get(string name, Common.SourceSpan? span = null)
     {
-        if (_values.TryGetValue(name, out object? value))
+        var env = this;
+        while (env is not null)
         {
-            return value;
+            if (env._values.TryGetValue(name, out object? value))
+            {
+                return value;
+            }
+            env = env.Enclosing;
         }
-
-        if (Enclosing is not null)
-        {
-            return Enclosing.Get(name, span);
-        }
-
         throw new RuntimeError($"Undefined variable '{name}'.", span);
     }
 
@@ -76,23 +75,20 @@ public class Environment
     /// </summary>
     public void Assign(string name, object? value, Common.SourceSpan? span = null)
     {
-        if (_values.ContainsKey(name))
+        var env = this;
+        while (env is not null)
         {
-            if (_constants.Contains(name))
+            if (env._values.ContainsKey(name))
             {
-                throw new RuntimeError($"Cannot reassign constant '{name}'.", span);
+                if (env._constants.Contains(name))
+                {
+                    throw new RuntimeError($"Cannot reassign constant '{name}'.", span);
+                }
+                env._values[name] = value;
+                return;
             }
-
-            _values[name] = value;
-            return;
+            env = env.Enclosing;
         }
-
-        if (Enclosing is not null)
-        {
-            Enclosing.Assign(name, value, span);
-            return;
-        }
-
         throw new RuntimeError($"Undefined variable '{name}'.", span);
     }
 

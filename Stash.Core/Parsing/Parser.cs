@@ -1685,6 +1685,63 @@ public class Parser
     // ── Helper methods ────────────────────────────────────────────
 
     /// <summary>
+    /// <summary>
+    /// Checks whether the current token matches the given type. If so, consumes it.
+    /// Non-allocating single-type overload.
+    /// </summary>
+    private bool Match(TokenType type)
+    {
+        if (Check(type))
+        {
+            Advance();
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Checks whether the current token matches either type. If so, consumes it.
+    /// Non-allocating two-type overload.
+    /// </summary>
+    private bool Match(TokenType type1, TokenType type2)
+    {
+        if (Check(type1))
+        {
+            Advance();
+            return true;
+        }
+        if (Check(type2))
+        {
+            Advance();
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Checks whether the current token matches any of the three types. If so, consumes it.
+    /// Non-allocating three-type overload.
+    /// </summary>
+    private bool Match(TokenType type1, TokenType type2, TokenType type3)
+    {
+        if (Check(type1))
+        {
+            Advance();
+            return true;
+        }
+        if (Check(type2))
+        {
+            Advance();
+            return true;
+        }
+        if (Check(type3))
+        {
+            Advance();
+            return true;
+        }
+        return false;
+    }
+
     /// Checks whether the current token matches any of the given types. If a match is found,
     /// the token is consumed (advanced past).
     /// </summary>

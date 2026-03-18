@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Analysis;
 
+using System;
 using System.Collections.Generic;
 using Stash.Common;
 
@@ -13,6 +14,8 @@ public enum ScopeKind
 
 public class Scope
 {
+    private readonly Dictionary<string, List<SymbolInfo>> _symbolsByName = new();
+
     public ScopeKind Kind { get; }
     public Scope? Parent { get; }
     public SourceSpan Span { get; }
@@ -30,5 +33,42 @@ public class Scope
     public void AddSymbol(SymbolInfo symbol)
     {
         Symbols.Add(symbol);
+        if (!_symbolsByName.TryGetValue(symbol.Name, out var list))
+        {
+            list = new List<SymbolInfo>();
+            _symbolsByName[symbol.Name] = list;
+        }
+        list.Add(symbol);
+    }
+
+    public void ReplaceSymbol(int index, SymbolInfo symbol)
+    {
+        var old = Symbols[index];
+        Symbols[index] = symbol;
+
+        if (_symbolsByName.TryGetValue(old.Name, out var oldList))
+        {
+            var idx = oldList.IndexOf(old);
+            if (idx >= 0)
+            {
+                oldList.RemoveAt(idx);
+                if (oldList.Count == 0)
+                {
+                    _symbolsByName.Remove(old.Name);
+                }
+            }
+        }
+
+        if (!_symbolsByName.TryGetValue(symbol.Name, out var newList))
+        {
+            newList = new List<SymbolInfo>();
+            _symbolsByName[symbol.Name] = newList;
+        }
+        newList.Add(symbol);
+    }
+
+    public IReadOnlyList<SymbolInfo> GetSymbolsByName(string name)
+    {
+        return _symbolsByName.TryGetValue(name, out var list) ? list : Array.Empty<SymbolInfo>();
     }
 }

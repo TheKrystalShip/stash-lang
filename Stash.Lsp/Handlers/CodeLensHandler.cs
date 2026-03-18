@@ -1,5 +1,7 @@
 namespace Stash.Lsp.Handlers;
 
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -12,6 +14,7 @@ using Stash.Lsp.Analysis;
 public class CodeLensHandler : CodeLensHandlerBase
 {
     private readonly AnalysisEngine _analysis;
+    private readonly ConcurrentDictionary<Uri, Dictionary<string, CodeLens>> _previousLenses = new();
 
     public CodeLensHandler(AnalysisEngine analysis)
     {
@@ -29,13 +32,16 @@ public class CodeLensHandler : CodeLensHandlerBase
     public override Task<CodeLensContainer?> Handle(CodeLensParams request,
         CancellationToken cancellationToken)
     {
-        var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
+        var uri = request.TextDocument.Uri.ToUri();
+        var result = _analysis.GetCachedResult(uri);
         if (result == null)
         {
+            if (_previousLenses.TryGetValue(uri, out var cached))
+                return Task.FromResult<CodeLensContainer?>(new CodeLensContainer(cached.Values));
             return Task.FromResult<CodeLensContainer?>(null);
         }
 
-        var lenses = new List<CodeLens>();
+        var currentByName = new Dictionary<string, CodeLens>();
 
         foreach (var sym in result.Symbols.GetTopLevel())
         {
@@ -74,7 +80,7 @@ public class CodeLensHandler : CodeLensHandlerBase
             }
 
             // Add cross-file references from files that import this module
-            var crossFileRefs = _analysis.FindCrossFileReferences(request.TextDocument.Uri.ToUri(), sym.Name);
+            var crossFileRefs = _analysis.FindCrossFileReferences(uri, sym.Name);
             foreach (var (refUri, refSpan) in crossFileRefs)
             {
                 var refRange = refSpan.ToLspRange();
@@ -98,7 +104,7 @@ public class CodeLensHandler : CodeLensHandlerBase
                 _ => $"{refCount} references"
             };
 
-            lenses.Add(new CodeLens
+            currentByName[sym.Name] = new CodeLens
             {
                 Range = lspRange,
                 Command = new Command
@@ -112,10 +118,22 @@ public class CodeLensHandler : CodeLensHandlerBase
                         refLocations
                     }
                 }
-            });
+            };
         }
 
-        return Task.FromResult<CodeLensContainer?>(new CodeLensContainer(lenses));
+        // When there are parse errors, preserve lenses for symbols that dropped out of the AST
+        if (result.ParseErrors.Count > 0 && _previousLenses.TryGetValue(uri, out var previous))
+        {
+            foreach (var (name, oldLens) in previous)
+            {
+                if (!currentByName.ContainsKey(name))
+                    currentByName[name] = oldLens;
+            }
+        }
+
+        _previousLenses[uri] = currentByName;
+
+        return Task.FromResult<CodeLensContainer?>(new CodeLensContainer(currentByName.Values));
     }
 
     public override Task<CodeLens> Handle(CodeLens request, CancellationToken cancellationToken)

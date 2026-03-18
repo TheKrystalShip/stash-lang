@@ -1,5 +1,7 @@
 namespace Stash.Lsp.Handlers;
 
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -13,6 +15,7 @@ using StashSymbolKind = Stash.Lsp.Analysis.SymbolKind;
 public class SemanticTokensHandler : SemanticTokensHandlerBase
 {
     private readonly AnalysisEngine _analysis;
+    private readonly ConcurrentDictionary<Uri, SemanticTokensDocument> _documents = new();
 
     // Token type indices (must match legend registration)
     private const int TokenTypeNamespace = 0;
@@ -63,7 +66,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     SemanticTokenModifier.Readonly
                 )
             },
-            Full = new SemanticTokensCapabilityRequestFull { Delta = false },
+            Full = new SemanticTokensCapabilityRequestFull { Delta = true },
             Range = false
         };
 
@@ -74,6 +77,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         {
             return Task.CompletedTask;
         }
+
+        TokenType prevType = TokenType.Eof;
+        TokenType prevPrevType = TokenType.Eof;
 
         foreach (var token in result.Tokens)
         {
@@ -86,7 +92,15 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             var col = token.Span.StartColumn - 1;
             var length = token.Lexeme.Length;
 
-            if (token.Type == TokenType.Identifier)
+            bool isTypeHintPosition =
+                (prevType == TokenType.Colon && prevPrevType == TokenType.Identifier) ||
+                prevType == TokenType.Arrow;
+
+            if (isTypeHintPosition && (token.Type == TokenType.Identifier || IsKeyword(token.Type)))
+            {
+                ProcessIdentifier(builder, result, token, line, col, length, isTypeHintPosition: true);
+            }
+            else if (token.Type == TokenType.Identifier)
             {
                 ProcessIdentifier(builder, result, token, line, col, length);
             }
@@ -118,14 +132,27 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 builder.Push(line, col, length, TokenTypeComment, 0);
             }
+
+            if (token.Type is not (TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
+            {
+                prevPrevType = prevType;
+                prevType = token.Type;
+            }
         }
 
         return Task.CompletedTask;
     }
 
     private void ProcessIdentifier(SemanticTokensBuilder builder, AnalysisResult result,
-        Token token, int line, int col, int length)
+        Token token, int line, int col, int length, bool isTypeHintPosition = false)
     {
+        if (isTypeHintPosition && token.Type != TokenType.Identifier)
+        {
+            // Keyword in type hint position — always color as Type
+            builder.Push(line, col, length, TokenTypeType, 0);
+            return;
+        }
+
         var name = token.Lexeme;
         var spanLine = token.Span.StartLine;
         var spanCol = token.Span.StartColumn;
@@ -147,6 +174,11 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             else if (BuiltInRegistry.IsBuiltInNamespace(name))
             {
                 builder.Push(line, col, length, TokenTypeNamespace, 0);
+            }
+            else if (isTypeHintPosition)
+            {
+                // Unresolved identifier in type hint position — likely a type name
+                builder.Push(line, col, length, TokenTypeType, 0);
             }
         }
     }
@@ -351,6 +383,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     protected override Task<SemanticTokensDocument> GetSemanticTokensDocument(
         ITextDocumentIdentifierParams @params, CancellationToken cancellationToken)
     {
-        return Task.FromResult(new SemanticTokensDocument(CreateRegistrationOptions(null!, null!).Legend));
+        var uri = @params.TextDocument.Uri.ToUri();
+        var document = _documents.GetOrAdd(uri,
+            _ => new SemanticTokensDocument(CreateRegistrationOptions(null!, null!).Legend));
+        return Task.FromResult(document);
     }
 }

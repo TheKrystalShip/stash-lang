@@ -335,4 +335,129 @@ public class LspFeaturesTests
         Assert.Contains(tokens, t => t.Type == TokenType.Fn);
         Assert.Contains(tokens, t => t.Type == TokenType.Return);
     }
+
+    // ── Contextual Type Hint Highlighting ────────────────────────────
+
+    [Fact]
+    public void TypeHintPosition_KeywordInTyped_LexerProducesKeywordToken()
+    {
+        // When user types "in" (mid-typing "int") in a struct field type position,
+        // the lexer produces a keyword token — this is the scenario the contextual
+        // highlighting fix addresses.
+        var source = "struct S { f: in }";
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+
+        // Find the token after the colon — should be keyword 'In', not identifier
+        var colonIdx = tokens.FindIndex(t => t.Type == TokenType.Colon);
+        Assert.True(colonIdx >= 0, "Should find a Colon token");
+        Assert.True(colonIdx + 1 < tokens.Count, "Should have a token after Colon");
+        Assert.Equal(TokenType.In, tokens[colonIdx + 1].Type);
+    }
+
+    [Fact]
+    public void TypeHintPosition_FullTypeName_LexerProducesIdentifier()
+    {
+        // When the user completes typing "int", the lexer produces an identifier
+        var source = "struct S { f: int }";
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+
+        var colonIdx = tokens.FindIndex(t => t.Type == TokenType.Colon);
+        Assert.True(colonIdx >= 0);
+        Assert.Equal(TokenType.Identifier, tokens[colonIdx + 1].Type);
+        Assert.Equal("int", tokens[colonIdx + 1].Lexeme);
+    }
+
+    [Fact]
+    public void TypeHintPosition_DetectionPattern_IdentifierBeforeColon()
+    {
+        // Verify the token pattern used for type hint detection:
+        // Identifier followed by Colon in struct fields, function params, let/const
+        var source = "fn foo(x: string) {}";
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+
+        var colonIdx = tokens.FindIndex(t => t.Type == TokenType.Colon);
+        Assert.True(colonIdx >= 1);
+        Assert.Equal(TokenType.Identifier, tokens[colonIdx - 1].Type); // "x" before ":"
+        Assert.Equal(TokenType.Identifier, tokens[colonIdx + 1].Type); // "string" after ":"
+    }
+
+    [Fact]
+    public void TypeHintPosition_ReturnType_ArrowPrecedesType()
+    {
+        // Verify the token pattern for return type: RightParen Arrow Identifier
+        var source = "fn foo() -> int {}";
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+
+        var arrowIdx = tokens.FindIndex(t => t.Type == TokenType.Arrow);
+        Assert.True(arrowIdx >= 0);
+        Assert.Equal(TokenType.Identifier, tokens[arrowIdx + 1].Type);
+        Assert.Equal("int", tokens[arrowIdx + 1].Lexeme);
+    }
+
+    [Fact]
+    public void TypeHintPosition_ForIn_KeywordNotInTypePosition()
+    {
+        // In "for x in items", the "in" keyword is NOT preceded by Colon,
+        // so it should NOT be detected as a type hint position
+        var source = "for x in [1, 2, 3] {}";
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+
+        var inIdx = tokens.FindIndex(t => t.Type == TokenType.In);
+        Assert.True(inIdx >= 1);
+        // Previous token is an Identifier, but the token before that is NOT Colon
+        Assert.Equal(TokenType.Identifier, tokens[inIdx - 1].Type); // "x"
+        Assert.NotEqual(TokenType.Colon, tokens[inIdx - 1].Type); // Not a Colon
+    }
+
+    [Fact]
+    public void TypeHintPosition_LetVarDecl_TypeAfterColon()
+    {
+        // let x: int = 5 — "int" is in type hint position
+        var source = "let x: int = 5;";
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+
+        var colonIdx = tokens.FindIndex(t => t.Type == TokenType.Colon);
+        Assert.True(colonIdx >= 1);
+        Assert.Equal(TokenType.Identifier, tokens[colonIdx - 1].Type); // "x"
+        Assert.Equal(TokenType.Identifier, tokens[colonIdx + 1].Type); // "int"
+        Assert.Equal("int", tokens[colonIdx + 1].Lexeme);
+    }
+
+    [Fact]
+    public void TypeHintPosition_DictLiteral_ValueNotInTypePosition()
+    {
+        // { "key": value } — the Colon is preceded by StringLiteral, not Identifier
+        // so the value should NOT be treated as a type hint
+        var source = """let d = { "name": "Alice" };""";
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+
+        var colonIdx = tokens.FindIndex(t => t.Type == TokenType.Colon);
+        Assert.True(colonIdx >= 1);
+        // The token before colon is a StringLiteral, not an Identifier
+        Assert.Equal(TokenType.StringLiteral, tokens[colonIdx - 1].Type);
+    }
+
+    [Fact]
+    public void TypeHintPosition_StructField_TypeNameResolvesAsStruct()
+    {
+        // When a type name IS a known struct, it resolves via FindDefinition
+        var source = @"
+            struct Point { x: int, y: int }
+            fn draw(p: Point) {}
+        ";
+        var tree = Analyze(source);
+
+        // "Point" used as type hint should resolve to the struct definition
+        // Line 3 "fn draw(p: Point) {}" — Point is at column position after Colon
+        var sym = tree.FindDefinition("Point", 3, 24);
+        Assert.NotNull(sym);
+        Assert.Equal(SymbolKind.Struct, sym!.Kind);
+    }
 }

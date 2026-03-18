@@ -118,7 +118,10 @@ public class TemplateLexer
         while (_pos < _source.Length)
         {
             if (Matches("{{") || Matches("{%") || Matches("{#"))
+            {
                 break;
+            }
+
             AdvanceChar();
         }
         return _source[start.._pos];
@@ -198,10 +201,17 @@ public class TemplateLexer
 
     private bool Matches(string s)
     {
-        if (_pos + s.Length > _source.Length) return false;
+        if (_pos + s.Length > _source.Length)
+        {
+            return false;
+        }
+
         for (int i = 0; i < s.Length; i++)
         {
-            if (_source[_pos + i] != s[i]) return false;
+            if (_source[_pos + i] != s[i])
+            {
+                return false;
+            }
         }
         return true;
     }
@@ -209,7 +219,9 @@ public class TemplateLexer
     private void Advance(int count)
     {
         for (int i = 0; i < count; i++)
+        {
             AdvanceChar();
+        }
     }
 
     private void AdvanceChar()

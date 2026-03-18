@@ -1,7 +1,6 @@
 namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
-using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
@@ -373,7 +372,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                     for (int i = 0; i < expr.Arguments.Count && i < definition.ParameterTypes.Length; i++)
                     {
                         var expectedType = definition.ParameterTypes[i];
-                        if (expectedType == null) continue;
+                        if (expectedType == null)
+                        {
+                            continue;
+                        }
 
                         var argType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Arguments[i], line, col);
                         if (argType != null && argType != "null" && argType != expectedType)
@@ -515,8 +517,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         var receiverType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Object, line, col);
         if (receiverType != null)
         {
-            var field = _scopeTree.GlobalScope.Symbols.FirstOrDefault(s =>
-                s.Kind == SymbolKind.Field && s.ParentName == receiverType && s.Name == expr.Name.Lexeme);
+            var field = _scopeTree.FindField(receiverType, expr.Name.Lexeme);
             if (field?.TypeHint != null)
             {
                 var valueType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Value, line, col);

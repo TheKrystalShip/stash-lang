@@ -169,7 +169,7 @@ chmod +x hello.stash && ./hello.stash
 
 Stash ships with a full toolchain — no plugins or third-party tools required:
 
-- **Language Server (LSP)** — completions, hover, diagnostics, go-to-definition, rename, and formatting for any LSP-compatible editor. See [docs/LSP — Language Server Protocol.md](docs/LSP%20—%20Language%20Server%20Protocol.md).
+- **Language Server (LSP)** — completions, hover, diagnostics, go-to-definition, rename, and formatting for any LSP-compatible editor. Full analysis pipeline averages **1.2ms** per document change across real-world scripts. See [docs/LSP — Language Server Protocol.md](docs/LSP%20—%20Language%20Server%20Protocol.md).
 - **Debug Adapter (DAP)** — breakpoints, stepping, variable inspection for VS Code and other DAP clients. See [docs/DAP — Debug Adapter Protocol.md](docs/DAP%20—%20Debug%20Adapter%20Protocol.md).
 - **Built-in Test Runner** — `test()`, `describe()`, `assert.*` with TAP output. No external framework needed. See [docs/TAP — Testing Infrastructure.md](docs/TAP%20—%20Testing%20Infrastructure.md).
 - **CLI Debugger** — built-in step debugger with breakpoints, call stack inspection, and variable printing. Run any script with `--debug`.
@@ -215,15 +215,15 @@ See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 ## Performance
 
-Stash's .NET-backed interpreter outperforms Bash across the board. Both languages were benchmarked with equivalent scripts performing the same operations — identical algorithms, identical iteration counts, identical checksums.
+Stash's .NET-backed interpreter outperforms Bash across the board. Both languages were benchmarked with equivalent scripts performing the same operations — identical algorithms, identical iteration counts, identical checksums. The numbers represent the median of 3 separate runs for each benchmark.
 
 | Benchmark                 | What it tests                                            |    Stash |      Bash |   Speedup |
 | ------------------------- | -------------------------------------------------------- | -------: | --------: | --------: |
-| **Algorithms**            | Recursion, sorting, searching, struct usage              | 2,312 ms | 10,318 ms |  **4.5×** |
-| **Function Calls**        | Dispatch overhead across 0–4 argument arities            | 2,485 ms |  3,657 ms |  **1.5×** |
-| **Expression Throughput** | Dense arithmetic, 70 variables, string interpolation     | 1,033 ms |  4,981 ms |  **4.8×** |
-| **Built-in Functions**    | 13 stdlib calls per iteration (math, string, conversion) |   878 ms | 23,366 ms | **26.6×** |
-| **Scope Lookup**          | Variable resolution across 5-level nested closures       | 1,664 ms |  3,293 ms |  **2.0×** |
+| **Algorithms**            | Recursion, sorting, searching, struct usage              | 2,272 ms | 10,605 ms |  **4.7×** |
+| **Function Calls**        | Dispatch overhead across 0–4 argument arities            | 2,225 ms |  3,697 ms |  **1.7×** |
+| **Expression Throughput** | Dense arithmetic, 70 variables, string interpolation     | 1,221 ms |  4,936 ms |  **4.0×** |
+| **Built-in Functions**    | 13 stdlib calls per iteration (math, string, conversion) |   784 ms | 23,237 ms | **29.6×** |
+| **Scope Lookup**          | Variable resolution across 5-level nested closures       | 1,648 ms |  3,284 ms |  **2.0×** |
 
 > Measured on the same machine, same workload. Full scripts in [`benchmarks/`](benchmarks/).
 
