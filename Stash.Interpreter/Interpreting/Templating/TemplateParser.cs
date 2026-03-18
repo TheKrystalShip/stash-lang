@@ -2,6 +2,7 @@ namespace Stash.Interpreting.Templating;
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 
 /// <summary>
 /// Parses a flat list of template tokens into a tree of TemplateNode objects.
@@ -256,7 +257,7 @@ public class TemplateParser
     private RawNode ParseRawBlock()
     {
         // Everything until {% endraw %} is literal text
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
 
         while (_pos < _tokens.Count)
         {
@@ -359,7 +360,7 @@ public class TemplateParser
     private List<string> SplitByPipe(string content)
     {
         var parts = new List<string>();
-        var current = new System.Text.StringBuilder();
+        var current = new StringBuilder();
         int i = 0;
         int parenDepth = 0;
         bool inDoubleQuote = false;
@@ -472,7 +473,7 @@ public class TemplateParser
     private string[] SplitFilterArgs(string argsStr)
     {
         var args = new List<string>();
-        var current = new System.Text.StringBuilder();
+        var current = new StringBuilder();
         bool inDoubleQuote = false;
         bool inSingleQuote = false;
 

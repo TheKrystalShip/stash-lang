@@ -1,6 +1,7 @@
 namespace Stash.Interpreting.BuiltIns;
 
 using System.Collections.Generic;
+using System.Text;
 using Stash.Interpreting.Types;
 
 /// <summary>
@@ -219,7 +220,7 @@ public static class EnvBuiltIns
 
             filePath = ExpandTilde(filePath);
 
-            var sb = new System.Text.StringBuilder();
+            var sb = new StringBuilder();
             var entries = new System.Collections.Generic.SortedDictionary<string, string>();
             foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
             {

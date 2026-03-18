@@ -1598,7 +1598,7 @@ public class InterpreterTests
     public void StructToStr()
     {
         var result = Run("struct P { x } let p = P { x: 1 }; let result = conv.toStr(p);");
-        Assert.Contains("P instance", Assert.IsType<string>(result));
+        Assert.Equal("P { x: 1 }", result);
     }
 
     // Struct in array
@@ -6786,5 +6786,201 @@ public class InterpreterTests
     public void ForInIndex_WithoutIndex_StillWorks()
     {
         Assert.Equal(6L, Run("let result = 0; for (let item in [1, 2, 3]) { result = result + item; }"));
+    }
+
+    // ── Array for-in snapshot safety ────────────────────────────────
+
+    [Fact]
+    public void ForIn_ArrayMutation_DoesNotCrash()
+    {
+        var result = Run(@"
+            let items = [1, 2, 3];
+            let result = 0;
+            for (let item in items) {
+                arr.push(items, 99);
+                result = result + 1;
+            }
+        ");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void ForIn_ArrayRemoveDuringIteration()
+    {
+        var result = Run(@"
+            let arr = [10, 20, 30];
+            let sum = 0;
+            for (let item in arr) {
+                sum = sum + item;
+            }
+            let result = sum;
+        ");
+        Assert.Equal(60L, result);
+    }
+
+    // ── StashInstance.ToString() improvements ───────────────────────
+
+    [Fact]
+    public void StructToStr_MultipleFields()
+    {
+        var result = Run(@"
+            struct Point { x, y }
+            let p = Point { x: 10, y: 20 };
+            let result = conv.toStr(p);
+        ");
+        Assert.Equal("Point { x: 10, y: 20 }", result);
+    }
+
+    [Fact]
+    public void StructToStr_NestedStruct()
+    {
+        var result = Run(@"
+            struct Inner { v }
+            struct Outer { inner }
+            let i = Inner { v: 42 };
+            let o = Outer { inner: i };
+            let result = conv.toStr(o);
+        ");
+        Assert.Equal("Outer { inner: Inner { v: 42 } }", result);
+    }
+
+    [Fact]
+    public void StructToStr_InStringInterpolation()
+    {
+        var result = Run(@"
+            struct P { x }
+            let p = P { x: 5 };
+            let result = ""value: ${p}"";
+        ");
+        Assert.Equal("value: P { x: 5 }", result);
+    }
+
+    [Fact]
+    public void StructToStr_InConcatenation()
+    {
+        var result = Run(@"
+            struct P { x }
+            let p = P { x: 7 };
+            let result = ""got: "" + p;
+        ");
+        Assert.Equal("got: P { x: 7 }", result);
+    }
+
+    // ── dict.map() ─────────────────────────────────────────────────
+
+    [Fact]
+    public void DictMap_TransformsValues()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""a""] = 1;
+            d[""b""] = 2;
+            let mapped = dict.map(d, (k, v) => v * 10);
+            let result = mapped[""a""] + mapped[""b""];
+        ");
+        Assert.Equal(30L, result);
+    }
+
+    [Fact]
+    public void DictMap_PreservesKeys()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""x""] = 5;
+            let mapped = dict.map(d, (k, v) => k);
+            let result = mapped[""x""];
+        ");
+        Assert.Equal("x", result);
+    }
+
+    [Fact]
+    public void DictMap_DoesNotMutateOriginal()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""a""] = 1;
+            dict.map(d, (k, v) => v * 100);
+            let result = d[""a""];
+        ");
+        Assert.Equal(1L, result);
+    }
+
+    [Fact]
+    public void DictMap_EmptyDict()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            let mapped = dict.map(d, (k, v) => v);
+            let result = dict.size(mapped);
+        ");
+        Assert.Equal(0L, result);
+    }
+
+    // ── dict.filter() ──────────────────────────────────────────────
+
+    [Fact]
+    public void DictFilter_KeepsTruthyEntries()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""a""] = 1;
+            d[""b""] = 20;
+            d[""c""] = 3;
+            let filtered = dict.filter(d, (k, v) => v > 5);
+            let result = dict.size(filtered);
+        ");
+        Assert.Equal(1L, result);
+    }
+
+    [Fact]
+    public void DictFilter_ReturnsCorrectEntries()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""a""] = 1;
+            d[""b""] = 20;
+            let filtered = dict.filter(d, (k, v) => v > 5);
+            let result = filtered[""b""];
+        ");
+        Assert.Equal(20L, result);
+    }
+
+    [Fact]
+    public void DictFilter_DoesNotMutateOriginal()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""a""] = 1;
+            d[""b""] = 2;
+            dict.filter(d, (k, v) => v > 5);
+            let result = dict.size(d);
+        ");
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void DictFilter_EmptyResult()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""a""] = 1;
+            let filtered = dict.filter(d, (k, v) => false);
+            let result = dict.size(filtered);
+        ");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void DictFilter_ByKey()
+    {
+        var result = Run(@"
+            let d = dict.new();
+            d[""keep_me""] = 1;
+            d[""skip_me""] = 2;
+            d[""keep_this""] = 3;
+            let filtered = dict.filter(d, (k, v) => str.startsWith(k, ""keep""));
+            let result = dict.size(filtered);
+        ");
+        Assert.Equal(2L, result);
     }
 }

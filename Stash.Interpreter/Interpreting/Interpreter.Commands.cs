@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
+using System.Text;
 using Stash.Common;
 using Stash.Parsing.AST;
 using Stash.Interpreting.Types;
@@ -40,7 +41,7 @@ public partial class Interpreter
     /// </summary>
     private static string ExpandTildeInCommand(string command)
     {
-        var sb = new System.Text.StringBuilder(command.Length);
+        var sb = new StringBuilder(command.Length);
         bool inSingleQuote = false;
         bool inDoubleQuote = false;
         bool atWordStart = true;
@@ -99,7 +100,7 @@ public partial class Interpreter
     /// <returns>A <see cref="StashInstance"/> representing the command result.</returns>
     public object? VisitCommandExpr(CommandExpr expr)
     {
-        var commandBuilder = new System.Text.StringBuilder();
+        var commandBuilder = new StringBuilder();
         foreach (Expr part in expr.Parts)
         {
             object? value = part.Accept(this);

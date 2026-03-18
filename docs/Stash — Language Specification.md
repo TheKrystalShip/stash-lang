@@ -1204,6 +1204,28 @@ for (let key in config) {
 
 All other types produce a runtime error when used as the right-hand side of `for-in`.
 
+#### Snapshot Safety
+
+All `for-in` loops iterate over a **snapshot** of the collection taken at loop entry. Modifications to the collection during iteration (adding, removing, or replacing elements) do not affect the loop's iteration order or count:
+
+```stash
+let items = [1, 2, 3];
+for (let item in items) {
+    arr.push(items, item * 10);  // safe — does not affect iteration
+    io.println(item);            // prints 1, 2, 3
+}
+// items is now [1, 2, 3, 10, 20, 30]
+
+let d = dict.new();
+d["a"] = 1; d["b"] = 2;
+for (let key in d) {
+    dict.remove(d, key);  // safe — snapshot preserves original keys
+}
+// d is now empty
+```
+
+This applies to arrays and dictionaries. Strings and ranges are inherently safe (strings are immutable; ranges yield computed values).
+
 ### Break / Continue
 
 Standard `break` and `continue` within loops.

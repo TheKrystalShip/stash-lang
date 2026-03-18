@@ -3,6 +3,7 @@ namespace Stash.Interpreting;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text;
 using Stash.Common;
 using Stash.Debugging;
 using Stash.Lexing;
@@ -594,7 +595,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
         foreach (Expr part in expr.Parts)
         {
             object? value = part.Accept(this);

@@ -195,7 +195,7 @@ public partial class Interpreter
         IEnumerable<object?> items;
         if (iterable is List<object?> list)
         {
-            items = list;
+            items = new List<object?>(list);
         }
         else if (iterable is string str)
         {

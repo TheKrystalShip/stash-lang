@@ -1,6 +1,8 @@
 namespace Stash.Interpreting.Types;
 
+using System;
 using System.Collections.Generic;
+using System.Text;
 using Stash.Common;
 
 /// <summary>
@@ -57,8 +59,40 @@ public class StashInstance
     /// </summary>
     public IReadOnlyDictionary<string, object?> GetFields() => _fields;
 
+    [ThreadStatic]
+    private static HashSet<StashInstance>? _toStringGuard;
+
     public override string ToString()
     {
-        return $"<{TypeName} instance>";
+        _toStringGuard ??= new HashSet<StashInstance>(ReferenceEqualityComparer.Instance);
+
+        if (!_toStringGuard.Add(this))
+        {
+            return $"{TypeName} {{ ... }}";
+        }
+
+        try
+        {
+            var sb = new StringBuilder(TypeName);
+            sb.Append(" { ");
+            bool first = true;
+            foreach (var kvp in _fields)
+            {
+                if (!first)
+                {
+                    sb.Append(", ");
+                }
+                first = false;
+                sb.Append(kvp.Key);
+                sb.Append(": ");
+                sb.Append(RuntimeValues.Stringify(kvp.Value));
+            }
+            sb.Append(" }");
+            return sb.ToString();
+        }
+        finally
+        {
+            _toStringGuard.Remove(this);
+        }
     }
 }

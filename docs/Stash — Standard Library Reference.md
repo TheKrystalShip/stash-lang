@@ -369,7 +369,7 @@ let expanded = arr.flatMap([1, 2, 3], (x) => [x, x * 10]); // [1, 10, 2, 20, 3, 
 
 ## `dict` — Dictionary Operations
 
-All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument.
+All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument. Functional operations (`map`, `filter`, `merge`) return **new** dictionaries — they do not mutate the original.
 
 | Function                  | Description                                                         |
 | ------------------------- | ------------------------------------------------------------------- |
@@ -384,6 +384,8 @@ All `dict` functions (except `dict.new` and `dict.merge`) take the target dictio
 | `dict.size(d)`            | Return number of entries                                            |
 | `dict.pairs(d)`           | Return array of Pair structs (each with `.key` and `.value` fields) |
 | `dict.forEach(d, fn)`     | Call `fn(key, value)` for each entry                                |
+| `dict.map(d, fn)`         | Return new dictionary with values transformed by `fn(key, value)`   |
+| `dict.filter(d, fn)`      | Return new dictionary keeping entries where `fn(key, value)` is truthy |
 | `dict.merge(d1, d2)`      | Return new dictionary combining both (d2 wins on key conflicts)     |
 
 ### Index Syntax
@@ -426,6 +428,18 @@ for (let pair in pairs) {
 dict.forEach(config, (k, v) => {
     io.println(k + " => " + v);
 });
+
+// Mapping — transform values
+let prices = dict.new();
+prices["apple"] = 2;
+prices["banana"] = 3;
+
+let doubled = dict.map(prices, (key, price) => price * 2);
+// doubled: { "apple": 4, "banana": 6 }
+
+// Filtering — keep matching entries
+let expensive = dict.filter(prices, (key, price) => price > 2);
+// expensive: { "banana": 3 }
 
 // Merging
 let defaults = dict.new();

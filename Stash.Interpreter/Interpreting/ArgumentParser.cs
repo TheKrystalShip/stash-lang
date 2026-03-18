@@ -2,6 +2,7 @@ namespace Stash.Interpreting;
 
 using System;
 using System.Collections.Generic;
+using System.Text;
 using Stash.Interpreting.Types;
 
 /// <summary>Parses command-line arguments against an <c>ArgTree</c> specification, producing an <c>Args</c> instance with all parsed values.</summary>
@@ -510,7 +511,7 @@ internal sealed class ArgumentParser
     /// <param name="fields">The parsed fields dictionary (used to resolve default values).</param>
     private void PrintArgsHelp(StashInstance tree, Dictionary<string, object?> fields)
     {
-        var sb = new System.Text.StringBuilder();
+        var sb = new StringBuilder();
 
         string? scriptName = tree.GetField("name", null) as string;
         string? version = tree.GetField("version", null) as string;

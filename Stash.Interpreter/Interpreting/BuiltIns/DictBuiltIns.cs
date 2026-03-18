@@ -157,6 +157,50 @@ public static class DictBuiltIns
             return result;
         }));
 
+        dict.Define("map", new BuiltInFunction("dict.map", 2, (interp, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.map' must be a dictionary.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'dict.map' must be a function.");
+            }
+
+            var result = new StashDictionary();
+            foreach (var entry in d.RawEntries())
+            {
+                result.Set(entry.Key, fn.Call(interp, new List<object?> { entry.Key, entry.Value }));
+            }
+            return result;
+        }));
+
+        dict.Define("filter", new BuiltInFunction("dict.filter", 2, (interp, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.filter' must be a dictionary.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'dict.filter' must be a function.");
+            }
+
+            var result = new StashDictionary();
+            foreach (var entry in d.RawEntries())
+            {
+                var keep = fn.Call(interp, new List<object?> { entry.Key, entry.Value });
+                if (RuntimeValues.IsTruthy(keep))
+                {
+                    result.Set(entry.Key, entry.Value);
+                }
+            }
+            return result;
+        }));
+
         globals.Define("dict", dict);
     }
 }

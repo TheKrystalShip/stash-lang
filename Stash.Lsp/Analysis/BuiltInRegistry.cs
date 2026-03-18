@@ -377,6 +377,10 @@ public static class BuiltInRegistry
             Documentation: "Calls a function for each key-value pair in the dictionary.\n@param dict The dictionary to iterate\n@param fn A function taking (key, value) for each entry"),
         new NamespaceFunction("dict", "merge", new[] { new BuiltInParam("dict1", "dict"), new BuiltInParam("dict2", "dict") }, "dict",
             Documentation: "Returns a new dictionary combining both dictionaries. When keys conflict, values from the second dictionary take priority.\n@param dict1 The base dictionary\n@param dict2 The dictionary whose values take priority\n@return A new merged dictionary"),
+        new NamespaceFunction("dict", "map", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("fn", "function") }, "dict",
+            Documentation: "Returns a new dictionary with values transformed by a function. Keys are preserved.\n@param dict The dictionary to map over\n@param fn A function taking (key, value) that returns the new value\n@return A new dictionary with mapped values"),
+        new NamespaceFunction("dict", "filter", new[] { new BuiltInParam("dict", "dict"), new BuiltInParam("fn", "function") }, "dict",
+            Documentation: "Returns a new dictionary containing only entries for which the function returns a truthy value.\n@param dict The dictionary to filter\n@param fn A function taking (key, value) that returns a truthy or falsy value\n@return A new dictionary with filtered entries"),
         // str namespace
         new NamespaceFunction("str", "upper", new[] { new BuiltInParam("s", "string") }, "string",
             Documentation: "Converts all characters in a string to uppercase.\n@param s The input string\n@return A new string with all characters in uppercase"),
