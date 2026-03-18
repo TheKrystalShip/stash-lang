@@ -1057,4 +1057,107 @@ public class LexerTests
         Assert.Equal(TokenType.QuestionQuestion, tokens[1].Type);
         Assert.Equal(TokenType.QuestionDot, tokens[3].Type);
     }
+
+    // ── Doc comment tests ────────────────────────────────────────────────────
+
+    [Fact]
+    public void TripleSlash_EmitsDocCommentToken()
+    {
+        var lexer = new Lexer("/// This is a doc comment\nlet x = 1;", "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.DocComment, tokens[0].Type);
+        Assert.StartsWith("///", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void TripleSlash_WithoutTrivia_IsDiscarded()
+    {
+        var lexer = new Lexer("/// This is a doc comment\nlet x = 1;", "<test>");
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.Let, tokens[0].Type);
+    }
+
+    [Fact]
+    public void DocBlockComment_EmitsDocCommentToken()
+    {
+        var lexer = new Lexer("/** This is a doc block */\nlet x = 1;", "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.DocComment, tokens[0].Type);
+        Assert.StartsWith("/**", tokens[0].Lexeme);
+        Assert.EndsWith("*/", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void DocBlockComment_WithoutTrivia_IsDiscarded()
+    {
+        var lexer = new Lexer("/** doc */\nlet x = 1;", "<test>");
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.Let, tokens[0].Type);
+    }
+
+    [Fact]
+    public void DocBlockComment_Multiline_EmitsDocCommentToken()
+    {
+        var source = "/**\n * Line one\n * Line two\n */\nfn test() {}";
+        var lexer = new Lexer(source, "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.DocComment, tokens[0].Type);
+        Assert.Contains("Line one", tokens[0].Lexeme);
+        Assert.Contains("Line two", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void RegularComment_RemainsRegularComment()
+    {
+        var lexer = new Lexer("// regular comment\nlet x = 1;", "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.SingleLineComment, tokens[0].Type);
+    }
+
+    [Fact]
+    public void RegularBlockComment_RemainsBlockComment()
+    {
+        var lexer = new Lexer("/* regular block */\nlet x = 1;", "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.BlockComment, tokens[0].Type);
+    }
+
+    [Fact]
+    public void FourSlashes_IsRegularComment()
+    {
+        // //// should be treated as a regular comment (starts with // then the rest is comment text)
+        var lexer = new Lexer("//// not a doc comment\nlet x = 1;", "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.SingleLineComment, tokens[0].Type);
+    }
+
+    [Fact]
+    public void EmptyDocBlock_IsRegularBlockComment()
+    {
+        // /**/ is an empty block comment, not a doc comment
+        var lexer = new Lexer("/**/\nlet x = 1;", "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.BlockComment, tokens[0].Type);
+    }
+
+    [Fact]
+    public void ConsecutiveTripleSlash_EmitsMultipleDocTokens()
+    {
+        var source = "/// Line 1\n/// Line 2\n/// Line 3\nfn test() {}";
+        var lexer = new Lexer(source, "<test>", preserveTrivia: true);
+        var tokens = lexer.ScanTokens();
+        Assert.Equal(TokenType.DocComment, tokens[0].Type);
+        Assert.Equal(TokenType.DocComment, tokens[1].Type);
+        Assert.Equal(TokenType.DocComment, tokens[2].Type);
+        Assert.Equal(TokenType.Fn, tokens[3].Type);
+    }
+
+    [Fact]
+    public void DocBlockComment_Unterminated_ReportsError()
+    {
+        var lexer = new Lexer("/** unterminated doc", "<test>", preserveTrivia: true);
+        lexer.ScanTokens();
+        Assert.NotEmpty(lexer.Errors);
+        Assert.Contains("Unterminated doc comment", lexer.Errors[0]);
+    }
 }

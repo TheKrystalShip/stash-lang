@@ -247,6 +247,9 @@ public enum TokenType
 
     // ── Trivia (preserved only when requested) ───────────────────────
 
+    /// <summary>A documentation comment (<c>///</c> or <c>/** ... */</c>). Only emitted when trivia preservation is enabled.</summary>
+    DocComment,
+
     /// <summary>A single-line comment starting with <c>//</c>. Only emitted when trivia preservation is enabled.</summary>
     SingleLineComment,
 

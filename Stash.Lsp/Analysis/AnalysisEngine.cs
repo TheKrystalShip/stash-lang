@@ -27,7 +27,7 @@ public class AnalysisEngine
         var parserTokens = new List<Token>(tokens.Count);
         foreach (var t in tokens)
         {
-            if (t.Type is not (TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
+            if (t.Type is not (TokenType.DocComment or TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
             {
                 parserTokens.Add(t);
             }
@@ -82,6 +82,8 @@ public class AnalysisEngine
         }
 
         TypeInferenceEngine.InferTypes(symbols, statements);
+
+        DocCommentResolver.Resolve(tokens, symbols);
 
         var validator = new SemanticValidator(symbols);
         var semanticDiagnostics = validator.Validate(statements);

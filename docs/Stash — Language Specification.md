@@ -122,6 +122,55 @@ The lexer treats `$"..."` as a special token type (`InterpolatedString`). Inside
    comment */
 ```
 
+### Documentation Comments
+
+Stash supports documentation comments that attach to the declaration immediately following them. They are surfaced by the language server on hover and in signature help.
+
+**Triple-slash** (`///`) — line-level doc comments:
+
+```stash
+/// Adds two numbers together.
+/// @param a First number
+/// @param b Second number
+/// @return The sum of a and b
+fn add(a, b) {
+    return a + b;
+}
+```
+
+**Block doc comments** (`/** ... */`) — multi-line doc comments:
+
+```stash
+/**
+ * Checks whether a value exceeds a threshold.
+ * @param value The number to test
+ * @param threshold Upper bound
+ * @return true if value > threshold
+ */
+fn exceeds(value, threshold) {
+    return value > threshold;
+}
+```
+
+Documentation comments also attach to variables and constants (useful for documenting lambdas):
+
+```stash
+/// Formats a greeting message.
+/// @param name The person's name
+/// @return A greeting string
+let greet = (name) => "Hello, ${name}!";
+```
+
+**Supported tags:**
+
+| Tag | Description |
+|-----|-------------|
+| `@param name description` | Documents a function parameter |
+| `@return description` | Documents the return value |
+| `@returns description` | Alias for `@return` |
+
+> **Note:** `////` (four slashes) is treated as a regular comment, not a doc comment. Similarly, `/**/` (empty block) is a regular block comment.
+
 ### Sample Program
 
 ```stash

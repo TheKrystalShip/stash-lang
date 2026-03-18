@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Handlers;
 
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -97,6 +98,11 @@ public class HoverHandler : HoverHandlerBase
             md += $"\n\n*imported from {importedPath}*";
         }
 
+        if (symbol.Documentation != null)
+        {
+            md += "\n\n---\n\n" + FormatDocumentation(symbol.Documentation);
+        }
+
         return Task.FromResult<Hover?>(new Hover
         {
             Contents = new MarkedStringsOrMarkupContent(new MarkupContent
@@ -113,6 +119,62 @@ public class HoverHandler : HoverHandlerBase
         {
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
+
+    /// <summary>
+    /// Formats documentation text with @param and @return tags rendered as markdown.
+    /// </summary>
+    private static string FormatDocumentation(string documentation)
+    {
+        var lines = documentation.Split('\n');
+        var description = new List<string>();
+        var paramDocs = new List<(string Name, string Desc)>();
+        string? returnDoc = null;
+
+        foreach (var line in lines)
+        {
+            var trimmed = line.Trim();
+            if (trimmed.StartsWith("@param "))
+            {
+                var rest = trimmed.Substring(7).Trim();
+                var spaceIdx = rest.IndexOf(' ');
+                if (spaceIdx > 0)
+                {
+                    paramDocs.Add((rest.Substring(0, spaceIdx), rest.Substring(spaceIdx + 1).Trim()));
+                }
+                else
+                {
+                    paramDocs.Add((rest, ""));
+                }
+            }
+            else if (trimmed.StartsWith("@return ") || trimmed.StartsWith("@returns "))
+            {
+                var marker = trimmed.StartsWith("@returns ") ? "@returns " : "@return ";
+                returnDoc = trimmed.Substring(marker.Length).Trim();
+            }
+            else
+            {
+                description.Add(line);
+            }
+        }
+
+        var result = string.Join("\n", description).Trim();
+
+        if (paramDocs.Count > 0)
+        {
+            result += "\n\n**Parameters:**\n";
+            foreach ((string name, string desc) in paramDocs)
+            {
+                result += $"\n- `{name}` — {desc}";
+            }
+        }
+
+        if (returnDoc != null)
+        {
+            result += $"\n\n**Returns:** {returnDoc}";
+        }
+
+        return result;
+    }
 
 }
 

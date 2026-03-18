@@ -1,3 +1,4 @@
+[assembly: System.Runtime.CompilerServices.InternalsVisibleTo("Stash.Tests")]
 namespace Stash.Lsp.Handlers;
 
 using System;
@@ -66,7 +67,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     SemanticTokenModifier.Readonly
                 )
             },
-            Full = new SemanticTokensCapabilityRequestFull { Delta = true },
+            Full = new SemanticTokensCapabilityRequestFull { Delta = false },
             Range = false
         };
 
@@ -132,8 +133,12 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 builder.Push(line, col, length, TokenTypeComment, 0);
             }
+            else if (token.Type == TokenType.DocComment)
+            {
+                EmitDocComment(builder, token, line, col);
+            }
 
-            if (token.Type is not (TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
+            if (token.Type is not (TokenType.DocComment or TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
             {
                 prevPrevType = prevType;
                 prevType = token.Type;
@@ -329,6 +334,94 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 }
             }
         }
+    }
+
+    private static void EmitDocComment(SemanticTokensBuilder builder, Token token, int startLine, int startCol)
+    {
+        var lexeme = token.Lexeme;
+
+        // Multi-line block doc comment: /** ... */
+        if (lexeme.StartsWith("/**"))
+        {
+            var lines = lexeme.Split('\n');
+            for (int i = 0; i < lines.Length; i++)
+            {
+                var lineText = lines[i];
+                if (lineText.Length == 0) continue;
+                int currentLine = startLine + i;
+                int currentCol = i == 0 ? startCol : 0;
+                EmitDocLine(builder, lineText, currentLine, currentCol);
+            }
+        }
+        else
+        {
+            // Single-line /// comment
+            EmitDocLine(builder, lexeme, startLine, startCol);
+        }
+    }
+
+    private static void EmitDocLine(SemanticTokensBuilder builder, string text, int line, int col)
+    {
+        var segments = FindDocTagSegments(text);
+        foreach (var seg in segments)
+            builder.Push(line, col + seg.Offset, seg.Length, seg.IsTag ? TokenTypeKeyword : TokenTypeComment, 0);
+    }
+
+    internal readonly record struct DocTagSegment(int Offset, int Length, bool IsTag);
+
+    internal static List<DocTagSegment> FindDocTagSegments(string text)
+    {
+        var segments = new List<DocTagSegment>();
+        int pos = 0;
+
+        while (pos < text.Length)
+        {
+            int tagStart = text.IndexOf('@', pos);
+            if (tagStart < 0)
+                break;
+
+            int tagLen = 0;
+            if (MatchTag(text, tagStart, "@returns"))
+                tagLen = 8;
+            else if (MatchTag(text, tagStart, "@return"))
+                tagLen = 7;
+            else if (MatchTag(text, tagStart, "@param"))
+                tagLen = 6;
+
+            if (tagLen == 0)
+            {
+                pos = tagStart + 1;
+                continue;
+            }
+
+            if (tagStart > pos)
+                segments.Add(new DocTagSegment(pos, tagStart - pos, false));
+
+            segments.Add(new DocTagSegment(tagStart, tagLen, true));
+            pos = tagStart + tagLen;
+        }
+
+        if (pos < text.Length)
+            segments.Add(new DocTagSegment(pos, text.Length - pos, false));
+        else if (pos == 0 && text.Length > 0)
+            segments.Add(new DocTagSegment(0, text.Length, false));
+
+        return segments;
+    }
+
+    internal static bool MatchTag(string text, int start, string tag)
+    {
+        if (start + tag.Length > text.Length)
+            return false;
+
+        if (text.AsSpan(start, tag.Length).SequenceEqual(tag.AsSpan()))
+        {
+            // Must be followed by non-alphanumeric (word boundary) or end of string
+            int after = start + tag.Length;
+            return after >= text.Length || !char.IsLetterOrDigit(text[after]);
+        }
+
+        return false;
     }
 
     private static (int TokenType, int Modifiers) MapSymbolKind(SymbolInfo definition, Token token)

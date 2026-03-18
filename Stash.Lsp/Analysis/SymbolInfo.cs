@@ -32,6 +32,7 @@ public class SymbolInfo
     public int? RequiredParameterCount { get; }
     public string?[]? ParameterTypes { get; }
     public bool IsExplicitTypeHint { get; }
+    public string? Documentation { get; set; }
 
     public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false)
     {

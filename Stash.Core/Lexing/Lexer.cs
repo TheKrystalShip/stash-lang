@@ -297,11 +297,31 @@ public class Lexer
             case '/':
                 if (Match('/'))
                 {
-                    SingleLineComment();
+                    if (Peek() == '/' && PeekNext() != '/')
+                    {
+                        // /// doc comment — consume the third /
+                        _current++;
+                        _column++;
+                        DocLineComment();
+                    }
+                    else
+                    {
+                        SingleLineComment();
+                    }
                 }
                 else if (Match('*'))
                 {
-                    MultiLineComment();
+                    if (Peek() == '*' && PeekNext() != '/')
+                    {
+                        // /** doc block comment — consume the second *
+                        _current++;
+                        _column++;
+                        DocBlockComment();
+                    }
+                    else
+                    {
+                        MultiLineComment();
+                    }
                 }
                 else if (Match('='))
                 {
@@ -458,6 +478,63 @@ public class Lexer
         {
             AddToken(TokenType.SingleLineComment);
         }
+    }
+
+    /// <summary>
+    /// Scans a <c>///</c> documentation comment line.
+    /// The three slashes have already been consumed by the caller.
+    /// </summary>
+    private void DocLineComment()
+    {
+        while (!IsAtEnd && _source[_current] != '\n')
+        {
+            _current++;
+            _column++;
+        }
+
+        if (_preserveTrivia)
+        {
+            AddToken(TokenType.DocComment);
+        }
+    }
+
+    /// <summary>
+    /// Scans a <c>/** ... */</c> documentation block comment.
+    /// The opening <c>/**</c> has already been consumed by the caller.
+    /// Unlike regular block comments, doc block comments do not support nesting.
+    /// </summary>
+    private void DocBlockComment()
+    {
+        while (!IsAtEnd)
+        {
+            if (_source[_current] == '*' && _current + 1 < _source.Length && _source[_current + 1] == '/')
+            {
+                _current += 2;
+                _column += 2;
+
+                if (_preserveTrivia)
+                {
+                    AddToken(TokenType.DocComment);
+                }
+                return;
+            }
+            else if (_source[_current] == '\n')
+            {
+                _current++;
+                _line++;
+                _column = 1;
+            }
+            else
+            {
+                _current++;
+                _column++;
+            }
+        }
+
+        _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated doc comment.");
+        _structuredErrors.Add(new DiagnosticError(
+            new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+            "Unterminated doc comment."));
     }
 
     /// <summary>
