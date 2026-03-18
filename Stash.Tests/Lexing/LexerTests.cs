@@ -262,6 +262,8 @@ public class LexerTests
     [InlineData("try", TokenType.Try)]
     [InlineData("import", TokenType.Import)]
     [InlineData("from", TokenType.From)]
+    [InlineData("and", TokenType.AmpersandAmpersand)]
+    [InlineData("or", TokenType.PipePipe)]
     public void ScanTokens_Keyword_ProducesCorrectType(string source, TokenType expected)
     {
         var tokens = Scan(source);
@@ -982,6 +984,40 @@ public class LexerTests
         Assert.Equal(2, tokens.Count); // switch + EOF
         Assert.Equal(TokenType.Switch, tokens[0].Type);
         Assert.Equal("switch", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_AndKeyword_ProducesAmpersandAmpersandToken()
+    {
+        var tokens = Scan("and");
+        Assert.Equal(2, tokens.Count); // and + EOF
+        Assert.Equal(TokenType.AmpersandAmpersand, tokens[0].Type);
+        Assert.Equal("and", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_OrKeyword_ProducesPipePipeToken()
+    {
+        var tokens = Scan("or");
+        Assert.Equal(2, tokens.Count); // or + EOF
+        Assert.Equal(TokenType.PipePipe, tokens[0].Type);
+        Assert.Equal("or", tokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_AndKeyword_SameTokenTypeAsDoubleAmpersand()
+    {
+        var andTokens = Scan("and");
+        var ampTokens = Scan("&&");
+        Assert.Equal(ampTokens[0].Type, andTokens[0].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_OrKeyword_SameTokenTypeAsDoublePipe()
+    {
+        var orTokens = Scan("or");
+        var pipeTokens = Scan("||");
+        Assert.Equal(pipeTokens[0].Type, orTokens[0].Type);
     }
 
     [Fact]

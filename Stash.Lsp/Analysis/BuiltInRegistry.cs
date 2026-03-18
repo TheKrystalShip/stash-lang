@@ -363,7 +363,8 @@ public static class BuiltInRegistry
     {
         "let", "const", "fn", "struct", "enum", "if", "else",
         "for", "in", "while", "do", "return", "break", "continue",
-        "true", "false", "null", "try", "import", "from", "as", "args"
+        "true", "false", "null", "try", "import", "from", "as", "switch",
+        "and", "or", "args"
     };
 
     // ── Valid built-in type names (for type hint validation) ──

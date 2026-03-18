@@ -364,7 +364,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     private static bool IsKeyword(TokenType type) => type is
         TokenType.Let or TokenType.Const or TokenType.Fn or TokenType.Struct or
         TokenType.Enum or TokenType.If or TokenType.Else or TokenType.For or
-        TokenType.In or TokenType.While or TokenType.Return or TokenType.Break or
+        TokenType.In or TokenType.While or TokenType.Do or TokenType.Return or TokenType.Break or
         TokenType.Continue or TokenType.True or TokenType.False or TokenType.Null or
         TokenType.Try or TokenType.Import or TokenType.From or TokenType.As or
         TokenType.Switch;

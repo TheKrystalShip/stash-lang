@@ -85,6 +85,8 @@ Variables declared with `let` are **mutable** — they can be reassigned after d
 
 Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `?.` (optional chaining, see [Section 5e](#5e-optional-chaining)), `++` (increment), `--` (decrement). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)).
 
+Keyword aliases: `and` is a synonym for `&&`, and `or` is a synonym for `||`. They are pure syntactic sugar — identical precedence, same short-circuit evaluation, identical semantics.
+
 The `++` and `--` operators work on numeric variables, both as prefix and postfix:
 
 ```stash
@@ -1630,7 +1632,9 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`
+
+`and` and `or` are keyword aliases for `&&` and `||` respectively — they have identical precedence, short-circuit behavior, and semantics.
 
 Contextual keywords: `from` (only reserved after `import`, can be used as a variable name elsewhere)
 
@@ -1963,8 +1967,8 @@ nullCoalesce   → redirect ( "??" redirect )* ;
 redirect       → pipe ( redirectOp expression )* ;
 redirectOp     → ">" | ">>" | "2>" | "2>>" | "&>" | "&>>" ;
 pipe           → logic_or ( "|" logic_or )* ;
-logic_or       → logic_and ( "||" logic_and )* ;
-logic_and      → equality ( "&&" equality )* ;
+logic_or       → logic_and ( "||" | "or" logic_and )* ;
+logic_and      → equality ( "&&" | "and" equality )* ;
 equality       → comparison ( ("==" | "!=") comparison )* ;
 comparison     → range ( ("<" | ">" | "<=" | ">=" | "in") range )* ;
 range          → term ( ".." term ( ".." term )? )? ;

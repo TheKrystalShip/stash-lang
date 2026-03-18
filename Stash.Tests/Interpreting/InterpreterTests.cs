@@ -372,6 +372,59 @@ public class InterpreterTests
         Assert.Equal("value", Eval("\"value\" || \"default\""));
     }
 
+    // ── and / or keyword aliases ─────────────────────────────────────────────
+
+    [Fact]
+    public void AndKeyword_BehavesLikeAmpersandAmpersand()
+    {
+        Assert.Equal(true, Eval("true and true"));
+        Assert.Equal(false, Eval("true and false"));
+        Assert.Equal(false, Eval("false and true"));
+    }
+
+    [Fact]
+    public void OrKeyword_BehavesLikePipePipe()
+    {
+        Assert.Equal(true, Eval("true or false"));
+        Assert.Equal(true, Eval("false or true"));
+        Assert.Equal(false, Eval("false or false"));
+    }
+
+    [Fact]
+    public void AndKeyword_ShortCircuits()
+    {
+        // false and <anything> should short-circuit and not evaluate right side
+        Assert.Equal(false, Eval("false and (1 / 0)"));
+    }
+
+    [Fact]
+    public void OrKeyword_ShortCircuits()
+    {
+        // true or <anything> should short-circuit and not evaluate right side
+        Assert.Equal(true, Eval("true or (1 / 0)"));
+    }
+
+    [Fact]
+    public void AndOrKeywords_MixedWithSymbols()
+    {
+        Assert.Equal(true, Eval("true && true and true"));
+        Assert.Equal(true, Eval("false || true or true"));
+        Assert.Equal(false, Eval("true and false || false"));
+    }
+
+    [Fact]
+    public void AndOrKeywords_InIfCondition()
+    {
+        Assert.Equal("yes", Run("let result = \"no\"; if (true and true) { result = \"yes\"; }"));
+        Assert.Equal("yes", Run("let result = \"no\"; if (false or true) { result = \"yes\"; }"));
+    }
+
+    [Fact]
+    public void AndOrKeywords_InWhileCondition()
+    {
+        Assert.Equal(1L, Run("let x = 0; let result = 0; while (x < 1 and result == 0) { result = 1; x = x + 1; }"));
+    }
+
     // 18. Ternary
     [Fact]
     public void Ternary_TrueCondition()

@@ -100,6 +100,8 @@ public class Lexer
             ["from"] = TokenType.From,
             ["as"] = TokenType.As,
             ["switch"] = TokenType.Switch,
+            ["and"] = TokenType.AmpersandAmpersand,
+            ["or"] = TokenType.PipePipe,
         }.ToFrozenDictionary();
 
     /// <summary>Alternate lookup handle for <see cref="_keywords"/>, enabling keyword matching directly from <see cref="ReadOnlySpan{T}"/> slices without allocating a string.</summary>
