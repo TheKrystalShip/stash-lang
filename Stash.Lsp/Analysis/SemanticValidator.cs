@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
@@ -174,6 +175,18 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
         ValidateTypeHint(stmt.TypeHint);
+        if (stmt.TypeHint != null && stmt.Initializer != null)
+        {
+            var expectedType = stmt.TypeHint.Lexeme;
+            var actualType = TypeInferenceEngine.InferExpressionType(_scopeTree, stmt.Initializer, stmt.Name.Span.StartLine, stmt.Name.Span.StartColumn);
+            if (actualType != null && actualType != "null" && actualType != expectedType)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    $"Variable '{stmt.Name.Lexeme}' is declared as '{expectedType}' but initialized with '{actualType}'.",
+                    DiagnosticLevel.Warning,
+                    stmt.Initializer.Span));
+            }
+        }
         stmt.Initializer?.Accept(this);
         return null;
     }
@@ -181,6 +194,18 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
         ValidateTypeHint(stmt.TypeHint);
+        if (stmt.TypeHint != null)
+        {
+            var expectedType = stmt.TypeHint.Lexeme;
+            var actualType = TypeInferenceEngine.InferExpressionType(_scopeTree, stmt.Initializer, stmt.Name.Span.StartLine, stmt.Name.Span.StartColumn);
+            if (actualType != null && actualType != "null" && actualType != expectedType)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    $"Constant '{stmt.Name.Lexeme}' is declared as '{expectedType}' but initialized with '{actualType}'.",
+                    DiagnosticLevel.Warning,
+                    stmt.Initializer.Span));
+            }
+        }
         stmt.Initializer.Accept(this);
         return null;
     }
@@ -300,6 +325,17 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 DiagnosticLevel.Error,
                 expr.Name.Span));
         }
+        if (definition != null && definition.IsExplicitTypeHint && definition.TypeHint != null)
+        {
+            var valueType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Value, line, col);
+            if (valueType != null && valueType != "null" && valueType != definition.TypeHint)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    $"Cannot assign value of type '{valueType}' to variable '{expr.Name.Lexeme}' of type '{definition.TypeHint}'.",
+                    DiagnosticLevel.Warning,
+                    expr.Name.Span));
+            }
+        }
         expr.Value.Accept(this);
         return null;
     }
@@ -328,6 +364,28 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                             $"Expected {expected} arguments but got {expr.Arguments.Count}.",
                             DiagnosticLevel.Error,
                             expr.Paren.Span));
+                    }
+                }
+
+                // Type-check arguments against parameter type hints
+                if (definition.ParameterTypes != null)
+                {
+                    for (int i = 0; i < expr.Arguments.Count && i < definition.ParameterTypes.Length; i++)
+                    {
+                        var expectedType = definition.ParameterTypes[i];
+                        if (expectedType == null) continue;
+
+                        var argType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Arguments[i], line, col);
+                        if (argType != null && argType != "null" && argType != expectedType)
+                        {
+                            var paramName = definition.ParameterNames != null && i < definition.ParameterNames.Length
+                                ? definition.ParameterNames[i]
+                                : $"argument {i + 1}";
+                            _diagnostics.Add(new SemanticDiagnostic(
+                                $"Argument '{paramName}' expects type '{expectedType}' but got '{argType}'.",
+                                DiagnosticLevel.Warning,
+                                expr.Arguments[i].Span));
+                        }
                     }
                 }
             }
@@ -450,6 +508,28 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         expr.Object.Accept(this);
         expr.Value.Accept(this);
+
+        // Check field type compatibility for struct field assignments
+        var line = expr.Name.Span.StartLine;
+        var col = expr.Name.Span.StartColumn;
+        var receiverType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Object, line, col);
+        if (receiverType != null)
+        {
+            var field = _scopeTree.GlobalScope.Symbols.FirstOrDefault(s =>
+                s.Kind == SymbolKind.Field && s.ParentName == receiverType && s.Name == expr.Name.Lexeme);
+            if (field?.TypeHint != null)
+            {
+                var valueType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Value, line, col);
+                if (valueType != null && valueType != "null" && valueType != field.TypeHint)
+                {
+                    _diagnostics.Add(new SemanticDiagnostic(
+                        $"Cannot assign value of type '{valueType}' to field '{expr.Name.Lexeme}' of type '{field.TypeHint}'.",
+                        DiagnosticLevel.Warning,
+                        expr.Name.Span));
+                }
+            }
+        }
+
         return null;
     }
 

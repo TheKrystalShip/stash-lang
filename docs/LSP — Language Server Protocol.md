@@ -86,10 +86,10 @@ Stash.Lsp/                         # LSP server
 │   ├── ReferenceInfo.cs           # Reference occurrence tracking (read/write/call/type-use)
 │   ├── Scope.cs                   # Single scope node (Global/Function/Block/Loop)
 │   ├── ScopeTree.cs               # Hierarchical scope tree (replaces flat symbol table)
-│   ├── SemanticValidator.cs       # Semantic error checking (undefined vars, misplaced control flow)
+│   ├── SemanticValidator.cs       # Semantic error checking (undefined vars, type mismatches, control flow)
 │   ├── StashFormatter.cs          # Full document code formatter
 │   ├── SymbolCollector.cs         # AST visitor that builds scope tree and reference list
-│   ├── SymbolInfo.cs              # Symbol representation (name, kind, span, type hint)
+│   ├── SymbolInfo.cs              # Symbol representation (name, kind, span, type hint, parameter types)
 │   ├── TextUtilities.cs           # Word-at-position and dot-prefix extraction
 │   └── TypeInferenceEngine.cs     # Static type deduction for variables and expressions
 └── Handlers/
@@ -168,7 +168,7 @@ All analysis infrastructure has been implemented. Here are the key components:
 | **Formatter**          | `StashFormatter.cs`                     | Full document code formatter with configurable indent size and tab/space preference                  |
 | **Built-In Registry**  | `BuiltInRegistry.cs`                    | Centralized definitions for all built-in functions, structs, namespaces, keywords                    |
 | **Position Utilities** | `LspExtensions.cs` + `TextUtilities.cs` | SourceSpan ↔ LSP Range conversion, word-at-position, dot-prefix extraction                           |
-| **Symbol Info**        | `SymbolInfo.cs`                         | Symbol representation: name, kind, span, type hint, parameter info                                   |
+| **Symbol Info**        | `SymbolInfo.cs`                         | Symbol representation: name, kind, span, type hint, parameter types, explicit type hint tracking     |
 | **Reference Info**     | `ReferenceInfo.cs`                      | Reference occurrence tracking with read/write/call/type-use distinction                              |
 | **Analysis Result**    | `AnalysisResult.cs`                     | Complete analysis output per document (tokens, AST, errors, scope tree, imports)                     |
 
@@ -197,7 +197,8 @@ TypeInferenceEngine
 SemanticValidator (AST visitor)
     ├→ Undefined variables, const reassignment, wrong arity
     ├→ Misplaced break/continue/return
-    └→ Unreachable code detection
+    ├→ Unreachable code detection
+    └→ Type hint enforcement (argument types, assignment types, initialization types, field assignments)
     ↓
 AnalysisResult (cached per document URI)
     ├→ Tokens, AST statements
@@ -322,8 +323,36 @@ The following features were implemented beyond the original Phase A–E plan:
 | **Formatting**           | `FormattingHandler`         | Full document formatting with configurable indent size and tab/space preference         |
 | **Call Hierarchy**       | `CallHierarchyHandler`      | Incoming/outgoing call hierarchy for functions                                          |
 | **Linked Editing Range** | `LinkedEditingRangeHandler` | Linked editing for symbol occurrences (renames all when 2+ references exist)            |
-| **Type Inference**       | `TypeInferenceEngine`       | Static type deduction from struct init, command expressions, function returns, literals |
-| **Semantic Validation**  | `SemanticValidator`         | Catches undefined variables, const reassignment, wrong arity, misplaced control flow    |
+| **Type Inference**       | `TypeInferenceEngine`       | Static type deduction from struct init, command expressions, function returns, literals, dot-access field types; used by SemanticValidator for type checking |
+| **Semantic Validation**  | `SemanticValidator`         | Catches undefined variables, const reassignment, wrong arity, misplaced control flow, type hint violations |
+
+### Type Hint Enforcement
+
+The `SemanticValidator` enforces explicit type hints as warnings. Since Stash is dynamically typed, type hints are advisory — the validator warns when code contradicts the programmer's declared intent, but does not prevent execution.
+
+**Checks performed:**
+
+| Check | Location | Example | Diagnostic |
+| --- | --- | --- | --- |
+| **Argument type mismatch** | `VisitCallExpr` | `fn add(a: int) {}` called with `add("hello")` | Warning: Argument 'a' expects type 'int' but got 'string'. |
+| **Assignment type mismatch** | `VisitAssignExpr` | `let x: int = 5; x = "hello"` | Warning: Cannot assign value of type 'string' to variable 'x' of type 'int'. |
+| **Initialization type mismatch** | `VisitVarDeclStmt` | `let x: int = "hello"` | Warning: Variable 'x' is declared as 'int' but initialized with 'string'. |
+| **Const initialization mismatch** | `VisitConstDeclStmt` | `const x: int = "hello"` | Warning: Constant 'x' is declared as 'int' but initialized with 'string'. |
+| **Struct field assignment mismatch** | `VisitDotAssignExpr` | `alice.age = "thirty"` (where `age: int`) | Warning: Cannot assign value of type 'string' to field 'age' of type 'int'. |
+
+**Design decisions:**
+
+- **Warnings, not errors.** Type hints are advisory since Stash has no static type system. This preserves the dynamic nature of the language while providing early feedback.
+- **Explicit hints only.** Assignment checking only triggers for variables where the user wrote an explicit `: type` annotation. Inferred types do not restrict reassignment.
+- **Null compatibility.** `null` is compatible with any explicit type — `let x: Config = null` produces no warning.
+- **Inference-based.** `TypeInferenceEngine.InferExpressionType()` resolves argument and value types statically from literals, variable definitions, struct initializers, function return types, and dot-access field types (e.g., `alice.age` resolves to the field's declared type).
+
+**Supporting infrastructure:**
+
+- `SymbolInfo.ParameterTypes` — parallel array storing the explicit type hint (or `null`) for each function parameter position
+- `SymbolInfo.IsExplicitTypeHint` — distinguishes user-written `: type` annotations from types inferred by `TypeInferenceEngine`, ensuring only explicit hints trigger assignment warnings
+- `SymbolCollector` populates both fields for function declarations, variable/const declarations, function parameters, and struct methods
+- Struct field type checking resolves the receiver's type (via inference or explicit annotation), then looks up the field's type hint from the struct definition in the scope tree
 
 ---
 

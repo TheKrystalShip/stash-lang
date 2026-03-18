@@ -393,4 +393,489 @@ public class SemanticValidatorTests
         var diagnostics = Validate("fn f(a = 1, b = 2) {} f();");
         Assert.DoesNotContain(diagnostics, d => d.Message.Contains("arguments") && d.Level == DiagnosticLevel.Error);
     }
+
+    private static List<SemanticDiagnostic> ValidateWithInference(string source)
+    {
+        var lexer = new Lexer(source, "<test>");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        var collector = new SymbolCollector();
+        var scopeTree = collector.Collect(stmts);
+        TypeInferenceEngine.InferTypes(scopeTree, stmts);
+        var validator = new SemanticValidator(scopeTree);
+        return validator.Validate(stmts);
+    }
+
+    // ── Type Mismatch — Function Arguments ─────────────────────────────
+
+    [Fact]
+    public void TypedParam_WrongLiteralType_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value: int) {}
+            doSomething(""hello"");
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'int'") &&
+            d.Message.Contains("got 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_CorrectLiteralType_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value: int) {}
+            doSomething(42);
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("expects type") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_TypedVariable_Mismatch_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value: int) -> bool { return value > 10; }
+            let value: string = ""Hello"";
+            doSomething(value);
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'int'") &&
+            d.Message.Contains("got 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_TypedVariable_Match_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value: int) {}
+            let x: int = 42;
+            doSomething(x);
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("expects type") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_UntypedVariable_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value: int) {}
+            let x = 42;
+            doSomething(x);
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("expects type") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_UntypedVariable_WithInference_Mismatch_ReportsWarning()
+    {
+        var diagnostics = ValidateWithInference(@"
+            fn doSomething(value: int) {}
+            let x = ""hello"";
+            doSomething(x);
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'int'") &&
+            d.Message.Contains("got 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UntypedParam_AnyArgType_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value) {}
+            doSomething(""hello"");
+            doSomething(42);
+            doSomething(true);
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("expects type") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_NullArgument_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value: int) {}
+            doSomething(null);
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("expects type") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_MultipleParams_OneMismatch_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            fn connect(host: string, port: int) {}
+            connect(""localhost"", ""8080"");
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("'port'") &&
+            d.Message.Contains("expects type 'int'") &&
+            d.Message.Contains("got 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("'host'") &&
+            d.Message.Contains("expects type") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_BoolMismatch_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            fn check(flag: bool) {}
+            check(42);
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'bool'") &&
+            d.Message.Contains("got 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_FloatMismatch_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            fn calculate(ratio: float) {}
+            calculate(42);
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'float'") &&
+            d.Message.Contains("got 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_StructType_Mismatch_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            struct Server { host, port }
+            fn deploy(srv: Server) {}
+            deploy(""not a server"");
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'Server'") &&
+            d.Message.Contains("got 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedParam_StructType_Match_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            struct Server { host, port }
+            fn deploy(srv: Server) {}
+            deploy(Server { host: ""10.0.0.1"", port: 22 });
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("expects type") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    // ── Type Mismatch — Variable Reassignment ──────────────────────────
+
+    [Fact]
+    public void TypedVar_Reassign_DifferentType_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            let value: string = ""Hello"";
+            value = 20;
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'int'") &&
+            d.Message.Contains("variable 'value'") &&
+            d.Message.Contains("of type 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedVar_Reassign_SameType_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            let value: string = ""Hello"";
+            value = ""World"";
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("Cannot assign") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedVar_Reassign_Null_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            let value: string = ""Hello"";
+            value = null;
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("Cannot assign") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UntypedVar_Reassign_DifferentType_NoWarning()
+    {
+        var diagnostics = Validate(@"
+            let value = ""Hello"";
+            value = 20;
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("Cannot assign") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void UntypedVar_WithInference_Reassign_DifferentType_NoWarning()
+    {
+        var diagnostics = ValidateWithInference(@"
+            let value = ""Hello"";
+            value = 20;
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("Cannot assign") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedVar_IntToString_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            let count: int = 0;
+            count = ""not a number"";
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'string'") &&
+            d.Message.Contains("variable 'count'") &&
+            d.Message.Contains("of type 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedVar_BoolToInt_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            let flag: bool = true;
+            flag = 0;
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'int'") &&
+            d.Message.Contains("variable 'flag'") &&
+            d.Message.Contains("of type 'bool'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    // ── Type Mismatch — Variable Initialization ────────────────────────
+
+    [Fact]
+    public void TypedVar_InitWrongType_ReportsWarning()
+    {
+        var diagnostics = Validate(@"let x: int = ""hello"";");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Variable 'x' is declared as 'int'") &&
+            d.Message.Contains("initialized with 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedVar_InitCorrectType_NoWarning()
+    {
+        var diagnostics = Validate(@"let x: int = 42;");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("declared as") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedVar_InitWithNull_NoWarning()
+    {
+        var diagnostics = Validate(@"let x: string = null;");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("declared as") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedConst_InitWrongType_ReportsWarning()
+    {
+        var diagnostics = Validate(@"const MAX: int = ""hello"";");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Constant 'MAX' is declared as 'int'") &&
+            d.Message.Contains("initialized with 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void TypedConst_InitCorrectType_NoWarning()
+    {
+        var diagnostics = Validate(@"const MAX: int = 100;");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("declared as") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    // ── Combined Scenario from User Example ────────────────────────────
+
+    [Fact]
+    public void UserExample_TypedFnAndTypedVar_BothWarnings()
+    {
+        var diagnostics = Validate(@"
+            fn doSomething(value: int) -> bool {
+                return value > 10;
+            }
+            let value: string = ""Hello, World!"";
+            doSomething(value);
+            value = 20;
+        ");
+        // Should warn about function argument type mismatch
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'int'") &&
+            d.Message.Contains("got 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+        // Should warn about variable reassignment type mismatch
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'int'") &&
+            d.Message.Contains("variable 'value'") &&
+            d.Message.Contains("of type 'string'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    // ── Struct Field Assignment Type Checking ────────────────────────────
+
+    [Fact]
+    public void StructFieldAssign_TypeMismatch_ReportsWarning()
+    {
+        var diagnostics = ValidateWithInference(@"
+            struct Person {
+                name: string,
+                age: int
+            }
+            let alice = Person { name: ""Alice"", age: 30 };
+            alice.age = ""thirty"";
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'string'") &&
+            d.Message.Contains("field 'age'") &&
+            d.Message.Contains("of type 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void StructFieldAssign_CorrectType_NoWarning()
+    {
+        var diagnostics = ValidateWithInference(@"
+            struct Person {
+                name: string,
+                age: int
+            }
+            let alice = Person { name: ""Alice"", age: 30 };
+            alice.age = 31;
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("Cannot assign") && d.Message.Contains("field 'age'"));
+    }
+
+    [Fact]
+    public void StructFieldAssign_NullValue_NoWarning()
+    {
+        var diagnostics = ValidateWithInference(@"
+            struct Person {
+                name: string,
+                age: int
+            }
+            let alice = Person { name: ""Alice"", age: 30 };
+            alice.name = null;
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("Cannot assign") && d.Message.Contains("field 'name'"));
+    }
+
+    [Fact]
+    public void StructFieldAssign_UntypedField_NoWarning()
+    {
+        var diagnostics = ValidateWithInference(@"
+            struct Config {
+                value
+            }
+            let cfg = Config { value: ""hello"" };
+            cfg.value = 42;
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("Cannot assign") && d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void StructFieldAssign_MultipleFields_OnlyMismatchWarns()
+    {
+        var diagnostics = ValidateWithInference(@"
+            struct Person {
+                name: string,
+                age: int
+            }
+            let alice = Person { name: ""Alice"", age: 30 };
+            alice.name = ""Bob"";
+            alice.age = ""thirty"";
+        ");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("field 'name'") && d.Level == DiagnosticLevel.Warning);
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'string'") &&
+            d.Message.Contains("field 'age'") &&
+            d.Message.Contains("of type 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void StructFieldAssign_TypedVariable_Mismatch_ReportsWarning()
+    {
+        var diagnostics = ValidateWithInference(@"
+            struct Person {
+                name: string,
+                age: int
+            }
+            let alice = Person { name: ""Alice"", age: 30 };
+            let newAge = ""thirty"";
+            alice.age = newAge;
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'string'") &&
+            d.Message.Contains("field 'age'") &&
+            d.Message.Contains("of type 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void StructFieldAssign_ExplicitlyTypedVar_ReportsWarning()
+    {
+        var diagnostics = Validate(@"
+            struct Person {
+                name: string,
+                age: int
+            }
+            let alice: Person = Person { name: ""Alice"", age: 30 };
+            alice.age = ""thirty"";
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("Cannot assign value of type 'string'") &&
+            d.Message.Contains("field 'age'") &&
+            d.Message.Contains("of type 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void DotExpr_TypeInference_ResolveFieldType()
+    {
+        // This verifies TypeInferenceEngine resolves dot access field types
+        var diagnostics = ValidateWithInference(@"
+            struct Point {
+                x: int,
+                y: int
+            }
+            fn process(value: string) {}
+            let p = Point { x: 1, y: 2 };
+            process(p.x);
+        ");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("expects type 'string'") &&
+            d.Message.Contains("got 'int'") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
 }

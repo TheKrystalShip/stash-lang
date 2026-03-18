@@ -120,9 +120,10 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         var returnTypeStr = stmt.ReturnType?.Lexeme;
         var paramNames = stmt.Parameters.Select(p => p.Lexeme).ToArray();
         int requiredCount = stmt.DefaultValues.TakeWhile(d => d == null).Count();
+        var paramTypes = stmt.ParameterTypes.Select(t => t?.Lexeme).ToArray();
 
         // Function name goes into the parent (current) scope
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: paramTypes));
 
         // Visit default value expressions for reference collection
         foreach (var defaultVal in stmt.DefaultValues)
@@ -137,7 +138,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             var param = stmt.Parameters[i];
             var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.Lexeme : null;
             var paramDetail = paramType != null ? $"parameter of {stmt.Name.Lexeme}: {paramType}" : $"parameter of {stmt.Name.Lexeme}";
-            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: stmt.Name.Lexeme, typeHint: paramType));
+            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: stmt.Name.Lexeme, typeHint: paramType, isExplicitTypeHint: paramType != null));
         }
 
         foreach (var s in stmt.Body.Statements)
@@ -215,9 +216,10 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             var returnTypeStr = method.ReturnType?.Lexeme;
             var paramNames = method.Parameters.Select(p => p.Lexeme).ToArray();
             int requiredCount = method.DefaultValues.TakeWhile(d => d == null).Count();
+            var methodParamTypes = method.ParameterTypes.Select(t => t?.Lexeme).ToArray();
 
             _currentScope.AddSymbol(new SymbolInfo(method.Name.Lexeme, SymbolKind.Method, method.Name.Span, method.Span, methodDetail,
-                parentName: stmt.Name.Lexeme, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount));
+                parentName: stmt.Name.Lexeme, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: methodParamTypes));
 
             // Visit default value expressions for reference collection
             foreach (var defaultVal in method.DefaultValues)
@@ -237,7 +239,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
                 var param = method.Parameters[i];
                 var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
                 var paramDetail = paramType != null ? $"parameter of {method.Name.Lexeme}: {paramType}" : $"parameter of {method.Name.Lexeme}";
-                _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: method.Name.Lexeme, typeHint: paramType));
+                _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: method.Name.Lexeme, typeHint: paramType, isExplicitTypeHint: paramType != null));
             }
 
             foreach (var s in method.Body.Statements)
@@ -275,7 +277,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         var typeStr = stmt.TypeHint?.Lexeme;
         var detail = typeStr != null ? $"let {stmt.Name.Lexeme}: {typeStr}" : $"let {stmt.Name.Lexeme}";
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Variable, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
         stmt.Initializer?.Accept(this);
         return null;
     }
@@ -284,7 +286,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         var typeStr = stmt.TypeHint?.Lexeme;
         var detail = typeStr != null ? $"const {stmt.Name.Lexeme}: {typeStr}" : $"const {stmt.Name.Lexeme}";
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Constant, stmt.Name.Span, stmt.Span, detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
         stmt.Initializer.Accept(this);
         return null;
     }
@@ -359,7 +361,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
         var typeStr = stmt.TypeHint?.Lexeme;
         var detail = typeStr != null ? $"loop variable: {typeStr}" : "loop variable";
-        _currentScope.AddSymbol(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: detail, typeHint: typeStr));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.VariableName.Lexeme, SymbolKind.LoopVariable, stmt.VariableName.Span, detail: detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
         foreach (var s in stmt.Body.Statements)
         {
             s.Accept(this);

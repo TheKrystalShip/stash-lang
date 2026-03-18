@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Analysis;
 
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 using Stash.Parsing.AST;
 
@@ -96,7 +97,7 @@ public static class TypeInferenceEngine
         }
     }
 
-    private static string? InferExpressionType(ScopeTree scopeTree, Expr expr, int contextLine, int contextCol)
+    internal static string? InferExpressionType(ScopeTree scopeTree, Expr expr, int contextLine, int contextCol)
     {
         switch (expr)
         {
@@ -138,6 +139,19 @@ public static class TypeInferenceEngine
             // Rule 8: Array literal
             case ArrayExpr:
                 return "array";
+
+            // Rule 9: Dot access — resolve struct field type
+            case DotExpr dotExpr:
+            {
+                var receiverType = InferExpressionType(scopeTree, dotExpr.Object, contextLine, contextCol);
+                if (receiverType != null)
+                {
+                    var field = scopeTree.GlobalScope.Symbols.FirstOrDefault(s =>
+                        s.Kind == SymbolKind.Field && s.ParentName == receiverType && s.Name == dotExpr.Name.Lexeme);
+                    return field?.TypeHint;
+                }
+                return null;
+            }
 
             default:
                 return null;

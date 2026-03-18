@@ -30,8 +30,10 @@ public class SymbolInfo
     public Uri? SourceUri { get; }
     public string[]? ParameterNames { get; }
     public int? RequiredParameterCount { get; }
+    public string?[]? ParameterTypes { get; }
+    public bool IsExplicitTypeHint { get; }
 
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null)
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false)
     {
         Name = name;
         Kind = kind;
@@ -43,5 +45,7 @@ public class SymbolInfo
         SourceUri = sourceUri;
         ParameterNames = parameterNames;
         RequiredParameterCount = requiredParameterCount;
+        ParameterTypes = parameterTypes;
+        IsExplicitTypeHint = isExplicitTypeHint;
     }
 }
