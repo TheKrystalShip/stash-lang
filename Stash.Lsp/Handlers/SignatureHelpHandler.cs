@@ -50,12 +50,12 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         // Try built-in signatures first
         if (BuiltInRegistry.TryGetFunction(functionName, out var builtInFn))
         {
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, ExtractParamLabels(builtInFn.Detail), activeParam));
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, ExtractParamLabels(builtInFn.Detail), activeParam, builtInFn.Documentation));
         }
 
         if (BuiltInRegistry.TryGetNamespaceFunction(functionName, out var nsFn))
         {
-            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, ExtractParamLabels(nsFn.Detail), activeParam));
+            return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, ExtractParamLabels(nsFn.Detail), activeParam, nsFn.Documentation));
         }
 
         // Try user-defined functions
@@ -143,7 +143,7 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         return (name, commaCount);
     }
 
-    private static SignatureHelp BuildSignatureHelp(string label, string[] paramNames, int activeParam)
+    private static SignatureHelp BuildSignatureHelp(string label, string[] paramNames, int activeParam, string? documentation = null)
     {
         var parameters = new List<ParameterInformation>();
         foreach (var p in paramNames)
@@ -154,7 +154,10 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         var signatureInfo = new SignatureInformation
         {
             Label = label,
-            Parameters = new Container<ParameterInformation>(parameters)
+            Parameters = new Container<ParameterInformation>(parameters),
+            Documentation = documentation != null
+                ? new MarkupContent { Kind = MarkupKind.Markdown, Value = documentation }
+                : null
         };
 
         return new SignatureHelp

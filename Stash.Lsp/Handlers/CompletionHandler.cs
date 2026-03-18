@@ -81,7 +81,10 @@ public class CompletionHandler : CompletionHandlerBase
             {
                 Label = fn.Name,
                 Kind = LspCompletionItemKind.Function,
-                Detail = fn.Detail
+                Detail = fn.Detail,
+                Documentation = fn.Documentation != null
+                    ? new MarkupContent { Kind = MarkupKind.Markdown, Value = fn.Documentation }
+                    : null
             });
         }
 
@@ -171,7 +174,10 @@ public class CompletionHandler : CompletionHandlerBase
                 {
                     Label = fn.Name,
                     Kind = LspCompletionItemKind.Function,
-                    Detail = fn.Detail
+                    Detail = fn.Detail,
+                    Documentation = fn.Documentation != null
+                        ? new MarkupContent { Kind = MarkupKind.Markdown, Value = fn.Documentation }
+                        : null
                 });
             }
             foreach (var c in BuiltInRegistry.GetNamespaceConstants(prefix))

@@ -54,7 +54,7 @@ public class HoverHandler : HoverHandlerBase
                     })
                 });
             }
-            // Try built-in namespace constants (e.g., process.SIGTERM)
+            // Try built-in namespace constants (e.g., process.SIGTERM) and functions (e.g., arr.map)
             {
                 var lines2 = text!.Split('\n');
                 var dotPrefix = TextUtilities.FindDotPrefix(lines2[(int)request.Position.Line], (int)request.Position.Character);
@@ -73,7 +73,42 @@ public class HoverHandler : HoverHandlerBase
                             })
                         });
                     }
+
+                    if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out var nsFunc))
+                    {
+                        var markdown = $"```stash\n{nsFunc.Detail}\n```\n*built-in function* — from `{dotPrefix}`";
+                        if (nsFunc.Documentation != null)
+                        {
+                            markdown += "\n\n---\n\n" + FormatDocumentation(nsFunc.Documentation);
+                        }
+                        return Task.FromResult<Hover?>(new Hover
+                        {
+                            Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                            {
+                                Kind = MarkupKind.Markdown,
+                                Value = markdown
+                            })
+                        });
+                    }
                 }
+            }
+
+            // Try global built-in functions (e.g., typeof, len)
+            if (BuiltInRegistry.TryGetFunction(word, out var builtInFn))
+            {
+                var markdown = $"```stash\n{builtInFn.Detail}\n```\n*built-in function*";
+                if (builtInFn.Documentation != null)
+                {
+                    markdown += "\n\n---\n\n" + FormatDocumentation(builtInFn.Documentation);
+                }
+                return Task.FromResult<Hover?>(new Hover
+                {
+                    Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = markdown
+                    })
+                });
             }
 
             return Task.FromResult<Hover?>(null);
