@@ -292,30 +292,38 @@ All `arr` functions take the target array as the first argument. Functions that 
 
 ### Searching
 
-| Function                     | Description                                            |
-| ---------------------------- | ------------------------------------------------------ |
-| `arr.contains(array, value)` | Return `true` if value exists in array                 |
-| `arr.indexOf(array, value)`  | Return index of first occurrence, or `-1` if not found |
+| Function                      | Description                                                     |
+| ----------------------------- | --------------------------------------------------------------- |
+| `arr.contains(array, value)`  | Return `true` if value exists in array                          |
+| `arr.indexOf(array, value)`   | Return index of first occurrence, or `-1` if not found          |
+| `arr.findIndex(array, fn)`    | Return index of first element where `fn(element)` is truthy, or `-1` |
 
 ### Transformation
 
-| Function                       | Description                                                     |
-| ------------------------------ | --------------------------------------------------------------- |
-| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)  |
-| `arr.concat(array1, array2)`   | Return new array combining both arrays                          |
-| `arr.join(array, separator)`   | Join elements into a string with separator                      |
-| `arr.reverse(array)`           | Reverse array in-place                                          |
-| `arr.sort(array)`              | Sort array in-place (numbers and strings; error on mixed types) |
+| Function                       | Description                                                      |
+| ------------------------------ | ---------------------------------------------------------------- |
+| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)   |
+| `arr.concat(array1, array2)`   | Return new array combining both arrays                           |
+| `arr.join(array, separator)`   | Join elements into a string with separator                       |
+| `arr.reverse(array)`           | Reverse array in-place                                           |
+| `arr.sort(array)`              | Sort array in-place (numbers and strings; error on mixed types)  |
+| `arr.unique(array)`            | Return new array with duplicate values removed (first occurrence kept) |
+| `arr.flat(array)`              | Flatten one level of nesting into a new array                    |
+| `arr.flatMap(array, fn)`       | Map each element with `fn`, then flatten one level               |
 
 ### Higher-Order Functions
 
-| Function                         | Description                                                   |
-| -------------------------------- | ------------------------------------------------------------- |
-| `arr.map(array, fn)`             | Return new array with `fn(element)` applied to each element   |
-| `arr.filter(array, fn)`          | Return new array of elements where `fn(element)` is truthy    |
-| `arr.forEach(array, fn)`         | Call `fn(element)` for each element                           |
-| `arr.find(array, fn)`            | Return first element where `fn(element)` is truthy, or `null` |
-| `arr.reduce(array, fn, initial)` | Fold array: calls `fn(accumulator, element)` for each element |
+| Function                         | Description                                                    |
+| -------------------------------- | -------------------------------------------------------------- |
+| `arr.map(array, fn)`             | Return new array with `fn(element)` applied to each element    |
+| `arr.filter(array, fn)`          | Return new array of elements where `fn(element)` is truthy     |
+| `arr.forEach(array, fn)`         | Call `fn(element)` for each element                            |
+| `arr.find(array, fn)`            | Return first element where `fn(element)` is truthy, or `null`  |
+| `arr.findIndex(array, fn)`       | Return index of first truthy `fn(element)`, or `-1`            |
+| `arr.reduce(array, fn, initial)` | Fold array: calls `fn(accumulator, element)` for each element  |
+| `arr.any(array, fn)`             | Return `true` if any element satisfies `fn`                    |
+| `arr.every(array, fn)`           | Return `true` if all elements satisfy `fn`                     |
+| `arr.count(array, fn)`           | Return count of elements where `fn(element)` is truthy         |
 
 ### Examples
 
@@ -344,6 +352,17 @@ let big = arr.filter(nums, (x) => x > 2);        // [3, 4, 5]
 let sum = arr.reduce(nums, (acc, x) => acc + x, 0); // 14
 let found = arr.find(nums, (x) => x > 3);        // 4
 arr.forEach(nums, (x) => io.println(x));          // prints each element
+
+// Predicates
+let hasEven = arr.any(nums, (x) => x % 2 == 0);    // true
+let allPos = arr.every(nums, (x) => x > 0);         // true
+let evens = arr.count(nums, (x) => x % 2 == 0);     // 1
+let idx = arr.findIndex(nums, (x) => x > 3);        // 2
+
+// Deduplication and flattening
+let unique = arr.unique([1, 2, 2, 3, 1]);          // [1, 2, 3]
+let flat = arr.flat([[1, 2], [3, 4]]);             // [1, 2, 3, 4]
+let expanded = arr.flatMap([1, 2, 3], (x) => [x, x * 10]); // [1, 10, 2, 20, 3, 30]
 ```
 
 ---
@@ -421,20 +440,55 @@ let merged = dict.merge(defaults, config);
 
 ## `math` — Math Functions
 
+### Core
+
 | Function                      | Description                                                       |
 | ----------------------------- | ----------------------------------------------------------------- |
 | `math.abs(value)`             | Return the absolute value of a number                             |
 | `math.ceil(value)`            | Round a number up to the nearest integer                          |
 | `math.floor(value)`           | Round a number down to the nearest integer                        |
 | `math.round(value)`           | Round a number to the nearest integer                             |
+| `math.sign(value)`            | Return the sign: `-1`, `0`, or `1`                                |
 | `math.min(a, b)`              | Return the smaller of two numbers                                 |
 | `math.max(a, b)`              | Return the larger of two numbers                                  |
-| `math.pow(base, exponent)`    | Raise a number to a power                                         |
-| `math.sqrt(value)`            | Return the square root of a number                                |
-| `math.log(value)`             | Return the natural logarithm of a number                          |
-| `math.random()`               | Return a random float between 0.0 (inclusive) and 1.0 (exclusive) |
-| `math.randomInt(min, max)`    | Return a random integer between min and max (inclusive)           |
 | `math.clamp(value, min, max)` | Constrain a number within a min/max range                         |
+
+### Powers, Roots, and Logarithms
+
+| Function                   | Description                                                       |
+| -------------------------- | ----------------------------------------------------------------- |
+| `math.pow(base, exponent)` | Raise a number to a power                                         |
+| `math.sqrt(value)`         | Return the square root of a number                                |
+| `math.exp(value)`          | Return _e_ raised to the given power                              |
+| `math.log(value)`          | Return the natural logarithm (base _e_) of a number              |
+| `math.log10(value)`        | Return the base-10 logarithm of a number                         |
+| `math.log2(value)`         | Return the base-2 logarithm of a number                          |
+
+### Trigonometry
+
+| Function            | Description                                                          |
+| ------------------- | -------------------------------------------------------------------- |
+| `math.sin(value)`   | Return the sine of an angle (radians)                                |
+| `math.cos(value)`   | Return the cosine of an angle (radians)                              |
+| `math.tan(value)`   | Return the tangent of an angle (radians)                             |
+| `math.asin(value)`  | Return the arc sine (inverse sine) in radians                        |
+| `math.acos(value)`  | Return the arc cosine (inverse cosine) in radians                    |
+| `math.atan(value)`  | Return the arc tangent (inverse tangent) in radians                  |
+| `math.atan2(y, x)`  | Return the angle in radians between the positive x-axis and (x, y)  |
+
+### Random Numbers
+
+| Function                   | Description                                                       |
+| -------------------------- | ----------------------------------------------------------------- |
+| `math.random()`            | Return a random float between 0.0 (inclusive) and 1.0 (exclusive) |
+| `math.randomInt(min, max)` | Return a random integer between min and max (inclusive)            |
+
+### Constants
+
+| Constant  | Value                 | Description                              |
+| --------- | --------------------- | ---------------------------------------- |
+| `math.PI` | `3.141592653589793`   | Ratio of a circle's circumference to its diameter (π) |
+| `math.E`  | `2.718281828459045`   | Euler's number, base of natural logarithms            |
 
 ---
 

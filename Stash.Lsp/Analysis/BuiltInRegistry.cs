@@ -60,7 +60,7 @@ public static class BuiltInRegistry
         public string[] ParamNames => Parameters.Select(p => p.Name).ToArray();
     }
 
-    public record NamespaceConstant(string Namespace, string Name, string Type, string Value)
+    public record NamespaceConstant(string Namespace, string Name, string Type, string Value, string? Documentation = null)
     {
         public string QualifiedName => $"{Namespace}.{Name}";
         public string Detail => $"const {Namespace}.{Name}: {Type} = {Value}";
@@ -338,6 +338,20 @@ public static class BuiltInRegistry
             Documentation: "Returns the first element for which the predicate function returns a truthy value, or null if none match.\n@param array The array to search\n@param fn A predicate function that takes an element\n@return The first matching element, or null"),
         new NamespaceFunction("arr", "reduce", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function"), new BuiltInParam("initial") },
             Documentation: "Reduces an array to a single value by applying a function to an accumulator and each element.\n@param array The array to reduce\n@param fn A function taking (accumulator, element) and returning the new accumulator\n@param initial The initial value of the accumulator\n@return The final accumulator value"),
+        new NamespaceFunction("arr", "unique", new[] { new BuiltInParam("array", "array") }, "array",
+            Documentation: "Returns a new array with duplicate values removed, preserving the order of first occurrences.\n@param array The array to deduplicate\n@return A new array with unique elements"),
+        new NamespaceFunction("arr", "any", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "bool",
+            Documentation: "Returns true if at least one element satisfies the predicate function.\n@param array The array to test\n@param fn A predicate function that takes an element\n@return true if any element passes the test"),
+        new NamespaceFunction("arr", "every", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "bool",
+            Documentation: "Returns true if all elements satisfy the predicate function.\n@param array The array to test\n@param fn A predicate function that takes an element\n@return true if every element passes the test"),
+        new NamespaceFunction("arr", "flat", new[] { new BuiltInParam("array", "array") }, "array",
+            Documentation: "Flattens one level of nesting. Inner arrays are expanded into the result; non-array elements are kept as-is.\n@param array The array to flatten\n@return A new flattened array"),
+        new NamespaceFunction("arr", "flatMap", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "array",
+            Documentation: "Maps each element through a function, then flattens the result by one level.\n@param array The source array\n@param fn A function that takes an element and returns a value or array\n@return A new array with mapped and flattened results"),
+        new NamespaceFunction("arr", "findIndex", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "int",
+            Documentation: "Returns the index of the first element that satisfies the predicate, or -1 if none match.\n@param array The array to search\n@param fn A predicate function that takes an element\n@return The zero-based index, or -1 if not found"),
+        new NamespaceFunction("arr", "count", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "int",
+            Documentation: "Counts the number of elements that satisfy the predicate function.\n@param array The array to count in\n@param fn A predicate function that takes an element\n@return The count of matching elements"),
         // dict namespace
         new NamespaceFunction("dict", "new", Array.Empty<BuiltInParam>(), "dict",
             Documentation: "Creates a new empty dictionary.\n@return An empty dictionary"),
@@ -472,6 +486,28 @@ public static class BuiltInRegistry
             Documentation: "Returns a random integer between min (inclusive) and max (inclusive).\n@param min The minimum value (inclusive)\n@param max The maximum value (inclusive)\n@return A random integer in [min, max]"),
         new NamespaceFunction("math", "clamp", new[] { new BuiltInParam("n", "number"), new BuiltInParam("min", "number"), new BuiltInParam("max", "number") }, "number",
             Documentation: "Constrains a number to be within a specified range.\n@param n The number to clamp\n@param min The minimum value\n@param max The maximum value\n@return The clamped value"),
+        new NamespaceFunction("math", "sin", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the sine of an angle in radians.\n@param n The angle in radians\n@return The sine value"),
+        new NamespaceFunction("math", "cos", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the cosine of an angle in radians.\n@param n The angle in radians\n@return The cosine value"),
+        new NamespaceFunction("math", "tan", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the tangent of an angle in radians.\n@param n The angle in radians\n@return The tangent value"),
+        new NamespaceFunction("math", "asin", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the arc sine (inverse sine) of a number in radians.\n@param n The value (must be between -1 and 1)\n@return The angle in radians"),
+        new NamespaceFunction("math", "acos", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the arc cosine (inverse cosine) of a number in radians.\n@param n The value (must be between -1 and 1)\n@return The angle in radians"),
+        new NamespaceFunction("math", "atan", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the arc tangent (inverse tangent) of a number in radians.\n@param n The value\n@return The angle in radians"),
+        new NamespaceFunction("math", "atan2", new[] { new BuiltInParam("y", "number"), new BuiltInParam("x", "number") }, "float",
+            Documentation: "Returns the angle in radians between the positive x-axis and the point (x, y).\n@param y The y coordinate\n@param x The x coordinate\n@return The angle in radians"),
+        new NamespaceFunction("math", "sign", new[] { new BuiltInParam("n", "number") }, "int",
+            Documentation: "Returns the sign of a number: -1 for negative, 0 for zero, 1 for positive.\n@param n The number\n@return -1, 0, or 1"),
+        new NamespaceFunction("math", "exp", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns e raised to the specified power.\n@param n The exponent\n@return The value of e^n"),
+        new NamespaceFunction("math", "log10", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the base-10 logarithm of a number.\n@param n The number (must be positive)\n@return The base-10 logarithm"),
+        new NamespaceFunction("math", "log2", new[] { new BuiltInParam("n", "number") }, "float",
+            Documentation: "Returns the base-2 logarithm of a number.\n@param n The number (must be positive)\n@return The base-2 logarithm"),
         // time namespace
         new NamespaceFunction("time", "now", Array.Empty<BuiltInParam>(), "float",
             Documentation: "Returns the current time as a Unix timestamp (seconds since epoch) with fractional precision.\n@return The current Unix timestamp as a float"),
@@ -535,15 +571,24 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<NamespaceConstant> NamespaceConstants = new[]
     {
-        new NamespaceConstant("process", "SIGHUP",  "int", "1"),
-        new NamespaceConstant("process", "SIGINT",  "int", "2"),
-        new NamespaceConstant("process", "SIGQUIT", "int", "3"),
-        new NamespaceConstant("process", "SIGKILL", "int", "9"),
-        new NamespaceConstant("process", "SIGUSR1", "int", "10"),
-        new NamespaceConstant("process", "SIGUSR2", "int", "12"),
-        new NamespaceConstant("process", "SIGTERM", "int", "15"),
-        new NamespaceConstant("math", "PI", "float", "3.141592653589793"),
-        new NamespaceConstant("math", "E",  "float", "2.718281828459045"),
+        new NamespaceConstant("process", "SIGHUP",  "int", "1",
+            Documentation: "Hangup signal (1). Sent when a terminal is closed or a controlling process ends."),
+        new NamespaceConstant("process", "SIGINT",  "int", "2",
+            Documentation: "Interrupt signal (2). Sent when the user presses Ctrl+C."),
+        new NamespaceConstant("process", "SIGQUIT", "int", "3",
+            Documentation: "Quit signal (3). Similar to SIGINT but also produces a core dump."),
+        new NamespaceConstant("process", "SIGKILL", "int", "9",
+            Documentation: "Kill signal (9). Immediately terminates a process. Cannot be caught or ignored."),
+        new NamespaceConstant("process", "SIGUSR1", "int", "10",
+            Documentation: "User-defined signal 1 (10). Available for custom application-level signaling."),
+        new NamespaceConstant("process", "SIGUSR2", "int", "12",
+            Documentation: "User-defined signal 2 (12). Available for custom application-level signaling."),
+        new NamespaceConstant("process", "SIGTERM", "int", "15",
+            Documentation: "Termination signal (15). Requests graceful shutdown. Can be caught for cleanup."),
+        new NamespaceConstant("math", "PI", "float", "3.141592653589793",
+            Documentation: "The ratio of a circle's circumference to its diameter (π ≈ 3.14159)."),
+        new NamespaceConstant("math", "E",  "float", "2.718281828459045",
+            Documentation: "Euler's number, the base of natural logarithms (e ≈ 2.71828)."),
     };
 
     // ── Built-in Namespace Names ──

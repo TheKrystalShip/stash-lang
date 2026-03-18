@@ -1,6 +1,7 @@
 namespace Stash.Interpreting.Types;
 
 using System.Collections.Generic;
+using System.Linq;
 
 /// <summary>
 /// Represents a dictionary — an unordered collection of key-value pairs.
@@ -103,7 +104,7 @@ public class StashDictionary
     /// </summary>
     public IEnumerable<KeyValuePair<object, object?>> RawEntries()
     {
-        return _entries;
+        return _entries.ToList();
     }
 
     /// <summary>

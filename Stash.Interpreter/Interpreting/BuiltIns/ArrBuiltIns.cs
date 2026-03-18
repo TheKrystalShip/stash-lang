@@ -392,6 +392,172 @@ public static class ArrBuiltIns
             return accumulator;
         }));
 
+        arr.Define("unique", new BuiltInFunction("arr.unique", 1, (_, args) =>
+        {
+            if (args[0] is not List<object?> list)
+            {
+                throw new RuntimeError("First argument to 'arr.unique' must be an array.");
+            }
+
+            var result = new List<object?>();
+            foreach (var item in list)
+            {
+                bool found = false;
+                foreach (var existing in result)
+                {
+                    if (RuntimeValues.IsEqual(item, existing))
+                    {
+                        found = true;
+                        break;
+                    }
+                }
+                if (!found)
+                {
+                    result.Add(item);
+                }
+            }
+            return result;
+        }));
+
+        arr.Define("any", new BuiltInFunction("arr.any", 2, (interp, args) =>
+        {
+            if (args[0] is not List<object?> list)
+            {
+                throw new RuntimeError("First argument to 'arr.any' must be an array.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'arr.any' must be a function.");
+            }
+
+            foreach (var item in list)
+            {
+                if (RuntimeValues.IsTruthy(fn.Call(interp, new List<object?> { item })))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }));
+
+        arr.Define("every", new BuiltInFunction("arr.every", 2, (interp, args) =>
+        {
+            if (args[0] is not List<object?> list)
+            {
+                throw new RuntimeError("First argument to 'arr.every' must be an array.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'arr.every' must be a function.");
+            }
+
+            foreach (var item in list)
+            {
+                if (!RuntimeValues.IsTruthy(fn.Call(interp, new List<object?> { item })))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }));
+
+        arr.Define("flat", new BuiltInFunction("arr.flat", 1, (_, args) =>
+        {
+            if (args[0] is not List<object?> list)
+            {
+                throw new RuntimeError("First argument to 'arr.flat' must be an array.");
+            }
+
+            var result = new List<object?>();
+            foreach (var item in list)
+            {
+                if (item is List<object?> inner)
+                {
+                    result.AddRange(inner);
+                }
+                else
+                {
+                    result.Add(item);
+                }
+            }
+            return result;
+        }));
+
+        arr.Define("flatMap", new BuiltInFunction("arr.flatMap", 2, (interp, args) =>
+        {
+            if (args[0] is not List<object?> list)
+            {
+                throw new RuntimeError("First argument to 'arr.flatMap' must be an array.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'arr.flatMap' must be a function.");
+            }
+
+            var result = new List<object?>();
+            foreach (var item in list)
+            {
+                var mapped = fn.Call(interp, new List<object?> { item });
+                if (mapped is List<object?> inner)
+                {
+                    result.AddRange(inner);
+                }
+                else
+                {
+                    result.Add(mapped);
+                }
+            }
+            return result;
+        }));
+
+        arr.Define("findIndex", new BuiltInFunction("arr.findIndex", 2, (interp, args) =>
+        {
+            if (args[0] is not List<object?> list)
+            {
+                throw new RuntimeError("First argument to 'arr.findIndex' must be an array.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'arr.findIndex' must be a function.");
+            }
+
+            for (int i = 0; i < list.Count; i++)
+            {
+                if (RuntimeValues.IsTruthy(fn.Call(interp, new List<object?> { list[i] })))
+                {
+                    return (long)i;
+                }
+            }
+            return -1L;
+        }));
+
+        arr.Define("count", new BuiltInFunction("arr.count", 2, (interp, args) =>
+        {
+            if (args[0] is not List<object?> list)
+            {
+                throw new RuntimeError("First argument to 'arr.count' must be an array.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'arr.count' must be a function.");
+            }
+
+            long count = 0;
+            foreach (var item in list)
+            {
+                if (RuntimeValues.IsTruthy(fn.Call(interp, new List<object?> { item })))
+                {
+                    count++;
+                }
+            }
+            return count;
+        }));
+
         globals.Define("arr", arr);
     }
 }

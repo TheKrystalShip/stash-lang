@@ -4116,6 +4116,198 @@ public class InterpreterTests
         Assert.Equal("a-1-2-3", Run("let a = [1, 2, 3]; let result = arr.reduce(a, (acc, x) => acc + \"-\" + x, \"a\");"));
     }
 
+    // arr.unique
+    [Fact]
+    public void ArrUnique_RemovesDuplicates()
+    {
+        var result = Run("let a = [1, 2, 2, 3, 1, 3]; let result = arr.unique(a);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(2L, list[1]);
+        Assert.Equal(3L, list[2]);
+    }
+
+    [Fact]
+    public void ArrUnique_PreservesOrder()
+    {
+        var result = Run("let a = [3, 1, 2, 1, 3]; let result = arr.unique(a);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(3L, list[0]);
+        Assert.Equal(1L, list[1]);
+        Assert.Equal(2L, list[2]);
+    }
+
+    [Fact]
+    public void ArrUnique_EmptyArray()
+    {
+        var result = Run("let result = arr.unique([]);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void ArrUnique_MixedTypes()
+    {
+        var result = Run("let a = [1, \"1\", true, 1, \"1\"]; let result = arr.unique(a);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+    }
+
+    [Fact]
+    public void ArrUnique_ReturnsNewArray()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2, 2]; let b = arr.unique(a); let result = len(a);"));
+    }
+
+    // arr.any
+    [Fact]
+    public void ArrAny_TrueWhenMatch()
+    {
+        Assert.Equal(true, Run("let a = [1, 2, 3]; let result = arr.any(a, (x) => x > 2);"));
+    }
+
+    [Fact]
+    public void ArrAny_FalseWhenNoMatch()
+    {
+        Assert.Equal(false, Run("let a = [1, 2, 3]; let result = arr.any(a, (x) => x > 10);"));
+    }
+
+    [Fact]
+    public void ArrAny_EmptyArrayReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = arr.any([], (x) => true);"));
+    }
+
+    // arr.every
+    [Fact]
+    public void ArrEvery_TrueWhenAllMatch()
+    {
+        Assert.Equal(true, Run("let a = [2, 4, 6]; let result = arr.every(a, (x) => x % 2 == 0);"));
+    }
+
+    [Fact]
+    public void ArrEvery_FalseWhenSomeFail()
+    {
+        Assert.Equal(false, Run("let a = [2, 3, 6]; let result = arr.every(a, (x) => x % 2 == 0);"));
+    }
+
+    [Fact]
+    public void ArrEvery_EmptyArrayReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = arr.every([], (x) => false);"));
+    }
+
+    // arr.flat
+    [Fact]
+    public void ArrFlat_FlattensOneLevel()
+    {
+        var result = Run("let a = [[1, 2], [3, 4], [5]]; let result = arr.flat(a);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(5, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(5L, list[4]);
+    }
+
+    [Fact]
+    public void ArrFlat_MixedNestedAndFlat()
+    {
+        var result = Run("let a = [1, [2, 3], 4]; let result = arr.flat(a);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(4, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(2L, list[1]);
+        Assert.Equal(3L, list[2]);
+        Assert.Equal(4L, list[3]);
+    }
+
+    [Fact]
+    public void ArrFlat_DoesNotFlattenDeep()
+    {
+        var result = Run("let a = [[1, [2, 3]]]; let result = arr.flat(a);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.IsType<List<object?>>(list[1]);
+    }
+
+    [Fact]
+    public void ArrFlat_EmptyArray()
+    {
+        var result = Run("let result = arr.flat([]);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    // arr.flatMap
+    [Fact]
+    public void ArrFlatMap_MapsAndFlattens()
+    {
+        var result = Run("let a = [1, 2, 3]; let result = arr.flatMap(a, (x) => [x, x * 2]);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(6, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(2L, list[1]);
+        Assert.Equal(2L, list[2]);
+        Assert.Equal(4L, list[3]);
+    }
+
+    [Fact]
+    public void ArrFlatMap_NonArrayResults()
+    {
+        var result = Run("let a = [1, 2, 3]; let result = arr.flatMap(a, (x) => x * 10);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(10L, list[0]);
+        Assert.Equal(20L, list[1]);
+        Assert.Equal(30L, list[2]);
+    }
+
+    // arr.findIndex
+    [Fact]
+    public void ArrFindIndex_ReturnsIndex()
+    {
+        Assert.Equal(2L, Run("let a = [1, 2, 3, 4]; let result = arr.findIndex(a, (x) => x > 2);"));
+    }
+
+    [Fact]
+    public void ArrFindIndex_NoMatch_ReturnsNegativeOne()
+    {
+        Assert.Equal(-1L, Run("let a = [1, 2, 3]; let result = arr.findIndex(a, (x) => x > 10);"));
+    }
+
+    [Fact]
+    public void ArrFindIndex_ReturnsFirstMatch()
+    {
+        Assert.Equal(1L, Run("let a = [1, 4, 6, 8]; let result = arr.findIndex(a, (x) => x % 2 == 0);"));
+    }
+
+    // arr.count
+    [Fact]
+    public void ArrCount_CountsMatches()
+    {
+        Assert.Equal(3L, Run("let a = [1, 2, 3, 4, 5, 6]; let result = arr.count(a, (x) => x % 2 == 0);"));
+    }
+
+    [Fact]
+    public void ArrCount_NoMatches()
+    {
+        Assert.Equal(0L, Run("let a = [1, 3, 5]; let result = arr.count(a, (x) => x % 2 == 0);"));
+    }
+
+    [Fact]
+    public void ArrCount_AllMatch()
+    {
+        Assert.Equal(3L, Run("let a = [2, 4, 6]; let result = arr.count(a, (x) => x % 2 == 0);"));
+    }
+
+    [Fact]
+    public void ArrCount_EmptyArray()
+    {
+        Assert.Equal(0L, Run("let result = arr.count([], (x) => true);"));
+    }
+
     // ── Dictionary Tests ─────────────────────────────────────────────
 
     // dict.new
@@ -5033,6 +5225,167 @@ public class InterpreterTests
     public void MathE_IsConstant()
     {
         Assert.Equal(Math.E, Run("let result = math.E;"));
+    }
+
+    // math.sin
+    [Fact]
+    public void MathSin_Zero()
+    {
+        Assert.Equal(0.0, Run("let result = math.sin(0);"));
+    }
+
+    [Fact]
+    public void MathSin_PiOverTwo()
+    {
+        Assert.Equal(1.0, (double)Run("let result = math.sin(math.PI / 2);")!, 5);
+    }
+
+    // math.cos
+    [Fact]
+    public void MathCos_Zero()
+    {
+        Assert.Equal(1.0, Run("let result = math.cos(0);"));
+    }
+
+    [Fact]
+    public void MathCos_Pi()
+    {
+        Assert.Equal(-1.0, (double)Run("let result = math.cos(math.PI);")!, 5);
+    }
+
+    // math.tan
+    [Fact]
+    public void MathTan_Zero()
+    {
+        Assert.Equal(0.0, Run("let result = math.tan(0);"));
+    }
+
+    [Fact]
+    public void MathTan_PiOverFour()
+    {
+        Assert.Equal(1.0, (double)Run("let result = math.tan(math.PI / 4);")!, 5);
+    }
+
+    // math.asin
+    [Fact]
+    public void MathAsin_Zero()
+    {
+        Assert.Equal(0.0, Run("let result = math.asin(0);"));
+    }
+
+    [Fact]
+    public void MathAsin_One()
+    {
+        Assert.Equal(Math.PI / 2, (double)Run("let result = math.asin(1);")!, 5);
+    }
+
+    // math.acos
+    [Fact]
+    public void MathAcos_One()
+    {
+        Assert.Equal(0.0, Run("let result = math.acos(1);"));
+    }
+
+    [Fact]
+    public void MathAcos_Zero()
+    {
+        Assert.Equal(Math.PI / 2, (double)Run("let result = math.acos(0);")!, 5);
+    }
+
+    // math.atan
+    [Fact]
+    public void MathAtan_Zero()
+    {
+        Assert.Equal(0.0, Run("let result = math.atan(0);"));
+    }
+
+    [Fact]
+    public void MathAtan_One()
+    {
+        Assert.Equal(Math.PI / 4, (double)Run("let result = math.atan(1);")!, 5);
+    }
+
+    // math.atan2
+    [Fact]
+    public void MathAtan2_OneOne()
+    {
+        Assert.Equal(Math.PI / 4, (double)Run("let result = math.atan2(1, 1);")!, 5);
+    }
+
+    [Fact]
+    public void MathAtan2_ZeroNegativeOne()
+    {
+        Assert.Equal(Math.PI, (double)Run("let result = math.atan2(0, -1);")!, 5);
+    }
+
+    // math.sign
+    [Fact]
+    public void MathSign_Positive()
+    {
+        Assert.Equal(1L, Run("let result = math.sign(42);"));
+    }
+
+    [Fact]
+    public void MathSign_Negative()
+    {
+        Assert.Equal(-1L, Run("let result = math.sign(-7);"));
+    }
+
+    [Fact]
+    public void MathSign_Zero()
+    {
+        Assert.Equal(0L, Run("let result = math.sign(0);"));
+    }
+
+    [Fact]
+    public void MathSign_Float()
+    {
+        Assert.Equal(-1L, Run("let result = math.sign(-3.14);"));
+    }
+
+    // math.exp
+    [Fact]
+    public void MathExp_Zero()
+    {
+        Assert.Equal(1.0, Run("let result = math.exp(0);"));
+    }
+
+    [Fact]
+    public void MathExp_One()
+    {
+        Assert.Equal(Math.E, (double)Run("let result = math.exp(1);")!, 5);
+    }
+
+    // math.log10
+    [Fact]
+    public void MathLog10_Ten()
+    {
+        Assert.Equal(1.0, Run("let result = math.log10(10);"));
+    }
+
+    [Fact]
+    public void MathLog10_Hundred()
+    {
+        Assert.Equal(2.0, Run("let result = math.log10(100);"));
+    }
+
+    // math.log2
+    [Fact]
+    public void MathLog2_Two()
+    {
+        Assert.Equal(1.0, Run("let result = math.log2(2);"));
+    }
+
+    [Fact]
+    public void MathLog2_Eight()
+    {
+        Assert.Equal(3.0, Run("let result = math.log2(8);"));
+    }
+
+    [Fact]
+    public void MathLog2_NonNumber_Throws()
+    {
+        RunExpectingError("math.log2(\"hello\");");
     }
 
     // ── time namespace ──────────────────────────────────────────────

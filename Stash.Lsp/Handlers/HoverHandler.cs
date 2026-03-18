@@ -64,6 +64,10 @@ public class HoverHandler : HoverHandlerBase
                     if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out var constant))
                     {
                         var markdown = $"```stash\n{constant.Detail}\n```\n*constant* — from `{dotPrefix}`";
+                        if (constant.Documentation != null)
+                        {
+                            markdown += "\n\n---\n\n" + constant.Documentation;
+                        }
                         return Task.FromResult<Hover?>(new Hover
                         {
                             Contents = new MarkedStringsOrMarkupContent(new MarkupContent

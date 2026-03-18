@@ -130,6 +130,82 @@ public static class MathBuiltIns
             return result;
         }));
 
+        math.Define("sin", new BuiltInFunction("math.sin", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.sin");
+            return Math.Sin(d);
+        }));
+
+        math.Define("cos", new BuiltInFunction("math.cos", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.cos");
+            return Math.Cos(d);
+        }));
+
+        math.Define("tan", new BuiltInFunction("math.tan", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.tan");
+            return Math.Tan(d);
+        }));
+
+        math.Define("asin", new BuiltInFunction("math.asin", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.asin");
+            return Math.Asin(d);
+        }));
+
+        math.Define("acos", new BuiltInFunction("math.acos", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.acos");
+            return Math.Acos(d);
+        }));
+
+        math.Define("atan", new BuiltInFunction("math.atan", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.atan");
+            return Math.Atan(d);
+        }));
+
+        math.Define("atan2", new BuiltInFunction("math.atan2", 2, (interp, args) =>
+        {
+            double y = ToDouble(args[0], "math.atan2");
+            double x = ToDouble(args[1], "math.atan2");
+            return Math.Atan2(y, x);
+        }));
+
+        math.Define("sign", new BuiltInFunction("math.sign", 1, (interp, args) =>
+        {
+            if (args[0] is long l)
+            {
+                return (long)Math.Sign(l);
+            }
+
+            if (args[0] is double d)
+            {
+                return (long)Math.Sign(d);
+            }
+
+            throw new RuntimeError("Argument to 'math.sign' must be a number.");
+        }));
+
+        math.Define("exp", new BuiltInFunction("math.exp", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.exp");
+            return Math.Exp(d);
+        }));
+
+        math.Define("log10", new BuiltInFunction("math.log10", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.log10");
+            return Math.Log10(d);
+        }));
+
+        math.Define("log2", new BuiltInFunction("math.log2", 1, (interp, args) =>
+        {
+            double d = ToDouble(args[0], "math.log2");
+            return Math.Log2(d);
+        }));
+
         globals.Define("math", math);
     }
 

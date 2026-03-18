@@ -37,7 +37,10 @@ public class CodeLensHandler : CodeLensHandlerBase
         if (result == null)
         {
             if (_previousLenses.TryGetValue(uri, out var cached))
+            {
                 return Task.FromResult<CodeLensContainer?>(new CodeLensContainer(cached.Values));
+            }
+
             return Task.FromResult<CodeLensContainer?>(null);
         }
 
@@ -127,7 +130,9 @@ public class CodeLensHandler : CodeLensHandlerBase
             foreach (var (name, oldLens) in previous)
             {
                 if (!currentByName.ContainsKey(name))
+                {
                     currentByName[name] = oldLens;
+                }
             }
         }
 

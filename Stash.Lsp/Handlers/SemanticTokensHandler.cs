@@ -347,7 +347,11 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             for (int i = 0; i < lines.Length; i++)
             {
                 var lineText = lines[i];
-                if (lineText.Length == 0) continue;
+                if (lineText.Length == 0)
+                {
+                    continue;
+                }
+
                 int currentLine = startLine + i;
                 int currentCol = i == 0 ? startCol : 0;
                 EmitDocLine(builder, lineText, currentLine, currentCol);
@@ -364,7 +368,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     {
         var segments = FindDocTagSegments(text);
         foreach (var seg in segments)
+        {
             builder.Push(line, col + seg.Offset, seg.Length, seg.IsTag ? TokenTypeKeyword : TokenTypeComment, 0);
+        }
     }
 
     internal readonly record struct DocTagSegment(int Offset, int Length, bool IsTag);
@@ -378,15 +384,23 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         {
             int tagStart = text.IndexOf('@', pos);
             if (tagStart < 0)
+            {
                 break;
+            }
 
             int tagLen = 0;
             if (MatchTag(text, tagStart, "@returns"))
+            {
                 tagLen = 8;
+            }
             else if (MatchTag(text, tagStart, "@return"))
+            {
                 tagLen = 7;
+            }
             else if (MatchTag(text, tagStart, "@param"))
+            {
                 tagLen = 6;
+            }
 
             if (tagLen == 0)
             {
@@ -395,16 +409,22 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             }
 
             if (tagStart > pos)
+            {
                 segments.Add(new DocTagSegment(pos, tagStart - pos, false));
+            }
 
             segments.Add(new DocTagSegment(tagStart, tagLen, true));
             pos = tagStart + tagLen;
         }
 
         if (pos < text.Length)
+        {
             segments.Add(new DocTagSegment(pos, text.Length - pos, false));
+        }
         else if (pos == 0 && text.Length > 0)
+        {
             segments.Add(new DocTagSegment(0, text.Length, false));
+        }
 
         return segments;
     }
@@ -412,7 +432,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     internal static bool MatchTag(string text, int start, string tag)
     {
         if (start + tag.Length > text.Length)
+        {
             return false;
+        }
 
         if (text.AsSpan(start, tag.Length).SequenceEqual(tag.AsSpan()))
         {
