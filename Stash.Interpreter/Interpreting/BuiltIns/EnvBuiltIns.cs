@@ -61,6 +61,25 @@ public static class EnvBuiltIns
             return dict;
         }));
 
+        envNs.Define("withPrefix", new BuiltInFunction("env.withPrefix", 1, (_, args) =>
+        {
+            if (args[0] is not string prefix)
+            {
+                throw new RuntimeError("Argument to 'env.withPrefix' must be a string.");
+            }
+
+            var dict = new StashDictionary();
+            foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
+            {
+                var key = entry.Key.ToString()!;
+                if (key.StartsWith(prefix, System.StringComparison.Ordinal))
+                {
+                    dict.Set(key, entry.Value?.ToString());
+                }
+            }
+            return dict;
+        }));
+
         envNs.Define("remove", new BuiltInFunction("env.remove", 1, (_, args) =>
         {
             if (args[0] is not string name)
@@ -117,11 +136,26 @@ public static class EnvBuiltIns
             return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
         }));
 
-        envNs.Define("loadFile", new BuiltInFunction("env.loadFile", 1, (_, args) =>
+        envNs.Define("loadFile", new BuiltInFunction("env.loadFile", -1, (_, args) =>
         {
+            if (args.Count < 1 || args.Count > 2)
+            {
+                throw new RuntimeError("'env.loadFile' expects 1 or 2 arguments.");
+            }
+
             if (args[0] is not string filePath)
             {
                 throw new RuntimeError("Argument to 'env.loadFile' must be a string.");
+            }
+
+            var prefix = "";
+            if (args.Count == 2)
+            {
+                if (args[1] is not string prefixArg)
+                {
+                    throw new RuntimeError("Second argument to 'env.loadFile' must be a string.");
+                }
+                prefix = prefixArg;
             }
 
             filePath = ExpandTilde(filePath);
@@ -169,7 +203,7 @@ public static class EnvBuiltIns
                     }
                 }
 
-                System.Environment.SetEnvironmentVariable(key, value);
+                System.Environment.SetEnvironmentVariable(prefix + key, value);
                 count++;
             }
 

@@ -156,6 +156,7 @@ public static class BuiltInRegistry
         new NamespaceFunction("env", "set", new[] { new BuiltInParam("name", "string"), new BuiltInParam("value", "string") }),
         new NamespaceFunction("env", "has", new[] { new BuiltInParam("name", "string") }, "bool"),
         new NamespaceFunction("env", "all", Array.Empty<BuiltInParam>(), "dict"),
+        new NamespaceFunction("env", "withPrefix", new[] { new BuiltInParam("prefix", "string") }, "dict"),
         new NamespaceFunction("env", "remove", new[] { new BuiltInParam("name", "string") }),
         new NamespaceFunction("env", "cwd", Array.Empty<BuiltInParam>(), "string"),
         new NamespaceFunction("env", "home", Array.Empty<BuiltInParam>(), "string"),
@@ -163,7 +164,7 @@ public static class BuiltInRegistry
         new NamespaceFunction("env", "user", Array.Empty<BuiltInParam>(), "string"),
         new NamespaceFunction("env", "os", Array.Empty<BuiltInParam>(), "string"),
         new NamespaceFunction("env", "arch", Array.Empty<BuiltInParam>(), "string"),
-        new NamespaceFunction("env", "loadFile", new[] { new BuiltInParam("path", "string") }, "int"),
+        new NamespaceFunction("env", "loadFile", new[] { new BuiltInParam("path", "string"), new BuiltInParam("prefix", "string") }, "int", IsVariadic: true),
         new NamespaceFunction("env", "saveFile", new[] { new BuiltInParam("path", "string") }),
         // process namespace
         new NamespaceFunction("process", "exit", new[] { new BuiltInParam("code", "int") }),

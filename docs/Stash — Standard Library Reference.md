@@ -89,6 +89,7 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 | `env.set(name, value)` | Set environment variable                               |
 | `env.has(name)`        | Check if an environment variable exists                |
 | `env.all()`            | Return all environment variables as a dictionary       |
+| `env.withPrefix(prefix)` | Return all environment variables starting with prefix as a dictionary |
 | `env.remove(name)`     | Delete an environment variable                         |
 | `env.cwd()`            | Return the current working directory                   |
 | `env.home()`           | Return the user's home directory path                  |
@@ -96,6 +97,48 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 | `env.user()`           | Return the current username                            |
 | `env.os()`             | Return the OS name (`"linux"`, `"macos"`, `"windows"`) |
 | `env.arch()`           | Return the CPU architecture (`"x64"`, `"arm64"`, etc.) |
+
+### `env.withPrefix(prefix)`
+
+Returns a dictionary containing all environment variables whose names start with the given prefix. Keys in the returned dictionary retain their full original names.
+
+```stash
+env.set("MYAPP_HOST", "localhost");
+env.set("MYAPP_PORT", "8080");
+env.set("OTHER_VAR", "value");
+
+let appVars = env.withPrefix("MYAPP_");
+// appVars contains: { "MYAPP_HOST": "localhost", "MYAPP_PORT": "8080" }
+// "OTHER_VAR" is excluded
+
+for (let key in appVars) {
+    io.println(key + " = " + appVars[key]);
+}
+```
+
+### `env.loadFile(path, prefix?)`
+
+Loads environment variables from a `.env`-style file. Returns the number of variables loaded. When the optional `prefix` parameter is provided, each key is prefixed before being set in the environment — this prevents collisions with existing environment variables.
+
+```stash
+// .env file contains: HOST=localhost, PORT=8080
+
+// Load without prefix (keys set as-is)
+env.loadFile(".env");
+io.println(env.get("HOST"));          // "localhost"
+
+// Load with prefix (keys get prefix prepended)
+env.loadFile(".env", "MYAPP_");
+io.println(env.get("MYAPP_HOST"));    // "localhost"
+io.println(env.get("MYAPP_PORT"));    // "8080"
+```
+
+Combine with `env.withPrefix` to load and retrieve namespaced configuration:
+
+```stash
+env.loadFile(".env", "MYAPP_");
+let config = env.withPrefix("MYAPP_");
+```
 
 ---
 

@@ -5836,6 +5836,124 @@ public class InterpreterTests
         RunExpectingError("env.saveFile(42);");
     }
 
+    // ── env.withPrefix tests ─────────────────────────────────────────────────
+
+    [Fact]
+    public void EnvWithPrefix_ReturnsMatchingVars()
+    {
+        var result = Run(@"
+            env.set(""STASH_PFX_A"", ""alpha"");
+            env.set(""STASH_PFX_B"", ""bravo"");
+            env.set(""STASH_OTHER_C"", ""charlie"");
+            let d = env.withPrefix(""STASH_PFX_"");
+            let result = dict.has(d, ""STASH_PFX_A"") && dict.has(d, ""STASH_PFX_B"") && !dict.has(d, ""STASH_OTHER_C"");
+        ");
+        try
+        {
+            Assert.Equal(true, result);
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("STASH_PFX_A", null);
+            System.Environment.SetEnvironmentVariable("STASH_PFX_B", null);
+            System.Environment.SetEnvironmentVariable("STASH_OTHER_C", null);
+        }
+    }
+
+    [Fact]
+    public void EnvWithPrefix_ReturnsEmptyDictWhenNoMatch()
+    {
+        Assert.Equal(0L, Run(@"
+            let d = env.withPrefix(""STASH_ZZZZ_NONEXISTENT_"");
+            let result = dict.size(d);
+        "));
+    }
+
+    [Fact]
+    public void EnvWithPrefix_NonStringArg_ThrowsError()
+    {
+        RunExpectingError("env.withPrefix(42);");
+    }
+
+    [Fact]
+    public void EnvWithPrefix_PreservesFullKeyNames()
+    {
+        try
+        {
+            System.Environment.SetEnvironmentVariable("STASH_WP_KEY1", "val1");
+            var result = Run(@"
+                let d = env.withPrefix(""STASH_WP_"");
+                let result = d[""STASH_WP_KEY1""];
+            ");
+            Assert.Equal("val1", result);
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("STASH_WP_KEY1", null);
+        }
+    }
+
+    // ── env.loadFile with prefix tests ───────────────────────────────────────
+
+    [Fact]
+    public void EnvLoadFile_WithPrefix_AddsPrefix()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllText(tmp, "HOST=localhost\nPORT=8080\n");
+            var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\", \"MYAPP_\");");
+            Assert.Equal(2L, result);
+            Assert.Equal("localhost", System.Environment.GetEnvironmentVariable("MYAPP_HOST"));
+            Assert.Equal("8080", System.Environment.GetEnvironmentVariable("MYAPP_PORT"));
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("MYAPP_HOST", null);
+            System.Environment.SetEnvironmentVariable("MYAPP_PORT", null);
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void EnvLoadFile_WithoutPrefix_WorksAsDefault()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllText(tmp, "STASH_LF_NOPREFIX=value123\n");
+            var result = Run($"let result = env.loadFile(\"{tmp.Replace("\\", "\\\\")}\");");
+            Assert.Equal(1L, result);
+            Assert.Equal("value123", System.Environment.GetEnvironmentVariable("STASH_LF_NOPREFIX"));
+        }
+        finally
+        {
+            System.Environment.SetEnvironmentVariable("STASH_LF_NOPREFIX", null);
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void EnvLoadFile_PrefixNonString_ThrowsError()
+    {
+        string tmp = System.IO.Path.GetTempFileName();
+        try
+        {
+            System.IO.File.WriteAllText(tmp, "KEY=val\n");
+            RunExpectingError($"env.loadFile(\"{tmp.Replace("\\", "\\\\")}\", 42);");
+        }
+        finally
+        {
+            System.IO.File.Delete(tmp);
+        }
+    }
+
+    [Fact]
+    public void EnvLoadFile_TooManyArgs_ThrowsError()
+    {
+        RunExpectingError("env.loadFile(\"path\", \"prefix\", \"extra\");");
+    }
+
     // ── Default parameter value tests ────────────────────────────────────────
 
     [Fact]
