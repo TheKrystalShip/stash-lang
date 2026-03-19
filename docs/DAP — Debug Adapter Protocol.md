@@ -29,7 +29,7 @@ For the language-level debugging hooks (`IDebugger` interface, `CallFrame`, `Sou
 ┌──────────────────────────────▼──────────────────────────────────┐
 │                         Stash.Dap (DAP Server)                  │
 │                                                                 │
-│   StashDebugServer  ──registers──►  16 Request Handlers         │
+│   StashDebugServer  ──registers──►  19 Request Handlers         │
 │          │                                                      │
 │          └──► DebugSession (IDebugger) ◄──── Interpreter calls  │
 └──────────────────────────────┬──────────────────────────────────┘
@@ -75,7 +75,10 @@ Stash.Dap/
     ├── StashStackTraceHandler.cs
     ├── StashScopesHandler.cs
     ├── StashVariablesHandler.cs
-    └── StashEvaluateHandler.cs
+    ├── StashEvaluateHandler.cs
+    ├── StashSetVariableHandler.cs          # Variable modification
+    ├── StashSetFunctionBreakpointsHandler.cs # Function breakpoints
+    └── StashLoadedSourcesHandler.cs         # Loaded sources request
 ```
 
 **Dependencies:**
@@ -173,6 +176,23 @@ Loop iteration {i}: value = {arr[i]}
 
 The output appears as a `console` category output event in the client.
 
+#### Function Breakpoints
+
+Set a breakpoint that triggers when a named function is entered. The breakpoint matches the function name exactly as it appears in the call stack.
+
+```js
+// Function breakpoint names match function declaration names:
+// "greet" matches: fn greet() { ... }
+// "calculate" matches: fn calculate(x, y) { ... }
+```
+
+Function breakpoints support the same condition and hit-count features as line breakpoints:
+
+- **Condition**: A Stash expression evaluated in the function's local scope on entry. The breakpoint only fires when the condition is truthy.
+- **Hit condition**: Same operators as line breakpoints (`== N`, `>= N`, `> N`, `<= N`, `< N`, `% M == R`).
+
+When a function breakpoint fires, the client receives a `stopped` event with reason `"function breakpoint"`.
+
 ---
 
 ### Stepping
@@ -233,6 +253,60 @@ The `evaluate` request evaluates arbitrary Stash expressions in the current scop
 - **Hover evaluation** (`evaluateForHovers` capability) — editor hovering over a variable shows its value
 
 Evaluation errors are returned as a DAP error response with the error message, rather than crashing the session.
+
+---
+
+### Set Variable
+
+The `setVariable` request allows modifying variable values from the debug UI while execution is paused. The new value is specified as a Stash expression string, which is evaluated in the current scope before assignment.
+
+#### Supported Containers
+
+| Container Type      | Behavior                                                                                |
+| ------------------- | --------------------------------------------------------------------------------------- |
+| **Environment**     | Assigns the new value to the named variable in the scope. Constants cannot be modified. |
+| **Array**           | Sets the element at the specified index (e.g., `[0]`, `[1]`).                           |
+| **Dictionary**      | Sets the value for the specified key.                                                   |
+| **Struct instance** | Sets the named field on the instance. Undefined fields are rejected.                    |
+
+#### Value Expressions
+
+The value parameter is parsed and evaluated as a Stash expression, not a raw literal. This means:
+
+- `42` — assigns integer 42
+- `"hello"` — assigns string "hello"
+- `x + 1` — evaluates the expression using the current scope
+- `[1, 2, 3]` — assigns a new array
+
+If the expression fails to parse or evaluate, the request returns an error message.
+
+#### Restrictions
+
+- Constants declared with `const` cannot be modified — the request returns an error.
+- Only variables visible in the selected variable container can be modified.
+- Namespace members cannot be modified.
+
+---
+
+### Loaded Sources
+
+The `loadedSources` request returns all source files that have been loaded during the current debug session. This includes:
+
+- **Main script** — the `.stash` file specified in the launch configuration
+- **Imported modules** — any files loaded via `import { ... } from "file.stash"` or `import "file.stash" as alias`
+
+When a new source file is loaded (e.g., when an `import` statement executes), the server sends a `loadedSource` event with reason `"new"` to notify the client in real time. This enables editors to update their "Loaded Sources" panel as the script runs.
+
+#### Source Properties
+
+Each source in the response includes:
+
+| Property | Value                                       |
+| -------- | ------------------------------------------- |
+| `path`   | Normalized absolute path to the source file |
+| `name`   | File name only (e.g., `utils.stash`)        |
+
+Paths are normalized using `Path.GetFullPath()` for consistent matching across editors and platforms.
 
 ---
 
@@ -400,9 +474,9 @@ dotnet publish Stash.Dap/ -c Release -o publish/ \
 
 ## Testing
 
-113 tests across 3 files in `Stash.Tests/Dap/`:
+129 tests across 3 files in `Stash.Tests/Dap/`:
 
-### DebugSessionTests.cs (59 tests)
+### DebugSessionTests.cs (72 tests)
 
 Unit tests for `DebugSession` in isolation:
 
@@ -414,10 +488,13 @@ Unit tests for `DebugSession` in isolation:
 - Exception breakpoint filter enable/disable
 - Launch argument validation
 - Pause/resume gate behavior
+- SetVariable validation (no interpreter, invalid reference)
+- Function breakpoint management (set, clear, replace, ShouldBreakOnFunctionEntry)
+- Loaded sources tracking (add, deduplicate, clear on disconnect)
 
-### DapHandlerTests.cs (34 tests)
+### DapHandlerTests.cs (30 tests)
 
-Handler-level tests that exercise the 16 request handlers:
+Handler-level tests that exercise the 19 request handlers:
 
 - `Initialize` — capabilities response shape
 - `Threads` — single thread response
@@ -425,8 +502,11 @@ Handler-level tests that exercise the 16 request handlers:
 - `Continue`, `Next`, `StepIn`, `StepOut` — step mode transitions
 - `Evaluate` — expression evaluation and error responses
 - `Disconnect` — session teardown
+- SetVariable handler — error response for invalid inputs
+- SetFunctionBreakpoints handler — single, multiple, and null breakpoints
+- LoadedSources handler — empty and populated responses
 
-### DapIntegrationTests.cs (20 tests)
+### DapIntegrationTests.cs (27 tests)
 
 End-to-end tests that run real Stash scripts and validate DAP events:
 
@@ -442,6 +522,12 @@ End-to-end tests that run real Stash scripts and validate DAP events:
 - Pause mid-execution
 - Disconnect during execution
 - Script arguments (`args`) passed correctly
+- Function breakpoint hits on function entry
+- Conditional function breakpoints
+- SetVariable modification at breakpoint
+- Array element modification via SetVariable
+- Multiple function breakpoints hit in sequence
+- Loaded sources tracking (main script, imported modules)
 
 ### Running Tests
 
@@ -509,10 +595,10 @@ The `Initialize` response declares the following capabilities:
 | `supportsHitConditionalBreakpoints`              | ✅        |
 | `supportsLogPoints`                              | ✅        |
 | `exceptionBreakpointFilters` (`all`, `uncaught`) | ✅        |
-| `supportsSetVariable`                            | ❌        |
-| `supportsFunctionBreakpoints`                    | ❌        |
+| `supportsSetVariable`                            | ✅        |
+| `supportsFunctionBreakpoints`                    | ✅        |
 | `supportsExceptionInfoRequest`                   | ❌        |
-| `supportsLoadedSourcesRequest`                   | ❌        |
+| `supportsLoadedSourcesRequest`                   | ✅        |
 | `supportsAttachRequest`                          | ❌        |
 
 ---
@@ -521,20 +607,15 @@ The `Initialize` response declares the following capabilities:
 
 ### Current Limitations
 
-| Limitation                  | Notes                                                                                                                                                                         |
-| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Launch only**             | `attach` mode is not supported; the DAP server always launches a new interpreter process                                                                                      |
-| **Single thread**           | The Stash interpreter is single-threaded; DAP multi-thread concepts (pause all threads, per-thread stepping) do not apply                                                     |
-| **No set-variable**         | Variables cannot be mutated from the debug UI at runtime                                                                                                                      |
-| **No function breakpoints** | Cannot break on function entry by name; use a line breakpoint on the first line of the function instead                                                                       |
-| **No loaded sources**       | The editor cannot enumerate all loaded source files via DAP                                                                                                                   |
-| **`uncaught` = `all`**      | Currently both exception filters behave identically; distinguishing caught vs. uncaught exceptions requires restructuring the interpreter's error model                       |
-| **No source maps**          | `import` statements load other `.stash` files; breakpoints in imported modules use the imported file's absolute path correctly, but there is no higher-level source-map layer |
+| Limitation             | Notes                                                                                                                                                                         |
+| ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Launch only**        | `attach` mode is not supported; the DAP server always launches a new interpreter process                                                                                      |
+| **Single thread**      | The Stash interpreter is single-threaded; DAP multi-thread concepts (pause all threads, per-thread stepping) do not apply                                                     |
+| **`uncaught` = `all`** | Currently both exception filters behave identically; distinguishing caught vs. uncaught exceptions requires restructuring the interpreter's error model                       |
+| **No source maps**     | `import` statements load other `.stash` files; breakpoints in imported modules use the imported file's absolute path correctly, but there is no higher-level source-map layer |
 
 ### Potential Future Work
 
-- **Set variable**: Allow the debug UI to modify variable values at a breakpoint — requires exposing mutation APIs through `IDebugger`.
-- **Function breakpoints**: Parse `StashFunctionBreakpoint` names and inject breakpoints at function-definition sites.
 - **Exception info request**: Return structured exception details (type, message, stack) when paused on an exception.
 - **Distinguish caught vs. uncaught**: Track a try/catch depth counter in the interpreter to implement true `uncaught`-only filtering.
 - **Data breakpoints**: Pause when a specific variable's value changes.

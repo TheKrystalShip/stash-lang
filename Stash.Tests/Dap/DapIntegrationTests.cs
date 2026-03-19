@@ -720,4 +720,260 @@ public class DapIntegrationTests
             File.Delete(path);
         }
     }
+
+    // ── 21. Function Breakpoint ───────────────────────────────────────────────
+
+    [Fact]
+    public void Integration_FunctionBreakpoint_PausesOnEntry()
+    {
+        var path = CreateTempScript(
+            "fn greet(name) {\nreturn \"hi \" + name;\n}\nlet result = greet(\"world\");\n");
+        try
+        {
+            var session = new DebugSession();
+            session.SetFunctionBreakpoints(new[]
+            {
+                new FunctionBreakpoint { Name = "greet" },
+            });
+            session.Launch(path, null, false, null);
+            session.ConfigurationDone();
+
+            WaitForPause(session);
+
+            var frames = session.GetStackTrace();
+            Assert.Contains(frames, f => f.Name == "greet");
+            Assert.Equal(PauseReason.FunctionBreakpoint, GetPauseReason(session));
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    // ── 22. Function Breakpoint with Condition ────────────────────────────────
+
+    [Fact]
+    public void Integration_FunctionBreakpoint_WithCondition()
+    {
+        // Verify the breakpoint fires on every invocation of the function.
+        var path = CreateTempScript(
+            "fn greet(name) {\nreturn \"hi \" + name;\n}\nlet result = greet(\"world\");\nlet result2 = greet(\"moon\");\n");
+        try
+        {
+            var session = new DebugSession();
+            session.SetFunctionBreakpoints(new[]
+            {
+                new FunctionBreakpoint { Name = "greet" },
+            });
+            session.Launch(path, null, false, null);
+            session.ConfigurationDone();
+
+            // First call to greet("world")
+            WaitForPause(session);
+            var frames = session.GetStackTrace();
+            Assert.Contains(frames, f => f.Name == "greet");
+            Assert.Equal(PauseReason.FunctionBreakpoint, GetPauseReason(session));
+
+            session.Continue();
+
+            // Second call to greet("moon")
+            WaitForPause(session);
+            frames = session.GetStackTrace();
+            Assert.Contains(frames, f => f.Name == "greet");
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    // ── 23. Set Variable at Breakpoint ────────────────────────────────────────
+
+    [Fact]
+    public void Integration_SetVariable_ModifiesValueDuringExecution()
+    {
+        var path = CreateTempScript("let x = 10;\nlet y = x + 5;\nlet z = y;\n");
+        try
+        {
+            var session = new DebugSession();
+            session.SetBreakpoints(path, new[] { new SourceBreakpoint { Line = 2 } });
+            session.Launch(path, null, false, null);
+            session.ConfigurationDone();
+
+            WaitForPause(session);
+
+            var frames = session.GetStackTrace();
+            var frameId = (int)frames[0].Id;
+            var scopes = session.GetScopes(frameId);
+
+            // Modify x from 10 to 100
+            var result = session.SetVariable((int)scopes[0].VariablesReference, "x", "100");
+            Assert.Equal("100", result.Value);
+            Assert.Equal("int", result.Type);
+
+            // Verify the change persisted
+            var vars = session.GetVariables((int)scopes[0].VariablesReference);
+            Assert.Contains(vars, v => v.Name == "x" && v.Value == "100");
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    // ── 24. Set Variable — Array Element ──────────────────────────────────────
+
+    [Fact]
+    public void Integration_SetVariable_ModifiesArrayElement()
+    {
+        var path = CreateTempScript("let arr = [1, 2, 3];\nlet x = arr;\n");
+        try
+        {
+            var session = new DebugSession();
+            session.SetBreakpoints(path, new[] { new SourceBreakpoint { Line = 2 } });
+            session.Launch(path, null, false, null);
+            session.ConfigurationDone();
+
+            WaitForPause(session);
+
+            var frames = session.GetStackTrace();
+            var frameId = (int)frames[0].Id;
+            var scopes = session.GetScopes(frameId);
+            var vars = session.GetVariables((int)scopes[0].VariablesReference);
+
+            var arrVar = vars.First(v => v.Name == "arr");
+            Assert.True(arrVar.VariablesReference > 0);
+
+            // Modify arr[1] from 2 to 99
+            var result = session.SetVariable((int)arrVar.VariablesReference, "[1]", "99");
+            Assert.Equal("99", result.Value);
+
+            // Verify the change
+            var elements = session.GetVariables((int)arrVar.VariablesReference);
+            Assert.Contains(elements, e => e.Name == "[1]" && e.Value == "99");
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    // ── 25. Multiple Function Breakpoints ─────────────────────────────────────
+
+    [Fact]
+    public void Integration_MultipleFunctionBreakpoints_HitsEach()
+    {
+        var path = CreateTempScript(
+            "fn alpha() {\nreturn 1;\n}\nfn beta() {\nreturn 2;\n}\nlet a = alpha();\nlet b = beta();\n");
+        try
+        {
+            var session = new DebugSession();
+            session.SetFunctionBreakpoints(new[]
+            {
+                new FunctionBreakpoint { Name = "alpha" },
+                new FunctionBreakpoint { Name = "beta" },
+            });
+            session.Launch(path, null, false, null);
+            session.ConfigurationDone();
+
+            // First hit: alpha
+            WaitForPause(session);
+            var frames = session.GetStackTrace();
+            Assert.Contains(frames, f => f.Name == "alpha");
+
+            session.Continue();
+
+            // Second hit: beta
+            WaitForPause(session);
+            frames = session.GetStackTrace();
+            Assert.Contains(frames, f => f.Name == "beta");
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    // ── 26. Loaded Sources ────────────────────────────────────────────────────
+
+    [Fact]
+    public void LoadedSources_MainScript_AppearsInSources()
+    {
+        var path = CreateTempScript(@"
+let x = 1;
+let y = 2;
+");
+        try
+        {
+            var session = new DebugSession();
+            session.SetBreakpoints(path, new[] { new SourceBreakpoint { Line = 3 } });
+            session.Launch(path, null, false, null);
+            session.ConfigurationDone();
+            WaitForPause(session);
+
+            var sources = session.GetLoadedSources();
+            Assert.Single(sources);
+            Assert.Equal(path, sources[0].Path);
+            Assert.Equal(Path.GetFileName(path), sources[0].Name);
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    [Fact]
+    public void LoadedSources_WithImport_BothSourcesAppear()
+    {
+        var modulePath = Path.Combine(Path.GetTempPath(), $"stash_module_{Guid.NewGuid():N}.stash");
+        File.WriteAllText(modulePath, @"
+fn helper() {
+    return 42;
+}
+");
+
+        var mainPath = Path.Combine(Path.GetTempPath(), $"stash_main_{Guid.NewGuid():N}.stash");
+        File.WriteAllText(mainPath,
+            $"import {{ helper }} from \"{modulePath}\";\n" +
+            "let result = helper();\n");
+        try
+        {
+            var session = new DebugSession();
+            session.SetBreakpoints(mainPath, new[] { new SourceBreakpoint { Line = 2 } });
+            session.Launch(mainPath, null, false, null);
+            session.ConfigurationDone();
+            WaitForPause(session);
+
+            var sources = session.GetLoadedSources();
+            Assert.Equal(2, sources.Count);
+            Assert.Contains(sources, s => s.Path != null && s.Path.Contains(Path.GetFileName(mainPath)));
+            Assert.Contains(sources, s => s.Path != null && s.Path.Contains(Path.GetFileName(modulePath)));
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(mainPath);
+            File.Delete(modulePath);
+        }
+    }
 }

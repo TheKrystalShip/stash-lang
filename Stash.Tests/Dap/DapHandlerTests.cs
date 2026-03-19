@@ -281,4 +281,113 @@ public class DapHandlerTests
         var result = await handler.Handle(new EvaluateArguments { Expression = "x" }, CancellationToken.None);
         Assert.Equal(0, result.VariablesReference);
     }
+
+    // ── SetVariable handler ──────────────────────────────────────────────────
+
+    [Fact]
+    public async Task SetVariableHandler_BeforeLaunch_ReturnsErrorMessage()
+    {
+        var session = new DebugSession();
+        var handler = new StashSetVariableHandler(session);
+        var result = await handler.Handle(new SetVariableArguments
+        {
+            VariablesReference = 1,
+            Name = "x",
+            Value = "42"
+        }, CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.StartsWith("Error:", result.Value);
+    }
+
+    [Fact]
+    public async Task SetVariableHandler_InvalidReference_ReturnsErrorMessage()
+    {
+        var session = new DebugSession();
+        // Need to set interpreter for the SetVariable path
+        var field = typeof(DebugSession).GetField("_interpreter",
+            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
+        field.SetValue(session, new Stash.Interpreting.Interpreter());
+
+        var handler = new StashSetVariableHandler(session);
+        var result = await handler.Handle(new SetVariableArguments
+        {
+            VariablesReference = 9999,
+            Name = "x",
+            Value = "42"
+        }, CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.StartsWith("Error:", result.Value);
+    }
+
+    // ── SetFunctionBreakpoints handler ───────────────────────────────────────
+
+    [Fact]
+    public async Task SetFunctionBreakpointsHandler_ReturnsBreakpoints()
+    {
+        var session = new DebugSession();
+        var handler = new StashSetFunctionBreakpointsHandler(session);
+        var result = await handler.Handle(new SetFunctionBreakpointsArguments
+        {
+            Breakpoints = new Container<FunctionBreakpoint>(
+                new FunctionBreakpoint { Name = "myFunc" }
+            )
+        }, CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.Single(result.Breakpoints!);
+        Assert.True(result.Breakpoints!.First().Verified);
+    }
+
+    [Fact]
+    public async Task SetFunctionBreakpointsHandler_MultipleBreakpoints()
+    {
+        var session = new DebugSession();
+        var handler = new StashSetFunctionBreakpointsHandler(session);
+        var result = await handler.Handle(new SetFunctionBreakpointsArguments
+        {
+            Breakpoints = new Container<FunctionBreakpoint>(
+                new FunctionBreakpoint { Name = "func1" },
+                new FunctionBreakpoint { Name = "func2" },
+                new FunctionBreakpoint { Name = "func3" }
+            )
+        }, CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.Equal(3, result.Breakpoints!.Count());
+    }
+
+    [Fact]
+    public async Task SetFunctionBreakpointsHandler_NullBreakpoints_ReturnsEmpty()
+    {
+        var session = new DebugSession();
+        var handler = new StashSetFunctionBreakpointsHandler(session);
+        var result = await handler.Handle(new SetFunctionBreakpointsArguments
+        {
+            Breakpoints = null
+        }, CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.Empty(result.Breakpoints!);
+    }
+
+    // ── LoadedSources handler ─────────────────────────────────────────────────
+
+    [Fact]
+    public async Task LoadedSourcesHandler_NoSources_ReturnsEmpty()
+    {
+        var session = new DebugSession();
+        var handler = new StashLoadedSourcesHandler(session);
+        var result = await handler.Handle(new LoadedSourcesArguments(), CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.Empty(result.Sources);
+    }
+
+    [Fact]
+    public async Task LoadedSourcesHandler_WithSources_ReturnsSources()
+    {
+        var session = new DebugSession();
+        session.OnSourceLoaded("/test/main.stash");
+        session.OnSourceLoaded("/test/lib.stash");
+        var handler = new StashLoadedSourcesHandler(session);
+        var result = await handler.Handle(new LoadedSourcesArguments(), CancellationToken.None);
+        Assert.NotNull(result);
+        Assert.Equal(2, result.Sources.Count());
+    }
 }

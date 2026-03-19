@@ -258,15 +258,6 @@ public class DebugSessionTests
         Assert.False(session.StopOnEntry);
     }
 
-    [Fact]
-    public void ShouldBreakOnFunctionEntry_AlwaysReturnsFalse()
-    {
-        var session = new DebugSession();
-        Assert.False(session.ShouldBreakOnFunctionEntry("anyFunction"));
-        Assert.False(session.ShouldBreakOnFunctionEntry("main"));
-        Assert.False(session.ShouldBreakOnFunctionEntry(""));
-    }
-
     // ── 4. Launch Validation Tests ────────────────────────────────────────────
 
     [Fact]
@@ -543,5 +534,162 @@ public class DebugSessionTests
             BindingFlags.NonPublic | BindingFlags.Instance)!;
         var storedSpan = (SourceSpan?)field.GetValue(session);
         Assert.Equal(span, storedSpan);
+    }
+
+    // ── 14. SetVariable Tests ─────────────────────────────────────────────────
+
+    [Fact]
+    public void SetVariable_BeforeLaunch_ThrowsInvalidOperation()
+    {
+        var session = new DebugSession();
+        Assert.Throws<InvalidOperationException>(() => session.SetVariable(1, "x", "42"));
+    }
+
+    [Fact]
+    public void SetVariable_InvalidReference_ThrowsInvalidOperation()
+    {
+        var session = new DebugSession();
+        SetInterpreter(session, new Interpreter());
+        Assert.Throws<InvalidOperationException>(() => session.SetVariable(9999, "x", "42"));
+    }
+
+    // ── 15. SetFunctionBreakpoints Tests ──────────────────────────────────────
+
+    [Fact]
+    public void SetFunctionBreakpoints_ReturnsVerifiedBreakpoints()
+    {
+        var session = new DebugSession();
+        var bps = session.SetFunctionBreakpoints(new[]
+        {
+            new FunctionBreakpoint { Name = "myFunc" },
+        });
+        Assert.Single(bps);
+        Assert.True(bps[0].Verified);
+    }
+
+    [Fact]
+    public void SetFunctionBreakpoints_AssignsUniqueIds()
+    {
+        var session = new DebugSession();
+        var bps = session.SetFunctionBreakpoints(new[]
+        {
+            new FunctionBreakpoint { Name = "func1" },
+            new FunctionBreakpoint { Name = "func2" },
+        });
+        Assert.Equal(2, bps.Count);
+        Assert.NotEqual(bps[0].Id, bps[1].Id);
+    }
+
+    [Fact]
+    public void SetFunctionBreakpoints_ReplacesExisting()
+    {
+        var session = new DebugSession();
+        session.SetFunctionBreakpoints(new[]
+        {
+            new FunctionBreakpoint { Name = "func1" },
+            new FunctionBreakpoint { Name = "func2" },
+        });
+        var bps = session.SetFunctionBreakpoints(new[]
+        {
+            new FunctionBreakpoint { Name = "func3" },
+        });
+        Assert.Single(bps);
+    }
+
+    [Fact]
+    public void SetFunctionBreakpoints_EmptyList_ClearsAll()
+    {
+        var session = new DebugSession();
+        session.SetFunctionBreakpoints(new[]
+        {
+            new FunctionBreakpoint { Name = "func1" },
+        });
+        var bps = session.SetFunctionBreakpoints(Array.Empty<FunctionBreakpoint>());
+        Assert.Empty(bps);
+    }
+
+    [Fact]
+    public void ShouldBreakOnFunctionEntry_ReturnsTrueWhenSet()
+    {
+        var session = new DebugSession();
+        session.SetFunctionBreakpoints(new[]
+        {
+            new FunctionBreakpoint { Name = "myFunc" },
+        });
+        Assert.True(session.ShouldBreakOnFunctionEntry("myFunc"));
+        Assert.False(session.ShouldBreakOnFunctionEntry("otherFunc"));
+    }
+
+    [Fact]
+    public void ShouldBreakOnFunctionEntry_ReturnsFalseAfterClearing()
+    {
+        var session = new DebugSession();
+        session.SetFunctionBreakpoints(new[]
+        {
+            new FunctionBreakpoint { Name = "myFunc" },
+        });
+        session.SetFunctionBreakpoints(Array.Empty<FunctionBreakpoint>());
+        Assert.False(session.ShouldBreakOnFunctionEntry("myFunc"));
+    }
+
+    [Fact]
+    public void ShouldBreakOnFunctionEntry_DefaultReturnsFalse()
+    {
+        var session = new DebugSession();
+        Assert.False(session.ShouldBreakOnFunctionEntry("anyFunction"));
+        Assert.False(session.ShouldBreakOnFunctionEntry("main"));
+        Assert.False(session.ShouldBreakOnFunctionEntry(""));
+    }
+
+    // ── 16. LoadedSources Tests ──────────────────────────────────────────────
+
+    [Fact]
+    public void GetLoadedSources_BeforeLaunch_ReturnsEmpty()
+    {
+        var session = new DebugSession();
+        var sources = session.GetLoadedSources();
+        Assert.Empty(sources);
+    }
+
+    [Fact]
+    public void OnSourceLoaded_TracksLoadedFile()
+    {
+        var session = new DebugSession();
+        session.OnSourceLoaded("/path/to/script.stash");
+        var sources = session.GetLoadedSources();
+        Assert.Single(sources);
+        Assert.Equal("/path/to/script.stash", sources[0].Path);
+        Assert.Equal("script.stash", sources[0].Name);
+    }
+
+    [Fact]
+    public void OnSourceLoaded_DeduplicatesSamePath()
+    {
+        var session = new DebugSession();
+        session.OnSourceLoaded("/path/to/script.stash");
+        session.OnSourceLoaded("/path/to/script.stash");
+        var sources = session.GetLoadedSources();
+        Assert.Single(sources);
+    }
+
+    [Fact]
+    public void OnSourceLoaded_TracksMultipleFiles()
+    {
+        var session = new DebugSession();
+        session.OnSourceLoaded("/path/to/main.stash");
+        session.OnSourceLoaded("/path/to/lib/utils.stash");
+        session.OnSourceLoaded("/path/to/lib/helpers.stash");
+        var sources = session.GetLoadedSources();
+        Assert.Equal(3, sources.Count);
+    }
+
+    [Fact]
+    public void GetLoadedSources_ClearedAfterDisconnect()
+    {
+        var session = new DebugSession();
+        session.OnSourceLoaded("/path/to/script.stash");
+        Assert.Single(session.GetLoadedSources());
+        session.Disconnect();
+        Assert.Empty(session.GetLoadedSources());
     }
 }

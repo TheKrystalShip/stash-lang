@@ -60,11 +60,19 @@ public class DebugSession : IDebugger
     // All breakpoints for a file, keyed by normalized file path
     private readonly ConcurrentDictionary<string, List<StashBreakpoint>> _breakpoints = new();
 
+    // Function breakpoints, keyed by function name
+    private readonly Dictionary<string, FunctionBreakpointEntry> _functionBreakpoints = new();
+
     // ── Variable references ───────────────────────────────────────────────────
 
     // DAP uses integer IDs to reference variable containers (scopes, arrays, dicts, etc.)
     private long _nextVariableReference = 1;
     private readonly Dictionary<long, VariableContainer> _variableReferences = new();
+
+    // ── Loaded sources ────────────────────────────────────────────────────────
+
+    private readonly HashSet<string> _loadedSources = new();
+    private readonly object _loadedSourcesLock = new();
 
     // ── Session state ─────────────────────────────────────────────────────────
 
@@ -84,6 +92,17 @@ public class DebugSession : IDebugger
     private System.Threading.Thread? _interpreterThread;
 
     // ── Inner types ───────────────────────────────────────────────────────────
+
+    private sealed class FunctionBreakpointEntry
+    {
+        public required string Name { get; init; }
+        public string? Condition { get; init; }
+        public string? HitCondition { get; init; }
+        public int HitCount { get; set; }
+        public int Id { get; init; }
+    }
+
+    private static int _nextFunctionBpId;
 
     private sealed class VariableContainer
     {
@@ -324,6 +343,42 @@ public class DebugSession : IDebugger
         }
 
         _breakpoints[normalized] = stashBps;
+        return dapBps;
+    }
+
+    /// <summary>
+    /// Replaces all function breakpoints with the given list.
+    /// Returns DAP Breakpoint objects for each function breakpoint.
+    /// </summary>
+    public IReadOnlyList<DapBreakpoint> SetFunctionBreakpoints(IEnumerable<FunctionBreakpoint> breakpoints)
+    {
+        var dapBps = new List<DapBreakpoint>();
+
+        lock (_functionBreakpoints)
+        {
+            _functionBreakpoints.Clear();
+
+            foreach (var fbp in breakpoints)
+            {
+                var id = Interlocked.Increment(ref _nextFunctionBpId);
+                var entry = new FunctionBreakpointEntry
+                {
+                    Name = fbp.Name,
+                    Condition = fbp.Condition,
+                    HitCondition = fbp.HitCondition,
+                    Id = id,
+                };
+                _functionBreakpoints[fbp.Name] = entry;
+
+                dapBps.Add(new DapBreakpoint
+                {
+                    Id = id,
+                    Verified = true,
+                });
+            }
+        }
+
+        Trace($"SetFunctionBreakpoints: {dapBps.Count} function breakpoints");
         return dapBps;
     }
 
@@ -655,6 +710,100 @@ public class DebugSession : IDebugger
         return error != null ? $"Error: {error}" : RuntimeValues.Stringify(value);
     }
 
+    /// <summary>
+    /// Sets a variable's value in the given variable container.
+    /// The value string is parsed and evaluated as a Stash expression.
+    /// Returns the updated DAP Variable.
+    /// </summary>
+    public Variable SetVariable(int variablesReference, string name, string value)
+    {
+        if (_interpreter == null)
+        {
+            throw new InvalidOperationException("No interpreter active.");
+        }
+
+        VariableContainer? container;
+        lock (_variableReferences)
+        {
+            _variableReferences.TryGetValue(variablesReference, out container);
+        }
+
+        if (container == null)
+        {
+            throw new InvalidOperationException($"Unknown variable reference: {variablesReference}");
+        }
+
+        // Parse and evaluate the new value expression
+        var env = _pausedEnvironment ?? _interpreter.Globals;
+        var (newValue, error) = _interpreter.EvaluateString(value, env);
+        if (error != null)
+        {
+            throw new InvalidOperationException($"Failed to evaluate value: {error}");
+        }
+
+        // Apply the new value to the appropriate container
+        if (container.Environment != null)
+        {
+            // Environment scope variable
+            if (!container.Environment.Contains(name))
+            {
+                throw new InvalidOperationException($"Variable '{name}' not found in scope.");
+            }
+
+            if (container.Environment.IsConstant(name))
+            {
+                throw new InvalidOperationException($"Cannot modify constant '{name}'.");
+            }
+
+            container.Environment.Assign(name, newValue);
+        }
+        else if (container.Value is List<object?> list)
+        {
+            // Array element — name is like "[0]", "[1]", etc.
+            var indexStr = name.TrimStart('[').TrimEnd(']');
+            if (!int.TryParse(indexStr, out var index) || index < 0 || index >= list.Count)
+            {
+                throw new InvalidOperationException($"Invalid array index: {name}");
+            }
+
+            list[index] = newValue;
+        }
+        else if (container.Value is StashDictionary dict)
+        {
+            // Dictionary entry — name is the key
+            dict.Set(name, newValue);
+        }
+        else if (container.Value is StashInstance instance)
+        {
+            // Struct field
+            try
+            {
+                instance.SetField(name, newValue, null);
+            }
+            catch (RuntimeError ex)
+            {
+                throw new InvalidOperationException(ex.Message);
+            }
+        }
+        else
+        {
+            throw new InvalidOperationException($"Cannot set variable in this context.");
+        }
+
+        return FormatVariable(name, newValue);
+    }
+
+    /// <summary>Returns all source files that have been loaded during this session.</summary>
+    public IReadOnlyList<Source> GetLoadedSources()
+    {
+        lock (_loadedSourcesLock)
+        {
+            return _loadedSources
+                .Select(p => new Source { Path = p, Name = Path.GetFileName(p) })
+                .ToList();
+        }
+    }
+
     /// <summary>Terminates the debug session and unblocks the interpreter thread if paused.</summary>
     public void Disconnect()
     {
@@ -664,6 +813,11 @@ public class DebugSession : IDebugger
         lock (_variableReferences)
         {
             _variableReferences.Clear();
+        }
+
+        lock (_loadedSourcesLock)
+        {
+            _loadedSources.Clear();
         }
 
         if (_isPaused)
@@ -745,7 +899,50 @@ public class DebugSession : IDebugger
 
     public void OnFunctionEnter(string functionName, SourceSpan callSite, StashEnv localScope)
     {
-        // Step depth changes are picked up automatically via CallStack.Count in ShouldStopForStep
+        // Check for function breakpoint hit — snapshot entry under lock
+        FunctionBreakpointEntry? entry;
+        int hitCount;
+        lock (_functionBreakpoints)
+        {
+            if (!_functionBreakpoints.TryGetValue(functionName, out entry))
+            {
+                return;
+            }
+
+            entry.HitCount++;
+            hitCount = entry.HitCount;
+        }
+
+        // Evaluate condition if present
+        if (entry.Condition != null && _interpreter != null)
+        {
+            var (condValue, condError) = _interpreter.EvaluateString(entry.Condition, localScope);
+            if (condError != null || !RuntimeValues.IsTruthy(condValue))
+            {
+                return;
+            }
+        }
+
+        // Check hit condition if present
+        if (entry.HitCondition != null && !EvaluateHitCondition(entry.HitCondition, hitCount))
+        {
+            return;
+        }
+
+        Trace($"Function breakpoint hit: {functionName}");
+        _pausedAtSpan = callSite;
+        _pausedEnvironment = localScope;
+        _isPaused = true;
+        _pauseReason = PauseReason.FunctionBreakpoint;
+        lock (_variableReferences)
+        {
+            _variableReferences.Clear();
+            _nextVariableReference = 1;
+        }
+        _pauseGate.Reset();
+        SendStopped(PauseReason.FunctionBreakpoint);
+        _pauseGate.Wait();
+        _isPaused = false;
     }
 
     public void OnFunctionExit(string functionName)
@@ -776,7 +973,23 @@ public class DebugSession : IDebugger
 
     public void OnSourceLoaded(string filePath)
     {
-        // Could send LoadedSourceEvent here for IDE loaded-sources tracking
+        if (string.IsNullOrEmpty(filePath)) return;
+        filePath = NormalizePath(filePath);
+
+        bool isNew;
+        lock (_loadedSourcesLock)
+        {
+            isNew = _loadedSources.Add(filePath);
+        }
+
+        if (isNew)
+        {
+            _server?.SendLoadedSource(new LoadedSourceEvent
+            {
+                Reason = LoadedSourceReason.New,
+                Source = new Source { Path = filePath, Name = Path.GetFileName(filePath) },
+            });
+        }
     }
 
     public void OnExecutionComplete()
@@ -791,7 +1004,13 @@ public class DebugSession : IDebugger
 
     public bool ShouldBreakOnException(RuntimeError error) => _breakOnAllExceptions;
 
-    public bool ShouldBreakOnFunctionEntry(string functionName) => false;
+    public bool ShouldBreakOnFunctionEntry(string functionName)
+    {
+        lock (_functionBreakpoints)
+        {
+            return _functionBreakpoints.ContainsKey(functionName);
+        }
+    }
 
     // ── Private helpers ────────────────────────────────────────────────────────
 

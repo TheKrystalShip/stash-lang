@@ -49,7 +49,10 @@ public static class StashDebugServer
                 .WithHandler<StashStackTraceHandler>()
                 .WithHandler<StashScopesHandler>()
                 .WithHandler<StashVariablesHandler>()
-                .WithHandler<StashEvaluateHandler>();
+                .WithHandler<StashEvaluateHandler>()
+                .WithHandler<StashSetVariableHandler>()
+                .WithHandler<StashSetFunctionBreakpointsHandler>()
+                .WithHandler<StashLoadedSourcesHandler>();
 
             // Set capabilities for the framework's built-in initialize handler.
             // Capabilities like SupportsConfigurationDoneRequest are auto-detected
@@ -58,6 +61,9 @@ public static class StashDebugServer
             options.Capabilities.SupportsHitConditionalBreakpoints = true;
             options.Capabilities.SupportsEvaluateForHovers = true;
             options.Capabilities.SupportsLogPoints = true;
+            options.Capabilities.SupportsSetVariable = true;
+            options.Capabilities.SupportsFunctionBreakpoints = true;
+            options.Capabilities.SupportsLoadedSourcesRequest = true;
             options.Capabilities.ExceptionBreakpointFilters = new Container<ExceptionBreakpointsFilter>(
                 new ExceptionBreakpointsFilter { Filter = "all", Label = "All Exceptions", Default = false },
                 new ExceptionBreakpointsFilter { Filter = "uncaught", Label = "Uncaught Exceptions", Default = true }
