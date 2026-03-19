@@ -102,6 +102,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
     /// <summary>Cache mapping process handles to their wait results, preventing duplicate <c>process.wait()</c> calls.</summary>
     internal readonly Dictionary<StashInstance, StashInstance> ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Callbacks registered via <c>process.onExit()</c> to run when a tracked process exits.</summary>
+    internal readonly Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks = new(ReferenceEqualityComparer.Instance);
     /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime.</summary>
     private readonly Dictionary<Expr, int> _locals = new(ReferenceEqualityComparer.Instance);
     /// <summary>When true, variable lookups walk the scope chain instead of using resolver distances. Set during DAP evaluate requests.</summary>
@@ -585,5 +587,6 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             catch { /* Process may have already exited */ }
         }
         TrackedProcesses.Clear();
+        ProcessExitCallbacks.Clear();
     }
 }

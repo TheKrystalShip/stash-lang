@@ -3604,6 +3604,168 @@ public class InterpreterTests
         RunExpectingError("process.exit(\"not a number\");");
     }
 
+    // ── process.exists ──────────────────────────────────────────────
+
+    [Fact]
+    public void ProcessExists_CurrentProcess_ReturnsTrue()
+    {
+        var pid = System.Diagnostics.Process.GetCurrentProcess().Id;
+        Assert.Equal(true, Run($"let result = process.exists({pid});"));
+    }
+
+    [Fact]
+    public void ProcessExists_InvalidPid_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = process.exists(99999999);"));
+    }
+
+    [Fact]
+    public void ProcessExists_NonInteger_Throws()
+    {
+        RunExpectingError("process.exists(\"not a pid\");");
+    }
+
+    // ── process.find ────────────────────────────────────────────────
+
+    [Fact]
+    public void ProcessFind_ReturnsArray()
+    {
+        Assert.IsType<List<object?>>(Run("let result = process.find(\"__nonexistent_process_xyz__\");"));
+    }
+
+    [Fact]
+    public void ProcessFind_NonexistentName_ReturnsEmptyArray()
+    {
+        var result = Run("let result = len(process.find(\"__stash_nonexistent_xyz__\"));");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void ProcessFind_NonString_Throws()
+    {
+        RunExpectingError("process.find(42);");
+    }
+
+    // ── process.daemonize ───────────────────────────────────────────
+
+    [Fact]
+    public void ProcessDaemonize_ReturnsProcessHandle()
+    {
+        var result = Run("let p = process.daemonize(\"sleep 10\"); let result = typeof(p);");
+        Assert.Equal("struct", result);
+    }
+
+    [Fact]
+    public void ProcessDaemonize_NotTracked()
+    {
+        var result = Run(@"
+            let p = process.daemonize(""sleep 10"");
+            let tracked = process.list();
+            let result = len(tracked);
+        ");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void ProcessDaemonize_NonString_Throws()
+    {
+        RunExpectingError("process.daemonize(42);");
+    }
+
+    // ── process.waitAll ─────────────────────────────────────────────
+
+    [Fact]
+    public void ProcessWaitAll_ReturnsArrayOfResults()
+    {
+        var result = Run(@"
+            let p1 = process.spawn(""echo hello"");
+            let p2 = process.spawn(""echo world"");
+            let results = process.waitAll([p1, p2]);
+            let result = len(results);
+        ");
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void ProcessWaitAll_ResultsContainStdout()
+    {
+        var result = Run(@"
+            let p1 = process.spawn(""echo hello"");
+            let results = process.waitAll([p1]);
+            let result = str.trim(results[0].stdout);
+        ");
+        Assert.Equal("hello", result);
+    }
+
+    [Fact]
+    public void ProcessWaitAll_EmptyArray_ReturnsEmptyArray()
+    {
+        var result = Run("let result = len(process.waitAll([]));");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void ProcessWaitAll_NonArray_Throws()
+    {
+        RunExpectingError("process.waitAll(\"not an array\");");
+    }
+
+    [Fact]
+    public void ProcessWaitAll_NonProcessInArray_Throws()
+    {
+        RunExpectingError("process.waitAll([42]);");
+    }
+
+    // ── process.waitAny ─────────────────────────────────────────────
+
+    [Fact]
+    public void ProcessWaitAny_ReturnsCommandResult()
+    {
+        var result = Run(@"
+            let p1 = process.spawn(""echo fast"");
+            let p2 = process.spawn(""sleep 10"");
+            let r = process.waitAny([p1, p2]);
+            process.kill(p2);
+            let result = typeof(r);
+        ");
+        Assert.Equal("struct", result);
+    }
+
+    [Fact]
+    public void ProcessWaitAny_EmptyArray_Throws()
+    {
+        RunExpectingError("process.waitAny([]);");
+    }
+
+    [Fact]
+    public void ProcessWaitAny_NonArray_Throws()
+    {
+        RunExpectingError("process.waitAny(\"not an array\");");
+    }
+
+    [Fact]
+    public void ProcessWaitAny_NonProcessInArray_Throws()
+    {
+        RunExpectingError("process.waitAny([42]);");
+    }
+
+    // ── process.onExit ──────────────────────────────────────────────
+
+    [Fact]
+    public void ProcessOnExit_NonProcess_Throws()
+    {
+        RunExpectingError("process.onExit(42, (r) => r);");
+    }
+
+    [Fact]
+    public void ProcessOnExit_NonFunction_Throws()
+    {
+        RunExpectingError(@"
+            let p = process.spawn(""echo hi"");
+            process.onExit(p, ""not a function"");
+        ");
+    }
+
     [Fact]
     public void Namespace_AssignToIoMember_Throws()
     {

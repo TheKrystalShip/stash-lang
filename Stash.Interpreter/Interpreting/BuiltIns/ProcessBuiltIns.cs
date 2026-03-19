@@ -3,7 +3,9 @@ namespace Stash.Interpreting.BuiltIns;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using System.Threading;
 using System.Threading.Tasks;
+using Stash.Interpreting;
 using Stash.Interpreting.Exceptions;
 using Stash.Interpreting.Types;
 
@@ -165,6 +167,7 @@ public static class ProcessBuiltIns
 
             // Cache the result so subsequent wait() calls return the same data
             interp.ProcessWaitCache[handle] = result;
+            FireExitCallbacks(interp, handle, result);
             return result;
         }));
 
@@ -196,7 +199,10 @@ public static class ProcessBuiltIns
             var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
             Task.WaitAll(stdoutTask, stderrTask);
 
-            return RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+            var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+            interp.ProcessWaitCache[handle] = result;
+            FireExitCallbacks(interp, handle, result);
+            return result;
         }));
 
         process.Define("kill", new BuiltInFunction("process.kill", 1, (interp, args) =>
@@ -312,6 +318,7 @@ public static class ProcessBuiltIns
             if (idx >= 0)
             {
                 interp.TrackedProcesses.RemoveAt(idx);
+                interp.ProcessExitCallbacks.Remove(handle);
                 return true;
             }
 
@@ -389,6 +396,264 @@ public static class ProcessBuiltIns
             }
         }));
 
+        // ── Future Extensions ─────────────────────────────────────────
+
+        process.Define("onExit", new BuiltInFunction("process.onExit", 2, (interp, args) =>
+        {
+            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
+            {
+                throw new RuntimeError("First argument to 'process.onExit' must be a Process handle.");
+            }
+
+            if (args[1] is not IStashCallable callback)
+            {
+                throw new RuntimeError("Second argument to 'process.onExit' must be a function.");
+            }
+
+            if (callback.MinArity > 1)
+            {
+                throw new RuntimeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).");
+            }
+
+            var entry = interp.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+            if (entry.OsProcess is null)
+            {
+                return null;
+            }
+
+            if (!interp.ProcessExitCallbacks.TryGetValue(handle, out var callbacks))
+            {
+                callbacks = new List<IStashCallable>();
+                interp.ProcessExitCallbacks[handle] = callbacks;
+            }
+
+            callbacks.Add(callback);
+            return null;
+        }));
+
+        process.Define("daemonize", new BuiltInFunction("process.daemonize", 1, (interp, args) =>
+        {
+            if (args[0] is not string command)
+            {
+                throw new RuntimeError("Argument to 'process.daemonize' must be a string.");
+            }
+
+            var (program, arguments) = CommandParser.Parse(command);
+            var psi = new ProcessStartInfo
+            {
+                FileName = program,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                RedirectStandardInput = false,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (var arg in arguments)
+            {
+                psi.ArgumentList.Add(arg);
+            }
+
+            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to daemonize process.");
+
+            var fields = new Dictionary<string, object?>
+            {
+                ["pid"] = (long)osProcess.Id,
+                ["command"] = command
+            };
+            var handle = new StashInstance("Process", fields);
+
+            // Daemonized processes are NOT tracked — they survive script exit
+            return handle;
+        }));
+
+        process.Define("find", new BuiltInFunction("process.find", 1, (interp, args) =>
+        {
+            if (args[0] is not string name)
+            {
+                throw new RuntimeError("Argument to 'process.find' must be a string.");
+            }
+
+            var result = new List<object?>();
+            try
+            {
+                var processes = System.Diagnostics.Process.GetProcessesByName(name);
+                foreach (var p in processes)
+                {
+                    using (p)
+                    {
+                        var fields = new Dictionary<string, object?>
+                        {
+                            ["pid"] = (long)p.Id,
+                            ["command"] = name
+                        };
+                        result.Add(new StashInstance("Process", fields));
+                    }
+                }
+            }
+            catch
+            {
+                // Permission issues or other OS errors — return empty array
+            }
+
+            return result;
+        }));
+
+        process.Define("exists", new BuiltInFunction("process.exists", 1, (interp, args) =>
+        {
+            if (args[0] is not long pid)
+            {
+                throw new RuntimeError("Argument to 'process.exists' must be an integer (PID).");
+            }
+
+            try
+            {
+                var p = System.Diagnostics.Process.GetProcessById((int)pid);
+                bool alive = !p.HasExited;
+                p.Dispose();
+                return alive;
+            }
+            catch
+            {
+                return false;
+            }
+        }));
+
+        process.Define("waitAll", new BuiltInFunction("process.waitAll", 1, (interp, args) =>
+        {
+            if (args[0] is not List<object?> procs)
+            {
+                throw new RuntimeError("Argument to 'process.waitAll' must be an array of Process handles.");
+            }
+
+            var results = new List<object?>();
+            foreach (var item in procs)
+            {
+                if (item is not StashInstance handle || handle.TypeName != "Process")
+                {
+                    throw new RuntimeError("All elements in 'process.waitAll' array must be Process handles.");
+                }
+
+                var entry = interp.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+                if (entry.OsProcess is null)
+                {
+                    if (interp.ProcessWaitCache.TryGetValue(handle, out var cached))
+                    {
+                        results.Add(cached);
+                    }
+                    else
+                    {
+                        results.Add(RuntimeValues.CreateCommandResult("", "", -1));
+                    }
+                    continue;
+                }
+
+                var osProcess = entry.OsProcess;
+                var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+                var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+                osProcess.WaitForExit();
+                Task.WaitAll(stdoutTask, stderrTask);
+
+                var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+                interp.ProcessWaitCache[handle] = result;
+                FireExitCallbacks(interp, handle, result);
+                results.Add(result);
+            }
+
+            return results;
+        }));
+
+        process.Define("waitAny", new BuiltInFunction("process.waitAny", 1, (interp, args) =>
+        {
+            if (args[0] is not List<object?> procs)
+            {
+                throw new RuntimeError("Argument to 'process.waitAny' must be an array of Process handles.");
+            }
+
+            if (procs.Count == 0)
+            {
+                throw new RuntimeError("'process.waitAny' requires a non-empty array.");
+            }
+
+            // Validate all handles first
+            var entries = new List<(StashInstance Handle, System.Diagnostics.Process? OsProcess)>();
+            foreach (var item in procs)
+            {
+                if (item is not StashInstance handle || handle.TypeName != "Process")
+                {
+                    throw new RuntimeError("All elements in 'process.waitAny' array must be Process handles.");
+                }
+
+                var entry = interp.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
+                entries.Add((handle, entry.OsProcess));
+            }
+
+            // Check if any have already exited
+            foreach (var (handle, osProcess) in entries)
+            {
+                if (osProcess is null)
+                {
+                    if (interp.ProcessWaitCache.TryGetValue(handle, out var cached))
+                    {
+                        return cached;
+                    }
+                    return RuntimeValues.CreateCommandResult("", "", -1);
+                }
+
+                if (osProcess.HasExited)
+                {
+                    var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+                    var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+                    Task.WaitAll(stdoutTask, stderrTask);
+
+                    var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+                    interp.ProcessWaitCache[handle] = result;
+                    FireExitCallbacks(interp, handle, result);
+                    return result;
+                }
+            }
+
+            // Poll until one exits
+            while (true)
+            {
+                foreach (var (handle, osProcess) in entries)
+                {
+                    if (osProcess is not null && osProcess.HasExited)
+                    {
+                        var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
+                        var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
+                        Task.WaitAll(stdoutTask, stderrTask);
+
+                        var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+                        interp.ProcessWaitCache[handle] = result;
+                        FireExitCallbacks(interp, handle, result);
+                        return result;
+                    }
+                }
+
+                Thread.Sleep(50); // Poll every 50ms
+            }
+        }));
+
         globals.Define("process", process);
+    }
+
+    /// <summary>
+    /// Fires any pending onExit callbacks for a process that has exited.
+    /// Must be called from the main thread after obtaining a CommandResult.
+    /// </summary>
+    internal static void FireExitCallbacks(Interpreter interp, StashInstance handle, StashInstance result)
+    {
+        if (interp.ProcessExitCallbacks.TryGetValue(handle, out var callbacks))
+        {
+            interp.ProcessExitCallbacks.Remove(handle);
+            foreach (var cb in callbacks)
+            {
+                try
+                {
+                    cb.Call(interp, new List<object?> { result });
+                }
+                catch { /* Errors in onExit callbacks are non-fatal */ }
+            }
+        }
     }
 }

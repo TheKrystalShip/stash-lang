@@ -757,6 +757,12 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 | `process.list()`                | List all tracked (spawned) process handles                        |
 | `process.read(proc)`            | Read available stdout from a running process (non-blocking)       |
 | `process.write(proc, data)`     | Write to a running process's stdin                                |
+| `process.onExit(proc, callback)` | Register a callback to run when a process exits                   |
+| `process.daemonize(cmd)`         | Launch a command as a daemon (not tracked, survives script exit)   |
+| `process.find(name)`             | Find system processes by name, returns array of `Process` handles |
+| `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)          |
+| `process.waitAll(procs)`         | Wait for all processes in an array to exit                        |
+| `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                  |
 
 ### The `Process` Handle
 
@@ -941,14 +947,87 @@ if (finalResult == null) {
 io.println("Server stopped");
 ```
 
-### Future Extensions
+### Daemonizing Processes
 
-- **`process.onExit(proc, callback)`** — Register a lambda callback for when a process exits.
-- **`process.daemonize(cmd)`** — Launch as a proper daemon (double-fork, detach from terminal).
-- **`process.find(name)`** — Find system processes by name.
-- **`process.exists(pid)`** — Check if an arbitrary system process exists by PID.
-- **`process.waitAll(procs)`** — Wait for multiple processes to all exit.
-- **`process.waitAny(procs)`** — Wait for the first of multiple processes to exit.
+```stash
+let daemon = process.daemonize("my-daemon --config /etc/app.conf");
+io.println("Daemon PID: " + daemon.pid);
+// daemon is NOT tracked — it survives script exit
+// process.list() will not include it
+```
+
+`process.daemonize(cmd)` launches a command as a detached daemon process. Unlike `process.spawn()`, the returned `Process` handle is **not tracked** — the process will not be killed when the script exits, and it will not appear in `process.list()`. The handle retains `pid` and `command` fields for reference.
+
+This is the preferred way to launch long-lived services or background workers that should outlive the script.
+
+### Finding System Processes
+
+```stash
+let procs = process.find("nginx");
+for (let p in procs) {
+    io.println("Found nginx (PID: " + p.pid + ")");
+}
+```
+
+`process.find(name)` searches for running system processes by name. Returns an array of `Process` handles with `pid` and `command` fields. Returns an empty array if no matching processes are found. The returned handles are **not tracked** — they represent external processes not spawned by the script.
+
+### Checking Process Existence
+
+```stash
+if (process.exists(1234)) {
+    io.println("Process 1234 is running");
+} else {
+    io.println("Process 1234 does not exist");
+}
+```
+
+`process.exists(pid)` checks whether a system process with the given PID exists and is running. Returns `true` if the process exists, `false` otherwise. This works with any PID — not just processes spawned by the script.
+
+### Waiting for Multiple Processes
+
+```stash
+let p1 = process.spawn("task1.sh");
+let p2 = process.spawn("task2.sh");
+let p3 = process.spawn("task3.sh");
+
+// Wait for all to finish
+let results = process.waitAll([p1, p2, p3]);
+for (let r in results) {
+    io.println("Exit code: " + r.exitCode);
+}
+```
+
+`process.waitAll(procs)` blocks until every process in the array has exited. Returns an array of `CommandResult` objects in the same order as the input array, each containing `stdout`, `stderr`, and `exitCode`.
+
+```stash
+// Wait for the first to finish
+let fastest = process.waitAny([p1, p2, p3]);
+io.println("First result: " + fastest.stdout);
+```
+
+`process.waitAny(procs)` blocks until **any one** of the processes exits, then immediately returns that process's `CommandResult`. The remaining processes continue running. Requires a non-empty array.
+
+### Exit Callbacks
+
+```stash
+let server = process.spawn("python3 -m http.server 8080");
+
+process.onExit(server, (result) => {
+    io.println("Server exited with code: " + result.exitCode);
+    if (result.exitCode != 0) {
+        io.println("Error: " + result.stderr);
+    }
+});
+
+// ... continue doing other work ...
+
+// Callbacks fire when process.wait() or process.waitAll() is called
+let finalResult = process.wait(server);
+```
+
+`process.onExit(proc, callback)` registers a callback function to run when a process exits. The callback receives a `CommandResult` as its single argument. Multiple callbacks can be registered for the same process. Callbacks are fired synchronously on the main thread when the process result is collected via `process.wait()`, `process.waitTimeout()`, `process.waitAll()`, or `process.waitAny()`. Returns `null`.
+
+If the process handle is detached via `process.detach()`, any registered callbacks are discarded.
 
 ---
 
