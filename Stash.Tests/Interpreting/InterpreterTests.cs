@@ -5233,13 +5233,13 @@ public class InterpreterTests
     [Fact]
     public void MathCeil_Float()
     {
-        Assert.Equal(4L, Run("let result = math.ceil(3.2);"));
+        Assert.Equal(4.0, Run("let result = math.ceil(3.2);"));
     }
 
     [Fact]
     public void MathCeil_NegativeFloat()
     {
-        Assert.Equal(-3L, Run("let result = math.ceil(-3.7);"));
+        Assert.Equal(-3.0, Run("let result = math.ceil(-3.7);"));
     }
 
     [Fact]
@@ -5251,13 +5251,13 @@ public class InterpreterTests
     [Fact]
     public void MathFloor_Float()
     {
-        Assert.Equal(3L, Run("let result = math.floor(3.9);"));
+        Assert.Equal(3.0, Run("let result = math.floor(3.9);"));
     }
 
     [Fact]
     public void MathFloor_NegativeFloat()
     {
-        Assert.Equal(-4L, Run("let result = math.floor(-3.2);"));
+        Assert.Equal(-4.0, Run("let result = math.floor(-3.2);"));
     }
 
     [Fact]
@@ -5269,13 +5269,13 @@ public class InterpreterTests
     [Fact]
     public void MathRound_RoundsUp()
     {
-        Assert.Equal(4L, Run("let result = math.round(3.7);"));
+        Assert.Equal(4.0, Run("let result = math.round(3.7);"));
     }
 
     [Fact]
     public void MathRound_RoundsDown()
     {
-        Assert.Equal(3L, Run("let result = math.round(3.2);"));
+        Assert.Equal(3.0, Run("let result = math.round(3.2);"));
     }
 
     [Fact]

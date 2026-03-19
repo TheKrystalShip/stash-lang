@@ -35,20 +35,23 @@ public static class MathBuiltIns
 
         math.Define("ceil", new BuiltInFunction("math.ceil", 1, (interp, args) =>
         {
+            if (args[0] is long l) return l;
             double d = ToDouble(args[0], "math.ceil");
-            return (long)Math.Ceiling(d);
+            return Math.Ceiling(d);
         }));
 
         math.Define("floor", new BuiltInFunction("math.floor", 1, (interp, args) =>
         {
+            if (args[0] is long l) return l;
             double d = ToDouble(args[0], "math.floor");
-            return (long)Math.Floor(d);
+            return Math.Floor(d);
         }));
 
         math.Define("round", new BuiltInFunction("math.round", 1, (interp, args) =>
         {
+            if (args[0] is long l) return l;
             double d = ToDouble(args[0], "math.round");
-            return (long)Math.Round(d, MidpointRounding.AwayFromZero);
+            return Math.Round(d, MidpointRounding.AwayFromZero);
         }));
 
         math.Define("min", new BuiltInFunction("math.min", 2, (interp, args) =>

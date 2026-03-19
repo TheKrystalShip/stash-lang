@@ -1,148 +1,130 @@
 #!/usr/bin/env stash
 
-// System Information Dashboard
-// Gathers and displays system details in a formatted report
+// examples/system_info.stash
+// System Information Dashboard — server health report using the sys namespace
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-// ─── Helpers ─────────────────────────────────────────────────
-
-fn run_cmd(cmd_str: string) -> string {
-    let result = try $({cmd_str});
-    if (result == null) { return "N/A"; }
-    if (result.exitCode != 0) { return "N/A"; }
-    return str.trim(result.stdout);
+fn formatBytes(n) {
+  if (n >= 1073741824) {
+    return conv.toStr(math.round(n / 1073741824.0 * 10) / 10) + " GB";
+  } else if (n >= 1048576) {
+    return conv.toStr(math.round(n / 1048576.0 * 10) / 10) + " MB";
+  } else if (n >= 1024) {
+    return conv.toStr(math.round(n / 1024.0 * 10) / 10) + " KB";
+  }
+  return conv.toStr(n) + " B";
 }
 
-fn print_row(label: string, value: string) {
-    io.println($"  {str.padEnd(label, 16)} {value}");
+fn progressBar(pct, width) {
+  let filled = conv.toInt(math.floor(pct / 100.0 * width));
+  let empty = width - filled;
+  let color = pct >= 90 ? term.RED : (pct >= 70 ? term.YELLOW : term.GREEN);
+  let bar = term.color("█" * filled, color) + term.dim("░" * empty);
+  return "[" + bar + "] " + str.padStart(conv.toStr(math.round(pct * 10) / 10) + "%", 6);
 }
 
-// ─── System Info ─────────────────────────────────────────────
-
-io.println("=" * 50);
-io.println("         System Information Dashboard");
-io.println("=" * 50);
-io.println($"  Generated: {time.date()} {time.clock()}");
-io.println("-" * 50);
-
-io.println("");
-io.println("  [ Hardware & OS ]");
-io.println("");
-
-print_row("Hostname:", run_cmd("hostname"));
-print_row("Kernel:", run_cmd("uname -r"));
-print_row("OS:", env.os());
-print_row("Arch:", env.arch());
-print_row("CPU Cores:", run_cmd("nproc"));
-
-// Memory — extract total from free command
-let mem_line = run_cmd("free -h | head -2 | tail -1");
-let mem_total = "N/A";
-if (mem_line != "N/A") {
-    let parts = str.split(str.trim(mem_line), " ");
-    let non_empty = arr.filter(parts, (p) => p != "");
-    if (len(non_empty) > 1) {
-        mem_total = non_empty[1];
-    }
-}
-print_row("Memory:", mem_total);
-
-// Disk usage for root
-let disk_line = run_cmd("df -h / | tail -1");
-let disk_used = "N/A";
-if (disk_line != "N/A") {
-    let parts = str.split(str.trim(disk_line), " ");
-    let non_empty = arr.filter(parts, (p) => p != "");
-    if (len(non_empty) > 4) {
-        disk_used = $"{non_empty[4]} of {non_empty[1]}";
-    }
-}
-print_row("Disk (/):", disk_used);
-
-print_row("Uptime:", run_cmd("uptime -p"));
-
-// ─── User & Environment ─────────────────────────────────────
-
-io.println("");
-io.println("  [ User & Environment ]");
-io.println("");
-
-print_row("User:", env.user());
-print_row("Home:", env.home());
-print_row("CWD:", env.cwd());
-print_row("Shell:", env.get("SHELL") ?? "unknown");
-print_row("Editor:", env.get("EDITOR") ?? env.get("VISUAL") ?? "not set");
-print_row("Language:", env.get("LANG") ?? "not set");
-
-// PATH entry count
-let path_val = env.get("PATH") ?? "";
-let path_entries = arr.filter(str.split(path_val, ":"), (p) => p != "");
-print_row("PATH entries:", conv.toStr(len(path_entries)));
-
-// ─── Network ────────────────────────────────────────────────
-
-io.println("");
-io.println("  [ Network ]");
-io.println("");
-
-// IP addresses
-let ip_output = run_cmd("hostname -I");
-if (ip_output != "N/A" && ip_output != "") {
-    let ips = arr.filter(str.split(ip_output, " "), (ip) => ip != "");
-    for (let i, ip in ips) {
-        let label = i == 0 ? "IP Address:" : "";
-        print_row(label, str.trim(ip));
-    }
-} else {
-    print_row("IP Address:", "N/A");
+fn formatUptime(seconds) {
+  let s = conv.toInt(seconds);
+  let d = math.floor(s / 86400);
+  let h = math.floor((s % 86400) / 3600);
+  let m = math.floor((s % 3600) / 60);
+  let out = "";
+  if (d > 0) {
+    out = out + conv.toStr(d) + "d ";
+  }
+  if (h > 0 || d > 0) {
+    out = out + conv.toStr(h) + "h ";
+  }
+  out = out + conv.toStr(m) + "m";
+  return out;
 }
 
-// Default gateway
-let gw = run_cmd("ip route");
-if (gw != "N/A" && str.contains(gw, "default")) {
-    let gw_parts = str.split(gw, " ");
-    let via_idx = arr.indexOf(gw_parts, "via");
-    if (via_idx >= 0 && via_idx + 1 < len(gw_parts)) {
-        print_row("Gateway:", gw_parts[via_idx + 1]);
-    }
-} else {
-    print_row("Gateway:", "N/A");
+fn row(label, value) {
+  io.println("  " + term.dim(str.padEnd(label, 18)) + " " + value);
 }
 
-print_row("Hostname (DNS):", run_cmd("hostname -f"));
+// ─── Header ──────────────────────────────────────────────────────────────────
 
-// ─── Running Processes ──────────────────────────────────────
+let W = 56;
+io.println(term.bold("═" * W));
+io.println(term.bold("  System Information Dashboard"));
+io.println(term.bold("═" * W));
+row("Host:", term.bold(env.hostname()));
+row("OS:", env.os());
+row("Time:", time.format(time.now(), "yyyy-MM-dd HH:mm:ss"));
+row("PID:", conv.toStr(sys.pid()));
+row("Temp dir:", sys.tempDir());
+io.println("─" * W);
 
-io.println("");
-io.println("  [ Top Processes by Memory ]");
-io.println("");
+// ─── CPU ─────────────────────────────────────────────────────────────────────
 
-let ps_output: CommandResult = $(ps aux --sort=-%mem) | $(head -6);
-if (ps_output == null || ps_output.exitCode != 0) {
-    io.println("  N/A");
-} else {
-    let output: string = ps_output.stdout;
-    let ps_lines = str.split(output, "\n");
-    for (let i, line in ps_lines) {
-        let trimmed = str.trim(line);
-        if (trimmed != "" && i < 6) {
-            // First line is header
-            let prefix = i == 0 ? "  " : "  ";
-            io.println($"{prefix}{trimmed}");
-        }
-    }
+io.println(term.bold("\n  CPU"));
+
+let cores = sys.cpuCount();
+
+let load = sys.loadAvg();
+
+let load1 = load[0];
+
+let load5 = load[1];
+
+let load15 = load[2];
+
+let loadPct = math.round(load1 * 100.0 / cores);
+row("Cores:", conv.toStr(cores));
+
+fn round2(v) {
+  return math.round(v * 100) / 100;
 }
 
-// ─── Summary ────────────────────────────────────────────────
+row("Load avg:", conv.toStr(round2(load1)) + "  " + conv.toStr(round2(load5)) + "  " + conv.toStr(round2(load15)) + "  (1m / 5m / 15m)");
+row("Load %:", progressBar(loadPct, 20));
 
-io.println("");
-io.println("-" * 50);
+// ─── Memory ──────────────────────────────────────────────────────────────────
 
-let load = run_cmd("cat /proc/loadavg");
-if (load != "N/A") {
-    let load_parts = str.split(load, " ");
-    io.println($"  Load Average: {load_parts[0]} {load_parts[1]} {load_parts[2]}");
+io.println(term.bold("\n  Memory"));
+
+let totalMem = sys.totalMemory();
+
+let freeMem = sys.freeMemory();
+
+let usedMem = totalMem - freeMem;
+
+let memPct = math.round(usedMem * 100.0 / totalMem);
+row("Total:", formatBytes(totalMem));
+row("Used:", formatBytes(usedMem) + "  " + progressBar(memPct, 20));
+row("Free:", formatBytes(freeMem));
+
+// ─── Disk ─────────────────────────────────────────────────────────────────────
+
+io.println(term.bold("\n  Disk (/)"));
+
+let disk = sys.diskUsage("/");
+
+let diskPct = math.round(disk["used"] * 100.0 / disk["total"]);
+row("Total:", formatBytes(disk["total"]));
+row("Used:", formatBytes(disk["used"]) + "  " + progressBar(diskPct, 20));
+row("Free:", formatBytes(disk["free"]));
+
+// ─── Network ─────────────────────────────────────────────────────────────────
+
+io.println(term.bold("\n  Network interfaces"));
+
+let ifaces = sys.networkInterfaces();
+
+for (let iface in ifaces) {
+  let statusColor = iface["status"] == "Up" ? term.GREEN : term.RED;
+  let badge = term.color("●", statusColor);
+  let addrs = iface["addresses"];
+  let addrStr = len(addrs) > 0 ? addrs[0] : "—";
+  io.println("  " + badge + " " + term.bold(str.padEnd(iface["name"], 12)) + term.dim(iface["type"]) + "  " + addrStr);
 }
 
-let proc_count = run_cmd("ls -d /proc/[0-9]* | wc -l");
-io.println($"  Processes:    {proc_count}");
-io.println("=" * 50);
+// ─── Uptime ──────────────────────────────────────────────────────────────────
+
+io.println(term.bold("\n  Uptime"));
+row("Running for:", formatUptime(sys.uptime()));
+
+// ─── Footer ──────────────────────────────────────────────────────────────────
+
+io.println("\n" + "═" * W);

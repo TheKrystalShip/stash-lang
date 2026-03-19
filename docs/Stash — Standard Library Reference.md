@@ -35,7 +35,8 @@
 19. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
 20. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
 21. [`term` — Terminal Formatting](#term--terminal-formatting)
-22. [Argument Parsing](#argument-parsing)
+22. [`sys` — System Information](#sys--system-information)
+23. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -47,11 +48,11 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 
 ### Global Functions
 
-| Function       | Description                                                              |
-| -------------- | ------------------------------------------------------------------------ |
-| `typeof(val)`  | Return the type of a value as string                                     |
-| `len(val)`     | Length of a string or array                                              |
-| `lastError()`  | Last error message (string) or null                                      |
+| Function      | Description                          |
+| ------------- | ------------------------------------ |
+| `typeof(val)` | Return the type of a value as string |
+| `len(val)`    | Length of a string or array          |
+| `lastError()` | Last error message (string) or null  |
 
 ---
 
@@ -149,31 +150,31 @@ let config = env.withPrefix("MYAPP_");
 
 ## `fs` — File System Operations
 
-| Function                       | Description                                    |
-| ------------------------------ | ---------------------------------------------- |
-| `fs.readFile(path)`            | Read file contents as string                   |
-| `fs.writeFile(path, content)`  | Write string to file (creates or overwrites)   |
-| `fs.appendFile(path, content)` | Append string to file                          |
-| `fs.readLines(path)`           | Read file as array of lines                    |
-| `fs.exists(path)`              | Check if a file exists (returns boolean)       |
-| `fs.dirExists(path)`           | Check if a directory exists (returns boolean)  |
-| `fs.pathExists(path)`          | Check if a file or directory exists            |
-| `fs.isFile(path)`              | Check if path is a file (returns boolean)      |
-| `fs.isDir(path)`               | Check if path is a directory (returns boolean) |
-| `fs.isSymlink(path)`           | Check if path is a symbolic link               |
-| `fs.createDir(path)`           | Create a directory (including parents)         |
-| `fs.delete(path)`              | Delete a file or directory (recursive)         |
-| `fs.copy(src, dst)`            | Copy a file (overwrites destination)           |
-| `fs.move(src, dst)`            | Move/rename a file (overwrites destination)    |
-| `fs.size(path)`                | Get file size in bytes                         |
-| `fs.listDir(path)`             | List entries in a directory (returns array)    |
-| `fs.glob(pattern)`             | Find files matching a glob pattern             |
-| `fs.walk(path)`                | Recursively list all files under a directory   |
-| `fs.tempFile()`                | Create a temporary file, returns its path      |
-| `fs.tempDir()`                 | Create a temporary directory, returns its path |
-| `fs.modifiedAt(path)`          | Get last modified time as Unix timestamp       |
-| `fs.createFile(path)`          | Create an empty file or update modified time   |
-| `fs.symlink(target, path)`     | Create a symbolic link                         |
+| Function                       | Description                                                                       |
+| ------------------------------ | --------------------------------------------------------------------------------- |
+| `fs.readFile(path)`            | Read file contents as string                                                      |
+| `fs.writeFile(path, content)`  | Write string to file (creates or overwrites)                                      |
+| `fs.appendFile(path, content)` | Append string to file                                                             |
+| `fs.readLines(path)`           | Read file as array of lines                                                       |
+| `fs.exists(path)`              | Check if a file exists (returns boolean)                                          |
+| `fs.dirExists(path)`           | Check if a directory exists (returns boolean)                                     |
+| `fs.pathExists(path)`          | Check if a file or directory exists                                               |
+| `fs.isFile(path)`              | Check if path is a file (returns boolean)                                         |
+| `fs.isDir(path)`               | Check if path is a directory (returns boolean)                                    |
+| `fs.isSymlink(path)`           | Check if path is a symbolic link                                                  |
+| `fs.createDir(path)`           | Create a directory (including parents)                                            |
+| `fs.delete(path)`              | Delete a file or directory (recursive)                                            |
+| `fs.copy(src, dst)`            | Copy a file (overwrites destination)                                              |
+| `fs.move(src, dst)`            | Move/rename a file (overwrites destination)                                       |
+| `fs.size(path)`                | Get file size in bytes                                                            |
+| `fs.listDir(path)`             | List entries in a directory (returns array)                                       |
+| `fs.glob(pattern)`             | Find files matching a glob pattern                                                |
+| `fs.walk(path)`                | Recursively list all files under a directory                                      |
+| `fs.tempFile()`                | Create a temporary file, returns its path                                         |
+| `fs.tempDir()`                 | Create a temporary directory, returns its path                                    |
+| `fs.modifiedAt(path)`          | Get last modified time as Unix timestamp                                          |
+| `fs.createFile(path)`          | Create an empty file or update modified time                                      |
+| `fs.symlink(target, path)`     | Create a symbolic link                                                            |
 | `fs.stat(path)`                | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name) |
 
 ---
@@ -335,13 +336,13 @@ All `arr` functions take the target array as the first argument. Functions that 
 
 ### Aggregation & Grouping
 
-| Function                  | Description                                                   |
-| ------------------------- | ------------------------------------------------------------- |
-| `arr.sortBy(array, fn)`  | Return new array sorted by `fn(element)` key (does not mutate)|
-| `arr.groupBy(array, fn)` | Group elements into dict keyed by `fn(element)` result        |
-| `arr.sum(array)`          | Sum all numeric elements                                      |
-| `arr.min(array)`          | Return minimum numeric element                                |
-| `arr.max(array)`          | Return maximum numeric element                                |
+| Function                 | Description                                                    |
+| ------------------------ | -------------------------------------------------------------- |
+| `arr.sortBy(array, fn)`  | Return new array sorted by `fn(element)` key (does not mutate) |
+| `arr.groupBy(array, fn)` | Group elements into dict keyed by `fn(element)` result         |
+| `arr.sum(array)`         | Sum all numeric elements                                       |
+| `arr.min(array)`         | Return minimum numeric element                                 |
+| `arr.max(array)`         | Return maximum numeric element                                 |
 
 ### Examples
 
@@ -490,16 +491,16 @@ let merged = dict.merge(defaults, config);
 
 ### Core
 
-| Function                      | Description                                |
-| ----------------------------- | ------------------------------------------ |
-| `math.abs(value)`             | Return the absolute value of a number      |
-| `math.ceil(value)`            | Round a number up to the nearest integer   |
-| `math.floor(value)`           | Round a number down to the nearest integer |
-| `math.round(value)`           | Round a number to the nearest integer      |
-| `math.sign(value)`            | Return the sign: `-1`, `0`, or `1`         |
-| `math.min(a, b)`              | Return the smaller of two numbers          |
-| `math.max(a, b)`              | Return the larger of two numbers           |
-| `math.clamp(value, min, max)` | Constrain a number within a min/max range  |
+| Function                      | Description                                                               |
+| ----------------------------- | ------------------------------------------------------------------------- |
+| `math.abs(value)`             | Return the absolute value of a number                                     |
+| `math.ceil(value)`            | Round up to the nearest integer (type-preserving: float in → float out)   |
+| `math.floor(value)`           | Round down to the nearest integer (type-preserving: float in → float out) |
+| `math.round(value)`           | Round to the nearest integer (type-preserving: float in → float out)      |
+| `math.sign(value)`            | Return the sign: `-1`, `0`, or `1`                                        |
+| `math.min(a, b)`              | Return the smaller of two numbers                                         |
+| `math.max(a, b)`              | Return the larger of two numbers                                          |
+| `math.clamp(value, min, max)` | Constrain a number within a min/max range                                 |
 
 ### Powers, Roots, and Logarithms
 
@@ -736,15 +737,15 @@ io.println("Configuration updated.");
 
 ## `http` — HTTP Requests
 
-| Function                | Description                                          |
-| ----------------------- | ---------------------------------------------------- |
-| `http.get(url)`         | Send HTTP GET request and return response            |
-| `http.post(url, body)`  | Send HTTP POST request with body and return response |
-| `http.put(url, body)`   | Send HTTP PUT request with body and return response  |
-| `http.delete(url)`      | Send HTTP DELETE request and return response         |
-| `http.request(options)` | Send custom HTTP request with a dict of options      |
-| `http.patch(url, body)` | Send HTTP PATCH request with body and return response|
-| `http.download(url, path)` | Download a file to disk (streaming, memory-efficient)|
+| Function                   | Description                                           |
+| -------------------------- | ----------------------------------------------------- |
+| `http.get(url)`            | Send HTTP GET request and return response             |
+| `http.post(url, body)`     | Send HTTP POST request with body and return response  |
+| `http.put(url, body)`      | Send HTTP PUT request with body and return response   |
+| `http.delete(url)`         | Send HTTP DELETE request and return response          |
+| `http.request(options)`    | Send custom HTTP request with a dict of options       |
+| `http.patch(url, body)`    | Send HTTP PATCH request with body and return response |
+| `http.download(url, path)` | Download a file to disk (streaming, memory-efficient) |
 
 ### Response Object
 
@@ -779,22 +780,22 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 
 ### Quick Reference
 
-| Function                        | Description                                                       |
-| ------------------------------- | ----------------------------------------------------------------- |
-| `process.exit(code)`            | Terminate the script with exit code                               |
-| `process.spawn(cmd)`            | Launch a background process, returns a `Process` handle           |
-| `process.wait(proc)`            | Block until a process exits, returns `CommandResult`              |
-| `process.waitTimeout(proc, ms)` | Wait with timeout; returns `CommandResult` or `null` if timed out |
-| `process.kill(proc)`            | Send SIGTERM to a process                                         |
-| `process.isAlive(proc)`         | Check if a process is still running (returns `bool`)              |
-| `process.signal(proc, sig)`     | Send an arbitrary signal to a process                             |
-| `process.pid(proc)`             | Get the OS process ID                                             |
-| `process.detach(proc)`          | Detach a process so it survives script exit                       |
-| `process.list()`                | List all tracked (spawned) process handles                        |
-| `process.read(proc)`            | Read available stdout from a running process (non-blocking)       |
-| `process.write(proc, data)`     | Write to a running process's stdin                                |
+| Function                         | Description                                                       |
+| -------------------------------- | ----------------------------------------------------------------- |
+| `process.exit(code)`             | Terminate the script with exit code                               |
+| `process.spawn(cmd)`             | Launch a background process, returns a `Process` handle           |
+| `process.wait(proc)`             | Block until a process exits, returns `CommandResult`              |
+| `process.waitTimeout(proc, ms)`  | Wait with timeout; returns `CommandResult` or `null` if timed out |
+| `process.kill(proc)`             | Send SIGTERM to a process                                         |
+| `process.isAlive(proc)`          | Check if a process is still running (returns `bool`)              |
+| `process.signal(proc, sig)`      | Send an arbitrary signal to a process                             |
+| `process.pid(proc)`              | Get the OS process ID                                             |
+| `process.detach(proc)`           | Detach a process so it survives script exit                       |
+| `process.list()`                 | List all tracked (spawned) process handles                        |
+| `process.read(proc)`             | Read available stdout from a running process (non-blocking)       |
+| `process.write(proc, data)`      | Write to a running process's stdin                                |
 | `process.onExit(proc, callback)` | Register a callback to run when a process exits                   |
-| `process.daemonize(cmd)`         | Launch a command as a daemon (not tracked, survives script exit)   |
+| `process.daemonize(cmd)`         | Launch a command as a daemon (not tracked, survives script exit)  |
 | `process.find(name)`             | Find system processes by name, returns array of `Process` handles |
 | `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)          |
 | `process.waitAll(procs)`         | Wait for all processes in an array to exit                        |
@@ -1292,9 +1293,9 @@ let parsed = args.parse({
 | `name`        | string | Script name (used in help text)                                    |
 | `version`     | string | Version string (triggers auto `--version`)                         |
 | `description` | string | Script description                                                 |
-| `flags`       | dict   | `{ name: { short, description } }` — boolean switches             |
-| `options`     | dict   | `{ name: { short, type, default, description, required } }`       |
-| `commands`    | dict   | `{ name: { description, flags, options, positionals } }`          |
+| `flags`       | dict   | `{ name: { short, description } }` — boolean switches              |
+| `options`     | dict   | `{ name: { short, type, default, description, required } }`        |
+| `commands`    | dict   | `{ name: { description, flags, options, positionals } }`           |
 | `positionals` | array  | `[{ name, type, default, description, required }]` — order matters |
 
 **Flags** dict values accept: `short`, `description`
@@ -1421,12 +1422,12 @@ The `crypto` namespace provides cryptographic hash functions, HMAC signatures, U
 
 ### Hash Functions
 
-| Function              | Description                                        |
-| --------------------- | -------------------------------------------------- |
-| `crypto.md5(data)`    | Compute MD5 hash of a string (hex string)          |
-| `crypto.sha1(data)`   | Compute SHA-1 hash of a string (hex string)        |
-| `crypto.sha256(data)` | Compute SHA-256 hash of a string (hex string)      |
-| `crypto.sha512(data)` | Compute SHA-512 hash of a string (hex string)      |
+| Function              | Description                                   |
+| --------------------- | --------------------------------------------- |
+| `crypto.md5(data)`    | Compute MD5 hash of a string (hex string)     |
+| `crypto.sha1(data)`   | Compute SHA-1 hash of a string (hex string)   |
+| `crypto.sha256(data)` | Compute SHA-256 hash of a string (hex string) |
+| `crypto.sha512(data)` | Compute SHA-512 hash of a string (hex string) |
 
 ```stash
 let hash = crypto.sha256("hello");
@@ -1439,9 +1440,9 @@ io.println(md5);   // "5d41402abc4b2a76b9719d911017c592"
 
 ### HMAC
 
-| Function                        | Description                                         |
-| ------------------------------- | --------------------------------------------------- |
-| `crypto.hmac(algo, key, data)`  | Compute HMAC with specified algorithm (hex string)  |
+| Function                       | Description                                        |
+| ------------------------------ | -------------------------------------------------- |
+| `crypto.hmac(algo, key, data)` | Compute HMAC with specified algorithm (hex string) |
 
 The `algo` parameter accepts `"md5"`, `"sha1"`, `"sha256"`, or `"sha512"`.
 
@@ -1452,9 +1453,9 @@ io.println(signature);  // lowercase hex HMAC
 
 ### File Hashing
 
-| Function                       | Description                                                  |
-| ------------------------------ | ------------------------------------------------------------ |
-| `crypto.hashFile(path, algo?)` | Hash a file's contents (default algorithm: `"sha256"`)       |
+| Function                       | Description                                            |
+| ------------------------------ | ------------------------------------------------------ |
+| `crypto.hashFile(path, algo?)` | Hash a file's contents (default algorithm: `"sha256"`) |
 
 ```stash
 let checksum = crypto.hashFile("deploy.tar.gz");
@@ -1467,10 +1468,10 @@ io.println("MD5: " + md5sum);
 
 ### UUID & Random
 
-| Function                | Description                                           |
-| ----------------------- | ----------------------------------------------------- |
-| `crypto.uuid()`         | Generate a random UUID v4 string                      |
-| `crypto.randomBytes(n)` | Generate `n` cryptographically secure random bytes    |
+| Function                | Description                                        |
+| ----------------------- | -------------------------------------------------- |
+| `crypto.uuid()`         | Generate a random UUID v4 string                   |
+| `crypto.randomBytes(n)` | Generate `n` cryptographically secure random bytes |
 
 `randomBytes` returns the bytes as a lowercase hexadecimal string (2 hex characters per byte).
 
@@ -1490,10 +1491,10 @@ The `encoding` namespace provides Base64, URL, and hexadecimal encoding and deco
 
 ### Base64
 
-| Function                    | Description                        |
-| --------------------------- | ---------------------------------- |
-| `encoding.base64Encode(s)`  | Encode a string to Base64          |
-| `encoding.base64Decode(s)`  | Decode a Base64 string             |
+| Function                   | Description               |
+| -------------------------- | ------------------------- |
+| `encoding.base64Encode(s)` | Encode a string to Base64 |
+| `encoding.base64Decode(s)` | Decode a Base64 string    |
 
 ```stash
 let encoded = encoding.base64Encode("Hello, World!");
@@ -1505,10 +1506,10 @@ io.println(decoded);   // "Hello, World!"
 
 ### URL Encoding
 
-| Function                  | Description                                           |
-| ------------------------- | ----------------------------------------------------- |
-| `encoding.urlEncode(s)`   | URL-encode a string (RFC 3986 percent-encoding)       |
-| `encoding.urlDecode(s)`   | Decode a URL-encoded string                           |
+| Function                | Description                                     |
+| ----------------------- | ----------------------------------------------- |
+| `encoding.urlEncode(s)` | URL-encode a string (RFC 3986 percent-encoding) |
+| `encoding.urlDecode(s)` | Decode a URL-encoded string                     |
 
 ```stash
 let encoded = encoding.urlEncode("hello world&key=value");
@@ -1520,10 +1521,10 @@ io.println(decoded);   // "hello world&key=value"
 
 ### Hexadecimal
 
-| Function                 | Description                                          |
-| ------------------------ | ---------------------------------------------------- |
-| `encoding.hexEncode(s)`  | Encode a string's UTF-8 bytes as hexadecimal         |
-| `encoding.hexDecode(s)`  | Decode a hexadecimal string to a UTF-8 string        |
+| Function                | Description                                   |
+| ----------------------- | --------------------------------------------- |
+| `encoding.hexEncode(s)` | Encode a string's UTF-8 bytes as hexadecimal  |
+| `encoding.hexDecode(s)` | Decode a hexadecimal string to a UTF-8 string |
 
 ```stash
 let hex = encoding.hexEncode("hello");
@@ -1541,42 +1542,42 @@ The `term` namespace provides ANSI terminal formatting, color output, and table 
 
 #### Color Constants
 
-| Constant        | Value       |
-| --------------- | ----------- |
-| `term.BLACK`    | `"black"`   |
-| `term.RED`      | `"red"`     |
-| `term.GREEN`    | `"green"`   |
-| `term.YELLOW`   | `"yellow"`  |
-| `term.BLUE`     | `"blue"`    |
-| `term.MAGENTA`  | `"magenta"` |
-| `term.CYAN`     | `"cyan"`    |
-| `term.WHITE`    | `"white"`   |
-| `term.GRAY`     | `"gray"`    |
+| Constant       | Value       |
+| -------------- | ----------- |
+| `term.BLACK`   | `"black"`   |
+| `term.RED`     | `"red"`     |
+| `term.GREEN`   | `"green"`   |
+| `term.YELLOW`  | `"yellow"`  |
+| `term.BLUE`    | `"blue"`    |
+| `term.MAGENTA` | `"magenta"` |
+| `term.CYAN`    | `"cyan"`    |
+| `term.WHITE`   | `"white"`   |
+| `term.GRAY`    | `"gray"`    |
 
 ### Text Formatting
 
-| Function                    | Description                                                 |
-| --------------------------- | ----------------------------------------------------------- |
-| `term.color(text, color)`   | Wrap text in ANSI color using `term` color constants        |
-| `term.bold(text)`           | Bold text                                                   |
-| `term.dim(text)`            | Dim text                                                    |
-| `term.underline(text)`      | Underlined text                                             |
-| `term.style(text, opts)`    | Combined styles via dict `{ color: term.RED, bold: true }`  |
-| `term.strip(text)`          | Remove all ANSI escape codes from text                      |
+| Function                  | Description                                                |
+| ------------------------- | ---------------------------------------------------------- |
+| `term.color(text, color)` | Wrap text in ANSI color using `term` color constants       |
+| `term.bold(text)`         | Bold text                                                  |
+| `term.dim(text)`          | Dim text                                                   |
+| `term.underline(text)`    | Underlined text                                            |
+| `term.style(text, opts)`  | Combined styles via dict `{ color: term.RED, bold: true }` |
+| `term.strip(text)`        | Remove all ANSI escape codes from text                     |
 
 ### Terminal Info
 
-| Function               | Description                                        |
-| ---------------------- | -------------------------------------------------- |
-| `term.width()`         | Terminal width in columns (fallback: 80)            |
-| `term.isInteractive()` | Whether stdin is a TTY (interactive terminal)      |
-| `term.clear()`         | Clear terminal screen                               |
+| Function               | Description                                   |
+| ---------------------- | --------------------------------------------- |
+| `term.width()`         | Terminal width in columns (fallback: 80)      |
+| `term.isInteractive()` | Whether stdin is a TTY (interactive terminal) |
+| `term.clear()`         | Clear terminal screen                         |
 
 ### Table Rendering
 
-| Function                       | Description                                |
-| ------------------------------ | ------------------------------------------ |
-| `term.table(rows, headers?)`   | Format data as ASCII table string          |
+| Function                     | Description                       |
+| ---------------------------- | --------------------------------- |
+| `term.table(rows, headers?)` | Format data as ASCII table string |
 
 ### Examples
 
@@ -1620,6 +1621,88 @@ io.println(term.table(data, ["ID", "Name", "Score"]));
 // | 3  | Charlie | 92    |
 // +----+---------+-------+
 ```
+
+---
+
+## `sys` — System Information
+
+The `sys` namespace provides functions for querying system-level information: CPU, memory, disk, network interfaces, and process metadata. These are read-only introspection functions useful for server monitoring, health checks, and capacity planning scripts.
+
+| Function                  | Description                                                  |
+| ------------------------- | ------------------------------------------------------------ |
+| `sys.cpuCount()`          | Number of logical CPU cores                                  |
+| `sys.totalMemory()`       | Total physical RAM in bytes                                  |
+| `sys.freeMemory()`        | Available free RAM in bytes                                  |
+| `sys.uptime()`            | System uptime in seconds                                     |
+| `sys.loadAvg()`           | CPU load averages as array `[1min, 5min, 15min]`             |
+| `sys.diskUsage(path?)`    | Disk usage dict with `total`, `used`, `free` keys (in bytes) |
+| `sys.pid()`               | Current process ID                                           |
+| `sys.tempDir()`           | OS temporary directory path                                  |
+| `sys.networkInterfaces()` | Array of network interface dicts                             |
+
+### CPU & Memory
+
+```stash
+io.println(sys.cpuCount());      // e.g., 8
+io.println(sys.totalMemory());   // e.g., 17179869184 (16 GB)
+io.println(sys.freeMemory());    // e.g., 8589934592  (8 GB available)
+```
+
+### Uptime & Load
+
+```stash
+io.println(sys.uptime());  // e.g., 86432.5 (seconds since boot)
+
+let load = sys.loadAvg();
+io.println(load);  // e.g., [0.15, 0.10, 0.05]
+```
+
+> **Note:** `sys.loadAvg()` reads `/proc/loadavg` on Linux. On other platforms it returns `[0.0, 0.0, 0.0]`.
+
+### Disk Usage
+
+```stash
+let disk = sys.diskUsage();          // root filesystem
+io.println(disk["total"]);           // total bytes
+io.println(disk["used"]);            // used bytes
+io.println(disk["free"]);            // free bytes
+
+let data = sys.diskUsage("/data");   // specific mount point
+```
+
+### Process & Temp Directory
+
+```stash
+io.println(sys.pid());       // e.g., 12345
+io.println(sys.tempDir());   // e.g., "/tmp"
+```
+
+### Network Interfaces
+
+```stash
+let ifaces = sys.networkInterfaces();
+for (let iface in ifaces) {
+    io.println(iface["name"] + " (" + iface["status"] + ")");
+    for (let addr in iface["addresses"]) {
+        io.println("  " + addr);
+    }
+}
+// Example output:
+// lo (Up)
+//   127.0.0.1
+//   ::1
+// eth0 (Up)
+//   192.168.1.100
+```
+
+Each network interface dict contains:
+
+| Field       | Type   | Description                                       |
+| ----------- | ------ | ------------------------------------------------- |
+| `name`      | string | Interface name (e.g., `"eth0"`, `"lo"`)           |
+| `type`      | string | Interface type (e.g., `"Ethernet"`, `"Loopback"`) |
+| `status`    | string | Operational status (e.g., `"Up"`, `"Down"`)       |
+| `addresses` | array  | Array of IP address strings                       |
 
 ---
 

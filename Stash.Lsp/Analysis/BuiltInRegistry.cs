@@ -479,12 +479,12 @@ public static class BuiltInRegistry
         // math namespace
         new NamespaceFunction("math", "abs", new[] { new BuiltInParam("n", "number") }, "number",
             Documentation: "Returns the absolute value of a number.\n@param n The number\n@return The absolute value"),
-        new NamespaceFunction("math", "ceil", new[] { new BuiltInParam("n", "number") }, "int",
-            Documentation: "Returns the smallest integer greater than or equal to a number (rounds up).\n@param n The number to round up\n@return The ceiling value as an integer"),
-        new NamespaceFunction("math", "floor", new[] { new BuiltInParam("n", "number") }, "int",
-            Documentation: "Returns the largest integer less than or equal to a number (rounds down).\n@param n The number to round down\n@return The floor value as an integer"),
-        new NamespaceFunction("math", "round", new[] { new BuiltInParam("n", "number") }, "int",
-            Documentation: "Rounds a number to the nearest integer.\n@param n The number to round\n@return The rounded integer"),
+        new NamespaceFunction("math", "ceil", new[] { new BuiltInParam("n", "number") }, "number",
+            Documentation: "Returns the smallest integer greater than or equal to a number (rounds up). Returns float if the input is float, int if the input is int.\n@param n The number to round up\n@return The ceiling value (same type as input)"),
+        new NamespaceFunction("math", "floor", new[] { new BuiltInParam("n", "number") }, "number",
+            Documentation: "Returns the largest integer less than or equal to a number (rounds down). Returns float if the input is float, int if the input is int.\n@param n The number to round down\n@return The floor value (same type as input)"),
+        new NamespaceFunction("math", "round", new[] { new BuiltInParam("n", "number") }, "number",
+            Documentation: "Rounds a number to the nearest integer. Ties round away from zero. Returns float if the input is float, int if the input is int.\n@param n The number to round\n@return The rounded value (same type as input)"),
         new NamespaceFunction("math", "min", new[] { new BuiltInParam("a", "number"), new BuiltInParam("b", "number") }, "number",
             Documentation: "Returns the smaller of two numbers.\n@param a The first number\n@param b The second number\n@return The smaller value"),
         new NamespaceFunction("math", "max", new[] { new BuiltInParam("a", "number"), new BuiltInParam("b", "number") }, "number",
@@ -662,6 +662,25 @@ public static class BuiltInRegistry
             Documentation: "Clears the terminal screen using ANSI escape codes."),
         new NamespaceFunction("term", "table", new[] { new BuiltInParam("rows", "array"), new BuiltInParam("headers", "array") }, "string", IsVariadic: true,
             Documentation: "Formats data as an ASCII table string. Each row is an array of values. Headers are optional.\n@param rows An array of arrays (each inner array is a row)\n@param headers An optional array of column header strings\n@return The formatted table as a string"),
+        // sys namespace ──────────────────────────────────────────────────────
+        new NamespaceFunction("sys", "cpuCount", Array.Empty<BuiltInParam>(), "int",
+            Documentation: "Returns the number of logical CPU cores.\n@return The number of CPU cores as an integer"),
+        new NamespaceFunction("sys", "totalMemory", Array.Empty<BuiltInParam>(), "int",
+            Documentation: "Returns the total physical RAM in bytes.\n@return Total memory in bytes"),
+        new NamespaceFunction("sys", "freeMemory", Array.Empty<BuiltInParam>(), "int",
+            Documentation: "Returns the available free RAM in bytes. On Linux, reads from /proc/meminfo.\n@return Available memory in bytes"),
+        new NamespaceFunction("sys", "uptime", Array.Empty<BuiltInParam>(), "float",
+            Documentation: "Returns the system uptime in seconds.\n@return Uptime in seconds as a float"),
+        new NamespaceFunction("sys", "loadAvg", Array.Empty<BuiltInParam>(), "array",
+            Documentation: "Returns CPU load averages as an array [1min, 5min, 15min]. On non-Linux platforms, returns [0.0, 0.0, 0.0].\n@return An array of three float values"),
+        new NamespaceFunction("sys", "diskUsage", new[] { new BuiltInParam("path", "string") }, "dict", IsVariadic: true,
+            Documentation: "Returns disk usage information for the given path as a dict with 'total', 'used', and 'free' keys (all in bytes). Defaults to root filesystem if no path is provided.\n@param path Optional path to check disk usage for\n@return A dict with total, used, and free bytes"),
+        new NamespaceFunction("sys", "pid", Array.Empty<BuiltInParam>(), "int",
+            Documentation: "Returns the current process ID.\n@return The PID as an integer"),
+        new NamespaceFunction("sys", "tempDir", Array.Empty<BuiltInParam>(), "string",
+            Documentation: "Returns the OS temporary directory path.\n@return The path to the temp directory"),
+        new NamespaceFunction("sys", "networkInterfaces", Array.Empty<BuiltInParam>(), "array",
+            Documentation: "Returns an array of network interface dicts, each with 'name', 'type', 'status', and 'addresses' fields.\n@return An array of dicts describing network interfaces"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -710,7 +729,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys"
     };
 
     // ── Keywords ──

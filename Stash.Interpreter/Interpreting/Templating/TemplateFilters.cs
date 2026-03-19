@@ -187,7 +187,7 @@ public static class TemplateFilters
     {
         if (value is double d)
         {
-            return (long)Math.Round(d);
+            return Math.Round(d, MidpointRounding.AwayFromZero);
         }
 
         if (value is long)
