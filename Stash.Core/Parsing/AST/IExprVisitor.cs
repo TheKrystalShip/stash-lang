@@ -182,4 +182,5 @@ public interface IExprVisitor<T>
     /// <param name="expr">The range expression node to visit.</param>
     /// <returns>The result of evaluating the range.</returns>
     T VisitRangeExpr(RangeExpr expr);
+    T VisitDictLiteralExpr(DictLiteralExpr expr);
 }

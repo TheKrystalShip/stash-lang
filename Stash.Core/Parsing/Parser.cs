@@ -1362,6 +1362,46 @@ public class Parser
             return new ArrayExpr(elements, MakeSpan(open.Span, close.Span));
         }
 
+        // Dict literal: { key: value, key2: value2 }
+        // Only in expression context — Statement() catches LeftBrace first for blocks.
+        if (Check(TokenType.LeftBrace))
+        {
+            int savedPosition = _current;
+            Token open = Advance(); // consume '{'
+
+            // Empty dict: { }
+            if (Check(TokenType.RightBrace))
+            {
+                Token close = Advance();
+                return new DictLiteralExpr(new List<(Token, Expr)>(), MakeSpan(open.Span, close.Span));
+            }
+
+            // Check for dict pattern: Identifier ':' (key-value pair)
+            if (Check(TokenType.Identifier))
+            {
+                int peekAhead = _current;
+                if (peekAhead + 1 < _tokens.Count &&
+                    _tokens[peekAhead + 1].Type == TokenType.Colon)
+                {
+                    // Confirmed dict literal — parse entries
+                    var entries = new List<(Token Key, Expr Value)>();
+                    do
+                    {
+                        Token key = Consume(TokenType.Identifier, "Expected identifier key in dict literal.");
+                        Consume(TokenType.Colon, "Expected ':' after dict key.");
+                        Expr value = Expression();
+                        entries.Add((key, value));
+                    } while (Match(TokenType.Comma));
+
+                    Token close = Consume(TokenType.RightBrace, "Expected '}' after dict entries.");
+                    return new DictLiteralExpr(entries, MakeSpan(open.Span, close.Span));
+                }
+            }
+
+            // Not a dict literal — backtrack
+            _current = savedPosition;
+        }
+
         if (Match(TokenType.Identifier))
         {
             Token name = Previous();

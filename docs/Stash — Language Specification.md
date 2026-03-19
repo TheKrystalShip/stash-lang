@@ -260,7 +260,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `array`  | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size      |
 | `struct` | `Server { host: "...", ... }`  | Named structured data (see Section 5)  |
 | `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)       |
-| `dict`   | `dict.new()`                   | Key-value map (see Section 5c)         |
+| `dict`   | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)         |
 | `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d) |
 
 ### Type Coercion & Truthiness
@@ -731,12 +731,79 @@ Dictionaries provide dynamic key-value mappings — the complement to arrays for
 
 ### Creation
 
-Dictionaries are created via the `dict` namespace:
+Dictionaries can be created with **literal syntax** using `{ key: value }` pairs, or via the `dict` namespace:
 
 ```stash
-let d = dict.new();       // empty dictionary
+// Dict literal — concise inline initialization
+let config = { host: "localhost", port: 8080, debug: true };
+
+// Empty dict literal
+let empty = {};
+
+// Equivalent using dict.new()
+let d = dict.new();
 d["name"] = "Alice";      // set via index syntax
 d.age = 30;               // set via dot access
+```
+
+#### Dict Literal Details
+
+Keys in dict literals are **bare identifiers** interpreted as string keys:
+
+```stash
+let d = { name: "Stash", version: 1 };
+d["name"];     // "Stash" — key is the string "name"
+d.version;     // 1
+```
+
+Values can be any expression — variables, function calls, nested literals:
+
+```stash
+let x = 10;
+let d = {
+    computed: x * 2,
+    nested: { inner: true },
+    items: [1, 2, 3]
+};
+d.computed;        // 20
+d.nested.inner;    // true
+len(d.items);      // 3
+```
+
+Dict literals produce the same `dict` type as `dict.new()` — all dict namespace functions work on them:
+
+```stash
+let d = { a: 1, b: 2 };
+typeof(d);          // "dict"
+len(d);             // 2
+dict.has(d, "a");   // true
+dict.keys(d);       // ["a", "b"]
+```
+
+#### Disambiguation
+
+Dict literals can only appear in **expression context** (right side of `=`, function arguments, array elements, etc.). A `{` at the **start of a statement** is always parsed as a block:
+
+```stash
+// Block — { at statement start
+{
+    let x = 1;
+}
+
+// Dict literal — { in expression context
+let d = { x: 1 };
+fn process(d) { ... }
+process({ timeout: 30 });
+```
+
+Struct initialization uses a **name prefix** to disambiguate:
+
+```stash
+// Struct init — name before {
+let srv = Server { host: "10.0.0.1", port: 22 };
+
+// Dict literal — no name before {
+let config = { host: "10.0.0.1", port: 22 };
 ```
 
 ### Key Types
@@ -1735,6 +1802,7 @@ Identifiers: user-defined names
 - `AssignExpr` — `x = val`
 - `DotAssignExpr` — `obj.field = val`
 - `ArrayExpr` — `[1, 2, 3]`
+- `DictLiteralExpr` — `{ key: value, key2: value2 }`
 - `IndexExpr` — `arr[i]`
 - `IndexAssignExpr` — `arr[i] = val`
 - `TernaryExpr` — `cond ? a : b`

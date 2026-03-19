@@ -496,6 +496,16 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitDictLiteralExpr(DictLiteralExpr expr)
+    {
+        foreach (var (_, value) in expr.Entries)
+        {
+            value.Accept(this);
+        }
+
+        return null;
+    }
+
     public object? VisitIndexExpr(IndexExpr expr)
     {
         expr.Object.Accept(this);

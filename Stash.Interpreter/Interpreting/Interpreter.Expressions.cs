@@ -616,6 +616,17 @@ public partial class Interpreter
     }
 
     /// <inheritdoc />
+    public object? VisitDictLiteralExpr(DictLiteralExpr expr)
+    {
+        var dict = new StashDictionary();
+        foreach (var (key, value) in expr.Entries)
+        {
+            dict.Set(key.Lexeme, value.Accept(this));
+        }
+        return dict;
+    }
+
+    /// <inheritdoc />
     public object? VisitIndexExpr(IndexExpr expr)
     {
         object? obj = expr.Object.Accept(this);

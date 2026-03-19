@@ -396,6 +396,16 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitDictLiteralExpr(DictLiteralExpr expr)
+    {
+        foreach (var (_, value) in expr.Entries)
+        {
+            Resolve(value);
+        }
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitIndexExpr(IndexExpr expr)
     {
         Resolve(expr.Object);
