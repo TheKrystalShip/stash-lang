@@ -31,7 +31,8 @@
 15. [`http` — HTTP Requests](#http--http-requests)
 16. [`process` — Process Management](#process--process-management)
 17. [`tpl` — Templating](#tpl--templating)
-18. [Argument Parsing](#argument-parsing)
+18. [`store` — In-Memory Store](#store--in-memory-store)
+19. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -83,20 +84,20 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 
 ## `env` — Environment Variables
 
-| Function               | Description                                            |
-| ---------------------- | ------------------------------------------------------ |
-| `env.get(name)`        | Read environment variable (null if unset)              |
-| `env.set(name, value)` | Set environment variable                               |
-| `env.has(name)`        | Check if an environment variable exists                |
-| `env.all()`            | Return all environment variables as a dictionary       |
+| Function                 | Description                                                           |
+| ------------------------ | --------------------------------------------------------------------- |
+| `env.get(name)`          | Read environment variable (null if unset)                             |
+| `env.set(name, value)`   | Set environment variable                                              |
+| `env.has(name)`          | Check if an environment variable exists                               |
+| `env.all()`              | Return all environment variables as a dictionary                      |
 | `env.withPrefix(prefix)` | Return all environment variables starting with prefix as a dictionary |
-| `env.remove(name)`     | Delete an environment variable                         |
-| `env.cwd()`            | Return the current working directory                   |
-| `env.home()`           | Return the user's home directory path                  |
-| `env.hostname()`       | Return the machine hostname                            |
-| `env.user()`           | Return the current username                            |
-| `env.os()`             | Return the OS name (`"linux"`, `"macos"`, `"windows"`) |
-| `env.arch()`           | Return the CPU architecture (`"x64"`, `"arm64"`, etc.) |
+| `env.remove(name)`       | Delete an environment variable                                        |
+| `env.cwd()`              | Return the current working directory                                  |
+| `env.home()`             | Return the user's home directory path                                 |
+| `env.hostname()`         | Return the machine hostname                                           |
+| `env.user()`             | Return the current username                                           |
+| `env.os()`               | Return the OS name (`"linux"`, `"macos"`, `"windows"`)                |
+| `env.arch()`             | Return the CPU architecture (`"x64"`, `"arm64"`, etc.)                |
 
 ### `env.withPrefix(prefix)`
 
@@ -292,38 +293,38 @@ All `arr` functions take the target array as the first argument. Functions that 
 
 ### Searching
 
-| Function                      | Description                                                     |
-| ----------------------------- | --------------------------------------------------------------- |
-| `arr.contains(array, value)`  | Return `true` if value exists in array                          |
-| `arr.indexOf(array, value)`   | Return index of first occurrence, or `-1` if not found          |
-| `arr.findIndex(array, fn)`    | Return index of first element where `fn(element)` is truthy, or `-1` |
+| Function                     | Description                                                          |
+| ---------------------------- | -------------------------------------------------------------------- |
+| `arr.contains(array, value)` | Return `true` if value exists in array                               |
+| `arr.indexOf(array, value)`  | Return index of first occurrence, or `-1` if not found               |
+| `arr.findIndex(array, fn)`   | Return index of first element where `fn(element)` is truthy, or `-1` |
 
 ### Transformation
 
-| Function                       | Description                                                      |
-| ------------------------------ | ---------------------------------------------------------------- |
-| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)   |
-| `arr.concat(array1, array2)`   | Return new array combining both arrays                           |
-| `arr.join(array, separator)`   | Join elements into a string with separator                       |
-| `arr.reverse(array)`           | Reverse array in-place                                           |
-| `arr.sort(array)`              | Sort array in-place (numbers and strings; error on mixed types)  |
+| Function                       | Description                                                            |
+| ------------------------------ | ---------------------------------------------------------------------- |
+| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)         |
+| `arr.concat(array1, array2)`   | Return new array combining both arrays                                 |
+| `arr.join(array, separator)`   | Join elements into a string with separator                             |
+| `arr.reverse(array)`           | Reverse array in-place                                                 |
+| `arr.sort(array)`              | Sort array in-place (numbers and strings; error on mixed types)        |
 | `arr.unique(array)`            | Return new array with duplicate values removed (first occurrence kept) |
-| `arr.flat(array)`              | Flatten one level of nesting into a new array                    |
-| `arr.flatMap(array, fn)`       | Map each element with `fn`, then flatten one level               |
+| `arr.flat(array)`              | Flatten one level of nesting into a new array                          |
+| `arr.flatMap(array, fn)`       | Map each element with `fn`, then flatten one level                     |
 
 ### Higher-Order Functions
 
-| Function                         | Description                                                    |
-| -------------------------------- | -------------------------------------------------------------- |
-| `arr.map(array, fn)`             | Return new array with `fn(element)` applied to each element    |
-| `arr.filter(array, fn)`          | Return new array of elements where `fn(element)` is truthy     |
-| `arr.forEach(array, fn)`         | Call `fn(element)` for each element                            |
-| `arr.find(array, fn)`            | Return first element where `fn(element)` is truthy, or `null`  |
-| `arr.findIndex(array, fn)`       | Return index of first truthy `fn(element)`, or `-1`            |
-| `arr.reduce(array, fn, initial)` | Fold array: calls `fn(accumulator, element)` for each element  |
-| `arr.any(array, fn)`             | Return `true` if any element satisfies `fn`                    |
-| `arr.every(array, fn)`           | Return `true` if all elements satisfy `fn`                     |
-| `arr.count(array, fn)`           | Return count of elements where `fn(element)` is truthy         |
+| Function                         | Description                                                   |
+| -------------------------------- | ------------------------------------------------------------- |
+| `arr.map(array, fn)`             | Return new array with `fn(element)` applied to each element   |
+| `arr.filter(array, fn)`          | Return new array of elements where `fn(element)` is truthy    |
+| `arr.forEach(array, fn)`         | Call `fn(element)` for each element                           |
+| `arr.find(array, fn)`            | Return first element where `fn(element)` is truthy, or `null` |
+| `arr.findIndex(array, fn)`       | Return index of first truthy `fn(element)`, or `-1`           |
+| `arr.reduce(array, fn, initial)` | Fold array: calls `fn(accumulator, element)` for each element |
+| `arr.any(array, fn)`             | Return `true` if any element satisfies `fn`                   |
+| `arr.every(array, fn)`           | Return `true` if all elements satisfy `fn`                    |
+| `arr.count(array, fn)`           | Return count of elements where `fn(element)` is truthy        |
 
 ### Examples
 
@@ -371,22 +372,22 @@ let expanded = arr.flatMap([1, 2, 3], (x) => [x, x * 10]); // [1, 10, 2, 20, 3, 
 
 All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument. Functional operations (`map`, `filter`, `merge`) return **new** dictionaries — they do not mutate the original.
 
-| Function                  | Description                                                         |
-| ------------------------- | ------------------------------------------------------------------- |
-| `dict.new()`              | Create an empty dictionary                                          |
-| `dict.get(d, key)`        | Get value for key, or `null` if not found                           |
-| `dict.set(d, key, value)` | Set key-value pair (mutates dictionary)                             |
-| `dict.has(d, key)`        | Return `true` if key exists                                         |
-| `dict.remove(d, key)`     | Remove key; returns `true` if found                                 |
-| `dict.clear(d)`           | Remove all entries                                                  |
-| `dict.keys(d)`            | Return array of all keys                                            |
-| `dict.values(d)`          | Return array of all values                                          |
-| `dict.size(d)`            | Return number of entries                                            |
-| `dict.pairs(d)`           | Return array of Pair structs (each with `.key` and `.value` fields) |
-| `dict.forEach(d, fn)`     | Call `fn(key, value)` for each entry                                |
-| `dict.map(d, fn)`         | Return new dictionary with values transformed by `fn(key, value)`   |
+| Function                  | Description                                                            |
+| ------------------------- | ---------------------------------------------------------------------- |
+| `dict.new()`              | Create an empty dictionary                                             |
+| `dict.get(d, key)`        | Get value for key, or `null` if not found                              |
+| `dict.set(d, key, value)` | Set key-value pair (mutates dictionary)                                |
+| `dict.has(d, key)`        | Return `true` if key exists                                            |
+| `dict.remove(d, key)`     | Remove key; returns `true` if found                                    |
+| `dict.clear(d)`           | Remove all entries                                                     |
+| `dict.keys(d)`            | Return array of all keys                                               |
+| `dict.values(d)`          | Return array of all values                                             |
+| `dict.size(d)`            | Return number of entries                                               |
+| `dict.pairs(d)`           | Return array of Pair structs (each with `.key` and `.value` fields)    |
+| `dict.forEach(d, fn)`     | Call `fn(key, value)` for each entry                                   |
+| `dict.map(d, fn)`         | Return new dictionary with values transformed by `fn(key, value)`      |
 | `dict.filter(d, fn)`      | Return new dictionary keeping entries where `fn(key, value)` is truthy |
-| `dict.merge(d1, d2)`      | Return new dictionary combining both (d2 wins on key conflicts)     |
+| `dict.merge(d1, d2)`      | Return new dictionary combining both (d2 wins on key conflicts)        |
 
 ### Index Syntax
 
@@ -456,53 +457,53 @@ let merged = dict.merge(defaults, config);
 
 ### Core
 
-| Function                      | Description                                                       |
-| ----------------------------- | ----------------------------------------------------------------- |
-| `math.abs(value)`             | Return the absolute value of a number                             |
-| `math.ceil(value)`            | Round a number up to the nearest integer                          |
-| `math.floor(value)`           | Round a number down to the nearest integer                        |
-| `math.round(value)`           | Round a number to the nearest integer                             |
-| `math.sign(value)`            | Return the sign: `-1`, `0`, or `1`                                |
-| `math.min(a, b)`              | Return the smaller of two numbers                                 |
-| `math.max(a, b)`              | Return the larger of two numbers                                  |
-| `math.clamp(value, min, max)` | Constrain a number within a min/max range                         |
+| Function                      | Description                                |
+| ----------------------------- | ------------------------------------------ |
+| `math.abs(value)`             | Return the absolute value of a number      |
+| `math.ceil(value)`            | Round a number up to the nearest integer   |
+| `math.floor(value)`           | Round a number down to the nearest integer |
+| `math.round(value)`           | Round a number to the nearest integer      |
+| `math.sign(value)`            | Return the sign: `-1`, `0`, or `1`         |
+| `math.min(a, b)`              | Return the smaller of two numbers          |
+| `math.max(a, b)`              | Return the larger of two numbers           |
+| `math.clamp(value, min, max)` | Constrain a number within a min/max range  |
 
 ### Powers, Roots, and Logarithms
 
-| Function                   | Description                                                       |
-| -------------------------- | ----------------------------------------------------------------- |
-| `math.pow(base, exponent)` | Raise a number to a power                                         |
-| `math.sqrt(value)`         | Return the square root of a number                                |
-| `math.exp(value)`          | Return _e_ raised to the given power                              |
-| `math.log(value)`          | Return the natural logarithm (base _e_) of a number              |
-| `math.log10(value)`        | Return the base-10 logarithm of a number                         |
-| `math.log2(value)`         | Return the base-2 logarithm of a number                          |
+| Function                   | Description                                         |
+| -------------------------- | --------------------------------------------------- |
+| `math.pow(base, exponent)` | Raise a number to a power                           |
+| `math.sqrt(value)`         | Return the square root of a number                  |
+| `math.exp(value)`          | Return _e_ raised to the given power                |
+| `math.log(value)`          | Return the natural logarithm (base _e_) of a number |
+| `math.log10(value)`        | Return the base-10 logarithm of a number            |
+| `math.log2(value)`         | Return the base-2 logarithm of a number             |
 
 ### Trigonometry
 
-| Function            | Description                                                          |
-| ------------------- | -------------------------------------------------------------------- |
-| `math.sin(value)`   | Return the sine of an angle (radians)                                |
-| `math.cos(value)`   | Return the cosine of an angle (radians)                              |
-| `math.tan(value)`   | Return the tangent of an angle (radians)                             |
-| `math.asin(value)`  | Return the arc sine (inverse sine) in radians                        |
-| `math.acos(value)`  | Return the arc cosine (inverse cosine) in radians                    |
-| `math.atan(value)`  | Return the arc tangent (inverse tangent) in radians                  |
-| `math.atan2(y, x)`  | Return the angle in radians between the positive x-axis and (x, y)  |
+| Function           | Description                                                        |
+| ------------------ | ------------------------------------------------------------------ |
+| `math.sin(value)`  | Return the sine of an angle (radians)                              |
+| `math.cos(value)`  | Return the cosine of an angle (radians)                            |
+| `math.tan(value)`  | Return the tangent of an angle (radians)                           |
+| `math.asin(value)` | Return the arc sine (inverse sine) in radians                      |
+| `math.acos(value)` | Return the arc cosine (inverse cosine) in radians                  |
+| `math.atan(value)` | Return the arc tangent (inverse tangent) in radians                |
+| `math.atan2(y, x)` | Return the angle in radians between the positive x-axis and (x, y) |
 
 ### Random Numbers
 
 | Function                   | Description                                                       |
 | -------------------------- | ----------------------------------------------------------------- |
 | `math.random()`            | Return a random float between 0.0 (inclusive) and 1.0 (exclusive) |
-| `math.randomInt(min, max)` | Return a random integer between min and max (inclusive)            |
+| `math.randomInt(min, max)` | Return a random integer between min and max (inclusive)           |
 
 ### Constants
 
-| Constant  | Value                 | Description                              |
-| --------- | --------------------- | ---------------------------------------- |
-| `math.PI` | `3.141592653589793`   | Ratio of a circle's circumference to its diameter (π) |
-| `math.E`  | `2.718281828459045`   | Euler's number, base of natural logarithms            |
+| Constant  | Value               | Description                                           |
+| --------- | ------------------- | ----------------------------------------------------- |
+| `math.PI` | `3.141592653589793` | Ratio of a circle's circumference to its diameter (π) |
+| `math.E`  | `2.718281828459045` | Euler's number, base of natural logarithms            |
 
 ---
 
@@ -1049,6 +1050,90 @@ let output = tpl.renderFile("templates/report.tpl", data);
 // Pre-compile for repeated use
 let compiled = tpl.compile("{{ name | upper }}");
 let r1 = tpl.render(compiled, data);
+```
+
+---
+
+## `store` — In-Memory Store
+
+A process-scoped in-memory key-value store. The store acts as a centralized data hub — any module or script running in the same interpreter shares the same store instance. Values persist for the lifetime of the process.
+
+Keys must be strings. Values can be any Stash type (strings, numbers, booleans, arrays, dicts, structs, functions, null).
+
+| Function              | Description                                                 |
+| --------------------- | ----------------------------------------------------------- |
+| `store.set(key, val)` | Set a key-value pair (overwrites if key exists)             |
+| `store.get(key)`      | Get the value for a key, or `null` if not found             |
+| `store.has(key)`      | Return `true` if the key exists                             |
+| `store.remove(key)`   | Remove a key; returns `true` if found                       |
+| `store.keys()`        | Return an array of all keys                                 |
+| `store.values()`      | Return an array of all values                               |
+| `store.size()`        | Return the number of entries                                |
+| `store.all()`         | Return a dictionary copy of all entries                     |
+| `store.scope(prefix)` | Return a dictionary of entries whose keys start with prefix |
+| `store.clear()`       | Remove all entries                                          |
+
+### Centralized Configuration
+
+```stash
+// config.stash — shared configuration module
+store.set("app.name", "MyApp");
+store.set("app.version", "1.0.0");
+store.set("app.debug", false);
+store.set("db.host", "localhost");
+store.set("db.port", 5432);
+```
+
+```stash
+// main.stash — reads config set by another module
+import "config.stash";
+
+io.println(store.get("app.name"));     // "MyApp"
+io.println(store.get("app.version"));  // "1.0.0"
+```
+
+### Scoped Retrieval
+
+Use `store.scope()` to retrieve groups of related entries by key prefix:
+
+```stash
+store.set("server.host", "10.0.0.1");
+store.set("server.port", 8080);
+store.set("server.name", "web-01");
+store.set("db.host", "10.0.0.2");
+
+let serverConfig = store.scope("server.");
+// dict with: { "server.host": "10.0.0.1", "server.port": 8080, "server.name": "web-01" }
+
+dict.forEach(serverConfig, (key, val) => {
+    io.println(key + " = " + val);
+});
+```
+
+### Shared State Across Modules
+
+Because modules are cached per-interpreter, the store provides a natural way to share state without passing data through function arguments:
+
+```stash
+// counter.stash
+fn increment(name) {
+    let current = store.get(name) ?? 0;
+    store.set(name, current + 1);
+}
+
+fn getCount(name) {
+    return store.get(name) ?? 0;
+}
+```
+
+```stash
+// app.stash
+import { increment, getCount } from "counter.stash";
+
+increment("requests");
+increment("requests");
+increment("requests");
+io.println(getCount("requests"));  // 3
 ```
 
 ---

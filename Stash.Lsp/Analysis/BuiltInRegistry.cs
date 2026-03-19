@@ -569,6 +569,28 @@ public static class BuiltInRegistry
             Documentation: "Reads a template file and renders it with the given data dictionary.\n@param path The path to the template file\n@param data A dictionary of variables available in the template\n@return The rendered output string"),
         new NamespaceFunction("tpl", "compile", new[] { new BuiltInParam("template", "string") },
             Documentation: "Pre-compiles a template string into an optimized form for repeated rendering. Pass the result to tpl.render() for faster execution.\n@param template The template string to compile\n@return A compiled template object"),
+
+        // store namespace
+        new NamespaceFunction("store", "set", new[] { new BuiltInParam("key", "string"), new BuiltInParam("value") },
+            Documentation: "Sets a key-value pair in the store. Overwrites any existing value for the key.\n@param key The key (must be a string)\n@param value The value to store"),
+        new NamespaceFunction("store", "get", new[] { new BuiltInParam("key", "string") },
+            Documentation: "Gets the value associated with a key, or null if the key does not exist.\n@param key The key to look up\n@return The stored value, or null"),
+        new NamespaceFunction("store", "has", new[] { new BuiltInParam("key", "string") }, "bool",
+            Documentation: "Checks whether a key exists in the store.\n@param key The key to check\n@return true if the key exists, false otherwise"),
+        new NamespaceFunction("store", "remove", new[] { new BuiltInParam("key", "string") }, "bool",
+            Documentation: "Removes a key from the store.\n@param key The key to remove\n@return true if the key was found and removed, false otherwise"),
+        new NamespaceFunction("store", "keys", Array.Empty<BuiltInParam>(), "array",
+            Documentation: "Returns an array of all keys in the store.\n@return An array of string keys"),
+        new NamespaceFunction("store", "values", Array.Empty<BuiltInParam>(), "array",
+            Documentation: "Returns an array of all values in the store.\n@return An array of values"),
+        new NamespaceFunction("store", "clear", Array.Empty<BuiltInParam>(),
+            Documentation: "Removes all entries from the store."),
+        new NamespaceFunction("store", "size", Array.Empty<BuiltInParam>(), "int",
+            Documentation: "Returns the number of entries in the store.\n@return The number of key-value pairs"),
+        new NamespaceFunction("store", "all", Array.Empty<BuiltInParam>(), "dict",
+            Documentation: "Returns a dictionary containing all key-value pairs in the store.\n@return A dictionary copy of all store entries"),
+        new NamespaceFunction("store", "scope", new[] { new BuiltInParam("prefix", "string") }, "dict",
+            Documentation: "Returns a dictionary of all entries whose keys start with the given prefix.\n@param prefix The prefix to filter keys by\n@return A dictionary of matching entries"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -599,7 +621,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store"
     };
 
     // ── Keywords ──

@@ -529,6 +529,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         TestBuiltIns.Register(_globals);
         PathBuiltIns.Register(_globals);
         TplBuiltIns.Register(_globals);
+        StoreBuiltIns.Register(_globals);
 
         // Capability-gated built-ins
         if (_capabilities.HasFlag(StashCapabilities.Environment))

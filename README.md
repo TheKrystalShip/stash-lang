@@ -139,8 +139,6 @@ import { deploy, Server } from "utils.stash";
 import "lib/utils.stash" as utils;
 ```
 
-For the full language reference, see the [Language Specification](docs/Stash%20—%20Language%20Specification.md).
-
 ---
 
 ## Getting Started
