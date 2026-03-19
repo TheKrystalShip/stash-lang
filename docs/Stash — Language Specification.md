@@ -1482,7 +1482,6 @@ io.println(counter()); // 2
 | `typeof(val)`      | Return the type of a value as string      |
 | `len(val)`         | Length of a string or array               |
 | `lastError()`      | Last error message (string) or null       |
-| `parseArgs(t)`     | Parse command-line arguments              |
 | `test(s, f)`       | Run a test                                |
 | `declare(s, f)`    | Group tests together                      |
 | `captureOutput(f)` | Redirects the output of any internal call |

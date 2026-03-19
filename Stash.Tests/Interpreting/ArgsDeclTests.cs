@@ -42,7 +42,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { flags: [ArgDef { name: "verbose", description: "Verbose mode" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--verbose"]));
@@ -53,7 +53,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { flags: [ArgDef { name: "verbose", description: "Verbose mode" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.verbose;
             """;
         Assert.Equal(false, RunWithArgs(source, []));
@@ -64,7 +64,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { flags: [ArgDef { name: "verbose", short: "v", description: "Verbose mode" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["-v"]));
@@ -80,7 +80,7 @@ public class ArgsDeclTests
                     ArgDef { name: "debug",   short: "d", description: "Debug"   }
                 ]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.debug;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--verbose", "--debug"]));
@@ -91,7 +91,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { flags: [ArgDef { name: "quiet", short: "q", description: "Suppress output" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.quiet;
             """;
         Assert.Equal(true, RunWithArgs(source, ["-q"]));
@@ -102,7 +102,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { flags: [ArgDef { name: "dryrun", description: "Dry run mode" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.dryrun;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--dryrun"]));
@@ -117,7 +117,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "port", type: "int", description: "Port number" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.port;
             """;
         Assert.Equal(8080L, RunWithArgs(source, ["--port", "8080"]));
@@ -128,7 +128,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "port", short: "p", type: "int", description: "Port number" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.port;
             """;
         Assert.Equal(9000L, RunWithArgs(source, ["-p", "9000"]));
@@ -139,7 +139,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "host", description: "Hostname" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.host;
             """;
         Assert.Equal("localhost", RunWithArgs(source, ["--host=localhost"]));
@@ -150,7 +150,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "port", type: "int", default: 8080, description: "Port" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.port;
             """;
         Assert.Equal(8080L, RunWithArgs(source, []));
@@ -161,7 +161,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "host", description: "Hostname" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.host;
             """;
         Assert.Null(RunWithArgs(source, []));
@@ -172,7 +172,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "count", type: "int", description: "Count" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.count;
             """;
         var result = RunWithArgs(source, ["--count", "42"]);
@@ -185,7 +185,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "ratio", type: "float", description: "Ratio" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.ratio;
             """;
         var result = RunWithArgs(source, ["--ratio", "3.14"]);
@@ -198,7 +198,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "enabled", type: "bool", description: "Enabled" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.enabled;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--enabled", "true"]));
@@ -214,7 +214,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "name", type: "string", description: "Name" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.name;
             """;
         var result = RunWithArgs(source, ["--name", "alice"]);
@@ -227,7 +227,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "host", required: true, description: "Host" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.host;
             """;
         RunWithArgsExpectingError(source, []);
@@ -242,7 +242,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { positionals: [ArgDef { name: "target", type: "string", description: "Target" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.target;
             """;
         Assert.Equal("example.com", RunWithArgs(source, ["example.com"]));
@@ -258,7 +258,7 @@ public class ArgsDeclTests
                     ArgDef { name: "dst", type: "string", description: "Destination" }
                 ]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.dst;
             """;
         Assert.Equal("/tmp/out", RunWithArgs(source, ["/home/user/file", "/tmp/out"]));
@@ -269,7 +269,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { positionals: [ArgDef { name: "count", type: "int", description: "Count" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.count;
             """;
         Assert.Equal(5L, RunWithArgs(source, ["5"]));
@@ -280,7 +280,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { positionals: [ArgDef { name: "target", required: true, description: "Target" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.target;
             """;
         RunWithArgsExpectingError(source, []);
@@ -291,7 +291,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { positionals: [ArgDef { name: "host", default: "localhost", description: "Host" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.host;
             """;
         Assert.Equal("localhost", RunWithArgs(source, []));
@@ -302,7 +302,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { positionals: [ArgDef { name: "filename", description: "File" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.filename;
             """;
         var result = RunWithArgs(source, ["report.txt"]);
@@ -324,7 +324,7 @@ public class ArgsDeclTests
                     ArgDef { name: "stop",  description: "Stop service"  }
                 ]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.command;
             """;
         Assert.Equal("start", RunWithArgs(source, ["start"]));
@@ -337,7 +337,7 @@ public class ArgsDeclTests
             let tree = ArgTree {
                 commands: [ArgDef { name: "start", description: "Start service" }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.command;
             """;
         Assert.Null(RunWithArgs(source, []));
@@ -351,7 +351,7 @@ public class ArgsDeclTests
             let tree = ArgTree {
                 commands: [ArgDef { name: "start", description: "Start service", args: subtree }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.start.detach;
             """;
         Assert.Equal(true, RunWithArgs(source, ["start", "--detach"]));
@@ -365,7 +365,7 @@ public class ArgsDeclTests
             let tree = ArgTree {
                 commands: [ArgDef { name: "start", description: "Start service", args: subtree }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.start.delay;
             """;
         Assert.Equal(10L, RunWithArgs(source, ["start", "--delay", "10"]));
@@ -379,7 +379,7 @@ public class ArgsDeclTests
             let tree = ArgTree {
                 commands: [ArgDef { name: "deploy", description: "Deploy app", args: subtree }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.deploy.env;
             """;
         Assert.Equal("production", RunWithArgs(source, ["deploy", "production"]));
@@ -393,7 +393,7 @@ public class ArgsDeclTests
             let tree = ArgTree {
                 commands: [ArgDef { name: "start", description: "Start service", args: subtree }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.start.port;
             """;
         Assert.Equal(3000L, RunWithArgs(source, ["start", "--port=3000"]));
@@ -407,7 +407,7 @@ public class ArgsDeclTests
             let tree = ArgTree {
                 commands: [ArgDef { name: "deploy", description: "Deploy", args: subtree }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.command;
             """;
         RunWithArgsExpectingError(source, ["deploy"]);
@@ -424,7 +424,7 @@ public class ArgsDeclTests
                     ArgDef { name: "test",   description: "Test"   }
                 ]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.command;
             """;
         Assert.Equal("deploy", RunWithArgs(source, ["deploy"]));
@@ -443,7 +443,7 @@ public class ArgsDeclTests
                 options:    [ArgDef { name: "port",    short: "p", type: "int", default: 80, description: "Port" }],
                 positionals:[ArgDef { name: "host",    type: "string", description: "Host" }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.port;
             """;
         Assert.Equal(9090L, RunWithArgs(source, ["-v", "--port", "9090", "myhost"]));
@@ -457,7 +457,7 @@ public class ArgsDeclTests
                 flags:    [ArgDef { name: "verbose", short: "v", description: "Verbose" }],
                 commands: [ArgDef { name: "start",                description: "Start"   }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--verbose", "start"]));
@@ -472,7 +472,7 @@ public class ArgsDeclTests
                 options:  [ArgDef { name: "config", description: "Config file" }],
                 commands: [ArgDef { name: "run",    description: "Run", args: subtree }]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.run.workers;
             """;
         Assert.Equal(4L, RunWithArgs(source, ["run", "--workers", "4"]));
@@ -489,7 +489,7 @@ public class ArgsDeclTests
                     ArgDef { name: "label", type: "string", description: "Label" }
                 ]
             };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.label;
             """;
         Assert.Equal("test", RunWithArgs(source, ["--count", "3", "--ratio", "0.5", "--label", "test"]));
@@ -500,7 +500,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { name: "mytool", description: "A tool" };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = 42;
             """;
         Assert.Equal(42L, RunWithArgs(source, []));
@@ -515,7 +515,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { flags: [ArgDef { name: "verbose", description: "Verbose" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.verbose;
             """;
         RunWithArgsExpectingError(source, ["--unknown"]);
@@ -526,7 +526,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { flags: [ArgDef { name: "verbose", short: "v", description: "Verbose" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.verbose;
             """;
         RunWithArgsExpectingError(source, ["-z"]);
@@ -537,7 +537,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "port", type: "int", description: "Port" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.port;
             """;
         RunWithArgsExpectingError(source, ["--port"]);
@@ -548,7 +548,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "port", type: "int", description: "Port" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.port;
             """;
         RunWithArgsExpectingError(source, ["--port", "abc"]);
@@ -559,7 +559,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "enabled", type: "bool", description: "Enabled" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.enabled;
             """;
         RunWithArgsExpectingError(source, ["--enabled", "maybe"]);
@@ -570,7 +570,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { options: [ArgDef { name: "ratio", type: "float", description: "Ratio" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.ratio;
             """;
         RunWithArgsExpectingError(source, ["--ratio", "not-a-float"]);
@@ -585,7 +585,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { name: "mytool", flags: [ArgDef { name: "verbose", description: "Verbose" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.verbose;
             """;
         Assert.Equal(false, RunWithArgs(source, []));
@@ -596,7 +596,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { name: "mytool", version: "2.0.0", description: "A tool" };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = 1;
             """;
         Assert.Equal(1L, RunWithArgs(source, []));
@@ -607,7 +607,7 @@ public class ArgsDeclTests
     {
         var source = """
             let tree = ArgTree { description: "This is a description", flags: [ArgDef { name: "quiet", description: "Quiet mode" }] };
-            let args = parseArgs(tree);
+            let args = args.parse(tree);
             let result = args.quiet;
             """;
         Assert.Equal(false, RunWithArgs(source, []));

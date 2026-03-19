@@ -19,7 +19,7 @@ internal sealed class ArgumentParser
     }
 
     /// <summary>
-    /// Implements the parseArgs() built-in function.
+    /// Implements the args.parse() built-in function.
     /// Takes an ArgTree StashInstance and parses _scriptArgs against it.
     /// Returns a StashInstance with all parsed argument values.
     /// </summary>
@@ -27,7 +27,7 @@ internal sealed class ArgumentParser
     {
         if (treeObj is not StashInstance tree || tree.TypeName != "ArgTree")
         {
-            throw new RuntimeError("Argument to 'parseArgs' must be an ArgTree instance.");
+            throw new RuntimeError("Argument to 'args.parse' must be an ArgTree instance.");
         }
 
         string? scriptName = tree.GetField("name", null) as string;

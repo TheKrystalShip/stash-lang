@@ -1,7 +1,7 @@
 #!/usr/bin/env stash
 
 // Service Controller CLI
-// Demonstrates parseArgs for building command-line tools
+// Demonstrates args.parse for building command-line tools
 //
 // Usage:
 //   stash service_ctl.stash start web --port 9000 --detach
@@ -11,7 +11,7 @@
 
 // ─── Argument Declaration ────────────────────────────────────
 
-let args = parseArgs(ArgTree {
+let args = args.parse(ArgTree {
     name: "service_ctl",
     version: "1.0",
     description: "Start, stop, and inspect managed services",

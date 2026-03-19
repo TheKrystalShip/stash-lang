@@ -38,7 +38,7 @@
 
 ## Overview
 
-Stash organizes built-in functions into **namespaces** accessed via dot notation (e.g., `fs.readFile(path)`). A small set of fundamental functions remain global (`typeof`, `len`, `lastError`, `parseArgs`); everything else lives in a namespace.
+Stash organizes built-in functions into **namespaces** accessed via dot notation (e.g., `fs.readFile(path)`). A small set of fundamental functions remain global (`typeof`, `len`, `lastError`); everything else lives in a namespace.
 
 Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
@@ -49,7 +49,6 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 | `typeof(val)`  | Return the type of a value as string                                     |
 | `len(val)`     | Length of a string or array                                              |
 | `lastError()`  | Last error message (string) or null                                      |
-| `parseArgs(t)` | Parse command-line arguments (see [Argument Parsing](#argument-parsing)) |
 
 ---
 
@@ -1140,7 +1139,7 @@ io.println(getCount("requests"));  // 3
 
 ## Argument Parsing
 
-Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus a **`parseArgs()`** function for declarative CLI argument parsing. Instead of manually parsing `argv`, scripts construct an `ArgTree` describing expected flags, options, positional arguments, and subcommands, then call `parseArgs()` to get a struct of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
+Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus the **`args.parse()`** function for declarative CLI argument parsing. Instead of manually parsing `args.list()`, scripts construct an `ArgTree` describing expected flags, options, positional arguments, and subcommands, then call `args.parse()` to get a struct of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
 
 ### Built-in Structs
 
@@ -1173,7 +1172,7 @@ Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus a **`parseAr
 ### Syntax
 
 ```stash
-let args = parseArgs(ArgTree {
+let parsed = args.parse(ArgTree {
     name: "deploy",
     version: "1.0.0",
     description: "A deployment tool",
@@ -1200,7 +1199,7 @@ let args = parseArgs(ArgTree {
 });
 ```
 
-`parseArgs()` returns a `StashInstance` bound to the variable; all parsed values are accessed via dot notation.
+`args.parse()` returns a `StashInstance` bound to the variable; all parsed values are accessed via dot notation.
 
 ### Flags
 
@@ -1251,25 +1250,25 @@ if (args.command == "deploy") {
 
 ### Accessing Parsed Values
 
-All parsed values are accessible via dot notation on the variable returned by `parseArgs()`:
+All parsed values are accessible via dot notation on the variable returned by `args.parse()`:
 
 ```stash
-let args = parseArgs(ArgTree {
+let parsed = args.parse(ArgTree {
     flags:     [ArgDef { name: "verbose", short: "v", description: "" }],
     options:   [ArgDef { name: "port", type: "int", default: 8080, description: "" }],
     positionals: [ArgDef { name: "file", required: true, description: "" }]
 });
 
-io.println(args.verbose);    // false (or true if --verbose was passed)
-io.println(args.port);       // 8080 (or user-provided value)
-io.println(args.file);       // first positional argument value
-io.println(args.command);    // name of matched subcommand, or null
-io.println(args.deploy.force); // subcommand flag value
+io.println(parsed.verbose);    // false (or true if --verbose was passed)
+io.println(parsed.port);       // 8080 (or user-provided value)
+io.println(parsed.file);       // first positional argument value
+io.println(parsed.command);    // name of matched subcommand, or null
+io.println(parsed.deploy.force); // subcommand flag value
 ```
 
 ### Validation & Error Handling
 
-`parseArgs()` performs automatic validation:
+`args.parse()` performs automatic validation:
 
 - **Required options/positionals:** A runtime error is raised if a required argument is not provided.
 - **Unknown arguments:** A runtime error is raised for unrecognized flags or options.

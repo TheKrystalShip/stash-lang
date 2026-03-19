@@ -119,8 +119,7 @@ public static class BuiltInRegistry
             Documentation: "Returns the length of a string, array, or dictionary.\n@param value A string, array, or dictionary\n@return The number of characters, elements, or entries"),
         new BuiltInFunction("lastError", Array.Empty<BuiltInParam>(), "string",
             Documentation: "Returns the last runtime error message, or null if no error has occurred.\n@return The error message string, or null"),
-        new BuiltInFunction("parseArgs", new[] { new BuiltInParam("tree", "ArgTree") }, "Args",
-            Documentation: "Parses command-line arguments according to a declarative argument tree definition.\n@param tree An ArgTree struct defining flags, options, commands, and positionals\n@return A parsed arguments object with flags, options, and positional values"),
+
         new BuiltInFunction("test", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
             Documentation: "Defines a test case with a name and a function body. The function is executed and the result is reported in TAP format.\n@param name The name of the test case\n@param fn The test function to execute"),
         new BuiltInFunction("skip", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
@@ -591,6 +590,14 @@ public static class BuiltInRegistry
             Documentation: "Returns a dictionary containing all key-value pairs in the store.\n@return A dictionary copy of all store entries"),
         new NamespaceFunction("store", "scope", new[] { new BuiltInParam("prefix", "string") }, "dict",
             Documentation: "Returns a dictionary of all entries whose keys start with the given prefix.\n@param prefix The prefix to filter keys by\n@return A dictionary of matching entries"),
+
+        // ── args ──────────────────────────────────────────────────────
+        new NamespaceFunction("args", "list", Array.Empty<BuiltInParam>(), "array",
+            Documentation: "Returns an array of all raw command-line arguments passed to the script.\n@return An array of argument strings"),
+        new NamespaceFunction("args", "count", Array.Empty<BuiltInParam>(), "int",
+            Documentation: "Returns the number of command-line arguments passed to the script.\n@return The argument count"),
+        new NamespaceFunction("args", "parse", new[] { new BuiltInParam("tree", "ArgTree") }, "Args",
+            Documentation: "Parses command-line arguments according to a declarative argument tree definition.\n@param tree An ArgTree struct defining flags, options, commands, and positionals\n@return A parsed arguments object with flags, options, and positional values"),
     };
 
     // ── Built-in Namespace Constants ──

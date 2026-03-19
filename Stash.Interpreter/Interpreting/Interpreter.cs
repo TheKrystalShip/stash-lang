@@ -540,6 +540,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         if (_capabilities.HasFlag(StashCapabilities.Process))
         {
             ProcessBuiltIns.Register(_globals);
+            ArgsBuiltIns.Register(_globals);
         }
 
         if (_capabilities.HasFlag(StashCapabilities.FileSystem))

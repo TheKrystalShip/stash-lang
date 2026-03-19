@@ -148,12 +148,6 @@ public static class GlobalBuiltIns
                 "name", "short", "type", "default", "description", "required", "args"
             }, new Dictionary<string, StashFunction>()));
 
-            // parseArgs built-in function
-            globals.Define("parseArgs", new BuiltInFunction("parseArgs", 1, (interpreter, fnArgs) =>
-            {
-                return new ArgumentParser(interpreter.ScriptArgs).Parse(fnArgs[0]);
-            }));
-
             globals.Define("exit", new BuiltInFunction("exit", 1, (interp, args) =>
             {
                 if (args[0] is not long code)
