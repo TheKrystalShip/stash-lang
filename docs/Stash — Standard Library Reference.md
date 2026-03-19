@@ -32,7 +32,9 @@
 16. [`process` — Process Management](#process--process-management)
 17. [`tpl` — Templating](#tpl--templating)
 18. [`store` — In-Memory Store](#store--in-memory-store)
-19. [Argument Parsing](#argument-parsing)
+19. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+20. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+21. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -58,6 +60,8 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 | ---------------------- | ----------------------------------------------------- |
 | `io.println(val)`      | Print value followed by newline                       |
 | `io.print(val)`        | Print value without newline                           |
+| `io.eprintln(val)`     | Print value followed by newline to standard error     |
+| `io.eprint(val)`       | Print value without newline to standard error         |
 | `io.readLine(prompt?)` | Read a line from standard input, with optional prompt |
 
 ---
@@ -1376,6 +1380,126 @@ COMMAND 'deploy':
 ## Testing Infrastructure
 
 For complete documentation on Stash's built-in testing primitives — `test()`, `describe()`, `captureOutput()`, the `assert` namespace, TAP output format, and the `ITestHarness` architecture — see [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md).
+
+---
+
+## `crypto` — Cryptography & Hashing
+
+The `crypto` namespace provides cryptographic hash functions, HMAC signatures, UUID generation, and secure random byte generation. All hash functions return lowercase hexadecimal strings.
+
+### Hash Functions
+
+| Function              | Description                                        |
+| --------------------- | -------------------------------------------------- |
+| `crypto.md5(data)`    | Compute MD5 hash of a string (hex string)          |
+| `crypto.sha1(data)`   | Compute SHA-1 hash of a string (hex string)        |
+| `crypto.sha256(data)` | Compute SHA-256 hash of a string (hex string)      |
+| `crypto.sha512(data)` | Compute SHA-512 hash of a string (hex string)      |
+
+```stash
+let hash = crypto.sha256("hello");
+io.println(hash);  // "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
+
+// MD5 for legacy compatibility
+let md5 = crypto.md5("hello");
+io.println(md5);   // "5d41402abc4b2a76b9719d911017c592"
+```
+
+### HMAC
+
+| Function                        | Description                                         |
+| ------------------------------- | --------------------------------------------------- |
+| `crypto.hmac(algo, key, data)`  | Compute HMAC with specified algorithm (hex string)  |
+
+The `algo` parameter accepts `"md5"`, `"sha1"`, `"sha256"`, or `"sha512"`.
+
+```stash
+let signature = crypto.hmac("sha256", "my-secret-key", "request-body");
+io.println(signature);  // lowercase hex HMAC
+```
+
+### File Hashing
+
+| Function                       | Description                                                  |
+| ------------------------------ | ------------------------------------------------------------ |
+| `crypto.hashFile(path, algo?)` | Hash a file's contents (default algorithm: `"sha256"`)       |
+
+```stash
+let checksum = crypto.hashFile("deploy.tar.gz");
+io.println("SHA-256: " + checksum);
+
+// Explicit algorithm
+let md5sum = crypto.hashFile("deploy.tar.gz", "md5");
+io.println("MD5: " + md5sum);
+```
+
+### UUID & Random
+
+| Function                | Description                                           |
+| ----------------------- | ----------------------------------------------------- |
+| `crypto.uuid()`         | Generate a random UUID v4 string                      |
+| `crypto.randomBytes(n)` | Generate `n` cryptographically secure random bytes    |
+
+`randomBytes` returns the bytes as a lowercase hexadecimal string (2 hex characters per byte).
+
+```stash
+let id = crypto.uuid();
+io.println(id);   // "550e8400-e29b-41d4-a716-446655440000"
+
+let token = crypto.randomBytes(32);
+io.println(token);  // 64 hex characters of random data
+```
+
+---
+
+## `encoding` — Encoding & Decoding
+
+The `encoding` namespace provides Base64, URL, and hexadecimal encoding and decoding functions.
+
+### Base64
+
+| Function                    | Description                        |
+| --------------------------- | ---------------------------------- |
+| `encoding.base64Encode(s)`  | Encode a string to Base64          |
+| `encoding.base64Decode(s)`  | Decode a Base64 string             |
+
+```stash
+let encoded = encoding.base64Encode("Hello, World!");
+io.println(encoded);   // "SGVsbG8sIFdvcmxkIQ=="
+
+let decoded = encoding.base64Decode(encoded);
+io.println(decoded);   // "Hello, World!"
+```
+
+### URL Encoding
+
+| Function                  | Description                                           |
+| ------------------------- | ----------------------------------------------------- |
+| `encoding.urlEncode(s)`   | URL-encode a string (RFC 3986 percent-encoding)       |
+| `encoding.urlDecode(s)`   | Decode a URL-encoded string                           |
+
+```stash
+let encoded = encoding.urlEncode("hello world&key=value");
+io.println(encoded);   // "hello%20world%26key%3Dvalue"
+
+let decoded = encoding.urlDecode(encoded);
+io.println(decoded);   // "hello world&key=value"
+```
+
+### Hexadecimal
+
+| Function                 | Description                                          |
+| ------------------------ | ---------------------------------------------------- |
+| `encoding.hexEncode(s)`  | Encode a string's UTF-8 bytes as hexadecimal         |
+| `encoding.hexDecode(s)`  | Decode a hexadecimal string to a UTF-8 string        |
+
+```stash
+let hex = encoding.hexEncode("hello");
+io.println(hex);       // "68656c6c6f"
+
+let text = encoding.hexDecode(hex);
+io.println(text);      // "hello"
+```
 
 ---
 

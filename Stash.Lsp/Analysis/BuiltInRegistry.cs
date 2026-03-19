@@ -135,6 +135,10 @@ public static class BuiltInRegistry
             Documentation: "Prints a value to standard output without a trailing newline.\n@param value The value to print (converted to string)"),
         new NamespaceFunction("io", "readLine", new[] { new BuiltInParam("prompt", "string") }, "string", IsVariadic: true,
             Documentation: "Reads a line of input from standard input. Optionally displays a prompt.\n@param prompt An optional prompt string to display before reading\n@return The line of input as a string"),
+        new NamespaceFunction("io", "eprintln", new[] { new BuiltInParam("value") },
+            Documentation: "Prints a value followed by a newline to standard error.\n@param value The value to print (converted to string)"),
+        new NamespaceFunction("io", "eprint", new[] { new BuiltInParam("value") },
+            Documentation: "Prints a value to standard error without a trailing newline.\n@param value The value to print (converted to string)"),
         // conv namespace
         new NamespaceFunction("conv", "toStr", new[] { new BuiltInParam("value") }, "string",
             Documentation: "Converts any value to its string representation.\n@param value The value to convert\n@return The string representation of the value"),
@@ -590,6 +594,38 @@ public static class BuiltInRegistry
             Documentation: "Returns the number of command-line arguments passed to the script.\n@return The argument count"),
         new NamespaceFunction("args", "parse", new[] { new BuiltInParam("spec", "dict") }, "dict",
             Documentation: "Parses command-line arguments according to a dict specification.\n@param spec A dict defining flags, options, commands, and positionals\n@return A dict with all parsed argument values accessible via dot notation"),
+
+        // ── crypto ────────────────────────────────────────────────────
+        new NamespaceFunction("crypto", "md5", new[] { new BuiltInParam("data", "string") }, "string",
+            Documentation: "Computes the MD5 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string"),
+        new NamespaceFunction("crypto", "sha1", new[] { new BuiltInParam("data", "string") }, "string",
+            Documentation: "Computes the SHA-1 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string"),
+        new NamespaceFunction("crypto", "sha256", new[] { new BuiltInParam("data", "string") }, "string",
+            Documentation: "Computes the SHA-256 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string"),
+        new NamespaceFunction("crypto", "sha512", new[] { new BuiltInParam("data", "string") }, "string",
+            Documentation: "Computes the SHA-512 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string"),
+        new NamespaceFunction("crypto", "hmac", new[] { new BuiltInParam("algo", "string"), new BuiltInParam("key", "string"), new BuiltInParam("data", "string") }, "string",
+            Documentation: "Computes an HMAC signature using the specified algorithm.\n@param algo The hash algorithm: \"md5\", \"sha1\", \"sha256\", or \"sha512\"\n@param key The secret key\n@param data The data to sign\n@return The HMAC as a lowercase hexadecimal string"),
+        new NamespaceFunction("crypto", "hashFile", new[] { new BuiltInParam("path", "string"), new BuiltInParam("algo", "string") }, "string", IsVariadic: true,
+            Documentation: "Computes the hash of a file's contents.\n@param path The file path to hash\n@param algo Optional hash algorithm (default: \"sha256\"). One of \"md5\", \"sha1\", \"sha256\", \"sha512\"\n@return The hash as a lowercase hexadecimal string"),
+        new NamespaceFunction("crypto", "uuid", Array.Empty<BuiltInParam>(), "string",
+            Documentation: "Generates a random UUID v4 string.\n@return A UUID string in standard format (e.g., \"550e8400-e29b-41d4-a716-446655440000\")"),
+        new NamespaceFunction("crypto", "randomBytes", new[] { new BuiltInParam("n", "int") }, "string",
+            Documentation: "Generates cryptographically secure random bytes.\n@param n The number of random bytes to generate (must be > 0)\n@return The random bytes as a lowercase hexadecimal string"),
+
+        // ── encoding ─────────────────────────────────────────────────
+        new NamespaceFunction("encoding", "base64Encode", new[] { new BuiltInParam("s", "string") }, "string",
+            Documentation: "Encodes a string to Base64.\n@param s The string to encode\n@return The Base64-encoded string"),
+        new NamespaceFunction("encoding", "base64Decode", new[] { new BuiltInParam("s", "string") }, "string",
+            Documentation: "Decodes a Base64 string back to its original string.\n@param s The Base64-encoded string\n@return The decoded string"),
+        new NamespaceFunction("encoding", "urlEncode", new[] { new BuiltInParam("s", "string") }, "string",
+            Documentation: "URL-encodes a string using RFC 3986 percent-encoding.\n@param s The string to encode\n@return The URL-encoded string"),
+        new NamespaceFunction("encoding", "urlDecode", new[] { new BuiltInParam("s", "string") }, "string",
+            Documentation: "Decodes a URL-encoded (percent-encoded) string.\n@param s The URL-encoded string\n@return The decoded string"),
+        new NamespaceFunction("encoding", "hexEncode", new[] { new BuiltInParam("s", "string") }, "string",
+            Documentation: "Encodes a string's UTF-8 bytes as a lowercase hexadecimal string.\n@param s The string to encode\n@return The hexadecimal string"),
+        new NamespaceFunction("encoding", "hexDecode", new[] { new BuiltInParam("s", "string") }, "string",
+            Documentation: "Decodes a hexadecimal string back to a UTF-8 string.\n@param s The hexadecimal string to decode\n@return The decoded string"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -620,7 +656,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding"
     };
 
     // ── Keywords ──

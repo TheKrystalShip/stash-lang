@@ -1,0 +1,143 @@
+#!/usr/bin/env stash
+
+// examples/encoding.stash
+// Encoding & Decoding Toolkit — Base64, URL encoding, hex, and practical API workflows
+
+io.println("=" * 54);
+io.println("  Encoding & Decoding Toolkit");
+io.println("=" * 54);
+
+// ─── Base64 Encoding ─────────────────────────────────────────────────────────
+
+io.println("\n-- Base64 Encoding --");
+
+let greeting = "Hello, Stash!";
+
+let b64 = encoding.base64Encode(greeting);
+
+let decoded = encoding.base64Decode(b64);
+io.println($"  original:  \"{greeting}\"");
+io.println($"  encoded:   \"{b64}\"");
+io.println($"  decoded:   \"{decoded}\"");
+io.println($"  roundtrip: {decoded == greeting}");
+
+// Encode a JSON payload
+
+io.println("\n  Encoding a JSON payload:");
+
+let payload = dict.new();
+dict.set(payload, "user", "alice");
+dict.set(payload, "role", "admin");
+dict.set(payload, "exp", 9999999999);
+
+let json_str = json.stringify(payload);
+
+let b64_token = encoding.base64Encode(json_str);
+io.println($"  payload:   {json_str}");
+io.println($"  base64:    {b64_token}");
+
+// HTTP Basic Auth header
+
+io.println("\n  HTTP Basic Auth header:");
+
+let user = "alice";
+
+let pass = "s3cr3t!";
+
+let creds_b64 = encoding.base64Encode($"{user}:{pass}");
+io.println($"  Authorization: Basic {creds_b64}");
+
+// ─── URL Encoding ────────────────────────────────────────────────────────────
+
+io.println("\n-- URL Encoding --");
+
+let query = "search term & filter=price<50 USD";
+
+let encoded = encoding.urlEncode(query);
+
+let back = encoding.urlDecode(encoded);
+io.println($"  original:  \"{query}\"");
+io.println($"  encoded:   \"{encoded}\"");
+io.println($"  decoded:   \"{back}\"");
+io.println($"  roundtrip: {back == query}");
+
+// Build a complete URL
+
+io.println("\n  Building a query string:");
+
+let base_url = "https://api.example.com/search";
+
+let term = encoding.urlEncode("hello world");
+
+let category = encoding.urlEncode("books & media");
+
+let full_url = $"{base_url}?q={term}&category={category}&page=1";
+io.println($"  URL: {full_url}");
+
+// Double-encoding awareness
+
+io.println("\n  Double-encoding awareness:");
+
+let once = encoding.urlEncode("foo bar");
+
+let twice = encoding.urlEncode(once);
+io.println($"  encoded once:  \"{once}\"");
+io.println($"  encoded twice: \"{twice}\"  ← avoid this");
+
+// ─── Hex Encoding ────────────────────────────────────────────────────────────
+
+io.println("\n-- Hex Encoding --");
+
+let word = "Stash";
+
+let hex_str = encoding.hexEncode(word);
+
+let hex_back = encoding.hexDecode(hex_str);
+io.println($"  original:  \"{word}\"");
+io.println($"  hex:       {hex_str}");
+io.println($"  decoded:   \"{hex_back}\"");
+io.println($"  roundtrip: {hex_back == word}");
+
+// Raw byte inspection
+
+io.println("\n  Raw byte inspection:");
+
+let samples = ["A", " ", "€", "©"];
+
+for (let sample in samples) {
+    io.println($"  \"{sample}\"  →  {encoding.hexEncode(sample)}");
+}
+
+// Crypto hashes are already hex
+
+io.println("\n  Crypto hashes are already hex strings:");
+
+let data = "Hello, Stash!";
+
+let sha_hex = crypto.sha256(data);
+
+let re_encoded = encoding.hexEncode(sha_hex);
+io.println($"  sha256(\"{data}\"):");
+io.println($"    raw:         {sha_hex}");
+io.println($"    hex(sha256): {re_encoded}  ← double-encoded, not useful");
+
+// ─── Practical: Building an API Request ──────────────────────────────────────
+
+io.println("\n-- Practical: Building an API Request --");
+
+let api_key = "myapp:api_key_abc123";
+
+let auth_token = encoding.base64Encode(api_key);
+
+let search_q = encoding.urlEncode("coffee beans");
+
+let location = encoding.urlEncode("New York, NY");
+
+let endpoint = $"https://api.example.com/v1/products?q={search_q}&location={location}&limit=10";
+io.println($"  Authorization: Basic {auth_token}");
+io.println($"  GET {endpoint}");
+io.println("\n  Decoded for inspection:");
+io.println($"    auth:     {encoding.base64Decode(auth_token)}");
+io.println($"    q:        {encoding.urlDecode(search_q)}");
+io.println($"    location: {encoding.urlDecode(location)}");
+io.println("\n" + "=" * 54);

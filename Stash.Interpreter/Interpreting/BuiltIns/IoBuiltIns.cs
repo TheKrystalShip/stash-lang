@@ -29,6 +29,22 @@ public static class IoBuiltIns
             return null;
         }));
 
+        io.Define("eprintln", new BuiltInFunction("io.eprintln", 1, (interp, args) =>
+        {
+            string text = RuntimeValues.Stringify(args[0]);
+            interp.ErrorOutput.WriteLine(text);
+            interp.Debugger?.OnOutput("stderr", text + "\n");
+            return null;
+        }));
+
+        io.Define("eprint", new BuiltInFunction("io.eprint", 1, (interp, args) =>
+        {
+            string text = RuntimeValues.Stringify(args[0]);
+            interp.ErrorOutput.Write(text);
+            interp.Debugger?.OnOutput("stderr", text);
+            return null;
+        }));
+
         io.Define("readLine", new BuiltInFunction("io.readLine", -1, (interp, args) =>
         {
             if (args.Count > 1)

@@ -1,0 +1,126 @@
+#!/usr/bin/env stash
+
+// examples/crypto.stash
+// Cryptography & Hashing Toolkit — hashing, HMAC, file integrity, UUIDs, and secure random
+
+io.println("=" * 56);
+io.println("  Cryptography & Hashing Toolkit");
+io.println("=" * 56);
+
+// ─── Hash Functions ───────────────────────────────────────────────────────────
+
+io.println("\n-- Hash Functions --");
+
+let message = "Hello, Stash!";
+io.println($"  input:   \"{message}\"");
+io.println($"  MD5:     {crypto.md5(message)}   (legacy/checksums only)");
+io.println($"  SHA-1:   {crypto.sha1(message)}           (legacy/checksums only)");
+io.println($"  SHA-256: {crypto.sha256(message)}");
+io.println($"  SHA-512: {crypto.sha512(message)}");
+io.println("\n  Note: MD5 and SHA-1 are broken for security purposes.");
+io.println("        Use SHA-256 or SHA-512 for any new security-sensitive work.");
+
+// ─── Password Hashing (Conceptual) ───────────────────────────────────────────
+
+io.println("\n-- Password Hashing (Conceptual) --");
+io.println("  (In production, use a proper KDF like bcrypt/Argon2.)");
+
+let password_a = "correct-horse-battery-staple";
+
+let password_b = "hunter2";
+
+let hash_a = crypto.sha256(password_a);
+
+let hash_b = crypto.sha256(password_b);
+
+let hash_a2 = crypto.sha256(password_a);
+io.println($"  password_a hash:    {hash_a}");
+io.println($"  password_b hash:    {hash_b}");
+io.println($"  different inputs → different hashes: {hash_a != hash_b}");
+io.println($"  same input → same hash (deterministic): {hash_a == hash_a2}");
+
+// ─── HMAC Signatures ─────────────────────────────────────────────────────────
+
+io.println("\n-- HMAC Signatures --");
+
+let secret_key = "super-secret-api-key";
+
+let request_body = "{\"user_id\": 42, \"action\": \"transfer\", \"amount\": 100}";
+
+let signature = crypto.hmac("sha256", secret_key, request_body);
+io.println($"  request body:  {request_body}");
+io.println($"  HMAC-SHA256:   {signature}");
+
+// Webhook signature verification pattern
+
+io.println("\n  Webhook verification pattern:");
+
+let webhook_payload = "event=payment&amount=49.99&currency=USD";
+
+let webhook_secret = "wh_secret_abc123";
+
+let received_sig = crypto.hmac("sha256", webhook_secret, webhook_payload);
+
+let expected_sig = crypto.hmac("sha256", webhook_secret, webhook_payload);
+
+let sig_valid = received_sig == expected_sig;
+io.println($"  received sig:  {received_sig}");
+io.println($"  signature valid: {sig_valid}");
+
+// ─── File Integrity ───────────────────────────────────────────────────────────
+
+io.println("\n-- File Integrity --");
+
+let tmp_path = "/tmp/stash_crypto_demo.txt";
+
+let content = "Stash language — file integrity check\n";
+fs.writeFile(tmp_path, content);
+
+let file_hash = crypto.hashFile(tmp_path);
+
+let content_hash = crypto.sha256(content);
+io.println($"  file:          {tmp_path}");
+io.println($"  hashFile():    {file_hash}");
+io.println($"  sha256(content): {content_hash}");
+io.println($"  hashes match:  {file_hash == content_hash}");
+fs.delete(tmp_path);
+io.println("  temp file cleaned up.");
+
+// ─── UUID Generation ──────────────────────────────────────────────────────────
+
+io.println("\n-- UUID Generation --");
+
+let id1 = crypto.uuid();
+
+let id2 = crypto.uuid();
+
+let id3 = crypto.uuid();
+io.println($"  uuid 1:  {id1}");
+io.println($"  uuid 2:  {id2}");
+io.println($"  uuid 3:  {id3}");
+io.println($"  all unique: {id1 != id2 and id2 != id3 and id1 != id3}");
+
+// Practical use: session and request IDs
+
+let session_id = "sess_" + str.replace(crypto.uuid(), "-", "");
+
+let request_id = "req_" + str.replace(crypto.uuid(), "-", "");
+io.println($"\n  session_id:  {session_id}");
+io.println($"  request_id:  {request_id}");
+
+// ─── Secure Random ────────────────────────────────────────────────────────────
+
+io.println("\n-- Secure Random --");
+
+let token_16 = crypto.randomBytes(16);
+
+let token_32 = crypto.randomBytes(32);
+io.println($"  16-byte token (32 hex chars): {token_16}");
+io.println($"  32-byte token (64 hex chars): {token_32}");
+
+// API key generation: 32 random bytes → 64-char hex string
+
+let api_key = "sk_" + crypto.randomBytes(32);
+io.println($"\n  Generated API key ({len(api_key)} chars):");
+io.println($"    {api_key}");
+io.println("\n" + "=" * 56);

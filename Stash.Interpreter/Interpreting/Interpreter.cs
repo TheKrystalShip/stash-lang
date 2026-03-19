@@ -532,6 +532,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         PathBuiltIns.Register(_globals);
         TplBuiltIns.Register(_globals);
         StoreBuiltIns.Register(_globals);
+        CryptoBuiltIns.Register(_globals);
+        EncodingBuiltIns.Register(_globals);
 
         // Capability-gated built-ins
         if (_capabilities.HasFlag(StashCapabilities.Environment))
