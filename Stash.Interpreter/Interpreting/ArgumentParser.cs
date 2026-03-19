@@ -25,9 +25,15 @@ internal sealed class ArgumentParser
     /// </summary>
     public object? Parse(object? treeObj)
     {
+        // Accept dict literal specs and normalize to ArgTree
+        if (treeObj is StashDictionary dictSpec)
+        {
+            treeObj = NormalizeDictSpec(dictSpec);
+        }
+
         if (treeObj is not StashInstance tree || tree.TypeName != "ArgTree")
         {
-            throw new RuntimeError("Argument to 'args.parse' must be an ArgTree instance.");
+            throw new RuntimeError("Argument to 'args.parse' must be an ArgTree or dict spec.");
         }
 
         string? scriptName = tree.GetField("name", null) as string;
@@ -843,5 +849,149 @@ internal sealed class ArgumentParser
         }
 
         Console.Write(sb.ToString());
+    }
+
+    /// <summary>
+    /// Converts a dict-based argument specification into an ArgTree StashInstance
+    /// that the existing Parse() method can process.
+    /// </summary>
+    internal static StashInstance NormalizeDictSpec(StashDictionary spec)
+    {
+        var fields = new Dictionary<string, object?>
+        {
+            ["name"] = spec.Has("name") ? spec.Get("name") as string : null,
+            ["version"] = spec.Has("version") ? spec.Get("version") as string : null,
+            ["description"] = spec.Has("description") ? spec.Get("description") as string : null,
+            ["flags"] = NormalizeArgDefs(spec, "flags"),
+            ["options"] = NormalizeArgDefs(spec, "options"),
+            ["commands"] = NormalizeCommands(spec),
+            ["positionals"] = NormalizePositionals(spec),
+        };
+
+        return new StashInstance("ArgTree", fields);
+    }
+
+    private static List<object?> NormalizeArgDefs(StashDictionary spec, string section)
+    {
+        var result = new List<object?>();
+
+        if (!spec.Has(section))
+            return result;
+
+        var raw = spec.Get(section);
+        if (raw is not StashDictionary dict)
+            return result;
+
+        foreach (var entry in dict.RawEntries())
+        {
+            string name = entry.Key as string
+                ?? throw new RuntimeError($"Keys in '{section}' must be strings.");
+
+            var entryFields = new Dictionary<string, object?>
+            {
+                ["name"] = name,
+                ["short"] = null,
+                ["type"] = null,
+                ["default"] = null,
+                ["description"] = null,
+                ["required"] = null,
+                ["args"] = null,
+            };
+
+            if (entry.Value is StashDictionary props)
+            {
+                if (props.Has("short")) entryFields["short"] = props.Get("short");
+                if (props.Has("type")) entryFields["type"] = props.Get("type");
+                if (props.Has("default")) entryFields["default"] = props.Get("default");
+                if (props.Has("description")) entryFields["description"] = props.Get("description");
+                if (props.Has("required")) entryFields["required"] = props.Get("required");
+            }
+
+            result.Add(new StashInstance("ArgDef", entryFields));
+        }
+
+        return result;
+    }
+
+    private static List<object?> NormalizeCommands(StashDictionary spec)
+    {
+        var result = new List<object?>();
+
+        if (!spec.Has("commands"))
+            return result;
+
+        var raw = spec.Get("commands");
+        if (raw is not StashDictionary dict)
+            return result;
+
+        foreach (var entry in dict.RawEntries())
+        {
+            string name = entry.Key as string
+                ?? throw new RuntimeError("Command names must be strings.");
+
+            var cmdFields = new Dictionary<string, object?>
+            {
+                ["name"] = name,
+                ["short"] = null,
+                ["type"] = null,
+                ["default"] = null,
+                ["description"] = null,
+                ["required"] = null,
+                ["args"] = null,
+            };
+
+            if (entry.Value is StashDictionary cmdProps)
+            {
+                if (cmdProps.Has("description")) cmdFields["description"] = cmdProps.Get("description");
+
+                // Build nested ArgTree from command's flags/options/positionals
+                bool hasSubSpec = cmdProps.Has("flags") || cmdProps.Has("options") || cmdProps.Has("positionals");
+                if (hasSubSpec)
+                {
+                    cmdFields["args"] = NormalizeDictSpec(cmdProps);
+                }
+            }
+
+            result.Add(new StashInstance("ArgDef", cmdFields));
+        }
+
+        return result;
+    }
+
+    private static List<object?> NormalizePositionals(StashDictionary spec)
+    {
+        var result = new List<object?>();
+
+        if (!spec.Has("positionals"))
+            return result;
+
+        var raw = spec.Get("positionals");
+        if (raw is not List<object?> arr)
+            return result;
+
+        foreach (var item in arr)
+        {
+            if (item is not StashDictionary posDict)
+                throw new RuntimeError("Each positional in 'positionals' array must be a dict.");
+
+            string? name = posDict.Has("name") ? posDict.Get("name") as string : null;
+            if (name is null)
+                throw new RuntimeError("Each positional dict must have a 'name' field.");
+
+            var posFields = new Dictionary<string, object?>
+            {
+                ["name"] = name,
+                ["short"] = null,
+                ["type"] = posDict.Has("type") ? posDict.Get("type") : null,
+                ["default"] = posDict.Has("default") ? posDict.Get("default") : null,
+                ["description"] = posDict.Has("description") ? posDict.Get("description") : null,
+                ["required"] = posDict.Has("required") ? posDict.Get("required") : null,
+                ["args"] = null,
+            };
+
+            result.Add(new StashInstance("ArgDef", posFields));
+        }
+
+        return result;
     }
 }

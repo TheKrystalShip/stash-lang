@@ -1139,7 +1139,11 @@ io.println(getCount("requests"));  // 3
 
 ## Argument Parsing
 
-Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus the **`args.parse()`** function for declarative CLI argument parsing. Instead of manually parsing `args.list()`, scripts construct an `ArgTree` describing expected flags, options, positional arguments, and subcommands, then call `args.parse()` to get a struct of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
+Stash provides the **`args.parse()`** function for declarative CLI argument parsing. Instead of manually parsing `args.list()`, scripts pass a **dict spec** describing expected flags, options, positional arguments, and subcommands, then call `args.parse()` to get a struct of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
+
+`args.parse()` accepts two spec formats:
+- **Dict spec** (recommended) — a dict literal with `flags`, `options`, `commands`, and `positionals` keys
+- **ArgTree struct** (legacy) — an `ArgTree` instance with `ArgDef` entries
 
 ### Built-in Structs
 
@@ -1169,7 +1173,58 @@ Stash provides built-in **`ArgTree`** and **`ArgDef`** structs plus the **`args.
 | `required`    | bool (optional)    | Whether the argument must be provided (default: `false`)    |
 | `args`        | ArgTree (optional) | Nested `ArgTree` for subcommand flags/options/positionals   |
 
-### Syntax
+### Dict Spec Format (Recommended)
+
+The dict spec uses dict literals for a concise, readable argument definition:
+
+```stash
+let parsed = args.parse({
+    name: "deploy",
+    version: "1.0.0",
+    description: "A deployment tool",
+    flags: {
+        help:    { short: "h", description: "Show help" },
+        verbose: { short: "v", description: "Enable verbose output" }
+    },
+    options: {
+        port: { short: "p", type: "int", default: 8080, description: "Port to listen on" }
+    },
+    positionals: [
+        { name: "target", type: "string", required: true, description: "Target host" }
+    ],
+    commands: {
+        deploy: {
+            description: "Deploy the application",
+            flags: { force: { short: "f", description: "Force deployment" } },
+            options: { timeout: { type: "int", default: 30, description: "Timeout in seconds" } }
+        }
+    }
+});
+```
+
+#### Dict Spec Structure
+
+| Top-Level Key | Type   | Description                                                        |
+| ------------- | ------ | ------------------------------------------------------------------ |
+| `name`        | string | Script name (used in help text)                                    |
+| `version`     | string | Version string (triggers auto `--version`)                         |
+| `description` | string | Script description                                                 |
+| `flags`       | dict   | `{ name: { short, description } }` — boolean switches             |
+| `options`     | dict   | `{ name: { short, type, default, description, required } }`       |
+| `commands`    | dict   | `{ name: { description, flags, options, positionals } }`          |
+| `positionals` | array  | `[{ name, type, default, description, required }]` — order matters |
+
+**Flags** dict values accept: `short`, `description`
+
+**Options** dict values accept: `short`, `type`, `default`, `description`, `required`
+
+**Commands** dict values accept: `description`, plus nested `flags`/`options`/`positionals` using the same dict format (recursive)
+
+**Positionals** array elements accept: `name` (required), `type`, `default`, `description`, `required`
+
+### ArgTree/ArgDef Format (Legacy)
+
+The struct-based format is still supported for backward compatibility:
 
 ```stash
 let parsed = args.parse(ArgTree {
@@ -1253,10 +1308,10 @@ if (args.command == "deploy") {
 All parsed values are accessible via dot notation on the variable returned by `args.parse()`:
 
 ```stash
-let parsed = args.parse(ArgTree {
-    flags:     [ArgDef { name: "verbose", short: "v", description: "" }],
-    options:   [ArgDef { name: "port", type: "int", default: 8080, description: "" }],
-    positionals: [ArgDef { name: "file", required: true, description: "" }]
+let parsed = args.parse({
+    flags:       { verbose: { short: "v", description: "" } },
+    options:     { port: { type: "int", default: 8080, description: "" } },
+    positionals: [{ name: "file", required: true, description: "" }]
 });
 
 io.println(parsed.verbose);    // false (or true if --verbose was passed)
