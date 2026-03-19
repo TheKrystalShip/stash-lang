@@ -189,6 +189,75 @@ public static class HttpBuiltIns
             }
         }));
 
+        http.Define("patch", new BuiltInFunction("http.patch", 2, (_, args) =>
+        {
+            if (args[0] is not string url)
+            {
+                throw new RuntimeError("First argument to 'http.patch' must be a string.");
+            }
+
+            if (args[1] is not string body)
+            {
+                throw new RuntimeError("Second argument to 'http.patch' must be a string.");
+            }
+
+            ValidateUrl(url, "http.patch");
+
+            try
+            {
+                var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
+                var response = _client.PatchAsync(url, content).GetAwaiter().GetResult();
+                return MakeResponse(response);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.patch: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.patch: request timed out.");
+            }
+        }));
+
+        http.Define("download", new BuiltInFunction("http.download", 2, (_, args) =>
+        {
+            if (args[0] is not string url)
+            {
+                throw new RuntimeError("First argument to 'http.download' must be a string.");
+            }
+
+            if (args[1] is not string path)
+            {
+                throw new RuntimeError("Second argument to 'http.download' must be a string.");
+            }
+
+            ValidateUrl(url, "http.download");
+            path = Interpreter.ExpandTilde(path);
+
+            try
+            {
+                using var response = _client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
+                response.EnsureSuccessStatusCode();
+                using var stream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
+                using var fileStream = System.IO.File.Create(path);
+                stream.CopyTo(fileStream);
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.download: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.download: request timed out.");
+            }
+            catch (System.IO.IOException e)
+            {
+                try { System.IO.File.Delete(path); } catch { }
+                throw new RuntimeError($"http.download: cannot write file '{path}': {e.Message}");
+            }
+            return null;
+        }));
+
         globals.Define("http", http);
     }
 

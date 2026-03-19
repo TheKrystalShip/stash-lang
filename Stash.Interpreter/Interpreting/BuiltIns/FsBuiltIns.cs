@@ -423,6 +423,73 @@ public static class FsBuiltIns
             catch (System.IO.IOException) { return false; }
         }));
 
+        fs.Define("createFile", new BuiltInFunction("fs.createFile", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.createFile' must be a string.");
+            path = ExpandTilde(path);
+
+            try
+            {
+                if (System.IO.File.Exists(path))
+                {
+                    System.IO.File.SetLastWriteTimeUtc(path, System.DateTime.UtcNow);
+                }
+                else
+                {
+                    using (System.IO.File.Create(path)) { }
+                }
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create file '{path}': {e.Message}"); }
+            return null;
+        }));
+
+        fs.Define("symlink", new BuiltInFunction("fs.symlink", 2, (_, args) =>
+        {
+            if (args[0] is not string target)
+                throw new RuntimeError("First argument to 'fs.symlink' must be a string.");
+            if (args[1] is not string linkPath)
+                throw new RuntimeError("Second argument to 'fs.symlink' must be a string.");
+            target = ExpandTilde(target);
+            linkPath = ExpandTilde(linkPath);
+
+            try
+            {
+                System.IO.File.CreateSymbolicLink(linkPath, target);
+            }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create symlink '{linkPath}': {e.Message}"); }
+            return null;
+        }));
+
+        fs.Define("stat", new BuiltInFunction("fs.stat", 1, (_, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'fs.stat' must be a string.");
+            path = ExpandTilde(path);
+
+            try
+            {
+                var info = new System.IO.FileInfo(path);
+                if (!info.Exists && !System.IO.Directory.Exists(path))
+                    throw new RuntimeError($"Path does not exist: '{path}'.");
+
+                var isDir = System.IO.Directory.Exists(path);
+                var result = new StashDictionary();
+                result.Set("size", isDir ? 0L : info.Length);
+                result.Set("isFile", info.Exists && !isDir);
+                result.Set("isDir", isDir);
+                bool isSymlink = false;
+                try { isSymlink = (System.IO.File.GetAttributes(path) & System.IO.FileAttributes.ReparsePoint) != 0; } catch { }
+                result.Set("isSymlink", isSymlink);
+                result.Set("modified", (double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0);
+                result.Set("created", (double)new System.DateTimeOffset(info.CreationTimeUtc).ToUnixTimeMilliseconds() / 1000.0);
+                result.Set("name", System.IO.Path.GetFileName(path));
+                return result;
+            }
+            catch (RuntimeError) { throw; }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot stat '{path}': {e.Message}"); }
+        }));
+
         globals.Define("fs", fs);
     }
 }

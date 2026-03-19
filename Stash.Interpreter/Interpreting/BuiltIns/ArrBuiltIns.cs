@@ -558,6 +558,117 @@ public static class ArrBuiltIns
             return count;
         }));
 
+        arr.Define("sortBy", new BuiltInFunction("arr.sortBy", 2, (interp, args) =>
+        {
+            if (args[0] is not List<object?> list)
+                throw new RuntimeError("First argument to 'arr.sortBy' must be an array.");
+            if (args[1] is not IStashCallable fn)
+                throw new RuntimeError("Second argument to 'arr.sortBy' must be a function.");
+
+            var sorted = new List<object?>(list);
+            try
+            {
+                sorted.Sort((a, b) =>
+                {
+                    var ka = fn.Call(interp, new List<object?> { a });
+                    var kb = fn.Call(interp, new List<object?> { b });
+                    return CompareValues(ka, kb);
+                });
+            }
+            catch (InvalidOperationException ex) when (ex.InnerException is RuntimeError re)
+            {
+                throw re;
+            }
+            return sorted;
+        }));
+
+        arr.Define("groupBy", new BuiltInFunction("arr.groupBy", 2, (interp, args) =>
+        {
+            if (args[0] is not List<object?> list)
+                throw new RuntimeError("First argument to 'arr.groupBy' must be an array.");
+            if (args[1] is not IStashCallable fn)
+                throw new RuntimeError("Second argument to 'arr.groupBy' must be a function.");
+
+            var result = new StashDictionary();
+            foreach (var item in list)
+            {
+                var key = RuntimeValues.Stringify(fn.Call(interp, new List<object?> { item }));
+                var existing = result.Get(key);
+                if (existing is List<object?> group)
+                {
+                    group.Add(item);
+                }
+                else
+                {
+                    result.Set(key, new List<object?> { item });
+                }
+            }
+            return result;
+        }));
+
+        arr.Define("sum", new BuiltInFunction("arr.sum", 1, (_, args) =>
+        {
+            if (args[0] is not List<object?> list)
+                throw new RuntimeError("First argument to 'arr.sum' must be an array.");
+
+            long longTotal = 0;
+            double doubleTotal = 0;
+            bool hasFloat = false;
+            foreach (var item in list)
+            {
+                if (item is long l) longTotal += l;
+                else if (item is double d) { doubleTotal += d; hasFloat = true; }
+                else throw new RuntimeError("'arr.sum' requires all elements to be numbers.");
+            }
+            return hasFloat ? (object?)(doubleTotal + longTotal) : (object?)longTotal;
+        }));
+
+        arr.Define("min", new BuiltInFunction("arr.min", 1, (_, args) =>
+        {
+            if (args[0] is not List<object?> list)
+                throw new RuntimeError("First argument to 'arr.min' must be an array.");
+            if (list.Count == 0)
+                throw new RuntimeError("'arr.min' requires a non-empty array.");
+
+            double min = double.MaxValue;
+            bool hasFloat = false;
+            foreach (var item in list)
+            {
+                if (item is long l) { if (l < min) min = l; }
+                else if (item is double d) { if (d < min) min = d; hasFloat = true; }
+                else throw new RuntimeError("'arr.min' requires all elements to be numbers.");
+            }
+            return hasFloat ? min : (object)(long)min;
+        }));
+
+        arr.Define("max", new BuiltInFunction("arr.max", 1, (_, args) =>
+        {
+            if (args[0] is not List<object?> list)
+                throw new RuntimeError("First argument to 'arr.max' must be an array.");
+            if (list.Count == 0)
+                throw new RuntimeError("'arr.max' requires a non-empty array.");
+
+            double max = double.MinValue;
+            bool hasFloat = false;
+            foreach (var item in list)
+            {
+                if (item is long l) { if (l > max) max = l; }
+                else if (item is double d) { if (d > max) max = d; hasFloat = true; }
+                else throw new RuntimeError("'arr.max' requires all elements to be numbers.");
+            }
+            return hasFloat ? max : (object)(long)max;
+        }));
+
         globals.Define("arr", arr);
+    }
+
+    private static int CompareValues(object? a, object? b)
+    {
+        if (a is long la && b is long lb) return la.CompareTo(lb);
+        if (a is double da && b is double db) return da.CompareTo(db);
+        if (a is long la2 && b is double db2) return ((double)la2).CompareTo(db2);
+        if (a is double da2 && b is long lb2) return da2.CompareTo((double)lb2);
+        if (a is string sa && b is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
+        throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sortBy'.");
     }
 }

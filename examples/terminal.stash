@@ -1,0 +1,121 @@
+#!/usr/bin/env stash
+
+// examples/terminal.stash
+// Terminal Formatting — colors, styles, tables, and terminal utilities
+
+io.println("=" * 54);
+io.println("  Terminal Formatting Toolkit");
+io.println("=" * 54);
+
+// ─── Colors ──────────────────────────────────────────────
+
+io.println("\n-- Colors --");
+io.println("  " + term.color("Red alert!", term.RED));
+io.println("  " + term.color("Green success", term.GREEN));
+io.println("  " + term.color("Yellow warning", term.YELLOW));
+io.println("  " + term.color("Blue info", term.BLUE));
+io.println("  " + term.color("Cyan highlight", term.CYAN));
+io.println("  " + term.color("Magenta accent", term.MAGENTA));
+io.println("  " + term.color("White text", term.WHITE));
+io.println("  " + term.color("Gray dimmed", term.GRAY));
+
+// ─── Text Styles ─────────────────────────────────────────
+
+io.println("\n-- Text Styles --");
+io.println("  " + term.bold("Bold text"));
+io.println("  " + term.dim("Dim text"));
+io.println("  " + term.underline("Underlined text"));
+
+// ─── Combined Styles ─────────────────────────────────────
+
+io.println("\n-- Combined Styles --");
+
+let error = term.style("ERROR", {
+  color: term.RED, bold: true
+}
+
+);
+
+let warn = term.style("WARNING", {
+  color: term.YELLOW, bold: true, underline: true
+}
+
+);
+
+let info = term.style("INFO", {
+  color: term.CYAN, dim: true
+}
+
+);
+io.println("  " + error + ": Something went wrong");
+io.println("  " + warn + ": Disk space low");
+io.println("  " + info + ": Server started on port 3000");
+
+// ─── Status Messages Pattern ──────────────────────────────
+
+io.println("\n-- Status Messages --");
+
+fn status(msg, ok) {
+  if (ok) {
+    io.println("  " + term.color("✓", term.GREEN) + " " + msg);
+  } else {
+    io.println("  " + term.color("✗", term.RED) + " " + msg);
+  }
+}
+
+status("Database connection", true);
+status("Redis cache", true);
+status("Email service", false);
+status("API gateway", true);
+
+// ─── Strip ANSI Codes ────────────────────────────────────
+
+io.println("\n-- Stripping ANSI Codes --");
+
+let styled = term.color(term.bold("styled text"), term.RED);
+io.println("  with ANSI:    " + styled);
+io.println("  stripped:     " + term.strip(styled));
+io.println("  lengths:      styled=" + conv.toStr(len(styled)) + ", plain=" + conv.toStr(len(term.strip(styled))));
+
+// ─── Terminal Info ────────────────────────────────────────
+
+io.println("\n-- Terminal Info --");
+io.println("  width:       " + conv.toStr(term.width()) + " columns");
+io.println("  interactive: " + conv.toStr(term.isInteractive()));
+
+// ─── ASCII Tables ─────────────────────────────────────────
+
+io.println("\n-- ASCII Tables --");
+
+let users = [[1, "Alice", "admin", term.color("active", term.GREEN)], [2, "Bob", "user", term.color("active", term.GREEN)], [3, "Charlie", "user", term.color("inactive", term.RED)], [4, "Diana", "moderator", term.color("active", term.GREEN)]];
+io.println(term.table(users, ["ID", "Name", "Role", "Status"]));
+
+// ─── Log-style Output ────────────────────────────────────
+
+io.println("\n-- Log-style Output --");
+
+fn log(level, msg) {
+  let tag = level;
+  if (level == "ERROR") {
+    tag = term.style(level, {
+      color: term.RED, bold: true
+    }
+    );
+  }
+  if (level == "WARN") {
+    tag = term.color(level, term.YELLOW);
+  }
+  if (level == "INFO") {
+    tag = term.color(level, term.CYAN);
+  }
+  if (level == "DEBUG") {
+    tag = term.color(level, term.GRAY);
+  }
+  let ts = time.format(time.now(), "HH:mm:ss");
+  io.println("  " + term.dim(ts) + " [" + tag + "] " + msg);
+}
+
+log("INFO", "Application started");
+log("DEBUG", "Loading configuration...");
+log("WARN", "Cache miss for key 'user:42'");
+log("ERROR", "Connection refused: port 5432");

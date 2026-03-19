@@ -34,7 +34,8 @@
 18. [`store` — In-Memory Store](#store--in-memory-store)
 19. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
 20. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-21. [Argument Parsing](#argument-parsing)
+21. [`term` — Terminal Formatting](#term--terminal-formatting)
+22. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -171,6 +172,9 @@ let config = env.withPrefix("MYAPP_");
 | `fs.tempFile()`                | Create a temporary file, returns its path      |
 | `fs.tempDir()`                 | Create a temporary directory, returns its path |
 | `fs.modifiedAt(path)`          | Get last modified time as Unix timestamp       |
+| `fs.createFile(path)`          | Create an empty file or update modified time   |
+| `fs.symlink(target, path)`     | Create a symbolic link                         |
+| `fs.stat(path)`                | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name) |
 
 ---
 
@@ -329,6 +333,16 @@ All `arr` functions take the target array as the first argument. Functions that 
 | `arr.every(array, fn)`           | Return `true` if all elements satisfy `fn`                    |
 | `arr.count(array, fn)`           | Return count of elements where `fn(element)` is truthy        |
 
+### Aggregation & Grouping
+
+| Function                  | Description                                                   |
+| ------------------------- | ------------------------------------------------------------- |
+| `arr.sortBy(array, fn)`  | Return new array sorted by `fn(element)` key (does not mutate)|
+| `arr.groupBy(array, fn)` | Group elements into dict keyed by `fn(element)` result        |
+| `arr.sum(array)`          | Sum all numeric elements                                      |
+| `arr.min(array)`          | Return minimum numeric element                                |
+| `arr.max(array)`          | Return maximum numeric element                                |
+
 ### Examples
 
 ```stash
@@ -367,6 +381,22 @@ let idx = arr.findIndex(nums, (x) => x > 3);        // 2
 let unique = arr.unique([1, 2, 2, 3, 1]);          // [1, 2, 3]
 let flat = arr.flat([[1, 2], [3, 4]]);             // [1, 2, 3, 4]
 let expanded = arr.flatMap([1, 2, 3], (x) => [x, x * 10]); // [1, 10, 2, 20, 3, 30]
+
+// Aggregation and grouping
+let total = arr.sum([1, 2, 3, 4, 5]);              // 15
+let smallest = arr.min([3, 1, 4, 1, 5]);            // 1
+let largest = arr.max([3, 1, 4, 1, 5]);             // 5
+
+let sorted = arr.sortBy(["banana", "apple", "cherry"], (x) => x);
+// ["apple", "banana", "cherry"]
+
+let people = [
+    { name: "Alice", dept: "eng" },
+    { name: "Bob", dept: "sales" },
+    { name: "Charlie", dept: "eng" }
+];
+let byDept = arr.groupBy(people, (p) => p.dept);
+// { "eng": [Alice, Charlie], "sales": [Bob] }
 ```
 
 ---
@@ -713,6 +743,8 @@ io.println("Configuration updated.");
 | `http.put(url, body)`   | Send HTTP PUT request with body and return response  |
 | `http.delete(url)`      | Send HTTP DELETE request and return response         |
 | `http.request(options)` | Send custom HTTP request with a dict of options      |
+| `http.patch(url, body)` | Send HTTP PATCH request with body and return response|
+| `http.download(url, path)` | Download a file to disk (streaming, memory-efficient)|
 
 ### Response Object
 
@@ -1499,6 +1531,94 @@ io.println(hex);       // "68656c6c6f"
 
 let text = encoding.hexDecode(hex);
 io.println(text);      // "hello"
+```
+
+---
+
+## `term` — Terminal Formatting
+
+The `term` namespace provides ANSI terminal formatting, color output, and table rendering.
+
+#### Color Constants
+
+| Constant        | Value       |
+| --------------- | ----------- |
+| `term.BLACK`    | `"black"`   |
+| `term.RED`      | `"red"`     |
+| `term.GREEN`    | `"green"`   |
+| `term.YELLOW`   | `"yellow"`  |
+| `term.BLUE`     | `"blue"`    |
+| `term.MAGENTA`  | `"magenta"` |
+| `term.CYAN`     | `"cyan"`    |
+| `term.WHITE`    | `"white"`   |
+| `term.GRAY`     | `"gray"`    |
+
+### Text Formatting
+
+| Function                    | Description                                                 |
+| --------------------------- | ----------------------------------------------------------- |
+| `term.color(text, color)`   | Wrap text in ANSI color using `term` color constants        |
+| `term.bold(text)`           | Bold text                                                   |
+| `term.dim(text)`            | Dim text                                                    |
+| `term.underline(text)`      | Underlined text                                             |
+| `term.style(text, opts)`    | Combined styles via dict `{ color: term.RED, bold: true }`  |
+| `term.strip(text)`          | Remove all ANSI escape codes from text                      |
+
+### Terminal Info
+
+| Function               | Description                                        |
+| ---------------------- | -------------------------------------------------- |
+| `term.width()`         | Terminal width in columns (fallback: 80)            |
+| `term.isInteractive()` | Whether stdin is a TTY (interactive terminal)      |
+| `term.clear()`         | Clear terminal screen                               |
+
+### Table Rendering
+
+| Function                       | Description                                |
+| ------------------------------ | ------------------------------------------ |
+| `term.table(rows, headers?)`   | Format data as ASCII table string          |
+
+### Examples
+
+```stash
+// Colored output
+io.println(term.color("ERROR: file not found", term.RED));
+io.println(term.color("SUCCESS: deployed", term.GREEN));
+
+// Bold and underline
+io.println(term.bold("Important Notice"));
+io.println(term.underline("https://example.com"));
+
+// Combined styles
+let styled = term.style("WARNING", { color: term.YELLOW, bold: true });
+io.println(styled);
+
+// Strip ANSI codes (useful for logging to file)
+let colored = term.color("hello", term.RED);
+let plain = term.strip(colored);   // "hello"
+
+// Terminal info
+let cols = term.width();
+io.println("Terminal is " + conv.toStr(cols) + " columns wide");
+
+if (term.isInteractive()) {
+    io.println("Running in interactive mode");
+}
+
+// ASCII table
+let data = [
+    [1, "Alice", 95],
+    [2, "Bob", 87],
+    [3, "Charlie", 92]
+];
+io.println(term.table(data, ["ID", "Name", "Score"]));
+// +----+---------+-------+
+// | ID | Name    | Score |
+// +----+---------+-------+
+// | 1  | Alice   | 95    |
+// | 2  | Bob     | 87    |
+// | 3  | Charlie | 92    |
+// +----+---------+-------+
 ```
 
 ---

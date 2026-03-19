@@ -281,6 +281,12 @@ public static class BuiltInRegistry
             Documentation: "Checks whether the current user has write permission on a file.\n@param path The path to the file\n@return true if the file is writable"),
         new NamespaceFunction("fs", "executable", new[] { new BuiltInParam("path", "string") }, "bool",
             Documentation: "Checks whether the current user has execute permission on a file.\n@param path The path to the file\n@return true if the file is executable"),
+        new NamespaceFunction("fs", "createFile", new[] { new BuiltInParam("path", "string") },
+            Documentation: "Creates an empty file or updates the last-modified timestamp of an existing file.\n@param path The path to the file"),
+        new NamespaceFunction("fs", "symlink", new[] { new BuiltInParam("target", "string"), new BuiltInParam("path", "string") },
+            Documentation: "Creates a symbolic link at path pointing to target.\n@param target The path the symlink will point to\n@param path The path where the symlink will be created"),
+        new NamespaceFunction("fs", "stat", new[] { new BuiltInParam("path", "string") }, "dict",
+            Documentation: "Returns a dictionary with file metadata: size, isFile, isDir, isSymlink, modified, created, name.\n@param path The path to inspect\n@return A dictionary with file information"),
         // path namespace
         new NamespaceFunction("path", "abs", new[] { new BuiltInParam("path", "string") }, "string",
             Documentation: "Converts a relative path to an absolute path.\n@param path The path to resolve\n@return The absolute path"),
@@ -347,6 +353,16 @@ public static class BuiltInRegistry
             Documentation: "Returns the index of the first element that satisfies the predicate, or -1 if none match.\n@param array The array to search\n@param fn A predicate function that takes an element\n@return The zero-based index, or -1 if not found"),
         new NamespaceFunction("arr", "count", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "int",
             Documentation: "Counts the number of elements that satisfy the predicate function.\n@param array The array to count in\n@param fn A predicate function that takes an element\n@return The count of matching elements"),
+        new NamespaceFunction("arr", "sortBy", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "array",
+            Documentation: "Returns a new array sorted by keys extracted via a function. The original array is not modified.\n@param array The source array\n@param fn A function that takes an element and returns a comparable sort key\n@return A new sorted array"),
+        new NamespaceFunction("arr", "groupBy", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") }, "dict",
+            Documentation: "Groups array elements into a dictionary keyed by the result of calling a function on each element.\n@param array The source array\n@param fn A function that takes an element and returns a grouping key\n@return A dictionary mapping keys to arrays of matching elements"),
+        new NamespaceFunction("arr", "sum", new[] { new BuiltInParam("array", "array") }, "number",
+            Documentation: "Returns the sum of all numeric elements in the array.\n@param array An array of numbers\n@return The sum as an int (if all elements are ints) or float"),
+        new NamespaceFunction("arr", "min", new[] { new BuiltInParam("array", "array") }, "number",
+            Documentation: "Returns the minimum numeric element in the array.\n@param array A non-empty array of numbers\n@return The smallest element"),
+        new NamespaceFunction("arr", "max", new[] { new BuiltInParam("array", "array") }, "number",
+            Documentation: "Returns the maximum numeric element in the array.\n@param array A non-empty array of numbers\n@return The largest element"),
         // dict namespace
         new NamespaceFunction("dict", "new", Array.Empty<BuiltInParam>(), "dict",
             Documentation: "Creates a new empty dictionary.\n@return An empty dictionary"),
@@ -542,6 +558,10 @@ public static class BuiltInRegistry
             Documentation: "Sends an HTTP DELETE request to the specified URL.\n@param url The URL to request\n@return An HttpResponse with status, body, and headers fields"),
         new NamespaceFunction("http", "request", new[] { new BuiltInParam("options", "dict") }, "HttpResponse",
             Documentation: "Sends a configurable HTTP request using an options dictionary. The dict can include keys: \"url\", \"method\", \"headers\" (dict), \"body\" (string).\n@param options A dictionary with request configuration\n@return An HttpResponse with status, body, and headers fields"),
+        new NamespaceFunction("http", "patch", new[] { new BuiltInParam("url", "string"), new BuiltInParam("body", "string") }, "HttpResponse",
+            Documentation: "Sends an HTTP PATCH request with a body to the specified URL.\n@param url The URL to request\n@param body The request body as a string\n@return An HttpResponse with status, body, and headers fields"),
+        new NamespaceFunction("http", "download", new[] { new BuiltInParam("url", "string"), new BuiltInParam("path", "string") },
+            Documentation: "Downloads a file from a URL and saves it to disk using streaming (memory-efficient for large files).\n@param url The URL to download from\n@param path The local file path to save to"),
         // ini namespace
         new NamespaceFunction("ini", "parse", new[] { new BuiltInParam("text", "string") }, "dict",
             Documentation: "Parses INI-formatted text into a dictionary. Sections become nested dictionaries.\n@param text The INI text to parse\n@return A dictionary representing the INI structure"),
@@ -556,7 +576,6 @@ public static class BuiltInRegistry
             Documentation: "Parses configuration text in the specified format.\n@param text The configuration text to parse\n@param format The format to use (\"json\" or \"ini\")\n@return A dictionary representing the configuration"),
         new NamespaceFunction("config", "stringify", new[] { new BuiltInParam("data"), new BuiltInParam("format", "string") }, "string",
             Documentation: "Converts data to a configuration text string in the specified format.\n@param data The data to serialize\n@param format The format to use (\"json\" or \"ini\")\n@return The configuration text"),
-
         // tpl namespace
         new NamespaceFunction("tpl", "render", new[] { new BuiltInParam("template", "string"), new BuiltInParam("data", "dict") }, "string",
             Documentation: "Renders a template string with the given data dictionary. Supports {{ variable }}, {% if %}, {% for %}, and {% include %} directives.\n@param template The template string or a compiled template\n@param data A dictionary of variables available in the template\n@return The rendered output string"),
@@ -564,7 +583,6 @@ public static class BuiltInRegistry
             Documentation: "Reads a template file and renders it with the given data dictionary.\n@param path The path to the template file\n@param data A dictionary of variables available in the template\n@return The rendered output string"),
         new NamespaceFunction("tpl", "compile", new[] { new BuiltInParam("template", "string") },
             Documentation: "Pre-compiles a template string into an optimized form for repeated rendering. Pass the result to tpl.render() for faster execution.\n@param template The template string to compile\n@return A compiled template object"),
-
         // store namespace
         new NamespaceFunction("store", "set", new[] { new BuiltInParam("key", "string"), new BuiltInParam("value") },
             Documentation: "Sets a key-value pair in the store. Overwrites any existing value for the key.\n@param key The key (must be a string)\n@param value The value to store"),
@@ -586,7 +604,6 @@ public static class BuiltInRegistry
             Documentation: "Returns a dictionary containing all key-value pairs in the store.\n@return A dictionary copy of all store entries"),
         new NamespaceFunction("store", "scope", new[] { new BuiltInParam("prefix", "string") }, "dict",
             Documentation: "Returns a dictionary of all entries whose keys start with the given prefix.\n@param prefix The prefix to filter keys by\n@return A dictionary of matching entries"),
-
         // ── args ──────────────────────────────────────────────────────
         new NamespaceFunction("args", "list", Array.Empty<BuiltInParam>(), "array",
             Documentation: "Returns an array of all raw command-line arguments passed to the script.\n@return An array of argument strings"),
@@ -594,7 +611,6 @@ public static class BuiltInRegistry
             Documentation: "Returns the number of command-line arguments passed to the script.\n@return The argument count"),
         new NamespaceFunction("args", "parse", new[] { new BuiltInParam("spec", "dict") }, "dict",
             Documentation: "Parses command-line arguments according to a dict specification.\n@param spec A dict defining flags, options, commands, and positionals\n@return A dict with all parsed argument values accessible via dot notation"),
-
         // ── crypto ────────────────────────────────────────────────────
         new NamespaceFunction("crypto", "md5", new[] { new BuiltInParam("data", "string") }, "string",
             Documentation: "Computes the MD5 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string"),
@@ -612,7 +628,6 @@ public static class BuiltInRegistry
             Documentation: "Generates a random UUID v4 string.\n@return A UUID string in standard format (e.g., \"550e8400-e29b-41d4-a716-446655440000\")"),
         new NamespaceFunction("crypto", "randomBytes", new[] { new BuiltInParam("n", "int") }, "string",
             Documentation: "Generates cryptographically secure random bytes.\n@param n The number of random bytes to generate (must be > 0)\n@return The random bytes as a lowercase hexadecimal string"),
-
         // ── encoding ─────────────────────────────────────────────────
         new NamespaceFunction("encoding", "base64Encode", new[] { new BuiltInParam("s", "string") }, "string",
             Documentation: "Encodes a string to Base64.\n@param s The string to encode\n@return The Base64-encoded string"),
@@ -626,6 +641,27 @@ public static class BuiltInRegistry
             Documentation: "Encodes a string's UTF-8 bytes as a lowercase hexadecimal string.\n@param s The string to encode\n@return The hexadecimal string"),
         new NamespaceFunction("encoding", "hexDecode", new[] { new BuiltInParam("s", "string") }, "string",
             Documentation: "Decodes a hexadecimal string back to a UTF-8 string.\n@param s The hexadecimal string to decode\n@return The decoded string"),
+        // ── term ──────────────────────────────────────────────────────
+        new NamespaceFunction("term", "color", new[] { new BuiltInParam("text", "string"), new BuiltInParam("color", "string") }, "string",
+            Documentation: "Wraps text in ANSI color codes. Use term color constants: term.BLACK, term.RED, term.GREEN, term.YELLOW, term.BLUE, term.MAGENTA, term.CYAN, term.WHITE, term.GRAY.\n@param text The text to colorize\n@param color A color constant from the term namespace\n@return The text wrapped in ANSI escape codes"),
+        new NamespaceFunction("term", "bold", new[] { new BuiltInParam("text", "string") }, "string",
+            Documentation: "Wraps text in ANSI bold escape codes.\n@param text The text to make bold\n@return The text with bold formatting"),
+        new NamespaceFunction("term", "dim", new[] { new BuiltInParam("text", "string") }, "string",
+            Documentation: "Wraps text in ANSI dim escape codes.\n@param text The text to dim\n@return The text with dim formatting"),
+        new NamespaceFunction("term", "underline", new[] { new BuiltInParam("text", "string") }, "string",
+            Documentation: "Wraps text in ANSI underline escape codes.\n@param text The text to underline\n@return The text with underline formatting"),
+        new NamespaceFunction("term", "style", new[] { new BuiltInParam("text", "string"), new BuiltInParam("opts", "dict") }, "string",
+            Documentation: "Applies combined ANSI styles from a dict. Supported keys: color (string), bold (bool), dim (bool), underline (bool).\n@param text The text to style\n@param opts A dict with style options\n@return The styled text"),
+        new NamespaceFunction("term", "strip", new[] { new BuiltInParam("text", "string") }, "string",
+            Documentation: "Removes all ANSI escape codes from a string.\n@param text The text to strip\n@return The text without ANSI escape sequences"),
+        new NamespaceFunction("term", "width", Array.Empty<BuiltInParam>(), "int",
+            Documentation: "Returns the terminal width in columns. Falls back to 80 if not available.\n@return The terminal width"),
+        new NamespaceFunction("term", "isInteractive", Array.Empty<BuiltInParam>(), "bool",
+            Documentation: "Checks whether standard input is connected to an interactive terminal (TTY).\n@return true if stdin is a TTY"),
+        new NamespaceFunction("term", "clear", Array.Empty<BuiltInParam>(),
+            Documentation: "Clears the terminal screen using ANSI escape codes."),
+        new NamespaceFunction("term", "table", new[] { new BuiltInParam("rows", "array"), new BuiltInParam("headers", "array") }, "string", IsVariadic: true,
+            Documentation: "Formats data as an ASCII table string. Each row is an array of values. Headers are optional.\n@param rows An array of arrays (each inner array is a row)\n@param headers An optional array of column header strings\n@return The formatted table as a string"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -650,13 +686,31 @@ public static class BuiltInRegistry
             Documentation: "The ratio of a circle's circumference to its diameter (π ≈ 3.14159)."),
         new NamespaceConstant("math", "E",  "float", "2.718281828459045",
             Documentation: "Euler's number, the base of natural logarithms (e ≈ 2.71828)."),
+        new NamespaceConstant("term", "BLACK",   "string", "black",
+            Documentation: "Color constant for black. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "RED",     "string", "red",
+            Documentation: "Color constant for red. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "GREEN",   "string", "green",
+            Documentation: "Color constant for green. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "YELLOW",  "string", "yellow",
+            Documentation: "Color constant for yellow. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "BLUE",    "string", "blue",
+            Documentation: "Color constant for blue. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "MAGENTA", "string", "magenta",
+            Documentation: "Color constant for magenta. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "CYAN",    "string", "cyan",
+            Documentation: "Color constant for cyan. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "WHITE",   "string", "white",
+            Documentation: "Color constant for white. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "GRAY",    "string", "gray",
+            Documentation: "Color constant for gray. Use with term.color() or term.style()."),
     };
 
     // ── Built-in Namespace Names ──
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term"
     };
 
     // ── Keywords ──

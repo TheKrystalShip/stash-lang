@@ -1,0 +1,121 @@
+#!/usr/bin/env stash
+// examples/arrays.stash
+
+io.println("=" * 54);
+io.println("  Array Operations — Sorting, Grouping, Aggregation");
+io.println("=" * 54);
+
+// ─── Sorting with sortBy ──────────────────────────
+io.println("\n-- Sort by Numeric Value --");
+let numbers = [5, 2, 8, 1, 9, 3];
+let sorted = arr.sortBy(numbers, (x) => x);
+io.println("  original: " + conv.toStr(numbers));
+io.println("  sorted:   " + conv.toStr(sorted));
+
+io.println("\n-- Sort Strings by Length --");
+let words = ["banana", "fig", "apple", "kiwi", "grape"];
+let byLength = arr.sortBy(words, (w) => len(w));
+io.println("  by length: " + conv.toStr(byLength));
+
+io.println("\n-- Sort Objects by Property --");
+let people = [
+    { name: "Charlie", age: 35 },
+    { name: "Alice", age: 28 },
+    { name: "Bob", age: 32 }
+];
+let byAge = arr.sortBy(people, (p) => dict.get(p, "age"));
+for (let person in byAge) {
+    io.println("  " + dict.get(person, "name") + " (age " + conv.toStr(dict.get(person, "age")) + ")");
+}
+
+// ─── Grouping with groupBy ─────────────────────────
+io.println("\n-- Group Numbers by Parity --");
+let nums = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+let parity = arr.groupBy(nums, (n) => {
+    if (n % 2 == 0) { return "even"; }
+    return "odd";
+});
+io.println("  even: " + conv.toStr(dict.get(parity, "even")));
+io.println("  odd:  " + conv.toStr(dict.get(parity, "odd")));
+
+io.println("\n-- Group Words by First Letter --");
+let fruits = ["apple", "avocado", "banana", "blueberry", "cherry", "cranberry"];
+let byLetter = arr.groupBy(fruits, (f) => str.substring(f, 0, 1));
+let keys = dict.keys(byLetter);
+for (let key in keys) {
+    io.println("  " + key + ": " + conv.toStr(dict.get(byLetter, key)));
+}
+
+io.println("\n-- Group People by Role --");
+let team = [
+    { name: "Alice", role: "dev" },
+    { name: "Bob", role: "design" },
+    { name: "Charlie", role: "dev" },
+    { name: "Diana", role: "design" },
+    { name: "Eve", role: "dev" }
+];
+let byRole = arr.groupBy(team, (p) => dict.get(p, "role"));
+let roles = dict.keys(byRole);
+for (let role in roles) {
+    let members = dict.get(byRole, role);
+    let names = arr.map(members, (m) => dict.get(m, "name"));
+    io.println("  " + role + ": " + arr.join(names, ", "));
+}
+
+// ─── Aggregation ─────────────────────────────────
+io.println("\n-- Sum --");
+let scores = [85, 92, 78, 95, 88];
+io.println("  scores: " + conv.toStr(scores));
+io.println("  total:  " + conv.toStr(arr.sum(scores)));
+
+let prices = [19.99, 5.50, 12.75, 8.25];
+io.println("  prices: " + conv.toStr(prices));
+io.println("  total:  " + conv.toStr(arr.sum(prices)));
+
+io.println("\n-- Min & Max --");
+let temps = [72, 68, 75, 81, 63, 70];
+io.println("  temperatures: " + conv.toStr(temps));
+io.println("  min: " + conv.toStr(arr.min(temps)));
+io.println("  max: " + conv.toStr(arr.max(temps)));
+
+let floats = [3.14, 2.72, 1.41, 1.73];
+io.println("  constants: " + conv.toStr(floats));
+io.println("  min: " + conv.toStr(arr.min(floats)));
+io.println("  max: " + conv.toStr(arr.max(floats)));
+
+// ─── Combining Operations ────────────────────────
+io.println("\n-- Data Pipeline --");
+let students = [
+    { name: "Alice", grade: 92 },
+    { name: "Bob", grade: 85 },
+    { name: "Charlie", grade: 78 },
+    { name: "Diana", grade: 95 },
+    { name: "Eve", grade: 88 }
+];
+
+// Sort by grade (highest first, use negative key)
+let ranked = arr.sortBy(students, (s) => -dict.get(s, "grade"));
+io.println("  rankings:");
+let rank = 1;
+for (let s in ranked) {
+    io.println("    #" + conv.toStr(rank) + " " + dict.get(s, "name") + " — " + conv.toStr(dict.get(s, "grade")));
+    rank = rank + 1;
+}
+
+// Aggregate grades
+let grades = arr.map(students, (s) => dict.get(s, "grade"));
+io.println("  total:   " + conv.toStr(arr.sum(grades)));
+io.println("  lowest:  " + conv.toStr(arr.min(grades)));
+io.println("  highest: " + conv.toStr(arr.max(grades)));
+
+// Group by pass/fail
+let results = arr.groupBy(students, (s) => {
+    if (dict.get(s, "grade") >= 85) { return "pass"; }
+    return "needs improvement";
+});
+let categories = dict.keys(results);
+for (let cat in categories) {
+    let members = dict.get(results, cat);
+    let names = arr.map(members, (m) => dict.get(m, "name"));
+    io.println("  " + cat + ": " + arr.join(names, ", "));
+}
