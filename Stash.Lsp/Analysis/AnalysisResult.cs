@@ -66,4 +66,79 @@ public class AnalysisResult
 
         return (symbol, moduleInfo);
     }
+
+    /// <summary>
+    /// Determines whether the token at the given 1-based source position is a dict literal key.
+    /// A dict key is an Identifier preceded by LeftBrace/Comma and followed by Colon,
+    /// excluding struct init fields (which resolve to Field symbols).
+    /// </summary>
+    public bool IsDictKey(int line, int column)
+    {
+        for (int i = 0; i < Tokens.Count; i++)
+        {
+            var token = Tokens[i];
+            if (token.Type != TokenType.Identifier)
+            {
+                continue;
+            }
+
+            if (token.Span.StartLine != line || token.Span.StartColumn != column)
+            {
+                continue;
+            }
+
+            // Check: preceded by { or , (skip trivia tokens)
+            bool precededByBraceOrComma = false;
+            for (int j = i - 1; j >= 0; j--)
+            {
+                var prev = Tokens[j].Type;
+                if (prev is TokenType.LeftBrace or TokenType.Comma)
+                {
+                    precededByBraceOrComma = true;
+                    break;
+                }
+                // Skip trivia (comments, etc.)
+                if (prev is TokenType.SingleLineComment or TokenType.BlockComment or TokenType.DocComment or TokenType.Shebang)
+                {
+                    continue;
+                }
+
+                break;
+            }
+
+            if (!precededByBraceOrComma)
+            {
+                return false;
+            }
+
+            // Check: followed by Colon
+            bool followedByColon = false;
+            for (int j = i + 1; j < Tokens.Count; j++)
+            {
+                var next = Tokens[j].Type;
+                if (next == TokenType.Colon)
+                {
+                    followedByColon = true;
+                    break;
+                }
+                if (next is TokenType.SingleLineComment or TokenType.BlockComment or TokenType.DocComment or TokenType.Shebang)
+                {
+                    continue;
+                }
+
+                break;
+            }
+
+            if (!followedByColon)
+            {
+                return false;
+            }
+
+            // Exclude struct init fields: if this identifier resolves to a Field symbol, it's a struct init
+            var def = Symbols.FindDefinition(token.Lexeme, line, column);
+            return def == null || def.Kind != SymbolKind.Field;
+        }
+
+        return false;
+    }
 }

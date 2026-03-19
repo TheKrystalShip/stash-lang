@@ -1,3 +1,4 @@
+using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -459,5 +460,110 @@ public class LspFeaturesTests
         var sym = tree.FindDefinition("Point", 3, 24);
         Assert.NotNull(sym);
         Assert.Equal(SymbolKind.Struct, sym!.Kind);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 6. Dict Literal Semantic Tests
+    // ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void DictKey_DoesNotResolveAsVariable()
+    {
+        // Dict keys should not resolve to variable symbols
+        const string src = """let d = { name: "Alice", age: 30 };""";
+        var tree = Analyze(src);
+
+        // "name" and "age" as dict keys should NOT be in the symbol table as variables
+        var nameSyms = tree.All.Where(s => s.Name == "name" && s.Kind == SymbolKind.Variable).ToList();
+        Assert.Empty(nameSyms);
+    }
+
+    [Fact]
+    public void DictKey_CoexistsWithSameNameVariable()
+    {
+        // A variable named "name" and a dict key "name" should not conflict
+        const string src = """
+            let name = "Bob";
+            let d = { name: "Alice" };
+            """;
+        var tree = Analyze(src);
+
+        // The variable "name" should exist
+        var nameSym = tree.FindDefinition("name", 1, 5);
+        Assert.NotNull(nameSym);
+        Assert.Equal(SymbolKind.Variable, nameSym!.Kind);
+    }
+
+    [Fact]
+    public void DictLiteral_NestedDict_KeysNotVariables()
+    {
+        // Nested dict keys should also not create variable symbols
+        const string src = """let d = { flags: { verbose: true } };""";
+        var tree = Analyze(src);
+
+        var flagsVars = tree.All.Where(s => s.Name == "flags" && s.Kind == SymbolKind.Variable).ToList();
+        Assert.Empty(flagsVars);
+        var verboseVars = tree.All.Where(s => s.Name == "verbose" && s.Kind == SymbolKind.Variable).ToList();
+        Assert.Empty(verboseVars);
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 7. IsDictKey — Hover/Definition Suppression Tests
+    // ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void IsDictKey_SimpleKey_ReturnsTrue()
+    {
+        // { name: "Alice" }  — "name" at line 1, col 11 is a dict key
+        const string src = """let d = { name: "Alice" };""";
+        var result = FullAnalyze(src);
+
+        // Find the "name" token to get its exact position
+        var nameToken = result.Tokens.First(t => t.Type == Stash.Lexing.TokenType.Identifier && t.Lexeme == "name");
+        Assert.True(result.IsDictKey(nameToken.Span.StartLine, nameToken.Span.StartColumn));
+    }
+
+    [Fact]
+    public void IsDictKey_SecondKey_ReturnsTrue()
+    {
+        // { name: "Alice", age: 30 }  — "age" after comma is also a dict key
+        const string src = """let d = { name: "Alice", age: 30 };""";
+        var result = FullAnalyze(src);
+
+        var ageToken = result.Tokens.First(t => t.Type == Stash.Lexing.TokenType.Identifier && t.Lexeme == "age");
+        Assert.True(result.IsDictKey(ageToken.Span.StartLine, ageToken.Span.StartColumn));
+    }
+
+    [Fact]
+    public void IsDictKey_VariableNotDictKey_ReturnsFalse()
+    {
+        // "let name = ..." — "name" is a variable, not a dict key
+        const string src = """let name = "Bob";""";
+        var result = FullAnalyze(src);
+
+        var nameToken = result.Tokens.First(t => t.Type == Stash.Lexing.TokenType.Identifier && t.Lexeme == "name");
+        Assert.False(result.IsDictKey(nameToken.Span.StartLine, nameToken.Span.StartColumn));
+    }
+
+    [Fact]
+    public void IsDictKey_NameShadowsNamespace_ReturnsTrue()
+    {
+        // { config: { verbose: true } }  — "config" is a dict key even though it shadows the built-in namespace
+        const string src = """let d = { config: { verbose: true } };""";
+        var result = FullAnalyze(src);
+
+        var configToken = result.Tokens.First(t => t.Type == Stash.Lexing.TokenType.Identifier && t.Lexeme == "config");
+        Assert.True(result.IsDictKey(configToken.Span.StartLine, configToken.Span.StartColumn));
+    }
+
+    [Fact]
+    public void IsDictKey_NestedDictKey_ReturnsTrue()
+    {
+        // Nested dict key should also be detected
+        const string src = """let d = { flags: { verbose: true } };""";
+        var result = FullAnalyze(src);
+
+        var verboseToken = result.Tokens.First(t => t.Type == Stash.Lexing.TokenType.Identifier && t.Lexeme == "verbose");
+        Assert.True(result.IsDictKey(verboseToken.Span.StartLine, verboseToken.Span.StartColumn));
     }
 }

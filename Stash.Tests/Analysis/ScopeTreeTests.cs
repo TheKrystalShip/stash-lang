@@ -461,17 +461,6 @@ fn foo() { return 1; }
     }
 
     [Fact]
-    public void BuiltIns_ArgTreeStruct_HasTypedFields()
-    {
-        var tree = Analyze("", includeBuiltIns: true);
-        var syms = tree.GlobalScope.Symbols;
-
-        Assert.Contains(syms, s => s.Name == "ArgTree" && s.Kind == SymbolKind.Struct);
-        Assert.Contains(syms, s => s.Name == "name" && s.Kind == SymbolKind.Field && s.ParentName == "ArgTree" && s.TypeHint == "string");
-        Assert.Contains(syms, s => s.Name == "flags" && s.Kind == SymbolKind.Field && s.ParentName == "ArgTree" && s.TypeHint == "array");
-    }
-
-    [Fact]
     public void FunctionScope_WithDefaultParams_ContainsParameters()
     {
         var tree = Analyze("fn greet(name, greeting = \"Hello\") { return greeting; }");

@@ -106,8 +106,9 @@ public class ArgsNamespaceTests
     public void Parse_BasicFlag_SetsTrue()
     {
         var source = """
-            let tree = ArgTree { flags: [ArgDef { name: "verbose", description: "Verbose mode" }] };
-            let parsed = args.parse(tree);
+            let parsed = args.parse({
+                flags: { verbose: { description: "Verbose mode" } }
+            });
             let result = parsed.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--verbose"]));
@@ -117,8 +118,9 @@ public class ArgsNamespaceTests
     public void Parse_BasicOption_SetsValue()
     {
         var source = """
-            let tree = ArgTree { options: [ArgDef { name: "port", type: "int", description: "Port" }] };
-            let parsed = args.parse(tree);
+            let parsed = args.parse({
+                options: { port: { type: "int", description: "Port" } }
+            });
             let result = parsed.port;
             """;
         Assert.Equal(8080L, RunWithArgs(source, ["--port", "8080"]));

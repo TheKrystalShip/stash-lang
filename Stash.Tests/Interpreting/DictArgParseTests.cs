@@ -335,7 +335,7 @@ public class DictArgParseTests
     // =========================================================================
 
     [Fact]
-    public void DictCommand_Name_CapturedInArgsCommand()
+    public void DictCommand_Name_Captured()
     {
         var source = """
             let args = args.parse({

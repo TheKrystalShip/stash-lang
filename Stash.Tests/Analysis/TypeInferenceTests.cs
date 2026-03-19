@@ -236,4 +236,34 @@ public class TypeInferenceTests
         Assert.NotNull(symbol);
         Assert.Equal("CommandResult", symbol.TypeHint);
     }
+
+    [Fact]
+    public void InfersType_DictLiteral()
+    {
+        const string src = """let d = { name: "Alice", age: 30 };""";
+        var (tree, _) = AnalyzeWithStatements(src);
+        var symbol = tree.FindDefinition("d", 1, 5);
+        Assert.NotNull(symbol);
+        Assert.Equal("dict", symbol.TypeHint);
+    }
+
+    [Fact]
+    public void InfersType_EmptyDictLiteral()
+    {
+        const string src = "let d = {};";
+        var (tree, _) = AnalyzeWithStatements(src);
+        var symbol = tree.FindDefinition("d", 1, 5);
+        Assert.NotNull(symbol);
+        Assert.Equal("dict", symbol.TypeHint);
+    }
+
+    [Fact]
+    public void InfersType_ArgsParseReturnsDict()
+    {
+        const string src = """let parsed = args.parse({ name: "cli" });""";
+        var (tree, _) = AnalyzeWithStatements(src);
+        var symbol = tree.FindDefinition("parsed", 1, 5);
+        Assert.NotNull(symbol);
+        Assert.Equal("dict", symbol.TypeHint);
+    }
 }

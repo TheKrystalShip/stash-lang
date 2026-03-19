@@ -76,26 +76,6 @@ public static class BuiltInRegistry
             new("stderr", "string"),
             new("exitCode", "int"),
         }),
-        new BuiltInStruct("ArgTree", new BuiltInField[]
-        {
-            new("name", "string"),
-            new("version", "string"),
-            new("description", "string"),
-            new("flags", "array"),
-            new("options", "array"),
-            new("commands", "array"),
-            new("positionals", "array"),
-        }),
-        new BuiltInStruct("ArgDef", new BuiltInField[]
-        {
-            new("name", "string"),
-            new("short", "string"),
-            new("type", "string"),
-            new("default", null),
-            new("description", "string"),
-            new("required", "bool"),
-            new("args", "ArgTree"),
-        }),
         new BuiltInStruct("Process", new BuiltInField[]
         {
             new("pid", "int"),
@@ -596,8 +576,8 @@ public static class BuiltInRegistry
             Documentation: "Returns an array of all raw command-line arguments passed to the script.\n@return An array of argument strings"),
         new NamespaceFunction("args", "count", Array.Empty<BuiltInParam>(), "int",
             Documentation: "Returns the number of command-line arguments passed to the script.\n@return The argument count"),
-        new NamespaceFunction("args", "parse", new[] { new BuiltInParam("tree", "ArgTree") }, "Args",
-            Documentation: "Parses command-line arguments according to a declarative argument tree definition.\n@param tree An ArgTree struct defining flags, options, commands, and positionals\n@return A parsed arguments object with flags, options, and positional values"),
+        new NamespaceFunction("args", "parse", new[] { new BuiltInParam("spec", "dict") }, "dict",
+            Documentation: "Parses command-line arguments according to a dict specification.\n@param spec A dict defining flags, options, commands, and positionals\n@return A dict with all parsed argument values accessible via dot notation"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -628,7 +608,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args"
     };
 
     // ── Keywords ──

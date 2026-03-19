@@ -82,8 +82,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType prevType = TokenType.Eof;
         TokenType prevPrevType = TokenType.Eof;
 
-        foreach (var token in result.Tokens)
+        var tokenList = result.Tokens;
+        for (int i = 0; i < tokenList.Count; i++)
         {
+            var token = tokenList[i];
             if (token.Type == TokenType.Eof)
             {
                 continue;
@@ -103,7 +105,26 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             }
             else if (token.Type == TokenType.Identifier)
             {
-                ProcessIdentifier(builder, result, token, line, col, length);
+                // Check if this is a dict literal key: identifier before colon, after { or ,
+                if ((prevType is TokenType.LeftBrace or TokenType.Comma)
+                    && i + 1 < tokenList.Count
+                    && tokenList[i + 1].Type == TokenType.Colon)
+                {
+                    // If the symbol resolves to a struct field, it's a struct init — let ProcessIdentifier handle it
+                    var def = result.Symbols.FindDefinition(token.Lexeme, token.Span.StartLine, token.Span.StartColumn);
+                    if (def == null || def.Kind != StashSymbolKind.Field)
+                    {
+                        builder.Push(line, col, length, TokenTypeProperty, 0);
+                    }
+                    else
+                    {
+                        ProcessIdentifier(builder, result, token, line, col, length);
+                    }
+                }
+                else
+                {
+                    ProcessIdentifier(builder, result, token, line, col, length);
+                }
             }
             else if (IsKeyword(token.Type))
             {
@@ -143,7 +164,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 prevPrevType = prevType;
                 prevType = token.Type;
             }
-        }
+        } // end for
 
         return Task.CompletedTask;
     }
@@ -480,7 +501,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.Let or TokenType.Const or TokenType.Fn or TokenType.Struct or
         TokenType.Enum or TokenType.If or TokenType.Else or TokenType.For or
         TokenType.In or TokenType.While or TokenType.Do or TokenType.Return or TokenType.Break or
-        TokenType.Continue or TokenType.True or TokenType.False or TokenType.Null or
+        TokenType.Continue or
         TokenType.Try or TokenType.Import or TokenType.From or TokenType.As or
         TokenType.Switch;
 

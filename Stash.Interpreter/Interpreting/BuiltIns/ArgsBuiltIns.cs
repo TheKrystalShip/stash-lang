@@ -13,7 +13,10 @@ public static class ArgsBuiltIns
         {
             var result = new List<object?>();
             foreach (var s in interp.ScriptArgs)
+            {
                 result.Add((object?)s);
+            }
+
             return result;
         }));
 

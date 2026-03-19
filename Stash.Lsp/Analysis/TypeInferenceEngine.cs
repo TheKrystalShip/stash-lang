@@ -140,6 +140,10 @@ public static class TypeInferenceEngine
             case ArrayExpr:
                 return "array";
 
+            // Rule 10: Dict literal
+            case DictLiteralExpr:
+                return "dict";
+
             // Rule 9: Dot access — resolve struct field type
             case DotExpr dotExpr:
             {

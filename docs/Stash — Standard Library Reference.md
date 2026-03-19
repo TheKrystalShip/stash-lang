@@ -1139,43 +1139,11 @@ io.println(getCount("requests"));  // 3
 
 ## Argument Parsing
 
-Stash provides the **`args.parse()`** function for declarative CLI argument parsing. Instead of manually parsing `args.list()`, scripts pass a **dict spec** describing expected flags, options, positional arguments, and subcommands, then call `args.parse()` to get a struct of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
+Stash provides the **`args.parse()`** function for declarative CLI argument parsing. Instead of manually parsing `args.list()`, scripts pass a **dict spec** describing expected flags, options, positional arguments, and subcommands, then call `args.parse()` to get a dict of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
 
-`args.parse()` accepts two spec formats:
-- **Dict spec** (recommended) — a dict literal with `flags`, `options`, `commands`, and `positionals` keys
-- **ArgTree struct** (legacy) — an `ArgTree` instance with `ArgDef` entries
+### Spec Format
 
-### Built-in Structs
-
-`ArgTree` and `ArgDef` are pre-defined by the interpreter — scripts use them directly without declaring them.
-
-#### `ArgTree` Fields
-
-| Field         | Type              | Description                                        |
-| ------------- | ----------------- | -------------------------------------------------- |
-| `name`        | string (optional) | Script name (used in help text and usage line)     |
-| `version`     | string (optional) | Version string (used with auto `--version` flag)   |
-| `description` | string            | Script description (required, can be `""`)         |
-| `flags`       | array (optional)  | Array of `ArgDef` entries for boolean switches     |
-| `options`     | array (optional)  | Array of `ArgDef` entries for value-taking options |
-| `commands`    | array (optional)  | Array of `ArgDef` entries for subcommands          |
-| `positionals` | array (optional)  | Array of `ArgDef` entries for positional arguments |
-
-#### `ArgDef` Fields
-
-| Field         | Type               | Description                                                 |
-| ------------- | ------------------ | ----------------------------------------------------------- |
-| `name`        | string (required)  | Long name of the argument                                   |
-| `short`       | string (optional)  | Single-character short form                                 |
-| `type`        | string (optional)  | Type for coercion: `"string"`, `"int"`, `"float"`, `"bool"` |
-| `default`     | any (optional)     | Default value (any expression)                              |
-| `description` | string             | Description for help text (required, can be `""`)           |
-| `required`    | bool (optional)    | Whether the argument must be provided (default: `false`)    |
-| `args`        | ArgTree (optional) | Nested `ArgTree` for subcommand flags/options/positionals   |
-
-### Dict Spec Format (Recommended)
-
-The dict spec uses dict literals for a concise, readable argument definition:
+The spec uses dict literals to declare expected arguments:
 
 ```stash
 let parsed = args.parse({
@@ -1222,54 +1190,20 @@ let parsed = args.parse({
 
 **Positionals** array elements accept: `name` (required), `type`, `default`, `description`, `required`
 
-### ArgTree/ArgDef Format (Legacy)
-
-The struct-based format is still supported for backward compatibility:
-
-```stash
-let parsed = args.parse(ArgTree {
-    name: "deploy",
-    version: "1.0.0",
-    description: "A deployment tool",
-    flags: [
-        ArgDef { name: "help", short: "h", description: "Show help" },
-        ArgDef { name: "verbose", short: "v", description: "Enable verbose output" }
-    ],
-    options: [
-        ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Port to listen on" }
-    ],
-    positionals: [
-        ArgDef { name: "target", type: "string", required: true, description: "Target host" }
-    ],
-    commands: [
-        ArgDef {
-            name: "deploy",
-            description: "Deploy the application",
-            args: ArgTree {
-                flags: [ArgDef { name: "force", short: "f", description: "Force deployment" }],
-                options: [ArgDef { name: "timeout", type: "int", default: 30, description: "Timeout in seconds" }]
-            }
-        }
-    ]
-});
-```
-
-`args.parse()` returns a `StashInstance` bound to the variable; all parsed values are accessed via dot notation.
-
 ### Flags
 
-Flags are boolean switches that default to `false` and become `true` when present. Each flag is an `ArgDef` in the `flags` array.
+Flags are boolean switches that default to `false` and become `true` when present. Each flag is a key in the `flags` dict.
 
 Usage: `--name` or `-short`
 
 **Special flags:**
 
 - A flag named `help` will automatically print formatted help text and exit when `--help` or its short form is passed.
-- A flag named `version` will automatically print the `version` metadata value and exit when `--version` is passed (requires `version` to be set on the `ArgTree`).
+- A flag named `version` will automatically print the `version` metadata value and exit when `--version` is passed (requires `version` to be set in the spec).
 
 ### Options
 
-Options take a value and support type coercion. Each option is an `ArgDef` in the `options` array.
+Options take a value and support type coercion. Each option is a key in the `options` dict.
 
 Usage: `--name value`, `-s value`, or `--name=value`
 
@@ -1286,13 +1220,13 @@ A runtime error is raised if the value cannot be parsed as the specified type.
 
 ### Positional Arguments
 
-Positional arguments are captured in declaration order. Non-flag, non-option, non-command arguments fill positionals sequentially. Each positional is an `ArgDef` in the `positionals` array.
+Positional arguments are captured in declaration order. Non-flag, non-option, non-command arguments fill positionals sequentially. Each positional is a dict in the `positionals` array.
 
 Usage: `./script.stash myhost` — the first non-flag, non-option argument fills the first positional.
 
 ### Subcommands
 
-`ArgDef` entries in the `commands` array define named subcommands. An `args` field on the `ArgDef` provides an `ArgTree` describing the subcommand's own flags, options, and positionals.
+Keys in the `commands` dict define named subcommands. Each command value is a dict containing the subcommand's own `flags`, `options`, and `positionals` (using the same format as the top level).
 
 When a subcommand is matched, `args.command` is set to the command name as a string, and `args.<commandName>` contains the subcommand's parsed values:
 

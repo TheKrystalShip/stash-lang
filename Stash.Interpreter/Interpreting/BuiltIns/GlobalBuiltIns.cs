@@ -137,17 +137,6 @@ public static class GlobalBuiltIns
 
         if (capabilities.HasFlag(StashCapabilities.Process))
         {
-            // Built-in structs for argument parsing
-            globals.Define("ArgTree", new StashStruct("ArgTree", new List<string>
-            {
-                "name", "version", "description", "flags", "options", "commands", "positionals"
-            }, new Dictionary<string, StashFunction>()));
-
-            globals.Define("ArgDef", new StashStruct("ArgDef", new List<string>
-            {
-                "name", "short", "type", "default", "description", "required", "args"
-            }, new Dictionary<string, StashFunction>()));
-
             globals.Define("exit", new BuiltInFunction("exit", 1, (interp, args) =>
             {
                 if (args[0] is not long code)

@@ -11,48 +11,39 @@
 
 // ─── Argument Declaration ────────────────────────────────────
 
-let args = args.parse(ArgTree {
+let parsedArgs: dict = args.parse({
     name: "service_ctl",
     version: "1.0",
     description: "Start, stop, and inspect managed services",
-    flags: [
-        ArgDef { name: "help", short: "h", description: "Show help message" },
-        ArgDef { name: "verbose", short: "v", description: "Enable verbose output" }
-    ],
-    options: [
-        ArgDef { name: "config", short: "c", default: "/etc/svc/services.conf", description: "Path to services config file" }
-    ],
-    commands: [
-        ArgDef {
-            name: "start",
+    flags: {
+        help:    { short: "h", description: "Show help message" },
+        verbose: { short: "v", description: "Enable verbose output" }
+    },
+    options: {
+        config: { short: "c", default: "/etc/svc/services.conf", description: "Path to services config file" }
+    },
+    commands: {
+        start: {
             description: "Start a named service",
-            args: ArgTree {
-                positionals: [ ArgDef { name: "service", required: true, description: "Service name" } ],
-                flags: [ ArgDef { name: "detach", short: "d", description: "Run in background" } ],
-                options: [
-                    ArgDef { name: "port", short: "p", type: "int", default: 8080, description: "Listen port" },
-                    ArgDef { name: "env", short: "e", default: "development", description: "Runtime environment" }
-                ]
+            positionals: [{ name: "service", required: true, description: "Service name" }],
+            flags:   { detach: { short: "d", description: "Run in background" } },
+            options: {
+                port: { short: "p", type: "int", default: 8080, description: "Listen port" },
+                env:  { short: "e", default: "development", description: "Runtime environment" }
             }
         },
-        ArgDef {
-            name: "stop",
+        stop: {
             description: "Stop a running service",
-            args: ArgTree {
-                positionals: [ ArgDef { name: "service", required: true, description: "Service name" } ],
-                flags: [ ArgDef { name: "force", short: "f", description: "Force kill (SIGKILL)" } ],
-                options: [ ArgDef { name: "timeout", short: "t", type: "int", default: 10, description: "Shutdown timeout in seconds" } ]
-            }
+            positionals: [{ name: "service", required: true, description: "Service name" }],
+            flags:   { force: { short: "f", description: "Force kill (SIGKILL)" } },
+            options: { timeout: { short: "t", type: "int", default: 10, description: "Shutdown timeout in seconds" } }
         },
-        ArgDef {
-            name: "status",
+        status: {
             description: "Show service status",
-            args: ArgTree {
-                positionals: [ ArgDef { name: "service", description: "Specific service (omit for all)" } ],
-                options: [ ArgDef { name: "filter", description: "Filter: running, stopped" } ]
-            }
+            positionals: [{ name: "service", description: "Specific service (omit for all)" }],
+            options: { filter: { description: "Filter: running, stopped" } }
         }
-    ]
+    }
 });
 
 // ─── Domain Types ────────────────────────────────────────────
@@ -81,7 +72,7 @@ fn state_label(state) {
 }
 
 fn verbose(msg: string) {
-    if (args.verbose) {
+    if (parsedArgs.verbose) {
         io.println($"[verbose] {msg}");
     }
 }
@@ -113,13 +104,13 @@ fn print_row(info) {
 // ─── Subcommands ─────────────────────────────────────────────
 
 fn cmd_start() {
-    let svc = args.start.service;
-    let port = args.start.port;
-    let env_name = args.start.env;
-    let detach = args.start.detach;
+    let svc = parsedArgs.start.service;
+    let port = parsedArgs.start.port;
+    let env_name = parsedArgs.start.env;
+    let detach = parsedArgs.start.detach;
 
     io.println($"Starting '{svc}' on port {port} (env={env_name})...");
-    verbose($"Config: {args.config}");
+    verbose($"Config: {parsedArgs.config}");
 
     let info = probe_service(svc);
     if (info.state == ServiceState.Running) {
@@ -138,9 +129,9 @@ fn cmd_start() {
 }
 
 fn cmd_stop() {
-    let svc = args.stop.service;
-    let force = args.stop.force;
-    let timeout = args.stop.timeout;
+    let svc = parsedArgs.stop.service;
+    let force = parsedArgs.stop.force;
+    let timeout = parsedArgs.stop.timeout;
 
     io.println($"Stopping '{svc}'...");
     verbose($"Timeout: {timeout}s, force={force}");
@@ -163,8 +154,8 @@ fn cmd_stop() {
 }
 
 fn cmd_status() {
-    let target = args.status.service;
-    let filter = args.status.filter;
+    let target = parsedArgs.status.service;
+    let filter = parsedArgs.status.filter;
 
     let known = ["web", "db", "cache", "worker"];
 
@@ -200,7 +191,7 @@ fn cmd_status() {
 
 // ─── Dispatch ────────────────────────────────────────────────
 
-let cmd = args.command;
+let cmd = parsedArgs.command;
 
 if (cmd == "start") {
     cmd_start();

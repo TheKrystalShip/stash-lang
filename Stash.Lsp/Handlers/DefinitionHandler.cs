@@ -33,6 +33,13 @@ public class DefinitionHandler : DefinitionHandlerBase
         var (result, word) = ctx.Value;
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
+
+        // Dict literal keys are not symbols — suppress go-to-definition
+        if (result.IsDictKey((int)line, (int)col))
+        {
+            return Task.FromResult<LocationOrLocationLinks?>(null);
+        }
+
         var symbol = result.Symbols.FindDefinition(word, line, col);
 
         if (symbol == null)

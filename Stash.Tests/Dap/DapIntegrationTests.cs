@@ -657,17 +657,16 @@ public class DapIntegrationTests
     [Fact]
     public void Integration_ScriptArgs_Accessible()
     {
-        // Use the ArgTree/args.parse API to expose script arguments as Stash values.
+        // Use the args.parse API to expose script arguments as Stash values.
         var script =
-            "let tree = ArgTree { positionals: [ArgDef { name: \"target\", type: \"string\", description: \"Target\" }] };\n" +
-            "let a = args.parse(tree);\n" +
+            "let a = args.parse({ positionals: [{ name: \"target\", type: \"string\", description: \"Target\" }] });\n" +
             "let first = a.target;\n" +
             "let x = first;\n";
         var path = CreateTempScript(script);
         try
         {
             var session = new DebugSession();
-            session.SetBreakpoints(path, new[] { new SourceBreakpoint { Line = 4 } });
+            session.SetBreakpoints(path, new[] { new SourceBreakpoint { Line = 3 } });
             session.Launch(path, null, false, new[] { "hello" });
             session.ConfigurationDone();
 

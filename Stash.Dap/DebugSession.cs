@@ -973,7 +973,11 @@ public class DebugSession : IDebugger
 
     public void OnSourceLoaded(string filePath)
     {
-        if (string.IsNullOrEmpty(filePath)) return;
+        if (string.IsNullOrEmpty(filePath))
+        {
+            return;
+        }
+
         filePath = NormalizePath(filePath);
 
         bool isNew;

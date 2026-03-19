@@ -33,6 +33,12 @@ public class HoverHandler : HoverHandlerBase
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
 
+        // Dict literal keys are not symbols — suppress hover resolution
+        if (result.IsDictKey((int)line, (int)col))
+        {
+            return Task.FromResult<Hover?>(null);
+        }
+
         var symbol = result.Symbols.FindDefinition(word, line, col);
 
         // If not found directly, try namespace member access
