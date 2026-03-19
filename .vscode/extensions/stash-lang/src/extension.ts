@@ -27,6 +27,9 @@ export function activate(context: vscode.ExtensionContext) {
 
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "stash" }],
+    synchronize: {
+      configurationSection: "stash",
+    },
   };
 
   client = new LanguageClient(

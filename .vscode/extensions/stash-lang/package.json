@@ -147,6 +147,36 @@
           "default": "",
           "description": "Absolute path to the Stash LSP server binary. If empty, the extension looks for 'stash-lsp' on the system PATH."
         },
+        "stash.lsp.debounceTime": {
+          "type": "number",
+          "default": 25,
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "Debounce delay in milliseconds before running analysis after a document change. Lower values provide faster feedback but use more CPU."
+        },
+        "stash.lsp.logLevel": {
+          "type": "string",
+          "default": "warning",
+          "enum": ["trace", "debug", "information", "warning", "error"],
+          "enumDescriptions": [
+            "Log everything, including very detailed internal events",
+            "Log debug-level messages and above",
+            "Log informational messages and above",
+            "Log warnings and errors only (default)",
+            "Log errors only"
+          ],
+          "description": "Minimum log level for the Stash language server. Logs appear in the Output panel under 'Stash Language Server'."
+        },
+        "stash.inlayHints.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable inlay hints (parameter name hints at call sites)."
+        },
+        "stash.codeLens.enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable or disable code lens (reference counts above functions, structs, and enums)."
+        },
         "stash.formatting.enabled": {
           "type": "boolean",
           "default": true,

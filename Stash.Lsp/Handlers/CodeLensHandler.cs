@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -14,11 +15,15 @@ using Stash.Lsp.Analysis;
 public class CodeLensHandler : CodeLensHandlerBase
 {
     private readonly AnalysisEngine _analysis;
+    private readonly LspSettings _settings;
+    private readonly ILogger<CodeLensHandler> _logger;
     private readonly ConcurrentDictionary<Uri, Dictionary<string, CodeLens>> _previousLenses = new();
 
-    public CodeLensHandler(AnalysisEngine analysis)
+    public CodeLensHandler(AnalysisEngine analysis, LspSettings settings, ILogger<CodeLensHandler> logger)
     {
         _analysis = analysis;
+        _settings = settings;
+        _logger = logger;
     }
 
     protected override CodeLensRegistrationOptions CreateRegistrationOptions(
@@ -32,6 +37,11 @@ public class CodeLensHandler : CodeLensHandlerBase
     public override Task<CodeLensContainer?> Handle(CodeLensParams request,
         CancellationToken cancellationToken)
     {
+        if (!_settings.CodeLensEnabled)
+        {
+            return Task.FromResult<CodeLensContainer?>(null);
+        }
+
         var uri = request.TextDocument.Uri.ToUri();
         var result = _analysis.GetCachedResult(uri);
         if (result == null)
@@ -138,6 +148,7 @@ public class CodeLensHandler : CodeLensHandlerBase
 
         _previousLenses[uri] = currentByName;
 
+        _logger.LogDebug("CodeLens: {Count} lenses for {Uri}", currentByName.Count, uri);
         return Task.FromResult<CodeLensContainer?>(new CodeLensContainer(currentByName.Values));
     }
 

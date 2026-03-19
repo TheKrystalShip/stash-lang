@@ -5,6 +5,7 @@ using System.Collections.Concurrent;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -19,14 +20,17 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly DocumentManager _documents;
     private readonly AnalysisEngine _analysis;
     private readonly ILanguageServerFacade _server;
+    private readonly LspSettings _settings;
+    private readonly ILogger<TextDocumentSyncHandler> _logger;
     private readonly ConcurrentDictionary<Uri, CancellationTokenSource> _pendingAnalysis = new();
-    private const int DebounceDelayMs = 25;
 
-    public TextDocumentSyncHandler(DocumentManager documents, AnalysisEngine analysis, ILanguageServerFacade server)
+    public TextDocumentSyncHandler(DocumentManager documents, AnalysisEngine analysis, ILanguageServerFacade server, LspSettings settings, ILogger<TextDocumentSyncHandler> logger)
     {
         _documents = documents;
         _analysis = analysis;
         _server = server;
+        _settings = settings;
+        _logger = logger;
     }
 
     public override TextDocumentAttributes GetTextDocumentAttributes(DocumentUri uri) =>
@@ -34,6 +38,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     public override Task<Unit> Handle(DidOpenTextDocumentParams request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Document opened: {Uri}", request.TextDocument.Uri);
         var uri = request.TextDocument.Uri.ToUri();
         var text = request.TextDocument.Text;
         var version = request.TextDocument.Version ?? 0;
@@ -46,6 +51,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     public override Task<Unit> Handle(DidChangeTextDocumentParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Document changed: {Uri}", request.TextDocument.Uri);
         var uri = request.TextDocument.Uri.ToUri();
         var version = request.TextDocument.Version ?? 0;
 
@@ -62,6 +68,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     public override Task<Unit> Handle(DidCloseTextDocumentParams request, CancellationToken cancellationToken)
     {
+        _logger.LogInformation("Document closed: {Uri}", request.TextDocument.Uri);
         var uri = request.TextDocument.Uri.ToUri();
 
         // Cancel any pending debounced analysis
@@ -113,7 +120,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         {
             try
             {
-                await Task.Delay(DebounceDelayMs, cts.Token);
+                await Task.Delay(_settings.DebounceDelayMs, cts.Token);
 
                 // After the delay, get the latest text and analyze
                 var text = _documents.GetText(uri);
@@ -135,6 +142,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
     private void AnalyzeAndPublishDiagnostics(Uri uri, string text)
     {
+        _logger.LogDebug("Analysis started: {Uri}", uri);
         // Invalidate this file's module cache so importers get fresh data
         if (uri.IsFile)
         {
@@ -178,6 +186,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             }
         }
 
+        _logger.LogDebug("Analysis completed: {Uri}, {DiagCount} diagnostics", uri, diagnostics.Count);
         _server.Workspace.SendSemanticTokensRefresh(new SemanticTokensRefreshParams());
     }
 

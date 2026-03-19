@@ -12,16 +12,20 @@ public static class StashLanguageServer
 {
     public static async Task RunAsync()
     {
+        var settings = new LspSettings();
+
         var server = await LanguageServer.From(options =>
             options
                 .WithInput(Console.OpenStandardInput())
                 .WithOutput(Console.OpenStandardOutput())
                 .ConfigureLogging(logging =>
                 {
-                    logging.SetMinimumLevel(LogLevel.Warning);
+                    logging.SetMinimumLevel(LogLevel.Trace);
+                    logging.AddFilter((category, level) => level >= settings.LogLevel);
                 })
                 .WithServices(services =>
                 {
+                    services.AddSingleton(settings);
                     services.AddSingleton<DocumentManager>();
                     services.AddSingleton<AnalysisEngine>();
                 })
@@ -48,6 +52,7 @@ public static class StashLanguageServer
                 .WithHandler<LinkedEditingRangeHandler>()
                 .WithHandler<TypeDefinitionHandler>()
                 .WithHandler<ImplementationHandler>()
+                .WithHandler<ConfigurationHandler>()
                 .OnInitialize((server, request, cancellationToken) =>
                 {
                     return Task.CompletedTask;

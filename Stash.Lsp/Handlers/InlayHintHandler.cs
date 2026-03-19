@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -13,14 +14,23 @@ using Stash.Parsing.AST;
 public class InlayHintHandler : InlayHintsHandlerBase
 {
     private readonly AnalysisEngine _analysis;
+    private readonly LspSettings _settings;
+    private readonly ILogger<InlayHintHandler> _logger;
 
-    public InlayHintHandler(AnalysisEngine analysis)
+    public InlayHintHandler(AnalysisEngine analysis, LspSettings settings, ILogger<InlayHintHandler> logger)
     {
         _analysis = analysis;
+        _settings = settings;
+        _logger = logger;
     }
 
     public override Task<InlayHintContainer?> Handle(InlayHintParams request, CancellationToken cancellationToken)
     {
+        if (!_settings.InlayHintsEnabled)
+        {
+            return Task.FromResult<InlayHintContainer?>(null);
+        }
+
         var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
         {
@@ -34,6 +44,7 @@ public class InlayHintHandler : InlayHintsHandlerBase
             CollectFromStmt(stmt, hints, result);
         }
 
+        _logger.LogDebug("InlayHints: {Count} hints for {Uri}", hints.Count, request.TextDocument.Uri);
         return Task.FromResult<InlayHintContainer?>(hints.Count == 0 ? null : new InlayHintContainer(hints));
     }
 

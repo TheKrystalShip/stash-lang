@@ -54,6 +54,9 @@ function activate(context) {
     };
     const clientOptions = {
         documentSelector: [{ scheme: "file", language: "stash" }],
+        synchronize: {
+            configurationSection: "stash",
+        },
     };
     client = new node_1.LanguageClient("stashLanguageServer", "Stash Language Server", serverOptions, clientOptions);
     const showRefsDisposable = vscode.commands.registerCommand("stash.showReferences", (uriStr, positionObj, locations) => {
