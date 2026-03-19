@@ -6,13 +6,13 @@
 
 fn formatBytes(n) {
   if (n >= 1073741824) {
-    return conv.toStr(math.round(n / 1073741824.0 * 10) / 10) + " GB";
+    return $"{math.round(n / 1073741824.0 * 10) / 10} GB";
   } else if (n >= 1048576) {
-    return conv.toStr(math.round(n / 1048576.0 * 10) / 10) + " MB";
+    return $"{math.round(n / 1048576.0 * 10) / 10} MB";
   } else if (n >= 1024) {
-    return conv.toStr(math.round(n / 1024.0 * 10) / 10) + " KB";
+    return $"{math.round(n / 1024.0 * 10) / 10} KB";
   }
-  return conv.toStr(n) + " B";
+  return $"{n} B";
 }
 
 fn progressBar(pct, width) {
@@ -20,7 +20,7 @@ fn progressBar(pct, width) {
   let empty = width - filled;
   let color = pct >= 90 ? term.RED : (pct >= 70 ? term.YELLOW : term.GREEN);
   let bar = term.color("█" * filled, color) + term.dim("░" * empty);
-  return "[" + bar + "] " + str.padStart(conv.toStr(math.round(pct * 10) / 10) + "%", 6);
+  return "[" + bar + "] " + str.padStart($"{math.round(pct * 10) / 10}%", 6);
 }
 
 fn formatUptime(seconds) {
@@ -30,12 +30,12 @@ fn formatUptime(seconds) {
   let m = math.floor((s % 3600) / 60);
   let out = "";
   if (d > 0) {
-    out = out + conv.toStr(d) + "d ";
+    out = out + d + "d ";
   }
   if (h > 0 || d > 0) {
-    out = out + conv.toStr(h) + "h ";
+    out = out + h + "h ";
   }
-  out = out + conv.toStr(m) + "m";
+  out = out + m + "m";
   return out;
 }
 
@@ -52,7 +52,7 @@ io.println(term.bold("═" * W));
 row("Host:", term.bold(env.hostname()));
 row("OS:", env.os());
 row("Time:", time.format(time.now(), "yyyy-MM-dd HH:mm:ss"));
-row("PID:", conv.toStr(sys.pid()));
+row("PID:", sys.pid());
 row("Temp dir:", sys.tempDir());
 io.println("─" * W);
 
@@ -71,13 +71,13 @@ let load5 = load[1];
 let load15 = load[2];
 
 let loadPct = math.round(load1 * 100.0 / cores);
-row("Cores:", conv.toStr(cores));
+row("Cores:", cores);
 
 fn round2(v) {
   return math.round(v * 100) / 100;
 }
 
-row("Load avg:", conv.toStr(round2(load1)) + "  " + conv.toStr(round2(load5)) + "  " + conv.toStr(round2(load15)) + "  (1m / 5m / 15m)");
+row("Load avg:", $"{round2(load1)}  {round2(load5)}  {round2(load15)}  (1m / 5m / 15m)");
 row("Load %:", progressBar(loadPct, 20));
 
 // ─── Memory ──────────────────────────────────────────────────────────────────

@@ -24,7 +24,7 @@ public class DefinitionHandler : DefinitionHandlerBase
     {
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
-        var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
+        var ctx = _analysis.GetContextAt(uri, text, request.Position.Line, request.Position.Character);
         if (ctx == null)
         {
             return Task.FromResult<LocationOrLocationLinks?>(null);
@@ -35,16 +35,27 @@ public class DefinitionHandler : DefinitionHandlerBase
         var col = request.Position.Character + 1;
 
         // Dict literal keys are not symbols — suppress go-to-definition
-        if (result.IsDictKey((int)line, (int)col))
+        if (result.IsDictKey(line, col))
         {
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
+        // Dot-access context: ignore global-scope namespace matches (e.g., "time" in "e.time")
+        var textLines = text!.Split('\n');
+        var dotPrefix = TextUtilities.FindDotPrefix(textLines[request.Position.Line], request.Position.Character);
+        bool afterDot = dotPrefix != null;
+
         var symbol = result.Symbols.FindDefinition(word, line, col);
+
+        // After dot: suppress namespace symbol matches — this is a member access, not a namespace reference
+        if (afterDot && symbol != null && symbol.Kind is Analysis.SymbolKind.Namespace)
+        {
+            symbol = null;
+        }
 
         if (symbol == null)
         {
-            var nsMember = result.ResolveNamespaceMember(text!, (int)request.Position.Line, (int)request.Position.Character, word);
+            var nsMember = result.ResolveNamespaceMember(text!, request.Position.Line, request.Position.Character, word);
             if (nsMember != null)
             {
                 var (memberSymbol, moduleInfo) = nsMember.Value;

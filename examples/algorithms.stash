@@ -98,7 +98,7 @@ fn quicksort(items: array, lo: int, hi: int) {
 
 let prices = arr.map(catalog, (p) => p.price);
 quicksort(prices, 0, len(prices) - 1);
-io.println($"  Prices sorted: {arr.join(arr.map(prices, (x) => conv.toStr(x)), ", ")}");
+io.println($"  Prices sorted: {arr.join(prices, ", ")}");
 
 // ─── Binary Search ────────────────────────────────────────────────────────────
 
@@ -178,7 +178,7 @@ for (let i, p in ranked) {
         "materials"  => "Material",
         _            => "General"
     };
-    let rank = str.padStart(conv.toStr(i + 1), 2, " ");
+    let rank = str.padStart($"{i + 1}", 2, " ");
     io.println($"  {rank}. {str.padEnd(p.name, 16)} ${p.price}  [{dept}]");
 }
 
@@ -196,12 +196,12 @@ for (let _ in 0..10) {
     fib_a = fib_b;
     fib_b = next;
 }
-io.println($"  Fibonacci(0..10): {arr.join(arr.map(fibs, (x) => conv.toStr(x)), ", ")}");
+io.println($"  Fibonacci(0..10): {arr.join(fibs, ", ")}");
 
 // Powers of 2 using range with step
 let pow_parts = [];
 for (let exp in 0..11..2) {
-    arr.push(pow_parts, conv.toStr(conv.toInt(math.pow(2, exp))));
+    arr.push(pow_parts, conv.toInt(math.pow(2, exp)));
 }
 io.println($"  2^(0,2,4,6,8,10): {arr.join(pow_parts, ", ")}");
 
@@ -209,7 +209,7 @@ io.println($"  2^(0,2,4,6,8,10): {arr.join(pow_parts, ", ")}");
 io.print("  Countdown: ");
 let cd_parts = [];
 for (let t in 5..0) {
-    arr.push(cd_parts, conv.toStr(t));
+    arr.push(cd_parts, t);
 }
 io.println(arr.join(cd_parts, "… ") + "… go!");
 

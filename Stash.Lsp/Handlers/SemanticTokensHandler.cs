@@ -103,8 +103,19 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 ProcessIdentifier(builder, result, token, line, col, length, isTypeHintPosition: true);
             }
+            else if (token.Type == TokenType.Identifier && prevType is TokenType.Let or TokenType.Const)
+            {
+                // After let/const — always a variable declaration, no resolution needed
+                int modifiers = ModifierDeclaration;
+                if (prevType == TokenType.Const)
+                {
+                    modifiers |= ModifierReadonly;
+                }
+                builder.Push(line, col, length, TokenTypeVariable, modifiers);
+            }
             else if (token.Type == TokenType.Identifier)
             {
+                bool afterDot = prevType == TokenType.Dot;
                 // Check if this is a dict literal key: identifier before colon, after { or ,
                 if ((prevType is TokenType.LeftBrace or TokenType.Comma)
                     && i + 1 < tokenList.Count
@@ -118,13 +129,18 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     }
                     else
                     {
-                        ProcessIdentifier(builder, result, token, line, col, length);
+                        ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot);
                     }
                 }
                 else
                 {
-                    ProcessIdentifier(builder, result, token, line, col, length);
+                    ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot);
                 }
+            }
+            else if (prevType == TokenType.Dot && (IsKeyword(token.Type) || token.Type is TokenType.True or TokenType.False or TokenType.Null))
+            {
+                // Keywords/booleans after dot are member access (e.g., assert.true, assert.false)
+                builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
             }
             else if (IsKeyword(token.Type))
             {
@@ -170,11 +186,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     }
 
     private void ProcessIdentifier(SemanticTokensBuilder builder, AnalysisResult result,
-        Token token, int line, int col, int length, bool isTypeHintPosition = false)
+        Token token, int line, int col, int length, bool isTypeHintPosition = false, bool afterDot = false)
     {
-        if (isTypeHintPosition && token.Type != TokenType.Identifier)
+        // Note: Declaration context (after let/const) is handled directly in the caller
+        // before reaching this method — those identifiers are always variable declarations.
+        // ── Rule 1: Type hint position ──────────────────────────────
+        // After "identifier:" or "→" — always a type name.
+        if (isTypeHintPosition)
         {
-            // Keyword in type hint position — always color as Type
             builder.Push(line, col, length, TokenTypeType, 0);
             return;
         }
@@ -183,28 +202,41 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         var spanLine = token.Span.StartLine;
         var spanCol = token.Span.StartColumn;
 
-        var definition = result.Symbols.FindDefinition(name, spanLine, spanCol);
-
-        if (definition != null)
+        // ── Rule 2: After dot — member access ───────────────────────
+        // Only property or function. Never namespace/keyword/type.
+        if (afterDot)
         {
-            var (tokenType, modifiers) = MapSymbolKind(definition, token);
-            builder.Push(line, col, length, tokenType, modifiers);
+            var definition = result.Symbols.FindDefinition(name, spanLine, spanCol);
+            if (definition != null && definition.Kind is StashSymbolKind.Field or StashSymbolKind.Function
+                    or StashSymbolKind.EnumMember or StashSymbolKind.Variable or StashSymbolKind.Constant)
+            {
+                var (tokenType, modifiers) = MapSymbolKind(definition, token);
+                builder.Push(line, col, length, tokenType, modifiers);
+            }
+            else if (BuiltInRegistry.IsBuiltInFunction(name))
+            {
+                builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
+            }
+            // else: unresolved member access — leave uncolored (dynamic dict property)
+            return;
         }
-        else
+
+        // ── Rule 3: Standalone identifier ───────────────────────────
+        // Normal resolution: symbol table → built-in function → built-in namespace.
         {
-            // Unresolved — try built-in names
-            if (BuiltInRegistry.IsBuiltInFunction(name))
+            var definition = result.Symbols.FindDefinition(name, spanLine, spanCol);
+            if (definition != null)
+            {
+                var (tokenType, modifiers) = MapSymbolKind(definition, token);
+                builder.Push(line, col, length, tokenType, modifiers);
+            }
+            else if (BuiltInRegistry.IsBuiltInFunction(name))
             {
                 builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
             }
             else if (BuiltInRegistry.IsBuiltInNamespace(name))
             {
                 builder.Push(line, col, length, TokenTypeNamespace, 0);
-            }
-            else if (isTypeHintPosition)
-            {
-                // Unresolved identifier in type hint position — likely a type name
-                builder.Push(line, col, length, TokenTypeType, 0);
             }
         }
     }
@@ -258,6 +290,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             else if (parts[i] is List<Token> subTokens)
             {
                 // Process embedded expression tokens
+                TokenType prevSubType = TokenType.Eof;
                 foreach (var subToken in subTokens)
                 {
                     if (subToken.Type == TokenType.Eof)
@@ -268,10 +301,24 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     var subLine = subToken.Span.StartLine - 1;
                     var subCol = subToken.Span.StartColumn - 1;
                     var subLength = subToken.Lexeme.Length;
+                    bool afterDot = prevSubType == TokenType.Dot;
 
-                    if (subToken.Type == TokenType.Identifier)
+                    if (subToken.Type == TokenType.Identifier && prevSubType is TokenType.Let or TokenType.Const)
                     {
-                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength);
+                        int modifiers = ModifierDeclaration;
+                        if (prevSubType == TokenType.Const)
+                        {
+                            modifiers |= ModifierReadonly;
+                        }
+                        builder.Push(subLine, subCol, subLength, TokenTypeVariable, modifiers);
+                    }
+                    else if (subToken.Type == TokenType.Identifier)
+                    {
+                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot);
+                    }
+                    else if (afterDot && (IsKeyword(subToken.Type) || subToken.Type is TokenType.True or TokenType.False or TokenType.Null))
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeFunction, ModifierReadonly);
                     }
                     else if (IsKeyword(subToken.Type))
                     {
@@ -297,6 +344,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         ProcessCompoundToken(builder, result, subToken);
                     }
+
+                    prevSubType = subToken.Type;
                 }
                 // Account for {} delimiters in offset
                 // Each interpolation adds at least 2 chars for { and }
@@ -316,6 +365,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         {
             if (part is List<Token> subTokens)
             {
+                TokenType prevSubType = TokenType.Eof;
                 foreach (var subToken in subTokens)
                 {
                     if (subToken.Type == TokenType.Eof)
@@ -326,10 +376,24 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     var subLine = subToken.Span.StartLine - 1;
                     var subCol = subToken.Span.StartColumn - 1;
                     var subLength = subToken.Lexeme.Length;
+                    bool afterDot = prevSubType == TokenType.Dot;
 
-                    if (subToken.Type == TokenType.Identifier)
+                    if (subToken.Type == TokenType.Identifier && prevSubType is TokenType.Let or TokenType.Const)
                     {
-                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength);
+                        int modifiers = ModifierDeclaration;
+                        if (prevSubType == TokenType.Const)
+                        {
+                            modifiers |= ModifierReadonly;
+                        }
+                        builder.Push(subLine, subCol, subLength, TokenTypeVariable, modifiers);
+                    }
+                    else if (subToken.Type == TokenType.Identifier)
+                    {
+                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot);
+                    }
+                    else if (afterDot && (IsKeyword(subToken.Type) || subToken.Type is TokenType.True or TokenType.False or TokenType.Null))
+                    {
+                        builder.Push(subLine, subCol, subLength, TokenTypeFunction, ModifierReadonly);
                     }
                     else if (IsKeyword(subToken.Type))
                     {
@@ -352,6 +416,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                         // Recurse for nested compound tokens
                         ProcessCompoundToken(builder, result, subToken);
                     }
+
+                    prevSubType = subToken.Type;
                 }
             }
         }

@@ -9,13 +9,13 @@ io.println("=" * 54);
 io.println("\n-- Sort by Numeric Value --");
 let numbers = [5, 2, 8, 1, 9, 3];
 let sorted = arr.sortBy(numbers, (x) => x);
-io.println("  original: " + conv.toStr(numbers));
-io.println("  sorted:   " + conv.toStr(sorted));
+io.println("  original: " + numbers);
+io.println("  sorted:   " + sorted);
 
 io.println("\n-- Sort Strings by Length --");
 let words = ["banana", "fig", "apple", "kiwi", "grape"];
 let byLength = arr.sortBy(words, (w) => len(w));
-io.println("  by length: " + conv.toStr(byLength));
+io.println("  by length: " + byLength);
 
 io.println("\n-- Sort Objects by Property --");
 let people = [
@@ -25,7 +25,7 @@ let people = [
 ];
 let byAge = arr.sortBy(people, (p) => dict.get(p, "age"));
 for (let person in byAge) {
-    io.println("  " + dict.get(person, "name") + " (age " + conv.toStr(dict.get(person, "age")) + ")");
+    io.println($"  {dict.get(person, "name")} (age {dict.get(person, "age")})");
 }
 
 // ─── Grouping with groupBy ─────────────────────────
@@ -35,15 +35,15 @@ let parity = arr.groupBy(nums, (n) => {
     if (n % 2 == 0) { return "even"; }
     return "odd";
 });
-io.println("  even: " + conv.toStr(dict.get(parity, "even")));
-io.println("  odd:  " + conv.toStr(dict.get(parity, "odd")));
+io.println("  even: " + dict.get(parity, "even"));
+io.println("  odd:  " + dict.get(parity, "odd"));
 
 io.println("\n-- Group Words by First Letter --");
 let fruits = ["apple", "avocado", "banana", "blueberry", "cherry", "cranberry"];
 let byLetter = arr.groupBy(fruits, (f) => str.substring(f, 0, 1));
 let keys = dict.keys(byLetter);
 for (let key in keys) {
-    io.println("  " + key + ": " + conv.toStr(dict.get(byLetter, key)));
+    io.println($"  {key}: {dict.get(byLetter, key)}");
 }
 
 io.println("\n-- Group People by Role --");
@@ -65,23 +65,23 @@ for (let role in roles) {
 // ─── Aggregation ─────────────────────────────────
 io.println("\n-- Sum --");
 let scores = [85, 92, 78, 95, 88];
-io.println("  scores: " + conv.toStr(scores));
-io.println("  total:  " + conv.toStr(arr.sum(scores)));
+io.println("  scores: " + scores);
+io.println("  total:  " + arr.sum(scores));
 
 let prices = [19.99, 5.50, 12.75, 8.25];
-io.println("  prices: " + conv.toStr(prices));
-io.println("  total:  " + conv.toStr(arr.sum(prices)));
+io.println("  prices: " + prices);
+io.println("  total:  " + arr.sum(prices));
 
 io.println("\n-- Min & Max --");
 let temps = [72, 68, 75, 81, 63, 70];
-io.println("  temperatures: " + conv.toStr(temps));
-io.println("  min: " + conv.toStr(arr.min(temps)));
-io.println("  max: " + conv.toStr(arr.max(temps)));
+io.println("  temperatures: " + temps);
+io.println("  min: " + arr.min(temps));
+io.println("  max: " + arr.max(temps));
 
 let floats = [3.14, 2.72, 1.41, 1.73];
-io.println("  constants: " + conv.toStr(floats));
-io.println("  min: " + conv.toStr(arr.min(floats)));
-io.println("  max: " + conv.toStr(arr.max(floats)));
+io.println("  constants: " + floats);
+io.println("  min: " + arr.min(floats));
+io.println("  max: " + arr.max(floats));
 
 // ─── Combining Operations ────────────────────────
 io.println("\n-- Data Pipeline --");
@@ -98,15 +98,15 @@ let ranked = arr.sortBy(students, (s) => -dict.get(s, "grade"));
 io.println("  rankings:");
 let rank = 1;
 for (let s in ranked) {
-    io.println("    #" + conv.toStr(rank) + " " + dict.get(s, "name") + " — " + conv.toStr(dict.get(s, "grade")));
+    io.println($"    #{rank} {dict.get(s, "name")} — {dict.get(s, "grade")}");
     rank = rank + 1;
 }
 
 // Aggregate grades
 let grades = arr.map(students, (s) => dict.get(s, "grade"));
-io.println("  total:   " + conv.toStr(arr.sum(grades)));
-io.println("  lowest:  " + conv.toStr(arr.min(grades)));
-io.println("  highest: " + conv.toStr(arr.max(grades)));
+io.println("  total:   " + arr.sum(grades));
+io.println("  lowest:  " + arr.min(grades));
+io.println("  highest: " + arr.max(grades));
 
 // Group by pass/fail
 let results = arr.groupBy(students, (s) => {

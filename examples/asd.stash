@@ -1,0 +1,30 @@
+#!/usr/bin/env stash
+
+fn doSomething(value: int) -> bool {
+  return value > 10;
+}
+
+let value: string = "Hello, World!";
+
+struct Person {
+  name: string,
+  age: int
+}
+
+struct Server {
+  host: string,
+  port: int
+}
+
+let alice: Person = Person { name: "Alice", age: 30 };
+alice.name = "Bob";
+// alice.age = "thirty"; // No warning, even though age should be an int
+
+let server: Server = Server { host: "localhost", port: 8080 };
+
+io.println($"Server is running on {server.host}:{server.port}");
+
+let dictionary: dict = dict.new();
+dict.map(dictionary, (key, value) => {
+  io.println($"Key: {key}, Value: {value}");
+});

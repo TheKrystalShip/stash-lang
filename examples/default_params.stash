@@ -185,7 +185,7 @@ io.println($"  {make_url("/orders", "https://orders.example.com")}");
 io.println($"  {make_url("/reports", "https://bi.example.com", "v2")}");
 io.println("");
 
-let encode_param = (key, value, sep = "=") => key + sep + conv.toStr(value);
+let encode_param = (key, value, sep = "=") => key + sep + value;
 
 let params = [["q", "stash lang"], ["limit", 10], ["page", 2]];
 let qs = arr.join(arr.map(params, (p) => encode_param(p[0], p[1])), "&");

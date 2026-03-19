@@ -79,7 +79,7 @@ let levels = ["INFO", "WARN", "ERROR"];
 for (let level in levels) {
     let count = dict.get(counts, level) ?? 0;
     let bar = "*" * count;
-    io.println($"  {str.padEnd(level, 7)} {str.padStart(conv.toStr(count), 3)}  {bar}");
+    io.println($"  {str.padEnd(level, 7)} {str.padStart($"{count}", 3)}  {bar}");
 }
 io.println("");
 

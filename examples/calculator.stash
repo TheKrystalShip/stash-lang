@@ -155,7 +155,7 @@ fn convert_temp(value: float, src: string, to: string) {
 }
 
 fn fmt(n: float) {
-    return conv.toStr(math.floor(n * 100) / 100.0);
+    return math.floor(n * 100) / 100.0;
 }
 
 io.println("  Length:");

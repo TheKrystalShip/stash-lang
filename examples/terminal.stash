@@ -69,13 +69,13 @@ io.println("\n-- Stripping ANSI Codes --");
 let styled = term.color(term.bold("styled text"), term.RED);
 io.println("  with ANSI:    " + styled);
 io.println("  stripped:     " + term.strip(styled));
-io.println("  lengths:      styled=" + conv.toStr(len(styled)) + ", plain=" + conv.toStr(len(term.strip(styled))));
+io.println($"  lengths:      styled={len(styled)}, plain={len(term.strip(styled))}");
 
 // ─── Terminal Info ────────────────────────────────────────
 
 io.println("\n-- Terminal Info --");
-io.println("  width:       " + conv.toStr(term.width()) + " columns");
-io.println("  interactive: " + conv.toStr(term.isInteractive()));
+io.println($"  width:       {term.width()} columns");
+io.println($"  interactive: {term.isInteractive()}");
 
 // ─── ASCII Tables ─────────────────────────────────────────
 

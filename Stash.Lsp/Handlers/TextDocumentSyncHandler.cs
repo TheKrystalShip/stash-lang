@@ -11,6 +11,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
+using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using Stash.Lsp.Analysis;
 
 public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
@@ -19,7 +20,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
     private readonly AnalysisEngine _analysis;
     private readonly ILanguageServerFacade _server;
     private readonly ConcurrentDictionary<Uri, CancellationTokenSource> _pendingAnalysis = new();
-    private const int DebounceDelayMs = 50;
+    private const int DebounceDelayMs = 25;
 
     public TextDocumentSyncHandler(DocumentManager documents, AnalysisEngine analysis, ILanguageServerFacade server)
     {
@@ -176,6 +177,8 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
                 });
             }
         }
+
+        _server.Workspace.SendSemanticTokensRefresh(new SemanticTokensRefreshParams());
     }
 
     private static System.Collections.Generic.List<Diagnostic> BuildDiagnostics(AnalysisResult result)

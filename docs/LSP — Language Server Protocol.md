@@ -174,7 +174,7 @@ All analysis infrastructure has been implemented. Here are the key components:
 
 ### Analysis Pipeline
 
-The analysis engine runs a full pipeline on each document change (debounced at 50ms):
+The analysis engine runs a full pipeline on each document change (debounced at 25ms):
 
 ```
 Document text
@@ -220,7 +220,7 @@ The analysis pipeline is optimized for sub-millisecond response on typical files
 | **AnalysisEngine**  | Manual token filtering with pre-allocated list                        | Avoids LINQ delegate allocation and intermediate list resizing                    |
 | **SemanticTokens**  | Delta token support with per-URI document caching                     | Only encodes changed tokens on subsequent requests                                |
 | **Lexer**           | `FrozenDictionary` for keyword lookup                                 | O(1) keyword identification (compile-time optimized)                              |
-| **Document Sync**   | 50ms debounce on incremental changes                                  | Coalesces rapid keystrokes into single analysis pass                              |
+| **Document Sync**   | 25ms debounce on incremental changes                                  | Coalesces rapid keystrokes into single analysis pass                              |
 
 ### Benchmark Results
 
@@ -286,7 +286,7 @@ Establishes the full client ↔ server pipeline with real-time diagnostic report
 
 **Implementation notes:**
 
-- Diagnostics are published inline by `TextDocumentSyncHandler` with a 50ms debounce
+- Diagnostics are published inline by `TextDocumentSyncHandler` with a 25ms debounce
 - No separate `DiagnosticsHandler` — publication is integrated into the sync handler
 - Three diagnostic stages: lexer errors, parser errors, and semantic diagnostics
 - Incremental document sync is supported via `DocumentManager.ApplyIncrementalChanges()`

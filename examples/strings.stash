@@ -232,7 +232,7 @@ io.println("-- Template Engine --");
 fn render(template: string, vars: dict) {
     let result = template;
     for (let key, value in vars) {
-        result = str.replaceAll(result, "{{" + key + "}}", conv.toStr(value));
+        result = str.replaceAll(result, "{{" + key + "}}", $"{value}");
     }
     return result;
 }

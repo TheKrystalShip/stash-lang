@@ -39,7 +39,21 @@ public class HoverHandler : HoverHandlerBase
             return Task.FromResult<Hover?>(null);
         }
 
+        // ── Dot-access context check ──────────────────────────────────────────
+        // Detect whether this word follows a dot (e.g., "time" in "e.time").
+        // If so, do NOT resolve it as a standalone global symbol.
+        var textLines = text!.Split('\n');
+        var dotPrefix = TextUtilities.FindDotPrefix(textLines[(int)request.Position.Line], (int)request.Position.Character);
+        bool afterDot = dotPrefix != null;
+
         var symbol = result.Symbols.FindDefinition(word, line, col);
+
+        // After dot: a namespace symbol match is a false positive — e.g., hovering
+        // "time" in "e.time" must not resolve to the "time" namespace.
+        if (afterDot && symbol != null && symbol.Kind is Analysis.SymbolKind.Namespace)
+        {
+            symbol = null;
+        }
 
         // If not found directly, try namespace member access
         if (symbol == null)
@@ -48,8 +62,6 @@ public class HoverHandler : HoverHandlerBase
             if (nsMember != null)
             {
                 var (nsSym, _) = nsMember.Value;
-                var lines2 = text!.Split('\n');
-                var dotPrefix = TextUtilities.FindDotPrefix(lines2[(int)request.Position.Line], (int)request.Position.Character);
                 var markdown = $"```stash\n{nsSym.Detail ?? nsSym.Name}\n```\n*{nsSym.Kind}* — from `{dotPrefix}`";
                 return Task.FromResult<Hover?>(new Hover
                 {
@@ -62,8 +74,6 @@ public class HoverHandler : HoverHandlerBase
             }
             // Try built-in namespace constants (e.g., process.SIGTERM) and functions (e.g., arr.map)
             {
-                var lines2 = text!.Split('\n');
-                var dotPrefix = TextUtilities.FindDotPrefix(lines2[(int)request.Position.Line], (int)request.Position.Character);
                 if (dotPrefix != null)
                 {
                     var qualifiedName = $"{dotPrefix}.{word}";
@@ -103,8 +113,8 @@ public class HoverHandler : HoverHandlerBase
                 }
             }
 
-            // Try global built-in functions (e.g., typeof, len)
-            if (BuiltInRegistry.TryGetFunction(word, out var builtInFn))
+            // Try global built-in functions (e.g., typeof, len) — only for standalone identifiers
+            if (!afterDot && BuiltInRegistry.TryGetFunction(word, out var builtInFn))
             {
                 var markdown = $"```stash\n{builtInFn.Detail}\n```\n*built-in function*";
                 if (builtInFn.Documentation != null)
