@@ -37,10 +37,12 @@ public class StashFormatter
         var contextStack = new Stack<FormatterContext>();
         contextStack.Push(FormatterContext.TopLevel);
         TokenType? prevType = null;
+        Token? prevToken = null;
         bool prevWasUnaryMinusPlus = false;
         string? pendingKeyword = null;
         bool prevClosedInline = false;
         int ternaryDepth = 0;
+        var multiLineBrackets = new Stack<bool>();
 
         for (int i = 0; i < tokens.Count; i++)
         {
@@ -65,8 +67,37 @@ public class StashFormatter
                 }
             }
 
+            // Decrement indent BEFORE determining whitespace for ] in multi-line arrays
+            if (token.Type == TokenType.RightBracket && multiLineBrackets.Count > 0 && multiLineBrackets.Peek())
+            {
+                indentLevel = Math.Max(0, indentLevel - 1);
+            }
+
             // Determine and apply whitespace
             var ws = GetWhitespace(prevType, token.Type, context, indentLevel, prevWasUnaryMinusPlus, prevClosedInline, ternaryDepth);
+
+            // Keep inline comments on the same line
+            if (token.Type == TokenType.SingleLineComment && prevToken != null && prevToken.Span.StartLine == token.Span.StartLine)
+            {
+                ws = Whitespace.Space;
+            }
+
+            // Preserve multi-line array formatting
+            if (multiLineBrackets.Count > 0 && multiLineBrackets.Peek())
+            {
+                if (prevType == TokenType.LeftBracket && token.Type != TokenType.RightBracket)
+                {
+                    ws = Whitespace.NewLine;
+                }
+                else if (prevType == TokenType.Comma && context == FormatterContext.Brackets)
+                {
+                    ws = Whitespace.NewLine;
+                }
+                else if (token.Type == TokenType.RightBracket)
+                {
+                    ws = Whitespace.NewLine;
+                }
+            }
 
             switch (ws)
             {
@@ -145,10 +176,19 @@ public class StashFormatter
             }
             else if (token.Type == TokenType.LeftBracket)
             {
+                bool isMultiLine = i + 1 < tokens.Count
+                    && tokens[i + 1].Type != TokenType.Eof
+                    && tokens[i + 1].Span.StartLine > token.Span.StartLine;
+                multiLineBrackets.Push(isMultiLine);
+                if (isMultiLine) indentLevel++;
                 contextStack.Push(FormatterContext.Brackets);
             }
             else if (token.Type is TokenType.RightParen or TokenType.RightBracket)
             {
+                if (token.Type == TokenType.RightBracket && multiLineBrackets.Count > 0)
+                {
+                    multiLineBrackets.Pop();
+                }
                 if (contextStack.Count > 1)
                 {
                     contextStack.Pop();
@@ -209,6 +249,7 @@ public class StashFormatter
 
             prevClosedInline = token.Type == TokenType.RightBrace && context == FormatterContext.StructInit;
             prevType = token.Type;
+            prevToken = token;
         }
 
         var result = sb.ToString().TrimEnd();
@@ -268,13 +309,19 @@ public class StashFormatter
         // Rule 8: prev == LeftBrace
         if (prev == TokenType.LeftBrace)
         {
-            return context == FormatterContext.StructInit ? Whitespace.None : Whitespace.NewLine;
+            return context == FormatterContext.StructInit ? Whitespace.Space : Whitespace.NewLine;
         }
 
         // Rule 9: cur == RightBrace
         if (cur == TokenType.RightBrace)
         {
-            return context == FormatterContext.StructInit ? Whitespace.None : Whitespace.NewLine;
+            return context == FormatterContext.StructInit ? Whitespace.Space : Whitespace.NewLine;
+        }
+
+        // Rule 9.5: prev == RightBrace && cur is RightParen/RightBracket — callback-style closings
+        if (prev == TokenType.RightBrace && cur is TokenType.RightParen or TokenType.RightBracket)
+        {
+            return Whitespace.None;
         }
 
         // Rule 10: prev == RightBrace && indentLevel == 0

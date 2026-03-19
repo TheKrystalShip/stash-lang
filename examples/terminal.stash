@@ -32,24 +32,18 @@ io.println("\n-- Combined Styles --");
 
 let error = term.style("ERROR", {
   color: term.RED, bold: true
-}
-
-);
+});
 
 let warn = term.style("WARNING", {
   color: term.YELLOW, bold: true, underline: true
-}
-
-);
+});
 
 let info = term.style("INFO", {
   color: term.CYAN, dim: true
-}
-
-);
-io.println("  " + error + ": Something went wrong");
-io.println("  " + warn + ": Disk space low");
-io.println("  " + info + ": Server started on port 3000");
+});
+io.println($"  {error}: Something went wrong");
+io.println($"  {warn}: Disk space low");
+io.println($"  {info}: Server started on port 3000");
 
 // ─── Status Messages Pattern ──────────────────────────────
 
@@ -87,7 +81,12 @@ io.println("  interactive: " + conv.toStr(term.isInteractive()));
 
 io.println("\n-- ASCII Tables --");
 
-let users = [[1, "Alice", "admin", term.color("active", term.GREEN)], [2, "Bob", "user", term.color("active", term.GREEN)], [3, "Charlie", "user", term.color("inactive", term.RED)], [4, "Diana", "moderator", term.color("active", term.GREEN)]];
+let users = [
+  [1, "Alice", "admin", term.color("active", term.GREEN)],
+  [2, "Bob", "user", term.color("active", term.GREEN)],
+  [3, "Charlie", "user", term.color("inactive", term.RED)],
+  [4, "Diana", "moderator", term.color("active", term.GREEN)]
+];
 io.println(term.table(users, ["ID", "Name", "Role", "Status"]));
 
 // ─── Log-style Output ────────────────────────────────────
@@ -99,8 +98,7 @@ fn log(level, msg) {
   if (level == "ERROR") {
     tag = term.style(level, {
       color: term.RED, bold: true
-    }
-    );
+    });
   }
   if (level == "WARN") {
     tag = term.color(level, term.YELLOW);

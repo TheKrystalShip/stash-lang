@@ -103,7 +103,7 @@ public class FormatterTests
     public void Format_ImportDestructuring()
     {
         var result = Format("import{foo,bar}from \"module.stash\";");
-        Assert.Equal("import {foo, bar} from \"module.stash\";\n", result);
+        Assert.Equal("import { foo, bar } from \"module.stash\";\n", result);
     }
 
     [Fact]
@@ -159,7 +159,7 @@ public class FormatterTests
     public void Format_StructInit_Inline()
     {
         var result = Format("let s = Target{host:\"a\",user:\"b\"};");
-        Assert.Equal("let s = Target {host: \"a\", user: \"b\"};\n", result);
+        Assert.Equal("let s = Target { host: \"a\", user: \"b\" };\n", result);
     }
 
     [Fact]
@@ -323,5 +323,40 @@ public class FormatterTests
     {
         var result = Format("fn connect(host:string,port:int=8080) {}");
         Assert.Equal("fn connect(host: string, port: int = 8080) {\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_InlineComment_Preserved()
+    {
+        var result = Format("let x = 5; // important note\nlet y = 10;");
+        Assert.Equal("let x = 5; // important note\n\nlet y = 10;\n", result);
+    }
+
+    [Fact]
+    public void Format_CallbackLambda_ClosingBrace()
+    {
+        var result = Format("arr.map(items, (item) => {\nreturn item * 2;\n});");
+        Assert.Equal("arr.map(items, (item) => {\n  return item * 2;\n});\n", result);
+    }
+
+    [Fact]
+    public void Format_MultiLineArray_Preserved()
+    {
+        var result = Format("let arr = [\n  1,\n  2,\n  3\n];");
+        Assert.Equal("let arr = [\n  1,\n  2,\n  3\n];\n", result);
+    }
+
+    [Fact]
+    public void Format_MultiLineNestedArray_Preserved()
+    {
+        var result = Format("let users = [\n  [1, \"Alice\"],\n  [2, \"Bob\"]\n];");
+        Assert.Equal("let users = [\n  [1, \"Alice\"],\n  [2, \"Bob\"]\n];\n", result);
+    }
+
+    [Fact]
+    public void Format_SingleLineArray_StaysSingleLine()
+    {
+        var result = Format("let arr = [1, 2, 3];");
+        Assert.Equal("let arr = [1, 2, 3];\n", result);
     }
 }
