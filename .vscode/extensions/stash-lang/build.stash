@@ -1,0 +1,11 @@
+#!/usr/bin/env stash
+
+let result: CommandResult = $(npx tsc);
+if (result.exitCode != 0) {
+  io.println("TypeScript compilation failed:");
+  io.println(result.stdout);
+  io.println(result.stderr);
+  process.exit(1);
+} else {
+  io.println("TypeScript compilation complete.");
+}

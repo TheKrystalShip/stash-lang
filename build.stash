@@ -16,6 +16,8 @@ const INTERPRETER_SOURCE: string = $"./Stash.Cli/bin/Release/net10.0/{RUNTIME}/p
 
 const INTERPRETER_DEST: string = $"{homeDir}/.local/bin/stash";
 
+const VSCODE_EXTENSION_BUILD_SCRIPT: string = "./.vscode/extensions/stash-lang/build.stash";
+
 const artifacts = dict.new();
 dict.set(artifacts, INTERPRETER_SOURCE, INTERPRETER_DEST);
 dict.set(artifacts, LSP_SOURCE, LSP_DEST);
@@ -47,6 +49,7 @@ fn cleanBuild() {
     io.println(result.stderr);
     process.exit(1);
   }
+
   // Guard: the LSP must be a managed bundle (>20MB), not a Native AOT binary (~5MB).
   // If it's too small, it was likely published with AOT and will crash at runtime
   // due to DryIoc's reflection-based initialization being trimmed away.
@@ -74,6 +77,20 @@ fn cleanBuild() {
     process.exit(1);
   }
   io.println("DAP build complete.");
+
+  // Build the VSCode extension
+  io.println("Building VSCode extension...");
+  let originalDir: string = env.cwd();
+  process.chdir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT));
+  let currentDir = env.cwd();
+  result = $({path.base(VSCODE_EXTENSION_BUILD_SCRIPT)}); // execute the build.stash script
+  process.chdir(originalDir);
+  if (result.exitCode != 0) {
+    io.println("VSCode extension build failed:");
+    io.println(result.stdout);
+    io.println(result.stderr);
+    process.exit(1);
+  }
   io.println("Build complete.");
 }
 

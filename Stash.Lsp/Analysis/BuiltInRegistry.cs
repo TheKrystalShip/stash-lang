@@ -232,6 +232,8 @@ public static class BuiltInRegistry
             Documentation: "Waits for all processes in an array to exit. Returns an array of CommandResult objects in the same order.\n@param procs An array of Process handles to wait for\n@return An array of CommandResult structs with stdout, stderr, and exitCode"),
         new NamespaceFunction("process", "waitAny", new[] { new BuiltInParam("procs", "array") }, "CommandResult",
             Documentation: "Waits for the first process in an array to exit and returns its result.\n@param procs An array of Process handles to wait for\n@return The CommandResult of the first process to exit"),
+        new NamespaceFunction("process", "chdir", new[] { new BuiltInParam("path", "string") }, "null",
+            Documentation: "Changes the current working directory of the process.\n@param path The directory path to change to (absolute or relative)\n@return null"),
         // file system namespace
         new NamespaceFunction("fs", "readFile", new[] { new BuiltInParam("path", "string") }, "string",
             Documentation: "Reads the entire contents of a file as a string.\n@param path The path to the file\n@return The file contents as a string"),

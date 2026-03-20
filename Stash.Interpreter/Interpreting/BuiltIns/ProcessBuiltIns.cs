@@ -634,6 +634,19 @@ public static class ProcessBuiltIns
             }
         }));
 
+        process.Define("chdir", new BuiltInFunction("process.chdir", 1, (interp, args) =>
+        {
+            if (args[0] is not string path)
+                throw new RuntimeError("Argument to 'process.chdir' must be a string.");
+
+            string resolved = System.IO.Path.GetFullPath(path);
+            if (!System.IO.Directory.Exists(resolved))
+                throw new RuntimeError($"process.chdir: directory does not exist: '{resolved}'.");
+
+            System.Environment.CurrentDirectory = resolved;
+            return null;
+        }));
+
         globals.Define("process", process);
     }
 

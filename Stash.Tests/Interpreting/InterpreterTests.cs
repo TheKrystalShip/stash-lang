@@ -3749,6 +3749,41 @@ public class InterpreterTests
         RunExpectingError("process.waitAny([42]);");
     }
 
+    [Fact]
+    public void ProcessChdir_ChangesWorkingDirectory()
+    {
+        var result = Run(@"
+            let original = env.cwd();
+            process.chdir(""/tmp"");
+            let result = env.cwd();
+            process.chdir(original);
+        ");
+        Assert.Equal("/tmp", result);
+    }
+
+    [Fact]
+    public void ProcessChdir_NonStringArg_ThrowsError()
+    {
+        RunExpectingError("process.chdir(42);");
+    }
+
+    [Fact]
+    public void ProcessChdir_NonExistentDirectory_ThrowsError()
+    {
+        RunExpectingError(@"process.chdir(""/nonexistent_dir_xyz_123"");");
+    }
+
+    [Fact]
+    public void ProcessChdir_ReturnsNull()
+    {
+        var result = Run(@"
+            let original = env.cwd();
+            let result = process.chdir(""/tmp"");
+            process.chdir(original);
+        ");
+        Assert.Null(result);
+    }
+
     // ── process.onExit ──────────────────────────────────────────────
 
     [Fact]

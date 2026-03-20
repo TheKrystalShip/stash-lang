@@ -800,6 +800,25 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 | `process.exists(pid)`            | Check if a system process exists by PID (returns `bool`)          |
 | `process.waitAll(procs)`         | Wait for all processes in an array to exit                        |
 | `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                  |
+| `process.chdir(path)`            | Change the current working directory                              |
+
+### `process.chdir(path)`
+
+Changes the current working directory of the process. Accepts absolute or relative paths. Throws a runtime error if the directory does not exist.
+
+```stash
+// Save and restore working directory
+let original = env.cwd();
+process.chdir("/tmp");
+io.println(env.cwd());     // "/tmp"
+process.chdir(original);   // restore
+
+// Change to a subdirectory for a build step
+let cwd = env.cwd();
+process.chdir("src/frontend");
+let result = $(npm run build);
+process.chdir(cwd);
+```
 
 ### The `Process` Handle
 
