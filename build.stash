@@ -27,8 +27,7 @@ fn cleanBuildStash() {
   io.println("Cleaning and building the project...");
   let result: CommandResult = $(dotnet clean);
   if (result.exitCode != 0) {
-    io.println("Clean failed:");
-    io.println(result.stderr);
+    io.println($"Clean failed:\n{result.stderr}");
     process.exit(1);
   }
   io.println("Clean complete. Starting build...");
@@ -36,8 +35,7 @@ fn cleanBuildStash() {
   // CLI — Native AOT
   result = $(dotnet publish Stash.Cli -c Release -r {RUNTIME} -p:PublishAot=true);
   if (result.exitCode != 0) {
-    io.println("CLI build failed:");
-    io.println(result.stderr);
+    io.println($"CLI build failed:\n{result.stderr}");
     process.exit(1);
   }
   io.println("CLI build complete.");
@@ -45,8 +43,7 @@ fn cleanBuildStash() {
   // LSP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
   result = $(dotnet publish Stash.Lsp -c Release -r {RUNTIME});
   if (result.exitCode != 0) {
-    io.println("LSP build failed:");
-    io.println(result.stderr);
+    io.println($"LSP build failed:\n{result.stderr}");
     process.exit(1);
   }
 
@@ -65,8 +62,7 @@ fn cleanBuildStash() {
   // DAP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
   result = $(dotnet publish Stash.Dap -c Release -r {RUNTIME});
   if (result.exitCode != 0) {
-    io.println("DAP build failed:");
-    io.println(result.stderr);
+    io.println($"DAP build failed:\n{result.stderr}");
     process.exit(1);
   }
   let dapSize: int = fs.size(DAP_SOURCE);
@@ -98,17 +94,13 @@ fn deploy() {
 }
 
 fn buildExtension() {
-  let result;
-
   // Build the VSCode extension
   io.println("Building VSCode extension...");
-  result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
+  let result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
     return $({path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});
   });
   if (result.exitCode != 0) {
-    io.println("VSCode extension build failed:");
-    io.println(result.stdout);
-    io.println(result.stderr);
+    io.println($"VSCode extension build failed:\n{result.stderr}");
     process.exit(1);
   }
   io.println("Build complete.");
