@@ -286,4 +286,242 @@ let result = arr.groupBy(words, (x) => conv.toStr(len(x)));
     {
         RunExpectingError(@"arr.max([""a"", ""b""]);");
     }
+
+    // ── arr.zip ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Zip_BasicArrays()
+    {
+        var result = Run("let result = arr.zip([1, 2, 3], [\"a\", \"b\", \"c\"]);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        var pair0 = Assert.IsType<List<object?>>(list[0]);
+        Assert.Equal(1L, pair0[0]);
+        Assert.Equal("a", pair0[1]);
+    }
+
+    [Fact]
+    public void Zip_UnequalLengths()
+    {
+        var result = Run("let result = arr.zip([1, 2], [\"a\", \"b\", \"c\"]);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+    }
+
+    [Fact]
+    public void Zip_EmptyArrays()
+    {
+        var result = Run("let result = arr.zip([], []);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void Zip_NonArrayThrows()
+    {
+        RunExpectingError("let result = arr.zip(42, [1]);");
+    }
+
+    // ── arr.chunk ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Chunk_EvenSplit()
+    {
+        var result = Run("let result = arr.chunk([1, 2, 3, 4], 2);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        var chunk0 = Assert.IsType<List<object?>>(list[0]);
+        Assert.Equal(2, chunk0.Count);
+        Assert.Equal(1L, chunk0[0]);
+        Assert.Equal(2L, chunk0[1]);
+    }
+
+    [Fact]
+    public void Chunk_UnevenSplit()
+    {
+        var result = Run("let result = arr.chunk([1, 2, 3, 4, 5], 2);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        var lastChunk = Assert.IsType<List<object?>>(list[2]);
+        Assert.Single(lastChunk);
+    }
+
+    [Fact]
+    public void Chunk_EmptyArray()
+    {
+        var result = Run("let result = arr.chunk([], 3);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void Chunk_ZeroSizeThrows()
+    {
+        RunExpectingError("let result = arr.chunk([1, 2], 0);");
+    }
+
+    [Fact]
+    public void Chunk_NonArrayThrows()
+    {
+        RunExpectingError("let result = arr.chunk(42, 2);");
+    }
+
+    // ── arr.shuffle ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Shuffle_PreservesElements()
+    {
+        var result = Run(@"
+            let a = [1, 2, 3, 4, 5];
+            arr.shuffle(a);
+            arr.sort(a);
+            let result = a;
+        ");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(5, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(5L, list[4]);
+    }
+
+    [Fact]
+    public void Shuffle_ReturnsNull()
+    {
+        var result = Run("let result = arr.shuffle([1, 2, 3]);");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Shuffle_NonArrayThrows()
+    {
+        RunExpectingError("arr.shuffle(42);");
+    }
+
+    // ── arr.take ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Take_FirstN()
+    {
+        var result = Run("let result = arr.take([1, 2, 3, 4, 5], 3);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(3L, list[2]);
+    }
+
+    [Fact]
+    public void Take_MoreThanLength()
+    {
+        var result = Run("let result = arr.take([1, 2], 5);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+    }
+
+    [Fact]
+    public void Take_Zero()
+    {
+        var result = Run("let result = arr.take([1, 2, 3], 0);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void Take_NonArrayThrows()
+    {
+        RunExpectingError("let result = arr.take(42, 2);");
+    }
+
+    // ── arr.drop ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Drop_FirstN()
+    {
+        var result = Run("let result = arr.drop([1, 2, 3, 4, 5], 2);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(3L, list[0]);
+        Assert.Equal(5L, list[2]);
+    }
+
+    [Fact]
+    public void Drop_MoreThanLength()
+    {
+        var result = Run("let result = arr.drop([1, 2], 5);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Empty(list);
+    }
+
+    [Fact]
+    public void Drop_Zero()
+    {
+        var result = Run("let result = arr.drop([1, 2, 3], 0);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+    }
+
+    [Fact]
+    public void Drop_NonArrayThrows()
+    {
+        RunExpectingError("let result = arr.drop(42, 2);");
+    }
+
+    // ── arr.partition ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void Partition_EvenOdd()
+    {
+        var result = Run("let result = arr.partition([1, 2, 3, 4, 5], (x) => x % 2 == 0);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+        var even = Assert.IsType<List<object?>>(list[0]);
+        var odd = Assert.IsType<List<object?>>(list[1]);
+        Assert.Equal(2, even.Count);
+        Assert.Equal(3, odd.Count);
+        Assert.Equal(2L, even[0]);
+        Assert.Equal(4L, even[1]);
+    }
+
+    [Fact]
+    public void Partition_AllMatch()
+    {
+        var result = Run("let result = arr.partition([2, 4, 6], (x) => x % 2 == 0);");
+        var list = Assert.IsType<List<object?>>(result);
+        var matching = Assert.IsType<List<object?>>(list[0]);
+        var nonMatching = Assert.IsType<List<object?>>(list[1]);
+        Assert.Equal(3, matching.Count);
+        Assert.Empty(nonMatching);
+    }
+
+    [Fact]
+    public void Partition_NoneMatch()
+    {
+        var result = Run("let result = arr.partition([1, 3, 5], (x) => x % 2 == 0);");
+        var list = Assert.IsType<List<object?>>(result);
+        var matching = Assert.IsType<List<object?>>(list[0]);
+        var nonMatching = Assert.IsType<List<object?>>(list[1]);
+        Assert.Empty(matching);
+        Assert.Equal(3, nonMatching.Count);
+    }
+
+    [Fact]
+    public void Partition_EmptyArray()
+    {
+        var result = Run("let result = arr.partition([], (x) => true);");
+        var list = Assert.IsType<List<object?>>(result);
+        var matching = Assert.IsType<List<object?>>(list[0]);
+        var nonMatching = Assert.IsType<List<object?>>(list[1]);
+        Assert.Empty(matching);
+        Assert.Empty(nonMatching);
+    }
+
+    [Fact]
+    public void Partition_NonArrayThrows()
+    {
+        RunExpectingError("let result = arr.partition(42, (x) => true);");
+    }
+
+    [Fact]
+    public void Partition_NonFunctionThrows()
+    {
+        RunExpectingError("let result = arr.partition([1, 2], 42);");
+    }
 }

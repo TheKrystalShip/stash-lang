@@ -637,11 +637,15 @@ public static class ProcessBuiltIns
         process.Define("chdir", new BuiltInFunction("process.chdir", 1, (interp, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'process.chdir' must be a string.");
+            }
 
             string resolved = System.IO.Path.GetFullPath(path);
             if (!System.IO.Directory.Exists(resolved))
+            {
                 throw new RuntimeError($"process.chdir: directory does not exist: '{resolved}'.");
+            }
 
             System.Environment.CurrentDirectory = resolved;
             return null;
@@ -650,14 +654,20 @@ public static class ProcessBuiltIns
         process.Define("withDir", new BuiltInFunction("process.withDir", 2, (interp, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("First argument to 'process.withDir' must be a string (directory path).");
+            }
 
             if (args[1] is not IStashCallable fn)
+            {
                 throw new RuntimeError("Second argument to 'process.withDir' must be a function.");
+            }
 
             string resolved = System.IO.Path.GetFullPath(path);
             if (!System.IO.Directory.Exists(resolved))
+            {
                 throw new RuntimeError($"process.withDir: directory does not exist: '{resolved}'.");
+            }
 
             string previous = System.Environment.CurrentDirectory;
             System.Environment.CurrentDirectory = resolved;

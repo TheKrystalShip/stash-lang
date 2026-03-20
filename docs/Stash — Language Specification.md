@@ -273,7 +273,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 
 **Numeric type mixing:** When an `int` and a `float` are used in an arithmetic operation (`+`, `-`, `*`, `/`, `%`), the `int` is promoted to `float` and the result is a `float`. `5 + 3.14` produces `8.14`.
 
-**Equality:** `==` and `!=` never perform type coercion. Values of different types are never equal (`5 != "5"`, `0 != false`, `0 != null`). Enum values are compared by identity (type + member name).
+**Equality:** `==` and `!=` never perform type coercion. Values of different types are never equal (`5 != "5"`, `0 != false`, `0 != null`). Enum values are compared by identity (type + member name). Dictionaries and struct instances use **reference equality** — two distinct dictionaries or instances with identical contents are not equal (`==` returns `false`). Neither type can be used as a dictionary key.
 
 ---
 

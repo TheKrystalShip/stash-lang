@@ -180,7 +180,11 @@ public class StashFormatter
                     && tokens[i + 1].Type != TokenType.Eof
                     && tokens[i + 1].Span.StartLine > token.Span.StartLine;
                 multiLineBrackets.Push(isMultiLine);
-                if (isMultiLine) indentLevel++;
+                if (isMultiLine)
+                {
+                    indentLevel++;
+                }
+
                 contextStack.Push(FormatterContext.Brackets);
             }
             else if (token.Type is TokenType.RightParen or TokenType.RightBracket)

@@ -1,6 +1,7 @@
 namespace Stash.Interpreting.BuiltIns;
 
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Threading;
@@ -108,6 +109,145 @@ public static class TimeBuiltIns
             return DateTimeOffset.UtcNow.ToString("o");
         }));
 
+        // ── Time decomposition functions ─────────────────────────────────
+
+        ns.Define("year", new BuiltInFunction("time.year", -1, (_, args) =>
+        {
+            var dt = GetDateTimeFromArgs("time.year", args);
+            return (long)dt.Year;
+        }));
+
+        ns.Define("month", new BuiltInFunction("time.month", -1, (_, args) =>
+        {
+            var dt = GetDateTimeFromArgs("time.month", args);
+            return (long)dt.Month;
+        }));
+
+        ns.Define("day", new BuiltInFunction("time.day", -1, (_, args) =>
+        {
+            var dt = GetDateTimeFromArgs("time.day", args);
+            return (long)dt.Day;
+        }));
+
+        ns.Define("hour", new BuiltInFunction("time.hour", -1, (_, args) =>
+        {
+            var dt = GetDateTimeFromArgs("time.hour", args);
+            return (long)dt.Hour;
+        }));
+
+        ns.Define("minute", new BuiltInFunction("time.minute", -1, (_, args) =>
+        {
+            var dt = GetDateTimeFromArgs("time.minute", args);
+            return (long)dt.Minute;
+        }));
+
+        ns.Define("second", new BuiltInFunction("time.second", -1, (_, args) =>
+        {
+            var dt = GetDateTimeFromArgs("time.second", args);
+            return (long)dt.Second;
+        }));
+
+        ns.Define("dayOfWeek", new BuiltInFunction("time.dayOfWeek", -1, (_, args) =>
+        {
+            var dt = GetDateTimeFromArgs("time.dayOfWeek", args);
+            return dt.DayOfWeek.ToString().ToLowerInvariant();
+        }));
+
+        ns.Define("add", new BuiltInFunction("time.add", 2, (_, args) =>
+        {
+            double ts;
+            if (args[0] is long l)
+            {
+                ts = (double)l;
+            }
+            else if (args[0] is double d)
+            {
+                ts = d;
+            }
+            else
+            {
+                throw new RuntimeError("First argument to 'time.add' must be a number (timestamp).");
+            }
+
+            double seconds;
+            if (args[1] is long ls)
+            {
+                seconds = (double)ls;
+            }
+            else if (args[1] is double ds)
+            {
+                seconds = ds;
+            }
+            else
+            {
+                throw new RuntimeError("Second argument to 'time.add' must be a number (seconds).");
+            }
+
+            return ts + seconds;
+        }));
+
+        ns.Define("diff", new BuiltInFunction("time.diff", 2, (_, args) =>
+        {
+            double ts1;
+            if (args[0] is long l1)
+            {
+                ts1 = (double)l1;
+            }
+            else if (args[0] is double d1)
+            {
+                ts1 = d1;
+            }
+            else
+            {
+                throw new RuntimeError("First argument to 'time.diff' must be a number (timestamp).");
+            }
+
+            double ts2;
+            if (args[1] is long l2)
+            {
+                ts2 = (double)l2;
+            }
+            else if (args[1] is double d2)
+            {
+                ts2 = d2;
+            }
+            else
+            {
+                throw new RuntimeError("Second argument to 'time.diff' must be a number (timestamp).");
+            }
+
+            return Math.Abs(ts1 - ts2);
+        }));
+
         globals.Define("time", ns);
+    }
+
+    private static DateTimeOffset GetDateTimeFromArgs(string funcName, List<object?> args)
+    {
+        if (args.Count > 1)
+        {
+            throw new RuntimeError($"'{funcName}' expects 0 or 1 arguments.");
+        }
+
+        if (args.Count == 0)
+        {
+            return DateTimeOffset.UtcNow;
+        }
+
+        double seconds;
+        if (args[0] is long l)
+        {
+            seconds = (double)l;
+        }
+        else if (args[0] is double d)
+        {
+            seconds = d;
+        }
+        else
+        {
+            throw new RuntimeError($"Argument to '{funcName}' must be a number (timestamp).");
+        }
+
+        return DateTimeOffset.FromUnixTimeMilliseconds((long)(seconds * 1000));
     }
 }

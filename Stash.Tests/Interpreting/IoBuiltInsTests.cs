@@ -146,4 +146,83 @@ public class IoBuiltInsTests
         var result = RunReturningValue("let result = io.eprint(\"x\");");
         Assert.Null(result);
     }
+
+    // ── io.confirm ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Confirm_YesReturnsTrue()
+    {
+        var interpreter = new Interpreter();
+        var outSw = new System.IO.StringWriter();
+        interpreter.Output = outSw;
+        interpreter.Input = new System.IO.StringReader("y\n");
+
+        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        interpreter.Interpret(statements);
+
+        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
+        var result = interpreter.Interpret(resultExpr);
+        Assert.Equal(true, result);
+        Assert.Contains("[y/N]", outSw.ToString());
+    }
+
+    [Fact]
+    public void Confirm_NoReturnsFalse()
+    {
+        var interpreter = new Interpreter();
+        var outSw = new System.IO.StringWriter();
+        interpreter.Output = outSw;
+        interpreter.Input = new System.IO.StringReader("n\n");
+
+        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        interpreter.Interpret(statements);
+
+        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
+        var result = interpreter.Interpret(resultExpr);
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Confirm_EmptyInputReturnsFalse()
+    {
+        var interpreter = new Interpreter();
+        var outSw = new System.IO.StringWriter();
+        interpreter.Output = outSw;
+        interpreter.Input = new System.IO.StringReader("\n");
+
+        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        interpreter.Interpret(statements);
+
+        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
+        var result = interpreter.Interpret(resultExpr);
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Confirm_YesFullWordReturnsTrue()
+    {
+        var interpreter = new Interpreter();
+        var outSw = new System.IO.StringWriter();
+        interpreter.Output = outSw;
+        interpreter.Input = new System.IO.StringReader("yes\n");
+
+        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var statements = parser.ParseProgram();
+        interpreter.Interpret(statements);
+
+        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
+        var result = interpreter.Interpret(resultExpr);
+        Assert.Equal(true, result);
+    }
 }

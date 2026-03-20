@@ -36,7 +36,8 @@
 20. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
 21. [`term` — Terminal Formatting](#term--terminal-formatting)
 22. [`sys` — System Information](#sys--system-information)
-23. [Argument Parsing](#argument-parsing)
+23. [`log` — Logging](#log--logging)
+24. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -65,6 +66,7 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 | `io.eprintln(val)`     | Print value followed by newline to standard error     |
 | `io.eprint(val)`       | Print value without newline to standard error         |
 | `io.readLine(prompt?)` | Read a line from standard input, with optional prompt |
+| `io.confirm(prompt)`   | Display a [y/N] confirmation prompt, returns boolean  |
 
 ---
 
@@ -181,14 +183,18 @@ let config = env.withPrefix("MYAPP_");
 
 ## `path` — Path Manipulation
 
-| Function          | Description                        |
-| ----------------- | ---------------------------------- |
-| `path.abs(p)`     | Get absolute path                  |
-| `path.dir(p)`     | Get directory portion of path      |
-| `path.base(p)`    | Get filename with extension        |
-| `path.name(p)`    | Get filename without extension     |
-| `path.ext(p)`     | Get file extension (including `.`) |
-| `path.join(a, b)` | Join two path segments             |
+| Function                  | Description                                                        |
+| ------------------------- | ------------------------------------------------------------------ |
+| `path.abs(p)`             | Get absolute path                                                  |
+| `path.dir(p)`             | Get directory portion of path                                      |
+| `path.base(p)`            | Get filename with extension                                        |
+| `path.name(p)`            | Get filename without extension                                     |
+| `path.ext(p)`             | Get file extension (including `.`)                                 |
+| `path.join(a, b)`         | Join two path segments                                             |
+| `path.normalize(p)`       | Normalize path (resolve `.` and `..`, remove redundant separators) |
+| `path.isAbsolute(p)`      | Return `true` if path is absolute                                  |
+| `path.relative(from, to)` | Compute relative path from one path to another                     |
+| `path.separator()`        | Return the platform path separator (`/` on Unix, `\` on Windows)   |
 
 ---
 
@@ -198,13 +204,15 @@ All `str` functions take the target string as the first argument. Strings are im
 
 ### Case & Whitespace
 
-| Function           | Description                            |
-| ------------------ | -------------------------------------- |
-| `str.upper(s)`     | Convert to uppercase                   |
-| `str.lower(s)`     | Convert to lowercase                   |
-| `str.trim(s)`      | Remove leading and trailing whitespace |
-| `str.trimStart(s)` | Remove leading whitespace              |
-| `str.trimEnd(s)`   | Remove trailing whitespace             |
+| Function            | Description                                    |
+| ------------------- | ---------------------------------------------- |
+| `str.upper(s)`      | Convert to uppercase                           |
+| `str.lower(s)`      | Convert to lowercase                           |
+| `str.trim(s)`       | Remove leading and trailing whitespace         |
+| `str.trimStart(s)`  | Remove leading whitespace                      |
+| `str.trimEnd(s)`    | Remove trailing whitespace                     |
+| `str.capitalize(s)` | Capitalize first character, lowercase the rest |
+| `str.title(s)`      | Convert to title case (capitalize each word)   |
 
 ### Search & Test
 
@@ -230,18 +238,23 @@ All `str` functions take the target string as the first argument. Strings are im
 
 ### Extraction & Transformation
 
-| Function                        | Description                                                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------ |
-| `str.substring(s, start, end?)` | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
-| `str.replace(s, old, new)`      | Replace first occurrence of `old` with `new`                                         |
-| `str.replaceAll(s, old, new)`   | Replace all occurrences of `old` with `new`                                          |
-| `str.split(s, delimiter)`       | Split string into array by `delimiter`                                               |
-| `str.repeat(s, count)`          | Repeat string `count` times                                                          |
-| `str.reverse(s)`                | Reverse the string                                                                   |
-| `str.chars(s)`                  | Convert to array of single-character strings                                         |
-| `str.padStart(s, len, fill?)`   | Pad start to `len` characters with `fill` (default `" "`)                            |
-| `str.padEnd(s, len, fill?)`     | Pad end to `len` characters with `fill` (default `" "`)                              |
-| `str.format(template, ...args)` | Replace `{0}`, `{1}`, etc. placeholders with arguments                               |
+| Function                           | Description                                                                          |
+| ---------------------------------- | ------------------------------------------------------------------------------------ |
+| `str.substring(s, start, end?)`    | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
+| `str.replace(s, old, new)`         | Replace first occurrence of `old` with `new`                                         |
+| `str.replaceAll(s, old, new)`      | Replace all occurrences of `old` with `new`                                          |
+| `str.split(s, delimiter)`          | Split string into array by `delimiter`                                               |
+| `str.repeat(s, count)`             | Repeat string `count` times                                                          |
+| `str.reverse(s)`                   | Reverse the string                                                                   |
+| `str.chars(s)`                     | Convert to array of single-character strings                                         |
+| `str.padStart(s, len, fill?)`      | Pad start to `len` characters with `fill` (default `" "`)                            |
+| `str.padEnd(s, len, fill?)`        | Pad end to `len` characters with `fill` (default `" "`)                              |
+| `str.format(template, ...args)`    | Replace `{0}`, `{1}`, etc. placeholders with arguments                               |
+| `str.lines(s)`                     | Split string into array of lines (handles `\r\n`, `\r`, `\n`)                        |
+| `str.words(s)`                     | Split string into array of whitespace-separated words                                |
+| `str.truncate(s, maxLen, suffix?)` | Truncate to `maxLen` characters with optional suffix (default `"..."`)               |
+| `str.slug(s)`                      | Convert to URL-friendly slug (lowercase, hyphens, no special chars)                  |
+| `str.wrap(s, width)`               | Word-wrap string to specified width, preserving paragraph breaks                     |
 
 ### Regex
 
@@ -344,6 +357,17 @@ All `arr` functions take the target array as the first argument. Functions that 
 | `arr.min(array)`         | Return minimum numeric element                                 |
 | `arr.max(array)`         | Return maximum numeric element                                 |
 
+### Partitioning & Slicing
+
+| Function                   | Description                                                              |
+| -------------------------- | ------------------------------------------------------------------------ |
+| `arr.zip(a, b)`            | Combine two arrays into array of `[a[i], b[i]]` pairs (stops at shorter) |
+| `arr.chunk(array, size)`   | Split array into chunks of `size` elements (last chunk may be smaller)   |
+| `arr.take(array, n)`       | Return new array with first `n` elements                                 |
+| `arr.drop(array, n)`       | Return new array with first `n` elements removed                         |
+| `arr.partition(array, fn)` | Split into `[matching, non-matching]` arrays based on predicate          |
+| `arr.shuffle(array)`       | Randomly shuffle array in-place (Fisher-Yates algorithm)                 |
+
 ### Examples
 
 ```stash
@@ -422,6 +446,13 @@ All `dict` functions (except `dict.new` and `dict.merge`) take the target dictio
 | `dict.map(d, fn)`         | Return new dictionary with values transformed by `fn(key, value)`      |
 | `dict.filter(d, fn)`      | Return new dictionary keeping entries where `fn(key, value)` is truthy |
 | `dict.merge(d1, d2)`      | Return new dictionary combining both (d2 wins on key conflicts)        |
+| `dict.fromPairs(pairs)`   | Create dictionary from array of `[key, value]` pairs                   |
+| `dict.pick(d, keys)`      | Return new dictionary with only the specified keys                     |
+| `dict.omit(d, keys)`      | Return new dictionary excluding the specified keys                     |
+| `dict.defaults(d, defs)`  | Return new dictionary with missing keys filled from defaults           |
+| `dict.any(d, fn)`         | Return `true` if any entry satisfies `fn(key, value)`                  |
+| `dict.every(d, fn)`       | Return `true` if all entries satisfy `fn(key, value)`                  |
+| `dict.find(d, fn)`        | Return first value where `fn(key, value)` is truthy, or `null`         |
 
 ### Index Syntax
 
@@ -483,6 +514,8 @@ defaults["retries"] = 3;
 
 let merged = dict.merge(defaults, config);
 // merged has all keys from both; config values take priority
+// Note: dict.merge performs a shallow copy — nested arrays or
+// dictionaries in values are shared, not cloned.
 ```
 
 ---
@@ -553,6 +586,15 @@ let merged = dict.merge(defaults, config);
 | `time.date()`                 | Return current date as `YYYY-MM-DD` string                     |
 | `time.clock()`                | Return high-resolution monotonic clock time (for benchmarking) |
 | `time.iso()`                  | Return current time as ISO 8601 string with UTC timezone       |
+| `time.year(ts?)`              | Return year component of timestamp (or current time)           |
+| `time.month(ts?)`             | Return month (1-12) of timestamp (or current time)             |
+| `time.day(ts?)`               | Return day of month (1-31) of timestamp (or current time)      |
+| `time.hour(ts?)`              | Return hour (0-23) of timestamp (or current time)              |
+| `time.minute(ts?)`            | Return minute (0-59) of timestamp (or current time)            |
+| `time.second(ts?)`            | Return second (0-59) of timestamp (or current time)            |
+| `time.dayOfWeek(ts?)`         | Return day name (e.g., `"Monday"`) of timestamp (or now)       |
+| `time.add(ts, seconds)`       | Add seconds to a timestamp, return new timestamp               |
+| `time.diff(ts1, ts2)`         | Return difference in seconds between two timestamps (ts1-ts2)  |
 
 ---
 
@@ -563,6 +605,7 @@ let merged = dict.merge(defaults, config);
 | `json.parse(text)`    | Parse a JSON string into Stash values          |
 | `json.stringify(val)` | Serialize a Stash value to compact JSON string |
 | `json.pretty(val)`    | Serialize a Stash value to pretty-printed JSON |
+| `json.valid(text)`    | Return `true` if the string is valid JSON      |
 
 ### Type Mapping
 
@@ -1458,6 +1501,70 @@ OPTIONS:
 COMMAND 'deploy':
   -f, --force          Force deployment
       --timeout <int>  Timeout in seconds (default: 30)
+```
+
+---
+
+## `log` — Logging
+
+The `log` namespace provides structured logging with configurable levels, format strings, and file output. By default, log messages are written to standard error.
+
+### Log Levels
+
+Messages are filtered by the current log level. Setting a level suppresses all messages below it:
+
+| Level   | Priority | Description                    |
+| ------- | -------- | ------------------------------ |
+| `debug` | 0        | Detailed debugging information |
+| `info`  | 1        | General informational messages |
+| `warn`  | 2        | Warning conditions             |
+| `error` | 3        | Error conditions               |
+
+The default level is `"info"`, meaning `debug` messages are suppressed.
+
+### Functions
+
+| Function              | Description                                                      |
+| --------------------- | ---------------------------------------------------------------- |
+| `log.debug(msg)`      | Log a debug-level message (suppressed unless level is `debug`)   |
+| `log.info(msg)`       | Log an info-level message                                        |
+| `log.warn(msg)`       | Log a warning-level message                                      |
+| `log.error(msg)`      | Log an error-level message (always output)                       |
+| `log.setLevel(level)` | Set minimum log level (`"debug"`, `"info"`, `"warn"`, `"error"`) |
+| `log.setFormat(fmt)`  | Set log message format string                                    |
+| `log.toFile(path)`    | Redirect log output to a file (pass `null` to revert to stderr)  |
+
+### Format String
+
+The default format is `"[{time}] [{level}] {msg}"`. Available placeholders:
+
+| Placeholder | Description                             |
+| ----------- | --------------------------------------- |
+| `{time}`    | Current timestamp in ISO 8601 format    |
+| `{level}`   | Uppercase log level (DEBUG, INFO, etc.) |
+| `{msg}`     | The log message                         |
+
+### Examples
+
+```stash
+// Basic logging
+log.info("Application started");
+log.warn("Disk space low");
+log.error("Connection failed");
+
+// Debug messages (suppressed by default)
+log.setLevel("debug");
+log.debug("Entering function parse()");
+
+// Custom format
+log.setFormat("{level}: {msg}");
+log.info("Server ready");   // "INFO: Server ready"
+
+// Log to file
+log.toFile("/var/log/myapp.log");
+log.info("This goes to the file");
+log.toFile(null);  // revert to stderr
+log.info("Back to stderr");
 ```
 
 ---

@@ -44,6 +44,24 @@ public static class JsonBuiltIns
             return PrettyValue(args[0], 0);
         }));
 
+        json.Define("valid", new BuiltInFunction("json.valid", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'json.valid' must be a string.");
+            }
+
+            try
+            {
+                using var doc = System.Text.Json.JsonDocument.Parse(s);
+                return true;
+            }
+            catch (System.Text.Json.JsonException)
+            {
+                return false;
+            }
+        }));
+
         globals.Define("json", json);
     }
 

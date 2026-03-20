@@ -16,7 +16,9 @@ public static class IoBuiltIns
         io.Define("println", new BuiltInFunction("io.println", -1, (interp, args) =>
         {
             if (args.Count > 1)
+            {
                 throw new RuntimeError("'io.println' expects 0 or 1 arguments.");
+            }
 
             string text = args.Count == 1 ? RuntimeValues.Stringify(args[0]) : "";
             interp.Output.WriteLine(text);
@@ -61,6 +63,21 @@ public static class IoBuiltIns
                 interp.Output.Write(prompt);
             }
             return interp.Input.ReadLine();
+        }));
+
+        io.Define("confirm", new BuiltInFunction("io.confirm", 1, (interp, args) =>
+        {
+            string prompt = RuntimeValues.Stringify(args[0]);
+            interp.Output.Write(prompt + " [y/N] ");
+            interp.Output.Flush();
+            string? response = interp.Input.ReadLine();
+            if (response == null)
+            {
+                return false;
+            }
+
+            response = response.Trim().ToLowerInvariant();
+            return response == "y" || response == "yes";
         }));
 
         globals.Define("io", io);

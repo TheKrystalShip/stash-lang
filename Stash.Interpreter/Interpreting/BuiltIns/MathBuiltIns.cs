@@ -35,21 +35,33 @@ public static class MathBuiltIns
 
         math.Define("ceil", new BuiltInFunction("math.ceil", 1, (interp, args) =>
         {
-            if (args[0] is long l) return l;
+            if (args[0] is long l)
+            {
+                return l;
+            }
+
             double d = ToDouble(args[0], "math.ceil");
             return Math.Ceiling(d);
         }));
 
         math.Define("floor", new BuiltInFunction("math.floor", 1, (interp, args) =>
         {
-            if (args[0] is long l) return l;
+            if (args[0] is long l)
+            {
+                return l;
+            }
+
             double d = ToDouble(args[0], "math.floor");
             return Math.Floor(d);
         }));
 
         math.Define("round", new BuiltInFunction("math.round", 1, (interp, args) =>
         {
-            if (args[0] is long l) return l;
+            if (args[0] is long l)
+            {
+                return l;
+            }
+
             double d = ToDouble(args[0], "math.round");
             return Math.Round(d, MidpointRounding.AwayFromZero);
         }));
@@ -121,7 +133,7 @@ public static class MathBuiltIns
 
         math.Define("clamp", new BuiltInFunction("math.clamp", 3, (interp, args) =>
         {
-            double n   = ToDouble(args[0], "math.clamp");
+            double n = ToDouble(args[0], "math.clamp");
             double min = ToDouble(args[1], "math.clamp");
             double max = ToDouble(args[2], "math.clamp");
             double result = Math.Clamp(n, min, max);

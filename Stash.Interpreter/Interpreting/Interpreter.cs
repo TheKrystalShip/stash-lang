@@ -536,6 +536,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         EncodingBuiltIns.Register(_globals);
         TermBuiltIns.Register(_globals);
         SysBuiltIns.Register(_globals);
+        LogBuiltIns.Register(_globals);
 
         // Capability-gated built-ins
         if (_capabilities.HasFlag(StashCapabilities.Environment))

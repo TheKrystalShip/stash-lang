@@ -40,6 +40,20 @@ Expressions inside templates are evaluated by Stash's own interpreter, giving te
 
 **File extension:** Template files use the `.tpl` extension by convention (e.g., `report.tpl`, `nginx.conf.tpl`). The Stash VS Code extension provides syntax highlighting for `.tpl` files with template-aware coloring of delimiters, tags, filters, and embedded Stash expressions.
 
+| Feature                    | Example                                                | Purpose                                       |
+| -------------------------- | ------------------------------------------------------ | --------------------------------------------- |
+| **Variable interpolation** | `{{ name }}`                                           | Inject values into output                     |
+| **Dot access**             | `{{ user.name }}`                                      | Access nested properties                      |
+| **Conditionals**           | `{% if active %}...{% endif %}`                        | Conditional rendering                         |
+| **Iteration**              | `{% for item in items %}...{% endfor %}`               | Loop over collections                         |
+| **Comments**               | `{# ignored #}`                                        | Template-only comments (stripped from output) |
+| **Filters/pipes**          | `{{ name \| upper }}`                                  | Transform values inline                       |
+| **Else/else-if**           | `{% if x %}...{% elif y %}...{% else %}...{% endif %}` | Multi-branch conditionals                     |
+| **Template includes**      | `{% include "header.html" %}`                          | Compose templates from fragments              |
+| **Default values**         | `{{ name \| default("Anon") }}`                        | Fallback for missing values                   |
+| **Whitespace control**     | `{%- trim -%}`                                         | Control newlines around tags                  |
+| **Raw/escape blocks**      | `{% raw %}{{ not parsed }}{% endraw %}`                | Output literal delimiters                     |
+
 ---
 
 ## 2. API — `tpl` Namespace

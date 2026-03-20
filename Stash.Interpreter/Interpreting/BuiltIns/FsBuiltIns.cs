@@ -426,7 +426,10 @@ public static class FsBuiltIns
         fs.Define("createFile", new BuiltInFunction("fs.createFile", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.createFile' must be a string.");
+            }
+
             path = ExpandTilde(path);
 
             try
@@ -447,9 +450,15 @@ public static class FsBuiltIns
         fs.Define("symlink", new BuiltInFunction("fs.symlink", 2, (_, args) =>
         {
             if (args[0] is not string target)
+            {
                 throw new RuntimeError("First argument to 'fs.symlink' must be a string.");
+            }
+
             if (args[1] is not string linkPath)
+            {
                 throw new RuntimeError("Second argument to 'fs.symlink' must be a string.");
+            }
+
             target = ExpandTilde(target);
             linkPath = ExpandTilde(linkPath);
 
@@ -464,14 +473,19 @@ public static class FsBuiltIns
         fs.Define("stat", new BuiltInFunction("fs.stat", 1, (_, args) =>
         {
             if (args[0] is not string path)
+            {
                 throw new RuntimeError("Argument to 'fs.stat' must be a string.");
+            }
+
             path = ExpandTilde(path);
 
             try
             {
                 var info = new System.IO.FileInfo(path);
                 if (!info.Exists && !System.IO.Directory.Exists(path))
+                {
                     throw new RuntimeError($"Path does not exist: '{path}'.");
+                }
 
                 var isDir = System.IO.Directory.Exists(path);
                 var result = new StashDictionary();

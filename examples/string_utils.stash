@@ -1,0 +1,44 @@
+#!/usr/bin/env stash
+
+// String Utilities — Demonstrating new str namespace functions
+// ── capitalize & title ──
+
+let name = "hello world";
+io.println($"capitalize: {str.capitalize(name)}"); // "Hello world"
+
+io.println($"title:      {str.title(name)}"); // "Hello World"
+// ── lines & words ──
+
+let text = "line one\nline two\nline three";
+
+let lines = str.lines(text);
+io.println($"\nLines ({len(lines)}):");
+
+for (let line in lines) {
+  io.println($"  > {line}");
+}
+
+let sentence = "  the   quick brown   fox  ";
+
+let words = str.words(sentence);
+io.println($"\nWords: {arr.join(words, ", ")}");
+
+// ── truncate ──
+
+let longText = "This is a very long description that should be truncated";
+io.println($"\nTruncated (20):  {str.truncate(longText, 20)}");
+io.println($"Truncated (20, →): {str.truncate(longText, 20, " →")}");
+
+// ── slug ──
+
+let title = "Hello, World! This is a Test";
+io.println($"\nSlug: {str.slug(title)}"); // "hello-world-this-is-a-test"
+
+let articleTitle = "  10 Tips & Tricks for Stash!! ";
+io.println($"Slug: {str.slug(articleTitle)}");
+
+// ── wrap ──
+
+let paragraph = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Ut enim ad minim veniam.";
+io.println("\nWrapped at 40 chars:");
+io.println(str.wrap(paragraph, 40));

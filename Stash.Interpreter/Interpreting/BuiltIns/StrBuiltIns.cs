@@ -538,6 +538,175 @@ public static class StrBuiltIns
             }
         }));
 
+        // ── Additional string utilities ──────────────────────────────────
+
+        str.Define("capitalize", new BuiltInFunction("str.capitalize", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.capitalize' must be a string.");
+            }
+
+            if (s.Length == 0)
+            {
+                return s;
+            }
+
+            return char.ToUpperInvariant(s[0]) + s.Substring(1).ToLowerInvariant();
+        }));
+
+        str.Define("title", new BuiltInFunction("str.title", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.title' must be a string.");
+            }
+
+            if (s.Length == 0)
+            {
+                return s;
+            }
+
+            var chars = s.ToCharArray();
+            bool capitalizeNext = true;
+            for (int i = 0; i < chars.Length; i++)
+            {
+                if (char.IsWhiteSpace(chars[i]))
+                {
+                    capitalizeNext = true;
+                }
+                else if (capitalizeNext)
+                {
+                    chars[i] = char.ToUpperInvariant(chars[i]);
+                    capitalizeNext = false;
+                }
+                else
+                {
+                    chars[i] = char.ToLowerInvariant(chars[i]);
+                }
+            }
+            return new string(chars);
+        }));
+
+        str.Define("lines", new BuiltInFunction("str.lines", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.lines' must be a string.");
+            }
+
+            var lines = s.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
+            return lines.Select(l => (object?)l).ToList();
+        }));
+
+        str.Define("words", new BuiltInFunction("str.words", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.words' must be a string.");
+            }
+
+            var words = s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            return words.Select(w => (object?)w).ToList();
+        }));
+
+        str.Define("truncate", new BuiltInFunction("str.truncate", -1, (_, args) =>
+        {
+            if (args.Count < 2 || args.Count > 3)
+            {
+                throw new RuntimeError("'str.truncate' requires 2 or 3 arguments.");
+            }
+
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.truncate' must be a string.");
+            }
+
+            if (args[1] is not long maxLen)
+            {
+                throw new RuntimeError("Second argument to 'str.truncate' must be an integer.");
+            }
+
+            if (maxLen < 0)
+            {
+                throw new RuntimeError("'str.truncate' maxLen must be >= 0.");
+            }
+
+            string suffix = args.Count == 3 && args[2] is string sfx ? sfx : "...";
+            if (s.Length <= (int)maxLen)
+            {
+                return s;
+            }
+
+            int cutLen = (int)maxLen - suffix.Length;
+            if (cutLen < 0)
+            {
+                cutLen = 0;
+            }
+
+            return s.Substring(0, cutLen) + suffix;
+        }));
+
+        str.Define("slug", new BuiltInFunction("str.slug", 1, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.slug' must be a string.");
+            }
+
+            var slug = s.ToLowerInvariant();
+            slug = Regex.Replace(slug, @"[^a-z0-9\s-]", "");
+            slug = Regex.Replace(slug, @"[\s-]+", "-");
+            slug = slug.Trim('-');
+            return slug;
+        }));
+
+        str.Define("wrap", new BuiltInFunction("str.wrap", 2, (_, args) =>
+        {
+            if (args[0] is not string s)
+            {
+                throw new RuntimeError("First argument to 'str.wrap' must be a string.");
+            }
+
+            if (args[1] is not long width)
+            {
+                throw new RuntimeError("Second argument to 'str.wrap' must be an integer.");
+            }
+
+            if (width <= 0)
+            {
+                throw new RuntimeError("'str.wrap' width must be > 0.");
+            }
+
+            var result = new System.Text.StringBuilder();
+            int w = (int)width;
+            foreach (var paragraph in s.Split('\n'))
+            {
+                if (result.Length > 0)
+                {
+                    result.Append('\n');
+                }
+
+                var paragraphWords = paragraph.Split(' ');
+                int lineLen = 0;
+                bool firstWord = true;
+                foreach (var word in paragraphWords)
+                {
+                    if (!firstWord && lineLen + 1 + word.Length > w)
+                    {
+                        result.Append('\n');
+                        lineLen = 0;
+                        firstWord = true;
+                    }
+                    if (!firstWord) { result.Append(' '); lineLen++; }
+                    result.Append(word);
+                    lineLen += word.Length;
+                    firstWord = false;
+                }
+            }
+            return result.ToString();
+        }));
+
         globals.Define("str", str);
     }
 }

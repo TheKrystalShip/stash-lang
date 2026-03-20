@@ -201,6 +201,176 @@ public static class DictBuiltIns
             return result;
         }));
 
+        // ── Additional dictionary utilities ──────────────────────────────
+
+        dict.Define("fromPairs", new BuiltInFunction("dict.fromPairs", 1, (_, args) =>
+        {
+            if (args[0] is not List<object?> pairs)
+            {
+                throw new RuntimeError("First argument to 'dict.fromPairs' must be an array.");
+            }
+
+            var result = new StashDictionary();
+            foreach (var pair in pairs)
+            {
+                if (pair is not List<object?> p || p.Count != 2)
+                {
+                    throw new RuntimeError("'dict.fromPairs' requires each element to be a [key, value] pair.");
+                }
+
+                var key = p[0] ?? throw new RuntimeError("Dictionary key cannot be null in 'dict.fromPairs'.");
+                result.Set(key, p[1]);
+            }
+            return result;
+        }));
+
+        dict.Define("pick", new BuiltInFunction("dict.pick", 2, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.pick' must be a dictionary.");
+            }
+
+            if (args[1] is not List<object?> keys)
+            {
+                throw new RuntimeError("Second argument to 'dict.pick' must be an array.");
+            }
+
+            var result = new StashDictionary();
+            foreach (var key in keys)
+            {
+                if (key != null && d.Has(key))
+                {
+                    result.Set(key, d.Get(key));
+                }
+            }
+            return result;
+        }));
+
+        dict.Define("omit", new BuiltInFunction("dict.omit", 2, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.omit' must be a dictionary.");
+            }
+
+            if (args[1] is not List<object?> keysToOmit)
+            {
+                throw new RuntimeError("Second argument to 'dict.omit' must be an array.");
+            }
+
+            var result = new StashDictionary();
+            foreach (var entry in d.RawEntries())
+            {
+                bool omit = false;
+                foreach (var key in keysToOmit)
+                {
+                    if (key != null && RuntimeValues.IsEqual(entry.Key, key))
+                    {
+                        omit = true;
+                        break;
+                    }
+                }
+                if (!omit)
+                {
+                    result.Set(entry.Key, entry.Value);
+                }
+            }
+            return result;
+        }));
+
+        dict.Define("defaults", new BuiltInFunction("dict.defaults", 2, (_, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.defaults' must be a dictionary.");
+            }
+
+            if (args[1] is not StashDictionary defaults)
+            {
+                throw new RuntimeError("Second argument to 'dict.defaults' must be a dictionary.");
+            }
+
+            var result = new StashDictionary();
+            foreach (var entry in defaults.RawEntries())
+            {
+                result.Set(entry.Key, entry.Value);
+            }
+
+            foreach (var entry in d.RawEntries())
+            {
+                result.Set(entry.Key, entry.Value);
+            }
+
+            return result;
+        }));
+
+        dict.Define("any", new BuiltInFunction("dict.any", 2, (interp, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.any' must be a dictionary.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'dict.any' must be a function.");
+            }
+
+            foreach (var entry in d.RawEntries())
+            {
+                if (RuntimeValues.IsTruthy(fn.Call(interp, new List<object?> { entry.Key, entry.Value })))
+                {
+                    return true;
+                }
+            }
+            return false;
+        }));
+
+        dict.Define("every", new BuiltInFunction("dict.every", 2, (interp, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.every' must be a dictionary.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'dict.every' must be a function.");
+            }
+
+            foreach (var entry in d.RawEntries())
+            {
+                if (!RuntimeValues.IsTruthy(fn.Call(interp, new List<object?> { entry.Key, entry.Value })))
+                {
+                    return false;
+                }
+            }
+            return true;
+        }));
+
+        dict.Define("find", new BuiltInFunction("dict.find", 2, (interp, args) =>
+        {
+            if (args[0] is not StashDictionary d)
+            {
+                throw new RuntimeError("First argument to 'dict.find' must be a dictionary.");
+            }
+
+            if (args[1] is not IStashCallable fn)
+            {
+                throw new RuntimeError("Second argument to 'dict.find' must be a function.");
+            }
+
+            foreach (var entry in d.RawEntries())
+            {
+                if (RuntimeValues.IsTruthy(fn.Call(interp, new List<object?> { entry.Key, entry.Value })))
+                {
+                    return new List<object?> { entry.Key, entry.Value };
+                }
+            }
+            return null;
+        }));
+
         globals.Define("dict", dict);
     }
 }

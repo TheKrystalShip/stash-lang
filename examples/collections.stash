@@ -1,0 +1,95 @@
+#!/usr/bin/env stash
+
+// Collections — Demonstrating new arr and dict functions
+// ── arr.zip ──
+
+let names = ["Alice", "Bob", "Charlie"];
+
+let scores = [95, 87, 92];
+
+let paired = arr.zip(names, scores);
+io.println("Zipped pairs:");
+
+for (let pair in paired) {
+  io.println($"  {pair[0]}: {pair[1]}");
+}
+
+// ── arr.chunk ──
+
+let items = [1, 2, 3, 4, 5, 6, 7];
+
+let chunks = arr.chunk(items, 3);
+io.println("\nChunks of 3:");
+
+for (let chunk in chunks) {
+  io.println($"  {arr.join(chunk, ", ")}");
+}
+
+// ── arr.take & arr.drop ──
+
+let nums = [10, 20, 30, 40, 50];
+io.println($"\nFirst 3:   {arr.join(arr.take(nums, 3), ", ")}");
+io.println($"After 3:   {arr.join(arr.drop(nums, 3), ", ")}");
+
+// ── arr.partition ──
+
+let numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+
+let parts = arr.partition(numbers, (n) => n % 2 == 0);
+io.println($"\nEven: {arr.join(parts[0], ", ")}");
+io.println($"Odd:  {arr.join(parts[1], ", ")}");
+
+// ── arr.shuffle ──
+
+let deck = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+arr.shuffle(deck);
+io.println($"\nShuffled: {arr.join(deck, ", ")}");
+
+// ── dict.fromPairs ──
+
+io.println("\n── Dictionary Operations ──");
+
+let pairs = [["name", "Alice"], ["age", 30], ["city", "NYC"]];
+
+let person = dict.fromPairs(pairs);
+io.println($"From pairs: {json.stringify(person)}");
+
+// ── dict.pick & dict.omit ──
+
+let config = {
+  host: "localhost", port: 8080, debug: true, secret: "abc123"
+};
+
+let public = dict.omit(config, ["secret"]);
+io.println($"Public config: {json.stringify(public)}");
+
+let network = dict.pick(config, ["host", "port"]);
+io.println($"Network only:  {json.stringify(network)}");
+
+// ── dict.defaults ──
+
+let userConfig = {
+  port: 3000
+};
+
+let defaults = {
+  host: "0.0.0.0", port: 8080, debug: false
+};
+
+let merged = dict.defaults(userConfig, defaults);
+io.println($"\nWith defaults: {json.stringify(merged)}");
+
+// ── dict.any, dict.every, dict.find ──
+
+let inventory = {
+  apples: 5, bananas: 0, oranges: 3, pears: 0
+};
+
+let hasStock = dict.any(inventory, (k, v) => v > 0);
+io.println($"\nHas any stock: {hasStock}");
+
+let allInStock = dict.every(inventory, (k, v) => v > 0);
+io.println($"All in stock:  {allInStock}");
+
+let found = dict.find(inventory, (k, v) => v == 0);
+io.println($"Out of stock:  {found}");
