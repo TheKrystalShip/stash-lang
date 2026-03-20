@@ -162,7 +162,7 @@ fn cmd_status() {
     io.println("=" * 40);
     io.println("  Service Status");
     io.println("=" * 40);
-    io.println("");
+    io.println();
 
     let shown = 0;
     for (let name in known) {
@@ -186,7 +186,7 @@ fn cmd_status() {
     if (shown == 0) {
         io.println("  (no matching services)");
     }
-    io.println("");
+    io.println();
 }
 
 // ─── Dispatch ────────────────────────────────────────────────

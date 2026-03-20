@@ -67,7 +67,7 @@ for (let f in allFiles) {
 fs.delete(workDir);
 io.println($"Cleaned up. Still exists: {fs.exists(workDir)}");
 
-io.println("");
+io.println();
 
 
 // ─── 2. Environment & System Info (env) ──────────────────────
@@ -92,7 +92,7 @@ let shellVar = "SHELL";
 let shell = env.get(shellVar) ?? "(not set)";
 io.println($"  SHELL         : {shell}");
 
-io.println("");
+io.println();
 
 
 // ─── 3. Type Conversions (conv) ──────────────────────────────
@@ -122,7 +122,7 @@ io.println($"  fromCharCode(65)   = {conv.fromCharCode(65)}");
 let bad = try conv.toInt("not-a-number");
 io.println($"  try toInt(bad)     = {bad ?? "null (error caught)"}");
 
-io.println("");
+io.println();
 
 
 // ─── 4. Math Utilities (math) ────────────────────────────────
@@ -155,7 +155,7 @@ io.println($"  math.log(math.E)  = {math.log(math.E)}");
 io.println($"  math.pow(2, 10)   = {math.pow(2, 10)}");
 io.println($"  randomInt(1, 6)   = {math.randomInt(1, 6)}");
 
-io.println("");
+io.println();
 
 
 // ─── 5. Time Operations (time) ───────────────────────────────
@@ -184,7 +184,7 @@ for (let v in vals) {
 let elapsed = time.millis() - start;
 log_msg($"sqrt sum = {acc}, took {elapsed}ms");
 
-io.println("");
+io.println();
 
 
 // ─── 6. Namespace Introspection ──────────────────────────────

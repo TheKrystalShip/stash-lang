@@ -129,8 +129,8 @@ public static class BuiltInRegistry
     public static readonly IReadOnlyList<NamespaceFunction> NamespaceFunctions = new[]
     {
         // io namespace
-        new NamespaceFunction("io", "println", new[] { new BuiltInParam("value") },
-            Documentation: "Prints a value followed by a newline to standard output.\n@param value The value to print (converted to string)"),
+        new NamespaceFunction("io", "println", new[] { new BuiltInParam("value") }, IsVariadic: true,
+            Documentation: "Prints a value followed by a newline to standard output. When called with no arguments, prints an empty line.\n@param value The value to print (converted to string). Optional — defaults to empty string"),
         new NamespaceFunction("io", "print", new[] { new BuiltInParam("value") },
             Documentation: "Prints a value to standard output without a trailing newline.\n@param value The value to print (converted to string)"),
         new NamespaceFunction("io", "readLine", new[] { new BuiltInParam("prompt", "string") }, "string", IsVariadic: true,

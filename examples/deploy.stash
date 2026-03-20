@@ -111,7 +111,7 @@ utils.banner("Deployment Pipeline");
 io.println($"  Package:  {PACKAGE}");
 io.println($"  Targets:  {len(targets)}");
 io.println($"  Retries:  {MAX_RETRIES}");
-io.println("");
+io.println();
 
 let results = [];
 let start_time = time.millis();
@@ -120,7 +120,7 @@ for (let i, target in targets) {
     io.println($"[{i + 1}/{len(targets)}] {target.label()}");
     let status = deploy_to(target, PACKAGE);
     arr.push(results, status);
-    io.println("");
+    io.println();
 }
 
 let elapsed = time.millis() - start_time;
@@ -128,7 +128,7 @@ let elapsed = time.millis() - start_time;
 // ─── Results Summary ─────────────────────────────────────────
 
 utils.banner("Deployment Summary");
-io.println("");
+io.println();
 
 let successes = arr.filter(results, (r) => r.result == DeployResult.Success);
 let failures = arr.filter(results, (r) => r.result == DeployResult.Failed);
@@ -145,7 +145,7 @@ for (let status in results) {
     io.println($"  {icon} {target_label} ({status.message})");
 }
 
-io.println("");
+io.println();
 io.println("-" * 55);
 io.println($"  Succeeded: {len(successes)}");
 io.println($"  Failed:    {len(failures)}");

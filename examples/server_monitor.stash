@@ -101,7 +101,7 @@ io.println(BORDER);
 io.println("  INFRASTRUCTURE HEALTH MONITOR");
 io.println($"  {time.clock()}");
 io.println(BORDER);
-io.println("");
+io.println();
 
 let hServer = str.padEnd("SERVER", 30);
 let hRole   = str.padEnd("ROLE", 10);
@@ -134,7 +134,7 @@ let degradedCount = len(degraded);
 let downCount     = len(down);
 let unknownCount  = len(unknown);
 
-io.println("");
+io.println();
 io.println($"  Servers checked : {total}");
 io.println($"  ✓ Healthy       : {healthyCount}");
 io.println($"  ~ Degraded      : {degradedCount}");
@@ -148,6 +148,6 @@ let overallHealth = (downCount + unknownCount) switch {
     _ => "CRITICAL"
 };
 
-io.println("");
+io.println();
 io.println($"  Overall status  : {overallHealth}");
 io.println(BORDER);

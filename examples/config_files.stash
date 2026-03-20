@@ -6,7 +6,7 @@
 io.println("=" * 54);
 io.println("  Config File Toolkit");
 io.println("=" * 54);
-io.println("");
+io.println();
 
 // --- Validation rule struct ---
 
@@ -55,7 +55,7 @@ let region = cfg?.cloud?.region ?? "us-east-1";
 let tls    = cfg?.database?.tls?.enabled ?? false;
 io.println($"  cloud.region = {region}  (defaulted via ??)");
 io.println($"  db.tls       = {tls}  (defaulted via ??)");
-io.println("");
+io.println();
 
 // --- 2. Validate required config fields ---
 
@@ -69,7 +69,7 @@ app_rules["region"] = Rule { required: false, min_num: null, max_num: null  };
 
 io.println("  Validating [app] section:");
 validate_section(cfg.app, app_rules);
-io.println("");
+io.println();
 
 // --- 3. INI config: parse, modify, stringify ---
 
@@ -93,7 +93,7 @@ for (let line in str.split(out_ini, "\n")) {
         io.println($"    {line}");
     }
 }
-io.println("");
+io.println();
 
 // --- 4. Merge defaults with environment overrides ---
 
@@ -117,7 +117,7 @@ io.println("  Merged config (env overrides win on conflicts):");
 for (let k, v in merged) {
     io.println($"    {k} = {v}");
 }
-io.println("");
+io.println();
 
 // --- 5. Multi-line string config templates ---
 
@@ -155,7 +155,7 @@ for (let line in str.split(pretty, "\n")) {
         io.println($"    {line}");
     }
 }
-io.println("");
+io.println();
 
 // Optional chaining on parsed INI sections
 let db_section = data?.database;
@@ -165,4 +165,4 @@ let db_tls     = data?.database?.tls?.enabled ?? false;
 io.println($"  db.host      = {db_host}");
 io.println($"  db.port      = {db_port}");
 io.println($"  db.tls       = {db_tls}  (optional, defaulted)");
-io.println("");
+io.println();

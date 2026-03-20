@@ -56,7 +56,7 @@ let label = "RESULT";
 let width = 30;
 let side  = (width - len(label)) / 2;
 io.println("  " + ("─" * side) + " " + label + " " + ("─" * side));
-io.println("");
+io.println();
 
 // ─── Case, Trim & Search ──────────────────────────────────────────────────────
 
@@ -74,7 +74,7 @@ io.println($"  endsWith \"dog\":      {str.endsWith(sentence, "dog")}");
 io.println($"  contains \"fox\":      {str.contains(sentence, "fox")}");
 io.println($"  indexOf \"quick\":     {str.indexOf(sentence, "quick")}");
 io.println($"  lastIndexOf \"o\":     {str.lastIndexOf(sentence, "o")}");
-io.println("");
+io.println();
 
 // ─── Slice, Replace & Split ───────────────────────────────────────────────────
 
@@ -93,7 +93,7 @@ io.println($"  split csv: {columns}");
 io.println($"  padStart \"7\" → \"{str.padStart("7", 4, "0")}\"");
 io.println($"  padEnd   \"hi\" → \"{str.padEnd("hi", 8, ".")}\"");
 io.println($"  chars(\"Stash\"): {str.chars("Stash")}");
-io.println("");
+io.println();
 
 // ─── 'in' Operator ────────────────────────────────────────────────────────────
 
@@ -109,7 +109,7 @@ io.println($"  \"frontend\" in tags:    {"frontend" in tags}");
 
 io.println($"  5 in 1..10:            {5 in 1..10}");
 io.println($"  10 in 1..10:           {10 in 1..10}  (end-exclusive)");
-io.println("");
+io.println();
 
 // ─── Character Iteration ──────────────────────────────────────────────────────
 
@@ -139,7 +139,7 @@ for (let ch, cnt in freq) {
     arr.push(parts, $"{ch}×{cnt}");
 }
 io.println(arr.join(parts, "  "));
-io.println("");
+io.println();
 
 // ─── Regex Operations ─────────────────────────────────────────────────────────
 
@@ -158,7 +158,7 @@ io.println($"  All numbers:    {arr.join(all_nums, ", ")}");
 
 let sanitized = str.replaceRegex(log_line, "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}", "[IP_REDACTED]");
 io.println($"  Sanitized:      {sanitized}");
-io.println("");
+io.println();
 
 // ─── Slug Generator ──────────────────────────────────────────────────────────
 
@@ -182,7 +182,7 @@ for (let title in titles) {
     io.println($"  \"{str.trim(title)}\"");
     io.println($"    → \"{to_slug(title)}\"");
 }
-io.println("");
+io.println();
 
 // ─── CSV Parser ───────────────────────────────────────────────────────────────
 
@@ -223,7 +223,7 @@ io.println($"  Parsed {len(people)} records:");
 for (let p in people) {
     io.println($"    {str.padEnd(p["name"], 8)} age={p["age"]}  city={p["city"]}");
 }
-io.println("");
+io.println();
 
 // ─── Simple Template Engine ───────────────────────────────────────────────────
 
@@ -245,7 +245,7 @@ ctx["tasks"] = 7;
 
 let tmpl = "Hi {{name}}! As a {{role}} on {{team}}, you have {{tasks}} open tasks.";
 io.println($"  {render(tmpl, ctx)}");
-io.println("");
+io.println();
 
 // ─── Word Counter ─────────────────────────────────────────────────────────────
 

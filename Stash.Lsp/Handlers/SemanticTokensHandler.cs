@@ -129,12 +129,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     }
                     else
                     {
-                        ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot);
+                        ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot,
+                            tokenList: tokenList, tokenIndex: i);
                     }
                 }
                 else
                 {
-                    ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot);
+                    ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot,
+                        tokenList: tokenList, tokenIndex: i);
                 }
             }
             else if (prevType == TokenType.Dot && (IsKeyword(token.Type) || token.Type is TokenType.True or TokenType.False or TokenType.Null))
@@ -186,7 +188,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     }
 
     private void ProcessIdentifier(SemanticTokensBuilder builder, AnalysisResult result,
-        Token token, int line, int col, int length, bool isTypeHintPosition = false, bool afterDot = false)
+        Token token, int line, int col, int length, bool isTypeHintPosition = false, bool afterDot = false,
+        IReadOnlyList<Token>? tokenList = null, int tokenIndex = -1)
     {
         // Note: Declaration context (after let/const) is handled directly in the caller
         // before reaching this method — those identifiers are always variable declarations.
@@ -204,11 +207,15 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
 
         // ── Rule 2: After dot — member access ───────────────────────
         // Only property or function. Never namespace/keyword/type.
+        // Exclude Variable and Constant — those are standalone declarations
+        // that can't be members. Including them causes false matches when
+        // a local variable shares the name of a namespace function
+        // (e.g., `let cwd = env.cwd()` would color the method as a variable).
         if (afterDot)
         {
             var definition = result.Symbols.FindDefinition(name, spanLine, spanCol);
             if (definition != null && definition.Kind is StashSymbolKind.Field or StashSymbolKind.Function
-                    or StashSymbolKind.EnumMember or StashSymbolKind.Variable or StashSymbolKind.Constant)
+                    or StashSymbolKind.EnumMember)
             {
                 var (tokenType, modifiers) = MapSymbolKind(definition, token);
                 builder.Push(line, col, length, tokenType, modifiers);
@@ -216,6 +223,19 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             else if (BuiltInRegistry.IsBuiltInFunction(name))
             {
                 builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
+            }
+            else if (tokenList != null && tokenIndex >= 2
+                     && tokenList[tokenIndex - 2].Type == TokenType.Identifier)
+            {
+                var qualifiedName = tokenList[tokenIndex - 2].Lexeme + "." + name;
+                if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out _))
+                {
+                    builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
+                }
+                else if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out _))
+                {
+                    builder.Push(line, col, length, TokenTypeVariable, ModifierReadonly);
+                }
             }
             // else: unresolved member access — leave uncolored (dynamic dict property)
             return;

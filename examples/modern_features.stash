@@ -31,7 +31,7 @@ let env = "production";
 env ??= "development";
 io.println($"  env   (already set):        {env}");
 
-io.println("");
+io.println();
 
 // ─── 2. Multi-line Strings ──────────────────────────────────────
 
@@ -77,7 +77,7 @@ for (let n in 1..16) {
     io.print(sep + label);
     sep = ", ";
 }
-io.println("");
+io.println();
 
 // Pagination — page 3 of 5, 5 items per page
 let page = 3;
@@ -90,7 +90,7 @@ for (let i in page_start..page_end) {
     io.print(sep + i);
     sep = ", ";
 }
-io.println("");
+io.println();
 
 // Stepped range — even numbers only
 io.print("  0..20..2:  ");
@@ -99,14 +99,14 @@ for (let n in 0..20..2) {
     io.print(sep + n);
     sep = ", ";
 }
-io.println("");
+io.println();
 
 // Multiplication table with nested ranges
 io.println("  3x3 table:");
 for (let r in 1..4) {
     io.print("    ");
     for (let c in 1..4) { io.print($"{r * c}\t"); }
-    io.println("");
+    io.println();
 }
 
 // Descending range — auto step -1
@@ -117,7 +117,7 @@ for (let n in 5..0) {
     sep = " ";
 }
 io.println(" -> launch!");
-io.println("");
+io.println();
 
 // ─── 4. The `in` Operator ───────────────────────────────────────
 
@@ -146,7 +146,7 @@ let log_line = "WARN: disk usage at 91%";
 io.println($"  \"WARN\"  in log  ->  {"WARN" in log_line}");
 io.println($"  \"ERROR\" in log  ->  {"ERROR" in log_line}");
 
-io.println("");
+io.println();
 
 // ─── 5. Destructuring ───────────────────────────────────────────
 
@@ -177,13 +177,13 @@ cfg["log_level"] = "info";
 const {debug, log_level} = cfg;
 io.println($"  config  ->  debug={debug}, log_level={log_level}");
 
-io.println("");
+io.println();
 
 // ─── 6. Putting It All Together ─────────────────────────────────
 
 io.println("=== 6. Putting It All Together ===");
 io.println("  Processing a task backlog with every feature...");
-io.println("");
+io.println();
 
 // Multi-line string as a compact data source
 let raw = """

@@ -21,7 +21,7 @@ fs.writeFile(path.join(subDir, "version.txt"), "1.0.0");
 fs.writeFile(path.join(demoDir, "config.txt"), "debug=true");
 io.println("Demo directory: " + demoDir);
 io.println("Starting in:    " + env.cwd());
-io.println("");
+io.println();
 
 // ─────────────────────────────────────────────────────────────────
 // 1. process.chdir — Imperative Directory Changes
@@ -44,7 +44,7 @@ let config = fs.readFile("config.txt");
 io.println("Read config: " + config);
 process.chdir(original);
 io.println("Restored to: " + env.cwd());
-io.println("");
+io.println();
 
 // Use case: early return from a function
 
@@ -64,7 +64,7 @@ fn findVersion(dir: string) -> string {
 
 let version = findVersion(subDir);
 io.println("Found version: " + version);
-io.println("");
+io.println();
 
 // ─────────────────────────────────────────────────────────────────
 // 2. process.withDir — Scoped Directory Changes
@@ -85,7 +85,7 @@ process.withDir(demoDir, () => {
   io.println("Read config: " + content);
 });
 io.println("Auto-restored: " + env.cwd());
-io.println("");
+io.println();
 
 // Capture return values
 
@@ -93,13 +93,13 @@ let ver = process.withDir(subDir, () => {
   return str.trim(fs.readFile("version.txt"));
 });
 io.println("Version (via withDir): " + ver);
-io.println("");
+io.println();
 
 // Expression-body lambda for one-liners
 
 let cfg = process.withDir(demoDir, () => fs.readFile("config.txt"));
 io.println("Config (one-liner): " + cfg);
-io.println("");
+io.println();
 
 // Nesting: each level auto-restores
 
@@ -112,7 +112,7 @@ process.withDir(demoDir, () => {
   io.println("  Back to level 1: " + env.cwd());
 });
 io.println("Back to original: " + env.cwd());
-io.println("");
+io.println();
 
 // Exception safety: directory restored even on error
 // Even if the callback triggers an error, the directory is still restored.
@@ -126,19 +126,19 @@ let errorResult = try process.withDir(demoDir, () => {
 });
 io.println("After error: " + env.cwd() + " (restored!)");
 io.println("Error result was null: " + conv.toStr(errorResult == null));
-io.println("");
+io.println();
 
 // ─────────────────────────────────────────────────────────────────
 // 3. Choosing Between Them
 // ─────────────────────────────────────────────────────────────────
 
 io.println("═══ Choosing the Right Tool ═══");
-io.println("");
+io.println();
 io.println("Use process.chdir() when:");
 io.println("  - You need return/break/continue to affect the outer scope");
 io.println("  - Variables declared inside must be visible outside");
 io.println("  - You're changing directory for the rest of the script");
-io.println("");
+io.println();
 io.println("Use process.withDir() when:");
 io.println("  - The operation is self-contained");
 io.println("  - You want guaranteed cleanup (exception-safe)");

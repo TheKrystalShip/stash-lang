@@ -13,9 +13,12 @@ public static class IoBuiltIns
         // ── io namespace ─────────────────────────────────────────────────
         var io = new StashNamespace("io");
 
-        io.Define("println", new BuiltInFunction("io.println", 1, (interp, args) =>
+        io.Define("println", new BuiltInFunction("io.println", -1, (interp, args) =>
         {
-            string text = RuntimeValues.Stringify(args[0]);
+            if (args.Count > 1)
+                throw new RuntimeError("'io.println' expects 0 or 1 arguments.");
+
+            string text = args.Count == 1 ? RuntimeValues.Stringify(args[0]) : "";
             interp.Output.WriteLine(text);
             interp.Debugger?.OnOutput("stdout", text + "\n");
             return null;

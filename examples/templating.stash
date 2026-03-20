@@ -6,7 +6,7 @@
 io.println("=" * 56);
 io.println("  Stash Templating Engine Demo");
 io.println("=" * 56);
-io.println("");
+io.println();
 
 // ─── 1. Inline Template Rendering ───────────────────────
 
@@ -18,7 +18,7 @@ data["version"] = "1.0";
 
 let greeting = tpl.render("Hello, {{ name }}! Welcome to version {{ version }}.", data);
 io.println(greeting);
-io.println("");
+io.println();
 
 // ─── 2. Filters ─────────────────────────────────────────
 
@@ -67,7 +67,7 @@ let cond_template = """
 """;
 
 io.println(tpl.render(cond_template, user_data));
-io.println("");
+io.println();
 
 // ─── 4. Loops with Metadata ─────────────────────────────
 
@@ -121,12 +121,12 @@ for (let user in users) {
   row_data["email"] = user.email;
   io.println(tpl.render(row_tpl, row_data));
 }
-io.println("");
+io.println();
 
 // ─── 6. File-Based Template ─────────────────────────────
 
 io.println("=== 6. File-Based Template (Report) ===");
-io.println("");
+io.println();
 
 struct Server {
   name,

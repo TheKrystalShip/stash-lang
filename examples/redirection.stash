@@ -9,7 +9,7 @@ $(mkdir -p {tmp});
 io.println("=" * 50);
 io.println("  Output Redirection Demo");
 io.println("=" * 50);
-io.println("");
+io.println();
 
 // ─── 1. Write stdout to file (>) ─────────────────────────────
 
@@ -18,7 +18,7 @@ $(echo "First line of output") > "${tmp}/output.txt";
 $(echo "This overwrites the first line") > "${tmp}/output.txt";
 let content = fs.readFile("${tmp}/output.txt");
 io.println($"   Content: {str.trim(content)}");
-io.println("");
+io.println();
 
 // ─── 2. Append stdout to file (>>) ──────────────────────────
 
@@ -32,7 +32,7 @@ io.println("   Log contents:");
 for (let line in str.split(str.trim(log), "\n")) {
     io.println($"     {line}");
 }
-io.println("");
+io.println();
 
 // ─── 3. Capture stderr (2>) ─────────────────────────────────
 
@@ -43,7 +43,7 @@ if (fs.exists("${tmp}/errors.txt")) {
     let err_size = fs.size("${tmp}/errors.txt");
     io.println($"   Captured {err_size} bytes of stderr");
 }
-io.println("");
+io.println();
 
 // ─── 4. Append stderr (2>>) ─────────────────────────────────
 
@@ -56,7 +56,7 @@ if (fs.exists("${tmp}/all_errors.txt")) {
     let err_lines = arr.filter(str.split(err_content, "\n"), (l) => l != "");
     io.println($"   Accumulated {len(err_lines)} error line(s)");
 }
-io.println("");
+io.println();
 
 // ─── 5. Combined stdout+stderr (&>) ─────────────────────────
 
@@ -67,7 +67,7 @@ if (fs.exists("${tmp}/combined.txt")) {
     let combined = str.trim(fs.readFile("${tmp}/combined.txt"));
     io.println($"   Combined: {combined}");
 }
-io.println("");
+io.println();
 
 // ─── 6. Combined append (&>>) ────────────────────────────────
 
@@ -79,7 +79,7 @@ let cl = str.trim(fs.readFile("${tmp}/combined_log.txt"));
 for (let line in str.split(cl, "\n")) {
     io.println($"   {line}");
 }
-io.println("");
+io.println();
 
 // ─── 7. Pipes with redirection ───────────────────────────────
 
@@ -88,7 +88,7 @@ $(printf "cherry\napple\nbanana\ndate\napricot\n") | $(sort) > "${tmp}/sorted.tx
 
 let fruits = str.trim(fs.readFile("${tmp}/sorted.txt"));
 io.println($"   Sorted fruits: {str.replaceAll(fruits, "\n", ", ")}");
-io.println("");
+io.println();
 
 // ─── 8. Separate stdout and stderr ───────────────────────────
 
@@ -97,7 +97,7 @@ $(sh -c 'echo "success" && echo "failure" >&2') > "${tmp}/out.txt" 2> "${tmp}/er
 
 io.println($"   stdout: {str.trim(fs.readFile("${tmp}/out.txt"))}");
 io.println($"   stderr: {str.trim(fs.readFile("${tmp}/err.txt"))}");
-io.println("");
+io.println();
 
 // ─── 9. Dynamic file paths ──────────────────────────────────
 
@@ -109,7 +109,7 @@ $(echo "Deployment completed successfully") > "${tmp}/${log_name}-${today}.log";
 let dynamic_file = "${tmp}/${log_name}-${today}.log";
 io.println($"   Wrote to: {log_name}-{today}.log");
 io.println($"   Content: {str.trim(fs.readFile(dynamic_file))}");
-io.println("");
+io.println();
 
 // ─── 10. Exit code preserved ─────────────────────────────────
 
@@ -120,7 +120,7 @@ io.println($"   stdout after redirect: '{ok.stdout}'");
 
 let fail = $(ls /definitely/not/here) 2> "${tmp}/fail.txt";
 io.println($"   Failure exit code: {fail.exitCode}");
-io.println("");
+io.println();
 
 // ─── Cleanup ─────────────────────────────────────────────────
 

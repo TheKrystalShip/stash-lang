@@ -8,10 +8,10 @@
 io.println("=" * 50);
 io.println("  Task Runner — Process Management Demo");
 io.println("=" * 50);
-io.println("");
+io.println();
 
 io.println("--- 1. Basic Spawn & Lifecycle ---");
-io.println("");
+io.println();
 
 let sleeper = process.spawn("sleep 5");
 io.println($"  Spawned 'sleep 5' → PID: {sleeper.pid}");
@@ -31,12 +31,12 @@ if (result != null) {
 }
 
 io.println($"  Alive after kill: {process.isAlive(sleeper)}");
-io.println("");
+io.println();
 
 // ─── 2. Process I/O ─────────────────────────────────────────
 
 io.println("--- 2. Process I/O ---");
-io.println("");
+io.println();
 
 // Write to stdin, read from stdout
 let upper = process.spawn("tr a-z A-Z");
@@ -54,12 +54,12 @@ let sorter = process.spawn("sort -n");
 process.write(sorter, "42\n7\n13\n1\n99\n");
 let sort_result = process.wait(sorter);
 io.println($"  Sorted: {str.replaceAll(str.trim(sort_result.stdout), "\n", ", ")}");
-io.println("");
+io.println();
 
 // ─── 3. Worker Pool ─────────────────────────────────────────
 
 io.println("--- 3. Worker Pool ---");
-io.println("");
+io.println();
 
 let task_names = ["compile", "lint", "test", "bundle"];
 
@@ -70,7 +70,7 @@ let workers = arr.map(task_names, (name) => {
 });
 
 io.println($"  Active processes: {len(process.list())}");
-io.println("");
+io.println();
 
 // Wait for all workers
 io.println("  Results:");
@@ -85,14 +85,14 @@ for (let i, worker in workers) {
     }
 }
 
-io.println("");
+io.println();
 io.println($"  All tasks passed: {all_ok}");
-io.println("");
+io.println();
 
 // ─── 4. Detach ──────────────────────────────────────────────
 
 io.println("--- 4. Detach ---");
-io.println("");
+io.println();
 
 let bg = process.spawn("sleep 0.5");
 io.println($"  Before detach — tracked: {len(process.list())}");
@@ -102,12 +102,12 @@ io.println($"  PID still known: {bg.pid}");
 
 // Clean up
 $(kill {bg.pid} 2>/dev/null);
-io.println("");
+io.println();
 
 // ─── 5. Signal Constants ────────────────────────────────────
 
 io.println("--- 5. Signal Constants ---");
-io.println("");
+io.println();
 
 let signals = [
     ["SIGHUP",  process.SIGHUP],
@@ -122,12 +122,12 @@ let signals = [
 for (let sig in signals) {
     io.println($"  {str.padEnd(sig[0], 10)} = {sig[1]}");
 }
-io.println("");
+io.println();
 
 // ─── 6. Graceful Shutdown ───────────────────────────────────
 
 io.println("--- 6. Graceful Shutdown Pattern ---");
-io.println("");
+io.println();
 
 let server = process.spawn("sleep 60");
 io.println($"  Server running → PID: {server.pid}");
@@ -145,7 +145,7 @@ if (shutdown != null) {
     io.println($"  Force killed (code: {forced.exitCode})");
 }
 
-io.println("");
+io.println();
 io.println("=" * 50);
 io.println("  All process management demos complete.");
 io.println("=" * 50);

@@ -107,7 +107,7 @@ let divider = "=" * 62;
 io.println(divider);
 io.println("  Network Diagnostics Toolkit");
 io.println(divider);
-io.println("");
+io.println();
 
 let results = [];
 
@@ -121,7 +121,7 @@ for (let target in targets) {
 
 // ─── Port Availability ────────────────────────────────────────
 
-io.println("");
+io.println();
 let port_open = check_port(CHECK_ADDRESS, CHECK_PORT);
 let port_label = port_open switch {
     true  => "open",
@@ -132,7 +132,7 @@ io.println($"  Port check {CHECK_ADDRESS}:{CHECK_PORT} → {port_label}");
 
 // ─── Results Table ────────────────────────────────────────────
 
-io.println("");
+io.println();
 io.println("  " + divider);
 io.println($"  [status] {"Host",-0}           {"Address",-0}         Latency   DNS");
 io.println("  " + "-" * 60);
@@ -148,7 +148,7 @@ let latencies  = arr.map(up_hosts, (r) => r.latency);
 let up_count   = len(up_hosts);
 let total      = len(results);
 
-io.println("");
+io.println();
 io.println("  " + divider);
 io.println($"  Reachable: {up_count}/{total} hosts");
 

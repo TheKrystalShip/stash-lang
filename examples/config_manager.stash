@@ -6,7 +6,7 @@
 io.println("=" * 54);
 io.println("  Application Configuration Manager");
 io.println("=" * 54);
-io.println("");
+io.println();
 
 // --- Enums ---
 
@@ -143,13 +143,13 @@ fn print_errors(errors) {
 io.println("=== 1. Loading with Defaults ===");
 let config = load_config();
 config.display();
-io.println("");
+io.println();
 
 // --- 2. Validate (default env — no DATABASE_URL needed) ---
 
 io.println("=== 2. Validation (development — defaults) ===");
 print_errors(config.validate());
-io.println("");
+io.println();
 
 // --- 3. Override via env vars and reload ---
 
@@ -163,13 +163,13 @@ env.set("APP_MAX_RETRIES", "5");
 
 let prod_config = load_config();
 prod_config.display();
-io.println("");
+io.println();
 
 // --- 4. Validate production config (DATABASE_URL missing) ---
 
 io.println("=== 4. Validation (production — DATABASE_URL missing) ===");
 print_errors(prod_config.validate());
-io.println("");
+io.println();
 
 // --- 5. Fix and revalidate ---
 
@@ -178,7 +178,7 @@ let final_config = load_config();
 
 io.println("=== 5. Revalidation (after setting DATABASE_URL) ===");
 print_errors(final_config.validate());
-io.println("");
+io.println();
 
 // --- 6. Destructuring config values ---
 
@@ -192,7 +192,7 @@ snapshot["timeout"]     = final_config.timeout;
 
 let { app_name, port, max_retries, timeout } = snapshot;
 io.println($"  app_name={app_name}, port={port}, retries={max_retries}, timeout={timeout}s");
-io.println("");
+io.println();
 
 // --- 7. Inspect relevant env vars ---
 

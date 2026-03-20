@@ -6,7 +6,7 @@
 io.println("=" * 54);
 io.println("  In-Memory Data Store");
 io.println("=" * 54);
-io.println("");
+io.println();
 
 // --- Simple KV store struct with TTL ---
 
@@ -72,7 +72,7 @@ io.println($"  size = {store.size()}");
 store.evict("user:3");
 io.println($"  after evict user:3 — size = {store.size()}");
 io.println($"  keys: {store.keys()}");
-io.println("");
+io.println();
 
 // --- 2. Nested dicts (dict of dicts) ---
 
@@ -97,7 +97,7 @@ io.println($"  alice.name = {users.alice.name}, role = {users.alice.role}");
 io.println($"  bob.age    = {users.bob.age}");
 // Bracket notation
 io.println($"  carol role = {users["carol"]["role"]}");
-io.println("");
+io.println();
 
 // --- 3. Iteration: keys, key-value, pairs, forEach ---
 
@@ -124,7 +124,7 @@ dict.forEach(users, (k, v) => {
 // dict.pairs
 let pairs = dict.pairs(users);
 io.println($"  Total pairs: {len(pairs)}");
-io.println("");
+io.println();
 
 // --- 4. Membership: in operator ---
 
@@ -135,7 +135,7 @@ io.println($"  'zara'  in users? {"zara" in users}");
 
 let user_keys = dict.keys(users);
 io.println($"  'bob' in keys array? {"bob" in user_keys}");
-io.println("");
+io.println();
 
 // --- 5. Querying with arr.filter, arr.map, arr.reduce ---
 
@@ -157,7 +157,7 @@ io.println($"  Total age: {total_age}, Average: {total_age / len(all_users)}");
 
 let admins = arr.filter(all_users, (u) => u["role"] == "admin");
 io.println($"  Admins: {arr.join(arr.map(admins, (u) => u["name"]), ", ")}");
-io.println("");
+io.println();
 
 // --- 6. Merging dicts ---
 
@@ -179,7 +179,7 @@ io.println("  Merged settings (user prefs override defaults):");
 for (let k, v in settings) {
     io.println($"    {k} = {v}");
 }
-io.println("");
+io.println();
 
 // --- 7. Word Frequency Counter ---
 
@@ -210,7 +210,7 @@ for (let pair in dict.pairs(freq)) {
         io.println($"    \"{pair.key}\": {pair.value}");
     }
 }
-io.println("");
+io.println();
 
 // --- 8. Inverted Index (word -> document list) ---
 
@@ -241,7 +241,7 @@ let quick_docs = index["quick"] ?? [];
 io.println($"  Documents containing 'fox':   {arr.join(fox_docs, ", ")}");
 io.println($"  Documents containing 'dog':   {arr.join(dog_docs, ", ")}");
 io.println($"  Documents containing 'quick': {arr.join(quick_docs, ", ")}");
-io.println("");
+io.println();
 
 // --- 9. dict.get with default, dict.clear ---
 

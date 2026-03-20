@@ -58,12 +58,12 @@ io.println("=" * 55);
 io.println("              Log File Analysis Report");
 io.println("=" * 55);
 io.println($"  Total entries parsed: {len(entries)}");
-io.println("");
+io.println();
 
 // ─── Level Frequency ─────────────────────────────────────────
 
 io.println("  [ Log Level Summary ]");
-io.println("");
+io.println();
 
 let counts = dict.new();
 for (let entry in entries) {
@@ -81,34 +81,34 @@ for (let level in levels) {
     let bar = "*" * count;
     io.println($"  {str.padEnd(level, 7)} {str.padStart($"{count}", 3)}  {bar}");
 }
-io.println("");
+io.println();
 
 // ─── Error Details ───────────────────────────────────────────
 
 io.println("  [ Error Entries ]");
-io.println("");
+io.println();
 
 let errors = arr.filter(entries, (e) => e.level == "ERROR");
 for (let i, err in errors) {
     io.println($"  {i + 1}. [{err.time}] {err.message}");
 }
-io.println("");
+io.println();
 
 // ─── Warning Details ─────────────────────────────────────────
 
 io.println("  [ Warning Entries ]");
-io.println("");
+io.println();
 
 let warnings = arr.filter(entries, (e) => e.level == "WARN");
 for (let warn in warnings) {
     io.println($"  [{warn.time}] {warn.message}");
 }
-io.println("");
+io.println();
 
 // ─── Pattern Search ──────────────────────────────────────────
 
 io.println("  [ Pattern Search ]");
-io.println("");
+io.println();
 
 let patterns = ["timeout", "database", "request", "disk"];
 for (let pattern in patterns) {
@@ -122,12 +122,12 @@ for (let pattern in patterns) {
         }
     }
 }
-io.println("");
+io.println();
 
 // ─── Time Range Filter ──────────────────────────────────────
 
 io.println("  [ Entries Between 08:03:00 and 08:06:00 ]");
-io.println("");
+io.println();
 
 let range_entries = arr.filter(entries, (e) => e.time >= "08:03:00" && e.time <= "08:06:00");
 for (let e in range_entries) {
@@ -138,7 +138,7 @@ for (let e in range_entries) {
     };
     io.println($"  {marker} {e.time} {str.padEnd(e.level, 6)} {e.message}");
 }
-io.println("");
+io.println();
 
 // ─── Write Report ────────────────────────────────────────────
 
@@ -160,5 +160,5 @@ if (lastError() == null) {
     io.println($"  Could not write report: {lastError()}");
 }
 
-io.println("");
+io.println();
 io.println("=" * 55);

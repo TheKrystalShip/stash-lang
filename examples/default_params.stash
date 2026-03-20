@@ -6,7 +6,7 @@
 io.println("=" * 54);
 io.println("  HTTP Client Builder");
 io.println("=" * 54);
-io.println("");
+io.println();
 
 // --- Request struct with fluent builder methods ---
 
@@ -85,7 +85,7 @@ struct Request {
         if (self.body != null) {
             io.println($"  body: {self.body}");
         }
-        io.println("");
+        io.println();
     }
 }
 
@@ -183,14 +183,14 @@ let make_url = (path, base = "https://api.example.com", version = "v1") =>
 io.println($"  {make_url("/users")}");
 io.println($"  {make_url("/orders", "https://orders.example.com")}");
 io.println($"  {make_url("/reports", "https://bi.example.com", "v2")}");
-io.println("");
+io.println();
 
 let encode_param = (key, value, sep = "=") => key + sep + value;
 
 let params = [["q", "stash lang"], ["limit", 10], ["page", 2]];
 let qs = arr.join(arr.map(params, (p) => encode_param(p[0], p[1])), "&");
 io.println($"  Query string: ?{qs}");
-io.println("");
+io.println();
 
 // --- 6. Middleware chain with multiple interceptors ---
 

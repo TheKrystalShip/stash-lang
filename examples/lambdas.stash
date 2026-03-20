@@ -35,7 +35,7 @@ io.println($"  tax(80000)              = {tax(80000)}");
 let apply_raise = (salary, pct = 0.05) => salary * (1.0 + pct);
 io.println($"  apply_raise(80000)      = {apply_raise(80000)}");
 io.println($"  apply_raise(80000, 0.1) = {apply_raise(80000, 0.10)}");
-io.println("");
+io.println();
 
 // ─── 2. Closures ───────────────────────────────────────────────
 
@@ -53,7 +53,7 @@ fn make_counter(start) {
 let tick = make_counter(0);
 io.print("  ticks: ");
 for (let i in 0..5) { io.print($"{tick()} "); }
-io.println("");
+io.println();
 
 // Factory: captures its argument as a fixed multiplier
 fn make_multiplier(factor) {
@@ -75,7 +75,7 @@ let valid_salary = make_validator(30000, 300000);
 io.println($"  valid_score(4.2)        = {valid_score(4.2)}");
 io.println($"  valid_score(6.0)        = {valid_score(6.0)}");
 io.println($"  valid_salary(95000)     = {valid_salary(95000)}");
-io.println("");
+io.println();
 
 // ─── 3. Higher-Order Functions ─────────────────────────────────
 
@@ -102,7 +102,7 @@ let pipeline     = pipe([inc, dbl, square]); // ((x+1)*2)^2
 io.println($"  compose(dbl, inc)(5)    = {inc_then_dbl(5)}");
 io.println($"  pipe([inc,dbl,sq])(3)   = {pipeline(3)}");
 io.println($"  apply(square, 9)        = {apply(square, 9)}");
-io.println("");
+io.println();
 
 let salaries = [72000, 95000, 110000, 48000, 135000, 62000];
 let raised   = arr.map(salaries, (s) => s * 1.1);
@@ -111,7 +111,7 @@ let total    = arr.reduce(salaries, (acc, s) => acc + s, 0);
 io.println($"  map(×1.1):    {arr.join(raised, ", ")}");
 io.println($"  filter(>80k): {arr.join(high, ", ")}");
 io.println($"  reduce(sum):  {total}");
-io.println("");
+io.println();
 
 // ─── 4. Currying ───────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ let eng_8pct = adjust("Engineering")(0.08);
 let mkt_5pct = adjust("Marketing")(0.05);
 io.println($"  eng_8pct(90000)         = {eng_8pct(90000)}");
 io.println($"  mkt_5pct(72000)         = {mkt_5pct(72000)}");
-io.println("");
+io.println();
 
 // ─── 5. Lambdas in Data Structures ─────────────────────────────
 
@@ -141,7 +141,7 @@ let base_sal   = 60000;
 for (let i, t in transforms) {
     io.println($"  {t_labels[i]}({base_sal}) = {t(base_sal)}");
 }
-io.println("");
+io.println();
 
 // Dict maps strategy names to salary-adjustment lambdas
 let strategies = dict.new();
@@ -152,7 +152,7 @@ let sample_sal = 80000;
 for (let name, strategy in strategies) {
     io.println($"  {name}({sample_sal}) = {strategy(sample_sal)}");
 }
-io.println("");
+io.println();
 
 // ─── 6. Pipeline: Employee Records ─────────────────────────────
 
@@ -175,7 +175,7 @@ let employees = [
 let engineers = arr.filter(employees, (e) => e.dept == "Engineering");
 io.print("  Engineers: ");
 arr.forEach(engineers, (e) => io.print($"{e.name} "));
-io.println("");
+io.println();
 
 // Salary stats for the Engineering dept
 let eng_sals = arr.map(engineers, (e) => e.salary);
