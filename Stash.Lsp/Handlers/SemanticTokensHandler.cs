@@ -156,7 +156,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 builder.Push(line, col, length, TokenTypeString, 0);
             }
-            else if (token.Type == TokenType.CommandLiteral)
+            else if (token.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
             {
                 ProcessCommandLiteral(builder, result, token);
             }
@@ -356,7 +356,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
                     }
-                    else if (subToken.Type == TokenType.CommandLiteral)
+                    else if (subToken.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
                     {
                         ProcessCommandLiteral(builder, result, subToken);
                     }
@@ -431,7 +431,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
                     }
-                    else if (subToken.Type is TokenType.CommandLiteral or TokenType.InterpolatedString)
+                    else if (subToken.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral or TokenType.InterpolatedString)
                     {
                         // Recurse for nested compound tokens
                         ProcessCompoundToken(builder, result, subToken);

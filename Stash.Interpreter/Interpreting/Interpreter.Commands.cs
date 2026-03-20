@@ -117,6 +117,59 @@ public partial class Interpreter
             throw new RuntimeError("Command cannot be empty.", expr.Span);
         }
 
+        // Passthrough mode ($>): inherit terminal stdin/stdout/stderr directly.
+        if (expr.IsPassthrough)
+        {
+            if (EmbeddedMode)
+            {
+                throw new RuntimeError("Passthrough commands are not available in embedded mode.", expr.Span);
+            }
+
+            if (_pendingStdin is not null)
+            {
+                throw new RuntimeError(
+                    "Passthrough commands cannot receive piped input. Use a capture command $(...) instead.",
+                    expr.Span);
+            }
+
+            try
+            {
+                var (program, arguments) = CommandParser.Parse(command);
+                var psi = new ProcessStartInfo
+                {
+                    FileName = program,
+                    RedirectStandardOutput = false,
+                    RedirectStandardError = false,
+                    RedirectStandardInput = false,
+                    UseShellExecute = false,
+                    CreateNoWindow = false
+                };
+
+                foreach (var arg in arguments)
+                {
+                    psi.ArgumentList.Add(arg);
+                }
+
+                using var process = Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", expr.Span);
+                process.WaitForExit();
+
+                return new StashInstance("CommandResult", new Dictionary<string, object?>
+                {
+                    ["stdout"] = "",
+                    ["stderr"] = "",
+                    ["exitCode"] = (long)process.ExitCode
+                });
+            }
+            catch (RuntimeError)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new RuntimeError($"Command execution failed: {ex.Message}", expr.Span);
+            }
+        }
+
         string stdout;
         string stderr;
         int exitCode;
@@ -224,6 +277,15 @@ public partial class Interpreter
     /// </summary>
     public object? VisitRedirectExpr(RedirectExpr expr)
     {
+        // Check if the inner expression is a passthrough command — these can't be redirected
+        // since their output goes directly to the terminal.
+        if (expr.Expression is CommandExpr { IsPassthrough: true })
+        {
+            throw new RuntimeError(
+                "Passthrough commands cannot be redirected. Use a capture command $(...) instead.",
+                expr.Span);
+        }
+
         // Evaluate the inner command/pipe expression
         object? result = expr.Expression.Accept(this);
 

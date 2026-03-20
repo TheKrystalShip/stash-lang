@@ -541,7 +541,7 @@ public class StashFormatter
     private static bool IsValueEnd(TokenType t) => t is
         TokenType.Identifier or TokenType.RightParen or TokenType.RightBracket or
         TokenType.IntegerLiteral or TokenType.FloatLiteral or TokenType.StringLiteral or
-        TokenType.InterpolatedString or TokenType.CommandLiteral or
+        TokenType.InterpolatedString or TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral or
         TokenType.True or TokenType.False or TokenType.Null or TokenType.PlusPlus or TokenType.MinusMinus;
 
     private static bool IsUnaryContext(TokenType t) => t is

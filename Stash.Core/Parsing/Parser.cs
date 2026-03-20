@@ -1326,7 +1326,7 @@ public class Parser
             return ParseInterpolatedString(token);
         }
 
-        if (Match(TokenType.CommandLiteral))
+        if (Match(TokenType.CommandLiteral, TokenType.PassthroughCommandLiteral))
         {
             Token token = Previous();
             return ParseCommandLiteral(token);
@@ -1683,7 +1683,7 @@ public class Parser
     // ── Command literal parsing ──────────────────────────────────
 
     /// <summary>
-    /// Converts a <see cref="TokenType.CommandLiteral"/> token into a
+    /// Converts a <see cref="TokenType.CommandLiteral"/> or <see cref="TokenType.PassthroughCommandLiteral"/> token into a
     /// <see cref="CommandExpr"/> AST node.
     /// </summary>
     /// <param name="token">The command literal token to parse.</param>
@@ -1719,7 +1719,7 @@ public class Parser
             }
         }
 
-        return new CommandExpr(exprParts, token.Span);
+        return new CommandExpr(exprParts, token.Span, token.Type == TokenType.PassthroughCommandLiteral);
     }
 
     // ── Helper methods ────────────────────────────────────────────

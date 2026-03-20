@@ -921,6 +921,53 @@ public class LexerTests
     }
 
     [Fact]
+    public void ScanTokens_PassthroughCommand_SimpleCommand()
+    {
+        var tokens = Scan("$>(echo hello)");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.PassthroughCommandLiteral, tokens[0].Type);
+        Assert.Equal("$>(echo hello)", tokens[0].Lexeme);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo hello", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_PassthroughCommand_WithInterpolation()
+    {
+        var tokens = Scan("$>(echo {name})");
+
+        Assert.Equal(TokenType.PassthroughCommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(2, parts.Count);
+        Assert.Equal("echo ", parts[0]);
+        var exprTokens = Assert.IsType<List<Token>>(parts[1]);
+        Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
+        Assert.Equal("name", exprTokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_PassthroughCommand_Unterminated_ReportsError()
+    {
+        var lexer = CreateLexer("$>(echo hello");
+        lexer.ScanTokens();
+        Assert.NotEmpty(lexer.Errors);
+        Assert.Contains("Unterminated command literal", lexer.Errors[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_PassthroughCommand_NestedParens()
+    {
+        var tokens = Scan("$>(echo (nested))");
+
+        Assert.Equal(TokenType.PassthroughCommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo (nested)", parts[0]);
+    }
+
+    [Fact]
     public void ScanTokens_AsKeyword_ProducesAsToken()
     {
         var tokens = Scan("as");

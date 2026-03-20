@@ -1,0 +1,100 @@
+#!/usr/bin/env stash
+
+// ============================================================================
+// Command Execution Modes: $() vs $>()
+//
+// Stash provides two command execution syntaxes:
+//   $()  — Capture mode: stdout/stderr are captured into a CommandResult
+//   $>() — Passthrough mode: stdin/stdout/stderr are inherited from the terminal
+// ============================================================================
+// ---------------------------------------------------------------------------
+// 1. Capture mode: $(command)
+//    Output is buffered and returned — not visible during execution.
+// ---------------------------------------------------------------------------
+
+io.println("=== Capture Mode: $() ===\n");
+
+// Basic command — stdout is captured
+
+let result = $(echo "Hello from captured mode");
+io.println($"Captured stdout: {result.stdout}");
+io.println($"Exit code: {result.exitCode}");
+
+// Stderr is also captured
+
+let errResult = $(ls /nonexistent_path_12345);
+
+if (errResult.exitCode != 0) {
+  io.println($"Command failed with exit code: {errResult.exitCode}");
+  io.println($"Captured stderr: {str.trim(errResult.stderr)}");
+}
+
+// Interpolation in commands
+
+let pattern = "PATH";
+
+let envResult = $(env);
+
+let lines = str.split(envResult.stdout, "\n");
+
+let matches = arr.filter(lines, (line) => str.contains(line, pattern));
+io.println($"\nEnvironment variables containing '{pattern}':");
+
+for (let line in matches) {
+  io.println($"  {line}");
+}
+
+// Piping between captured commands
+
+let pipeline = $(echo "hello world foo bar") | $(wc -w);
+io.println($"\nWord count via pipe: {str.trim(pipeline.stdout)}");
+
+// ---------------------------------------------------------------------------
+// 2. Passthrough mode: $>(command)
+//    Output goes directly to the terminal. User can interact with prompts.
+//    The CommandResult still provides exitCode, but stdout/stderr are empty.
+// ---------------------------------------------------------------------------
+
+io.println("\n=== Passthrough Mode: $>() ===\n");
+
+// Output streams directly to terminal — you see it in real time
+
+io.println("Running 'ls -la' in passthrough mode (output appears directly):");
+
+let lsResult: CommandResult = $>(ls -la);
+io.println($"\n(stdout is empty in passthrough: '{lsResult.stdout}')");
+io.println($"(exit code still works: {lsResult.exitCode})");
+
+// Passthrough is ideal for build tools and long-running commands
+
+io.println("\nRunning 'uname -a' in passthrough mode:");
+$>(uname -a);
+
+// Interpolation works the same way
+
+let dir = $"/home/{env.user()}";
+io.println($"\nListing {dir} in passthrough mode:");
+$>(ls {dir});
+
+// ---------------------------------------------------------------------------
+// 3. Choosing the right mode
+// ---------------------------------------------------------------------------
+
+io.println("\n=== When to Use Which ===\n");
+io.println("Use $()  when you need to parse or process command output:");
+
+let dateResult = $(date +%Y);
+io.println($"  Current year (captured): {str.trim(dateResult.stdout)}");
+io.println("\nUse $>() when you want output visible, or the command is interactive:");
+io.println("  Running 'date' in passthrough mode:");
+$>(date);
+
+// Passthrough exit code checking — same pattern as capture
+
+io.println("\nExit code checking works with both modes:");
+
+let testResult: CommandResult = $>(test -d /tmp);
+
+if (testResult.exitCode == 0) {
+  io.println("  /tmp exists (verified via passthrough).");
+}

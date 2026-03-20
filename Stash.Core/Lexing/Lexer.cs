@@ -247,6 +247,12 @@ public class Lexer
                 {
                     ScanInterpolatedString(prefixed: true);
                 }
+                else if (_current + 1 < _source.Length && _source[_current] == '>' && _source[_current + 1] == '(')
+                {
+                    _current += 2;
+                    _column += 2;
+                    ScanCommandLiteral(passthrough: true);
+                }
                 else if (Match('('))
                 {
                     ScanCommandLiteral();
@@ -1227,7 +1233,7 @@ public class Lexer
     /// embed Stash expressions. Parentheses are tracked for nesting so that subshells or
     /// grouped commands work correctly.
     /// </remarks>
-    private void ScanCommandLiteral()
+    private void ScanCommandLiteral(bool passthrough = false)
     {
         var parts = new List<object>(); // string or List<Token>
         var textSegment = new StringBuilder();
@@ -1338,7 +1344,7 @@ public class Lexer
         _column++;
 
         string lexeme = _source[_start.._current];
-        AddToken(TokenType.CommandLiteral, parts, lexeme);
+        AddToken(passthrough ? TokenType.PassthroughCommandLiteral : TokenType.CommandLiteral, parts, lexeme);
     }
 
     /// <summary>

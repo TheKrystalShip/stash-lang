@@ -1971,6 +1971,56 @@ public class InterpreterTests
         Assert.Equal(0L, Run("let result = $(true).exitCode;"));
     }
 
+    // ===== Passthrough Command ($>()) =====
+
+    [Fact]
+    public void PassthroughCommand_ExitCodeSuccess()
+    {
+        Assert.Equal(0L, Run("let r = $>(true); let result = r.exitCode;"));
+    }
+
+    [Fact]
+    public void PassthroughCommand_ExitCodeFailure()
+    {
+        var result = Run("let r = $>(false); let result = r.exitCode;");
+        Assert.IsType<long>(result);
+        Assert.NotEqual(0L, result);
+    }
+
+    [Fact]
+    public void PassthroughCommand_StdoutIsEmpty()
+    {
+        var result = Run("let r = $>(echo hello); let result = r.stdout;");
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void PassthroughCommand_StderrIsEmpty()
+    {
+        var result = Run("let r = $>(cat /dev/null/nonexistent); let result = r.stderr;");
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void PassthroughCommand_WithInterpolation()
+    {
+        var result = Run("let x = \"world\"; let r = $>(echo {x}); let result = r.exitCode;");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void PassthroughCommand_DirectFieldAccess()
+    {
+        var result = Run("let result = $>(true).exitCode;");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void PassthroughCommand_InPipeRight_ThrowsRuntimeError()
+    {
+        RunExpectingError("let result = $(echo hi) | $>(cat);");
+    }
+
     // ===== Phase 4: Pipe Operator =====
 
     [Fact]

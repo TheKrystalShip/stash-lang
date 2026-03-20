@@ -1026,8 +1026,57 @@ This feels natural — commands read like commands, not like strings, but you st
 | `exec("cmd")` | `exec("ls -la")` | Rejected — commands look like strings, not commands                         |
 | `` `cmd` ``   | `` `ls -la` ``   | Viable but conflicts with potential future use of backticks                 |
 | `$(cmd)`      | `$(ls -la)`      | **Chosen** — familiar from Bash, always raw mode, `{...}` for interpolation |
+| `$>(cmd)`     | `$>(ls -la)`     | Passthrough variant — inherited I/O for interactive commands                |
 
 Implementation: backed by `System.Diagnostics.Process` in C#.
+
+#### Passthrough Commands: `$>(command)`
+
+While `$(...)` captures stdout and stderr into a `CommandResult`, some commands need to interact directly with the terminal — displaying real-time output, showing progress bars, or prompting the user for input. The **passthrough** syntax `$>(...)` runs a command with inherited I/O:
+
+```stash
+// Captured mode — output is buffered, not visible during execution
+let result = $(dotnet build);
+io.println(result.stdout);        // print captured output after command finishes
+
+// Passthrough mode — output streams directly to terminal, user can respond to prompts
+let result = $>(dotnet build);
+// result.stdout and result.stderr are empty (output went to terminal)
+// result.exitCode contains the actual exit code
+```
+
+`$>(...)` mirrors how Bash runs commands in direct execution mode: the child process inherits the parent's stdin, stdout, and stderr file descriptors. This means:
+
+- **Output is visible in real time** — progress bars, colored output, and streaming logs work naturally
+- **Interactive prompts work** — commands like `npx tsc` or `apt install` that ask for confirmation receive user input
+- **TTY detection works** — programs that check `isatty()` see a real terminal and behave accordingly (colors, formatting)
+- **No output is captured** — `result.stdout` and `result.stderr` are always empty strings
+
+The returned `CommandResult` still provides `exitCode` for error checking:
+
+```stash
+let result = $>(make install);
+if (result.exitCode != 0) {
+    io.println("Installation failed!");
+    process.exit(1);
+}
+```
+
+Interpolation works identically to `$(...)`:
+
+```stash
+let target = "release";
+$>(cargo build --profile {target});
+```
+
+**When to use which:**
+
+| Syntax    | Output   | Input    | Use case                                                 |
+| --------- | -------- | -------- | -------------------------------------------------------- |
+| `$(cmd)`  | Captured | None     | Parse output, check stderr, pipe between commands        |
+| `$>(cmd)` | Terminal | Terminal | Build tools, installers, interactive prompts, long tasks |
+
+> **Note:** Passthrough commands cannot be used with pipes (`|`) or output redirection (`>`, `>>`), since their output is not captured. Use `$(...)` for commands that participate in pipes or redirections.
 
 ### Pipes
 

@@ -166,6 +166,9 @@ public enum TokenType
     /// <summary>A command literal for shell execution. Reserved for future implementation.</summary>
     CommandLiteral,
 
+    /// <summary>A passthrough command literal for interactive shell execution.</summary>
+    PassthroughCommandLiteral,
+
     // ── Keywords ─────────────────────────────────────────────────────
 
     /// <summary>The <c>let</c> keyword. Declares a mutable variable binding.</summary>

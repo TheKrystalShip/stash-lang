@@ -1060,6 +1060,37 @@ public class ParserTests
         Assert.Empty(cmd.Parts);
     }
 
+    [Fact]
+    public void Parse_PassthroughCommand_SimpleCommand_ProducesPassthroughCommandExpr()
+    {
+        var result = ParseExpr("$>(echo hello)");
+        var cmd = Assert.IsType<CommandExpr>(result);
+        Assert.True(cmd.IsPassthrough);
+        Assert.Single(cmd.Parts);
+        var literal = Assert.IsType<LiteralExpr>(cmd.Parts[0]);
+        Assert.Equal("echo hello", literal.Value);
+    }
+
+    [Fact]
+    public void Parse_PassthroughCommand_WithInterpolation()
+    {
+        var result = ParseExpr("$>(echo {name})");
+        var cmd = Assert.IsType<CommandExpr>(result);
+        Assert.True(cmd.IsPassthrough);
+        Assert.True(cmd.Parts.Count >= 2);
+        var textPart = Assert.IsType<LiteralExpr>(cmd.Parts[0]);
+        Assert.Equal("echo ", textPart.Value);
+        Assert.IsType<IdentifierExpr>(cmd.Parts[1]);
+    }
+
+    [Fact]
+    public void Parse_CaptureCommand_IsNotPassthrough()
+    {
+        var result = ParseExpr("$(echo hello)");
+        var cmd = Assert.IsType<CommandExpr>(result);
+        Assert.False(cmd.IsPassthrough);
+    }
+
     // ── Phase 4: Pipe Operator Parsing ──────────────────────────────
 
     [Fact]
