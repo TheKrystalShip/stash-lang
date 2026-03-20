@@ -1,27 +1,27 @@
 #!/usr/bin/env stash
 
-let homeDir: string = env.get("HOME");
+const HOME_DIR: string = env.get("HOME");
 
 const RUNTIME: string = "linux-x64";
 
 const LSP_SOURCE: string = $"./Stash.Lsp/bin/Release/net10.0/{RUNTIME}/publish/StashLsp";
 
-const LSP_DEST: string = $"{homeDir}/.local/bin/stash-lsp";
+const LSP_DEST: string = $"{HOME_DIR}/.local/bin/stash-lsp";
 
 const DAP_SOURCE: string = $"./Stash.Dap/bin/Release/net10.0/{RUNTIME}/publish/StashDap";
 
-const DAP_DEST: string = $"{homeDir}/.local/bin/stash-dap";
+const DAP_DEST: string = $"{HOME_DIR}/.local/bin/stash-dap";
 
 const INTERPRETER_SOURCE: string = $"./Stash.Cli/bin/Release/net10.0/{RUNTIME}/publish/Stash";
 
-const INTERPRETER_DEST: string = $"{homeDir}/.local/bin/stash";
+const INTERPRETER_DEST: string = $"{HOME_DIR}/.local/bin/stash";
 
 const VSCODE_EXTENSION_BUILD_SCRIPT: string = "./.vscode/extensions/stash-lang/build.stash";
 
-const artifacts = dict.new();
-dict.set(artifacts, INTERPRETER_SOURCE, INTERPRETER_DEST);
-dict.set(artifacts, LSP_SOURCE, LSP_DEST);
-dict.set(artifacts, DAP_SOURCE, DAP_DEST);
+let artifacts: dict = dict.new();
+artifacts[$"{INTERPRETER_SOURCE}"] = $"{INTERPRETER_DEST}";
+artifacts[$"{LSP_SOURCE}"] = $"{LSP_DEST}";
+artifacts[$"{DAP_SOURCE}"] = $"{DAP_DEST}";
 
 fn cleanBuildStash() {
   io.println("Cleaning and building the project...");
@@ -80,9 +80,7 @@ fn cleanBuildStash() {
 }
 
 fn deploy() {
-  for (let pair in dict.pairs(artifacts)) {
-    let source = pair.key;
-    let dest = pair.value;
+  for (let source, dest in artifacts) {
     if (!fs.exists(source)) {
       io.println($"Error: Source binary not found at {source}");
       io.println("Run cleanBuild() first.");

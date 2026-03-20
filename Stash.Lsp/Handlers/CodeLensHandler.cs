@@ -58,7 +58,7 @@ public class CodeLensHandler : CodeLensHandlerBase
 
         foreach (var sym in result.Symbols.GetTopLevel())
         {
-            if (sym.Kind is not (Analysis.SymbolKind.Function or Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum))
+            if (sym.Kind is not (Analysis.SymbolKind.Function or Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum or Analysis.SymbolKind.Constant))
             {
                 continue;
             }

@@ -171,7 +171,7 @@ public class LspFeaturesRound4Tests
     }
 
     [Fact]
-    public void CodeLens_TopLevel_IncludesOnlyFunctionsStructsEnums()
+    public void CodeLens_TopLevel_IncludesFunctionsStructsEnumsAndConstants()
     {
         var source = "let x = 1;\nconst y = 2;\nfn hello() {}\nstruct S { a }\nenum E { V }";
         var tree = Analyze(source);
@@ -179,6 +179,16 @@ public class LspFeaturesRound4Tests
         Assert.Contains(topLevel, s => s.Name == "hello" && s.Kind == SymbolKind.Function);
         Assert.Contains(topLevel, s => s.Name == "S" && s.Kind == SymbolKind.Struct);
         Assert.Contains(topLevel, s => s.Name == "E" && s.Kind == SymbolKind.Enum);
+        Assert.Contains(topLevel, s => s.Name == "y" && s.Kind == SymbolKind.Constant);
+    }
+
+    [Fact]
+    public void CodeLens_ConstWithReferences_CountsCorrectly()
+    {
+        var source = "const MAX = 100;\nlet x = MAX;\nlet y = MAX;";
+        var tree = Analyze(source);
+        var refs = tree.FindReferences("MAX", 1, 7);
+        Assert.Equal(3, refs.Count); // declaration + 2 reads
     }
 
     [Fact]
