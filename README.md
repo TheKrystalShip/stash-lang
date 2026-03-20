@@ -147,6 +147,8 @@ import "lib/utils.stash" as utils;
 dotnet build                                         # Build
 dotnet run --project Stash.Cli/                      # Start the REPL
 dotnet run --project Stash.Cli/ -- script.stash      # Run a script
+dotnet run --project Stash.Cli/ -- -c 'code'         # Run inline code
+echo 'code' | dotnet run --project Stash.Cli/        # Pipe from stdin
 dotnet test                                          # Run the test suite
 ```
 

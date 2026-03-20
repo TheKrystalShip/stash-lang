@@ -163,11 +163,11 @@ let greet = (name) => "Hello, ${name}!";
 
 **Supported tags:**
 
-| Tag | Description |
-|-----|-------------|
+| Tag                       | Description                    |
+| ------------------------- | ------------------------------ |
 | `@param name description` | Documents a function parameter |
-| `@return description` | Documents the return value |
-| `@returns description` | Alias for `@return` |
+| `@return description`     | Documents the return value     |
+| `@returns description`    | Alias for `@return`            |
 
 > **Note:** `////` (four slashes) is treated as a regular comment, not a doc comment. Similarly, `/**/` (empty block) is a regular block comment.
 
@@ -1086,6 +1086,71 @@ The lexer checks if the first two characters of the source are `#!`. If so, it s
 chmod +x script.stash
 ./script.stash
 ```
+
+---
+
+## 6b-2. Command-Line Execution Modes
+
+Stash supports multiple ways to execute code beyond script files and the interactive REPL.
+
+### Inline Code (`-c`)
+
+Execute code passed directly as a command-line argument, similar to `bash -c` or `python -c`:
+
+```bash
+stash -c 'io.println("hello");'
+stash --command 'let x = 2 + 2; io.println(x);'
+```
+
+Arguments after the command string are passed to the script:
+
+```bash
+stash -c 'io.println(args.list());' foo bar
+# Output: [foo, bar]
+```
+
+The source is identified as `<command>` in error diagnostics.
+
+### Standard Input (Piping)
+
+Stash reads and executes code from standard input when input is piped or redirected:
+
+```bash
+echo 'io.println("hello from stdin");' | stash
+cat deploy.stash | stash
+curl -sL https://example.com/script.stash | stash
+```
+
+Pass arguments to piped scripts using the `--` separator:
+
+```bash
+echo 'io.println(args.list());' | stash -- arg1 arg2
+# Output: [arg1, arg2]
+```
+
+The source is identified as `<stdin>` in error diagnostics.
+
+### Execution Mode Summary
+
+| Mode        | Command                      | Source Name |
+| ----------- | ---------------------------- | ----------- |
+| REPL        | `stash`                      | `<stdin>`   |
+| Script file | `stash script.stash`         | file path   |
+| Inline code | `stash -c 'code'`            | `<command>` |
+| Piped stdin | `echo 'code' \| stash`       | `<stdin>`   |
+| Debug       | `stash --debug script.stash` | file path   |
+| Test runner | `stash --test script.stash`  | file path   |
+
+### Exit Codes
+
+| Code | Meaning           |
+| ---- | ----------------- |
+| 0    | Success           |
+| 1    | Test failures     |
+| 64   | Invalid CLI usage |
+| 65   | Lex/parse error   |
+| 66   | File not found    |
+| 70   | Runtime error     |
 
 ---
 

@@ -1,10 +1,12 @@
 // ============================================================================
 // Stash — Phase 5 (Script File Execution + REPL)
 //
-// Entry point supporting two modes:
+// Entry point supporting multiple modes:
 //
-//   stash                → REPL mode
-//   stash <script.stash> → execute script file
+//   stash                        → REPL mode (interactive)
+//   stash <script.stash>         → execute script file
+//   stash -c '<code>'            → execute code from argument
+//   echo '<code>' | stash        → execute code from stdin
 //
 // Processing pipeline (both modes):
 //   1. Lex:       Source text → token list       (Lexer)
@@ -37,12 +39,7 @@ public class Program
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
     {
-        if (args.Length == 0)
-        {
-            RunRepl();
-            return;
-        }
-
+        string? commandString = null;
         bool debug = false;
         bool test = false;
         bool testList = false;
@@ -52,24 +49,43 @@ public class Program
 
         for (int i = 0; i < args.Length; i++)
         {
-            if (args[i] == "--debug" && scriptPath is null)
+            if ((args[i] == "-c" || args[i] == "--command") && scriptPath is null && commandString is null)
+            {
+                if (i + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine("Error: -c requires a command string argument.");
+                    System.Environment.Exit(64);
+                    return;
+                }
+                commandString = args[i + 1];
+                i++;
+                scriptArgStart = i + 1;
+                break;
+            }
+            else if (args[i] == "--debug" && scriptPath is null && commandString is null)
             {
                 debug = true;
             }
-            else if (args[i] == "--test" && scriptPath is null)
+            else if (args[i] == "--test" && scriptPath is null && commandString is null)
             {
                 test = true;
             }
-            else if (args[i] == "--test-list" && scriptPath is null)
+            else if (args[i] == "--test-list" && scriptPath is null && commandString is null)
             {
                 testList = true;
                 test = true;  // --test-list implies --test
             }
-            else if (args[i].StartsWith("--test-filter=") && scriptPath is null)
+            else if (args[i].StartsWith("--test-filter=") && scriptPath is null && commandString is null)
             {
                 testFilter = args[i]["--test-filter=".Length..];
             }
-            else if (scriptPath is null)
+            else if (args[i] == "--" && scriptPath is null && commandString is null)
+            {
+                // Everything after -- becomes script args (for stdin piping)
+                scriptArgStart = i + 1;
+                break;
+            }
+            else if (scriptPath is null && commandString is null)
             {
                 scriptPath = args[i];
                 scriptArgStart = i + 1;
@@ -80,6 +96,39 @@ public class Program
             }
         }
 
+        // Collect script arguments (available for all modes)
+        string[] scriptArgs = scriptArgStart >= 0 && scriptArgStart < args.Length
+            ? args[scriptArgStart..]
+            : Array.Empty<string>();
+
+        // Mode 1: -c command string
+        if (commandString is not null)
+        {
+            if (debug || test)
+            {
+                Console.Error.WriteLine("Error: --debug and --test flags cannot be used with -c.");
+                System.Environment.Exit(64);
+                return;
+            }
+            RunSource(commandString, "<command>", scriptArgs);
+            return;
+        }
+
+        // Mode 2: Piped stdin
+        if (Console.IsInputRedirected && scriptPath is null)
+        {
+            if (debug || test)
+            {
+                Console.Error.WriteLine("Error: --debug and --test flags cannot be used with stdin input.");
+                System.Environment.Exit(64);
+                return;
+            }
+            string source = Console.In.ReadToEnd();
+            RunSource(source, "<stdin>", scriptArgs);
+            return;
+        }
+
+        // Mode 3: Flags requiring a script file
         if (debug && scriptPath is null)
         {
             Console.Error.WriteLine("Error: --debug mode requires a script file.");
@@ -94,32 +143,81 @@ public class Program
             return;
         }
 
-        if (scriptPath is null)
+        // Mode 4: Script file execution
+        if (scriptPath is not null)
         {
-            RunRepl();
+            if (debug && test)
+            {
+                RunFileWithDebuggerAndTests(scriptPath, scriptArgs, testFilter, testList);
+            }
+            else if (debug)
+            {
+                RunFileWithDebugger(scriptPath, scriptArgs);
+            }
+            else if (test)
+            {
+                RunFileWithTests(scriptPath, scriptArgs, testFilter, testList);
+            }
+            else
+            {
+                RunFile(scriptPath, scriptArgs);
+            }
             return;
         }
 
-        // Collect the script's arguments (everything after the script path)
-        string[] scriptArgs = scriptArgStart >= 0 && scriptArgStart < args.Length
-            ? args[scriptArgStart..]
-            : Array.Empty<string>();
+        // Mode 5: Interactive REPL
+        RunRepl();
+    }
 
-        if (debug && test)
+    /// <summary>Executes Stash source code from a string (used by -c and stdin piping).</summary>
+    /// <param name="source">The source code to execute.</param>
+    /// <param name="sourceName">Diagnostic name for the source (e.g., "&lt;command&gt;" or "&lt;stdin&gt;").</param>
+    /// <param name="scriptArgs">Arguments to pass to the script.</param>
+    private static void RunSource(string source, string sourceName, string[] scriptArgs)
+    {
+        // Stage 1: Lex
+        var lexer = new Lexer(source, sourceName);
+        List<Token> tokens = lexer.ScanTokens();
+
+        if (lexer.Errors.Count > 0)
         {
-            RunFileWithDebuggerAndTests(scriptPath, scriptArgs, testFilter, testList);
+            foreach (string error in lexer.Errors)
+            {
+                Console.Error.WriteLine($"[lex error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
         }
-        else if (debug)
+
+        // Stage 2: Parse
+        var parser = new Parser(tokens);
+        List<Stmt> statements = parser.ParseProgram();
+
+        if (parser.Errors.Count > 0)
         {
-            RunFileWithDebugger(scriptPath, scriptArgs);
+            foreach (string error in parser.Errors)
+            {
+                Console.Error.WriteLine($"[parse error] {error}");
+            }
+            System.Environment.Exit(65);
+            return;
         }
-        else if (test)
+
+        // Stage 3: Interpret
+        var interpreter = new Interpreter();
+        interpreter.SetScriptArgs(scriptArgs);
+        try
         {
-            RunFileWithTests(scriptPath, scriptArgs, testFilter, testList);
+            interpreter.Interpret(statements);
         }
-        else
+        catch (RuntimeError ex)
         {
-            RunFile(scriptPath, scriptArgs);
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+        }
+        finally
+        {
+            interpreter.CleanupTrackedProcesses();
         }
     }
 
