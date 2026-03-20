@@ -1,11 +1,42 @@
 import * as vscode from "vscode";
 import * as fs from "fs";
+import * as os from "os";
+import * as path from "path";
+import { execFileSync } from "child_process";
 import {
   LanguageClient,
   LanguageClientOptions,
   ServerOptions,
 } from "vscode-languageclient/node";
 import { activateTesting } from "./testing";
+
+function resolveBinary(name: string): string {
+  // Try system PATH via which/where
+  try {
+    const cmd = process.platform === "win32" ? "where.exe" : "which";
+    const result = execFileSync(cmd, [name], {
+      encoding: "utf-8",
+      timeout: 5000,
+      stdio: ["ignore", "pipe", "ignore"],
+    }).split(/\r?\n/)[0].trim();
+    if (result) return result;
+  } catch {
+    // not found on PATH
+  }
+
+  // Fallback: check ~/.local/bin/ (Unix only)
+  if (process.platform !== "win32") {
+    const candidate = path.join(os.homedir(), ".local", "bin", name);
+    try {
+      fs.accessSync(candidate, fs.constants.X_OK);
+      return candidate;
+    } catch {
+      // not found or not executable
+    }
+  }
+
+  return name;
+}
 
 let client: LanguageClient | undefined;
 let debugOutput: vscode.OutputChannel | undefined;
@@ -18,7 +49,7 @@ export function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration("stash");
   const customPath: string = config.get<string>("lspPath", "");
 
-  const serverCommand = customPath || "stash-lsp";
+  const serverCommand = customPath || resolveBinary("stash-lsp");
 
   const serverOptions: ServerOptions = {
     run: { command: serverCommand, transport: 0 },
@@ -99,10 +130,10 @@ class StashDebugAdapterFactory implements vscode.DebugAdapterDescriptorFactory {
       const customPath: string = config.get<string>("dapPath", "");
       this.output.appendLine(`dapPath config value: "${customPath}"`);
 
-      const command = customPath || "stash-dap";
+      const command = customPath || resolveBinary("stash-dap");
       this.output.appendLine(`Resolved command: "${command}"`);
 
-      if (require("path").isAbsolute(command)) {
+      if (path.isAbsolute(command)) {
         let resolvedPath: string;
         try {
           resolvedPath = fs.realpathSync(command);

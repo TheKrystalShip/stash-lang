@@ -37,8 +37,39 @@ exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
 const fs = __importStar(require("fs"));
+const os = __importStar(require("os"));
+const path = __importStar(require("path"));
+const child_process_1 = require("child_process");
 const node_1 = require("vscode-languageclient/node");
 const testing_1 = require("./testing");
+function resolveBinary(name) {
+    // Try system PATH via which/where
+    try {
+        const cmd = process.platform === "win32" ? "where.exe" : "which";
+        const result = (0, child_process_1.execFileSync)(cmd, [name], {
+            encoding: "utf-8",
+            timeout: 5000,
+            stdio: ["ignore", "pipe", "ignore"],
+        }).split(/\r?\n/)[0].trim();
+        if (result)
+            return result;
+    }
+    catch {
+        // not found on PATH
+    }
+    // Fallback: check ~/.local/bin/ (Unix only)
+    if (process.platform !== "win32") {
+        const candidate = path.join(os.homedir(), ".local", "bin", name);
+        try {
+            fs.accessSync(candidate, fs.constants.X_OK);
+            return candidate;
+        }
+        catch {
+            // not found or not executable
+        }
+    }
+    return name;
+}
 let client;
 let debugOutput;
 function activate(context) {
@@ -47,7 +78,7 @@ function activate(context) {
     debugOutput.appendLine("Stash extension activated");
     const config = vscode.workspace.getConfiguration("stash");
     const customPath = config.get("lspPath", "");
-    const serverCommand = customPath || "stash-lsp";
+    const serverCommand = customPath || resolveBinary("stash-lsp");
     const serverOptions = {
         run: { command: serverCommand, transport: 0 },
         debug: { command: serverCommand, transport: 0 },
@@ -93,9 +124,9 @@ class StashDebugAdapterFactory {
             const config = vscode.workspace.getConfiguration("stash");
             const customPath = config.get("dapPath", "");
             this.output.appendLine(`dapPath config value: "${customPath}"`);
-            const command = customPath || "stash-dap";
+            const command = customPath || resolveBinary("stash-dap");
             this.output.appendLine(`Resolved command: "${command}"`);
-            if (require("path").isAbsolute(command)) {
+            if (path.isAbsolute(command)) {
                 let resolvedPath;
                 try {
                     resolvedPath = fs.realpathSync(command);
