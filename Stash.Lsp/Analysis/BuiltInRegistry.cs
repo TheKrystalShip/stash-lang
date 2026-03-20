@@ -234,6 +234,8 @@ public static class BuiltInRegistry
             Documentation: "Waits for the first process in an array to exit and returns its result.\n@param procs An array of Process handles to wait for\n@return The CommandResult of the first process to exit"),
         new NamespaceFunction("process", "chdir", new[] { new BuiltInParam("path", "string") }, "null",
             Documentation: "Changes the current working directory of the process.\n@param path The directory path to change to (absolute or relative)\n@return null"),
+        new NamespaceFunction("process", "withDir", new[] { new BuiltInParam("path", "string"), new BuiltInParam("fn", "function") }, "any",
+            Documentation: "Runs a function with the working directory temporarily changed to the given path. The original directory is restored when the function returns, even if it throws an error.\n@param path The directory to change to\n@param fn A function to execute in the changed directory\n@return The return value of fn"),
         // file system namespace
         new NamespaceFunction("fs", "readFile", new[] { new BuiltInParam("path", "string") }, "string",
             Documentation: "Reads the entire contents of a file as a string.\n@param path The path to the file\n@return The file contents as a string"),

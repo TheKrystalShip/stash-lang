@@ -801,6 +801,7 @@ Synchronous command execution via `$(...)` is the right default — run a comman
 | `process.waitAll(procs)`         | Wait for all processes in an array to exit                        |
 | `process.waitAny(procs)`         | Wait for the first of multiple processes to exit                  |
 | `process.chdir(path)`            | Change the current working directory                              |
+| `process.withDir(path, fn)`      | Run a function with a temporary working directory change          |
 
 ### `process.chdir(path)`
 
@@ -818,6 +819,38 @@ let cwd = env.cwd();
 process.chdir("src/frontend");
 let result = $(npm run build);
 process.chdir(cwd);
+```
+
+### `process.withDir(path, fn)`
+
+Runs a function with the working directory temporarily changed to the given path. The original directory is automatically restored when the function returns — even if it throws an error. Returns whatever the callback returns.
+
+This is the recommended approach for short, self-contained directory changes. For cases where you need `return`, `break`, or `continue` to affect the enclosing function or loop, use `process.chdir()` instead.
+
+```stash
+// Run a build in a subdirectory — directory is restored automatically
+process.withDir("src/frontend", () => {
+    $(npm install);
+    $(npm run build);
+});
+
+// Capture a return value from the block
+let files = process.withDir("/var/log", () => {
+    return fs.glob("*.log");
+});
+
+// Nesting works naturally
+process.withDir("services/api", () => {
+    $(docker compose build);
+    process.withDir("migrations", () => {
+        $(./run_migrations.sh);
+    });
+    // back to services/api
+});
+// back to original directory
+
+// Expression-body lambda for one-liners
+let config = process.withDir("config", () => fs.readFile("app.json"));
 ```
 
 ### The `Process` Handle

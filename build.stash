@@ -23,7 +23,7 @@ dict.set(artifacts, INTERPRETER_SOURCE, INTERPRETER_DEST);
 dict.set(artifacts, LSP_SOURCE, LSP_DEST);
 dict.set(artifacts, DAP_SOURCE, DAP_DEST);
 
-fn cleanBuild() {
+fn cleanBuildStash() {
   io.println("Cleaning and building the project...");
   let result: CommandResult = $(dotnet clean);
   if (result.exitCode != 0) {
@@ -77,21 +77,6 @@ fn cleanBuild() {
     process.exit(1);
   }
   io.println("DAP build complete.");
-
-  // Build the VSCode extension
-  io.println("Building VSCode extension...");
-  let originalDir: string = env.cwd();
-  process.chdir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT));
-  let currentDir = env.cwd();
-  result = $({path.base(VSCODE_EXTENSION_BUILD_SCRIPT)}); // execute the build.stash script
-  process.chdir(originalDir);
-  if (result.exitCode != 0) {
-    io.println("VSCode extension build failed:");
-    io.println(result.stdout);
-    io.println(result.stderr);
-    process.exit(1);
-  }
-  io.println("Build complete.");
 }
 
 fn deploy() {
@@ -114,5 +99,23 @@ fn deploy() {
   io.println("Deployment complete.");
 }
 
-cleanBuild();
+fn buildExtension() {
+  let result;
+
+  // Build the VSCode extension
+  io.println("Building VSCode extension...");
+  result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
+    return $({path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});
+  });
+  if (result.exitCode != 0) {
+    io.println("VSCode extension build failed:");
+    io.println(result.stdout);
+    io.println(result.stderr);
+    process.exit(1);
+  }
+  io.println("Build complete.");
+}
+
+cleanBuildStash();
 deploy();
+buildExtension();

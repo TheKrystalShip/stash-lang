@@ -3784,6 +3784,83 @@ public class InterpreterTests
         Assert.Null(result);
     }
 
+    // ── process.withDir ─────────────────────────────────────────────
+
+    [Fact]
+    public void ProcessWithDir_ChangesDirectoryInsideCallback()
+    {
+        var result = Run(@"
+            let result = process.withDir(""/tmp"", () => {
+                return env.cwd();
+            });
+        ");
+        Assert.Equal("/tmp", result);
+    }
+
+    [Fact]
+    public void ProcessWithDir_RestoresDirectoryAfterCallback()
+    {
+        var result = Run(@"
+            let before = env.cwd();
+            process.withDir(""/tmp"", () => {});
+            let result = env.cwd() == before;
+        ");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void ProcessWithDir_RestoresDirectoryOnError()
+    {
+        var result = Run(@"
+            let before = env.cwd();
+            try {
+                process.withDir(""/tmp"", () => {
+                    throw ""deliberate error"";
+                });
+            }
+            let result = env.cwd() == before;
+        ");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void ProcessWithDir_ReturnsCallbackValue()
+    {
+        var result = Run(@"
+            let result = process.withDir(""/tmp"", () => {
+                return 42;
+            });
+        ");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void ProcessWithDir_NonStringPath_ThrowsError()
+    {
+        RunExpectingError("process.withDir(123, () => {});");
+    }
+
+    [Fact]
+    public void ProcessWithDir_NonFunctionSecondArg_ThrowsError()
+    {
+        RunExpectingError(@"process.withDir(""/tmp"", ""not a function"");");
+    }
+
+    [Fact]
+    public void ProcessWithDir_NonExistentDirectory_ThrowsError()
+    {
+        RunExpectingError(@"process.withDir(""/nonexistent_dir_xyz_123"", () => {});");
+    }
+
+    [Fact]
+    public void ProcessWithDir_ExpressionBodyLambda()
+    {
+        var result = Run(@"
+            let result = process.withDir(""/tmp"", () => env.cwd());
+        ");
+        Assert.Equal("/tmp", result);
+    }
+
     // ── process.onExit ──────────────────────────────────────────────
 
     [Fact]
