@@ -64,30 +64,35 @@ public partial class Interpreter
         return null;
     }
 
-    /// <summary>Resolves a relative module path to an absolute path, relative to the current file's directory.</summary>
+    /// <summary>Resolves a module specifier to an absolute path. Bare specifiers (package imports) are resolved via <see cref="ModuleResolver.ResolvePackageImport"/>; relative/absolute specifiers are resolved against the importing file's directory with auto-.stash-extension and index.stash fallback.</summary>
     /// <param name="modulePath">The module path string as written in the import statement.</param>
     /// <param name="span">The source span of the path token, used for error reporting.</param>
     /// <returns>The resolved absolute file path.</returns>
     private string ResolveModulePath(string modulePath, SourceSpan span)
     {
-        string basePath;
-        if (_currentFile is not null)
+        string importingFileDir = _currentFile is not null
+            ? System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(_currentFile))!
+            : System.IO.Directory.GetCurrentDirectory();
+
+        // Try relative/absolute file resolution first (works for both relative paths
+        // and legacy bare filenames like "math.stash" that resolve relative to CWD).
+        string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(importingFileDir, modulePath));
+        string? resolvedFilePath = ModuleResolver.ResolveFilePath(fullPath);
+        if (resolvedFilePath is not null)
+            return resolvedFilePath;
+
+        // If that didn't work and it's a bare specifier, try package resolution.
+        if (ModuleResolver.IsBareSpecifier(modulePath))
         {
-            basePath = System.IO.Path.GetDirectoryName(System.IO.Path.GetFullPath(_currentFile))!;
-        }
-        else
-        {
-            basePath = System.IO.Directory.GetCurrentDirectory();
+            string? resolved = ModuleResolver.ResolvePackageImport(modulePath, importingFileDir);
+            if (resolved is not null)
+                return resolved;
+
+            var (packageName, _) = ModuleResolver.ParsePackageSpecifier(modulePath);
+            throw new RuntimeError($"Package '{packageName}' not found. Run: stash pkg install", span);
         }
 
-        string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, modulePath));
-
-        if (!System.IO.File.Exists(fullPath))
-        {
-            throw new RuntimeError($"Cannot find module '{modulePath}'.", span);
-        }
-
-        return fullPath;
+        throw new RuntimeError($"Cannot find module '{modulePath}'.", span);
     }
 
     /// <summary>Loads and executes a module file, returning its top-level environment. Results are cached to prevent re-execution on repeated imports.</summary>

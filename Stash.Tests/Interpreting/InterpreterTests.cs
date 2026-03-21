@@ -3127,7 +3127,9 @@ public class InterpreterTests
             string source = $"fs.writeFile(\"{tmpFile.Replace("\\", "\\\\")}\", \"hello world\"); let result = fs.readFile(\"{tmpFile.Replace("\\", "\\\\")}\");";
             Assert.Equal("hello world", Run(source));
         }
-        finally { if (System.IO.File.Exists(tmpFile))
+        finally
+        {
+            if (System.IO.File.Exists(tmpFile))
             {
                 System.IO.File.Delete(tmpFile);
             }
@@ -3144,7 +3146,9 @@ public class InterpreterTests
             string source = $"fs.writeFile(\"{escaped}\", \"hello\"); fs.appendFile(\"{escaped}\", \" world\"); let result = fs.readFile(\"{escaped}\");";
             Assert.Equal("hello world", Run(source));
         }
-        finally { if (System.IO.File.Exists(tmpFile))
+        finally
+        {
+            if (System.IO.File.Exists(tmpFile))
             {
                 System.IO.File.Delete(tmpFile);
             }
@@ -3160,7 +3164,9 @@ public class InterpreterTests
             string source = $"fs.createDir(\"{tmpDir.Replace("\\", "\\\\")}\"); let result = fs.dirExists(\"{tmpDir.Replace("\\", "\\\\")}\");";
             Assert.Equal(true, Run(source));
         }
-        finally { if (System.IO.Directory.Exists(tmpDir))
+        finally
+        {
+            if (System.IO.Directory.Exists(tmpDir))
             {
                 System.IO.Directory.Delete(tmpDir, true);
             }
@@ -3255,7 +3261,9 @@ public class InterpreterTests
             string source = $"let result = fs.size(\"{tmpFile.Replace("\\", "\\\\")}\");";
             Assert.Equal(5L, Run(source));
         }
-        finally { if (System.IO.File.Exists(tmpFile))
+        finally
+        {
+            if (System.IO.File.Exists(tmpFile))
             {
                 System.IO.File.Delete(tmpFile);
             }
@@ -7306,5 +7314,212 @@ public class InterpreterTests
             let result = dict.size(filtered);
         ");
         Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void Import_PackageByName_ResolvesFromStashes()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string pkgDir = System.IO.Path.Combine(tmpDir, "stashes", "math-utils");
+            System.IO.Directory.CreateDirectory(pkgDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "stash.json"), """{"name": "math-utils", "version": "1.0.0"}""");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "index.stash"), "fn add(a, b) { return a + b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import { add } from "math-utils"; let result = add(3, 4);""";
+
+            Assert.Equal(7L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_PackageWithCustomMain_ResolvesEntryPoint()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string pkgDir = System.IO.Path.Combine(tmpDir, "stashes", "toolkit");
+            string libDir = System.IO.Path.Combine(pkgDir, "lib");
+            System.IO.Directory.CreateDirectory(libDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "stash.json"), """{"name": "toolkit", "version": "1.0.0", "main": "lib/main.stash"}""");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(libDir, "main.stash"), """fn greet() { return "hello"; }""");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import { greet } from "toolkit"; let result = greet();""";
+
+            Assert.Equal("hello", RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_PackageSubpath_ResolvesFile()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string pkgDir = System.IO.Path.Combine(tmpDir, "stashes", "toolkit");
+            string libDir = System.IO.Path.Combine(pkgDir, "lib");
+            System.IO.Directory.CreateDirectory(libDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "stash.json"), """{"name": "toolkit", "version": "1.0.0"}""");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(libDir, "helpers.stash"), "fn double(x) { return x * 2; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import { double } from "toolkit/lib/helpers"; let result = double(5);""";
+
+            Assert.Equal(10L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_ScopedPackage_ResolvesFromStashes()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string pkgDir = System.IO.Path.Combine(tmpDir, "stashes", "@infra", "deploy");
+            System.IO.Directory.CreateDirectory(pkgDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "stash.json"), """{"name": "@infra/deploy", "version": "1.0.0"}""");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "index.stash"), """fn deploy() { return "deployed"; }""");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import { deploy } from "@infra/deploy"; let result = deploy();""";
+
+            Assert.Equal("deployed", RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void ImportAs_PackageByName_CreatesNamespace()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string pkgDir = System.IO.Path.Combine(tmpDir, "stashes", "utils");
+            System.IO.Directory.CreateDirectory(pkgDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "stash.json"), """{"name": "utils", "version": "1.0.0"}""");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "index.stash"), "fn upper(s) { return str.upper(s); }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import "utils" as u; let result = u.upper("hello");""";
+
+            Assert.Equal("HELLO", RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_PackageNotFound_ThrowsWithHelpfulMessage()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import { foo } from "nonexistent-pkg";""";
+
+            var lexer = new Lexer(source, mainPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            var interpreter = new Interpreter();
+            interpreter.CurrentFile = mainPath;
+            var ex = Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+            Assert.Contains("stash pkg install", ex.Message);
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_PackageSubpathAutoExtension_ResolvesStashFile()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string pkgDir = System.IO.Path.Combine(tmpDir, "stashes", "toolkit");
+            string libDir = System.IO.Path.Combine(pkgDir, "lib");
+            System.IO.Directory.CreateDirectory(libDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(pkgDir, "stash.json"), """{"name": "toolkit", "version": "1.0.0"}""");
+            System.IO.File.WriteAllText(System.IO.Path.Combine(libDir, "core.stash"), "const VERSION = 42;");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import { VERSION } from "toolkit/lib/core"; let result = VERSION;""";
+
+            Assert.Equal(42L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_RelativeImportStillWorks_WithPackagesPresent()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            System.IO.File.WriteAllText(System.IO.Path.Combine(tmpDir, "stash.json"), """{"name": "test-project", "version": "1.0.0"}""");
+
+            string stashesDir = System.IO.Path.Combine(tmpDir, "stashes");
+            System.IO.Directory.CreateDirectory(stashesDir);
+
+            string libDir = System.IO.Path.Combine(tmpDir, "lib");
+            System.IO.Directory.CreateDirectory(libDir);
+            System.IO.File.WriteAllText(System.IO.Path.Combine(libDir, "utils.stash"), """fn helper() { return "ok"; }""");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = """import { helper } from "./lib/utils.stash"; let result = helper();""";
+
+            Assert.Equal("ok", RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
     }
 }
