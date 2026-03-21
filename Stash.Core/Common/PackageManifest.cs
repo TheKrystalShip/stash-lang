@@ -7,6 +7,15 @@ using System.Text.RegularExpressions;
 
 namespace Stash.Common;
 
+public static partial class PackagingRegexes
+{
+    [GeneratedRegex(@"^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$", RegexOptions.IgnoreCase)]
+    public static partial Regex NamespacedPackageName();
+
+    [GeneratedRegex(@"^[a-z][a-z0-9-]*$", RegexOptions.IgnoreCase)]
+    public static partial Regex LocalPackageName();
+}
+
 public class PackageManifest
 {
     [JsonPropertyName("name")]
@@ -82,10 +91,10 @@ public class PackageManifest
 
         if (name.StartsWith('@'))
         {
-            return Regex.IsMatch(name, @"^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$");
+            return PackagingRegexes.NamespacedPackageName().IsMatch(name);
         }
 
-        return Regex.IsMatch(name, @"^[a-z][a-z0-9-]*$");
+        return PackagingRegexes.LocalPackageName().IsMatch(name);
     }
 
     public List<string> Validate()

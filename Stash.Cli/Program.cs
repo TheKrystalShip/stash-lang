@@ -39,6 +39,13 @@ public class Program
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
     {
+        // Package manager subcommand
+        if (args.Length > 0 && args[0] is "pkg" or "p")
+        {
+            Stash.Cli.PackageManager.Commands.PackageCommands.Run(args[1..]);
+            return;
+        }
+
         string? commandString = null;
         bool debug = false;
         bool test = false;

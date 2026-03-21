@@ -71,6 +71,8 @@ public static class GitSource
         process.WaitForExit();
 
         if (process.ExitCode != 0)
+        {
             throw new InvalidOperationException($"{errorPrefix}{stderr.Trim()}");
+        }
     }
 }

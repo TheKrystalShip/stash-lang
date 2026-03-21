@@ -54,20 +54,28 @@ public static class Tarball
             // Reject paths with .. components
             string[] parts = entryName.Replace('\\', '/').Split('/');
             if (parts.Any(p => p == ".."))
+            {
                 throw new InvalidOperationException($"Tarball entry '{entry.Name}' contains path traversal component '..'");
+            }
 
             // Strip leading / or ./
             entryName = entryName.TrimStart('/');
             if (entryName.StartsWith("./", StringComparison.Ordinal))
+            {
                 entryName = entryName.Substring(2);
+            }
 
             if (string.IsNullOrEmpty(entryName))
+            {
                 continue;
+            }
 
             string fullPath = Path.GetFullPath(Path.Combine(fullTargetDir, entryName));
 
             if (!fullPath.StartsWith(fullTargetDir + Path.DirectorySeparatorChar) && fullPath != fullTargetDir)
+            {
                 throw new InvalidOperationException($"Tarball entry '{entry.Name}' would escape target directory");
+            }
 
             if (entry.EntryType == TarEntryType.Directory)
             {
@@ -77,7 +85,9 @@ public static class Tarball
             {
                 string? parentDir = Path.GetDirectoryName(fullPath);
                 if (parentDir != null)
+                {
                     Directory.CreateDirectory(parentDir);
+                }
 
                 entry.ExtractToFile(fullPath, overwrite: true);
             }

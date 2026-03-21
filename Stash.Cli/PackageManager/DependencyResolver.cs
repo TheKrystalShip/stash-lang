@@ -154,17 +154,29 @@ public sealed class DependencyResolver
         var missing = new List<string>();
         foreach (var (name, entry) in result)
         {
-            if (entry.Dependencies == null) continue;
+            if (entry.Dependencies == null)
+            {
+                continue;
+            }
+
             foreach (var (depName, depConstraint) in entry.Dependencies)
             {
-                if (GitSource.IsGitSource(depConstraint)) continue;
+                if (GitSource.IsGitSource(depConstraint))
+                {
+                    continue;
+                }
+
                 if (!result.ContainsKey(depName))
+                {
                     missing.Add($"{depName} (required by {name}@{entry.Version})");
+                }
             }
         }
         if (missing.Count > 0)
+        {
             throw new InvalidOperationException(
                 $"Resolution incomplete — missing transitive dependencies: {string.Join(", ", missing)}");
+        }
 
         // Add git deps as-is (version unknown until clone)
         foreach (var (pkgName, gitConstraint) in gitDeps)

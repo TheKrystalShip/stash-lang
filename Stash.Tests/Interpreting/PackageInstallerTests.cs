@@ -20,7 +20,9 @@ public class TarballTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, recursive: true);
+        }
     }
 
     [Fact]
@@ -126,7 +128,9 @@ public class PackageCacheTests : IDisposable
     {
         PackageCache.ClearPackage(_pkgName);
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, recursive: true);
+        }
     }
 
     [Fact]
@@ -282,7 +286,10 @@ public class PackageInstallerTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_tempDir))
+        {
             Directory.Delete(_tempDir, recursive: true);
+        }
+
         PackageCache.ClearPackage(_pkgName);
     }
 

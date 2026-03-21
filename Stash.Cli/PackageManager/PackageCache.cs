@@ -17,7 +17,10 @@ public static class PackageCache
     public static string GetCachePath(string packageName, string version)
     {
         if (!PackageManifest.IsValidPackageName(packageName))
+        {
             throw new ArgumentException($"Invalid package name: '{packageName}'");
+        }
+
         string cacheDir = GetCacheDir();
         return Path.Combine(cacheDir, packageName, $"{version}.tar.gz");
     }
@@ -50,13 +53,17 @@ public static class PackageCache
     {
         string cacheDir = GetCacheDir();
         if (Directory.Exists(cacheDir))
+        {
             Directory.Delete(cacheDir, recursive: true);
+        }
     }
 
     public static void ClearPackage(string packageName)
     {
         string packageDir = Path.Combine(GetCacheDir(), packageName);
         if (Directory.Exists(packageDir))
+        {
             Directory.Delete(packageDir, recursive: true);
+        }
     }
 }

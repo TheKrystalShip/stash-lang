@@ -26,7 +26,9 @@ public sealed class PackageInstaller
         }
 
         if (source == null)
+        {
             throw new InvalidOperationException("A package source is required to resolve dependencies.");
+        }
 
         var resolver = new DependencyResolver(source);
         var resolved = resolver.Resolve(manifest);
@@ -52,7 +54,9 @@ public sealed class PackageInstaller
             string targetDir = Path.Combine(stashesDir, packageName);
 
             if (IsAlreadyInstalled(targetDir, entry.Version))
+            {
                 continue;
+            }
 
             InstallEntry(packageName, entry, targetDir);
         }
@@ -76,14 +80,18 @@ public sealed class PackageInstaller
             ?? throw new InvalidOperationException($"No stash.json found in {projectDir}");
 
         if (manifest.Dependencies == null || !manifest.Dependencies.ContainsKey(packageName))
+        {
             throw new InvalidOperationException($"Package '{packageName}' is not listed in dependencies.");
+        }
 
         manifest.Dependencies.Remove(packageName);
         SaveManifest(projectDir, manifest);
 
         string targetDir = Path.Combine(projectDir, "stashes", packageName);
         if (Directory.Exists(targetDir))
+        {
             Directory.Delete(targetDir, recursive: true);
+        }
 
         var lockFile = LockFile.Load(projectDir);
         if (lockFile != null)
@@ -111,7 +119,9 @@ public sealed class PackageInstaller
         {
             string lockPath = Path.Combine(projectDir, "stash-lock.json");
             if (File.Exists(lockPath))
+            {
                 File.Delete(lockPath);
+            }
         }
 
         Install(projectDir, source);
@@ -120,7 +130,9 @@ public sealed class PackageInstaller
     private static bool IsLockFileUpToDate(PackageManifest manifest, LockFile lockFile)
     {
         if (manifest.Dependencies == null || manifest.Dependencies.Count == 0)
+        {
             return lockFile.Resolved.Count == 0;
+        }
 
         return manifest.Dependencies.Keys.All(name => lockFile.Resolved.ContainsKey(name));
     }
@@ -128,11 +140,15 @@ public sealed class PackageInstaller
     private static bool IsAlreadyInstalled(string targetDir, string version)
     {
         if (!Directory.Exists(targetDir))
+        {
             return false;
+        }
 
         string markerPath = Path.Combine(targetDir, VersionMarkerFile);
         if (!File.Exists(markerPath))
+        {
             return false;
+        }
 
         string installedVersion = File.ReadAllText(markerPath).Trim();
         return string.Equals(installedVersion, version, StringComparison.Ordinal);
@@ -141,10 +157,14 @@ public sealed class PackageInstaller
     private static void InstallEntry(string packageName, LockFileEntry entry, string targetDir)
     {
         if (!PackageManifest.IsValidPackageName(packageName))
+        {
             throw new ArgumentException($"Invalid package name: '{packageName}'");
+        }
 
         if (Directory.Exists(targetDir))
+        {
             Directory.Delete(targetDir, recursive: true);
+        }
 
         string resolvedUrl = entry.Resolved ?? "";
 
@@ -160,7 +180,9 @@ public sealed class PackageInstaller
             finally
             {
                 if (Directory.Exists(tempDir))
+                {
                     Directory.Delete(tempDir, recursive: true);
+                }
             }
         }
         else
@@ -191,7 +213,10 @@ public sealed class PackageInstaller
         {
             var deps = new JsonObject();
             foreach (var (name, constraint) in manifest.Dependencies.OrderBy(kv => kv.Key))
+            {
                 deps[name] = constraint;
+            }
+
             node["dependencies"] = deps;
         }
         else
@@ -214,7 +239,11 @@ public sealed class PackageInstaller
         foreach (string dir in Directory.GetDirectories(sourceDir))
         {
             string dirName = Path.GetFileName(dir);
-            if (excludeGit && dirName == ".git") continue;
+            if (excludeGit && dirName == ".git")
+            {
+                continue;
+            }
+
             CopyDirectory(dir, Path.Combine(targetDir, dirName), excludeGit);
         }
     }
