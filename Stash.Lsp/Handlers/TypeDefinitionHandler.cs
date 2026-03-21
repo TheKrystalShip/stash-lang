@@ -54,7 +54,7 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         // If the symbol IS a struct or enum, return its own location
         if (symbol.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum)
         {
-            return MakeLocation(request.TextDocument.Uri, symbol, result);
+            return MakeLocationAsync(request.TextDocument.Uri, symbol, result);
         }
 
         // For variables, constants, parameters, loop variables — look up the TypeHint
@@ -70,13 +70,13 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
 
         if (typeSymbol != null)
         {
-            return MakeLocation(request.TextDocument.Uri, typeSymbol, result);
+            return MakeLocationAsync(request.TextDocument.Uri, typeSymbol, result);
         }
 
         return Task.FromResult<LocationOrLocationLinks?>(null);
     }
 
-    private Task<LocationOrLocationLinks?> MakeLocation(DocumentUri requestUri, SymbolInfo symbol, AnalysisResult result)
+    private Task<LocationOrLocationLinks?> MakeLocationAsync(DocumentUri requestUri, SymbolInfo symbol, AnalysisResult result)
     {
         // If the symbol was imported from another file, navigate there
         if (symbol.SourceUri != null)

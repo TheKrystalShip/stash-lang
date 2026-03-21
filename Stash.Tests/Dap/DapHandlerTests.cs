@@ -361,8 +361,9 @@ public class DapHandlerTests
         var handler = new StashSetFunctionBreakpointsHandler(session);
         var result = await handler.Handle(new SetFunctionBreakpointsArguments
         {
-            Breakpoints = null
+            Breakpoints = null!
         }, CancellationToken.None);
+
         Assert.NotNull(result);
         Assert.Empty(result.Breakpoints!);
     }
