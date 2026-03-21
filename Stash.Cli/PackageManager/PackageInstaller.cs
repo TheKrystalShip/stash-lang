@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Stash.Common;
@@ -188,14 +189,19 @@ public sealed class PackageInstaller
         else
         {
             string? tarballPath = PackageCache.GetCachedTarball(packageName, entry.Version);
+            if (tarballPath == null && resolvedUrl.StartsWith("http", StringComparison.OrdinalIgnoreCase))
+            {
+                tarballPath = DownloadAndCache(packageName, entry.Version, resolvedUrl);
+            }
+
             if (tarballPath != null)
             {
                 Tarball.Extract(tarballPath, targetDir);
             }
             else
             {
-                throw new NotSupportedException(
-                    $"Package '{packageName}@{entry.Version}' is not cached and HTTP download is not yet supported.");
+                throw new InvalidOperationException(
+                    $"Package '{packageName}@{entry.Version}' is not cached and no download URL is available.");
             }
         }
 
@@ -226,6 +232,23 @@ public sealed class PackageInstaller
 
         var options = new JsonSerializerOptions { WriteIndented = true, IndentSize = 2 };
         File.WriteAllText(path, node.ToJsonString(options) + "\n");
+    }
+
+    private static string DownloadAndCache(string packageName, string version, string downloadUrl)
+    {
+        using var http = new HttpClient();
+        using var response = http.GetAsync(downloadUrl).GetAwaiter().GetResult();
+        response.EnsureSuccessStatusCode();
+
+        string cachePath = PackageCache.GetCachePath(packageName, version);
+        Directory.CreateDirectory(Path.GetDirectoryName(cachePath)!);
+
+        using (var fileStream = new FileStream(cachePath, FileMode.Create, FileAccess.Write))
+        {
+            response.Content.ReadAsStreamAsync().GetAwaiter().GetResult().CopyTo(fileStream);
+        }
+
+        return cachePath;
     }
 
     private static void CopyDirectory(string sourceDir, string targetDir, bool excludeGit)

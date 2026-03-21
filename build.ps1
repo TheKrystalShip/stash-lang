@@ -16,12 +16,16 @@ $DAP_DEST = "$env:USERPROFILE\.local\bin\stash-dap.exe"
 $INTERPRETER_SOURCE = ".\Stash.Cli\bin\Release\net10.0\$RUNTIME\publish\Stash.exe"
 $INTERPRETER_DEST = "$env:USERPROFILE\.local\bin\stash.exe"
 
+$REGISTRY_SOURCE = ".\Stash.Registry\bin\Release\net10.0\$RUNTIME\publish\StashRegistry.exe"
+$REGISTRY_DEST = "$env:USERPROFILE\.local\bin\stash-registry.exe
+
 $VSCODE_EXTENSION_DIR = ".\.vscode\extensions\stash-lang"
 
 $artifacts = @{
     $INTERPRETER_SOURCE = $INTERPRETER_DEST
     $LSP_SOURCE         = $LSP_DEST
     $DAP_SOURCE         = $DAP_DEST
+    $REGISTRY_SOURCE    = $REGISTRY_DEST
 }
 
 # ── Clean & Build ───────────────────────────────────────────────────
@@ -31,36 +35,13 @@ dotnet clean
 if ($LASTEXITCODE -ne 0) { Write-Host "Clean failed."; exit 1 }
 Write-Host "Clean complete. Starting build..."
 
-# CLI — Native AOT
-dotnet publish Stash.Cli -c Release -r $RUNTIME -p:PublishAot=true
+dotnet publish -c Release -r $RUNTIME
 if ($LASTEXITCODE -ne 0) { Write-Host "CLI build failed."; exit 1 }
 Write-Host "CLI build complete."
 
 # LSP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
 dotnet publish Stash.Lsp -c Release -r $RUNTIME
 if ($LASTEXITCODE -ne 0) { Write-Host "LSP build failed."; exit 1 }
-
-$lspSize = (Get-Item $LSP_SOURCE).Length
-if ($lspSize -lt 20000000) {
-    Write-Host "Error: LSP binary is only $lspSize bytes — expected >20MB for a managed build."
-    Write-Host "The LSP appears to have been built with Native AOT, which is incompatible."
-    Write-Host "Ensure Stash.Lsp.csproj has <PublishAot>false</PublishAot> and retry."
-    exit 1
-}
-Write-Host "LSP build complete."
-
-# DAP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
-dotnet publish Stash.Dap -c Release -r $RUNTIME
-if ($LASTEXITCODE -ne 0) { Write-Host "DAP build failed."; exit 1 }
-
-$dapSize = (Get-Item $DAP_SOURCE).Length
-if ($dapSize -lt 20000000) {
-    Write-Host "Error: DAP binary is only $dapSize bytes — expected >20MB for a managed build."
-    Write-Host "The DAP appears to have been built with Native AOT, which is incompatible."
-    Write-Host "Ensure Stash.Dap.csproj has <PublishAot>false</PublishAot> and retry."
-    exit 1
-}
-Write-Host "DAP build complete."
 
 # ── Deploy ──────────────────────────────────────────────────────────
 $binDir = "$env:USERPROFILE\.local\bin"

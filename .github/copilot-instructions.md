@@ -10,6 +10,7 @@ Stash.Interpreter   → Tree-walk interpreter, Environment chain, 26 built-in na
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol (OmniSharp — NOT AOT, requires reflection)
 Stash.Dap           → Debug Adapter Protocol (OmniSharp — NOT AOT, requires reflection)
+Stash.Registry      → Package registry server (ASP.NET Core, EF Core, JWT auth)
 Stash.Tests         → xUnit test suite (~2,000 tests)
 ```
 
@@ -57,4 +58,6 @@ Detailed docs live in `docs/` — link to these instead of duplicating content:
 | DAP features & architecture   | `docs/DAP — Debug Adapter Protocol.md`       |
 | TAP test framework            | `docs/TAP — Testing Infrastructure.md`       |
 | Templating engine             | `docs/TPL — Templating Engine.md`            |
+| Package manager CLI           | `docs/PKG — Package Manager CLI.md`          |
+| Package registry              | `docs/Registry — Package Registry.md`        |
 | Design specs & analysis       | `docs/specs/`                                |

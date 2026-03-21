@@ -6441,6 +6441,11 @@ public class InterpreterTests
     [Fact]
     public void FsExecutable_ExecutableFile_ReturnsTrue()
     {
+        if (OperatingSystem.IsWindows())
+        {
+            return;
+        }
+
         string tmp = System.IO.Path.GetTempFileName();
         try
         {

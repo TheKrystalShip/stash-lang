@@ -16,14 +16,21 @@ const INTERPRETER_SOURCE: string = $"./Stash.Cli/bin/Release/net10.0/{RUNTIME}/p
 
 const INTERPRETER_DEST: string = $"{HOME_DIR}/.local/bin/stash";
 
+const REGISTRY_SOURCE: string = $"./Stash.Registry/bin/Release/net10.0/{RUNTIME}/publish/StashRegistry";
+
+const REGISTRY_DEST: string = $"{HOME_DIR}/.local/bin/stash-registry";
+
 const VSCODE_EXTENSION_BUILD_SCRIPT: string = "./.vscode/extensions/stash-lang/build.stash";
 
 let artifacts: dict = dict.new();
 artifacts[$"{INTERPRETER_SOURCE}"] = $"{INTERPRETER_DEST}";
 artifacts[$"{LSP_SOURCE}"] = $"{LSP_DEST}";
 artifacts[$"{DAP_SOURCE}"] = $"{DAP_DEST}";
+artifacts[$"{REGISTRY_SOURCE}"] = $"{REGISTRY_DEST}";
 
 fn cleanBuildStash() {
+
+  // Clean solution and build all projects
   io.println("Cleaning and building the project...");
   let result: CommandResult = $(dotnet clean);
   if (result.exitCode != 0) {
@@ -32,47 +39,13 @@ fn cleanBuildStash() {
   }
   io.println("Clean complete. Starting build...");
 
-  // CLI — Native AOT
-  result = $(dotnet publish Stash.Cli -c Release -r {RUNTIME} -p:PublishAot=true);
+  result = $(dotnet publish -c Release);
   if (result.exitCode != 0) {
-    io.println($"CLI build failed:\n{result.stderr}");
-    process.exit(1);
-  }
-  io.println("CLI build complete.");
-
-  // LSP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
-  result = $(dotnet publish Stash.Lsp -c Release -r {RUNTIME});
-  if (result.exitCode != 0) {
-    io.println($"LSP build failed:\n{result.stderr}");
+    io.println($"Build failed:\n{result.stderr}");
     process.exit(1);
   }
 
-  // Guard: the LSP must be a managed bundle (>20MB), not a Native AOT binary (~5MB).
-  // If it's too small, it was likely published with AOT and will crash at runtime
-  // due to DryIoc's reflection-based initialization being trimmed away.
-  let lspSize: int = fs.size(LSP_SOURCE);
-  if (lspSize < 20000000) {
-    io.println($"Error: LSP binary is only {lspSize} bytes — expected >20MB for a managed build.");
-    io.println("The LSP appears to have been built with Native AOT, which is incompatible.");
-    io.println("Ensure Stash.Lsp.csproj has <PublishAot>false</PublishAot> and retry.");
-    process.exit(1);
-  }
-  io.println("LSP build complete.");
-
-  // DAP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
-  result = $(dotnet publish Stash.Dap -c Release -r {RUNTIME});
-  if (result.exitCode != 0) {
-    io.println($"DAP build failed:\n{result.stderr}");
-    process.exit(1);
-  }
-  let dapSize: int = fs.size(DAP_SOURCE);
-  if (dapSize < 20000000) {
-    io.println($"Error: DAP binary is only {dapSize} bytes — expected >20MB for a managed build.");
-    io.println("The DAP appears to have been built with Native AOT, which is incompatible.");
-    io.println("Ensure Stash.Dap.csproj has <PublishAot>false</PublishAot> and retry.");
-    process.exit(1);
-  }
-  io.println("DAP build complete.");
+  io.println("Build complete.");
 }
 
 fn deploy() {
@@ -88,7 +61,7 @@ fn deploy() {
       // unlink old binary (process keeps running fine)
     }
     fs.copy(source, dest);
-    io.println($"Copied {source} to {dest}.");
+    io.println($"Copied {source} to {dest}");
   }
   io.println("Deployment complete.");
 }

@@ -18,11 +18,21 @@ public static class UpdateCommand
             return;
         }
 
-        string? packageName = args.Length > 0 ? args[0] : null;
+        string? packageName = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--registry" && i + 1 < args.Length)
+            {
+                i++;
+            }
+            else if (packageName == null)
+            {
+                packageName = args[i];
+            }
+        }
 
         if (packageName != null)
         {
-            // Update specific package: remove from lock and re-install
             var lockFile = LockFile.Load(projectDir);
             if (lockFile != null)
             {
@@ -33,7 +43,6 @@ public static class UpdateCommand
         }
         else
         {
-            // Update all: delete lock file entirely
             string lockPath = Path.Combine(projectDir, "stash-lock.json");
             if (File.Exists(lockPath))
             {
@@ -45,10 +54,13 @@ public static class UpdateCommand
 
         try
         {
-            PackageInstaller.Install(projectDir);
+            var (registryUrl, _) = RegistryResolver.Resolve(args);
+            var config = UserConfig.Load();
+            var source = new RegistryClient(registryUrl, config.GetToken(registryUrl));
+            PackageInstaller.Install(projectDir, source);
             Console.WriteLine("Dependencies updated.");
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("package source is required"))
+        catch (InvalidOperationException)
         {
             Console.Error.WriteLine("A package registry is required to re-resolve dependencies.");
             Console.Error.WriteLine("Lock file has been cleared. Dependencies will be re-resolved on next install with a registry.");

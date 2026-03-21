@@ -13,14 +13,30 @@ public static class InstallCommand
     {
         string projectDir = Directory.GetCurrentDirectory();
 
-        if (args.Length == 0)
+        var positionalArgs = new List<string>();
+        for (int i = 0; i < args.Length; i++)
         {
-            PackageInstaller.Install(projectDir);
+            if (args[i] == "--registry" && i + 1 < args.Length)
+            {
+                i++;
+            }
+            else
+            {
+                positionalArgs.Add(args[i]);
+            }
+        }
+
+        if (positionalArgs.Count == 0)
+        {
+            var (registryUrl, _) = RegistryResolver.Resolve(args);
+            var config = UserConfig.Load();
+            var source = new RegistryClient(registryUrl, config.GetToken(registryUrl));
+            PackageInstaller.Install(projectDir, source);
             Console.WriteLine("Dependencies installed.");
             return;
         }
 
-        string specifier = args[0];
+        string specifier = positionalArgs[0];
         string name;
         string constraint;
 
@@ -58,12 +74,15 @@ public static class InstallCommand
 
         try
         {
-            PackageInstaller.Install(projectDir);
+            var (registryUrl, _) = RegistryResolver.Resolve(args);
+            var config = UserConfig.Load();
+            var source = new RegistryClient(registryUrl, config.GetToken(registryUrl));
+            PackageInstaller.Install(projectDir, source);
             Console.WriteLine("Dependencies installed.");
         }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("package source is required"))
+        catch (InvalidOperationException)
         {
-            Console.WriteLine("Dependency added to stash.json. Run 'stash pkg install' with a configured registry to resolve.");
+            Console.Error.WriteLine("Run 'stash pkg install --registry <url>' to install dependencies.");
         }
     }
 

@@ -14,22 +14,63 @@ public static class PkgBuiltIns
         pkgNs.Define("info", new BuiltInFunction("pkg.info", 0, (interp, _) =>
         {
             string? projectRoot = FindProjectRoot(interp);
-            if (projectRoot == null) return null;
+            if (projectRoot == null)
+            {
+                return null;
+            }
 
             PackageManifest? manifest = PackageManifest.Load(projectRoot);
-            if (manifest == null) return null;
+            if (manifest == null)
+            {
+                return null;
+            }
 
             var dict = new StashDictionary();
 
-            if (manifest.Name != null) dict.Set("name", manifest.Name);
-            if (manifest.Version != null) dict.Set("version", manifest.Version);
-            if (manifest.Description != null) dict.Set("description", manifest.Description);
-            if (manifest.Author != null) dict.Set("author", manifest.Author);
-            if (manifest.License != null) dict.Set("license", manifest.License);
-            if (manifest.Main != null) dict.Set("main", manifest.Main);
-            if (manifest.Repository != null) dict.Set("repository", manifest.Repository);
-            if (manifest.Stash != null) dict.Set("stash", manifest.Stash);
-            if (manifest.Private != null) dict.Set("private", manifest.Private.Value);
+            if (manifest.Name != null)
+            {
+                dict.Set("name", manifest.Name);
+            }
+
+            if (manifest.Version != null)
+            {
+                dict.Set("version", manifest.Version);
+            }
+
+            if (manifest.Description != null)
+            {
+                dict.Set("description", manifest.Description);
+            }
+
+            if (manifest.Author != null)
+            {
+                dict.Set("author", manifest.Author);
+            }
+
+            if (manifest.License != null)
+            {
+                dict.Set("license", manifest.License);
+            }
+
+            if (manifest.Main != null)
+            {
+                dict.Set("main", manifest.Main);
+            }
+
+            if (manifest.Repository != null)
+            {
+                dict.Set("repository", manifest.Repository);
+            }
+
+            if (manifest.Stash != null)
+            {
+                dict.Set("stash", manifest.Stash);
+            }
+
+            if (manifest.Private != null)
+            {
+                dict.Set("private", manifest.Private.Value);
+            }
 
             if (manifest.Dependencies != null)
             {
@@ -77,7 +118,10 @@ public static class PkgBuiltIns
         pkgNs.Define("version", new BuiltInFunction("pkg.version", 0, (interp, _) =>
         {
             string? projectRoot = FindProjectRoot(interp);
-            if (projectRoot == null) return null;
+            if (projectRoot == null)
+            {
+                return null;
+            }
 
             PackageManifest? manifest = PackageManifest.Load(projectRoot);
             return manifest?.Version;
@@ -86,7 +130,10 @@ public static class PkgBuiltIns
         pkgNs.Define("dependencies", new BuiltInFunction("pkg.dependencies", 0, (interp, _) =>
         {
             string? projectRoot = FindProjectRoot(interp);
-            if (projectRoot == null) return null;
+            if (projectRoot == null)
+            {
+                return null;
+            }
 
             LockFile? lockFile = LockFile.Load(projectRoot);
             if (lockFile != null && lockFile.Resolved.Count > 0)
@@ -100,7 +147,10 @@ public static class PkgBuiltIns
             }
 
             PackageManifest? manifest = PackageManifest.Load(projectRoot);
-            if (manifest?.Dependencies == null) return null;
+            if (manifest?.Dependencies == null)
+            {
+                return null;
+            }
 
             var deps = new StashDictionary();
             foreach (var (name, version) in manifest.Dependencies)

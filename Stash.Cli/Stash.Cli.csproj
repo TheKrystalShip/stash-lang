@@ -13,6 +13,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <EventSourceSupport>false</EventSourceSupport>
     <DebugType>embedded</DebugType>
+    <PublishAot>true</PublishAot>
   </PropertyGroup>
 
   <ItemGroup>

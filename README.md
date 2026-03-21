@@ -177,6 +177,40 @@ Stash ships with a full toolchain — no plugins or third-party tools required:
 
 ---
 
+## Package Management
+
+Stash includes a built-in package manager for sharing and reusing code. Packages are defined by a `stash.json` manifest, locked with `stash-lock.json`, and installed into a `stashes/` directory.
+
+```bash
+stash pkg init                          # Create a new stash.json
+stash pkg install http-client@1.2.0     # Add and install a dependency
+stash pkg install                       # Install all dependencies from stash.json
+stash pkg update                        # Re-resolve to latest matching versions
+stash pkg search http-client            # Search a registry for packages
+stash pkg publish                       # Publish the current package
+stash pkg login --registry <url>        # Authenticate with a registry
+```
+
+Dependencies support semver constraints (`^1.2.0`, `~1.0.0`, `*`) and Git sources (`git:https://github.com/user/repo.git#v1.0.0`).
+
+All registry commands accept `--registry <url>` to target a specific registry. Without it, the CLI uses the default registry from `~/.stash/config.json` (set automatically on first `stash pkg login`).
+
+---
+
+## Package Registry
+
+Stash ships with a self-hosted package registry server for teams and organizations. Run your own registry with zero external dependencies — SQLite and local filesystem storage work out of the box.
+
+```bash
+dotnet run --project Stash.Registry/    # Start the registry server
+```
+
+The registry provides a full REST API for publishing, installing, searching, and managing packages. It includes JWT authentication with scoped tokens, rate limiting, integrity verification, and audit logging. For larger deployments, PostgreSQL and S3 backends are supported.
+
+See [docs/Registry — Package Registry.md](docs/Registry%20—%20Package%20Registry.md) for the full API reference, configuration options, and architecture details.
+
+---
+
 ## Embedding
 
 Stash can be embedded into any .NET application as a scripting engine — similar to how Lua is embedded in games. The `Stash.Interpreter` library provides a clean `StashEngine` API:
@@ -226,47 +260,8 @@ Stash's .NET-backed interpreter outperforms Bash across the board. Both language
 | **Scope Lookup**          | Variable resolution across 5-level nested closures       | 1,648 ms |  3,284 ms |  **2.0×** |
 
 > Measured on the same machine, same workload. Full scripts in [`benchmarks/`](benchmarks/).
-
----
-
-## Project Structure
-
-```
-Stash.Core/
-├── Common/          # Shared types (SourceSpan, DiagnosticError)
-├── Lexing/          # Lexer, Token, TokenType
-└── Parsing/         # Recursive descent parser
-    └── AST/         # All expression and statement node types
-
-Stash.Interpreter/   # Embeddable runtime library
-├── Interpreting/    # Tree-walk interpreter, Environment, runtime types
-│   └── BuiltIns/   # Standard library (io, fs, str, math, process, etc.)
-├── Debugging/       # IDebugger interface, CallFrame, CLI debugger
-└── Testing/         # ITestHarness interface, TapReporter
-
-Stash.Cli/           # Command-line interface (thin wrapper)
-├── Program.cs       # Entry point (REPL + file execution)
-└── LineEditor.cs    # REPL line editing with history
-
-Stash.Lsp/           # Language Server Protocol implementation
-├── Analysis/        # Semantic analysis, symbol collection, formatting
-└── Handlers/        # LSP request handlers
-
-Stash.Dap/           # Debug Adapter Protocol implementation
-└── Handlers/        # DAP request handlers
-
-Stash.Tests/         # xUnit test suite (~1,800 tests)
-├── Lexing/          # Lexer tests
-├── Parsing/         # Parser tests
-├── Interpreting/    # Interpreter + Environment tests
-└── Analysis/        # LSP analysis tests
-```
-
-```
-Source Code → Lexer → Tokens → Parser → AST → Interpreter → Execution
-```
-
-Example scripts are in [`examples/`](examples/).
+>
+> Example scripts are in [`examples/`](examples/).
 
 ---
 
@@ -280,6 +275,7 @@ Example scripts are in [`examples/`](examples/).
 | [Debug Adapter Protocol](docs/DAP%20—%20Debug%20Adapter%20Protocol.md)           | DAP implementation and debugging support          |
 | [Testing Infrastructure](docs/TAP%20—%20Testing%20Infrastructure.md)             | Built-in test runner and TAP output               |
 | [Templating Engine](docs/TPL%20—%20Templating%20Engine.md)                       | Jinja2-style template rendering and `tpl` namespace |
+| [Package Registry](docs/Registry%20—%20Package%20Registry.md)                    | Self-hosted registry server and CLI integration     |
 
 ---
 

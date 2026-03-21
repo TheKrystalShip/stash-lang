@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Common;
 using Stash.Lexing;
 using Stash.Lsp.Analysis;
 using Stash.Parsing.AST;
@@ -74,10 +75,25 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
         string? resolvedPath = null;
         if (documentDir != null)
         {
-            var fullPath = Path.GetFullPath(importPath, documentDir);
-            if (File.Exists(fullPath))
+            if (ModuleResolver.IsBareSpecifier(importPath))
             {
-                resolvedPath = fullPath;
+                var fullPath = Path.GetFullPath(importPath, documentDir);
+                if (File.Exists(fullPath))
+                {
+                    resolvedPath = fullPath;
+                }
+                else if (!Path.HasExtension(importPath))
+                {
+                    resolvedPath = ModuleResolver.ResolvePackageImport(importPath, documentDir);
+                }
+            }
+            else
+            {
+                var fullPath = Path.GetFullPath(importPath, documentDir);
+                if (File.Exists(fullPath))
+                {
+                    resolvedPath = fullPath;
+                }
             }
         }
 

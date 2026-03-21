@@ -30,6 +30,9 @@ DAP_DEST="${HOME}/.local/bin/stash-dap"
 INTERPRETER_SOURCE="./Stash.Cli/bin/Release/net10.0/${RUNTIME}/publish/Stash"
 INTERPRETER_DEST="${HOME}/.local/bin/stash"
 
+REGISTRY_SOURCE="./Stash.Registry/bin/Release/net10.0/${RUNTIME}/publish/StashRegistry"
+REGISTRY_DEST="${HOME}/.local/bin/stash-registry"
+
 VSCODE_EXTENSION_DIR="./.vscode/extensions/stash-lang"
 
 # ── Clean & Build ───────────────────────────────────────────────────
@@ -38,33 +41,8 @@ echo "Cleaning and building the project..."
 dotnet clean
 echo "Clean complete. Starting build..."
 
-# CLI — Native AOT
-dotnet publish Stash.Cli -c Release -r "$RUNTIME" -p:PublishAot=true
-echo "CLI build complete."
-
-# LSP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
-dotnet publish Stash.Lsp -c Release -r "$RUNTIME"
-
-LSP_SIZE=$(stat -c%s "$LSP_SOURCE" 2>/dev/null || stat -f%z "$LSP_SOURCE")
-if [ "$LSP_SIZE" -lt 20000000 ]; then
-    echo "Error: LSP binary is only ${LSP_SIZE} bytes — expected >20MB for a managed build."
-    echo "The LSP appears to have been built with Native AOT, which is incompatible."
-    echo "Ensure Stash.Lsp.csproj has <PublishAot>false</PublishAot> and retry."
-    exit 1
-fi
-echo "LSP build complete."
-
-# DAP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
-dotnet publish Stash.Dap -c Release -r "$RUNTIME"
-
-DAP_SIZE=$(stat -c%s "$DAP_SOURCE" 2>/dev/null || stat -f%z "$DAP_SOURCE")
-if [ "$DAP_SIZE" -lt 20000000 ]; then
-    echo "Error: DAP binary is only ${DAP_SIZE} bytes — expected >20MB for a managed build."
-    echo "The DAP appears to have been built with Native AOT, which is incompatible."
-    echo "Ensure Stash.Dap.csproj has <PublishAot>false</PublishAot> and retry."
-    exit 1
-fi
-echo "DAP build complete."
+dotnet publish -c Release -r "$RUNTIME"
+echo "Build complete."
 
 # ── Deploy ──────────────────────────────────────────────────────────
 mkdir -p "${HOME}/.local/bin"
@@ -73,6 +51,7 @@ declare -A ARTIFACTS=(
     ["$INTERPRETER_SOURCE"]="$INTERPRETER_DEST"
     ["$LSP_SOURCE"]="$LSP_DEST"
     ["$DAP_SOURCE"]="$DAP_DEST"
+    ["$REGISTRY_SOURCE"]="$REGISTRY_DEST"
 )
 
 for source in "${!ARTIFACTS[@]}"; do

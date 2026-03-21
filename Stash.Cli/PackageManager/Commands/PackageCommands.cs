@@ -44,6 +44,27 @@ public static class PackageCommands
                 case "outdated":
                     OutdatedCommand.Execute(subArgs);
                     break;
+                case "publish":
+                    PublishCommand.Execute(subArgs);
+                    break;
+                case "search":
+                    SearchCommand.Execute(subArgs);
+                    break;
+                case "info":
+                    InfoCommand.Execute(subArgs);
+                    break;
+                case "login":
+                    LoginCommand.Execute(subArgs);
+                    break;
+                case "logout":
+                    LogoutCommand.Execute(subArgs);
+                    break;
+                case "owner":
+                    OwnerCommand.Execute(subArgs);
+                    break;
+                case "unpublish":
+                    UnpublishCommand.Execute(subArgs);
+                    break;
                 case "help":
                 case "--help":
                 case "-h":
@@ -72,6 +93,16 @@ public static class PackageCommands
             Console.Error.WriteLine($"Error: {ex.Message}");
             Environment.Exit(1);
         }
+        catch (FormatException ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            Environment.Exit(1);
+        }
+        catch (System.Net.Http.HttpRequestException ex)
+        {
+            Console.Error.WriteLine($"Error: {ex.Message}");
+            Environment.Exit(1);
+        }
     }
 
     private static void PrintHelp()
@@ -86,6 +117,13 @@ public static class PackageCommands
         Console.WriteLine("  pack              Create a tarball from the current package");
         Console.WriteLine("  update            Update dependencies");
         Console.WriteLine("  outdated          Check for outdated dependencies");
+        Console.WriteLine("  publish           Publish package to registry");
+        Console.WriteLine("  search            Search registry for packages");
+        Console.WriteLine("  info              Show package information");
+        Console.WriteLine("  login             Authenticate with registry");
+        Console.WriteLine("  logout            Remove stored credentials");
+        Console.WriteLine("  owner             Manage package owners");
+        Console.WriteLine("  unpublish         Remove a published version");
         Console.WriteLine("  help              Show this help message");
     }
 }

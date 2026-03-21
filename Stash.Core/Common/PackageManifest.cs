@@ -170,6 +170,6 @@ public class PackageManifest
 [JsonSerializable(typeof(Dictionary<string, string>))]
 [JsonSerializable(typeof(List<string>))]
 [JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
-internal partial class PackageManifestJsonContext : JsonSerializerContext
+public partial class PackageManifestJsonContext : JsonSerializerContext
 {
 }
