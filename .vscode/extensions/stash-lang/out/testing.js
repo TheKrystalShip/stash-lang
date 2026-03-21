@@ -40,12 +40,13 @@ const child_process_1 = require("child_process");
 const tapParser_1 = require("./tapParser");
 const testDiscovery_1 = require("./testDiscovery");
 const codeLensProvider_1 = require("./codeLensProvider");
+const resolveBinary_1 = require("./resolveBinary");
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function getInterpreterPath() {
     const config = vscode.workspace.getConfiguration('stash');
-    return config.get('interpreterPath', '') || 'stash';
+    return config.get('interpreterPath', '') || (0, resolveBinary_1.resolveBinary)('stash');
 }
 function getFilePattern() {
     const config = vscode.workspace.getConfiguration('stash.testing');

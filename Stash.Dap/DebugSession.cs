@@ -195,13 +195,13 @@ public class DebugSession : IDebugger
 
         Trace($"Launch: {scriptPath}, stopOnEntry={stopOnEntry}");
 
-        _scriptPath = scriptPath;
+        _scriptPath = NormalizePath(scriptPath);
         _workingDirectory = workingDirectory;
         _stopOnEntry = stopOnEntry;
 
         _interpreter = new Interpreter();
         _interpreter.Debugger = this;
-        _interpreter.CurrentFile = scriptPath;
+        _interpreter.CurrentFile = _scriptPath;
         if (args is { Length: > 0 })
         {
             _interpreter.SetScriptArgs(args);
@@ -1097,7 +1097,16 @@ public class DebugSession : IDebugger
         }
     }
 
-    private static string NormalizePath(string path) => Path.GetFullPath(path);
+    private static string NormalizePath(string path)
+    {
+        string fullPath = Path.GetFullPath(path);
+        // Canonicalize Windows drive letter to uppercase for consistent dictionary lookup
+        if (fullPath.Length >= 2 && fullPath[1] == ':')
+        {
+            return char.ToUpperInvariant(fullPath[0]) + fullPath[1..];
+        }
+        return fullPath;
+    }
 
     private static Source? MakeSource(string? file)
     {

@@ -975,4 +975,45 @@ fn helper() {
             File.Delete(modulePath);
         }
     }
+
+    // ── Windows Path Normalization ────────────────────────────────────────────
+
+    [Fact]
+    public void Integration_BreakpointHit_DifferentDriveLetterCasing()
+    {
+        var path = CreateTempScript("let x = 10;\nlet y = 20;\nlet z = 30;\n");
+        try
+        {
+            // Simulate VS Code sending different drive letter casing
+            // for breakpoints vs program path
+            string bpPath = path;
+            string launchPath = path;
+
+            if (path.Length >= 2 && path[1] == ':')
+            {
+                // Use lowercase drive letter for breakpoints, uppercase for launch
+                bpPath = char.ToLowerInvariant(path[0]) + path[1..];
+                launchPath = char.ToUpperInvariant(path[0]) + path[1..];
+            }
+
+            var session = new DebugSession();
+            session.SetBreakpoints(bpPath, new[] { new SourceBreakpoint { Line = 2 } });
+            session.Launch(launchPath, null, false, null);
+            session.ConfigurationDone();
+
+            WaitForPause(session);
+
+            var frames = session.GetStackTrace();
+            Assert.NotEmpty(frames);
+            Assert.Equal(2, frames[0].Line);
+            Assert.Equal(PauseReason.Breakpoint, GetPauseReason(session));
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
 }

@@ -4,6 +4,7 @@ import { spawn } from 'child_process';
 import { TapParser, TapFailureDetails } from './tapParser';
 import { parseTestsFromText, discoverTestsDynamic, DiscoveredTest } from './testDiscovery';
 import { StashTestCodeLensProvider } from './codeLensProvider';
+import { resolveBinary } from './resolveBinary';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -11,7 +12,7 @@ import { StashTestCodeLensProvider } from './codeLensProvider';
 
 function getInterpreterPath(): string {
     const config = vscode.workspace.getConfiguration('stash');
-    return config.get<string>('interpreterPath', '') || 'stash';
+    return config.get<string>('interpreterPath', '') || resolveBinary('stash');
 }
 
 function getFilePattern(): string {
