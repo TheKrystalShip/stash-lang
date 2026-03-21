@@ -38,7 +38,10 @@ public class CliExecutionTests
             System.IO.Path.Combine(testDir, "..", "..", "..", "..", "Stash.Cli", "bin", "Debug", "net10.0"));
         string binary = System.IO.Path.Combine(cliDir, "Stash");
         if (!System.IO.File.Exists(binary))
+        {
             binary = System.IO.Path.Combine(cliDir, "Stash.exe"); // Windows
+        }
+
         return binary;
     }
 

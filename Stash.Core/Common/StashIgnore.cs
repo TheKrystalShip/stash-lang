@@ -7,7 +7,7 @@ namespace Stash.Common;
 
 public sealed class StashIgnore
 {
-    private static readonly string[] DefaultPatterns =
+    private static readonly string[] _defaultPatterns =
     [
         ".git/",
         "stashes/",
@@ -32,11 +32,15 @@ public sealed class StashIgnore
     {
         _rules = new List<(Regex, bool, bool)>();
 
-        foreach (string defaultPattern in DefaultPatterns)
+        foreach (string defaultPattern in _defaultPatterns)
+        {
             AddRule(defaultPattern);
+        }
 
         foreach (string pattern in patterns)
+        {
             AddRule(pattern);
+        }
     }
 
     public bool IsExcluded(string relativePath)
@@ -62,12 +66,16 @@ public sealed class StashIgnore
                     }
                 }
                 if (matchesDir)
+                {
                     excluded = !negated;
+                }
             }
             else
             {
                 if (pattern.IsMatch(normalized))
+                {
                     excluded = !negated;
+                }
             }
         }
 
@@ -80,7 +88,9 @@ public sealed class StashIgnore
         foreach (string path in relativePaths)
         {
             if (!IsExcluded(path))
+            {
                 result.Add(path);
+            }
         }
         return result;
     }
@@ -91,14 +101,20 @@ public sealed class StashIgnore
 
         // Skip empty lines and comments
         if (string.IsNullOrEmpty(pattern) || pattern.StartsWith('#'))
+        {
             return;
+        }
 
         bool negated = pattern.StartsWith('!');
         if (negated)
+        {
             pattern = pattern.Substring(1);
+        }
 
         if (string.IsNullOrEmpty(pattern))
+        {
             return;
+        }
 
         bool directoryOnly = pattern.EndsWith('/');
 
@@ -108,11 +124,15 @@ public sealed class StashIgnore
         // Determine if anchored to root
         bool anchored = pattern.StartsWith('/');
         if (anchored)
+        {
             pattern = pattern.TrimStart('/');
+        }
 
         // Strip trailing slash for regex building (we track directoryOnly separately)
         if (directoryOnly)
+        {
             pattern = pattern.TrimEnd('/');
+        }
 
         string regexStr = GlobToRegex(pattern, anchored);
         var regex = new Regex(regexStr, RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -153,7 +173,10 @@ public sealed class StashIgnore
                 int j = i + 2;
                 // consume optional trailing slash
                 if (j < pattern.Length && pattern[j] == '/')
+                {
                     j++;
+                }
+
                 if (j >= pattern.Length)
                 {
                     // ** at end of pattern (e.g. "docs/**") — match any remaining content

@@ -79,14 +79,18 @@ public partial class Interpreter
         string fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(importingFileDir, modulePath));
         string? resolvedFilePath = ModuleResolver.ResolveFilePath(fullPath);
         if (resolvedFilePath is not null)
+        {
             return resolvedFilePath;
+        }
 
         // If that didn't work and it's a bare specifier, try package resolution.
         if (ModuleResolver.IsBareSpecifier(modulePath))
         {
             string? resolved = ModuleResolver.ResolvePackageImport(modulePath, importingFileDir);
             if (resolved is not null)
+            {
                 return resolved;
+            }
 
             var (packageName, _) = ModuleResolver.ParsePackageSpecifier(modulePath);
             throw new RuntimeError($"Package '{packageName}' not found. Run: stash pkg install", span);

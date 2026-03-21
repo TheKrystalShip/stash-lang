@@ -28,7 +28,10 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
     public static SemVer Parse(string version)
     {
         if (!TryParse(version, out SemVer? result))
+        {
             throw new FormatException($"Invalid semantic version: '{version}'");
+        }
+
         return result!;
     }
 
@@ -36,7 +39,9 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
     {
         result = null;
         if (string.IsNullOrEmpty(version))
+        {
             return false;
+        }
 
         ReadOnlySpan<char> span = version.AsSpan().Trim();
 
@@ -46,7 +51,11 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
         if (plusIdx >= 0)
         {
             buildMetadata = span.Slice(plusIdx + 1).ToString();
-            if (buildMetadata.Length == 0) return false;
+            if (buildMetadata.Length == 0)
+            {
+                return false;
+            }
+
             span = span.Slice(0, plusIdx);
         }
 
@@ -56,32 +65,62 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
         if (dashIdx >= 0)
         {
             string preStr = span.Slice(dashIdx + 1).ToString();
-            if (preStr.Length == 0) return false;
+            if (preStr.Length == 0)
+            {
+                return false;
+            }
+
             preRelease = preStr.Split('.');
             foreach (string id in preRelease)
             {
-                if (id.Length == 0) return false;
+                if (id.Length == 0)
+                {
+                    return false;
+                }
+
                 foreach (char c in id)
                 {
                     if (!((c >= '0' && c <= '9') || (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '-'))
+                    {
                         return false;
+                    }
                 }
                 if (IsNumeric(id) && id.Length > 1 && id[0] == '0')
+                {
                     return false;
+                }
             }
             span = span.Slice(0, dashIdx);
         }
 
         // Parse MAJOR.MINOR.PATCH
         int dot1 = span.IndexOf('.');
-        if (dot1 < 0) return false;
+        if (dot1 < 0)
+        {
+            return false;
+        }
+
         ReadOnlySpan<char> rest = span.Slice(dot1 + 1);
         int dot2 = rest.IndexOf('.');
-        if (dot2 < 0) return false;
+        if (dot2 < 0)
+        {
+            return false;
+        }
 
-        if (!TryParseNonNegativeInt(span.Slice(0, dot1), out int major)) return false;
-        if (!TryParseNonNegativeInt(rest.Slice(0, dot2), out int minor)) return false;
-        if (!TryParseNonNegativeInt(rest.Slice(dot2 + 1), out int patch)) return false;
+        if (!TryParseNonNegativeInt(span.Slice(0, dot1), out int major))
+        {
+            return false;
+        }
+
+        if (!TryParseNonNegativeInt(rest.Slice(0, dot2), out int minor))
+        {
+            return false;
+        }
+
+        if (!TryParseNonNegativeInt(rest.Slice(dot2 + 1), out int patch))
+        {
+            return false;
+        }
 
         result = new SemVer(major, minor, patch, preRelease, buildMetadata.Length > 0 ? buildMetadata : null);
         return true;
@@ -91,7 +130,10 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
     {
         foreach (char c in s)
         {
-            if (c < '0' || c > '9') return false;
+            if (c < '0' || c > '9')
+            {
+                return false;
+            }
         }
         return s.Length > 0;
     }
@@ -99,12 +141,24 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
     private static bool TryParseNonNegativeInt(ReadOnlySpan<char> span, out int value)
     {
         value = 0;
-        if (span.IsEmpty) return false;
+        if (span.IsEmpty)
+        {
+            return false;
+        }
+
         foreach (char c in span)
         {
-            if (c < '0' || c > '9') return false;
+            if (c < '0' || c > '9')
+            {
+                return false;
+            }
+
             int digit = c - '0';
-            if (value > (int.MaxValue - digit) / 10) return false;
+            if (value > (int.MaxValue - digit) / 10)
+            {
+                return false;
+            }
+
             value = value * 10 + digit;
         }
         return true;
@@ -112,27 +166,53 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
 
     public int CompareTo(SemVer? other)
     {
-        if (other is null) return 1;
+        if (other is null)
+        {
+            return 1;
+        }
 
         int cmp = Major.CompareTo(other.Major);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+        {
+            return cmp;
+        }
 
         cmp = Minor.CompareTo(other.Minor);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+        {
+            return cmp;
+        }
 
         cmp = Patch.CompareTo(other.Patch);
-        if (cmp != 0) return cmp;
+        if (cmp != 0)
+        {
+            return cmp;
+        }
 
         // A version without pre-release is higher than one with pre-release
-        if (PreRelease.Length == 0 && other.PreRelease.Length == 0) return 0;
-        if (PreRelease.Length == 0) return 1;
-        if (other.PreRelease.Length == 0) return -1;
+        if (PreRelease.Length == 0 && other.PreRelease.Length == 0)
+        {
+            return 0;
+        }
+
+        if (PreRelease.Length == 0)
+        {
+            return 1;
+        }
+
+        if (other.PreRelease.Length == 0)
+        {
+            return -1;
+        }
 
         int count = Math.Min(PreRelease.Length, other.PreRelease.Length);
         for (int i = 0; i < count; i++)
         {
             cmp = ComparePreReleaseId(PreRelease[i], other.PreRelease[i]);
-            if (cmp != 0) return cmp;
+            if (cmp != 0)
+            {
+                return cmp;
+            }
         }
 
         return PreRelease.Length.CompareTo(other.PreRelease.Length);
@@ -143,9 +223,21 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
         bool aIsNum = TryParseNonNegativeInt(a.AsSpan(), out int aNum);
         bool bIsNum = TryParseNonNegativeInt(b.AsSpan(), out int bNum);
 
-        if (aIsNum && bIsNum) return aNum.CompareTo(bNum);
-        if (aIsNum) return -1;  // numeric < alphanumeric
-        if (bIsNum) return 1;   // alphanumeric > numeric
+        if (aIsNum && bIsNum)
+        {
+            return aNum.CompareTo(bNum);
+        }
+
+        if (aIsNum)
+        {
+            return -1;  // numeric < alphanumeric
+        }
+
+        if (bIsNum)
+        {
+            return 1;   // alphanumeric > numeric
+        }
+
         return string.Compare(a, b, StringComparison.Ordinal);
     }
 
@@ -157,7 +249,10 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
     {
         int hash = HashCode.Combine(Major, Minor, Patch);
         foreach (string id in PreRelease)
+        {
             hash = HashCode.Combine(hash, id);
+        }
+
         return hash;
     }
 
@@ -166,9 +261,15 @@ public sealed class SemVer : IComparable<SemVer>, IEquatable<SemVer>
         var sb = new StringBuilder();
         sb.Append(Major).Append('.').Append(Minor).Append('.').Append(Patch);
         if (PreRelease.Length > 0)
+        {
             sb.Append('-').Append(string.Join('.', PreRelease));
+        }
+
         if (BuildMetadata.Length > 0)
+        {
             sb.Append('+').Append(BuildMetadata);
+        }
+
         return sb.ToString();
     }
 
@@ -198,7 +299,11 @@ public sealed class SemVerRange
 
         public bool Matches(SemVer v)
         {
-            if (Op == CompOp.Any) return true;
+            if (Op == CompOp.Any)
+            {
+                return true;
+            }
+
             int cmp = v.CompareTo(Version);
             return Op switch
             {
@@ -224,17 +329,26 @@ public sealed class SemVerRange
     public static SemVerRange Parse(string constraint)
     {
         if (!TryParse(constraint, out SemVerRange? result))
+        {
             throw new FormatException($"Invalid version constraint: '{constraint}'");
+        }
+
         return result!;
     }
 
     public static bool TryParse(string? constraint, out SemVerRange? range)
     {
         range = null;
-        if (constraint is null) return false;
+        if (constraint is null)
+        {
+            return false;
+        }
 
         string trimmed = constraint.Trim();
-        if (trimmed.Length == 0) return false;
+        if (trimmed.Length == 0)
+        {
+            return false;
+        }
 
         var comparators = new List<Comparator>();
 
@@ -248,7 +362,11 @@ public sealed class SemVerRange
         // Caret: ^MAJOR.MINOR.PATCH — compatible range
         if (trimmed.Length > 1 && trimmed[0] == '^')
         {
-            if (!SemVer.TryParse(trimmed.Substring(1), out SemVer? v)) return false;
+            if (!SemVer.TryParse(trimmed.Substring(1), out SemVer? v))
+            {
+                return false;
+            }
+
             SemVer upper = v!.Major > 0
                 ? new SemVer(v.Major + 1, 0, 0)
                 : v.Minor > 0
@@ -263,7 +381,11 @@ public sealed class SemVerRange
         // Tilde: ~MAJOR.MINOR.PATCH — approximate range (same minor)
         if (trimmed.Length > 1 && trimmed[0] == '~')
         {
-            if (!SemVer.TryParse(trimmed.Substring(1), out SemVer? v)) return false;
+            if (!SemVer.TryParse(trimmed.Substring(1), out SemVer? v))
+            {
+                return false;
+            }
+
             SemVer upper = new SemVer(v!.Major, v.Minor + 1, 0);
             comparators.Add(new Comparator(CompOp.Gte, v));
             comparators.Add(new Comparator(CompOp.Lt, upper));
@@ -275,11 +397,19 @@ public sealed class SemVerRange
         string[] parts = trimmed.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         foreach (string part in parts)
         {
-            if (!TryParseComparator(part, out Comparator comp)) return false;
+            if (!TryParseComparator(part, out Comparator comp))
+            {
+                return false;
+            }
+
             comparators.Add(comp);
         }
 
-        if (comparators.Count == 0) return false;
+        if (comparators.Count == 0)
+        {
+            return false;
+        }
+
         range = new SemVerRange(comparators, trimmed);
         return true;
     }
@@ -305,7 +435,11 @@ public sealed class SemVerRange
         else if (span.StartsWith("="))  { op = CompOp.Eq;  skip = 1; }
         else                            { op = CompOp.Eq;  skip = 0; }
 
-        if (!SemVer.TryParse(span.Slice(skip).ToString(), out SemVer? version)) return false;
+        if (!SemVer.TryParse(span.Slice(skip).ToString(), out SemVer? version))
+        {
+            return false;
+        }
+
         comp = new Comparator(op, version);
         return true;
     }
@@ -333,12 +467,18 @@ public sealed class SemVerRange
                     break;
                 }
             }
-            if (!optedIn) return false;
+            if (!optedIn)
+            {
+                return false;
+            }
         }
 
         foreach (Comparator c in _comparators)
         {
-            if (!c.Matches(version)) return false;
+            if (!c.Matches(version))
+            {
+                return false;
+            }
         }
 
         return true;
@@ -350,7 +490,9 @@ public sealed class SemVerRange
         foreach (SemVer v in versions)
         {
             if (IsSatisfiedBy(v) && (best is null || v.CompareTo(best) > 0))
+            {
                 best = v;
+            }
         }
         return best;
     }

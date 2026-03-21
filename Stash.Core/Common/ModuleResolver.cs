@@ -12,7 +12,9 @@ public static class ModuleResolver
     public static bool IsBareSpecifier(string specifier)
     {
         if (string.IsNullOrEmpty(specifier))
+        {
             return false;
+        }
 
         if (specifier.StartsWith("./", StringComparison.Ordinal) ||
             specifier.StartsWith("../", StringComparison.Ordinal) ||
@@ -66,12 +68,16 @@ public static class ModuleResolver
             {
                 string manifestPath = Path.Combine(current, "stash.json");
                 if (File.Exists(manifestPath))
+                {
                     return current;
+                }
             }
 
             string? parent = Path.GetDirectoryName(current);
             if (parent == null || parent == current)
+            {
                 return null;
+            }
 
             current = parent.Replace('\\', '/');
         }
@@ -94,7 +100,9 @@ public static class ModuleResolver
         {
             string? result = ResolveInStashesDir(projectRoot, packageName, subpath);
             if (result != null)
+            {
                 return result;
+            }
         }
 
         // Fall back to global ~/.stash/stashes/
@@ -110,17 +118,23 @@ public static class ModuleResolver
     public static string? ResolveFilePath(string basePath)
     {
         if (File.Exists(basePath))
+        {
             return basePath;
+        }
 
         string withExtension = basePath + ".stash";
         if (File.Exists(withExtension))
+        {
             return withExtension;
+        }
 
         if (Directory.Exists(basePath))
         {
             string indexPath = Path.Combine(basePath, "index.stash");
             if (File.Exists(indexPath))
+            {
                 return indexPath;
+            }
         }
 
         return null;
@@ -167,7 +181,9 @@ public static class ModuleResolver
     {
         string packageDir = Path.Combine(root, "stashes", packageName);
         if (!Directory.Exists(packageDir))
+        {
             return null;
+        }
 
         if (subpath == null)
         {

@@ -38,7 +38,9 @@ public class LockFile
     {
         string lockPath = Path.Combine(directoryPath, "stash-lock.json");
         if (!File.Exists(lockPath))
+        {
             return null;
+        }
 
         string json = File.ReadAllText(lockPath);
         try
@@ -135,7 +137,10 @@ public class LockFile
             case JsonValueKind.Array:
                 writer.WriteStartArray();
                 foreach (var item in element.EnumerateArray())
+                {
                     WriteDocumentSorted(writer, item);
+                }
+
                 writer.WriteEndArray();
                 break;
 

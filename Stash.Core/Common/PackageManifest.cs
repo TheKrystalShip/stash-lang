@@ -52,7 +52,9 @@ public class PackageManifest
     {
         string manifestPath = Path.Combine(directoryPath, "stash.json");
         if (!File.Exists(manifestPath))
+        {
             return null;
+        }
 
         string json = File.ReadAllText(manifestPath);
         try
@@ -74,9 +76,15 @@ public class PackageManifest
     public static bool IsValidPackageName(string name)
     {
         if (name.Length > 64)
+        {
             return false;
+        }
+
         if (name.StartsWith('@'))
+        {
             return Regex.IsMatch(name, @"^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$");
+        }
+
         return Regex.IsMatch(name, @"^[a-z][a-z0-9-]*$");
     }
 
@@ -85,17 +93,23 @@ public class PackageManifest
         var errors = new List<string>();
 
         if (Name != null && !IsValidPackageName(Name))
+        {
             errors.Add($"Invalid package name '{Name}'. Must match ^[a-z][a-z0-9-]*$ or ^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$ and be at most 64 characters.");
+        }
 
         if (Version != null && !SemVer.TryParse(Version, out _))
+        {
             errors.Add($"Invalid version '{Version}'. Must be a valid SemVer string.");
+        }
 
         if (Dependencies != null)
         {
             foreach (var (dep, constraint) in Dependencies)
             {
                 if (!IsValidVersionConstraint(constraint))
+                {
                     errors.Add($"Invalid version constraint '{constraint}' for dependency '{dep}'.");
+                }
             }
         }
 
@@ -107,21 +121,27 @@ public class PackageManifest
         var errors = Validate();
 
         if (string.IsNullOrWhiteSpace(Name))
+        {
             errors.Add("Package name is required for publishing.");
+        }
         else if (!IsValidPackageName(Name))
         {
             // already reported by Validate()
         }
 
         if (string.IsNullOrWhiteSpace(Version))
+        {
             errors.Add("Package version is required for publishing.");
+        }
         else if (!SemVer.TryParse(Version, out _))
         {
             // already reported by Validate()
         }
 
         if (Private == true)
+        {
             errors.Add("Package is marked as private.");
+        }
 
         return errors;
     }
@@ -129,7 +149,10 @@ public class PackageManifest
     private static bool IsValidVersionConstraint(string constraint)
     {
         if (constraint.StartsWith("git:", StringComparison.Ordinal))
+        {
             return true;
+        }
+
         return SemVerRange.TryParse(constraint, out _);
     }
 }
