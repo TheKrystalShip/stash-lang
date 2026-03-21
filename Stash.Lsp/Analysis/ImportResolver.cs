@@ -123,14 +123,9 @@ public class ImportResolver
             return;
         }
 
-        var absolutePath = Path.GetFullPath(importPath, documentDir);
-
-        if (!File.Exists(absolutePath))
+        var absolutePath = ResolveImportToAbsolutePath(importPath, documentDir, resolution, stmt.Path.Span);
+        if (absolutePath == null)
         {
-            resolution.Diagnostics.Add(new SemanticDiagnostic(
-                $"Cannot find module '{importPath}'.",
-                DiagnosticLevel.Error,
-                stmt.Path.Span));
             return;
         }
 
@@ -198,20 +193,66 @@ public class ImportResolver
             return;
         }
 
-        var absolutePath = Path.GetFullPath(importPath, documentDir);
-
-        if (!File.Exists(absolutePath))
+        var absolutePath = ResolveImportToAbsolutePath(importPath, documentDir, resolution, stmt.Path.Span);
+        if (absolutePath == null)
         {
-            resolution.Diagnostics.Add(new SemanticDiagnostic(
-                $"Cannot find module '{importPath}'.",
-                DiagnosticLevel.Error,
-                stmt.Path.Span));
             return;
         }
 
         TrackDependency(absolutePath, documentUri);
         var moduleInfo = LoadModule(absolutePath, parseModule);
         resolution.NamespaceImports[stmt.Alias.Lexeme] = moduleInfo;
+    }
+
+    /// <summary>
+    /// Resolves an import path to an absolute file path, handling both relative files and bare specifiers.
+    /// Returns the absolute path on success, or null if resolution failed (diagnostic already added).
+    /// </summary>
+    private static string? ResolveImportToAbsolutePath(string importPath, string documentDir, ImportResolution resolution, SourceSpan span)
+    {
+        if (ModuleResolver.IsBareSpecifier(importPath))
+        {
+            // Try relative file first (handles "module.stash" without ./ prefix)
+            string relativePath = Path.GetFullPath(importPath, documentDir);
+            if (File.Exists(relativePath))
+            {
+                return relativePath;
+            }
+
+            if (Path.HasExtension(importPath))
+            {
+                // Has file extension — treat as missing file, not missing package
+                resolution.Diagnostics.Add(new SemanticDiagnostic(
+                    $"Cannot find module '{importPath}'.",
+                    DiagnosticLevel.Error,
+                    span));
+                return null;
+            }
+
+            string? packagePath = ModuleResolver.ResolvePackageImport(importPath, documentDir);
+            if (packagePath == null)
+            {
+                resolution.Diagnostics.Add(new SemanticDiagnostic(
+                    $"Package '{importPath}' not found. Run: stash pkg install",
+                    DiagnosticLevel.Warning,
+                    span));
+                return null;
+            }
+
+            return packagePath;
+        }
+
+        string absolutePath = Path.GetFullPath(importPath, documentDir);
+        if (!File.Exists(absolutePath))
+        {
+            resolution.Diagnostics.Add(new SemanticDiagnostic(
+                $"Cannot find module '{importPath}'.",
+                DiagnosticLevel.Error,
+                span));
+            return null;
+        }
+
+        return absolutePath;
     }
 
     private void TrackDependency(string importedPath, Uri importerUri)

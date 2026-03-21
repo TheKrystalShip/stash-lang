@@ -2,12 +2,14 @@ namespace Stash.Lsp.Handlers;
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Common;
 using Stash.Lsp.Analysis;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 
@@ -36,6 +38,16 @@ public class CompletionHandler : CompletionHandlerBase
             if (line < lines.Length)
             {
                 currentLine = lines[line];
+            }
+        }
+
+        // Import string completions: offer package names when inside import path strings
+        if (currentLine != null && IsInsideString(currentLine, col))
+        {
+            var importItems = GetImportCompletions(currentLine, col, uri);
+            if (importItems != null)
+            {
+                return Task.FromResult(new CompletionList(importItems));
             }
         }
 
@@ -308,6 +320,88 @@ public class CompletionHandler : CompletionHandlerBase
             TriggerCharacters = new Container<string>(".", "("),
             ResolveProvider = false
         };
+
+    private List<CompletionItem>? GetImportCompletions(string line, int col, Uri uri)
+    {
+        // Find the opening quote before the cursor
+        int quoteStart = -1;
+        for (int i = col - 1; i >= 0; i--)
+        {
+            if (line[i] == '"' && (i == 0 || line[i - 1] != '\\'))
+            {
+                quoteStart = i;
+                break;
+            }
+        }
+
+        if (quoteStart < 0)
+        {
+            return null;
+        }
+
+        // Check if the text before the quote indicates an import context
+        string before = line[..quoteStart].TrimEnd();
+        bool endsWithFrom = before.EndsWith("from", StringComparison.Ordinal) &&
+                            (before.Length == 4 || !char.IsLetterOrDigit(before[before.Length - 5]));
+        bool isImportContext = endsWithFrom ||
+                               (before.StartsWith("import", StringComparison.Ordinal) && !before.Contains('{'));
+
+        if (!isImportContext)
+        {
+            return null;
+        }
+
+        var items = new List<CompletionItem>();
+
+        // Find project root to list packages from stashes/
+        string? documentDir = null;
+        if (uri.IsFile)
+        {
+            documentDir = Path.GetDirectoryName(uri.LocalPath);
+        }
+
+        if (documentDir != null)
+        {
+            string? projectRoot = ModuleResolver.FindProjectRoot(documentDir);
+            if (projectRoot != null)
+            {
+                string stashesDir = Path.Combine(projectRoot, "stashes");
+                if (Directory.Exists(stashesDir))
+                {
+                    // List direct package directories
+                    foreach (string dir in Directory.GetDirectories(stashesDir))
+                    {
+                        string name = Path.GetFileName(dir);
+                        if (name.StartsWith('@'))
+                        {
+                            // Scoped packages: list @scope/name entries
+                            foreach (string scopedDir in Directory.GetDirectories(dir))
+                            {
+                                string scopedName = name + "/" + Path.GetFileName(scopedDir);
+                                items.Add(new CompletionItem
+                                {
+                                    Label = scopedName,
+                                    Kind = LspCompletionItemKind.Module,
+                                    Detail = "package"
+                                });
+                            }
+                        }
+                        else
+                        {
+                            items.Add(new CompletionItem
+                            {
+                                Label = name,
+                                Kind = LspCompletionItemKind.Module,
+                                Detail = "package"
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        return items.Count > 0 ? items : null;
+    }
 
     private static LspCompletionItemKind MapCompletionKind(Analysis.SymbolKind kind) => kind switch
     {

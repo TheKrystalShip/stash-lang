@@ -8,13 +8,13 @@ namespace Stash.Cli.PackageManager.Commands;
 
 public static partial class Regexes
 {
-    [GeneratedRegex(@"[^a-z0-9-]", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"[^a-z0-9-]", RegexOptions.Compiled)]
     public static partial Regex InvalidChars();
 
-    [GeneratedRegex(@"^[^a-z]+", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^[^a-z]+", RegexOptions.Compiled)]
     public static partial Regex LeadingNonLetters();
 
-    [GeneratedRegex(@"-+$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"-+$", RegexOptions.Compiled)]
     public static partial Regex TrailingDashes();
 }
 

@@ -9,10 +9,10 @@ namespace Stash.Common;
 
 public static partial class PackagingRegexes
 {
-    [GeneratedRegex(@"^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^@[a-z][a-z0-9-]*/[a-z][a-z0-9-]*$", RegexOptions.Compiled)]
     public static partial Regex NamespacedPackageName();
 
-    [GeneratedRegex(@"^[a-z][a-z0-9-]*$", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^[a-z][a-z0-9-]*$", RegexOptions.Compiled)]
     public static partial Regex LocalPackageName();
 }
 

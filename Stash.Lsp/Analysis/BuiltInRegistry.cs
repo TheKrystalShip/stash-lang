@@ -768,6 +768,16 @@ public static class BuiltInRegistry
             Documentation: "Sets the log message format string. Placeholders: {time}, {level}, {msg}. Default: \"[{time}] [{level}] {msg}\".\n@param format The format string"),
         new NamespaceFunction("log", "toFile", new[] { new BuiltInParam("path", "string") },
             Documentation: "Redirects log output to a file instead of stderr. Pass null or empty string to revert to stderr.\n@param path The file path to log to"),
+
+        // pkg namespace
+        new NamespaceFunction("pkg", "info", Array.Empty<BuiltInParam>(), "dict",
+            Documentation: "Returns the current project's stash.json as a dictionary. Returns null if no stash.json is found.\n@return A dictionary containing all manifest fields, or null"),
+        new NamespaceFunction("pkg", "version", Array.Empty<BuiltInParam>(), "string",
+            Documentation: "Returns the version string from the current project's stash.json. Returns null if no stash.json is found.\n@return The version string, or null"),
+        new NamespaceFunction("pkg", "dependencies", Array.Empty<BuiltInParam>(), "dict",
+            Documentation: "Returns the resolved dependency versions from the lock file. Falls back to manifest constraints if no lock file exists. Returns null if no stash.json is found.\n@return A dictionary of package names to version strings, or null"),
+        new NamespaceFunction("pkg", "root", Array.Empty<BuiltInParam>(), "string",
+            Documentation: "Returns the absolute path to the current project root (the directory containing stash.json). Returns null if no stash.json is found.\n@return The absolute path string, or null"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -816,7 +826,7 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys", "log"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg"
     };
 
     // ── Keywords ──

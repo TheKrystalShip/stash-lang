@@ -537,6 +537,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         TermBuiltIns.Register(_globals);
         SysBuiltIns.Register(_globals);
         LogBuiltIns.Register(_globals);
+        PkgBuiltIns.Register(_globals); // Reads project metadata only, not arbitrary files — intentionally ungated
 
         // Capability-gated built-ins
         if (_capabilities.HasFlag(StashCapabilities.Environment))
