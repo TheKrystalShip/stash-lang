@@ -200,4 +200,215 @@ public class PackageManifestTests
             Directory.Delete(tmpDir, true);
         }
     }
+
+    [Fact]
+    public void Load_AllPhase2Fields_ParsedCorrectly()
+    {
+        string tmpDir = Path.Combine(Path.GetTempPath(), "stash_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string json = """
+                {
+                    "name": "my-package",
+                    "version": "1.0.0",
+                    "author": "Alice",
+                    "license": "MIT",
+                    "repository": "https://github.com/example/my-package",
+                    "keywords": ["cli", "scripting"],
+                    "stash": ">=1.0.0",
+                    "files": ["lib/**", "bin/**"],
+                    "registries": { "default": "https://registry.example.com" },
+                    "private": false
+                }
+                """;
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), json);
+
+            var manifest = PackageManifest.Load(tmpDir);
+
+            Assert.NotNull(manifest);
+            Assert.Equal("Alice", manifest.Author);
+            Assert.Equal("MIT", manifest.License);
+            Assert.Equal("https://github.com/example/my-package", manifest.Repository);
+            Assert.NotNull(manifest.Keywords);
+            Assert.Equal(2, manifest.Keywords.Count);
+            Assert.Contains("cli", manifest.Keywords);
+            Assert.Contains("scripting", manifest.Keywords);
+            Assert.Equal(">=1.0.0", manifest.Stash);
+            Assert.NotNull(manifest.Files);
+            Assert.Equal(2, manifest.Files.Count);
+            Assert.Contains("lib/**", manifest.Files);
+            Assert.Contains("bin/**", manifest.Files);
+            Assert.NotNull(manifest.Registries);
+            Assert.Equal("https://registry.example.com", manifest.Registries["default"]);
+            Assert.False(manifest.Private);
+        }
+        finally
+        {
+            Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Load_PrivateTrue_PrivateIsTrue()
+    {
+        string tmpDir = Path.Combine(Path.GetTempPath(), "stash_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tmpDir);
+        try
+        {
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), """{"name": "internal-pkg", "private": true}""");
+
+            var manifest = PackageManifest.Load(tmpDir);
+
+            Assert.NotNull(manifest);
+            Assert.True(manifest.Private);
+        }
+        finally
+        {
+            Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Theory]
+    [InlineData("my-package")]
+    [InlineData("a")]
+    [InlineData("test123")]
+    public void IsValidPackageName_ValidName_ReturnsTrue(string name)
+    {
+        Assert.True(PackageManifest.IsValidPackageName(name));
+    }
+
+    [Theory]
+    [InlineData("@scope/name")]
+    [InlineData("@my-org/my-pkg")]
+    public void IsValidPackageName_ValidScopedName_ReturnsTrue(string name)
+    {
+        Assert.True(PackageManifest.IsValidPackageName(name));
+    }
+
+    [Theory]
+    [InlineData("My-Package")]
+    [InlineData("123abc")]
+    [InlineData("-test")]
+    [InlineData("")]
+    public void IsValidPackageName_InvalidName_ReturnsFalse(string name)
+    {
+        Assert.False(PackageManifest.IsValidPackageName(name));
+    }
+
+    [Fact]
+    public void IsValidPackageName_NameOver64Chars_ReturnsFalse()
+    {
+        string longName = new string('a', 65);
+
+        Assert.False(PackageManifest.IsValidPackageName(longName));
+    }
+
+    [Theory]
+    [InlineData("@/name")]
+    [InlineData("@scope/")]
+    public void IsValidPackageName_InvalidScopedName_ReturnsFalse(string name)
+    {
+        Assert.False(PackageManifest.IsValidPackageName(name));
+    }
+
+    [Fact]
+    public void Validate_ValidManifest_ReturnsEmptyErrors()
+    {
+        var manifest = new PackageManifest { Name = "my-package", Version = "1.0.0" };
+
+        var errors = manifest.Validate();
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void Validate_InvalidName_ReturnsNameError()
+    {
+        var manifest = new PackageManifest { Name = "My-Package", Version = "1.0.0" };
+
+        var errors = manifest.Validate();
+
+        Assert.Contains(errors, e => e.Contains("Invalid package name"));
+    }
+
+    [Fact]
+    public void Validate_InvalidVersion_ReturnsVersionError()
+    {
+        var manifest = new PackageManifest { Name = "my-package", Version = "not-semver" };
+
+        var errors = manifest.Validate();
+
+        Assert.Contains(errors, e => e.Contains("Invalid version"));
+    }
+
+    [Fact]
+    public void Validate_InvalidDependencyConstraint_ReturnsDependencyError()
+    {
+        var manifest = new PackageManifest
+        {
+            Name = "my-package",
+            Version = "1.0.0",
+            Dependencies = new Dictionary<string, string> { { "some-lib", "!!invalid!!" } }
+        };
+
+        var errors = manifest.Validate();
+
+        Assert.Contains(errors, e => e.Contains("some-lib"));
+    }
+
+    [Fact]
+    public void Validate_GitDependency_ReturnsNoError()
+    {
+        var manifest = new PackageManifest
+        {
+            Name = "my-package",
+            Version = "1.0.0",
+            Dependencies = new Dictionary<string, string> { { "git-dep", "git:https://github.com/example/repo" } }
+        };
+
+        var errors = manifest.Validate();
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void ValidateForPublishing_CompleteValidManifest_ReturnsEmptyErrors()
+    {
+        var manifest = new PackageManifest { Name = "my-package", Version = "1.0.0" };
+
+        var errors = manifest.ValidateForPublishing();
+
+        Assert.Empty(errors);
+    }
+
+    [Fact]
+    public void ValidateForPublishing_MissingName_ReturnsNameError()
+    {
+        var manifest = new PackageManifest { Version = "1.0.0" };
+
+        var errors = manifest.ValidateForPublishing();
+
+        Assert.Contains(errors, e => e.Contains("name"));
+    }
+
+    [Fact]
+    public void ValidateForPublishing_MissingVersion_ReturnsVersionError()
+    {
+        var manifest = new PackageManifest { Name = "my-package" };
+
+        var errors = manifest.ValidateForPublishing();
+
+        Assert.Contains(errors, e => e.Contains("version"));
+    }
+
+    [Fact]
+    public void ValidateForPublishing_PrivateTrue_ReturnsPrivateError()
+    {
+        var manifest = new PackageManifest { Name = "my-package", Version = "1.0.0", Private = true };
+
+        var errors = manifest.ValidateForPublishing();
+
+        Assert.Contains(errors, e => e.Contains("private"));
+    }
 }
