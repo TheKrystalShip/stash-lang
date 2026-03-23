@@ -438,6 +438,17 @@ public static class TestBuiltIns
         return $"{fileName} > {testName}";
     }
 
+    /// <summary>
+    /// Converts a Stash runtime value to a <see cref="double"/> for use in numeric
+    /// comparison assertions (<c>assert.greater</c> and <c>assert.less</c>).
+    /// </summary>
+    /// <param name="value">The runtime value to convert. Must be a <see cref="long"/> or <see cref="double"/>.</param>
+    /// <param name="funcName">The name of the calling assert function, used in the error message.</param>
+    /// <param name="span">The source location to attach to the <see cref="RuntimeError"/> if conversion fails.</param>
+    /// <returns>The numeric value as a <see cref="double"/>.</returns>
+    /// <exception cref="RuntimeError">
+    /// Thrown when <paramref name="value"/> is neither a <see cref="long"/> nor a <see cref="double"/>.
+    /// </exception>
     private static double ToDouble(object? value, string funcName, SourceSpan? span)
     {
         return value switch

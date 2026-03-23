@@ -10,15 +10,55 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/codeAction</c> requests to provide quick-fix actions
+/// for diagnostics reported by the Stash analyser.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Currently implements two categories of quick fixes:
+/// </para>
+/// <list type="bullet">
+///   <item>
+///     <term>Did-you-mean suggestions</term>
+///     <description>
+///       When an identifier is flagged as undefined, the handler uses
+///       Levenshtein distance against all in-scope symbols to suggest the closest match
+///       (within an edit distance of 3).
+///     </description>
+///   </item>
+///   <item>
+///     <term>Remove misplaced control-flow keywords</term>
+///     <description>
+///       Offers to delete <c>break</c>, <c>continue</c>, or <c>return</c> statements that
+///       appear outside their valid enclosing scopes.
+///     </description>
+///   </item>
+/// </list>
+/// <para>
+/// Uses the <see cref="AnalysisEngine"/>'s cached result to query the symbol table via
+/// <c>GetVisibleSymbols</c> for fuzzy name matching.
+/// </para>
+/// </remarks>
 public class CodeActionHandler : CodeActionHandlerBase
 {
     private readonly AnalysisEngine _analysis;
 
+    /// <summary>
+    /// Initialises the handler with the analysis engine used to retrieve cached document results.
+    /// </summary>
+    /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
     public CodeActionHandler(AnalysisEngine analysis)
     {
         _analysis = analysis;
     }
 
+    /// <summary>
+    /// Creates the registration options advertising <c>QuickFix</c> code action support.
+    /// </summary>
+    /// <param name="capability">The client's code action capability descriptor.</param>
+    /// <param name="clientCapabilities">The full set of client capabilities.</param>
+    /// <returns>Registration options scoped to <c>stash</c> language documents with <c>QuickFix</c> kind.</returns>
     protected override CodeActionRegistrationOptions CreateRegistrationOptions(
         CodeActionCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -29,6 +69,18 @@ public class CodeActionHandler : CodeActionHandlerBase
             )
         };
 
+    /// <summary>
+    /// Processes the code action request and returns applicable quick fixes for the diagnostics in the request context.
+    /// </summary>
+    /// <param name="request">
+    /// The request containing the document URI, the edited range, and the active diagnostics
+    /// for which code actions are requested.
+    /// </param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="CommandOrCodeActionContainer"/> with zero or more quick-fix actions,
+    /// or <see langword="null"/> if no cached analysis is available for the document.
+    /// </returns>
     public override Task<CommandOrCodeActionContainer?> Handle(CodeActionParams request,
         CancellationToken cancellationToken)
     {
@@ -132,9 +184,22 @@ public class CodeActionHandler : CodeActionHandlerBase
             new CommandOrCodeActionContainer(actions));
     }
 
+    /// <summary>
+    /// Resolve pass-through: returns the <see cref="CodeAction"/> unchanged (resolve not required).
+    /// </summary>
+    /// <param name="request">The code action to resolve.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The same <see cref="CodeAction"/> as received.</returns>
     public override Task<CodeAction> Handle(CodeAction request, CancellationToken cancellationToken)
         => Task.FromResult(request);
 
+    /// <summary>
+    /// Computes the Levenshtein (edit) distance between two strings using a case-insensitive
+    /// dynamic-programming approach.
+    /// </summary>
+    /// <param name="s">The source string.</param>
+    /// <param name="t">The target string.</param>
+    /// <returns>The minimum number of single-character edits required to transform <paramref name="s"/> into <paramref name="t"/>.</returns>
     private static int LevenshteinDistance(string s, string t)
     {
         int n = s.Length, m = t.Length;

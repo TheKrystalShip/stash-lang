@@ -6,15 +6,29 @@ using System.Globalization;
 using System.Text;
 using Stash.Interpreting.Types;
 
-/// <summary>Registers the <c>ini</c> namespace providing INI format parsing and serialization (parse, stringify).</summary>
+/// <summary>
+/// Registers the <c>ini</c> namespace built-in functions for INI format parsing and serialization.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Provides functions for working with INI configuration files: <c>ini.parse</c> and <c>ini.stringify</c>.
+/// </para>
+/// <para>
+/// Section headers in INI files are represented as nested <see cref="StashDictionary"/> instances.
+/// Bare key-value pairs outside any section are stored at the root level of the dictionary.
+/// </para>
+/// </remarks>
 public static class IniBuiltIns
 {
-    /// <summary>Registers the <c>ini</c> namespace and all its functions into the global environment.</summary>
-    /// <param name="globals">The global environment to register into.</param>
+    /// <summary>
+    /// Registers all <c>ini</c> namespace functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var ini = new StashNamespace("ini");
 
+        // ini.parse(string) — Parses an INI-format string into a dict. Section headers become nested dicts.
         ini.Define("parse", new BuiltInFunction("ini.parse", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -32,6 +46,7 @@ public static class IniBuiltIns
             }
         }));
 
+        // ini.stringify(dict) — Serializes a dict to an INI-format string. Nested dicts become section headers.
         ini.Define("stringify", new BuiltInFunction("ini.stringify", 1, (_, args) =>
         {
             if (args[0] is not StashDictionary dict)

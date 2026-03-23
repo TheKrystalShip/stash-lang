@@ -8,9 +8,20 @@ using System.Threading.Tasks;
 using Stash.Interpreting.Types;
 
 /// <summary>
-/// Registers the <c>http</c> namespace providing HTTP client functions (get, post, put, delete, request).
-/// All requests return a response object with status, body, and headers fields.
+/// Registers the <c>http</c> namespace built-in functions for HTTP client operations.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Provides functions for making HTTP requests: <c>http.get</c>, <c>http.post</c>,
+/// <c>http.put</c>, <c>http.patch</c>, <c>http.delete</c>, <c>http.request</c>,
+/// and <c>http.download</c>.
+/// </para>
+/// <para>
+/// All request functions return a <c>HttpResponse</c> struct instance with <c>status</c>,
+/// <c>body</c>, and <c>headers</c> fields. This namespace is only registered when the
+/// <see cref="StashCapabilities.Network"/> capability is enabled.
+/// </para>
+/// </remarks>
 public static class HttpBuiltIns
 {
     /// <summary>
@@ -22,13 +33,14 @@ public static class HttpBuiltIns
     };
 
     /// <summary>
-    /// Registers the <c>http</c> namespace and all its functions into the global environment.
+    /// Registers all <c>http</c> namespace functions into the global environment.
     /// </summary>
-    /// <param name="globals">The global environment to register into.</param>
+    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var http = new StashNamespace("http");
 
+        // http.get(url) — Sends an HTTP GET request. Returns a HttpResponse struct with status, body, and headers.
         http.Define("get", new BuiltInFunction("http.get", 1, (_, args) =>
         {
             if (args[0] is not string url)
@@ -53,6 +65,7 @@ public static class HttpBuiltIns
             }
         }));
 
+        // http.post(url, body) — Sends an HTTP POST request with a JSON body string. Returns a HttpResponse struct.
         http.Define("post", new BuiltInFunction("http.post", 2, (_, args) =>
         {
             if (args[0] is not string url)
@@ -83,6 +96,7 @@ public static class HttpBuiltIns
             }
         }));
 
+        // http.put(url, body) — Sends an HTTP PUT request with a JSON body string. Returns a HttpResponse struct.
         http.Define("put", new BuiltInFunction("http.put", 2, (_, args) =>
         {
             if (args[0] is not string url)
@@ -113,6 +127,7 @@ public static class HttpBuiltIns
             }
         }));
 
+        // http.delete(url) — Sends an HTTP DELETE request. Returns a HttpResponse struct with status, body, and headers.
         http.Define("delete", new BuiltInFunction("http.delete", 1, (_, args) =>
         {
             if (args[0] is not string url)
@@ -137,6 +152,7 @@ public static class HttpBuiltIns
             }
         }));
 
+        // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
         http.Define("request", new BuiltInFunction("http.request", 1, (_, args) =>
         {
             if (args[0] is not StashDictionary options)
@@ -189,6 +205,7 @@ public static class HttpBuiltIns
             }
         }));
 
+        // http.patch(url, body) — Sends an HTTP PATCH request with a JSON body string. Returns a HttpResponse struct.
         http.Define("patch", new BuiltInFunction("http.patch", 2, (_, args) =>
         {
             if (args[0] is not string url)
@@ -219,6 +236,7 @@ public static class HttpBuiltIns
             }
         }));
 
+        // http.download(url, path) — Downloads the response body of a GET request and writes it to the given file path. Returns null.
         http.Define("download", new BuiltInFunction("http.download", 2, (_, args) =>
         {
             if (args[0] is not string url)

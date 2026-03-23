@@ -12,13 +12,44 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/codeLens</c> requests to display reference counts above
+/// top-level function, struct, enum, and constant declarations.
+/// </summary>
+/// <remarks>
+/// <para>
+/// For each top-level symbol the handler counts references in the current document using
+/// <c>SymbolTable.FindReferences</c>, then adds cross-file references from all open documents
+/// that import the current module via <see cref="AnalysisEngine.FindCrossFileReferences"/>.
+/// The aggregated count is displayed as a clickable <c>stash.showReferences</c> command lens.
+/// </para>
+/// <para>
+/// When the document contains parse errors the handler merges the new lenses with the previous
+/// snapshot preserved in <c>_previousLenses</c>, so that lenses do not disappear for symbols
+/// that were temporarily removed from the AST due to a syntax error.
+/// </para>
+/// <para>
+/// Code lens display can be toggled via <see cref="LspSettings.CodeLensEnabled"/>.
+/// </para>
+/// </remarks>
 public class CodeLensHandler : CodeLensHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly LspSettings _settings;
     private readonly ILogger<CodeLensHandler> _logger;
+
+    /// <summary>
+    /// Per-document snapshot of the most recently computed lenses, keyed by symbol name.
+    /// Used to preserve lenses during parse-error recovery.
+    /// </summary>
     private readonly ConcurrentDictionary<Uri, Dictionary<string, CodeLens>> _previousLenses = new();
 
+    /// <summary>
+    /// Initialises the handler with the dependencies required to compute reference counts.
+    /// </summary>
+    /// <param name="analysis">The analysis engine that supplies cached results and cross-file references.</param>
+    /// <param name="settings">LSP settings used to check whether code lens is enabled.</param>
+    /// <param name="logger">Logger for debug diagnostics.</param>
     public CodeLensHandler(AnalysisEngine analysis, LspSettings settings, ILogger<CodeLensHandler> logger)
     {
         _analysis = analysis;
@@ -26,6 +57,12 @@ public class CodeLensHandler : CodeLensHandlerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Creates the registration options for code lens support.
+    /// </summary>
+    /// <param name="capability">The client's code lens capability descriptor.</param>
+    /// <param name="clientCapabilities">The full set of client capabilities.</param>
+    /// <returns>Registration options scoped to <c>stash</c> language documents without a resolve provider.</returns>
     protected override CodeLensRegistrationOptions CreateRegistrationOptions(
         CodeLensCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -34,6 +71,15 @@ public class CodeLensHandler : CodeLensHandlerBase
             ResolveProvider = false
         };
 
+    /// <summary>
+    /// Processes the code lens request and returns one lens per top-level declaration showing its reference count.
+    /// </summary>
+    /// <param name="request">The request containing the document URI.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="CodeLensContainer"/> with one lens per qualifying symbol, or
+    /// <see langword="null"/> if code lens is disabled or no analysis is available.
+    /// </returns>
     public override Task<CodeLensContainer?> Handle(CodeLensParams request,
         CancellationToken cancellationToken)
     {
@@ -152,6 +198,12 @@ public class CodeLensHandler : CodeLensHandlerBase
         return Task.FromResult<CodeLensContainer?>(new CodeLensContainer(currentByName.Values));
     }
 
+    /// <summary>
+    /// Resolve pass-through: returns the <see cref="CodeLens"/> unchanged (resolve not required).
+    /// </summary>
+    /// <param name="request">The code lens item to resolve.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The same <see cref="CodeLens"/> as received.</returns>
     public override Task<CodeLens> Handle(CodeLens request, CancellationToken cancellationToken)
         => Task.FromResult(request);
 }

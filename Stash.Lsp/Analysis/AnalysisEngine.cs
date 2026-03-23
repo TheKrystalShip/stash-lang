@@ -8,13 +8,37 @@ using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
 
+/// <summary>
+/// Core analysis engine for the Stash language server that lexes, parses, and semantically
+/// validates source documents and caches the results for handler consumption.
+/// </summary>
+/// <remarks>
+/// Each call to <see cref="Analyze"/> performs a full pipeline run (lex → parse → symbol
+/// collection → import resolution → type inference → semantic validation) and stores the
+/// <see cref="AnalysisResult"/> in an in-memory cache keyed by document <see cref="Uri"/>.
+/// Handlers retrieve cached results via <see cref="GetCachedResult"/> or the convenience
+/// method <see cref="GetContextAt"/>.
+/// </remarks>
 public class AnalysisEngine
 {
+    /// <summary>Thread-safe cache mapping document URIs to their most recent analysis results.</summary>
     private readonly ConcurrentDictionary<Uri, AnalysisResult> _cache = new();
+
+    /// <summary>Resolver responsible for locating and parsing imported Stash modules.</summary>
     private readonly ImportResolver _importResolver = new();
 
+    /// <summary>Gets the <see cref="ImportResolver"/> used to resolve cross-file imports.</summary>
     public ImportResolver ImportResolver => _importResolver;
 
+    /// <summary>
+    /// Performs a full analysis pass on the given source text and caches the result.
+    /// </summary>
+    /// <param name="uri">The document URI that identifies the source file.</param>
+    /// <param name="source">The raw source text to analyze.</param>
+    /// <returns>
+    /// An <see cref="AnalysisResult"/> containing tokens, AST statements, symbol table,
+    /// diagnostics, and import information.
+    /// </returns>
     public AnalysisResult Analyze(Uri uri, string source)
     {
         var filePath = uri.IsFile ? uri.LocalPath : uri.ToString();
@@ -96,6 +120,12 @@ public class AnalysisEngine
         return result;
     }
 
+    /// <summary>
+    /// Returns the most recently cached <see cref="AnalysisResult"/> for the given URI, or
+    /// <see langword="null"/> if the document has not been analyzed yet.
+    /// </summary>
+    /// <param name="uri">The document URI to look up.</param>
+    /// <returns>The cached <see cref="AnalysisResult"/>, or <see langword="null"/> if not present.</returns>
     public AnalysisResult? GetCachedResult(Uri uri)
     {
         return _cache.TryGetValue(uri, out var result) ? result : null;
@@ -122,6 +152,10 @@ public class AnalysisEngine
         return (result, word);
     }
 
+    /// <summary>
+    /// Invalidates the import cache for the given file so that the next analysis picks up changes.
+    /// </summary>
+    /// <param name="absolutePath">The absolute file system path of the module to invalidate.</param>
     public void InvalidateModule(string absolutePath)
     {
         _importResolver.InvalidateCache(absolutePath);
@@ -205,6 +239,15 @@ public class AnalysisEngine
         return results;
     }
 
+    /// <summary>
+    /// Parses the Stash source file at the given path and returns a <see cref="ImportResolver.ModuleInfo"/>
+    /// containing its symbol table and any lex/parse diagnostics.
+    /// </summary>
+    /// <param name="absolutePath">The absolute file system path of the module to parse.</param>
+    /// <returns>
+    /// An <see cref="ImportResolver.ModuleInfo"/> describing the module's URI, path, scope tree,
+    /// and structured errors.
+    /// </returns>
     private ImportResolver.ModuleInfo ParseModule(string absolutePath)
     {
         var uri = new Uri(absolutePath);

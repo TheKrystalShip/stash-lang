@@ -5,23 +5,45 @@ using System.Collections.Generic;
 using System.Net.NetworkInformation;
 using Stash.Interpreting.Types;
 
+/// <summary>
+/// Registers the <c>sys</c> namespace built-in functions for system information and resource queries.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Provides hardware and OS metrics: CPU count (<c>sys.cpuCount</c>), memory usage
+/// (<c>sys.totalMemory</c>, <c>sys.freeMemory</c>), system uptime (<c>sys.uptime</c>),
+/// load averages (<c>sys.loadAvg</c>, Linux only), disk usage (<c>sys.diskUsage</c>),
+/// current process ID (<c>sys.pid</c>), temporary directory (<c>sys.tempDir</c>), and
+/// network interface enumeration (<c>sys.networkInterfaces</c>).
+/// </para>
+/// <para>
+/// Some functions read from <c>/proc</c> on Linux and fall back gracefully on other platforms.
+/// </para>
+/// </remarks>
 public static class SysBuiltIns
 {
+    /// <summary>
+    /// Registers all <c>sys</c> namespace functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var sys = new StashNamespace("sys");
 
+        // sys.cpuCount() — Returns the number of logical CPU processors available to the current process.
         sys.Define("cpuCount", new BuiltInFunction("sys.cpuCount", 0, (_, args) =>
         {
             return (long)Environment.ProcessorCount;
         }));
 
+        // sys.totalMemory() — Returns the total available memory in bytes as reported by the GC memory info.
         sys.Define("totalMemory", new BuiltInFunction("sys.totalMemory", 0, (_, args) =>
         {
             var gcInfo = GC.GetGCMemoryInfo();
             return gcInfo.TotalAvailableMemoryBytes;
         }));
 
+        // sys.freeMemory() — Returns the available free memory in bytes. On Linux reads /proc/meminfo; falls back to GC info.
         sys.Define("freeMemory", new BuiltInFunction("sys.freeMemory", 0, (_, args) =>
         {
             if (OperatingSystem.IsLinux())
@@ -47,11 +69,14 @@ public static class SysBuiltIns
             return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
         }));
 
+        // sys.uptime() — Returns the system uptime in seconds (as a float) since process start via Environment.TickCount64.
         sys.Define("uptime", new BuiltInFunction("sys.uptime", 0, (_, args) =>
         {
             return Environment.TickCount64 / 1000.0;
         }));
 
+        // sys.loadAvg() — Returns a 3-element array of 1-, 5-, and 15-minute load averages.
+        //   On Linux reads /proc/loadavg; returns [0.0, 0.0, 0.0] on non-Linux platforms.
         sys.Define("loadAvg", new BuiltInFunction("sys.loadAvg", 0, (_, args) =>
         {
             if (OperatingSystem.IsLinux())
@@ -74,6 +99,8 @@ public static class SysBuiltIns
             return new List<object?> { 0.0, 0.0, 0.0 };
         }));
 
+        // sys.diskUsage([path]) — Returns a dict with "total", "used", and "free" bytes for the drive containing 'path'.
+        //   Defaults to the root drive ("/") if no path is provided.
         sys.Define("diskUsage", new BuiltInFunction("sys.diskUsage", -1, (_, args) =>
         {
             string path;
@@ -113,16 +140,20 @@ public static class SysBuiltIns
             return dict;
         }));
 
+        // sys.pid() — Returns the process ID (PID) of the current process as an integer.
         sys.Define("pid", new BuiltInFunction("sys.pid", 0, (_, args) =>
         {
             return (long)Environment.ProcessId;
         }));
 
+        // sys.tempDir() — Returns the path to the system's temporary directory (trailing separator stripped).
         sys.Define("tempDir", new BuiltInFunction("sys.tempDir", 0, (_, args) =>
         {
             return System.IO.Path.GetTempPath().TrimEnd(System.IO.Path.DirectorySeparatorChar);
         }));
 
+        // sys.networkInterfaces() — Returns an array of dicts describing each network interface.
+        //   Each dict has: "name" (string), "type" (string), "status" (string), "addresses" (array of IP strings).
         sys.Define("networkInterfaces", new BuiltInFunction("sys.networkInterfaces", 0, (_, args) =>
         {
             var interfaces = NetworkInterface.GetAllNetworkInterfaces();

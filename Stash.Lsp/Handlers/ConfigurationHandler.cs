@@ -9,17 +9,62 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>workspace/didChangeConfiguration</c> notifications to propagate
+/// editor settings changes to <see cref="LspSettings"/>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The handler reads the incoming JSON settings object under the <c>stash</c> namespace and
+/// updates the following <see cref="LspSettings"/> properties:
+/// </para>
+/// <list type="bullet">
+///   <item>
+///     <term><c>stash.lsp.debounceTime</c></term>
+///     <description>Maps to <see cref="LspSettings.DebounceDelayMs"/> (0–1000 ms).</description>
+///   </item>
+///   <item>
+///     <term><c>stash.lsp.logLevel</c></term>
+///     <description>Maps to <see cref="LspSettings.LogLevel"/> (trace/debug/information/warning/error).</description>
+///   </item>
+///   <item>
+///     <term><c>stash.inlayHints.enabled</c></term>
+///     <description>Maps to <see cref="LspSettings.InlayHintsEnabled"/>.</description>
+///   </item>
+///   <item>
+///     <term><c>stash.codeLens.enabled</c></term>
+///     <description>Maps to <see cref="LspSettings.CodeLensEnabled"/>.</description>
+///   </item>
+/// </list>
+/// <para>
+/// Updated settings are immediately visible to all handlers that hold a reference to the
+/// shared <see cref="LspSettings"/> singleton.
+/// </para>
+/// </remarks>
 public class ConfigurationHandler : DidChangeConfigurationHandlerBase
 {
     private readonly LspSettings _settings;
     private readonly ILogger<ConfigurationHandler> _logger;
 
+    /// <summary>
+    /// Initialises the handler with the shared settings object and a logger.
+    /// </summary>
+    /// <param name="settings">The mutable LSP settings instance shared across all handlers.</param>
+    /// <param name="logger">Logger for reporting the applied configuration values.</param>
     public ConfigurationHandler(LspSettings settings, ILogger<ConfigurationHandler> logger)
     {
         _settings = settings;
         _logger = logger;
     }
 
+    /// <summary>
+    /// Processes the configuration change notification and updates <see cref="LspSettings"/> accordingly.
+    /// </summary>
+    /// <param name="request">
+    /// The notification containing the new settings as a JSON object rooted at the workspace configuration.
+    /// </param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns><see cref="Unit.Task"/> after the settings have been applied.</returns>
     public override Task<Unit> Handle(DidChangeConfigurationParams request, CancellationToken cancellationToken)
     {
         if (request.Settings is JObject root)

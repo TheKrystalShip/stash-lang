@@ -13,17 +13,52 @@ using Stash.Common;
 using Stash.Lsp.Analysis;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 
+/// <summary>
+/// Handles LSP <c>textDocument/completion</c> requests to provide autocompletion suggestions.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Provides completions for keywords, built-in functions, built-in namespaces, and
+/// user-defined symbols visible at the cursor position (via <see cref="ScopeTree.GetVisibleSymbols"/>).
+/// </para>
+/// <para>
+/// When the cursor follows a <c>.</c>, only members of the preceding identifier are offered:
+/// built-in namespace members, import-alias module exports, user-defined struct fields/methods,
+/// built-in struct fields, or enum members. Uses <see cref="AnalysisEngine.GetCachedResult"/>
+/// to obtain the current <see cref="AnalysisResult"/> and <see cref="ScopeTree"/> for the file.
+/// </para>
+/// <para>
+/// When the cursor is inside a string that follows an <c>import</c> or <c>from</c> keyword,
+/// package names from the <c>stashes/</c> directory are suggested.
+/// </para>
+/// </remarks>
 public class CompletionHandler : CompletionHandlerBase
 {
+    /// <summary>The analysis engine used to obtain cached analysis results and symbol trees.</summary>
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="CompletionHandler"/> with the services
+    /// needed to resolve completion items.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing cached <see cref="AnalysisResult"/> data.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
     public CompletionHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the completion request and returns a list of completion items appropriate
+    /// for the cursor context — import path strings, dot-access members, or the full symbol list.
+    /// </summary>
+    /// <param name="request">The completion request containing the document URI and cursor position.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>A <see cref="CompletionList"/> with matching completion items, or an empty list when inside a non-import string.</returns>
     public override Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
@@ -71,6 +106,15 @@ public class CompletionHandler : CompletionHandlerBase
         return Task.FromResult(BuildFullCompletionList(uri, line + 1, col + 1));
     }
 
+    /// <summary>
+    /// Builds the default (non-dot) completion list: keywords, built-in functions,
+    /// built-in namespaces, and all symbols visible at the given cursor position according
+    /// to the <see cref="ScopeTree"/>.
+    /// </summary>
+    /// <param name="uri">The document URI for which to retrieve analysis results.</param>
+    /// <param name="line">1-based line number of the cursor.</param>
+    /// <param name="col">1-based column number of the cursor.</param>
+    /// <returns>A <see cref="CompletionList"/> containing all applicable items.</returns>
     private CompletionList BuildFullCompletionList(Uri uri, int line, int col)
     {
         var items = new List<CompletionItem>();
@@ -135,6 +179,13 @@ public class CompletionHandler : CompletionHandlerBase
         return new CompletionList(items);
     }
 
+    /// <summary>
+    /// Determines whether the cursor at <paramref name="col"/> on <paramref name="line"/>
+    /// is inside an unescaped double-quoted string literal.
+    /// </summary>
+    /// <param name="line">The source line text.</param>
+    /// <param name="col">The 0-based cursor column.</param>
+    /// <returns><see langword="true"/> if the cursor is inside a string; otherwise <see langword="false"/>.</returns>
     private static bool IsInsideString(string line, int col)
     {
         int quoteCount = 0;
@@ -148,6 +199,13 @@ public class CompletionHandler : CompletionHandlerBase
         return quoteCount % 2 != 0;
     }
 
+    /// <summary>
+    /// If the character immediately before the cursor is a <c>.</c>, walks backwards to
+    /// extract the identifier that precedes it (the dot-access prefix).
+    /// </summary>
+    /// <param name="line">The source line text.</param>
+    /// <param name="col">The 0-based cursor column.</param>
+    /// <returns>The identifier before the dot, or <see langword="null"/> if no dot context is found.</returns>
     private static string? GetDotPrefix(string line, int col)
     {
         // col is 0-based cursor position; the dot is at col-1
@@ -173,6 +231,16 @@ public class CompletionHandler : CompletionHandlerBase
         return line.Substring(end, col - 1 - end);
     }
 
+    /// <summary>
+    /// Handles dot-access completion for a given <paramref name="prefix"/> by resolving it as a
+    /// built-in namespace, an import alias, a struct instance, a struct type, a built-in struct,
+    /// or an enum, and returning only the applicable members.
+    /// </summary>
+    /// <param name="prefix">The identifier before the dot.</param>
+    /// <param name="uri">The document URI used to look up the cached analysis result.</param>
+    /// <param name="lspLine">0-based LSP line of the cursor.</param>
+    /// <param name="lspCol">0-based LSP column of the cursor.</param>
+    /// <returns>A <see cref="CompletionList"/> containing the members of the resolved type or namespace.</returns>
     private CompletionList HandleDotCompletion(string prefix, Uri uri, int lspLine, int lspCol)
     {
         var items = new List<CompletionItem>();
@@ -307,11 +375,22 @@ public class CompletionHandler : CompletionHandlerBase
         return new CompletionList(items);
     }
 
+    /// <summary>
+    /// Handles <c>completionItem/resolve</c> requests. No additional data is resolved;
+    /// the item is returned unchanged.
+    /// </summary>
+    /// <param name="request">The completion item to resolve.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>The same <paramref name="request"/> item unmodified.</returns>
     public override Task<CompletionItem> Handle(CompletionItem request, CancellationToken cancellationToken)
     {
         return Task.FromResult(request);
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c>
+    /// language files, triggers on <c>.</c> and <c>(</c>, and does not use a resolve provider.
+    /// </summary>
     protected override CompletionRegistrationOptions CreateRegistrationOptions(
         CompletionCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -321,6 +400,18 @@ public class CompletionHandler : CompletionHandlerBase
             ResolveProvider = false
         };
 
+    /// <summary>
+    /// Returns package-name completion items when the cursor is inside an import-path string
+    /// (i.e., after <c>from</c> or <c>import</c>). Scans the <c>stashes/</c> directory under
+    /// the project root for installable packages, including scoped (<c>@scope/name</c>) entries.
+    /// </summary>
+    /// <param name="line">The current source line text.</param>
+    /// <param name="col">The 0-based cursor column.</param>
+    /// <param name="uri">The document URI used to locate the project root.</param>
+    /// <returns>
+    /// A list of package-name completion items, or <see langword="null"/> if not in an import context
+    /// or no packages are found.
+    /// </returns>
     private List<CompletionItem>? GetImportCompletions(string line, int col, Uri uri)
     {
         // Find the opening quote before the cursor
@@ -403,6 +494,12 @@ public class CompletionHandler : CompletionHandlerBase
         return items.Count > 0 ? items : null;
     }
 
+    /// <summary>
+    /// Maps a Stash <see cref="Analysis.SymbolKind"/> to the corresponding LSP
+    /// <see cref="LspCompletionItemKind"/> for display in the editor's completion UI.
+    /// </summary>
+    /// <param name="kind">The Stash symbol kind to map.</param>
+    /// <returns>The equivalent LSP completion item kind.</returns>
     private static LspCompletionItemKind MapCompletionKind(Analysis.SymbolKind kind) => kind switch
     {
         Analysis.SymbolKind.Function => LspCompletionItemKind.Function,

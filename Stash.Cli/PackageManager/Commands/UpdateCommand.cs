@@ -4,8 +4,37 @@ using Stash.Common;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Implements the <c>stash pkg update</c> command for upgrading one or all
+/// installed dependencies to the latest versions permitted by their constraints.
+/// </summary>
+/// <remarks>
+/// <para>
+/// When a package name is provided, only that package's entry is removed from
+/// <see cref="LockFile"/> before re-running <see cref="PackageInstaller.Install"/>,
+/// allowing the resolver to pick a newer compatible version while leaving all
+/// other resolved versions intact.
+/// </para>
+/// <para>
+/// When no package name is given, the entire <c>stash-lock.json</c> file is
+/// deleted so that all dependencies are re-resolved from scratch.
+/// </para>
+/// <para>
+/// Registry resolution and authentication use <see cref="RegistryResolver"/>
+/// and <see cref="UserConfig"/> respectively.
+/// </para>
+/// </remarks>
 public static class UpdateCommand
 {
+    /// <summary>
+    /// Executes the update command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg update</c>. An optional
+    /// positional argument specifies the single package to update; when omitted,
+    /// all dependencies are updated. The <c>--registry &lt;url&gt;</c> flag
+    /// optionally overrides the default registry.
+    /// </param>
     public static void Execute(string[] args)
     {
         string projectDir = Directory.GetCurrentDirectory();

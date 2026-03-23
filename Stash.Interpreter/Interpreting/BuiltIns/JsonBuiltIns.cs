@@ -7,15 +7,30 @@ using System.Text;
 using System.Text.Json;
 using Stash.Interpreting.Types;
 
-/// <summary>Registers the <c>json</c> namespace providing JSON parsing and serialization (parse, stringify, pretty).</summary>
+/// <summary>
+/// Registers the <c>json</c> namespace built-in functions for JSON serialization and deserialization.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Provides functions for working with JSON data: <c>json.parse</c>, <c>json.stringify</c>,
+/// <c>json.pretty</c>, and <c>json.valid</c>.
+/// </para>
+/// <para>
+/// JSON objects are represented as <see cref="StashDictionary"/> instances and JSON arrays
+/// as <c>List&lt;object?&gt;</c> values in the Stash runtime.
+/// </para>
+/// </remarks>
 public static class JsonBuiltIns
 {
-    /// <summary>Registers the <c>json</c> namespace and all its functions into the global environment.</summary>
-    /// <param name="globals">The global environment to register into.</param>
+    /// <summary>
+    /// Registers all <c>json</c> namespace functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var json = new StashNamespace("json");
 
+        // json.parse(string) — Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).
         json.Define("parse", new BuiltInFunction("json.parse", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -34,16 +49,19 @@ public static class JsonBuiltIns
             }
         }));
 
+        // json.stringify(value) — Serializes a Stash value to a compact JSON string.
         json.Define("stringify", new BuiltInFunction("json.stringify", 1, (_, args) =>
         {
             return StringifyValue(args[0]);
         }));
 
+        // json.pretty(value) — Serializes a Stash value to an indented, human-readable JSON string.
         json.Define("pretty", new BuiltInFunction("json.pretty", 1, (_, args) =>
         {
             return PrettyValue(args[0], 0);
         }));
 
+        // json.valid(string) — Returns true if the given string is valid JSON, false otherwise.
         json.Define("valid", new BuiltInFunction("json.valid", 1, (_, args) =>
         {
             if (args[0] is not string s)

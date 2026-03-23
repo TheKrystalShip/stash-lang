@@ -12,26 +12,76 @@ using Stash.Parsing.AST;
 /// Resolves import statements to their target files, parses imported files,
 /// and provides exported symbols for cross-file analysis.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Two import forms are handled:
+/// </para>
+/// <list type="bullet">
+///   <item><description><c>import { name1, name2 } from "path.stash"</c> — selective import, resolved via <see cref="ResolveSelectiveImport"/>.</description></item>
+///   <item><description><c>import "path.stash" as alias</c> — namespace import, resolved via <see cref="ResolveNamespaceImport"/>.</description></item>
+/// </list>
+/// <para>
+/// Parsed module symbols are cached in a <see cref="System.Collections.Concurrent.ConcurrentDictionary{TKey,TValue}"/>
+/// keyed by absolute file path. Use <see cref="InvalidateCache"/> to evict a file when it changes.
+/// </para>
+/// <para>
+/// Reverse dependency tracking (file → importers) is maintained by <see cref="TrackDependency"/>
+/// and exposed via <see cref="GetDependents"/>. <see cref="AnalysisEngine"/> uses this to
+/// re-analyse all files that depend on a changed module.
+/// </para>
+/// <para>
+/// Circular imports are detected via a <c>_loadingModules</c> guard set; a circular dependency
+/// returns an empty module to break the cycle without throwing.
+/// </para>
+/// </remarks>
 public class ImportResolver
 {
     // Cache of parsed module symbols, keyed by absolute file path
     private readonly ConcurrentDictionary<string, ModuleInfo> _moduleCache = new();
+
+    /// <summary>Guard set preventing infinite recursion on circular imports.</summary>
     private readonly HashSet<string> _loadingModules = new();
     // Map from imported file path → set of document URIs that import it
     private readonly ConcurrentDictionary<string, HashSet<Uri>> _dependents = new();
 
+    /// <summary>
+    /// Delegate signature for a function that parses a Stash source file at the given absolute
+    /// path and returns its exported <see cref="ModuleInfo"/>. Provided by <see cref="AnalysisEngine"/>
+    /// so the resolver does not need to depend on the engine directly.
+    /// </summary>
+    /// <param name="absolutePath">Absolute path to the Stash file to parse.</param>
+    /// <returns>The parsed module information.</returns>
     public delegate ModuleInfo ModuleParser(string absolutePath);
 
     /// <summary>
     /// Represents the exported symbols from a parsed module file.
     /// </summary>
+    /// <remarks>
+    /// Instances are created by the <see cref="ModuleParser"/> delegate and stored in the module
+    /// cache. They are also stored in <see cref="ImportResolution.NamespaceImports"/> for
+    /// namespace-import aliases to enable dot-completion on the alias.
+    /// </remarks>
     public class ModuleInfo
     {
+        /// <summary>Gets the URI of the module file.</summary>
         public Uri Uri { get; }
+
+        /// <summary>Gets the absolute file-system path of the module.</summary>
         public string AbsolutePath { get; }
+
+        /// <summary>Gets the scope tree containing all top-level symbols exported by the module.</summary>
         public ScopeTree Symbols { get; }
+
+        /// <summary>Gets any parse errors encountered when loading the module.</summary>
         public List<DiagnosticError> Errors { get; }
 
+        /// <summary>
+        /// Initializes a new <see cref="ModuleInfo"/> with the given URI, path, symbol tree, and errors.
+        /// </summary>
+        /// <param name="uri">The URI of the module file.</param>
+        /// <param name="absolutePath">The absolute file-system path of the module.</param>
+        /// <param name="symbols">The parsed symbol tree for the module.</param>
+        /// <param name="errors">Any parse errors encountered.</param>
         public ModuleInfo(Uri uri, string absolutePath, ScopeTree symbols, List<DiagnosticError> errors)
         {
             Uri = uri;
@@ -255,6 +305,12 @@ public class ImportResolver
         return absolutePath;
     }
 
+    /// <summary>
+    /// Tracks an import dependency: records that <paramref name="importerUri"/> imports the file
+    /// at <paramref name="importedPath"/>. Thread-safe via per-set locking.
+    /// </summary>
+    /// <param name="importedPath">The absolute path of the imported file.</param>
+    /// <param name="importerUri">The URI of the file that contains the import statement.</param>
     private void TrackDependency(string importedPath, Uri importerUri)
     {
         var dependents = _dependents.GetOrAdd(importedPath, _ => new HashSet<Uri>());

@@ -8,17 +8,48 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/references</c> requests to find all references to the
+/// symbol under the cursor across the current document and the open workspace.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses <see cref="AnalysisEngine.GetContextAt"/> to identify the word at the cursor,
+/// then calls <see cref="ScopeTree.FindReferences"/> to locate all in-document references.
+/// Cross-file references in open workspace documents are appended via
+/// <see cref="AnalysisEngine.FindCrossFileReferences"/>.
+/// </para>
+/// </remarks>
 public class ReferencesHandler : ReferencesHandlerBase
 {
+    /// <summary>The analysis engine used to obtain context and find cross-file references.</summary>
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="ReferencesHandler"/> with the services
+    /// needed to locate symbol references.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and cross-file reference search.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
     public ReferencesHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the find-all-references request and returns all locations where the
+    /// symbol under the cursor is referenced, including cross-file usages.
+    /// </summary>
+    /// <param name="request">The references request containing the document URI and cursor position.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>
+    /// A <see cref="LocationContainer"/> with all reference locations, or
+    /// <see langword="null"/> if no symbol can be resolved or no references are found.
+    /// </returns>
     public override Task<LocationContainer?> Handle(ReferenceParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
@@ -63,6 +94,9 @@ public class ReferencesHandler : ReferencesHandlerBase
         return Task.FromResult<LocationContainer?>(new LocationContainer(locations));
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c> language files.
+    /// </summary>
     protected override ReferenceRegistrationOptions CreateRegistrationOptions(
         ReferenceCapability capability, ClientCapabilities clientCapabilities) =>
         new()

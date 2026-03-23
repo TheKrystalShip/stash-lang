@@ -13,15 +13,42 @@ using Stash.Lexing;
 using Stash.Lsp.Analysis;
 using Stash.Parsing.AST;
 
+/// <summary>
+/// Handles LSP <c>textDocument/documentLink</c> requests to make import path strings
+/// clickable hyperlinks in editors.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Walks the top-level statement list from the <see cref="AnalysisEngine"/> cached result,
+/// locates all <c>import</c> and <c>import … as</c> statements, and produces a
+/// <see cref="DocumentLink"/> for each import path token.
+/// </para>
+/// <para>
+/// Relative and bare specifier paths are resolved against the document's directory using
+/// <c>ModuleResolver</c>.  When a resolved file exists on disk the link's
+/// <see cref="DocumentLink.Target"/> is set to a <c>file://</c> URI; otherwise the tooltip
+/// shows the raw import string.
+/// </para>
+/// </remarks>
 public class DocumentLinkHandler : DocumentLinkHandlerBase
 {
     private readonly AnalysisEngine _analysis;
 
+    /// <summary>
+    /// Initialises the handler with the analysis engine used to retrieve cached document results.
+    /// </summary>
+    /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
     public DocumentLinkHandler(AnalysisEngine analysis)
     {
         _analysis = analysis;
     }
 
+    /// <summary>
+    /// Creates the registration options for document link support.
+    /// </summary>
+    /// <param name="capability">The client's document link capability descriptor.</param>
+    /// <param name="clientCapabilities">The full set of client capabilities.</param>
+    /// <returns>Registration options scoped to <c>stash</c> language documents without a resolve provider.</returns>
     protected override DocumentLinkRegistrationOptions CreateRegistrationOptions(
         DocumentLinkCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -30,9 +57,24 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
             ResolveProvider = false
         };
 
+    /// <summary>
+    /// Resolve pass-through: returns the <see cref="DocumentLink"/> unchanged.
+    /// </summary>
+    /// <param name="request">The document link item to resolve.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The same <see cref="DocumentLink"/> as received.</returns>
     public override Task<DocumentLink> Handle(DocumentLink request, CancellationToken cancellationToken) =>
         Task.FromResult(request);
 
+    /// <summary>
+    /// Processes the document link request and returns a link for each import statement in the document.
+    /// </summary>
+    /// <param name="request">The request containing the document URI.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="DocumentLinkContainer"/> with one link per import statement,
+    /// or <see langword="null"/> if no cached analysis is available.
+    /// </returns>
     public override Task<DocumentLinkContainer?> Handle(DocumentLinkParams request,
         CancellationToken cancellationToken)
     {
@@ -62,6 +104,16 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
         return Task.FromResult<DocumentLinkContainer?>(new DocumentLinkContainer(links));
     }
 
+    /// <summary>
+    /// Constructs a <see cref="DocumentLink"/> for a single import path token, resolving the path
+    /// to a <c>file://</c> URI when possible.
+    /// </summary>
+    /// <param name="links">The accumulator list to append the link to.</param>
+    /// <param name="pathToken">The string literal token containing the import path.</param>
+    /// <param name="documentDir">
+    /// The directory of the importing document, used as the base for relative path resolution.
+    /// May be <see langword="null"/> for non-file URIs.
+    /// </param>
     private static void AddLink(List<DocumentLink> links, Token pathToken, string? documentDir)
     {
         // The path token's Literal is the string value (without quotes)

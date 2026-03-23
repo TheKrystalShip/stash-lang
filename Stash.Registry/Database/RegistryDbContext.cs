@@ -3,17 +3,48 @@ using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Database;
 
+/// <summary>
+/// Entity Framework Core <see cref="DbContext"/> for the Stash package registry.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Exposes one <see cref="DbSet{TEntity}"/> per registry entity and configures the
+/// database schema in <see cref="OnModelCreating"/>. All column names follow
+/// <c>snake_case</c> convention to match the SQLite schema. Foreign-key cascade
+/// deletes are configured for versions → packages, tokens → users, and
+/// owners → packages.
+/// </para>
+/// </remarks>
 public sealed class RegistryDbContext : DbContext
 {
+    /// <summary>
+    /// Initialises the context with the provided EF Core options.
+    /// </summary>
+    /// <param name="options">The <see cref="DbContextOptions{RegistryDbContext}"/> to use.</param>
     public RegistryDbContext(DbContextOptions<RegistryDbContext> options) : base(options) { }
 
+    /// <summary>Gets the <see cref="PackageRecord"/> table.</summary>
     public DbSet<PackageRecord> Packages => Set<PackageRecord>();
+
+    /// <summary>Gets the <see cref="VersionRecord"/> table.</summary>
     public DbSet<VersionRecord> Versions => Set<VersionRecord>();
+
+    /// <summary>Gets the <see cref="UserRecord"/> table.</summary>
     public DbSet<UserRecord> Users => Set<UserRecord>();
+
+    /// <summary>Gets the <see cref="TokenRecord"/> table.</summary>
     public DbSet<TokenRecord> Tokens => Set<TokenRecord>();
+
+    /// <summary>Gets the <see cref="OwnerEntry"/> table.</summary>
     public DbSet<OwnerEntry> Owners => Set<OwnerEntry>();
+
+    /// <summary>Gets the <see cref="AuditEntry"/> audit log table.</summary>
     public DbSet<AuditEntry> AuditLog => Set<AuditEntry>();
 
+    /// <summary>
+    /// Configures entity mappings, column names, keys, and relationships.
+    /// </summary>
+    /// <param name="modelBuilder">The builder used to construct the EF Core model.</param>
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<PackageRecord>(entity =>

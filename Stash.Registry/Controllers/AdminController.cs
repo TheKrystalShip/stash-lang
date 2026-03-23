@@ -13,6 +13,17 @@ using Stash.Registry.Contracts;
 
 namespace Stash.Registry.Controllers;
 
+/// <summary>
+/// REST API controller for administrative operations.
+/// </summary>
+/// <remarks>
+/// <para>
+/// All endpoints in this controller require a JWT with the <c>admin</c> role,
+/// enforced by the <c>RequireAdmin</c> authorization policy. Operations include
+/// registry statistics, user management, package ownership adjustments, and
+/// paginated audit log access.
+/// </para>
+/// </remarks>
 [Authorize(Policy = "RequireAdmin")]
 [ApiController]
 [Route("api/v1/admin")]
@@ -23,6 +34,13 @@ public class AdminController : ControllerBase
     private readonly AuditService _auditService;
     private readonly RegistryConfig _config;
 
+    /// <summary>
+    /// Initialises the controller with its required services.
+    /// </summary>
+    /// <param name="db">Registry database for user, package, and ownership queries.</param>
+    /// <param name="authProvider">Provider used when creating new user accounts.</param>
+    /// <param name="auditService">Service that records administrative audit events.</param>
+    /// <param name="config">Registry-wide configuration.</param>
     public AdminController(
         IRegistryDatabase db,
         IAuthProvider authProvider,
@@ -35,6 +53,14 @@ public class AdminController : ControllerBase
         _config = config;
     }
 
+    /// <summary>
+    /// Returns high-level registry statistics.
+    /// </summary>
+    /// <remarks>Requires an admin JWT.</remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="StatsResponse"/> containing the total registered
+    /// user count.
+    /// </returns>
     [HttpGet("stats")]
     public async Task<IActionResult> GetStats()
     {
@@ -42,6 +68,20 @@ public class AdminController : ControllerBase
         return Ok(new StatsResponse { Users = users });
     }
 
+    /// <summary>
+    /// Creates a new user account as an administrator.
+    /// </summary>
+    /// <remarks>
+    /// Reads a <see cref="CreateUserRequest"/> JSON body. If the <c>role</c> field is
+    /// <c>admin</c>, the user's role is promoted immediately after creation via
+    /// <see cref="IRegistryDatabase.UpdateUserRoleAsync"/>. The creation is recorded in
+    /// the audit log. Requires an admin JWT.
+    /// </remarks>
+    /// <returns>
+    /// <c>201</c> with a <see cref="CreateUserResponse"/> containing the new username and
+    /// assigned role, <c>400</c> if validation fails, or <c>409</c> if the username is
+    /// already taken.
+    /// </returns>
     [HttpPost("users")]
     public async Task<IActionResult> CreateUser()
     {
@@ -94,6 +134,19 @@ public class AdminController : ControllerBase
         return StatusCode(201, new CreateUserResponse { Username = newUsername, Role = newRole });
     }
 
+    /// <summary>
+    /// Deletes a user account and its associated data.
+    /// </summary>
+    /// <param name="username">The URL-encoded username to delete.</param>
+    /// <remarks>
+    /// Cascading behaviour: tokens are removed automatically via the foreign-key
+    /// constraint; ownership entries are removed manually before the user row is
+    /// deleted. The action is recorded in the audit log. Requires an admin JWT.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="SuccessResponse"/> on success,
+    /// or <c>404</c> if the user does not exist.
+    /// </returns>
     [HttpDelete("users/{username}")]
     public async Task<IActionResult> DeleteUser(string username)
     {
@@ -113,6 +166,20 @@ public class AdminController : ControllerBase
         return Ok(new SuccessResponse());
     }
 
+    /// <summary>
+    /// Adds or removes package owners.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name whose ownership list is being modified.</param>
+    /// <remarks>
+    /// Reads an <see cref="OwnerUpdateRequest"/> JSON body with optional <c>add</c> and
+    /// <c>remove</c> owner lists. Each addition and removal is recorded individually in
+    /// the audit log. Requires an admin JWT.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with an <see cref="OwnerListResponse"/> containing the updated owner list,
+    /// <c>400</c> if the request body is malformed,
+    /// or <c>404</c> if the package does not exist.
+    /// </returns>
     [HttpPut("packages/{name}/owners")]
     public async Task<IActionResult> ManageOwners(string name)
     {
@@ -158,6 +225,23 @@ public class AdminController : ControllerBase
         return Ok(new OwnerListResponse { Owners = owners });
     }
 
+    /// <summary>
+    /// Returns a paginated list of audit log entries.
+    /// </summary>
+    /// <remarks>
+    /// Accepts the following optional query-string parameters:
+    /// <list type="bullet">
+    ///   <item><term>page</term><description>1-based page number (default: 1).</description></item>
+    ///   <item><term>pageSize</term><description>Results per page, 1–200 (default: 50).</description></item>
+    ///   <item><term>package</term><description>Filter to entries for a specific package name.</description></item>
+    ///   <item><term>action</term><description>Filter to entries with a specific action string.</description></item>
+    /// </list>
+    /// Requires an admin JWT.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with an <see cref="AuditLogResponse"/> containing the matching
+    /// <see cref="AuditEntry"/> items and pagination metadata.
+    /// </returns>
     [HttpGet("audit-log")]
     public async Task<IActionResult> GetAuditLog()
     {

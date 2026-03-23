@@ -515,6 +515,10 @@ public class TemplateParser
 
     // ── Helper methods ─────────────────────────────────────────────────
 
+    /// <summary>
+    /// Returns the token at the current parse position without consuming it,
+    /// or a synthetic <see cref="TemplateTokenType.Eof"/> token when past the end.
+    /// </summary>
     private TemplateToken Current()
     {
         if (_pos < _tokens.Count)
@@ -525,6 +529,13 @@ public class TemplateParser
         return new TemplateToken(TemplateTokenType.Eof, "", false, false, 0, 0);
     }
 
+    /// <summary>
+    /// Asserts that the current token is of <paramref name="type"/>, consumes it, and returns it.
+    /// </summary>
+    /// <param name="type">The expected token type.</param>
+    /// <exception cref="TemplateException">
+    /// Thrown when the current token does not match <paramref name="type"/>.
+    /// </exception>
     private TemplateToken Expect(TemplateTokenType type)
     {
         var token = Current();
@@ -561,6 +572,12 @@ public class TemplateParser
         Expect(TemplateTokenType.TagEnd);
     }
 
+    /// <summary>
+    /// Extracts the leading keyword from a tag content string
+    /// (e.g. <c>"if x > 0"</c> → <c>"if"</c>, <c>"endif"</c> → <c>"endif"</c>).
+    /// </summary>
+    /// <param name="content">The trimmed inner content of a tag block.</param>
+    /// <returns>The first whitespace-delimited word of <paramref name="content"/>.</returns>
     private static string GetTagKeyword(string content)
     {
         var trimmed = content.Trim();

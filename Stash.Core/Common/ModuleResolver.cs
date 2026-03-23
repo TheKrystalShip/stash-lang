@@ -140,6 +140,17 @@ public static class ModuleResolver
         return null;
     }
 
+    /// <summary>
+    /// Splits a bare module specifier into its package name and optional sub-path.
+    /// Scoped specifiers of the form <c>@scope/name/sub/path</c> are split after the second
+    /// slash; unscoped specifiers of the form <c>name/sub/path</c> are split after the first.
+    /// </summary>
+    /// <param name="specifier">The bare module specifier to parse, e.g. <c>@scope/pkg/lib/core</c> or <c>utils/helpers</c>.</param>
+    /// <returns>
+    /// A tuple where the first element is the package name (including the <c>@scope/</c> prefix
+    /// for scoped packages) and the second element is the sub-path after the package name, or
+    /// <c>null</c> if no sub-path was present.
+    /// </returns>
     public static (string packageName, string? subpath) ParsePackageSpecifier(string specifier)
     {
         if (specifier.StartsWith('@'))

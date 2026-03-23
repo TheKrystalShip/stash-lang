@@ -5,8 +5,28 @@ using Stash.Common;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Implements the <c>stash pkg outdated</c> command for displaying the currently
+/// installed version of each dependency alongside its declared constraint.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Reads the installed versions from <c>stash-lock.json</c> and the declared
+/// constraints from <c>stash.json</c>, then prints a tabular report to standard
+/// output.  No network requests are made; the command operates entirely on local
+/// files.
+/// </para>
+/// </remarks>
 public static class OutdatedCommand
 {
+    /// <summary>
+    /// Executes the outdated command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg outdated</c>.  No arguments
+    /// are currently consumed, but the parameter is retained for CLI dispatch
+    /// consistency.
+    /// </param>
     public static void Execute(string[] args)
     {
         string projectDir = Directory.GetCurrentDirectory();

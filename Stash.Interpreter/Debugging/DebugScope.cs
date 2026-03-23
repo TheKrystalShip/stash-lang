@@ -3,40 +3,84 @@ namespace Stash.Debugging;
 using StashEnv = Stash.Interpreting.Environment;
 
 /// <summary>
-/// Categorizes a scope in the scope chain for debugger variable inspection.
+/// Classifies the role of a scope in the debugger's scope-chain view.
 /// </summary>
+/// <remarks>
+/// Used by <see cref="DebugScope"/> to label each scope tier and to determine the
+/// display name shown in the DAP <c>scopes</c> response. The three values map
+/// directly to the conventional scope categories rendered by DAP clients such as
+/// VS Code's Variables pane.
+/// </remarks>
 public enum ScopeKind
 {
-    /// <summary>Variables local to the current function/block.</summary>
+    /// <summary>Variables declared in the innermost function or block currently executing.</summary>
     Local,
 
-    /// <summary>Variables captured from an enclosing function (closure).</summary>
+    /// <summary>
+    /// Variables captured from one or more enclosing functions — the lexical closure
+    /// of the currently executing function.
+    /// </summary>
     Closure,
 
-    /// <summary>Global (top-level) variables.</summary>
+    /// <summary>Variables declared at the top-level (module/global) scope.</summary>
     Global,
 }
 
 /// <summary>
-/// Represents a single scope for debugger variable inspection.
-/// Maps to DAP's Scope type.
+/// Represents a single named scope in the debugger's scope chain for variable inspection.
 /// </summary>
+/// <remarks>
+/// <para>
+/// A list of <see cref="DebugScope"/> objects is produced for each <see cref="CallFrame"/>
+/// by walking the frame's <see cref="CallFrame.LocalScope"/> chain and classifying each
+/// <see cref="Stash.Interpreting.Environment">Environment</see> tier as
+/// <see cref="ScopeKind.Local"/>, <see cref="ScopeKind.Closure"/>, or
+/// <see cref="ScopeKind.Global"/>.
+/// </para>
+/// <para>
+/// This corresponds to the DAP <c>Scope</c> type returned in <c>scopes</c> responses.
+/// Each scope's variables are enumerated via
+/// <see cref="Stash.Interpreting.Environment.GetAllBindings"/>.
+/// </para>
+/// </remarks>
 public class DebugScope
 {
-    /// <summary>The kind of scope (local, closure, or global).</summary>
+    /// <summary>
+    /// Gets the classification of this scope (local, closure, or global).
+    /// </summary>
     public ScopeKind Kind { get; }
 
-    /// <summary>Display name for the scope (e.g., "Local", "Closure", "Global").</summary>
+    /// <summary>
+    /// Gets the human-readable display name for this scope as shown in the debugger UI
+    /// (for example, <c>"Local"</c>, <c>"Closure"</c>, or <c>"Global"</c>).
+    /// </summary>
     public string Name { get; }
 
-    /// <summary>The environment/scope containing the variable bindings.</summary>
+    /// <summary>
+    /// Gets the <see cref="Stash.Interpreting.Environment">Environment</see> that backs
+    /// this scope and holds its variable bindings.
+    /// </summary>
     public StashEnv Environment { get; }
 
     /// <summary>
-    /// Number of variables in this scope.
+    /// Gets the number of variables currently bound in this scope.
     /// </summary>
+    /// <remarks>
+    /// Computed by enumerating <see cref="Stash.Interpreting.Environment.GetAllBindings"/>
+    /// on demand; the value reflects the live state of the environment.
+    /// </remarks>
     public int VariableCount => System.Linq.Enumerable.Count(Environment.GetAllBindings());
 
+    /// <summary>
+    /// Initialises a new <see cref="DebugScope"/> with the specified classification,
+    /// display name, and backing environment.
+    /// </summary>
+    /// <param name="kind">The <see cref="ScopeKind"/> that classifies this scope.</param>
+    /// <param name="name">The display name shown in the debugger Variables pane.</param>
+    /// <param name="environment">
+    /// The <see cref="Stash.Interpreting.Environment">Environment</see> whose bindings
+    /// this scope exposes.
+    /// </param>
     public DebugScope(ScopeKind kind, string name, StashEnv environment)
     {
         Kind = kind;

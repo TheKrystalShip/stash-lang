@@ -10,16 +10,37 @@ using Stash.Interpreting.Exceptions;
 using Stash.Interpreting.Types;
 
 /// <summary>
-/// Registers the 'process' namespace built-in functions.
+/// Registers the <c>process</c> namespace built-in functions for process management.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Provides functions for spawning, managing, and communicating with child processes:
+/// <c>process.exec</c>, <c>process.spawn</c>, <c>process.wait</c>, <c>process.waitTimeout</c>,
+/// <c>process.waitAll</c>, <c>process.waitAny</c>, <c>process.kill</c>, <c>process.signal</c>,
+/// <c>process.pid</c>, <c>process.isAlive</c>, <c>process.read</c>, <c>process.write</c>,
+/// <c>process.onExit</c>, <c>process.daemonize</c>, <c>process.detach</c>, <c>process.list</c>,
+/// <c>process.find</c>, <c>process.exists</c>, <c>process.chdir</c>, <c>process.withDir</c>,
+/// and <c>process.exit</c>.
+/// </para>
+/// <para>
+/// Also exposes POSIX signal constants: <c>SIGHUP</c>, <c>SIGINT</c>, <c>SIGQUIT</c>,
+/// <c>SIGKILL</c>, <c>SIGUSR1</c>, <c>SIGUSR2</c>, and <c>SIGTERM</c>.
+/// This namespace is only registered when the <see cref="StashCapabilities.Process"/>
+/// capability is enabled.
+/// </para>
+/// </remarks>
 public static class ProcessBuiltIns
 {
+    /// <summary>
+    /// Registers all <c>process</c> namespace functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Environment"/> to register functions in.</param>
     public static void Register(Environment globals)
     {
         // ── process namespace ────────────────────────────────────────────
         var process = new StashNamespace("process");
 
-        // Signal constants
+        // Signal constants — POSIX signal numbers for use with process.signal().
         process.Define("SIGHUP", (long)1);
         process.Define("SIGINT", (long)2);
         process.Define("SIGQUIT", (long)3);
@@ -28,6 +49,7 @@ public static class ProcessBuiltIns
         process.Define("SIGUSR2", (long)12);
         process.Define("SIGTERM", (long)15);
 
+        // process.exit(code) — Exits the process with the given integer exit code. Runs cleanup for tracked processes first.
         process.Define("exit", new BuiltInFunction("process.exit", 1, (interp, args) =>
         {
             if (args[0] is not long code)
@@ -46,6 +68,7 @@ public static class ProcessBuiltIns
             return null;
         }));
 
+        // process.exec(command) — Replaces the current process image with the given command (Unix execvp). On Windows, starts the process and exits with its code.
         process.Define("exec", new BuiltInFunction("process.exec", 1, (interp, args) =>
         {
             if (interp.EmbeddedMode)
@@ -105,6 +128,7 @@ public static class ProcessBuiltIns
             return null; // unreachable
         }));
 
+        // process.spawn(command) — Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output.
         process.Define("spawn", new BuiltInFunction("process.spawn", 1, (interp, args) =>
         {
             if (args[0] is not string command)
@@ -138,6 +162,7 @@ public static class ProcessBuiltIns
             return handle;
         }));
 
+        // process.wait(handle) — Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.
         process.Define("wait", new BuiltInFunction("process.wait", 1, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -171,6 +196,7 @@ public static class ProcessBuiltIns
             return result;
         }));
 
+        // process.waitTimeout(handle, ms) — Waits up to the given milliseconds for a process to exit. Returns a CommandResult or null if timed out.
         process.Define("waitTimeout", new BuiltInFunction("process.waitTimeout", 2, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -205,6 +231,7 @@ public static class ProcessBuiltIns
             return result;
         }));
 
+        // process.kill(handle) — Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success.
         process.Define("kill", new BuiltInFunction("process.kill", 1, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -229,6 +256,7 @@ public static class ProcessBuiltIns
             }
         }));
 
+        // process.isAlive(handle) — Returns true if the process is still running, false if it has exited.
         process.Define("isAlive", new BuiltInFunction("process.isAlive", 1, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -246,6 +274,7 @@ public static class ProcessBuiltIns
             catch { return false; }
         }));
 
+        // process.pid(handle) — Returns the OS process ID (integer) for a spawned Process handle.
         process.Define("pid", new BuiltInFunction("process.pid", 1, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -256,6 +285,7 @@ public static class ProcessBuiltIns
             return handle.GetField("pid", null);
         }));
 
+        // process.signal(handle, signum) — Sends a POSIX signal (integer) to a running process. Use process.SIGTERM etc. as constants. Returns true on success.
         process.Define("signal", new BuiltInFunction("process.signal", 2, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -307,6 +337,7 @@ public static class ProcessBuiltIns
             }
         }));
 
+        // process.detach(handle) — Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit.
         process.Define("detach", new BuiltInFunction("process.detach", 1, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -325,6 +356,7 @@ public static class ProcessBuiltIns
             return false;
         }));
 
+        // process.list() — Returns an array of all currently tracked Process handles spawned by this script.
         process.Define("list", new BuiltInFunction("process.list", 0, (interp, _) =>
         {
             var result = new List<object?>();
@@ -335,6 +367,7 @@ public static class ProcessBuiltIns
             return result;
         }));
 
+        // process.read(handle) — Non-blocking read from a process's stdout. Returns a string chunk or null if no data is available.
         process.Define("read", new BuiltInFunction("process.read", 1, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -366,6 +399,7 @@ public static class ProcessBuiltIns
             }
         }));
 
+        // process.write(handle, data) — Writes a string to a process's stdin. Returns true on success, false if the process has exited.
         process.Define("write", new BuiltInFunction("process.write", 2, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -398,6 +432,7 @@ public static class ProcessBuiltIns
 
         // ── Future Extensions ─────────────────────────────────────────
 
+        // process.onExit(handle, callback) — Registers a callback function to be called when the process exits. Callback receives a CommandResult.
         process.Define("onExit", new BuiltInFunction("process.onExit", 2, (interp, args) =>
         {
             if (args[0] is not StashInstance handle || handle.TypeName != "Process")
@@ -431,6 +466,7 @@ public static class ProcessBuiltIns
             return null;
         }));
 
+        // process.daemonize(command) — Starts a process fully detached from the script (no stdio redirection). Returns a Process handle; the process is NOT tracked and survives script exit.
         process.Define("daemonize", new BuiltInFunction("process.daemonize", 1, (interp, args) =>
         {
             if (args[0] is not string command)
@@ -466,6 +502,7 @@ public static class ProcessBuiltIns
             return handle;
         }));
 
+        // process.find(name) — Returns an array of Process handles for all OS processes matching the given name.
         process.Define("find", new BuiltInFunction("process.find", 1, (interp, args) =>
         {
             if (args[0] is not string name)
@@ -498,6 +535,7 @@ public static class ProcessBuiltIns
             return result;
         }));
 
+        // process.exists(pid) — Returns true if a process with the given OS PID is currently running.
         process.Define("exists", new BuiltInFunction("process.exists", 1, (interp, args) =>
         {
             if (args[0] is not long pid)
@@ -518,6 +556,7 @@ public static class ProcessBuiltIns
             }
         }));
 
+        // process.waitAll(handles) — Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order.
         process.Define("waitAll", new BuiltInFunction("process.waitAll", 1, (interp, args) =>
         {
             if (args[0] is not List<object?> procs)
@@ -562,6 +601,7 @@ public static class ProcessBuiltIns
             return results;
         }));
 
+        // process.waitAny(handles) — Waits until any process in the array exits. Returns the CommandResult of the first process to finish.
         process.Define("waitAny", new BuiltInFunction("process.waitAny", 1, (interp, args) =>
         {
             if (args[0] is not List<object?> procs)
@@ -634,6 +674,7 @@ public static class ProcessBuiltIns
             }
         }));
 
+        // process.chdir(path) — Changes the current working directory of the script process to the given path.
         process.Define("chdir", new BuiltInFunction("process.chdir", 1, (interp, args) =>
         {
             if (args[0] is not string path)
@@ -651,6 +692,7 @@ public static class ProcessBuiltIns
             return null;
         }));
 
+        // process.withDir(path, fn) — Temporarily changes the working directory to path, calls fn(), then restores the original directory. Returns fn's return value.
         process.Define("withDir", new BuiltInFunction("process.withDir", 2, (interp, args) =>
         {
             if (args[0] is not string path)

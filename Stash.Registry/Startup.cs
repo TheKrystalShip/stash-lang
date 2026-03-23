@@ -18,15 +18,59 @@ using Stash.Registry.Storage;
 
 namespace Stash.Registry;
 
+/// <summary>
+/// Configures the Stash registry server's dependency-injection container and HTTP
+/// middleware pipeline.
+/// </summary>
+/// <remarks>
+/// <para>
+/// This class is instantiated from <c>Program.cs</c> with a fully-populated
+/// <see cref="Configuration.RegistryConfig"/> loaded from the host's configuration
+/// sources.  It exposes two conventional ASP.NET Core entry points:
+/// <see cref="ConfigureServices"/> and <see cref="Configure"/>.
+/// </para>
+/// <para>
+/// Authentication is JWT Bearer-based.  Every validated token is additionally
+/// checked against the database to support revocation.  Storage and authentication
+/// back-ends are pluggable via <see cref="Configuration.RegistryConfig.Storage"/>
+/// and <see cref="Configuration.RegistryConfig.Auth"/> respectively.
+/// </para>
+/// </remarks>
 public sealed class Startup
 {
+    /// <summary>
+    /// The registry configuration loaded from the host environment, used to
+    /// wire up database, storage, authentication, and rate-limiting services.
+    /// </summary>
     private readonly RegistryConfig _config;
 
+    /// <summary>
+    /// Initialises a new <see cref="Startup"/> instance with the supplied registry
+    /// configuration.
+    /// </summary>
+    /// <param name="config">
+    /// The <see cref="RegistryConfig"/> instance that drives all service and
+    /// middleware configuration choices.
+    /// </param>
     public Startup(RegistryConfig config)
     {
         _config = config;
     }
 
+    /// <summary>
+    /// Registers all application services with the dependency-injection container.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Registers (among others): MVC controllers, JWT Bearer authentication with
+    /// token-revocation checking, authorisation policies, the database context
+    /// (SQLite or PostgreSQL based on <see cref="Configuration.DatabaseConfig.Type"/>),
+    /// the package storage back-end (file-system or S3), the authentication provider
+    /// (local, LDAP, or OIDC), <see cref="Services.PackageService"/>,
+    /// <see cref="Services.AuditService"/>, and the OpenAPI document generator.
+    /// </para>
+    /// </remarks>
+    /// <param name="services">The <see cref="IServiceCollection"/> to register services into.</param>
     public void ConfigureServices(IServiceCollection services)
     {
         services.AddControllers();
@@ -126,6 +170,23 @@ public sealed class Startup
         services.AddOpenApi();
     }
 
+    /// <summary>
+    /// Configures the HTTP middleware pipeline and performs one-time database initialisation.
+    /// </summary>
+    /// <param name="app">The <see cref="WebApplication"/> to configure.</param>
+    /// <remarks>
+    /// <para>
+    /// Pipeline (in order):
+    /// <list type="number">
+    ///   <item><description>Database initialisation — calls <see cref="Database.IRegistryDatabase.Initialize"/> in a transient scope.</description></item>
+    ///   <item><description><see cref="Middleware.RateLimitingMiddleware"/> — inserted only when <see cref="Configuration.RateLimitingConfig.Enabled"/> is <see langword="true"/>.</description></item>
+    ///   <item><description>OpenAPI endpoint (<c>GET /openapi/v1.json</c>) — mapped only in the <c>Development</c> environment.</description></item>
+    ///   <item><description>Routing, Authentication (JWT Bearer), Authorization.</description></item>
+    ///   <item><description>Health-check endpoint at <c>GET /</c> returning a <see cref="Contracts.HealthCheckResponse"/> JSON payload.</description></item>
+    ///   <item><description>MVC controller endpoints.</description></item>
+    /// </list>
+    /// </para>
+    /// </remarks>
     public void Configure(WebApplication app)
     {
         using (var scope = app.Services.CreateScope())

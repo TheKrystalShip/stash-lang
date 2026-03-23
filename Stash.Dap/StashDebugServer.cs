@@ -9,8 +9,19 @@ using OmniSharp.Extensions.DebugAdapter.Protocol.Models;
 using OmniSharp.Extensions.DebugAdapter.Server;
 using Stash.Dap.Handlers;
 
+/// <summary>
+/// Entry point for the Stash Debug Adapter Protocol server.
+/// </summary>
+/// <remarks>
+/// Configures and starts an <see cref="DebugAdapterServer"/> over stdio, registering all
+/// DAP request handlers and capability flags before entering an infinite wait loop.
+/// </remarks>
 public static class StashDebugServer
 {
+    /// <summary>
+    /// Starts the DAP server, registers all handlers, and waits indefinitely for client connections.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> that completes only when the process is terminated.</returns>
     public static async Task RunAsync()
     {
         var session = new DebugSession();

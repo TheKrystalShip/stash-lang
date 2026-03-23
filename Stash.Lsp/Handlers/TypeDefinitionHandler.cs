@@ -9,17 +9,54 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/typeDefinition</c> requests to navigate to the type
+/// declaration of the symbol under the cursor.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses <see cref="AnalysisEngine.GetContextAt"/> and <see cref="ScopeTree.FindDefinition"/>
+/// to resolve the symbol under the cursor. If the symbol is itself a <c>struct</c> or
+/// <c>enum</c>, the handler navigates to its own declaration. For variables, constants,
+/// parameters, and loop variables, the handler follows the <see cref="SymbolInfo.TypeHint"/>
+/// to find the corresponding type declaration in the <see cref="ScopeTree"/>.
+/// </para>
+/// <para>
+/// When the resolved type was imported from another file, the handler looks up the original
+/// declaration in that module via <see cref="AnalysisEngine.ImportResolver"/>. Built-in types
+/// registered at line 0 are treated as non-navigable and return <see langword="null"/>.
+/// </para>
+/// </remarks>
 public class TypeDefinitionHandler : TypeDefinitionHandlerBase
 {
+    /// <summary>The analysis engine used to obtain context and resolve type declarations.</summary>
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="TypeDefinitionHandler"/> with the services
+    /// needed to resolve go-to-type-definition locations.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and import resolution.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
     public TypeDefinitionHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the go-to-type-definition request and returns the location of the symbol's
+    /// type declaration, following <see cref="SymbolInfo.TypeHint"/> when necessary.
+    /// </summary>
+    /// <param name="request">The type-definition request containing the document URI and cursor position.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>
+    /// A <see cref="LocationOrLocationLinks"/> pointing to the type's declaration, or
+    /// <see langword="null"/> if the type cannot be resolved.
+    /// </returns>
     public override Task<LocationOrLocationLinks?> Handle(TypeDefinitionParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
@@ -76,6 +113,19 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         return Task.FromResult<LocationOrLocationLinks?>(null);
     }
 
+    /// <summary>
+    /// Constructs a <see cref="LocationOrLocationLinks"/> response for the given <paramref name="symbol"/>,
+    /// navigating to the original declaration in an imported module when
+    /// <see cref="SymbolInfo.SourceUri"/> is set. Returns <see langword="null"/> for built-in
+    /// types registered at line 0.
+    /// </summary>
+    /// <param name="requestUri">The URI of the document containing the cursor.</param>
+    /// <param name="symbol">The resolved <see cref="SymbolInfo"/> whose location to return.</param>
+    /// <param name="result">The current <see cref="AnalysisResult"/> for the open document.</param>
+    /// <returns>
+    /// A task containing a <see cref="LocationOrLocationLinks"/> for the symbol, or
+    /// <see langword="null"/> if the symbol has no navigable source.
+    /// </returns>
     private Task<LocationOrLocationLinks?> MakeLocationAsync(DocumentUri requestUri, SymbolInfo symbol, AnalysisResult result)
     {
         // If the symbol was imported from another file, navigate there
@@ -112,6 +162,9 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(loc));
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c> language files.
+    /// </summary>
     protected override TypeDefinitionRegistrationOptions CreateRegistrationOptions(
         TypeDefinitionCapability capability, ClientCapabilities clientCapabilities) =>
         new()

@@ -6,8 +6,35 @@ using Stash.Common;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Implements the <c>stash pkg publish</c> command for packing and uploading the
+/// current project to the registry.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Validates <c>stash.json</c> (name, version, non-private flag), packs the
+/// project into a temporary <c>.tar.gz</c> via <see cref="Tarball.Pack"/>, computes
+/// a SHA-256 integrity hash, and uploads the tarball using
+/// <see cref="RegistryClient.Publish"/>.
+/// </para>
+/// <para>
+/// An authenticated session is required.  The token is read from
+/// <see cref="UserConfig"/> for the resolved registry URL.
+/// </para>
+/// </remarks>
 public static class PublishCommand
 {
+    /// <summary>
+    /// Executes the publish command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg publish</c>.  The
+    /// <c>--registry &lt;url&gt;</c> flag optionally overrides the default registry.
+    /// </param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <c>stash.json</c> is missing, invalid, marks the package as
+    /// private, or when the user is not logged in to the target registry.
+    /// </exception>
     public static void Execute(string[] args)
     {
         var (registryUrl, _) = RegistryResolver.Resolve(args);

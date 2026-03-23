@@ -3,8 +3,36 @@ using System.IO;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Entry point for all <c>stash pkg</c> sub-commands, dispatching to the
+/// appropriate command class based on the first argument.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Recognised sub-commands and their aliases:
+/// <c>init</c>, <c>install</c>/<c>i</c>, <c>uninstall</c>/<c>remove</c>,
+/// <c>list</c>/<c>ls</c>, <c>pack</c>, <c>update</c>, <c>outdated</c>,
+/// <c>publish</c>, <c>search</c>, <c>info</c>, <c>login</c>, <c>logout</c>,
+/// <c>owner</c>, <c>unpublish</c>, and <c>help</c>.
+/// </para>
+/// <para>
+/// Exceptions of types <see cref="InvalidOperationException"/>,
+/// <see cref="InvalidDataException"/>, <see cref="ArgumentException"/>,
+/// <see cref="FormatException"/>, and <see cref="System.Net.Http.HttpRequestException"/>
+/// are caught, printed to <c>stderr</c>, and translated to a non-zero exit code.
+/// </para>
+/// </remarks>
 public static class PackageCommands
 {
+    /// <summary>
+    /// Parses the first element of <paramref name="args"/> as a sub-command name
+    /// and dispatches execution to the corresponding command class.
+    /// </summary>
+    /// <param name="args">
+    /// The command-line arguments following <c>stash pkg</c>, where the first
+    /// element is the sub-command name and the remainder are passed to the
+    /// sub-command's <c>Execute</c> method.
+    /// </param>
     public static void Run(string[] args)
     {
         if (args.Length == 0)
@@ -105,6 +133,9 @@ public static class PackageCommands
         }
     }
 
+    /// <summary>
+    /// Prints the usage summary and available sub-commands to standard output.
+    /// </summary>
     private static void PrintHelp()
     {
         Console.WriteLine("Usage: stash pkg <command> [options]");

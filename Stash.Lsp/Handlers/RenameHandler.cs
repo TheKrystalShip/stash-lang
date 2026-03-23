@@ -9,17 +9,52 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/rename</c> requests to rename a symbol and all its
+/// references within the current document.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses <see cref="AnalysisEngine.GetContextAt"/> to identify the symbol under the cursor
+/// and <see cref="ScopeTree.FindReferences"/> to collect every reference within the
+/// document. Each reference span is rewritten to the new name via a
+/// <see cref="WorkspaceEdit"/>.
+/// </para>
+/// <para>
+/// Rename is validated upfront by <see cref="PrepareRenameHandler"/>; if prepare returns
+/// <see langword="null"/>, the client will not invoke this handler.
+/// </para>
+/// </remarks>
 public class RenameHandler : RenameHandlerBase
 {
+    /// <summary>The analysis engine used to obtain context and locate all symbol references.</summary>
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="RenameHandler"/> with the services
+    /// needed to produce rename workspace edits.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and reference lookup.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
     public RenameHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the rename request and returns a <see cref="WorkspaceEdit"/> that replaces
+    /// every in-document reference to the symbol with the new name.
+    /// </summary>
+    /// <param name="request">The rename request containing the document URI, cursor position, and new name.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>
+    /// A <see cref="WorkspaceEdit"/> with text edits for every reference, or
+    /// <see langword="null"/> if no symbol can be resolved at the cursor.
+    /// </returns>
     public override Task<WorkspaceEdit?> Handle(RenameParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
@@ -61,6 +96,10 @@ public class RenameHandler : RenameHandlerBase
         return Task.FromResult<WorkspaceEdit?>(workspaceEdit);
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c>
+    /// language files and that a prepare-rename provider is available.
+    /// </summary>
     protected override RenameRegistrationOptions CreateRegistrationOptions(
         RenameCapability capability, ClientCapabilities clientCapabilities) =>
         new()

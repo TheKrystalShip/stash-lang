@@ -6,8 +6,27 @@ using Stash.Common;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Implements the <c>stash pkg list</c> command for displaying the installed
+/// dependency tree of the current project.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Reads <c>stash.json</c> and the resolved <c>stash-lock.json</c> from the current
+/// directory and prints a tree-style listing to standard output.  Direct dependencies
+/// are shown without a suffix; transitive dependencies are labelled
+/// <c>(transitive)</c>.
+/// </para>
+/// </remarks>
 public static class ListCommand
 {
+    /// <summary>
+    /// Executes the list command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg list</c>.  No arguments are
+    /// currently consumed, but the parameter is retained for CLI dispatch consistency.
+    /// </param>
     public static void Execute(string[] args)
     {
         string projectDir = Directory.GetCurrentDirectory();

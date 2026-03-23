@@ -8,17 +8,59 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/hover</c> requests to display contextual information
+/// about the symbol under the cursor.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses <see cref="AnalysisEngine.GetContextAt"/> to identify the word at the cursor position
+/// and then resolves it against the <see cref="ScopeTree"/> via
+/// <see cref="ScopeTree.FindDefinition"/>. The result is rendered as a Markdown code block
+/// showing the symbol's detail string and kind.
+/// </para>
+/// <para>
+/// Dot-access context is detected via <see cref="TextUtilities.FindDotPrefix"/>: when a word
+/// follows a dot, global namespace matches are suppressed to avoid false positives (e.g.,
+/// hovering <c>time</c> in <c>e.time</c> must not resolve to the <c>time</c> namespace).
+/// </para>
+/// <para>
+/// Falls back to resolving namespace members (via <see cref="AnalysisResult.ResolveNamespaceMember"/>),
+/// built-in namespace constants and functions (via <see cref="BuiltInRegistry"/>), and
+/// global built-in functions. Documentation strings are formatted with <c>@param</c> and
+/// <c>@return</c> tags converted to Markdown.
+/// </para>
+/// </remarks>
 public class HoverHandler : HoverHandlerBase
 {
+    /// <summary>The analysis engine used to obtain context and resolve symbols.</summary>
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="HoverHandler"/> with the services needed
+    /// to resolve hover information.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and context resolution.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
     public HoverHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the hover request and returns Markdown hover content for the symbol
+    /// under the cursor, or <see langword="null"/> when no resolvable symbol is found.
+    /// </summary>
+    /// <param name="request">The hover request containing the document URI and cursor position.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>
+    /// A <see cref="Hover"/> with a Markdown <see cref="MarkupContent"/> block, or
+    /// <see langword="null"/> if nothing can be resolved at the cursor.
+    /// </returns>
     public override Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
@@ -168,6 +210,9 @@ public class HoverHandler : HoverHandlerBase
         });
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c> language files.
+    /// </summary>
     protected override HoverRegistrationOptions CreateRegistrationOptions(
         HoverCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -176,8 +221,11 @@ public class HoverHandler : HoverHandlerBase
         };
 
     /// <summary>
-    /// Formats documentation text with @param and @return tags rendered as markdown.
+    /// Formats a documentation string by converting <c>@param</c> and <c>@return</c>/<c>@returns</c>
+    /// tags into Markdown bold sections, and returns the full formatted string.
     /// </summary>
+    /// <param name="documentation">The raw documentation string containing optional JSDoc-style tags.</param>
+    /// <returns>A Markdown-formatted documentation string with parameter and return sections.</returns>
     private static string FormatDocumentation(string documentation)
     {
         var lines = documentation.Split('\n');

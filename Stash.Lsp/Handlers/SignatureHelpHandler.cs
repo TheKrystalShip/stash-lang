@@ -9,17 +9,54 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/signatureHelp</c> requests to display parameter hints
+/// when the cursor is inside a function call.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Scans backwards from the cursor offset to locate the nearest enclosing open parenthesis
+/// via <see cref="FindCallContext"/>, extracts the function name, and counts commas to
+/// determine the active parameter index. Built-in functions and namespace functions are
+/// looked up from <see cref="BuiltInRegistry"/>; user-defined functions are resolved via
+/// <see cref="ScopeTree.FindDefinition"/> from the cached <see cref="AnalysisResult"/>.
+/// </para>
+/// <para>
+/// Parameter labels are extracted from the function's detail string (e.g., <c>fn foo(a: int, b: str)</c>)
+/// by <see cref="ExtractParamLabels"/> and attached to the <see cref="SignatureInformation"/>
+/// so editors can highlight the active parameter.
+/// </para>
+/// </remarks>
 public class SignatureHelpHandler : SignatureHelpHandlerBase
 {
+    /// <summary>The analysis engine used to look up user-defined function signatures.</summary>
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="SignatureHelpHandler"/> with the services
+    /// needed to resolve function signatures.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing cached <see cref="AnalysisResult"/> data.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
     public SignatureHelpHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the signature-help request and returns the signature of the enclosing
+    /// function call along with the active parameter index.
+    /// </summary>
+    /// <param name="request">The signature-help request containing the document URI and cursor position.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>
+    /// A <see cref="SignatureHelp"/> with the matching signature and active parameter, or
+    /// <see langword="null"/> if no enclosing function call can be found.
+    /// </returns>
     public override Task<SignatureHelp?> Handle(SignatureHelpParams request, CancellationToken cancellationToken)
     {
         var text = _documents.GetText(request.TextDocument.Uri.ToUri());
@@ -78,6 +115,17 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         return Task.FromResult<SignatureHelp?>(null);
     }
 
+    /// <summary>
+    /// Scans backwards through <paramref name="text"/> from <paramref name="offset"/> to find
+    /// the nearest unmatched open parenthesis that represents a function call, and counts
+    /// commas at the outermost call depth to determine the active parameter index.
+    /// </summary>
+    /// <param name="text">The full document source text.</param>
+    /// <param name="offset">The absolute character offset of the cursor.</param>
+    /// <returns>
+    /// A tuple of the function name (including namespace prefix if present) and the
+    /// zero-based active parameter index. Returns <c>(null, 0)</c> when no call context is found.
+    /// </returns>
     private static (string? FunctionName, int ActiveParam) FindCallContext(string text, int offset)
     {
         int depth = 0;
@@ -143,6 +191,15 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         return (name, commaCount);
     }
 
+    /// <summary>
+    /// Constructs a <see cref="SignatureHelp"/> object from the given function detail string,
+    /// parameter labels, and active parameter index.
+    /// </summary>
+    /// <param name="label">The full signature label string (e.g., <c>fn foo(a: int, b: str)</c>).</param>
+    /// <param name="paramNames">Array of individual parameter label strings to highlight.</param>
+    /// <param name="activeParam">Zero-based index of the parameter at the cursor.</param>
+    /// <param name="documentation">Optional Markdown documentation string for the function.</param>
+    /// <returns>A populated <see cref="SignatureHelp"/> ready to send to the client.</returns>
     private static SignatureHelp BuildSignatureHelp(string label, string[] paramNames, int activeParam, string? documentation = null)
     {
         var parameters = new List<ParameterInformation>();
@@ -168,6 +225,12 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         };
     }
 
+    /// <summary>
+    /// Extracts bare parameter names from a function detail string by stripping type
+    /// annotations (<c>name: type</c>) and default values (<c>name = default</c>).
+    /// </summary>
+    /// <param name="detail">The function detail string, e.g. <c>fn foo(a: int, b: str = "x")</c>.</param>
+    /// <returns>An array of bare parameter names, or an empty array if none are found.</returns>
     private static string[] ExtractParamNames(string detail)
     {
         // detail format: "fn name(a, b)" or "fn name(a: int, b: int) -> int"
@@ -209,6 +272,12 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         return parts;
     }
 
+    /// <summary>
+    /// Extracts the full parameter label strings from a function detail string, preserving
+    /// type annotations (e.g., <c>a: int</c>) for display in the signature-help UI.
+    /// </summary>
+    /// <param name="detail">The function detail string, e.g. <c>fn foo(a: int, b: str)</c>.</param>
+    /// <returns>An array of trimmed parameter label strings, or an empty array if none are found.</returns>
     private static string[] ExtractParamLabels(string detail)
     {
         var openParen = detail.IndexOf('(');
@@ -233,6 +302,10 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         return parts;
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c>
+    /// language files and triggers on <c>(</c> and <c>,</c> characters.
+    /// </summary>
     protected override SignatureHelpRegistrationOptions CreateRegistrationOptions(
         SignatureHelpCapability capability, ClientCapabilities clientCapabilities) =>
         new()

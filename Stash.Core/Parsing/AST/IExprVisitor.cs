@@ -182,5 +182,10 @@ public interface IExprVisitor<T>
     /// <param name="expr">The range expression node to visit.</param>
     /// <returns>The result of evaluating the range.</returns>
     T VisitRangeExpr(RangeExpr expr);
+    /// <summary>
+    /// Visits a <see cref="DictLiteralExpr"/> node (dictionary literal <c>{ key: value, ... }</c>).
+    /// </summary>
+    /// <param name="expr">The dictionary literal expression node to visit.</param>
+    /// <returns>The result of evaluating the dictionary literal.</returns>
     T VisitDictLiteralExpr(DictLiteralExpr expr);
 }

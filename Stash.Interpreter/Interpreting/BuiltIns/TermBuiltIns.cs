@@ -6,14 +6,34 @@ using System.Linq;
 using System.Text.RegularExpressions;
 using Stash.Interpreting.Types;
 
-/// <summary>Registers the <c>term</c> namespace providing terminal formatting and introspection functions.</summary>
+/// <summary>
+/// Registers the <c>term</c> namespace built-in functions for terminal styling and introspection.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Provides ANSI escape code helpers: foreground coloring (<c>term.color</c>), text weight
+/// (<c>term.bold</c>, <c>term.dim</c>), underlining (<c>term.underline</c>), combined styling
+/// (<c>term.style</c>), stripping ANSI codes (<c>term.strip</c>), tabular formatting
+/// (<c>term.table</c>), and screen clearing (<c>term.clear</c>).
+/// </para>
+/// <para>
+/// Also exposes color name constants (<c>term.BLACK</c>, <c>term.RED</c>, <c>term.GREEN</c>,
+/// <c>term.YELLOW</c>, <c>term.BLUE</c>, <c>term.MAGENTA</c>, <c>term.CYAN</c>,
+/// <c>term.WHITE</c>, <c>term.GRAY</c>) and terminal introspection helpers
+/// (<c>term.width</c>, <c>term.isInteractive</c>).
+/// </para>
+/// </remarks>
 public static class TermBuiltIns
 {
+    /// <summary>
+    /// Registers all <c>term</c> namespace functions and color constants into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var term = new StashNamespace("term");
 
-        // Color constants
+        // Color constants — string values accepted by term.color and term.style for foreground coloring.
         term.Define("BLACK", "black");
         term.Define("RED", "red");
         term.Define("GREEN", "green");
@@ -24,6 +44,8 @@ public static class TermBuiltIns
         term.Define("WHITE", "white");
         term.Define("GRAY", "gray");
 
+        // term.color(text, color) — Wraps 'text' in ANSI escape codes to display it in the specified foreground color.
+        //   'color' must be one of the term color constants (e.g. term.RED) or their string equivalents.
         term.Define("color", new BuiltInFunction("term.color", 2, (_, args) =>
         {
             if (args[0] is not string text)
@@ -52,6 +74,7 @@ public static class TermBuiltIns
             return $"\x1b[{code}m{text}\x1b[0m";
         }));
 
+        // term.bold(text) — Wraps 'text' in ANSI bold escape codes. Returns the styled string.
         term.Define("bold", new BuiltInFunction("term.bold", 1, (_, args) =>
         {
             if (args[0] is not string text)
@@ -62,6 +85,7 @@ public static class TermBuiltIns
             return $"\x1b[1m{text}\x1b[0m";
         }));
 
+        // term.dim(text) — Wraps 'text' in ANSI dim (faint) escape codes. Returns the styled string.
         term.Define("dim", new BuiltInFunction("term.dim", 1, (_, args) =>
         {
             if (args[0] is not string text)
@@ -72,6 +96,7 @@ public static class TermBuiltIns
             return $"\x1b[2m{text}\x1b[0m";
         }));
 
+        // term.underline(text) — Wraps 'text' in ANSI underline escape codes. Returns the styled string.
         term.Define("underline", new BuiltInFunction("term.underline", 1, (_, args) =>
         {
             if (args[0] is not string text)
@@ -82,6 +107,9 @@ public static class TermBuiltIns
             return $"\x1b[4m{text}\x1b[0m";
         }));
 
+        // term.style(text, opts) — Applies multiple styles to 'text' using an options dict.
+        //   Supported keys: "bold" (bool), "dim" (bool), "underline" (bool), "color" (string).
+        //   Returns the ANSI-styled string, or 'text' unchanged if no options are set.
         term.Define("style", new BuiltInFunction("term.style", 2, (_, args) =>
         {
             if (args[0] is not string text)
@@ -141,6 +169,7 @@ public static class TermBuiltIns
             return $"\x1b[{string.Join(";", codes)}m{text}\x1b[0m";
         }));
 
+        // term.strip(text) — Removes all ANSI escape sequences from 'text'. Returns the plain string.
         term.Define("strip", new BuiltInFunction("term.strip", 1, (_, args) =>
         {
             if (args[0] is not string text)
@@ -151,24 +180,29 @@ public static class TermBuiltIns
             return Regex.Replace(text, @"\x1b\[[0-9;]*m", "");
         }));
 
+        // term.width() — Returns the current terminal column width. Falls back to 80 if unavailable.
         term.Define("width", new BuiltInFunction("term.width", 0, (_, _) =>
         {
             try { return (long)Console.WindowWidth; }
             catch { return 80L; }
         }));
 
+        // term.isInteractive() — Returns true if stdin is connected to an interactive terminal (not redirected).
         term.Define("isInteractive", new BuiltInFunction("term.isInteractive", 0, (_, _) =>
         {
             try { return !Console.IsInputRedirected; }
             catch { return (object?)false; }
         }));
 
+        // term.clear() — Clears the terminal screen using ANSI escape sequences. Returns null.
         term.Define("clear", new BuiltInFunction("term.clear", 0, (interp, _) =>
         {
             interp.Output.Write("\x1b[2J\x1b[H");
             return null;
         }));
 
+        // term.table(rows [, headers]) — Formats a two-dimensional array as an ASCII table string.
+        //   Optional 'headers' array is rendered as a separate header row with a divider line.
         term.Define("table", new BuiltInFunction("term.table", -1, (_, args) =>
         {
             if (args.Count < 1 || args.Count > 2)

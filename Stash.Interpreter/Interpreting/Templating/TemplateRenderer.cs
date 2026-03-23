@@ -9,9 +9,45 @@ using Stash.Interpreting.Types;
 using Environment = Stash.Interpreting.Environment;
 
 /// <summary>
-/// Renders a parsed template AST into a string by evaluating expressions
-/// via the Stash interpreter and applying filters.
+/// Tree-walk renderer that evaluates a <see cref="TemplateNode"/> AST and produces
+/// the final output string.
 /// </summary>
+/// <remarks>
+/// <para>
+/// The renderer is the final stage of the templating pipeline:<br/>
+/// Template&nbsp;String → <see cref="TemplateLexer"/> → <see cref="TemplateParser"/> →
+/// <c>List&lt;TemplateNode&gt;</c> → <see cref="TemplateRenderer"/> → <c>string</c>.
+/// </para>
+/// <para>
+/// <strong>Environment setup:</strong> before rendering begins, <c>CreateEnvironment</c>
+/// builds a <see cref="Stash.Interpreting.Environment"/> whose parent is the interpreter's
+/// global scope, so every template variable in the data dictionary shadows globals but
+/// built-in functions and namespaces remain accessible.
+/// </para>
+/// <para>
+/// <strong>Expression evaluation:</strong> output expressions and conditions are forwarded
+/// to <see cref="Interpreter.EvaluateString"/>, which parses and executes them as full
+/// Stash expressions.  This means the complete Stash language (arithmetic, string
+/// operations, method calls, etc.) is available inside templates.
+/// </para>
+/// <para>
+/// <strong>Loop metadata:</strong> inside every <c>{% for %}</c> body a child
+/// <see cref="Stash.Interpreting.Environment"/> is created and a <c>loop</c>
+/// <see cref="Stash.Interpreting.Types.StashInstance"/> is injected with the fields
+/// <c>loop.index</c> (1-based), <c>loop.index0</c> (0-based), <c>loop.first</c>,
+/// <c>loop.last</c>, and <c>loop.length</c>.
+/// </para>
+/// <para>
+/// <strong>Includes:</strong> <c>{% include "path" %}</c> is resolved relative to the
+/// <c>basePath</c> supplied at construction time.  Path traversal outside the base
+/// directory is blocked.  Includes are disabled (and throw) when no base path is set.
+/// </para>
+/// <para>
+/// <strong>Filters:</strong> after an expression is evaluated, each
+/// <see cref="TemplateFilter"/> in the pipeline is applied in order via
+/// <see cref="TemplateFilters.Apply"/>.
+/// </para>
+/// </remarks>
 public class TemplateRenderer
 {
     private readonly Interpreter _interpreter;
@@ -29,8 +65,15 @@ public class TemplateRenderer
     }
 
     /// <summary>
-    /// Renders a template string with the given data dictionary.
+    /// Renders a template string with the given data dictionary by running the full
+    /// lex → parse → render pipeline.
     /// </summary>
+    /// <param name="template">The raw template source string.</param>
+    /// <param name="data">Key-value pairs exposed as variables inside the template.</param>
+    /// <returns>The rendered output string.</returns>
+    /// <exception cref="TemplateException">
+    /// Propagated from the lexer, parser, or renderer on any template error.
+    /// </exception>
     public string Render(string template, StashDictionary data)
     {
         var lexer = new TemplateLexer(template);
@@ -41,13 +84,22 @@ public class TemplateRenderer
     }
 
     /// <summary>
-    /// Renders a pre-parsed template with the given data dictionary.
+    /// Renders a pre-parsed template AST with the given data dictionary,
+    /// skipping the lex and parse phases.
     /// </summary>
+    /// <param name="nodes">An AST produced by a prior call to <see cref="TemplateParser.Parse"/>.</param>
+    /// <param name="data">Key-value pairs exposed as variables inside the template.</param>
+    /// <returns>The rendered output string.</returns>
     public string Render(List<TemplateNode> nodes, StashDictionary data)
     {
         return RenderNodes(nodes, data);
     }
 
+    /// <summary>
+    /// Iterates over <paramref name="nodes"/>, creating a shared
+    /// <see cref="Stash.Interpreting.Environment"/> populated from <paramref name="data"/>,
+    /// and appends each rendered node to a <see cref="StringBuilder"/>.
+    /// </summary>
     private string RenderNodes(List<TemplateNode> nodes, StashDictionary data)
     {
         var sb = new StringBuilder();
@@ -61,6 +113,14 @@ public class TemplateRenderer
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Dispatches a single <see cref="TemplateNode"/> to its specific render method
+    /// and appends the result to <paramref name="sb"/>.
+    /// </summary>
+    /// <param name="node">The AST node to render.</param>
+    /// <param name="env">The current variable environment.</param>
+    /// <param name="data">The original data dictionary (passed through to child renderers).</param>
+    /// <param name="sb">The output buffer to append to.</param>
     private void RenderNode(TemplateNode node, Environment env, StashDictionary data, StringBuilder sb)
     {
         switch (node)
@@ -91,6 +151,16 @@ public class TemplateRenderer
         }
     }
 
+    /// <summary>
+    /// Evaluates the expression in <paramref name="output"/>, applies its filter pipeline,
+    /// and appends the stringified result to <paramref name="sb"/>.
+    /// </summary>
+    /// <remarks>
+    /// If the expression evaluation produces an error and a <c>default</c> filter is
+    /// present in the pipeline, the error is suppressed and <see langword="null"/> is
+    /// passed to the <c>default</c> filter.  Otherwise the error is re-thrown as a
+    /// <see cref="TemplateException"/>.
+    /// </remarks>
     private void RenderOutput(OutputNode output, Environment env, StringBuilder sb)
     {
         var (value, error) = _interpreter.EvaluateString(output.Expression, env);
@@ -119,6 +189,10 @@ public class TemplateRenderer
         }
     }
 
+    /// <summary>
+    /// Evaluates each branch condition of <paramref name="ifNode"/> in order and renders
+    /// the first truthy branch.  Falls back to the else body if all conditions are falsy.
+    /// </summary>
     private void RenderIf(IfNode ifNode, Environment env, StashDictionary data, StringBuilder sb)
     {
         foreach (var branch in ifNode.Branches)
@@ -149,6 +223,11 @@ public class TemplateRenderer
         }
     }
 
+    /// <summary>
+    /// Iterates the collection described by <paramref name="forNode"/>, rendering the loop
+    /// body once per element with the loop variable and <c>loop</c> metadata bound in a
+    /// child environment.
+    /// </summary>
     private void RenderFor(ForNode forNode, Environment env, StashDictionary data, StringBuilder sb)
     {
         var (iterableValue, error) = _interpreter.EvaluateString(forNode.Iterable, env);
@@ -183,6 +262,17 @@ public class TemplateRenderer
         }
     }
 
+    /// <summary>
+    /// Converts a Stash runtime value into a flat <see cref="List{T}"/> of items
+    /// suitable for iteration by <c>RenderFor</c>.
+    /// </summary>
+    /// <param name="iterableValue">The evaluated iterable: list, range, string, or dictionary.</param>
+    /// <param name="iterableExpr">The original expression string, used in error messages.</param>
+    /// <returns>A list of items to iterate over.</returns>
+    /// <exception cref="TemplateException">
+    /// Thrown when <paramref name="iterableValue"/> is <see langword="null"/> or an
+    /// unsupported type.
+    /// </exception>
     private List<object?> CollectItems(object? iterableValue, string iterableExpr)
     {
         switch (iterableValue)
@@ -222,6 +312,16 @@ public class TemplateRenderer
         }
     }
 
+    /// <summary>
+    /// Resolves, reads, and renders an included template file, appending its output to
+    /// <paramref name="sb"/>.
+    /// </summary>
+    /// <remarks>
+    /// The resolved absolute path must remain within <c>_basePath</c>; otherwise a
+    /// <see cref="TemplateException"/> is thrown to prevent directory traversal.
+    /// The included file is rendered with the same <paramref name="data"/> dictionary as
+    /// the parent template.
+    /// </remarks>
     private void RenderInclude(IncludeNode include, StashDictionary data, StringBuilder sb)
     {
         if (_basePath is null)

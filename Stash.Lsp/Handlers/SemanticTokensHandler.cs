@@ -13,34 +13,91 @@ using Stash.Lexing;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Lsp.Analysis.SymbolKind;
 
+/// <summary>
+/// Handles LSP <c>textDocument/semanticTokens</c> requests to provide semantic
+/// syntax highlighting beyond TextMate grammar capabilities.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Classifies tokens into semantic types (namespace, type, function, parameter, variable,
+/// property, enumMember, keyword, number, string, comment, operator) and applies modifiers
+/// (declaration, readonly). Uses the <see cref="AnalysisEngine"/> cached result's token list
+/// and symbol table for accurate per-token classification.
+/// </para>
+/// <para>
+/// Special handling is applied for: post-dot member access, dict literal keys vs. struct init
+/// fields, embedded expressions inside interpolated strings and command literals, and doc-comment
+/// tag highlighting (<c>@param</c>, <c>@return</c>, <c>@returns</c>).
+/// </para>
+/// </remarks>
 public class SemanticTokensHandler : SemanticTokensHandlerBase
 {
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>Per-document cached <see cref="SemanticTokensDocument"/> instances keyed by URI.</summary>
     private readonly ConcurrentDictionary<Uri, SemanticTokensDocument> _documents = new();
 
     // Token type indices (must match legend registration)
+
+    /// <summary>Token type index for namespace identifiers (index 0 in legend).</summary>
     private const int TokenTypeNamespace = 0;
+
+    /// <summary>Token type index for type names — structs, enums, and type hint positions (index 1).</summary>
     private const int TokenTypeType = 1;
+
+    /// <summary>Token type index for function names (index 2).</summary>
     private const int TokenTypeFunction = 2;
+
+    /// <summary>Token type index for function parameters (index 3).</summary>
     private const int TokenTypeParameter = 3;
+
+    /// <summary>Token type index for variables and constants (index 4).</summary>
     private const int TokenTypeVariable = 4;
+
+    /// <summary>Token type index for struct fields and dict properties (index 5).</summary>
     private const int TokenTypeProperty = 5;
+
+    /// <summary>Token type index for enum member identifiers (index 6).</summary>
     private const int TokenTypeEnumMember = 6;
+
+    /// <summary>Token type index for language keywords (index 7).</summary>
     private const int TokenTypeKeyword = 7;
+
+    /// <summary>Token type index for integer and float literals (index 8).</summary>
     private const int TokenTypeNumber = 8;
+
+    /// <summary>Token type index for string literals (index 9).</summary>
     private const int TokenTypeString = 9;
+
+    /// <summary>Token type index for single-line, block, and doc comments (index 10).</summary>
     private const int TokenTypeComment = 10;
+
+    /// <summary>Token type index for operators and punctuation (index 11).</summary>
     private const int TokenTypeOperator = 11;
 
     // Token modifier bit flags
+
+    /// <summary>Modifier bit flag indicating the token is at its declaration site.</summary>
     private const int ModifierDeclaration = 1 << 0;
+
+    /// <summary>Modifier bit flag indicating the token refers to a read-only binding (constant or built-in).</summary>
     private const int ModifierReadonly = 1 << 1;
 
+    /// <summary>
+    /// Initialises the handler with an <see cref="AnalysisEngine"/> used to retrieve cached analysis results.
+    /// </summary>
+    /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
     public SemanticTokensHandler(AnalysisEngine analysis)
     {
         _analysis = analysis;
     }
 
+    /// <summary>
+    /// Creates the registration options advertising the supported token types, modifiers, and capabilities.
+    /// </summary>
+    /// <param name="capability">The client's semantic tokens capability descriptor.</param>
+    /// <param name="clientCapabilities">The full set of client capabilities.</param>
+    /// <returns>Registration options including the token legend and full-document token support.</returns>
     protected override SemanticTokensRegistrationOptions CreateRegistrationOptions(
         SemanticTokensCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -71,6 +128,13 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             Range = false
         };
 
+    /// <summary>
+    /// Tokenizes the document and pushes each token's semantic classification into <paramref name="builder"/>.
+    /// </summary>
+    /// <param name="builder">The builder that accumulates encoded token data.</param>
+    /// <param name="identifier">Identifies the document to tokenize.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>A completed task after all tokens have been classified and pushed.</returns>
     protected override Task Tokenize(SemanticTokensBuilder builder, ITextDocumentIdentifierParams identifier, CancellationToken cancellationToken)
     {
         var result = _analysis.GetCachedResult(identifier.TextDocument.Uri.ToUri());
@@ -187,6 +251,24 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         return Task.CompletedTask;
     }
 
+    /// <summary>
+    /// Classifies a single identifier token using symbol-table lookup and built-in registry rules.
+    /// </summary>
+    /// <param name="builder">The token builder to push classification results into.</param>
+    /// <param name="result">The cached analysis result for the document.</param>
+    /// <param name="token">The identifier token to classify.</param>
+    /// <param name="line">0-based line number of the token.</param>
+    /// <param name="col">0-based column number of the token.</param>
+    /// <param name="length">Length of the token lexeme in characters.</param>
+    /// <param name="isTypeHintPosition">
+    /// <see langword="true"/> when the token appears after a colon or arrow (type annotation),
+    /// which forces classification as <c>type</c> regardless of symbol-table lookup.
+    /// </param>
+    /// <param name="afterDot">
+    /// <see langword="true"/> when the token immediately follows a dot operator (member access).
+    /// </param>
+    /// <param name="tokenList">Full token list for lookahead/lookbehind when needed.</param>
+    /// <param name="tokenIndex">Index of <paramref name="token"/> within <paramref name="tokenList"/>.</param>
     private void ProcessIdentifier(SemanticTokensBuilder builder, AnalysisResult result,
         Token token, int line, int col, int length, bool isTypeHintPosition = false, bool afterDot = false,
         IReadOnlyList<Token>? tokenList = null, int tokenIndex = -1)
@@ -261,6 +343,12 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         }
     }
 
+    /// <summary>
+    /// Tokenizes a command literal, highlighting the command name and any embedded expression tokens.
+    /// </summary>
+    /// <param name="builder">The token builder to receive classifications.</param>
+    /// <param name="result">The cached analysis result used for symbol lookup within embedded expressions.</param>
+    /// <param name="token">The command literal token whose <c>Literal</c> contains the parsed parts list.</param>
     private void ProcessCommandLiteral(SemanticTokensBuilder builder, AnalysisResult result, Token token)
     {
         if (token.Literal is not List<object> parts)
@@ -374,6 +462,12 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         }
     }
 
+    /// <summary>
+    /// Tokenizes an interpolated string literal, recursing into each embedded expression segment.
+    /// </summary>
+    /// <param name="builder">The token builder to receive classifications.</param>
+    /// <param name="result">The cached analysis result used for symbol lookup inside interpolations.</param>
+    /// <param name="token">The interpolated string token whose <c>Literal</c> contains the parts list.</param>
     private void ProcessCompoundToken(SemanticTokensBuilder builder, AnalysisResult result, Token token)
     {
         if (token.Literal is not List<object> parts)
@@ -443,6 +537,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         }
     }
 
+    /// <summary>
+    /// Emits token classifications for a doc-comment token, handling both single-line
+    /// (<c>///</c>) and multi-line (<c>/** … */</c>) forms.
+    /// </summary>
+    /// <param name="builder">The token builder to push segments into.</param>
+    /// <param name="token">The doc-comment token.</param>
+    /// <param name="startLine">0-based starting line of the token.</param>
+    /// <param name="startCol">0-based starting column of the token.</param>
     private static void EmitDocComment(SemanticTokensBuilder builder, Token token, int startLine, int startCol)
     {
         var lexeme = token.Lexeme;
@@ -471,6 +573,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         }
     }
 
+    /// <summary>
+    /// Emits token classifications for a single line of a doc comment, splitting the text into
+    /// comment and keyword segments around any recognised doc tags.
+    /// </summary>
+    /// <param name="builder">The token builder to push segments into.</param>
+    /// <param name="text">The text of a single doc-comment line.</param>
+    /// <param name="line">0-based line number.</param>
+    /// <param name="col">0-based starting column of the line's first character.</param>
     private static void EmitDocLine(SemanticTokensBuilder builder, string text, int line, int col)
     {
         var segments = FindDocTagSegments(text);
@@ -480,8 +590,16 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         }
     }
 
+    /// <summary>Represents a contiguous segment of a doc-comment line, flagged as either a doc tag or plain text.</summary>
     internal readonly record struct DocTagSegment(int Offset, int Length, bool IsTag);
 
+    /// <summary>
+    /// Splits <paramref name="text"/> into segments, marking recognised doc tags
+    /// (<c>@param</c>, <c>@return</c>, <c>@returns</c>) as keyword segments and surrounding
+    /// text as comment segments.
+    /// </summary>
+    /// <param name="text">A single line of doc-comment text to analyse.</param>
+    /// <returns>An ordered list of <see cref="DocTagSegment"/> covering the full line.</returns>
     internal static List<DocTagSegment> FindDocTagSegments(string text)
     {
         var segments = new List<DocTagSegment>();
@@ -536,6 +654,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         return segments;
     }
 
+    /// <summary>
+    /// Tests whether <paramref name="text"/> contains <paramref name="tag"/> at position
+    /// <paramref name="start"/> followed by a word boundary or end-of-string.
+    /// </summary>
+    /// <param name="text">The text to search within.</param>
+    /// <param name="start">Position in <paramref name="text"/> at which to check.</param>
+    /// <param name="tag">The exact tag string to match (e.g., <c>"@param"</c>).</param>
+    /// <returns><see langword="true"/> if the tag matches at the given position; otherwise <see langword="false"/>.</returns>
     internal static bool MatchTag(string text, int start, string tag)
     {
         if (start + tag.Length > text.Length)
@@ -553,6 +679,15 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         return false;
     }
 
+    /// <summary>
+    /// Maps a <see cref="SymbolInfo"/> kind to the corresponding token type index and modifier bitmask.
+    /// </summary>
+    /// <param name="definition">The resolved symbol whose kind drives the mapping.</param>
+    /// <param name="token">The source token, used to detect whether this occurrence is the declaration site.</param>
+    /// <returns>
+    /// A tuple of (<c>tokenType</c> index, <c>modifiers</c> bitmask) ready to pass to
+    /// <see cref="SemanticTokensBuilder.Push"/>.
+    /// </returns>
     private static (int TokenType, int Modifiers) MapSymbolKind(SymbolInfo definition, Token token)
     {
         bool isDeclaration = definition.Span.StartLine == token.Span.StartLine &&
@@ -583,6 +718,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         return (tokenType, modifiers);
     }
 
+    /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is a Stash keyword token.</summary>
     private static bool IsKeyword(TokenType type) => type is
         TokenType.Let or TokenType.Const or TokenType.Fn or TokenType.Struct or
         TokenType.Enum or TokenType.If or TokenType.Else or TokenType.For or
@@ -591,6 +727,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.Try or TokenType.Import or TokenType.From or TokenType.As or
         TokenType.Switch;
 
+    /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is an operator or punctuation token.</summary>
     private static bool IsOperator(TokenType type) => type is
         TokenType.Plus or TokenType.Minus or TokenType.Star or TokenType.Slash or
         TokenType.Percent or TokenType.Bang or TokenType.Less or TokenType.Greater or
@@ -602,6 +739,13 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.AmpersandGreaterGreater or TokenType.TwoGreater or
         TokenType.TwoGreaterGreater;
 
+    /// <summary>
+    /// Returns or creates the <see cref="SemanticTokensDocument"/> for the given document URI,
+    /// initialised with the registered token legend.
+    /// </summary>
+    /// <param name="params">Parameters identifying the document.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The cached <see cref="SemanticTokensDocument"/> for the requested URI.</returns>
     protected override Task<SemanticTokensDocument> GetSemanticTokensDocument(
         ITextDocumentIdentifierParams @params, CancellationToken cancellationToken)
     {

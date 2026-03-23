@@ -6,8 +6,37 @@ using System.IO;
 using Stash.Interpreting.Templating;
 using Stash.Interpreting.Types;
 
+/// <summary>
+/// Registers the <c>tpl</c> built-in namespace, which exposes Stash's templating engine
+/// to user code via <c>tpl.render</c>, <c>tpl.renderFile</c>, and <c>tpl.compile</c>.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The three functions mirror the three stages of the templating pipeline:
+/// <list type="bullet">
+///   <item><description>
+///     <c>tpl.compile(template)</c> runs the <see cref="TemplateLexer"/> and
+///     <see cref="TemplateParser"/> and returns the resulting AST as a
+///     <c>List&lt;TemplateNode&gt;</c> for repeated use.
+///   </description></item>
+///   <item><description>
+///     <c>tpl.render(template, data)</c> accepts either a raw template string (lex +
+///     parse + render) or a pre-compiled AST (render only) together with a data dictionary.
+///   </description></item>
+///   <item><description>
+///     <c>tpl.renderFile(path, data)</c> reads a template from disk and renders it, with
+///     the file's directory automatically set as the base path for <c>{% include %}</c>
+///     directives.
+///   </description></item>
+/// </list>
+/// </para>
+/// </remarks>
 public static class TplBuiltIns
 {
+    /// <summary>
+    /// Registers the <c>tpl</c> namespace and its three functions into <paramref name="globals"/>.
+    /// </summary>
+    /// <param name="globals">The interpreter's global <see cref="Stash.Interpreting.Environment"/>.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         var tpl = new StashNamespace("tpl");
@@ -91,6 +120,12 @@ public static class TplBuiltIns
         globals.Define("tpl", tpl);
     }
 
+    /// <summary>
+    /// Expands a leading <c>~</c> in <paramref name="path"/> to the current user's
+    /// home directory, mirroring shell tilde expansion.
+    /// </summary>
+    /// <param name="path">The file path, potentially starting with <c>~</c>.</param>
+    /// <returns>The path with <c>~</c> replaced by the user profile directory.</returns>
     private static string ExpandTilde(string path)
     {
         if (path.StartsWith('~'))

@@ -782,6 +782,12 @@ public static class BuiltInRegistry
 
     // ── Built-in Namespace Constants ──
 
+    /// <summary>
+    /// All namespace-scoped built-in constants.
+    /// Includes POSIX signal numbers under <c>process</c> (<c>SIGHUP</c>…<c>SIGTERM</c>),
+    /// mathematical constants under <c>math</c> (<c>PI</c>, <c>E</c>),
+    /// and terminal color name constants under <c>term</c>.
+    /// </summary>
     public static readonly IReadOnlyList<NamespaceConstant> NamespaceConstants = new[]
     {
         new NamespaceConstant("process", "SIGHUP",  "int", "1",
@@ -824,6 +830,10 @@ public static class BuiltInRegistry
 
     // ── Built-in Namespace Names ──
 
+    /// <summary>
+    /// The ordered list of all 25 built-in namespace names recognized by the Stash language.
+    /// Used to populate completion items and to identify namespace access expressions.
+    /// </summary>
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
         "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg"
@@ -831,6 +841,11 @@ public static class BuiltInRegistry
 
     // ── Keywords ──
 
+    /// <summary>
+    /// All reserved keywords in the Stash language.
+    /// Used by <c>CompletionHandler</c> for keyword completion items and by
+    /// <see cref="SemanticValidator"/> to avoid flagging keywords as undefined names.
+    /// </summary>
     public static readonly IReadOnlyList<string> Keywords = new[]
     {
         "let", "const", "fn", "struct", "enum", "if", "else",
@@ -841,6 +856,10 @@ public static class BuiltInRegistry
 
     // ── Valid built-in type names (for type hint validation) ──
 
+    /// <summary>
+    /// The set of primitive and built-in type names that are valid as type hints in Stash.
+    /// Used by <see cref="SemanticValidator"/> to check function return-type and parameter-type annotations.
+    /// </summary>
     public static readonly HashSet<string> ValidTypes = new()
     {
         "string", "int", "float", "bool", "null", "array",
@@ -849,6 +868,12 @@ public static class BuiltInRegistry
 
     // ── Known names for semantic validation (don't warn as undefined) ──
 
+    /// <summary>
+    /// The union of all built-in function names, struct names, namespace names, and
+    /// a handful of global identifiers (<c>args</c>, <c>true</c>, <c>false</c>, <c>null</c>).
+    /// <see cref="SemanticValidator"/> uses this set to suppress "undefined name" warnings
+    /// for known built-ins.
+    /// </summary>
     public static readonly HashSet<string> KnownNames = new(
         Functions.Select(f => f.Name)
             .Concat(Structs.Select(s => s.Name))
@@ -858,42 +883,88 @@ public static class BuiltInRegistry
 
     // ── Precomputed lookup tables ──
 
+    /// <summary>O(1) lookup of global built-in functions by name.</summary>
     private static readonly Dictionary<string, BuiltInFunction> _functionsByName =
         Functions.ToDictionary(f => f.Name);
 
+    /// <summary>O(1) lookup of namespace functions by fully-qualified name (e.g., <c>"io.println"</c>).</summary>
     private static readonly Dictionary<string, NamespaceFunction> _namespaceFunctionsByQualifiedName =
         NamespaceFunctions.ToDictionary(f => f.QualifiedName);
 
+    /// <summary>O(1) lookup of namespace constants by fully-qualified name (e.g., <c>"process.SIGTERM"</c>).</summary>
     private static readonly Dictionary<string, NamespaceConstant> _namespaceConstantsByQualifiedName =
         NamespaceConstants.ToDictionary(c => c.QualifiedName);
 
+    /// <summary>Set of all global built-in function names including legacy aliases (<c>println</c>, <c>print</c>, <c>readLine</c>).</summary>
     private static readonly HashSet<string> _builtInFunctionNames =
         new(Functions.Select(f => f.Name).Concat(new[] { "println", "print", "readLine" }));
 
+    /// <summary>Set of all built-in namespace names for O(1) membership checks.</summary>
     private static readonly HashSet<string> _namespaceNameSet = new(NamespaceNames);
 
+    /// <summary>Namespace functions grouped by namespace name for O(1) member enumeration.</summary>
     private static readonly Dictionary<string, IReadOnlyList<NamespaceFunction>> _namespaceMembersByNamespace =
         NamespaceFunctions.GroupBy(f => f.Namespace).ToDictionary(g => g.Key, g => (IReadOnlyList<NamespaceFunction>)g.ToList());
 
+    /// <summary>Namespace constants grouped by namespace name for O(1) constant enumeration.</summary>
     private static readonly Dictionary<string, IReadOnlyList<NamespaceConstant>> _namespaceConstantsByNamespace =
         NamespaceConstants.GroupBy(c => c.Namespace).ToDictionary(g => g.Key, g => (IReadOnlyList<NamespaceConstant>)g.ToList());
 
+    /// <summary>
+    /// Looks up a global built-in function by name.
+    /// </summary>
+    /// <param name="name">The function name (e.g., <c>"len"</c>).</param>
+    /// <param name="function">When this method returns <see langword="true"/>, contains the matching <see cref="BuiltInFunction"/>.</param>
+    /// <returns><see langword="true"/> if the function exists; otherwise <see langword="false"/>.</returns>
     public static bool TryGetFunction(string name, out BuiltInFunction function)
         => _functionsByName.TryGetValue(name, out function!);
 
+    /// <summary>
+    /// Looks up a namespace function by its fully-qualified name.
+    /// </summary>
+    /// <param name="qualifiedName">The qualified name (e.g., <c>"io.println"</c>).</param>
+    /// <param name="function">When this method returns <see langword="true"/>, contains the matching <see cref="NamespaceFunction"/>.</param>
+    /// <returns><see langword="true"/> if the function exists; otherwise <see langword="false"/>.</returns>
     public static bool TryGetNamespaceFunction(string qualifiedName, out NamespaceFunction function)
         => _namespaceFunctionsByQualifiedName.TryGetValue(qualifiedName, out function!);
 
+    /// <summary>
+    /// Returns all functions that belong to the specified namespace.
+    /// </summary>
+    /// <param name="namespaceName">The namespace name (e.g., <c>"str"</c>).</param>
+    /// <returns>A read-only list of <see cref="NamespaceFunction"/> objects, or an empty sequence if the namespace is unknown.</returns>
     public static IEnumerable<NamespaceFunction> GetNamespaceMembers(string namespaceName)
         => _namespaceMembersByNamespace.TryGetValue(namespaceName, out var members) ? members : [];
 
+    /// <summary>
+    /// Returns all constants that belong to the specified namespace.
+    /// </summary>
+    /// <param name="namespaceName">The namespace name (e.g., <c>"process"</c>).</param>
+    /// <returns>A read-only list of <see cref="NamespaceConstant"/> objects, or an empty sequence if the namespace is unknown.</returns>
     public static IEnumerable<NamespaceConstant> GetNamespaceConstants(string namespaceName)
         => _namespaceConstantsByNamespace.TryGetValue(namespaceName, out var constants) ? constants : [];
 
+    /// <summary>
+    /// Looks up a namespace constant by its fully-qualified name.
+    /// </summary>
+    /// <param name="qualifiedName">The qualified name (e.g., <c>"math.PI"</c>).</param>
+    /// <param name="constant">When this method returns <see langword="true"/>, contains the matching <see cref="NamespaceConstant"/>.</param>
+    /// <returns><see langword="true"/> if the constant exists; otherwise <see langword="false"/>.</returns>
     public static bool TryGetNamespaceConstant(string qualifiedName, out NamespaceConstant constant)
         => _namespaceConstantsByQualifiedName.TryGetValue(qualifiedName, out constant!);
 
+    /// <summary>
+    /// Determines whether the given name is a global built-in function
+    /// (including legacy aliases <c>println</c>, <c>print</c>, and <c>readLine</c>).
+    /// </summary>
+    /// <param name="name">The name to test.</param>
+    /// <returns><see langword="true"/> if the name is a built-in function; otherwise <see langword="false"/>.</returns>
     public static bool IsBuiltInFunction(string name) => _builtInFunctionNames.Contains(name);
 
+    /// <summary>
+    /// Determines whether the given name is a built-in namespace identifier.
+    /// </summary>
+    /// <param name="name">The name to test.</param>
+    /// <returns><see langword="true"/> if the name is a built-in namespace; otherwise <see langword="false"/>.</returns>
     public static bool IsBuiltInNamespace(string name) => _namespaceNameSet.Contains(name);
 }

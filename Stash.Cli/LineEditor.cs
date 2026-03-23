@@ -263,7 +263,13 @@ public class LineEditor
         Render();
     }
 
-    /// <summary>Moves cursor one word left.</summary>
+    /// <summary>
+    /// Moves the cursor one word to the left (bound to <c>Ctrl+Left</c>).
+    /// </summary>
+    /// <remarks>
+    /// Skips trailing non-alphanumeric characters first, then skips the preceding
+    /// alphanumeric word, leaving the cursor at the start of that word.
+    /// </remarks>
     private void WordLeft()
     {
         if (_cursor == 0)
@@ -284,7 +290,13 @@ public class LineEditor
         Render();
     }
 
-    /// <summary>Moves cursor one word right.</summary>
+    /// <summary>
+    /// Moves the cursor one word to the right (bound to <c>Ctrl+Right</c>).
+    /// </summary>
+    /// <remarks>
+    /// Skips the current alphanumeric word first, then skips any following
+    /// non-alphanumeric characters, leaving the cursor at the start of the next word.
+    /// </remarks>
     private void WordRight()
     {
         if (_cursor >= _buffer.Length)
@@ -305,7 +317,14 @@ public class LineEditor
         Render();
     }
 
-    /// <summary>Deletes one word backward from cursor.</summary>
+    /// <summary>
+    /// Deletes one word backward from the cursor (bound to <c>Ctrl+W</c>).
+    /// </summary>
+    /// <remarks>
+    /// Mirrors the navigation logic of <see cref="WordLeft"/>: first skips trailing
+    /// non-alphanumeric characters, then skips the preceding alphanumeric word, and
+    /// removes the entire skipped range from the buffer.
+    /// </remarks>
     private void DeleteWordBackward()
     {
         if (_cursor == 0)

@@ -8,8 +8,19 @@ using OmniSharp.Extensions.LanguageServer.Server;
 using Stash.Lsp.Analysis;
 using Stash.Lsp.Handlers;
 
+/// <summary>
+/// Entry point for the Stash Language Server Protocol server.
+/// </summary>
+/// <remarks>
+/// Configures and starts an <see cref="LanguageServer"/> over stdio, registering all
+/// LSP request handlers, services, and lifecycle callbacks.
+/// </remarks>
 public static class StashLanguageServer
 {
+    /// <summary>
+    /// Starts the LSP server, registers all handlers and services, and waits for the client to exit.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> that completes when the language server shuts down.</returns>
     public static async Task RunAsync()
     {
         var settings = new LspSettings();

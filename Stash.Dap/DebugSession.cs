@@ -159,10 +159,15 @@ public class DebugSession : IDebugger
 
     // ── Diagnostic logging ────────────────────────────────────────────────────
 
+    /// <summary>Path to the rolling diagnostic log file written by <see cref="Trace"/>.</summary>
     private static readonly string _logFile = Path.Combine(
         System.Environment.GetEnvironmentVariable("HOME") ?? "/tmp",
         ".stash-dap.log");
 
+    /// <summary>
+    /// Writes a timestamped diagnostic line to stderr and appends it to <see cref="_logFile"/>.
+    /// </summary>
+    /// <param name="message">The message to log.</param>
     private static void Trace(string message)
     {
         var line = $"[{DateTime.Now:HH:mm:ss.fff}] {message}";
@@ -171,6 +176,11 @@ public class DebugSession : IDebugger
         try { File.AppendAllText(_logFile, line + "\n"); } catch { }
     }
 
+    /// <summary>
+    /// Public entry point for diagnostic tracing from outside the session (e.g. server callbacks).
+    /// Delegates to <see cref="Trace"/>.
+    /// </summary>
+    /// <param name="message">The message to log.</param>
     public static void TraceStatic(string message) => Trace(message);
 
     // ── Public API called by DAP handlers ─────────────────────────────────────
@@ -844,6 +854,29 @@ public class DebugSession : IDebugger
 
     // ── IDebugger implementation ───────────────────────────────────────────────
 
+    /// <summary>
+    /// Called by the interpreter immediately before executing each statement.
+    /// Decides whether to pause, and if so blocks the interpreter thread on
+    /// <see cref="_pauseGate"/> until a resume command arrives from the DAP client.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// Pause priority (first match wins):
+    /// <list type="number">
+    ///   <item>Explicit pause requested via <see cref="Pause"/>.</item>
+    ///   <item>Stop-on-entry (fires once, then clears the flag).</item>
+    ///   <item>Stepping — evaluated by <see cref="ShouldStopForStep"/>.</item>
+    ///   <item>Breakpoint hit — evaluated by <see cref="CheckBreakpointAtSpan"/>.</item>
+    /// </list>
+    /// </para>
+    /// <para>
+    /// Variable references are cleared on each pause so the client always gets
+    /// fresh, valid IDs for the new pause location.
+    /// </para>
+    /// </remarks>
+    /// <param name="span">The source span of the statement about to execute.</param>
+    /// <param name="environment">The active <see cref="StashEnv"/> at the pause point.</param>
+    /// <exception cref="OperationCanceledException">Thrown when the session has been terminated via <see cref="Disconnect"/>.</exception>
     public void OnBeforeExecute(SourceSpan span, StashEnv environment)
     {
         if (_terminated)
@@ -897,6 +930,18 @@ public class DebugSession : IDebugger
         }
     }
 
+    /// <summary>
+    /// Called by the interpreter whenever a named function is entered.
+    /// If a matching <see cref="FunctionBreakpointEntry"/> exists, evaluates its condition
+    /// and hit condition, then pauses if both are satisfied.
+    /// </summary>
+    /// <remarks>
+    /// The hit count is incremented under the <see cref="_functionBreakpoints"/> lock before
+    /// condition evaluation to ensure thread-safe counter updates.
+    /// </remarks>
+    /// <param name="functionName">The name of the function being entered.</param>
+    /// <param name="callSite">The <see cref="SourceSpan"/> of the call expression.</param>
+    /// <param name="localScope">The newly created local <see cref="StashEnv"/> for the function call.</param>
     public void OnFunctionEnter(string functionName, SourceSpan callSite, StashEnv localScope)
     {
         // Check for function breakpoint hit — snapshot entry under lock
@@ -945,11 +990,24 @@ public class DebugSession : IDebugger
         _isPaused = false;
     }
 
+    /// <summary>
+    /// Called by the interpreter whenever a named function returns.
+    /// Step-out detection is handled implicitly by <see cref="ShouldStopForStep"/> comparing
+    /// call-stack depth on the subsequent <see cref="OnBeforeExecute"/> call.
+    /// </summary>
+    /// <param name="functionName">The name of the function that has exited.</param>
     public void OnFunctionExit(string functionName)
     {
         // Step-out detection happens via ShouldStopForStep checking CallStack.Count
     }
 
+    /// <summary>
+    /// Called by the interpreter when a <see cref="RuntimeError"/> is raised.
+    /// Sends the error message to the DAP client as stderr output.
+    /// If <see cref="_breakOnAllExceptions"/> is set, pauses execution at the error site.
+    /// </summary>
+    /// <param name="error">The runtime error that was raised.</param>
+    /// <param name="callStack">The interpreter's call stack at the point of the error.</param>
     public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack)
     {
         SendOutput("stderr", $"Runtime error: {error.Message}\n");
@@ -971,6 +1029,12 @@ public class DebugSession : IDebugger
         }
     }
 
+    /// <summary>
+    /// Called by the interpreter when a new source file is loaded (e.g. via <c>import</c>).
+    /// Registers the path in <see cref="_loadedSources"/> and notifies the DAP client with a
+    /// <c>loadedSource</c> event so it can display the file in the loaded-sources view.
+    /// </summary>
+    /// <param name="filePath">Absolute or relative path of the newly loaded file.</param>
     public void OnSourceLoaded(string filePath)
     {
         if (string.IsNullOrEmpty(filePath))
@@ -996,18 +1060,41 @@ public class DebugSession : IDebugger
         }
     }
 
+    /// <summary>
+    /// Called by the interpreter after the top-level script finishes executing.
+    /// Termination events (<c>terminated</c> and <c>exited</c>) are sent from the
+    /// interpreter thread's <c>finally</c> block in <see cref="Launch"/> instead.
+    /// </summary>
     public void OnExecutionComplete()
     {
         // Handled in the Launch thread's finally block (SendTerminated + SendExited)
     }
 
+    /// <summary>
+    /// Called by the interpreter to emit diagnostic or informational output through the DAP channel.
+    /// Forwards the text to <see cref="SendOutput"/>.
+    /// </summary>
+    /// <param name="category">DAP output category (e.g. <c>"stdout"</c>, <c>"stderr"</c>, <c>"console"</c>).</param>
+    /// <param name="text">The text to emit.</param>
     public void OnOutput(string category, string text)
     {
         SendOutput(category, text);
     }
 
+    /// <summary>
+    /// Returns <c>true</c> when <see cref="_breakOnAllExceptions"/> is set, instructing the
+    /// interpreter to call <see cref="OnError"/> before propagating the exception.
+    /// </summary>
+    /// <param name="error">The runtime error that is about to be thrown.</param>
+    /// <returns><c>true</c> if the adapter should break on this error; otherwise <c>false</c>.</returns>
     public bool ShouldBreakOnException(RuntimeError error) => _breakOnAllExceptions;
 
+    /// <summary>
+    /// Returns <c>true</c> when a function breakpoint exists for <paramref name="functionName"/>,
+    /// allowing the interpreter to call <see cref="OnFunctionEnter"/> only when necessary.
+    /// </summary>
+    /// <param name="functionName">The name of the function being entered.</param>
+    /// <returns><c>true</c> if a function breakpoint is registered for this name; otherwise <c>false</c>.</returns>
     public bool ShouldBreakOnFunctionEntry(string functionName)
     {
         lock (_functionBreakpoints)
@@ -1018,12 +1105,22 @@ public class DebugSession : IDebugger
 
     // ── Private helpers ────────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Unblocks the interpreter thread by signaling <see cref="_pauseGate"/>.
+    /// Called by all step/continue operations after updating <see cref="_stepMode"/>.
+    /// </summary>
     private void Resume()
     {
         _isPaused = false;
         _pauseGate.Set();
     }
 
+    /// <summary>
+    /// Sends a DAP <c>output</c> event to the client, mapping the category string to the
+    /// appropriate <see cref="OutputEventCategory"/> enum value.
+    /// </summary>
+    /// <param name="category">DAP output category string (<c>"stdout"</c>, <c>"stderr"</c>, or any other value mapped to <c>console</c>).</param>
+    /// <param name="text">The text content of the output event.</param>
     private void SendOutput(string category, string text)
     {
         if (_server == null)
@@ -1040,16 +1137,25 @@ public class DebugSession : IDebugger
         _server.SendOutput(new OutputEvent { Category = outputCategory, Output = text });
     }
 
+    /// <summary>Sends a DAP <c>terminated</c> event signalling that the debuggee has finished.</summary>
     private void SendTerminated()
     {
         _server?.SendTerminated(new TerminatedEvent());
     }
 
+    /// <summary>Sends a DAP <c>exited</c> event with the given process exit code.</summary>
+    /// <param name="exitCode">The exit code of the debuggee process.</param>
     private void SendExited(int exitCode)
     {
         _server?.SendExited(new ExitedEvent { ExitCode = exitCode });
     }
 
+    /// <summary>
+    /// Sends a DAP <c>stopped</c> event to the client, mapping <see cref="PauseReason"/>
+    /// to the corresponding <see cref="StoppedEventReason"/> value.
+    /// </summary>
+    /// <param name="reason">The reason execution has paused.</param>
+    /// <param name="description">Optional human-readable description forwarded to the client (e.g. exception message).</param>
     private void SendStopped(PauseReason reason, string? description = null)
     {
         if (_server == null)
@@ -1097,6 +1203,12 @@ public class DebugSession : IDebugger
         }
     }
 
+    /// <summary>
+    /// Returns the canonical absolute path for <paramref name="path"/>, with the Windows
+    /// drive letter normalized to uppercase for consistent dictionary lookups.
+    /// </summary>
+    /// <param name="path">A relative or absolute file-system path.</param>
+    /// <returns>The normalized absolute path.</returns>
     private static string NormalizePath(string path)
     {
         string fullPath = Path.GetFullPath(path);
@@ -1108,6 +1220,12 @@ public class DebugSession : IDebugger
         return fullPath;
     }
 
+    /// <summary>
+    /// Creates a DAP <see cref="Source"/> from a file path, normalizing the path
+    /// and extracting the file name for display.
+    /// </summary>
+    /// <param name="file">The file path to convert; returns <c>null</c> when <paramref name="file"/> is <c>null</c>.</param>
+    /// <returns>A <see cref="Source"/> with <c>Path</c> and <c>Name</c> populated, or <c>null</c>.</returns>
     private static Source? MakeSource(string? file)
     {
         if (file == null)
@@ -1118,6 +1236,13 @@ public class DebugSession : IDebugger
         return new Source { Path = NormalizePath(file), Name = Path.GetFileName(file) };
     }
 
+    /// <summary>
+    /// Creates a synthetic DAP <see cref="StackFrame"/> representing the top-level script scope
+    /// (displayed as <c>&lt;script&gt;</c> at the bottom of the call stack).
+    /// </summary>
+    /// <param name="id">The frame identifier to assign.</param>
+    /// <param name="span">The source span to associate with the frame, or <c>null</c> for an unknown location.</param>
+    /// <returns>A <see cref="StackFrame"/> for the script-level context.</returns>
     private static StackFrame MakeScriptFrame(int id, SourceSpan? span)
     {
         return new StackFrame

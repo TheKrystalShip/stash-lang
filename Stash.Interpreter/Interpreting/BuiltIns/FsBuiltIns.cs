@@ -4,17 +4,43 @@ using System.Collections.Generic;
 using Stash.Interpreting.Types;
 
 /// <summary>
-/// Registers the 'fs' namespace built-in functions.
+/// Registers the <c>fs</c> namespace built-in functions for filesystem operations.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Provides 27 functions for reading, writing, and inspecting the filesystem:
+/// <c>fs.readFile</c>, <c>fs.writeFile</c>, <c>fs.appendFile</c>, <c>fs.readLines</c>,
+/// <c>fs.createFile</c>, <c>fs.exists</c>, <c>fs.dirExists</c>, <c>fs.pathExists</c>,
+/// <c>fs.createDir</c>, <c>fs.listDir</c>, <c>fs.delete</c>, <c>fs.copy</c>, <c>fs.move</c>,
+/// <c>fs.size</c>, <c>fs.stat</c>, <c>fs.glob</c>, <c>fs.walk</c>, <c>fs.isFile</c>,
+/// <c>fs.isDir</c>, <c>fs.isSymlink</c>, <c>fs.symlink</c>, <c>fs.modifiedAt</c>,
+/// <c>fs.readable</c>, <c>fs.writable</c>, <c>fs.executable</c>, <c>fs.tempFile</c>,
+/// and <c>fs.tempDir</c>.
+/// </para>
+/// <para>
+/// This namespace is only registered when the <see cref="StashCapabilities.FileSystem"/>
+/// capability is enabled. All path arguments support <c>~</c> home-directory expansion.
+/// </para>
+/// </remarks>
 public static class FsBuiltIns
 {
+    /// <summary>
+    /// Expands a leading <c>~</c> to the user's home directory in the given path.
+    /// </summary>
+    /// <param name="path">The path to expand.</param>
+    /// <returns>The path with <c>~</c> replaced by the home directory, or the original path if no <c>~</c> prefix.</returns>
     private static string ExpandTilde(string path) => Interpreter.ExpandTilde(path);
 
+    /// <summary>
+    /// Registers all <c>fs</c> namespace functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Environment"/> to register functions in.</param>
     public static void Register(Environment globals)
     {
         // ── fs namespace ─────────────────────────────────────────────────
         var fs = new StashNamespace("fs");
 
+        // fs.readFile(path) — Reads the entire contents of a file as a string. Throws on I/O error.
         fs.Define("readFile", new BuiltInFunction("fs.readFile", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -27,6 +53,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
         }));
 
+        // fs.writeFile(path, content) — Writes a string to a file, creating or overwriting it. Returns null.
         fs.Define("writeFile", new BuiltInFunction("fs.writeFile", 2, (_, args) =>
         {
             if (args[0] is not string path)
@@ -45,6 +72,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.exists(path) — Returns true if the given path is an existing file, false otherwise.
         fs.Define("exists", new BuiltInFunction("fs.exists", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -56,6 +84,7 @@ public static class FsBuiltIns
             return System.IO.File.Exists(path);
         }));
 
+        // fs.dirExists(path) — Returns true if the given path is an existing directory, false otherwise.
         fs.Define("dirExists", new BuiltInFunction("fs.dirExists", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -67,6 +96,7 @@ public static class FsBuiltIns
             return System.IO.Directory.Exists(path);
         }));
 
+        // fs.pathExists(path) — Returns true if the given path exists as either a file or directory, false otherwise.
         fs.Define("pathExists", new BuiltInFunction("fs.pathExists", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -78,6 +108,7 @@ public static class FsBuiltIns
             return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
         }));
 
+        // fs.createDir(path) — Creates a directory (and any missing parent directories). Returns null. No-ops if the directory already exists.
         fs.Define("createDir", new BuiltInFunction("fs.createDir", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -91,6 +122,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.delete(path) — Deletes a file or recursively deletes a directory. Throws if the path does not exist.
         fs.Define("delete", new BuiltInFunction("fs.delete", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -118,6 +150,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.copy(src, dst) — Copies a file from src to dst, overwriting dst if it exists. Returns null.
         fs.Define("copy", new BuiltInFunction("fs.copy", 2, (_, args) =>
         {
             if (args[0] is not string src)
@@ -137,6 +170,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.move(src, dst) — Moves or renames a file from src to dst, overwriting dst if it exists. Returns null.
         fs.Define("move", new BuiltInFunction("fs.move", 2, (_, args) =>
         {
             if (args[0] is not string src)
@@ -156,6 +190,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.size(path) — Returns the size of a file in bytes (integer).
         fs.Define("size", new BuiltInFunction("fs.size", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -168,6 +203,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}"); }
         }));
 
+        // fs.listDir(path) — Returns an array of all file and directory paths directly inside the given directory.
         fs.Define("listDir", new BuiltInFunction("fs.listDir", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -190,6 +226,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot list directory '{path}': {e.Message}"); }
         }));
 
+        // fs.appendFile(path, content) — Appends a string to the end of a file, creating it if it doesn't exist. Returns null.
         fs.Define("appendFile", new BuiltInFunction("fs.appendFile", 2, (_, args) =>
         {
             if (args[0] is not string path)
@@ -208,6 +245,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.readLines(path) — Reads all lines of a file and returns them as an array of strings.
         fs.Define("readLines", new BuiltInFunction("fs.readLines", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -224,6 +262,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
         }));
 
+        // fs.glob(pattern) — Returns an array of file paths matching a glob pattern (e.g. "src/**/*.cs"). Supports wildcards in filename only.
         fs.Define("glob", new BuiltInFunction("fs.glob", 1, (_, args) =>
         {
             if (args[0] is not string pattern)
@@ -252,6 +291,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"fs.glob failed: {e.Message}"); }
         }));
 
+        // fs.isFile(path) — Returns true if the path refers to an existing regular file.
         fs.Define("isFile", new BuiltInFunction("fs.isFile", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -263,6 +303,7 @@ public static class FsBuiltIns
             return System.IO.File.Exists(path);
         }));
 
+        // fs.isDir(path) — Returns true if the path refers to an existing directory.
         fs.Define("isDir", new BuiltInFunction("fs.isDir", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -274,6 +315,7 @@ public static class FsBuiltIns
             return System.IO.Directory.Exists(path);
         }));
 
+        // fs.isSymlink(path) — Returns true if the path is an existing symbolic link (reparse point).
         fs.Define("isSymlink", new BuiltInFunction("fs.isSymlink", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -293,11 +335,13 @@ public static class FsBuiltIns
             }
         }));
 
+        // fs.tempFile() — Creates a new empty temporary file and returns its path string.
         fs.Define("tempFile", new BuiltInFunction("fs.tempFile", 0, (_, _) =>
         {
             return System.IO.Path.GetTempFileName();
         }));
 
+        // fs.tempDir() — Creates a new temporary directory with a random name and returns its path string.
         fs.Define("tempDir", new BuiltInFunction("fs.tempDir", 0, (_, _) =>
         {
             string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName());
@@ -305,6 +349,7 @@ public static class FsBuiltIns
             return dir;
         }));
 
+        // fs.modifiedAt(path) — Returns the last-modified time of a file as a Unix timestamp (float, seconds since epoch).
         fs.Define("modifiedAt", new BuiltInFunction("fs.modifiedAt", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -321,6 +366,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get modified time for '{path}': {e.Message}"); }
         }));
 
+        // fs.walk(path) — Recursively walks a directory and returns an array of all file paths within it (all depths).
         fs.Define("walk", new BuiltInFunction("fs.walk", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -337,6 +383,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"fs.walk failed: {e.Message}"); }
         }));
 
+        // fs.readable(path) — Returns true if the path exists and the current process can read it.
         fs.Define("readable", new BuiltInFunction("fs.readable", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -359,6 +406,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException) { return false; }
         }));
 
+        // fs.writable(path) — Returns true if the path exists and the current process can write to it.
         fs.Define("writable", new BuiltInFunction("fs.writable", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -389,6 +437,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException) { return false; }
         }));
 
+        // fs.executable(path) — Returns true if the path is an existing file and appears to be executable (by extension on Windows, by Unix mode bits on Unix).
         fs.Define("executable", new BuiltInFunction("fs.executable", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -423,6 +472,7 @@ public static class FsBuiltIns
             catch (System.IO.IOException) { return false; }
         }));
 
+        // fs.createFile(path) — Creates an empty file at path, or updates its last-modified time if it already exists (similar to Unix touch). Returns null.
         fs.Define("createFile", new BuiltInFunction("fs.createFile", 1, (_, args) =>
         {
             if (args[0] is not string path)
@@ -447,6 +497,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.symlink(target, linkPath) — Creates a symbolic link at linkPath pointing to target. Returns null.
         fs.Define("symlink", new BuiltInFunction("fs.symlink", 2, (_, args) =>
         {
             if (args[0] is not string target)
@@ -470,6 +521,7 @@ public static class FsBuiltIns
             return null;
         }));
 
+        // fs.stat(path) — Returns a dict with file metadata: size (int), isFile (bool), isDir (bool), isSymlink (bool), modified (float), created (float), name (string).
         fs.Define("stat", new BuiltInFunction("fs.stat", 1, (_, args) =>
         {
             if (args[0] is not string path)

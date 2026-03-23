@@ -7,15 +7,36 @@ using System.Text.RegularExpressions;
 using Stash.Interpreting.Types;
 
 /// <summary>
-/// Registers the 'str' namespace built-in functions.
+/// Registers the <c>str</c> namespace built-in functions for string manipulation.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Provides 38 functions including <c>str.upper</c>, <c>str.lower</c>, <c>str.trim</c>,
+/// <c>str.split</c>, <c>str.replace</c>, <c>str.substring</c>, <c>str.match</c>,
+/// <c>str.format</c>, <c>str.capitalize</c>, <c>str.slug</c>, <c>str.wrap</c>, and more.
+/// All functions are registered as <see cref="BuiltInFunction"/> instances on a
+/// <see cref="StashNamespace"/> in the global <see cref="Environment"/>.
+/// </para>
+/// <para>
+/// All string functions are non-mutating and return new values. Regex-based functions
+/// (e.g. <c>str.match</c>, <c>str.isMatch</c>, <c>str.replaceRegex</c>) use a 5-second
+/// timeout to guard against catastrophic backtracking.
+/// </para>
+/// </remarks>
 public static class StrBuiltIns
 {
+    /// <summary>
+    /// Registers all <c>str</c> namespace functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Environment"/> to register functions in.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         // ── str namespace ────────────────────────────────────────────────
         var str = new StashNamespace("str");
 
+        // str.upper(s) — Returns a copy of s with all characters converted to uppercase
+        // using invariant culture rules.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("upper", new BuiltInFunction("str.upper", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -26,6 +47,9 @@ public static class StrBuiltIns
             return s.ToUpperInvariant();
         }));
 
+        // str.lower(s) — Returns a copy of s with all characters converted to lowercase
+        // using invariant culture rules.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("lower", new BuiltInFunction("str.lower", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -36,6 +60,8 @@ public static class StrBuiltIns
             return s.ToLowerInvariant();
         }));
 
+        // str.trim(s) — Returns a copy of s with leading and trailing whitespace removed.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("trim", new BuiltInFunction("str.trim", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -46,6 +72,8 @@ public static class StrBuiltIns
             return s.Trim();
         }));
 
+        // str.trimStart(s) — Returns a copy of s with leading whitespace removed.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("trimStart", new BuiltInFunction("str.trimStart", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -56,6 +84,8 @@ public static class StrBuiltIns
             return s.TrimStart();
         }));
 
+        // str.trimEnd(s) — Returns a copy of s with trailing whitespace removed.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("trimEnd", new BuiltInFunction("str.trimEnd", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -66,6 +96,9 @@ public static class StrBuiltIns
             return s.TrimEnd();
         }));
 
+        // str.contains(s, substring) — Returns true if s contains substring using ordinal
+        // (case-sensitive) comparison, false otherwise.
+        // Throws RuntimeError if either argument is not a string.
         str.Define("contains", new BuiltInFunction("str.contains", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -81,6 +114,9 @@ public static class StrBuiltIns
             return s.Contains(sub, StringComparison.Ordinal);
         }));
 
+        // str.startsWith(s, prefix) — Returns true if s begins with prefix using ordinal
+        // comparison, false otherwise.
+        // Throws RuntimeError if either argument is not a string.
         str.Define("startsWith", new BuiltInFunction("str.startsWith", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -96,6 +132,9 @@ public static class StrBuiltIns
             return s.StartsWith(prefix, StringComparison.Ordinal);
         }));
 
+        // str.endsWith(s, suffix) — Returns true if s ends with suffix using ordinal
+        // comparison, false otherwise.
+        // Throws RuntimeError if either argument is not a string.
         str.Define("endsWith", new BuiltInFunction("str.endsWith", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -111,6 +150,9 @@ public static class StrBuiltIns
             return s.EndsWith(suffix, StringComparison.Ordinal);
         }));
 
+        // str.indexOf(s, substring) — Returns the zero-based index of the first occurrence of
+        // substring in s using ordinal comparison, or -1 if not found.
+        // Throws RuntimeError if either argument is not a string.
         str.Define("indexOf", new BuiltInFunction("str.indexOf", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -126,6 +168,9 @@ public static class StrBuiltIns
             return (long)s.IndexOf(sub, StringComparison.Ordinal);
         }));
 
+        // str.lastIndexOf(s, substring) — Returns the zero-based index of the last occurrence
+        // of substring in s using ordinal comparison, or -1 if not found.
+        // Throws RuntimeError if either argument is not a string.
         str.Define("lastIndexOf", new BuiltInFunction("str.lastIndexOf", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -141,6 +186,9 @@ public static class StrBuiltIns
             return (long)s.LastIndexOf(sub, StringComparison.Ordinal);
         }));
 
+        // str.substring(s, start[, end]) — Returns the portion of s from index start (inclusive)
+        // to end (exclusive). When end is omitted, returns the remainder of the string from start.
+        // Indices must be within [0, len(s)]. Throws RuntimeError on out-of-range or wrong types.
         str.Define("substring", new BuiltInFunction("str.substring", -1, (_, args) =>
         {
             if (args.Count < 2 || args.Count > 3)
@@ -180,6 +228,9 @@ public static class StrBuiltIns
             return s.Substring((int)start);
         }));
 
+        // str.replace(s, old, new) — Returns a copy of s with the first occurrence of old
+        // replaced by new using ordinal comparison. Returns s unchanged if old is not found.
+        // Throws RuntimeError if any argument is not a string.
         str.Define("replace", new BuiltInFunction("str.replace", 3, (_, args) =>
         {
             if (args[0] is not string s)
@@ -206,6 +257,9 @@ public static class StrBuiltIns
             return s.Substring(0, idx) + newStr + s.Substring(idx + oldStr.Length);
         }));
 
+        // str.replaceAll(s, old, new) — Returns a copy of s with all occurrences of old
+        // replaced by new using ordinal comparison.
+        // Throws RuntimeError if any argument is not a string.
         str.Define("replaceAll", new BuiltInFunction("str.replaceAll", 3, (_, args) =>
         {
             if (args[0] is not string s)
@@ -226,6 +280,9 @@ public static class StrBuiltIns
             return s.Replace(oldStr, newStr, StringComparison.Ordinal);
         }));
 
+        // str.split(s, delimiter) — Splits s into an array of substrings around each
+        // occurrence of delimiter. Empty substrings are preserved.
+        // Throws RuntimeError if either argument is not a string.
         str.Define("split", new BuiltInFunction("str.split", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -242,6 +299,8 @@ public static class StrBuiltIns
             return parts.Select(p => (object?)p).ToList();
         }));
 
+        // str.repeat(s, count) — Returns s repeated count times. Count must be >= 0.
+        // Throws RuntimeError if s is not a string, count is not a non-negative integer.
         str.Define("repeat", new BuiltInFunction("str.repeat", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -262,6 +321,8 @@ public static class StrBuiltIns
             return string.Concat(Enumerable.Repeat(s, (int)count));
         }));
 
+        // str.reverse(s) — Returns a new string with the characters of s in reverse order.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("reverse", new BuiltInFunction("str.reverse", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -272,6 +333,9 @@ public static class StrBuiltIns
             return new string(s.Reverse().ToArray());
         }));
 
+        // str.chars(s) — Returns an array of single-character strings, one for each
+        // character in s.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("chars", new BuiltInFunction("str.chars", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -282,12 +346,20 @@ public static class StrBuiltIns
             return s.Select(c => (object?)c.ToString()).ToList();
         }));
 
+        // str.padStart(s, width[, padChar]) — Returns s left-padded with padChar (default " ")
+        // to at least width characters. If s is already >= width, returns s unchanged.
+        // Throws RuntimeError on invalid argument types.
         str.Define("padStart", new BuiltInFunction("str.padStart", -1, (_, args) =>
             RuntimeValues.PadString("str.padStart", args, padLeft: true)));
 
+        // str.padEnd(s, width[, padChar]) — Returns s right-padded with padChar (default " ")
+        // to at least width characters. If s is already >= width, returns s unchanged.
+        // Throws RuntimeError on invalid argument types.
         str.Define("padEnd", new BuiltInFunction("str.padEnd", -1, (_, args) =>
             RuntimeValues.PadString("str.padEnd", args, padLeft: false)));
 
+        // str.isDigit(s) — Returns true if s is non-empty and every character is a decimal digit.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("isDigit", new BuiltInFunction("str.isDigit", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -298,6 +370,8 @@ public static class StrBuiltIns
             return s.Length > 0 && s.All(char.IsDigit);
         }));
 
+        // str.isAlpha(s) — Returns true if s is non-empty and every character is a letter.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("isAlpha", new BuiltInFunction("str.isAlpha", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -308,6 +382,8 @@ public static class StrBuiltIns
             return s.Length > 0 && s.All(char.IsLetter);
         }));
 
+        // str.isAlphaNum(s) — Returns true if s is non-empty and every character is a letter
+        // or decimal digit. Throws RuntimeError if the argument is not a string.
         str.Define("isAlphaNum", new BuiltInFunction("str.isAlphaNum", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -318,6 +394,8 @@ public static class StrBuiltIns
             return s.Length > 0 && s.All(char.IsLetterOrDigit);
         }));
 
+        // str.isUpper(s) — Returns true if s contains at least one letter and all letters are
+        // uppercase. Non-letter characters are ignored. Throws RuntimeError if not a string.
         str.Define("isUpper", new BuiltInFunction("str.isUpper", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -329,6 +407,8 @@ public static class StrBuiltIns
             return letters.Count > 0 && letters.All(char.IsUpper);
         }));
 
+        // str.isLower(s) — Returns true if s contains at least one letter and all letters are
+        // lowercase. Non-letter characters are ignored. Throws RuntimeError if not a string.
         str.Define("isLower", new BuiltInFunction("str.isLower", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -340,6 +420,8 @@ public static class StrBuiltIns
             return letters.Count > 0 && letters.All(char.IsLower);
         }));
 
+        // str.isEmpty(s) — Returns true if s is empty or contains only whitespace characters.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("isEmpty", new BuiltInFunction("str.isEmpty", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -350,6 +432,10 @@ public static class StrBuiltIns
             return string.IsNullOrWhiteSpace(s);
         }));
 
+        // str.match(s, pattern) — Returns the first substring of s matching the regex pattern,
+        // or null if no match is found. Uses a 5-second timeout.
+        // Throws RuntimeError if either argument is not a string, the pattern is invalid,
+        // or the match times out.
         str.Define("match", new BuiltInFunction("str.match", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -378,6 +464,10 @@ public static class StrBuiltIns
             }
         }));
 
+        // str.matchAll(s, pattern) — Returns an array of all substrings in s that match the
+        // regex pattern. Returns an empty array if no matches are found. Uses a 5-second timeout.
+        // Throws RuntimeError if either argument is not a string, the pattern is invalid,
+        // or the match times out.
         str.Define("matchAll", new BuiltInFunction("str.matchAll", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -412,6 +502,10 @@ public static class StrBuiltIns
             }
         }));
 
+        // str.isMatch(s, pattern) — Returns true if s has at least one match for the regex
+        // pattern, false otherwise. Uses a 5-second timeout.
+        // Throws RuntimeError if either argument is not a string, the pattern is invalid,
+        // or the match times out.
         str.Define("isMatch", new BuiltInFunction("str.isMatch", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -439,6 +533,10 @@ public static class StrBuiltIns
             }
         }));
 
+        // str.replaceRegex(s, pattern, replacement) — Returns a copy of s with all matches of
+        // the regex pattern replaced by replacement. Supports backreference syntax in replacement.
+        // Uses a 5-second timeout. Throws RuntimeError if any argument is not a string, the
+        // pattern is invalid, or the match times out.
         str.Define("replaceRegex", new BuiltInFunction("str.replaceRegex", 3, (_, args) =>
         {
             if (args[0] is not string s)
@@ -471,6 +569,9 @@ public static class StrBuiltIns
             }
         }));
 
+        // str.count(s, substring) — Returns the number of non-overlapping occurrences of
+        // substring in s using ordinal comparison. Substring must not be empty.
+        // Throws RuntimeError if either argument is not a string or if substring is empty.
         str.Define("count", new BuiltInFunction("str.count", 2, (_, args) =>
         {
             if (args[0] is not string s)
@@ -498,6 +599,10 @@ public static class StrBuiltIns
             return count;
         }));
 
+        // str.format(template, ...args) — Returns a string formed by replacing {0}, {1}, ...
+        // placeholders in template with the stringified values of the corresponding extra arguments.
+        // At least 1 argument (the template) is required. Throws RuntimeError if the template
+        // is not a string, a placeholder index is out of range, or the regex times out.
         str.Define("format", new BuiltInFunction("str.format", -1, (_, args) =>
         {
             if (args.Count < 1)
@@ -540,6 +645,9 @@ public static class StrBuiltIns
 
         // ── Additional string utilities ──────────────────────────────────
 
+        // str.capitalize(s) — Returns a copy of s with the first character uppercased and the
+        // remainder lowercased. Returns s unchanged if it is empty.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("capitalize", new BuiltInFunction("str.capitalize", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -555,6 +663,9 @@ public static class StrBuiltIns
             return char.ToUpperInvariant(s[0]) + s.Substring(1).ToLowerInvariant();
         }));
 
+        // str.title(s) — Returns a copy of s in title case: the first letter of each
+        // whitespace-delimited word is uppercased and the remaining letters are lowercased.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("title", new BuiltInFunction("str.title", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -588,6 +699,8 @@ public static class StrBuiltIns
             return new string(chars);
         }));
 
+        // str.lines(s) — Splits s into an array of lines on "\r\n", "\n", or "\r" boundaries.
+        // Empty lines are preserved. Throws RuntimeError if the argument is not a string.
         str.Define("lines", new BuiltInFunction("str.lines", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -599,6 +712,8 @@ public static class StrBuiltIns
             return lines.Select(l => (object?)l).ToList();
         }));
 
+        // str.words(s) — Splits s into an array of words by whitespace, discarding empty
+        // entries. Throws RuntimeError if the argument is not a string.
         str.Define("words", new BuiltInFunction("str.words", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -610,6 +725,10 @@ public static class StrBuiltIns
             return words.Select(w => (object?)w).ToList();
         }));
 
+        // str.truncate(s, maxLen[, suffix]) — Returns s truncated to maxLen characters.
+        // If s is longer than maxLen, the suffix (default "...") is appended to the cut string.
+        // The total result length may be less than maxLen if suffix is longer than maxLen.
+        // Throws RuntimeError on wrong types or if maxLen < 0.
         str.Define("truncate", new BuiltInFunction("str.truncate", -1, (_, args) =>
         {
             if (args.Count < 2 || args.Count > 3)
@@ -647,6 +766,10 @@ public static class StrBuiltIns
             return s.Substring(0, cutLen) + suffix;
         }));
 
+        // str.slug(s) — Returns a URL-friendly slug from s: lowercased, non-alphanumeric
+        // characters removed, spaces and hyphens collapsed to a single hyphen, and leading
+        // and trailing hyphens stripped.
+        // Throws RuntimeError if the argument is not a string.
         str.Define("slug", new BuiltInFunction("str.slug", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -661,6 +784,10 @@ public static class StrBuiltIns
             return slug;
         }));
 
+        // str.wrap(s, width) — Wraps s at word boundaries so that no line exceeds width
+        // characters. Newlines already present in s are preserved as paragraph breaks.
+        // Width must be > 0. Throws RuntimeError if s is not a string or width is not a
+        // positive integer.
         str.Define("wrap", new BuiltInFunction("str.wrap", 2, (_, args) =>
         {
             if (args[0] is not string s)

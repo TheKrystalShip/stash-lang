@@ -10,15 +10,44 @@ using Stash.Common;
 using Stash.Lsp.Analysis;
 using Stash.Parsing.AST;
 
+/// <summary>
+/// Handles LSP <c>textDocument/selectionRange</c> requests to support smart selection
+/// expansion (also known as structural selection).
+/// </summary>
+/// <remarks>
+/// <para>
+/// For each cursor position the handler collects all AST nodes (statements and expressions)
+/// whose source spans contain that position, sorts them by size (smallest/innermost first),
+/// deduplicates identical spans, and then chains them into a linked list of
+/// <see cref="SelectionRange"/> nodes from innermost to outermost.
+/// </para>
+/// <para>
+/// This allows editors to expand the selection one syntactic level at a time:
+/// e.g., argument → call expression → statement → block → function body.
+/// </para>
+/// <para>
+/// Uses the <see cref="AnalysisEngine"/> cached result's statement list for traversal.
+/// </para>
+/// </remarks>
 public class SelectionRangeHandler : SelectionRangeHandlerBase
 {
     private readonly AnalysisEngine _analysis;
 
+    /// <summary>
+    /// Initialises the handler with the analysis engine used to retrieve cached document results.
+    /// </summary>
+    /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
     public SelectionRangeHandler(AnalysisEngine analysis)
     {
         _analysis = analysis;
     }
 
+    /// <summary>
+    /// Creates the registration options restricting this handler to Stash language documents.
+    /// </summary>
+    /// <param name="capability">The client's selection range capability descriptor.</param>
+    /// <param name="clientCapabilities">The full set of client capabilities.</param>
+    /// <returns>Registration options scoped to <c>stash</c> language documents.</returns>
     protected override SelectionRangeRegistrationOptions CreateRegistrationOptions(
         SelectionRangeCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -26,6 +55,15 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
 
+    /// <summary>
+    /// Processes the selection range request and returns a linked chain of expanding ranges for each position.
+    /// </summary>
+    /// <param name="request">The request containing the document URI and one or more cursor positions.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="Container{SelectionRange}"/> with one entry per requested position,
+    /// or <see langword="null"/> if no cached analysis is available.
+    /// </returns>
     public override Task<Container<SelectionRange>?> Handle(SelectionRangeParams request,
         CancellationToken cancellationToken)
     {
@@ -86,6 +124,13 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
         return Task.FromResult<Container<SelectionRange>?>(new Container<SelectionRange>(ranges));
     }
 
+    /// <summary>
+    /// Recursively collects all statement-level source spans that contain the given position.
+    /// </summary>
+    /// <param name="stmt">The statement node to examine.</param>
+    /// <param name="line">1-based line number of the cursor.</param>
+    /// <param name="col">1-based column number of the cursor.</param>
+    /// <param name="spans">The accumulator list for matching spans.</param>
     private static void CollectContainingSpans(Stmt stmt, int line, int col, List<SourceSpan> spans)
     {
         if (!Contains(stmt.Span, line, col))
@@ -147,6 +192,13 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
         }
     }
 
+    /// <summary>
+    /// Recursively collects all expression-level source spans that contain the given position.
+    /// </summary>
+    /// <param name="expr">The expression node to examine.</param>
+    /// <param name="line">1-based line number of the cursor.</param>
+    /// <param name="col">1-based column number of the cursor.</param>
+    /// <param name="spans">The accumulator list for matching spans.</param>
     private static void CollectContainingSpansExpr(Expr expr, int line, int col, List<SourceSpan> spans)
     {
         if (!Contains(expr.Span, line, col))
@@ -243,6 +295,12 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
         }
     }
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="span"/> contains the given 1-based position.
+    /// </summary>
+    /// <param name="span">The source span to test.</param>
+    /// <param name="line">1-based line number.</param>
+    /// <param name="col">1-based column number.</param>
     private static bool Contains(SourceSpan span, int line, int col)
     {
         if (line < span.StartLine || line > span.EndLine)
@@ -263,12 +321,19 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
         return true;
     }
 
+    /// <summary>
+    /// Returns an integer approximation of the area covered by <paramref name="span"/>,
+    /// used for sorting spans from innermost (smallest) to outermost (largest).
+    /// </summary>
+    /// <param name="span">The source span to measure.</param>
+    /// <returns>A numeric size value where line count dominates column count.</returns>
     private static int SpanSize(SourceSpan span)
     {
         // Approximate size for sorting — lines are the primary dimension
         return (span.EndLine - span.StartLine) * 10000 + (span.EndColumn - span.StartColumn);
     }
 
+    /// <summary>Returns <see langword="true"/> when two source spans have identical start and end positions.</summary>
     private static bool SpansEqual(SourceSpan a, SourceSpan b) =>
         a.StartLine == b.StartLine && a.StartColumn == b.StartColumn &&
         a.EndLine == b.EndLine && a.EndColumn == b.EndColumn;

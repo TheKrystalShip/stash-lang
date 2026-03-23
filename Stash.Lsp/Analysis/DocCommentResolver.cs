@@ -7,6 +7,27 @@ using Stash.Lexing;
 /// Attaches documentation comments to symbols by matching DocComment tokens
 /// to the declaration that immediately follows them.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Supports two comment styles recognised by the lexer:
+/// </para>
+/// <list type="bullet">
+///   <item><description><c>///</c> single-line doc comments — one or more consecutive tokens are joined with newlines.</description></item>
+///   <item><description><c>/** … */</c> block doc comments — the surrounding delimiters and leading <c>*</c> prefixes are stripped.</description></item>
+/// </list>
+/// <para>
+/// After a doc comment is collected, <see cref="FindNextSymbol"/> scans <see cref="ScopeTree.All"/>
+/// to find a declarable symbol (function, struct, enum, variable, constant, or method) whose
+/// declaration starts on the same line or the line immediately after the last doc comment token.
+/// The extracted text is then stored in <see cref="SymbolInfo.Documentation"/>, which is surfaced
+/// by hover and completion handlers.
+/// </para>
+/// <para>
+/// This resolver is called by <see cref="AnalysisEngine"/> after symbol collection and import
+/// resolution, so imported symbols are also eligible to receive documentation from the source file
+/// that defines them.
+/// </para>
+/// </remarks>
 public static class DocCommentResolver
 {
     /// <summary>

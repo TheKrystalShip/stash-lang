@@ -10,17 +10,56 @@ using Stash.Common;
 using Stash.Lsp.Analysis;
 using Stash.Parsing.AST;
 
+/// <summary>
+/// Handles LSP <c>textDocument/foldingRange</c> requests to provide code folding regions
+/// for Stash documents.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Folding ranges are produced from two sources:
+/// </para>
+/// <list type="bullet">
+///   <item>
+///     <term>AST-based regions</term>
+///     <description>
+///       The handler walks the statement tree from the <see cref="AnalysisEngine"/> cached
+///       result, emitting a <see cref="FoldingRangeKind.Region"/> for every multi-line block —
+///       function bodies, struct/enum declarations, if/else branches, loops, and explicit
+///       block statements.
+///     </description>
+///   </item>
+///   <item>
+///     <term>Comment regions</term>
+///     <description>
+///       The raw document text from <see cref="DocumentManager"/> is scanned for block
+///       comments (<c>/* … */</c>) and runs of two or more consecutive line comments
+///       (<c>// …</c>), which are folded as <see cref="FoldingRangeKind.Comment"/>.
+///     </description>
+///   </item>
+/// </list>
+/// </remarks>
 public class FoldingRangeHandler : FoldingRangeHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises the handler with the required analysis engine and document manager.
+    /// </summary>
+    /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
+    /// <param name="documents">The document manager used to retrieve raw document text for comment scanning.</param>
     public FoldingRangeHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Creates the registration options restricting this handler to Stash language documents.
+    /// </summary>
+    /// <param name="capability">The client's folding range capability descriptor.</param>
+    /// <param name="clientCapabilities">The full set of client capabilities.</param>
+    /// <returns>Registration options scoped to <c>stash</c> language documents.</returns>
     protected override FoldingRangeRegistrationOptions CreateRegistrationOptions(
         FoldingRangeCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -28,6 +67,15 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
 
+    /// <summary>
+    /// Processes the folding range request and returns all foldable regions for the document.
+    /// </summary>
+    /// <param name="request">The request containing the document URI.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="Container{FoldingRange}"/> combining AST-based and comment-based ranges,
+    /// or <see langword="null"/> if no cached analysis is available.
+    /// </returns>
     public override Task<Container<FoldingRange>?> Handle(FoldingRangeRequestParam request,
         CancellationToken cancellationToken)
     {
@@ -56,6 +104,12 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
         return Task.FromResult<Container<FoldingRange>?>(new Container<FoldingRange>(ranges));
     }
 
+    /// <summary>
+    /// Recursively walks a statement node and appends a <see cref="FoldingRange"/> for every
+    /// multi-line block it encounters.
+    /// </summary>
+    /// <param name="stmt">The statement to walk.</param>
+    /// <param name="ranges">The accumulator list that receives discovered ranges.</param>
     private void CollectFoldingRanges(Stmt stmt, List<FoldingRange> ranges)
     {
         switch (stmt)
@@ -134,6 +188,12 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
         }
     }
 
+    /// <summary>
+    /// Adds a <see cref="FoldingRange"/> for a source span if the span covers more than one line.
+    /// </summary>
+    /// <param name="ranges">The list to append the range to.</param>
+    /// <param name="span">The 1-based source span to convert.</param>
+    /// <param name="kind">The folding kind (<c>Region</c> or <c>Comment</c>).</param>
     private static void AddRegion(List<FoldingRange> ranges, SourceSpan span, FoldingRangeKind kind)
     {
         // Only fold multi-line regions
@@ -152,6 +212,12 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
         });
     }
 
+    /// <summary>
+    /// Scans the raw document text for block comments and runs of consecutive line comments,
+    /// appending a <see cref="FoldingRangeKind.Comment"/> range for each one.
+    /// </summary>
+    /// <param name="text">The full document text to scan.</param>
+    /// <param name="ranges">The accumulator list that receives discovered comment ranges.</param>
     private static void CollectCommentRanges(string text, List<FoldingRange> ranges)
     {
         var lines = text.Split('\n');

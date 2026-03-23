@@ -9,36 +9,103 @@ using Stash.Interpreting;
 using Stash.Interpreting.Types;
 
 /// <summary>
-/// An interactive command-line debugger for Stash scripts.
-/// Supports breakpoints (with conditions), stepping, variable inspection,
-/// scope chain viewing, and stack traces.
+/// An interactive command-line debugger for Stash scripts that implements
+/// <see cref="IDebugger"/> using a text-based REPL.
 /// </summary>
+/// <remarks>
+/// <para>
+/// <see cref="CliDebugger"/> provides a GDB-style debugging experience directly in
+/// the terminal. When attached to the <see cref="Interpreter"/>, execution pauses at
+/// configured <see cref="Breakpoint">breakpoints</see> or after each step command,
+/// and the user is dropped into an interactive <c>debug&gt;</c> prompt.
+/// </para>
+/// <para>
+/// <strong>Typical workflow:</strong>
+/// <list type="number">
+///   <item><description>
+///     Call <see cref="Initialize"/> before starting interpretation to let the user
+///     set initial breakpoints and configure the session.
+///   </description></item>
+///   <item><description>
+///     Attach the instance to the <see cref="Interpreter"/> and call
+///     <see cref="SetInterpreter"/> so that expression evaluation works in
+///     conditional breakpoints and the <c>eval</c> command.
+///   </description></item>
+///   <item><description>
+///     At each pause the user can inspect variables (<c>print</c>, <c>locals</c>,
+///     <c>scopes</c>), navigate the call stack (<c>stack</c>), manage breakpoints
+///     (<c>break</c>, <c>clear</c>, <c>breakpoints</c>), evaluate arbitrary
+///     expressions (<c>eval</c>), or resume execution (<c>continue</c>,
+///     <c>step</c>, <c>next</c>, <c>out</c>).
+///   </description></item>
+/// </list>
+/// </para>
+/// <para>
+/// For a DAP-based debugger that integrates with VS Code, see the
+/// <c>DebugSession</c> class in the <c>Stash.Dap</c> project.
+/// </para>
+/// </remarks>
 public class CliDebugger : IDebugger
 {
-    /// <summary>The list of user-defined breakpoints.</summary>
+    /// <summary>The ordered list of all user-defined <see cref="Breakpoint">breakpoints</see>.</summary>
     private readonly List<Breakpoint> _breakpoints = new();
-    /// <summary>When true, pause at the very next statement (step-into mode).</summary>
+    /// <summary>
+    /// When <see langword="true"/>, pause at the very next statement regardless of
+    /// depth (step-into mode). Cleared after the next pause.
+    /// </summary>
     private bool _stepInto;
-    /// <summary>When true, pause at the next statement at the same or shallower call depth (step-over mode).</summary>
+    /// <summary>
+    /// When <see langword="true"/>, pause at the next statement whose call depth is
+    /// less than or equal to <see cref="_pausedDepth"/> (step-over mode).
+    /// Cleared after the next pause.
+    /// </summary>
     private bool _stepOver;
-    /// <summary>When true, pause when returning to a shallower call depth (step-out mode).</summary>
+    /// <summary>
+    /// When <see langword="true"/>, pause when the call depth drops below
+    /// <see cref="_pausedDepth"/> (step-out mode). Cleared after the next pause.
+    /// </summary>
     private bool _stepOut;
-    /// <summary>The call depth at which the debugger last paused, used for step-over and step-out logic.</summary>
+    /// <summary>
+    /// The call depth recorded at the last pause, used as the reference depth for
+    /// step-over and step-out decisions.
+    /// </summary>
     private int _pausedDepth;
-    /// <summary>The current call stack depth, incremented on function entry and decremented on exit.</summary>
+    /// <summary>
+    /// The current call-stack depth, incremented on
+    /// <see cref="OnFunctionEnter"/> and decremented on <see cref="OnFunctionExit"/>.
+    /// </summary>
     private int _currentDepth;
-    /// <summary>The source span of the most recently executed statement.</summary>
+    /// <summary>
+    /// The <see cref="SourceSpan"/> of the statement that was most recently presented
+    /// to <see cref="OnBeforeExecute"/>.
+    /// </summary>
     private SourceSpan? _currentSpan;
-    /// <summary>The environment (scope) at the most recently executed statement.</summary>
+    /// <summary>
+    /// The <see cref="Stash.Interpreting.Environment">Environment</see> (scope chain)
+    /// active at the most recently executed statement.
+    /// </summary>
     private StashEnv? _currentEnv;
-    /// <summary>The current call stack, set by the interpreter via <see cref="SetCallStack"/>.</summary>
+    /// <summary>
+    /// The live call stack, kept current by the <see cref="Interpreter"/> via
+    /// <see cref="SetCallStack"/>.
+    /// </summary>
     private IReadOnlyList<CallFrame>? _callStack;
-    /// <summary>The interpreter instance, used for evaluating expressions in conditional breakpoints and the <c>eval</c> command.</summary>
+    /// <summary>
+    /// Reference to the running <see cref="Interpreter"/>, used to evaluate Stash
+    /// expressions for conditional breakpoints and the <c>eval</c> command.
+    /// Set via <see cref="SetInterpreter"/>.
+    /// </summary>
     private Interpreter? _interpreter;
 
     /// <summary>
-    /// Prompts the user for initial breakpoints before starting execution.
+    /// Prints a welcome banner and enters the initial <c>debug&gt;</c> prompt so the
+    /// user can configure breakpoints before execution begins.
     /// </summary>
+    /// <remarks>
+    /// Call this method once, before starting interpretation, so that the user has a
+    /// chance to set breakpoints via the <c>break</c> command and then issue
+    /// <c>run</c> to start the script.
+    /// </remarks>
     public void Initialize()
     {
         Console.WriteLine("Stash Debugger — Type 'help' for commands, 'run' to start execution.");
@@ -141,23 +208,47 @@ public class CliDebugger : IDebugger
     }
 
     /// <summary>
-    /// Sets the call stack reference for use in debugger commands.
-    /// Called by the interpreter to keep the debugger's view of the call stack current.
+    /// Sets the call-stack reference that the debugger uses when the user issues the
+    /// <c>stack</c> command or when <see cref="OnError"/> fires.
     /// </summary>
+    /// <remarks>
+    /// The <see cref="Interpreter"/> should call this method each time it updates the
+    /// call stack so that the <see cref="CliDebugger"/> always has an up-to-date view.
+    /// </remarks>
+    /// <param name="callStack">
+    /// The current ordered list of <see cref="CallFrame"/> objects, index 0 being the
+    /// outermost script frame.
+    /// </param>
     public void SetCallStack(IReadOnlyList<CallFrame> callStack)
     {
         _callStack = callStack;
     }
 
     /// <summary>
-    /// Sets the interpreter reference for expression evaluation in conditional breakpoints.
+    /// Sets the <see cref="Interpreter"/> reference used to evaluate Stash expressions
+    /// for conditional breakpoints and the <c>eval</c> command.
     /// </summary>
+    /// <remarks>
+    /// Must be called before execution starts. Without this reference, the
+    /// <c>eval</c> command and condition evaluation in <see cref="Breakpoint.Condition"/>
+    /// will be unavailable.
+    /// </remarks>
+    /// <param name="interpreter">The <see cref="Interpreter"/> instance to associate with this debugger.</param>
     public void SetInterpreter(Interpreter interpreter)
     {
         _interpreter = interpreter;
     }
 
-    /// <summary>Runs the interactive debugger REPL loop, reading and executing user commands until execution resumes.</summary>
+    /// <summary>
+    /// Runs the interactive debugger REPL, reading and dispatching user commands until
+    /// one of the resume commands (<c>run</c>, <c>step</c>, <c>next</c>, <c>out</c>)
+    /// returns control to the interpreter.
+    /// </summary>
+    /// <remarks>
+    /// Reads lines from <see cref="Console.In"/> and dispatches to the appropriate
+    /// handler method. On EOF (e.g., non-interactive stdin), the loop exits and
+    /// execution continues uninterrupted.
+    /// </remarks>
     private void Prompt()
     {
         while (true)
@@ -276,7 +367,20 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Handles the <c>break</c> command: sets a breakpoint at the specified location with an optional condition.</summary>
+    /// <summary>
+    /// Handles the <c>break</c> command: sets a <see cref="Breakpoint"/> at the given
+    /// location with an optional <c>if &lt;condition&gt;</c> guard.
+    /// </summary>
+    /// <remarks>
+    /// Accepted forms:
+    /// <list type="bullet">
+    ///   <item><description><c>break</c> — set at the current source location.</description></item>
+    ///   <item><description><c>break &lt;line&gt;</c> — set at the given line in the current file.</description></item>
+    ///   <item><description><c>break &lt;file&gt;:&lt;line&gt;</c> — set at an explicit file and line.</description></item>
+    ///   <item><description><c>break &lt;loc&gt; if &lt;expr&gt;</c> — set a conditional breakpoint.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="parts">The whitespace-split tokens of the user's input line.</param>
     private void HandleBreakpoint(string[] parts)
     {
         if (parts.Length < 2)
@@ -350,7 +454,20 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Handles the <c>clear</c> command: removes breakpoints by ID, location, or clears all.</summary>
+    /// <summary>
+    /// Handles the <c>clear</c> command: removes one or all <see cref="Breakpoint">breakpoints</see>
+    /// identified by numeric ID, source location, or the absence of any argument.
+    /// </summary>
+    /// <remarks>
+    /// Accepted forms:
+    /// <list type="bullet">
+    ///   <item><description><c>clear</c> — removes all breakpoints.</description></item>
+    ///   <item><description><c>clear &lt;id&gt;</c> — removes the breakpoint with that numeric ID.</description></item>
+    ///   <item><description><c>clear &lt;line&gt;</c> — removes the breakpoint at that line in the current file.</description></item>
+    ///   <item><description><c>clear &lt;file&gt;:&lt;line&gt;</c> — removes the breakpoint at an explicit location.</description></item>
+    /// </list>
+    /// </remarks>
+    /// <param name="parts">The whitespace-split tokens of the user's input line.</param>
     private void HandleClearBreakpoint(string[] parts)
     {
         if (parts.Length < 2)
@@ -411,7 +528,14 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Handles the <c>print</c> command: looks up a variable by name and displays its value.</summary>
+    /// <summary>
+    /// Handles the <c>print</c> command: looks up a variable by name in the current
+    /// scope chain and prints its value to the console.
+    /// </summary>
+    /// <param name="parts">
+    /// The whitespace-split tokens of the user's input line.
+    /// <c>parts[1]</c> must be the variable name to inspect.
+    /// </param>
     private void HandlePrint(string[] parts)
     {
         if (parts.Length < 2)
@@ -446,7 +570,19 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Walks the scope chain looking for a variable by name.</summary>
+    /// <summary>
+    /// Walks the entire scope chain of <see cref="_currentEnv"/> looking for a binding
+    /// with the given name.
+    /// </summary>
+    /// <param name="name">The variable name to look up.</param>
+    /// <param name="value">
+    /// When this method returns <see langword="true"/>, contains the bound value;
+    /// otherwise <see langword="null"/>.
+    /// </param>
+    /// <returns>
+    /// <see langword="true"/> if a binding for <paramref name="name"/> was found in any
+    /// scope; <see langword="false"/> otherwise.
+    /// </returns>
     private bool TryGetFromChain(string name, out object? value)
     {
         foreach (var scope in _currentEnv!.GetScopeChain())
@@ -460,7 +596,17 @@ public class CliDebugger : IDebugger
         return false;
     }
 
-    /// <summary>Handles the <c>eval</c> command: evaluates an arbitrary expression in the current scope.</summary>
+    /// <summary>
+    /// Handles the <c>eval</c> command: parses and evaluates an arbitrary Stash
+    /// expression in the current scope and prints the result.
+    /// </summary>
+    /// <remarks>
+    /// Requires both <see cref="_interpreter"/> and <see cref="_currentEnv"/> to be
+    /// non-<see langword="null"/>. The full input line is passed in addition to the
+    /// split <paramref name="parts"/> so that multi-token expressions are preserved.
+    /// </remarks>
+    /// <param name="parts">The whitespace-split tokens of the user's input line (used for length check).</param>
+    /// <param name="fullInput">The raw input line, used to extract the expression after the command keyword.</param>
     private void HandleEval(string[] parts, string fullInput)
     {
         if (_interpreter is null || _currentEnv is null)
@@ -490,7 +636,15 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Handles the <c>scopes</c> command: displays all scopes in the scope chain with their variables.</summary>
+    /// <summary>
+    /// Handles the <c>scopes</c> command: walks the full scope chain and prints every
+    /// scope tier along with all of its variable bindings.
+    /// </summary>
+    /// <remarks>
+    /// Each tier is labelled as <c>[Global]</c>, <c>[Local]</c>, or <c>[Closure]</c>
+    /// based on its position in the chain. Constant bindings are annotated with
+    /// <c>(const)</c>. Values are formatted via <see cref="FormatValue"/>.
+    /// </remarks>
     private void HandleScopes()
     {
         if (_currentEnv is null)
@@ -514,7 +668,14 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Handles the <c>locals</c> command: displays variables in the current (innermost) scope.</summary>
+    /// <summary>
+    /// Handles the <c>locals</c> command: prints all variable bindings in the
+    /// innermost (current) scope.
+    /// </summary>
+    /// <remarks>
+    /// Only the top-level environment frame is inspected; enclosing closure and global
+    /// scopes are not shown. Use <c>scopes</c> to see the full scope chain.
+    /// </remarks>
     private void HandleLocals()
     {
         if (_currentEnv is null)
@@ -537,9 +698,20 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Formats a Stash runtime value for display in the debugger REPL.</summary>
-    /// <param name="value">The value to format.</param>
-    /// <returns>A human-readable string representation.</returns>
+    /// <summary>
+    /// Formats a Stash runtime value as a human-readable string for display in the
+    /// debugger REPL.
+    /// </summary>
+    /// <remarks>
+    /// Handles all built-in Stash value types: <see langword="null"/>, <see cref="bool"/>,
+    /// <see cref="string"/>, <see cref="long"/>, <see cref="double"/>,
+    /// <see cref="List{T}">List&lt;object?&gt;</see>, <c>StashInstance</c>,
+    /// <c>StashEnumValue</c>, <c>StashFunction</c>, <c>StashLambda</c>,
+    /// <c>BuiltInFunction</c>, and <c>StashNamespace</c>. Unknown types fall back to
+    /// <see cref="object.ToString"/>.
+    /// </remarks>
+    /// <param name="value">The Stash runtime value to format. May be <see langword="null"/>.</param>
+    /// <returns>A human-readable string representation of <paramref name="value"/>.</returns>
     public static string FormatValue(object? value)
     {
         if (value is null)
@@ -601,7 +773,14 @@ public class CliDebugger : IDebugger
         return value.ToString() ?? "null";
     }
 
-    /// <summary>Prints the call stack to the console, most recent frame first.</summary>
+    /// <summary>
+    /// Prints the call stack to the console in reverse order (most recent frame first),
+    /// mirroring the display of common debuggers and stack-trace formatters.
+    /// </summary>
+    /// <param name="callStack">
+    /// The ordered list of <see cref="CallFrame"/> objects to display, index 0 being
+    /// the outermost script frame.
+    /// </param>
     private static void PrintCallStack(IReadOnlyList<CallFrame> callStack)
     {
         if (callStack.Count == 0)
@@ -618,7 +797,10 @@ public class CliDebugger : IDebugger
         }
     }
 
-    /// <summary>Prints the list of available debugger commands to the console.</summary>
+    /// <summary>
+    /// Prints the full list of available debugger commands and their aliases to the
+    /// console.
+    /// </summary>
     private static void PrintHelp()
     {
         Console.WriteLine("Debugger commands:");

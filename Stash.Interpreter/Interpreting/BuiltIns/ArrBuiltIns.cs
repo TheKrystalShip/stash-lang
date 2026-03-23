@@ -7,8 +7,20 @@ using Stash.Interpreting.Types;
 /// <summary>
 /// Registers the 'arr' namespace built-in functions.
 /// </summary>
+/// <remarks>
+/// <para>
+/// Provides functions including <c>arr.push</c>, <c>arr.pop</c>, <c>arr.map</c>,
+/// <c>arr.filter</c>, <c>arr.sort</c>, <c>arr.reduce</c>, and more.
+/// All functions are registered as <see cref="BuiltInFunction"/> instances on a
+/// <see cref="StashNamespace"/> in the global <see cref="Stash.Interpreting.Environment"/>.
+/// </para>
+/// </remarks>
 public static class ArrBuiltIns
 {
+    /// <summary>
+    /// Registers all <c>arr</c> namespace functions into the global environment.
+    /// </summary>
+    /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
     public static void Register(Stash.Interpreting.Environment globals)
     {
         // ── arr namespace ────────────────────────────────────────────────

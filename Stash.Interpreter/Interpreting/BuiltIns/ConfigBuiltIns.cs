@@ -22,7 +22,7 @@ public static class ConfigBuiltIns
     {
         var config = new StashNamespace("config");
 
-        // config.read(path) or config.read(path, format)
+        // config.read(path, format?) — Reads a config file from disk and parses it. Format is auto-detected from extension if omitted. Supports "json" and "ini".
         config.Define("read", new BuiltInFunction("config.read", -1, (_, args) =>
         {
             if (args.Count < 1 || args.Count > 2)
@@ -52,7 +52,7 @@ public static class ConfigBuiltIns
             return ParseByFormat(text, format, "config.read");
         }));
 
-        // config.write(path, data) or config.write(path, data, format)
+        // config.write(path, data, format?) — Serializes data and writes it to a config file. Format is auto-detected from extension if omitted. Supports "json" and "ini".
         config.Define("write", new BuiltInFunction("config.write", -1, (_, args) =>
         {
             if (args.Count < 2 || args.Count > 3)
@@ -83,7 +83,7 @@ public static class ConfigBuiltIns
             return null;
         }));
 
-        // config.parse(text, format)
+        // config.parse(text, format) — Parses a config string in the given format ("json" or "ini"). Returns a dict.
         config.Define("parse", new BuiltInFunction("config.parse", 2, (_, args) =>
         {
             if (args[0] is not string text)
@@ -99,7 +99,7 @@ public static class ConfigBuiltIns
             return ParseByFormat(text, format, "config.parse");
         }));
 
-        // config.stringify(data, format)
+        // config.stringify(data, format) — Serializes a Stash value to the given config format string ("json" or "ini"). Returns a string.
         config.Define("stringify", new BuiltInFunction("config.stringify", 2, (_, args) =>
         {
             if (args[1] is not string format)

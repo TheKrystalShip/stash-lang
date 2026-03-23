@@ -1,7 +1,27 @@
 namespace Stash.Lsp.Analysis;
 
+/// <summary>
+/// Stateless text-analysis helpers for extracting identifier tokens and dot-access prefixes
+/// from raw source lines, used by LSP handlers to resolve cursor context.
+/// </summary>
+/// <remarks>
+/// All methods operate on plain <see cref="string"/> input and are pure functions with no side effects.
+/// Consumed primarily by <see cref="AnalysisEngine.GetContextAt"/> and <see cref="AnalysisResult.ResolveNamespaceMember"/>.
+/// </remarks>
 public static class TextUtilities
 {
+    /// <summary>
+    /// Extracts the identifier word that spans the given 0-based cursor position.
+    /// </summary>
+    /// <remarks>
+    /// A word character is any letter, digit, or underscore (<c>[A-Za-z0-9_]</c>).
+    /// If the character at <paramref name="character"/> is not a word character, returns <c>null</c>.
+    /// Scans left and right to find the full token boundary.
+    /// </remarks>
+    /// <param name="text">The full document text (lines joined by <c>'\n'</c>).</param>
+    /// <param name="line">The 0-based line number.</param>
+    /// <param name="character">The 0-based character offset within the line.</param>
+    /// <returns>The word at the cursor, or <c>null</c> if the position is out of bounds or not on a word character.</returns>
     public static string? FindWordAtPosition(string text, int line, int character)
     {
         var lines = text.Split('\n');

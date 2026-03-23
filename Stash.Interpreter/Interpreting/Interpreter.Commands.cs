@@ -234,6 +234,17 @@ public partial class Interpreter
     /// Evaluates a pipe expression by chaining stdout of the left command to stdin of the right.
     /// Short-circuits on non-zero exit code.
     /// </summary>
+    /// <param name="expr">The pipe expression node containing the left and right command sub-expressions.</param>
+    /// <returns>
+    /// The <see cref="StashInstance"/> (<c>CommandResult</c>) produced by the right-hand command
+    /// on success, or the left-hand result unchanged if its exit code is non-zero.
+    /// </returns>
+    /// <remarks>
+    /// The left command must evaluate to a <c>CommandResult</c> instance. Its <c>stdout</c>
+    /// field is passed as <c>stdin</c> to the right command. If the left command's exit code
+    /// is non-zero the right command is not executed and the left result is returned as-is,
+    /// allowing callers to inspect the failure.
+    /// </remarks>
     public object? VisitPipeExpr(PipeExpr expr)
     {
         object? leftResult = expr.Left.Accept(this);
@@ -275,6 +286,17 @@ public partial class Interpreter
     /// Evaluates a redirect expression by executing the command and writing the selected
     /// stream(s) to the target file path.
     /// </summary>
+    /// <param name="expr">The redirect expression node describing the command, target path, stream, and append flag.</param>
+    /// <returns>
+    /// A new <see cref="StashInstance"/> (<c>CommandResult</c>) with the redirected stream(s)
+    /// cleared to empty strings, preserving the original exit code.
+    /// </returns>
+    /// <remarks>
+    /// Supports three stream selectors: <c>stdout</c>, <c>stderr</c>, and <c>all</c> (both).
+    /// When <see cref="RedirectExpr.Append"/> is <c>true</c> the content is appended to the
+    /// file rather than overwriting it. Passthrough commands (<c>$&gt;(...)</c>) cannot be
+    /// redirected. Any I/O failure is reported as a <see cref="RuntimeError"/>.
+    /// </remarks>
     public object? VisitRedirectExpr(RedirectExpr expr)
     {
         // Check if the inner expression is a passthrough command — these can't be redirected

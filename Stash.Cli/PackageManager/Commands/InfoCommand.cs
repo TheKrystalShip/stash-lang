@@ -3,8 +3,30 @@ using System.Text.Json;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Implements the <c>stash pkg info</c> command for displaying detailed metadata
+/// about a package retrieved from the registry.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Prints the package name, latest version, description, license, repository URL,
+/// owner list, published version history, and (up to ten lines of) the README
+/// to standard output.
+/// </para>
+/// </remarks>
 public static class InfoCommand
 {
+    /// <summary>
+    /// Executes the info command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg info</c>.  The first
+    /// positional argument is the package name (required).  The
+    /// <c>--registry &lt;url&gt;</c> flag optionally overrides the default registry.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when no package name is supplied.
+    /// </exception>
     public static void Execute(string[] args)
     {
         string? packageName = null;
@@ -114,6 +136,13 @@ public static class InfoCommand
         }
     }
 
+    /// <summary>
+    /// Reads a string property from a <see cref="JsonElement"/>, returning an empty
+    /// string when the property is absent or not a JSON string.
+    /// </summary>
+    /// <param name="el">The JSON element to query.</param>
+    /// <param name="prop">The name of the property to read.</param>
+    /// <returns>The string value of the property, or an empty string if not found.</returns>
     private static string GetString(JsonElement el, string prop)
     {
         if (el.TryGetProperty(prop, out var val) && val.ValueKind == JsonValueKind.String)

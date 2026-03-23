@@ -7,8 +7,35 @@ using Stash.Common;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Implements the <c>stash pkg install</c> command for installing packages from
+/// the registry or Git sources.
+/// </summary>
+/// <remarks>
+/// <para>
+/// When invoked with no positional arguments the command installs all dependencies
+/// declared in <c>stash.json</c> using <see cref="PackageInstaller.Install"/>.
+/// </para>
+/// <para>
+/// When a package specifier is provided it is parsed as either a Git source URL
+/// (prefixed with <c>git:</c>), a versioned registry reference
+/// (<c>&lt;name&gt;@&lt;version&gt;</c>), or a bare package name.  The dependency
+/// is written to <c>stash.json</c> via <see cref="AddDependency"/> before the full
+/// install is triggered.
+/// </para>
+/// </remarks>
 public static class InstallCommand
 {
+    /// <summary>
+    /// Executes the install command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg install</c>.  An optional
+    /// positional argument specifies a package specifier to add (e.g.
+    /// <c>my-package</c>, <c>my-package@1.2.0</c>, or
+    /// <c>git:https://github.com/…#main</c>).  The <c>--registry &lt;url&gt;</c>
+    /// flag optionally overrides the default registry.
+    /// </param>
     public static void Execute(string[] args)
     {
         string projectDir = Directory.GetCurrentDirectory();
@@ -86,6 +113,16 @@ public static class InstallCommand
         }
     }
 
+    /// <summary>
+    /// Adds or updates the <paramref name="name"/> entry in the <c>dependencies</c>
+    /// object of the project's <c>stash.json</c> file.
+    /// </summary>
+    /// <param name="projectDir">The root directory of the project containing <c>stash.json</c>.</param>
+    /// <param name="name">The package name to add or update.</param>
+    /// <param name="constraint">The version constraint string to store (e.g. <c>^1.0.0</c> or <c>*</c>).</param>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when <c>stash.json</c> does not exist or cannot be parsed.
+    /// </exception>
     private static void AddDependency(string projectDir, string name, string constraint)
     {
         string path = Path.Combine(projectDir, "stash.json");
@@ -106,6 +143,15 @@ public static class InstallCommand
         File.WriteAllText(path, root.ToJsonString(options) + "\n");
     }
 
+    /// <summary>
+    /// Derives a lower-case package name from the final path segment of a Git
+    /// repository URL, stripping any trailing <c>.git</c> suffix.
+    /// </summary>
+    /// <param name="url">The Git repository URL to extract the name from.</param>
+    /// <returns>
+    /// A lower-case string representing the repository name, suitable for use as
+    /// a Stash package name.
+    /// </returns>
     private static string ExtractNameFromGitUrl(string url)
     {
         string lastSegment = url;

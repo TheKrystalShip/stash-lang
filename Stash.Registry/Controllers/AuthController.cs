@@ -15,6 +15,18 @@ using Stash.Registry.Services;
 
 namespace Stash.Registry.Controllers;
 
+/// <summary>
+/// REST API controller for authentication and token management.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Handles user login, self-service registration, and JWT token lifecycle. The
+/// <c>login</c> and <c>register</c> endpoints are anonymous; all token management
+/// endpoints require a valid JWT. On login a <c>publish</c>-scoped token is issued
+/// automatically; additional tokens with <c>read</c>, <c>publish</c>, or <c>admin</c>
+/// scope can be created via <c>POST /api/v1/auth/tokens</c>.
+/// </para>
+/// </remarks>
 [ApiController]
 [Route("api/v1/auth")]
 public class AuthController : ControllerBase
@@ -25,6 +37,14 @@ public class AuthController : ControllerBase
     private readonly AuditService _auditService;
     private readonly RegistryConfig _config;
 
+    /// <summary>
+    /// Initialises the controller with its required services.
+    /// </summary>
+    /// <param name="db">Registry database used to look up users and persist tokens.</param>
+    /// <param name="jwtService">Service that mints signed JWT strings.</param>
+    /// <param name="authProvider">Provider that validates credentials and creates user accounts.</param>
+    /// <param name="auditService">Service that records security-relevant events.</param>
+    /// <param name="config">Registry-wide configuration, including token expiry settings.</param>
     public AuthController(
         IRegistryDatabase db,
         JwtTokenService jwtService,
@@ -39,6 +59,19 @@ public class AuthController : ControllerBase
         _config = config;
     }
 
+    /// <summary>
+    /// Authenticates a user with username and password and returns a JWT.
+    /// </summary>
+    /// <remarks>
+    /// Reads a <see cref="LoginRequest"/> JSON body. On success a <c>publish</c>-scoped
+    /// JWT is issued and persisted as a <see cref="TokenRecord"/>. No authentication
+    /// is required to call this endpoint.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="LoginResponse"/> containing the JWT and its expiry,
+    /// <c>400</c> if the request body is missing or malformed,
+    /// or <c>401</c> if the credentials are invalid.
+    /// </returns>
     [HttpPost("login")]
     [AllowAnonymous]
     public async Task<IActionResult> Login()
@@ -85,6 +118,21 @@ public class AuthController : ControllerBase
         return Ok(new LoginResponse { Token = jwt, ExpiresAt = expiresAt });
     }
 
+    /// <summary>
+    /// Creates a new user account (self-service registration).
+    /// </summary>
+    /// <remarks>
+    /// Reads a <see cref="RegisterRequest"/> JSON body. Registration can be disabled
+    /// globally via <see cref="RegistryConfig"/>; if so, <c>403</c> is returned.
+    /// Usernames must be 1–64 alphanumeric, hyphen, or underscore characters.
+    /// Passwords must be at least 8 characters. No authentication is required.
+    /// </remarks>
+    /// <returns>
+    /// <c>201</c> with a <see cref="RegisterResponse"/>,
+    /// <c>400</c> if validation fails,
+    /// <c>403</c> if registration is disabled,
+    /// or <c>409</c> if the username is already taken.
+    /// </returns>
     [HttpPost("register")]
     [AllowAnonymous]
     public async Task<IActionResult> Register()
@@ -137,6 +185,17 @@ public class AuthController : ControllerBase
         return StatusCode(201, new RegisterResponse { Username = username });
     }
 
+    /// <summary>
+    /// Returns the identity of the currently authenticated user.
+    /// </summary>
+    /// <remarks>
+    /// Requires a valid JWT. The username and role are read directly from the JWT claims;
+    /// no database query is performed.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="WhoamiResponse"/> containing the username and role,
+    /// or <c>401</c> if the request is unauthenticated.
+    /// </returns>
     [HttpGet("whoami")]
     [Authorize]
     public async Task<IActionResult> Whoami()
@@ -147,6 +206,21 @@ public class AuthController : ControllerBase
         return Ok(new WhoamiResponse { Username = username, Role = role });
     }
 
+    /// <summary>
+    /// Creates a new API token for the authenticated user.
+    /// </summary>
+    /// <remarks>
+    /// Reads a <see cref="TokenCreateRequest"/> JSON body. The <c>scope</c> field must be
+    /// <c>read</c>, <c>publish</c>, or <c>admin</c>; only users with the <c>admin</c> role
+    /// may request an admin-scoped token. The resulting JWT is persisted as a
+    /// <see cref="TokenRecord"/> and returned once — it cannot be retrieved again.
+    /// </remarks>
+    /// <returns>
+    /// <c>201</c> with a <see cref="TokenCreateResponse"/> containing the JWT and token ID,
+    /// <c>400</c> if the body is invalid or the scope is unrecognised,
+    /// <c>401</c> if unauthenticated,
+    /// or <c>403</c> if a non-admin requests an admin-scoped token.
+    /// </returns>
     [HttpPost("tokens")]
     [Authorize]
     public async Task<IActionResult> CreateToken()
@@ -200,6 +274,20 @@ public class AuthController : ControllerBase
         return StatusCode(201, new TokenCreateResponse { Token = jwt, TokenId = tokenId, Scope = scope, ExpiresAt = expiresAt, Description = body?.Description });
     }
 
+    /// <summary>
+    /// Revokes (deletes) a token by its ID.
+    /// </summary>
+    /// <param name="id">The token ID to revoke.</param>
+    /// <remarks>
+    /// A user may revoke their own tokens. Admin users may revoke any token. The
+    /// deletion is recorded in the audit log.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="SuccessResponse"/> on success,
+    /// <c>401</c> if unauthenticated,
+    /// <c>403</c> if the caller does not own the token and is not an admin,
+    /// or <c>404</c> if the token does not exist.
+    /// </returns>
     [HttpDelete("tokens/{id}")]
     [Authorize]
     public async Task<IActionResult> DeleteToken(string id)

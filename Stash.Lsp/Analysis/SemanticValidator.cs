@@ -5,20 +5,56 @@ using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 
+/// <summary>
+/// Severity level of a <see cref="SemanticDiagnostic"/> produced by <see cref="SemanticValidator"/>.
+/// Maps directly to the LSP <c>DiagnosticSeverity</c> values sent to the editor.
+/// </summary>
 public enum DiagnosticLevel
 {
+    /// <summary>A definite semantic error (e.g. <c>break</c> outside a loop, constant reassignment).</summary>
     Error,
+    /// <summary>A likely mistake that may still run (e.g. type mismatch, undefined identifier).</summary>
     Warning,
+    /// <summary>An informational hint such as unreachable code, rendered with a "faded" style.</summary>
     Information
 }
 
+/// <summary>
+/// Represents a single diagnostic message produced by <see cref="SemanticValidator"/>,
+/// carrying the message text, severity, source location, and an optional "unnecessary code" flag.
+/// </summary>
+/// <remarks>
+/// Diagnostics are forwarded by <see cref="AnalysisEngine"/> to the LSP
+/// <c>textDocument/publishDiagnostics</c> notification and rendered as squiggly underlines
+/// in the editor. The <see cref="IsUnnecessary"/> flag triggers an additional faded rendering
+/// style for unreachable-code hints.
+/// </remarks>
 public class SemanticDiagnostic
 {
+    /// <summary>Gets the human-readable diagnostic message shown in the editor tooltip.</summary>
     public string Message { get; }
+
+    /// <summary>Gets the severity (Error, Warning, or Information) of this diagnostic.</summary>
     public DiagnosticLevel Level { get; }
+
+    /// <summary>Gets the source span to underline in the editor.</summary>
     public SourceSpan Span { get; }
+
+    /// <summary>
+    /// Gets whether this diagnostic marks code that is present but will never execute
+    /// (unreachable code). When <see langword="true"/> the LSP client may apply a faded style
+    /// in addition to the normal diagnostic decoration.
+    /// </summary>
     public bool IsUnnecessary { get; }
 
+    /// <summary>
+    /// Initializes a new <see cref="SemanticDiagnostic"/> with the given message, level, span,
+    /// and optional unnecessary-code flag.
+    /// </summary>
+    /// <param name="message">Human-readable diagnostic text.</param>
+    /// <param name="level">Severity of the diagnostic.</param>
+    /// <param name="span">Source location to highlight.</param>
+    /// <param name="isUnnecessary"><see langword="true"/> to enable faded rendering for unreachable code.</param>
     public SemanticDiagnostic(string message, DiagnosticLevel level, SourceSpan span, bool isUnnecessary = false)
     {
         Message = message;
@@ -28,22 +64,65 @@ public class SemanticDiagnostic
     }
 }
 
+/// <summary>
+/// Validates a parsed Stash AST against the <see cref="ScopeTree"/> produced by
+/// <see cref="SymbolCollector"/>, emitting <see cref="SemanticDiagnostic"/> entries for
+/// semantic errors, warnings, and informational hints.
+/// </summary>
+/// <remarks>
+/// <para>
+/// The validator implements the full <see cref="IStmtVisitor{T}"/> and
+/// <see cref="IExprVisitor{T}"/> interfaces to walk every node in the tree.
+/// The following diagnostic categories are produced:
+/// </para>
+/// <list type="bullet">
+///   <item><description><b>Errors</b>: <c>break</c>/<c>continue</c> outside a loop; <c>return</c> outside a function; constant reassignment; arity mismatch on calls to known built-in functions.</description></item>
+///   <item><description><b>Warnings</b>: unknown type annotations; undefined identifier references; type mismatches on variable initialization, assignment, struct field assignment, and function argument passing.</description></item>
+///   <item><description><b>Information</b>: unreachable statements following a terminating statement (<c>return</c>, <c>break</c>, <c>continue</c>, <c>process.exit()</c>), rendered as faded unnecessary code.</description></item>
+/// </list>
+/// <para>
+/// Type mismatch checks delegate to <see cref="TypeInferenceEngine.InferExpressionType"/>
+/// to determine the actual type of an expression. Arity checks use
+/// <see cref="SymbolInfo.ParameterNames"/>, <see cref="SymbolInfo.RequiredParameterCount"/>,
+/// and <see cref="SymbolInfo.ParameterTypes"/> recorded during symbol collection.
+/// </para>
+/// </remarks>
 public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 {
+    /// <summary>The scope tree used for definition lookups and unresolved reference queries.</summary>
     private readonly ScopeTree _scopeTree;
+
+    /// <summary>Accumulates diagnostics produced during a single <see cref="Validate"/> call.</summary>
     private readonly List<SemanticDiagnostic> _diagnostics = new();
+
+    /// <summary>Tracks nesting depth of loop bodies to validate <c>break</c>/<c>continue</c> usage.</summary>
     private int _loopDepth;
+
+    /// <summary>Tracks nesting depth of function bodies to validate <c>return</c> usage.</summary>
     private int _functionDepth;
 
+    /// <summary>Set of names that are always in scope (built-in functions, namespaces, etc.).</summary>
     private static readonly HashSet<string> _builtInNames = BuiltInRegistry.KnownNames;
 
+    /// <summary>Set of type names that are always valid (primitives and built-in struct names).</summary>
     private static readonly HashSet<string> _validBuiltInTypes = BuiltInRegistry.ValidTypes;
 
+    /// <summary>
+    /// Initializes a new <see cref="SemanticValidator"/> for the given scope tree.
+    /// </summary>
+    /// <param name="scopeTree">The scope tree previously built by <see cref="SymbolCollector"/>.</param>
     public SemanticValidator(ScopeTree scopeTree)
     {
         _scopeTree = scopeTree;
     }
 
+    /// <summary>
+    /// Runs all semantic checks over <paramref name="statements"/> and returns the collected
+    /// diagnostics. Also checks for unresolved identifier references not covered by the visitor
+    /// walk (undefined variable warnings).
+    /// </summary>
+    /// <param name="statements">The top-level AST statements of the document to validate.</param>
+    /// <returns>All <see cref="SemanticDiagnostic"/> entries produced during validation.</returns>
     public List<SemanticDiagnostic> Validate(List<Stmt> statements)
     {
         _diagnostics.Clear();
@@ -66,6 +145,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     // Statement visitors
 
+    /// <summary>
+    /// Validates the <paramref name="typeHint"/> token against the set of known built-in types
+    /// and user-declared struct/enum names. Emits a <see cref="DiagnosticLevel.Warning"/> diagnostic
+    /// if the type name is not recognised.
+    /// </summary>
+    /// <param name="typeHint">The type annotation token to validate, or <see langword="null"/> to skip.</param>
     private void ValidateTypeHint(Token? typeHint)
     {
         if (typeHint == null)
@@ -92,6 +177,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             typeHint.Span));
     }
 
+    /// <summary>
+    /// Validates parameter and return type annotations, then recurses into the function body
+    /// checking for unreachable statements within a new function-depth context.
+    /// </summary>
+    /// <param name="stmt">The function declaration to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
         foreach (var paramType in stmt.ParameterTypes)
@@ -106,6 +197,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Validates the condition expression, then recurses into the loop body within an incremented
+    /// loop-depth context to allow <c>break</c>/<c>continue</c> without triggering errors.
+    /// </summary>
+    /// <param name="stmt">The while statement to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitWhileStmt(WhileStmt stmt)
     {
         stmt.Condition.Accept(this);
@@ -115,6 +212,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Recurses into the do-while body (within an incremented loop-depth context), then
+    /// validates the condition expression.
+    /// </summary>
+    /// <param name="stmt">The do-while statement to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDoWhileStmt(DoWhileStmt stmt)
     {
         _loopDepth++;
@@ -124,6 +227,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Validates the optional element type annotation, recurses into the iterable expression,
+    /// then visits the loop body within an incremented loop-depth context.
+    /// </summary>
+    /// <param name="stmt">The for-in statement to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitForInStmt(ForInStmt stmt)
     {
         ValidateTypeHint(stmt.TypeHint);
@@ -134,6 +243,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Emits a <see cref="DiagnosticLevel.Error"/> diagnostic if <c>break</c> appears outside
+    /// any loop (i.e. <see cref="_loopDepth"/> is zero).
+    /// </summary>
+    /// <param name="stmt">The break statement.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitBreakStmt(BreakStmt stmt)
     {
         if (_loopDepth == 0)
@@ -146,6 +261,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Emits a <see cref="DiagnosticLevel.Error"/> diagnostic if <c>continue</c> appears outside
+    /// any loop (i.e. <see cref="_loopDepth"/> is zero).
+    /// </summary>
+    /// <param name="stmt">The continue statement.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitContinueStmt(ContinueStmt stmt)
     {
         if (_loopDepth == 0)
@@ -158,6 +279,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Emits a <see cref="DiagnosticLevel.Error"/> diagnostic if <c>return</c> appears outside
+    /// any function (i.e. <see cref="_functionDepth"/> is zero), then recurses into the return value.
+    /// </summary>
+    /// <param name="stmt">The return statement.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitReturnStmt(ReturnStmt stmt)
     {
         if (_functionDepth == 0)
@@ -171,6 +298,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Validates the explicit type annotation (if present) and emits a warning if the inferred
+    /// type of the initializer does not match. Recurses into the initializer expression.
+    /// </summary>
+    /// <param name="stmt">The variable declaration to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
         ValidateTypeHint(stmt.TypeHint);
@@ -190,6 +323,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Validates the explicit type annotation (if present) and emits a warning if the inferred
+    /// type of the initializer does not match. Recurses into the initializer expression.
+    /// </summary>
+    /// <param name="stmt">The constant declaration to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
         ValidateTypeHint(stmt.TypeHint);
@@ -209,18 +348,31 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the initializer expression of a destructuring declaration.</summary>
+    /// <param name="stmt">The destructuring declaration to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDestructureStmt(DestructureStmt stmt)
     {
         stmt.Initializer.Accept(this);
         return null;
     }
 
+    /// <summary>Delegates to <see cref="CheckUnreachableStatements"/> for the block's statement list.</summary>
+    /// <param name="stmt">The block statement to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         CheckUnreachableStatements(stmt.Statements);
         return null;
     }
 
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="stmt"/> unconditionally terminates
+    /// control flow, making any following statement unreachable. Handles <c>return</c>,
+    /// <c>break</c>, <c>continue</c>, and <c>process.exit(…)</c> calls.
+    /// </summary>
+    /// <param name="stmt">The statement to check.</param>
+    /// <returns><see langword="true"/> if no statement after this one can be reached.</returns>
     private static bool IsTerminatingStatement(Stmt stmt)
     {
         if (stmt is ReturnStmt || stmt is BreakStmt || stmt is ContinueStmt)
@@ -240,6 +392,13 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return false;
     }
 
+    /// <summary>
+    /// Iterates over <paramref name="statements"/> and emits a
+    /// <see cref="DiagnosticLevel.Information"/> / <see cref="SemanticDiagnostic.IsUnnecessary"/>
+    /// diagnostic for every statement that follows a terminating statement.
+    /// Still visits unreachable statements so that nested semantic errors are not silently swallowed.
+    /// </summary>
+    /// <param name="statements">The ordered list of statements to scan.</param>
     private void CheckUnreachableStatements(List<Stmt> statements)
     {
         bool reachable = true;
@@ -269,6 +428,9 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         }
     }
 
+    /// <summary>Recurses into the condition and both branches of an if statement.</summary>
+    /// <param name="stmt">The if statement.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitIfStmt(IfStmt stmt)
     {
         stmt.Condition.Accept(this);
@@ -277,12 +439,21 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the expression of an expression statement.</summary>
+    /// <param name="stmt">The expression statement.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitExprStmt(ExprStmt stmt)
     {
         stmt.Expression.Accept(this);
         return null;
     }
 
+    /// <summary>
+    /// Validates all field type annotations and method signatures/bodies of a struct declaration.
+    /// Method bodies are validated within an incremented function-depth context.
+    /// </summary>
+    /// <param name="stmt">The struct declaration to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitStructDeclStmt(StructDeclStmt stmt)
     {
         foreach (var fieldType in stmt.FieldTypes)
@@ -306,12 +477,27 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
         return null;
     }
+    /// <summary>No-op — enum declarations introduce no semantic constraints to validate.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt) => null;
+
+    /// <summary>No-op — import statements are validated separately by <see cref="ImportResolver"/>.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitImportStmt(ImportStmt stmt) => null;
+
+    /// <summary>No-op — import-as statements are validated separately by <see cref="ImportResolver"/>.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitImportAsStmt(ImportAsStmt stmt) => null;
 
     // Expression visitors
 
+    /// <summary>
+    /// Validates a variable assignment: emits an error if the target is a constant, and
+    /// emits a warning if the assigned value's inferred type mismatches the target's explicit
+    /// type annotation. Then recurses into the right-hand side value.
+    /// </summary>
+    /// <param name="expr">The assignment expression to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitAssignExpr(AssignExpr expr)
     {
         var line = expr.Name.Span.StartLine;
@@ -339,6 +525,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Validates a function call: checks arity (too-few / too-many arguments) and per-argument
+    /// type compatibility against the callee's parameter types. For built-in namespace calls
+    /// (e.g. <c>http.get</c>), validates arity against <see cref="BuiltInRegistry"/>.
+    /// Recurses into all argument expressions.
+    /// </summary>
+    /// <param name="expr">The call expression to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitCallExpr(CallExpr expr)
     {
         if (expr.Callee is IdentifierExpr id)
@@ -418,21 +612,32 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>No-op — literals have no semantic constraints to validate.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitLiteralExpr(LiteralExpr expr) => null;
+
+    /// <summary>No-op — identifier resolution is handled by the unresolved-references pass in <see cref="Validate"/>.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitIdentifierExpr(IdentifierExpr expr) => null;
 
+    /// <summary>Recurses into the operand of a unary expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
         expr.Right.Accept(this);
         return null;
     }
 
+    /// <summary>Recurses into the operand of an update expression (<c>++</c>/<c>--</c>).</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
         expr.Operand.Accept(this);
         return null;
     }
 
+    /// <summary>Recurses into both operands of a binary expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitBinaryExpr(BinaryExpr expr)
     {
         expr.Left.Accept(this);
@@ -440,12 +645,16 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the inner expression of a grouping.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitGroupingExpr(GroupingExpr expr)
     {
         expr.Expression.Accept(this);
         return null;
     }
 
+    /// <summary>Recurses into the condition and both branches of a ternary expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
         expr.Condition.Accept(this);
@@ -454,6 +663,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the subject and all arm patterns and bodies of a switch expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitSwitchExpr(SwitchExpr expr)
     {
         expr.Subject.Accept(this);
@@ -465,6 +676,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into all element expressions of an array literal.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitArrayExpr(ArrayExpr expr)
     {
         foreach (var el in expr.Elements)
@@ -475,6 +688,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the value expression of each entry in a dict literal.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDictLiteralExpr(DictLiteralExpr expr)
     {
         foreach (var (_, value) in expr.Entries)
@@ -485,6 +700,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the object and index sub-expressions of an index expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitIndexExpr(IndexExpr expr)
     {
         expr.Object.Accept(this);
@@ -492,6 +709,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the object, index, and assigned value of an index-assignment expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitIndexAssignExpr(IndexAssignExpr expr)
     {
         expr.Object.Accept(this);
@@ -500,6 +719,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into all field-value expressions of a struct initializer.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
         foreach (var (_, value) in expr.FieldValues)
@@ -510,12 +731,20 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the object sub-expression of a dot-access expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDotExpr(DotExpr expr)
     {
         expr.Object.Accept(this);
         return null;
     }
 
+    /// <summary>
+    /// Recurses into the object and assigned value, then checks that the value's inferred type
+    /// is compatible with the field's declared type. Emits a warning on mismatch.
+    /// </summary>
+    /// <param name="expr">The dot-assignment expression to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDotAssignExpr(DotAssignExpr expr)
     {
         expr.Object.Accept(this);
@@ -544,6 +773,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into each interpolated part of an interpolated string expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
     {
         foreach (var part in expr.Parts)
@@ -554,6 +785,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into each interpolated part of a shell command expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitCommandExpr(CommandExpr expr)
     {
         foreach (var part in expr.Parts)
@@ -563,6 +796,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into both sides of a pipe expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitPipeExpr(PipeExpr expr)
     {
         expr.Left.Accept(this);
@@ -570,6 +805,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the source expression and redirect target of a redirect expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitRedirectExpr(RedirectExpr expr)
     {
         expr.Expression.Accept(this);
@@ -577,12 +814,16 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the inner expression of a <c>try</c> expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitTryExpr(TryExpr expr)
     {
         expr.Expression.Accept(this);
         return null;
     }
 
+    /// <summary>Recurses into both sides of a null-coalescing expression (<c>??</c>).</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         expr.Left.Accept(this);
@@ -590,6 +831,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Recurses into the start, end, and optional step of a range expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitRangeExpr(RangeExpr expr)
     {
         expr.Start.Accept(this);
@@ -598,6 +841,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>
+    /// Validates each parameter type annotation, then recurses into the lambda body
+    /// (expression or block) within an incremented function-depth context.
+    /// </summary>
+    /// <param name="expr">The lambda expression to validate.</param>
+    /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitLambdaExpr(LambdaExpr expr)
     {
         foreach (var paramType in expr.ParameterTypes)
@@ -624,6 +873,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     }
 
     // Helper to count parameters from detail string "fn name(a, b)" or "fn name()"
+
+    /// <summary>
+    /// Parses the parameter count from a <see cref="SymbolInfo.Detail"/> signature string
+    /// of the form <c>"fn name(a, b)"</c>. Returns <c>-1</c> if the string cannot be parsed.
+    /// Used as a fallback when <see cref="SymbolInfo.ParameterNames"/> is unavailable.
+    /// </summary>
+    /// <param name="detail">The signature detail string to parse.</param>
+    /// <returns>The number of comma-separated parameters, or <c>-1</c> on parse failure.</returns>
     private static int CountParameters(string detail)
     {
         var openParen = detail.IndexOf('(');

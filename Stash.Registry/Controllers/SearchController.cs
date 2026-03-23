@@ -11,17 +11,48 @@ using Stash.Registry.Database.Models;
 
 namespace Stash.Registry.Controllers;
 
+/// <summary>
+/// REST API controller for searching the package registry.
+/// </summary>
+/// <remarks>
+/// <para>
+/// All search endpoints are public and require no authentication.
+/// Queries are matched against package names and descriptions using a SQL
+/// <c>LIKE</c> pattern. Results are paginated; the maximum page size is 100.
+/// </para>
+/// </remarks>
 [ApiController]
 [Route("api/v1/search")]
 public sealed class SearchController : ControllerBase
 {
     private readonly IRegistryDatabase _db;
 
+    /// <summary>
+    /// Initialises the controller with its required services.
+    /// </summary>
+    /// <param name="db">Registry database used to execute search queries.</param>
     public SearchController(IRegistryDatabase db)
     {
         _db = db;
     }
 
+    /// <summary>
+    /// Searches for packages by name or description with pagination.
+    /// </summary>
+    /// <remarks>
+    /// Accepts the following query-string parameters:
+    /// <list type="bullet">
+    ///   <item><term>q</term><description>Search term (default: empty, returns all packages).</description></item>
+    ///   <item><term>page</term><description>1-based page number (default: 1).</description></item>
+    ///   <item><term>pageSize</term><description>Results per page, 1–100 (default: 20).</description></item>
+    /// </list>
+    /// No authentication required.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="SearchResponse"/> containing a list of
+    /// <see cref="PackageSummaryResponse"/> objects, pagination metadata, and the total
+    /// result count.
+    /// </returns>
     [AllowAnonymous]
     [HttpGet]
     public async Task<IActionResult> Search()

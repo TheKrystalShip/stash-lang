@@ -6,20 +6,59 @@ using System.Text.RegularExpressions;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Provides source-generated regular expressions used by <see cref="InitCommand"/>
+/// to sanitise directory names into valid Stash package names.
+/// </summary>
 public static partial class Regexes
 {
+    /// <summary>
+    /// Matches any character that is not a lower-case ASCII letter, digit, or hyphen,
+    /// used to replace invalid characters with hyphens.
+    /// </summary>
     [GeneratedRegex(@"[^a-z0-9-]", RegexOptions.Compiled)]
     public static partial Regex InvalidChars();
 
+    /// <summary>
+    /// Matches one or more leading characters that are not lower-case ASCII letters,
+    /// used to strip non-letter prefixes from a candidate package name.
+    /// </summary>
     [GeneratedRegex(@"^[^a-z]+", RegexOptions.Compiled)]
     public static partial Regex LeadingNonLetters();
 
+    /// <summary>
+    /// Matches one or more trailing hyphens, used to strip dangling hyphens from a
+    /// candidate package name.
+    /// </summary>
     [GeneratedRegex(@"-+$", RegexOptions.Compiled)]
     public static partial Regex TrailingDashes();
 }
 
+/// <summary>
+/// Implements the <c>stash pkg init</c> command for creating a new <c>stash.json</c>
+/// manifest file in the current directory.
+/// </summary>
+/// <remarks>
+/// <para>
+/// When the <c>--yes</c> (<c>-y</c>) flag is provided all prompts are skipped and
+/// sensible defaults are applied automatically.  Otherwise the user is prompted
+/// interactively for each field.
+/// </para>
+/// <para>
+/// The suggested package name is derived from the current directory name by
+/// lower-casing it and stripping characters that are invalid in a Stash package name
+/// using the <see cref="Regexes"/> helpers.
+/// </para>
+/// </remarks>
 public static class InitCommand
 {
+    /// <summary>
+    /// Executes the init command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg init</c>.  Pass <c>--yes</c>
+    /// or <c>-y</c> to accept all defaults without interactive prompts.
+    /// </param>
     public static void Execute(string[] args)
     {
         bool useDefaults = false;
@@ -108,6 +147,14 @@ public static class InitCommand
         Console.WriteLine($"Created {manifestPath}");
     }
 
+    /// <summary>
+    /// Writes a prompt to standard output, reads a line from standard input, and
+    /// returns the trimmed input or <paramref name="defaultValue"/> when the input
+    /// is blank.
+    /// </summary>
+    /// <param name="prompt">The prompt text to display to the user.</param>
+    /// <param name="defaultValue">The value to return when the user enters nothing.</param>
+    /// <returns>The trimmed user input, or <paramref name="defaultValue"/> if blank.</returns>
     private static string Prompt(string prompt, string defaultValue)
     {
         Console.Write(prompt);

@@ -9,17 +9,58 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/definition</c> requests to navigate to the declaration
+/// of the symbol under the cursor.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses <see cref="AnalysisEngine.GetContextAt"/> to identify the word at the cursor and
+/// resolves it to a <see cref="SymbolInfo"/> via <see cref="ScopeTree.FindDefinition"/>.
+/// </para>
+/// <para>
+/// For symbols imported from another file (<see cref="SymbolInfo.SourceUri"/> is set),
+/// the handler navigates directly to the symbol's original declaration in that module
+/// using <see cref="AnalysisEngine.ImportResolver"/>. If the exact symbol cannot be found
+/// in the imported module, it falls back to the beginning of the imported file.
+/// </para>
+/// <para>
+/// Dot-access context (detected via <see cref="TextUtilities.FindDotPrefix"/>) suppresses
+/// namespace-symbol matches to prevent false navigation (e.g., <c>e.time</c> must not
+/// jump to the <c>time</c> namespace declaration). Namespace member access is resolved
+/// via <see cref="AnalysisResult.ResolveNamespaceMember"/>.
+/// </para>
+/// </remarks>
 public class DefinitionHandler : DefinitionHandlerBase
 {
+    /// <summary>The analysis engine used to obtain context and resolve symbol definitions.</summary>
     private readonly AnalysisEngine _analysis;
+
+    /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="DefinitionHandler"/> with the services
+    /// needed to resolve go-to-definition locations.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and import resolution.</param>
+    /// <param name="documents">Document manager for reading open file contents.</param>
     public DefinitionHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the go-to-definition request and returns the location of the symbol's declaration,
+    /// navigating into imported modules when necessary.
+    /// </summary>
+    /// <param name="request">The definition request containing the document URI and cursor position.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>
+    /// A <see cref="LocationOrLocationLinks"/> pointing to the symbol's definition, or
+    /// <see langword="null"/> if no symbol can be resolved at the cursor.
+    /// </returns>
     public override Task<LocationOrLocationLinks?> Handle(DefinitionParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
@@ -106,6 +147,9 @@ public class DefinitionHandler : DefinitionHandlerBase
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(location));
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c> language files.
+    /// </summary>
     protected override DefinitionRegistrationOptions CreateRegistrationOptions(
         DefinitionCapability capability, ClientCapabilities clientCapabilities) =>
         new()

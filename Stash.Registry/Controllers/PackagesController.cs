@@ -15,6 +15,18 @@ using Stash.Registry.Storage;
 
 namespace Stash.Registry.Controllers;
 
+/// <summary>
+/// REST API controller for package operations (get, publish, unpublish, download).
+/// </summary>
+/// <remarks>
+/// <para>
+/// Public read endpoints (<c>GET</c>) require no authentication. Publishing and
+/// unpublishing require a JWT with the <c>publish</c> or <c>admin</c> scope
+/// (enforced by the <c>RequirePublishScope</c> policy). Ownership checks are
+/// performed against the <see cref="IRegistryDatabase"/> ownership table before
+/// any write is accepted.
+/// </para>
+/// </remarks>
 [ApiController]
 [Route("api/v1/packages")]
 public class PackagesController : ControllerBase
@@ -25,6 +37,14 @@ public class PackagesController : ControllerBase
     private readonly AuditService _auditService;
     private readonly RegistryConfig _config;
 
+    /// <summary>
+    /// Initialises the controller with its required services.
+    /// </summary>
+    /// <param name="db">Registry database for metadata queries and ownership checks.</param>
+    /// <param name="storage">Blob storage backend for package tarballs.</param>
+    /// <param name="packageService">Service that encapsulates publish and unpublish logic.</param>
+    /// <param name="auditService">Service that records package-related audit events.</param>
+    /// <param name="config">Registry-wide configuration.</param>
     public PackagesController(
         IRegistryDatabase db,
         IPackageStorage storage,
@@ -39,6 +59,15 @@ public class PackagesController : ControllerBase
         _config = config;
     }
 
+    /// <summary>
+    /// Gets package metadata including all published versions.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <remarks>No authentication required.</remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="PackageDetailResponse"/> containing package info,
+    /// owner list, and a version map, or <c>404</c> if the package does not exist.
+    /// </returns>
     [AllowAnonymous]
     [HttpGet("{name}")]
     public async Task<IActionResult> GetPackage(string name)
@@ -86,6 +115,16 @@ public class PackagesController : ControllerBase
         return Ok(response);
     }
 
+    /// <summary>
+    /// Gets metadata for a specific version of a package.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="version">The exact semantic version string.</param>
+    /// <remarks>No authentication required.</remarks>
+    /// <returns>
+    /// <c>200</c> with a <see cref="VersionDetailResponse"/>,
+    /// or <c>404</c> if the package or version does not exist.
+    /// </returns>
     [AllowAnonymous]
     [HttpGet("{name}/{version}")]
     public async Task<IActionResult> GetVersion(string name, string version)
@@ -100,6 +139,19 @@ public class PackagesController : ControllerBase
         return Ok(BuildVersionResponse(vr));
     }
 
+    /// <summary>
+    /// Downloads the tarball for a specific package version.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="version">The exact semantic version string.</param>
+    /// <remarks>
+    /// Streams the compressed tarball from <see cref="IPackageStorage"/> with content
+    /// type <c>application/gzip</c>. No authentication required.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> file stream on success,
+    /// or <c>404</c> if the version record or its tarball cannot be found.
+    /// </returns>
     [AllowAnonymous]
     [HttpGet("{name}/{version}/download")]
     public async Task<IActionResult> DownloadVersion(string name, string version)
@@ -119,6 +171,24 @@ public class PackagesController : ControllerBase
         return File(stream, "application/gzip", $"{decodedName.Replace('/', '-')}-{version}.tgz");
     }
 
+    /// <summary>
+    /// Publishes a new package or a new version of an existing package.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name to publish under.</param>
+    /// <remarks>
+    /// Reads the package tarball from the raw request body. An optional
+    /// <c>X-Integrity</c> header may be supplied for client-side integrity
+    /// verification. The caller must be an owner of an existing package, or the
+    /// package must not yet exist. Requires a JWT with the <c>publish</c> or
+    /// <c>admin</c> scope.
+    /// </remarks>
+    /// <returns>
+    /// <c>201</c> with a <see cref="PublishResponse"/> containing the package name,
+    /// version, and integrity hash,
+    /// <c>400</c> if the tarball is malformed or the version already exists,
+    /// <c>401</c> if unauthenticated,
+    /// or <c>403</c> if the user is not an owner of the package.
+    /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
     [HttpPut("{name}")]
     public async Task<IActionResult> PublishPackage(string name)
@@ -148,6 +218,23 @@ public class PackagesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Removes a specific version of a package from the registry.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="version">The exact semantic version string to remove.</param>
+    /// <remarks>
+    /// The caller must be an owner of the package or hold an <c>admin</c>-scoped
+    /// token. Both the metadata record and the stored tarball are removed. The
+    /// operation is recorded in the audit log. Requires a JWT with the
+    /// <c>publish</c> or <c>admin</c> scope.
+    /// </remarks>
+    /// <returns>
+    /// <c>200</c> with an <see cref="UnpublishResponse"/> on success,
+    /// <c>400</c> if the version does not exist,
+    /// <c>401</c> if unauthenticated,
+    /// or <c>403</c> if the caller does not have permission.
+    /// </returns>
     [Authorize(Policy = "RequirePublishScope")]
     [HttpDelete("{name}/{version}")]
     public async Task<IActionResult> UnpublishVersion(string name, string version)
@@ -172,6 +259,11 @@ public class PackagesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Maps a <see cref="VersionRecord"/> entity to its API response shape.
+    /// </summary>
+    /// <param name="vr">The version record to convert.</param>
+    /// <returns>A <see cref="VersionDetailResponse"/> populated from the record's fields.</returns>
     private static VersionDetailResponse BuildVersionResponse(VersionRecord vr)
     {
         Dictionary<string, object>? deps = null;

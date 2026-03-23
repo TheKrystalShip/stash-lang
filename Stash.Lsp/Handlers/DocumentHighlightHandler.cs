@@ -7,17 +7,43 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
+/// <summary>
+/// Handles LSP <c>textDocument/documentHighlight</c> requests to highlight all occurrences
+/// of the symbol under the cursor within the current document.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses the <see cref="AnalysisEngine"/> to obtain the analysis context at the cursor position,
+/// then queries the symbol table for all references to the resolved symbol. Each reference is
+/// mapped to a <see cref="DocumentHighlight"/> with a kind of <c>Read</c> or <c>Write</c>
+/// depending on the <see cref="ReferenceKind"/> recorded by the analyser.
+/// </para>
+/// </remarks>
 public class DocumentHighlightHandler : DocumentHighlightHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
 
+    /// <summary>
+    /// Initialises the handler with the dependencies required to resolve symbol references.
+    /// </summary>
+    /// <param name="analysis">The analysis engine used to retrieve cached document results.</param>
+    /// <param name="documents">The document manager used to obtain the current document text.</param>
     public DocumentHighlightHandler(AnalysisEngine analysis, DocumentManager documents)
     {
         _analysis = analysis;
         _documents = documents;
     }
 
+    /// <summary>
+    /// Processes the document highlight request and returns all occurrence ranges for the symbol at the cursor.
+    /// </summary>
+    /// <param name="request">The request containing the document URI and cursor position.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>
+    /// A <see cref="DocumentHighlightContainer"/> with one entry per reference, or
+    /// <see langword="null"/> if the cursor is not over a resolvable symbol.
+    /// </returns>
     public override Task<DocumentHighlightContainer?> Handle(DocumentHighlightParams request, CancellationToken cancellationToken)
     {
         var uri = request.TextDocument.Uri.ToUri();
@@ -53,6 +79,12 @@ public class DocumentHighlightHandler : DocumentHighlightHandlerBase
         return Task.FromResult<DocumentHighlightContainer?>(new DocumentHighlightContainer(highlights));
     }
 
+    /// <summary>
+    /// Creates the registration options restricting this handler to Stash language documents.
+    /// </summary>
+    /// <param name="capability">The client's document highlight capability descriptor.</param>
+    /// <param name="clientCapabilities">The full set of client capabilities.</param>
+    /// <returns>Registration options scoped to <c>stash</c> language documents.</returns>
     protected override DocumentHighlightRegistrationOptions CreateRegistrationOptions(
         DocumentHighlightCapability capability, ClientCapabilities clientCapabilities) =>
         new()

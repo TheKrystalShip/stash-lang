@@ -10,15 +10,51 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 using LspSymbolKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.SymbolKind;
 
+/// <summary>
+/// Handles LSP <c>textDocument/documentSymbol</c> requests to provide a hierarchical
+/// outline of all symbols declared in the current document.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Uses <see cref="AnalysisEngine.GetCachedResult"/> to retrieve the latest
+/// <see cref="AnalysisResult"/> for the file and builds a hierarchical
+/// <see cref="DocumentSymbol"/> tree from <see cref="ScopeTree.GetHierarchicalSymbols"/>.
+/// Top-level symbols such as functions, structs, enums, and constants are returned as
+/// parent nodes; their nested members (fields, methods, enum members) are attached as
+/// child nodes.
+/// </para>
+/// <para>
+/// Synthetic built-in symbols registered at line 0 are excluded from the outline.
+/// Each symbol uses the full span (<see cref="SymbolInfo.FullSpan"/>) for its range and
+/// the name span for the selection range, so editors can highlight just the identifier
+/// when the user navigates to it.
+/// </para>
+/// </remarks>
 public class DocumentSymbolHandler : DocumentSymbolHandlerBase
 {
+    /// <summary>The analysis engine used to obtain cached symbol hierarchies.</summary>
     private readonly AnalysisEngine _analysis;
 
+    /// <summary>
+    /// Initialises a new instance of <see cref="DocumentSymbolHandler"/> with the analysis
+    /// engine used to retrieve document symbol trees.
+    /// </summary>
+    /// <param name="analysis">Analysis engine providing hierarchical <see cref="SymbolInfo"/> data.</param>
     public DocumentSymbolHandler(AnalysisEngine analysis)
     {
         _analysis = analysis;
     }
 
+    /// <summary>
+    /// Processes the document-symbol request and returns a hierarchical list of symbols
+    /// declared in the document, suitable for populating an editor outline view.
+    /// </summary>
+    /// <param name="request">The document-symbol request containing the document URI.</param>
+    /// <param name="cancellationToken">Token to cancel the request.</param>
+    /// <returns>
+    /// A <see cref="SymbolInformationOrDocumentSymbolContainer"/> with the document's symbol hierarchy,
+    /// or <see langword="null"/> if no cached analysis result is available.
+    /// </returns>
     public override Task<SymbolInformationOrDocumentSymbolContainer?> Handle(
         DocumentSymbolParams request, CancellationToken cancellationToken)
     {
@@ -73,6 +109,9 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
             new SymbolInformationOrDocumentSymbolContainer(symbols));
     }
 
+    /// <summary>
+    /// Creates the registration options specifying that this handler applies to <c>stash</c> language files.
+    /// </summary>
     protected override DocumentSymbolRegistrationOptions CreateRegistrationOptions(
         DocumentSymbolCapability capability, ClientCapabilities clientCapabilities) =>
         new()
@@ -80,6 +119,12 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash"))
         };
 
+    /// <summary>
+    /// Maps a Stash <see cref="Analysis.SymbolKind"/> to the corresponding LSP
+    /// <see cref="LspSymbolKind"/> for the document outline view.
+    /// </summary>
+    /// <param name="kind">The Stash symbol kind to map.</param>
+    /// <returns>The equivalent LSP symbol kind.</returns>
     private static LspSymbolKind MapSymbolKind(Analysis.SymbolKind kind) => kind switch
     {
         Analysis.SymbolKind.Function => LspSymbolKind.Function,

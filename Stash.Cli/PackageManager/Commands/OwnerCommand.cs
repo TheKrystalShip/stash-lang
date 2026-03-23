@@ -3,8 +3,36 @@ using System.Collections.Generic;
 
 namespace Stash.Cli.PackageManager.Commands;
 
+/// <summary>
+/// Implements the <c>stash pkg owner</c> command for listing, adding, and removing
+/// package owners on the registry.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Supported sub-commands: <c>list</c>/<c>ls</c>, <c>add</c>, and <c>remove</c>.
+/// The <c>add</c> and <c>remove</c> actions require an authenticated session
+/// (i.e. a token stored via <c>stash pkg login</c>).
+/// </para>
+/// </remarks>
 public static class OwnerCommand
 {
+    /// <summary>
+    /// Executes the owner command with the given arguments.
+    /// </summary>
+    /// <param name="args">
+    /// Command-line arguments following <c>stash pkg owner</c>.  The first two
+    /// positional arguments are the sub-command (<c>list</c>, <c>add</c>, or
+    /// <c>remove</c>) and the package name.  A third positional argument (username)
+    /// is required for <c>add</c> and <c>remove</c>.  The
+    /// <c>--registry &lt;url&gt;</c> flag optionally overrides the default registry.
+    /// </param>
+    /// <exception cref="ArgumentException">
+    /// Thrown when required positional arguments are missing or the sub-command is
+    /// unrecognised.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the user is not logged in for a mutating operation.
+    /// </exception>
     public static void Execute(string[] args)
     {
         var positionalArgs = new List<string>();

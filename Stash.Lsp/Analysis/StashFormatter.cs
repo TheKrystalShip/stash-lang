@@ -5,17 +5,63 @@ using Stash.Lexing;
 
 namespace Stash.Lsp.Analysis;
 
+/// <summary>
+/// Reformats a Stash source file by re-lexing it (with trivia preserved) and emitting
+/// tokens with canonical whitespace according to a deterministic set of formatting rules.
+/// </summary>
+/// <remarks>
+/// <para>
+/// Formatting is token-stream based: the formatter lexes the source with
+/// <c>preserveTrivia: true</c> so that comments are included, then iterates over the token
+/// stream and determines what whitespace to insert before each token via <see cref="GetWhitespace"/>.
+/// No AST is constructed.
+/// </para>
+/// <para>
+/// Key formatting rules applied by <see cref="GetWhitespace"/>:
+/// </para>
+/// <list type="number">
+///   <item><description>Single blank line between top-level declarations (after <c>}</c> at indent 0, after top-level <c>;</c>).</description></item>
+///   <item><description>Newline + indent inside block bodies (<c>{ … }</c>) and after semicolons.</description></item>
+///   <item><description>No space before <c>;</c>, <c>,</c>, <c>)</c>, <c>]</c>, or <c>.</c>.</description></item>
+///   <item><description>Space around binary operators, assignment (<c>=</c>), arrows (<c>-&gt;</c>, <c>=&gt;</c>), and ternary operators (<c>?</c>, <c>:</c>).</description></item>
+///   <item><description>No space between a function name and its argument list (<c>fn(</c>), but space between a control keyword and its parenthesis (<c>if (</c>).</description></item>
+///   <item><description>No space after <c>!</c> (logical not) or before/after <c>++</c>/<c>--</c> in postfix or prefix position.</description></item>
+///   <item><description>Struct/enum body members are separated by newlines; struct initializer fields use inline spacing.</description></item>
+///   <item><description>Multi-line array literals are preserved: elements are placed on separate indented lines.</description></item>
+///   <item><description>Inline comments on the same line as the preceding token are kept on that line.</description></item>
+///   <item><description>Block comments are re-indented to the current indent level.</description></item>
+/// </list>
+/// <para>
+/// The formatter is used by the LSP <c>textDocument/formatting</c> and
+/// <c>textDocument/rangeFormatting</c> handlers in <see cref="AnalysisEngine"/>.
+/// </para>
+/// </remarks>
 public class StashFormatter
 {
+    /// <summary>Number of spaces per indent level when <see cref="_useTabs"/> is <see langword="false"/>.</summary>
     private readonly int _indentSize;
+
+    /// <summary>When <see langword="true"/>, a single tab character is used per indent level instead of spaces.</summary>
     private readonly bool _useTabs;
 
+    /// <summary>
+    /// Initializes a new <see cref="StashFormatter"/> with the given indentation settings.
+    /// </summary>
+    /// <param name="indentSize">Number of spaces per indent level (ignored when <paramref name="useTabs"/> is <see langword="true"/>). Defaults to 2.</param>
+    /// <param name="useTabs">Use tab characters instead of spaces for indentation. Defaults to <see langword="false"/>.</param>
     public StashFormatter(int indentSize = 2, bool useTabs = false)
     {
         _indentSize = indentSize;
         _useTabs = useTabs;
     }
 
+    /// <summary>
+    /// Appends the indentation string for the given nesting <paramref name="level"/> to
+    /// <paramref name="sb"/>. Uses a tab per level when <see cref="_useTabs"/> is set,
+    /// otherwise <see cref="_indentSize"/> spaces per level.
+    /// </summary>
+    /// <param name="sb">The string builder to append to.</param>
+    /// <param name="level">The current nesting level (zero-based).</param>
     private void AppendIndent(StringBuilder sb, int level)
     {
         var indentChar = _useTabs ? '\t' : ' ';
@@ -23,10 +69,25 @@ public class StashFormatter
         sb.Append(new string(indentChar, count));
     }
 
+    /// <summary>
+    /// Categorises the syntactic context currently being formatted, used to decide between
+    /// inline spacing (struct initializers) and block formatting (bodies, enums).
+    /// </summary>
     private enum FormatterContext { TopLevel, EnumBody, StructBody, Block, Parens, Brackets, StructInit }
 
+    /// <summary>
+    /// The type of whitespace to insert before the current token as determined by
+    /// <see cref="GetWhitespace"/>.
+    /// </summary>
     private enum Whitespace { None, Space, NewLine, BlankLine }
 
+    /// <summary>
+    /// Formats the given Stash <paramref name="source"/> string and returns the reformatted
+    /// result with a trailing newline. Returns an empty string if the source contains only
+    /// whitespace.
+    /// </summary>
+    /// <param name="source">The raw Stash source text to format.</param>
+    /// <returns>The formatted source text.</returns>
     public string Format(string source)
     {
         var lexer = new Lexer(source, "<format>", preserveTrivia: true);
@@ -260,6 +321,19 @@ public class StashFormatter
         return result.Length > 0 ? result + "\n" : "";
     }
 
+    /// <summary>
+    /// Applies the formatting rules (numbered 1–37) to determine what whitespace, if any,
+    /// should be inserted between the previous token type <paramref name="prev"/> and the
+    /// current token type <paramref name="cur"/> given the formatting context.
+    /// </summary>
+    /// <param name="prev">The token type that was just emitted, or <see langword="null"/> at the start of file.</param>
+    /// <param name="cur">The token type about to be emitted.</param>
+    /// <param name="context">The current syntactic context (block, enum body, struct init, …).</param>
+    /// <param name="indentLevel">The current nesting level, used for blank-line decisions.</param>
+    /// <param name="prevWasUnaryMinusPlus"><see langword="true"/> if the previous <c>-</c> or <c>+</c> was in a unary position.</param>
+    /// <param name="prevClosedInline"><see langword="true"/> if the previous <c>}</c> closed a struct initializer inline.</param>
+    /// <param name="ternaryDepth">Number of open ternary <c>?</c> operators not yet matched by a <c>:</c>.</param>
+    /// <returns>The <see cref="Whitespace"/> to insert before the current token.</returns>
     private Whitespace GetWhitespace(TokenType? prev, TokenType cur, FormatterContext context, int indentLevel, bool prevWasUnaryMinusPlus, bool prevClosedInline, int ternaryDepth)
     {
         // Rule 1: No previous token
@@ -498,6 +572,14 @@ public class StashFormatter
         return Whitespace.Space;
     }
 
+    /// <summary>
+    /// Appends a multi-line block comment to <paramref name="sb"/>, re-indenting each line
+    /// after the first to the current <paramref name="indentLevel"/> and stripping leading
+    /// whitespace from continuation lines.
+    /// </summary>
+    /// <param name="sb">The output string builder.</param>
+    /// <param name="lexeme">The raw block-comment lexeme including <c>/*</c> and <c>*/</c> delimiters.</param>
+    /// <param name="indentLevel">The current nesting level used for indenting continuation lines.</param>
     private void FormatBlockComment(StringBuilder sb, string lexeme, int indentLevel)
     {
         var lines = lexeme.Split('\n');
@@ -516,14 +598,27 @@ public class StashFormatter
         }
     }
 
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="t"/> begins a top-level declaration or
+    /// statement, used to insert a blank line after a top-level semicolon.
+    /// </summary>
     private static bool IsTopLevelStart(TokenType t) => t is
         TokenType.Fn or TokenType.Struct or TokenType.Enum or TokenType.Const or TokenType.Let or
         TokenType.Import or TokenType.For or TokenType.While or TokenType.Do or TokenType.If or
         TokenType.SingleLineComment;
 
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="t"/> is a control-flow keyword
+    /// that takes a parenthesised condition, used to insert a space before the opening
+    /// parenthesis (e.g. <c>if (</c>, <c>while (</c>).
+    /// </summary>
     private static bool IsControlKeyword(TokenType t) => t is
         TokenType.If or TokenType.While or TokenType.Do or TokenType.For;
 
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="t"/> is a keyword that must be
+    /// followed by a space before the next token (e.g. <c>let</c>, <c>return</c>, <c>import</c>).
+    /// </summary>
     private static bool IsKeyword(TokenType t) => t is
         TokenType.Let or TokenType.Const or TokenType.Fn or TokenType.Struct or TokenType.Enum or
         TokenType.If or TokenType.Else or TokenType.For or TokenType.In or TokenType.While or TokenType.Do or
@@ -531,6 +626,10 @@ public class StashFormatter
         TokenType.False or TokenType.Null or TokenType.Try or TokenType.Import or
         TokenType.From or TokenType.As;
 
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="t"/> is a binary operator that
+    /// requires spaces on both sides (arithmetic, comparison, logical, pipe operators).
+    /// </summary>
     private static bool IsBinaryOp(TokenType t) => t is
         TokenType.Plus or TokenType.Minus or TokenType.Star or TokenType.Slash or TokenType.Percent or
         TokenType.EqualEqual or TokenType.BangEqual or TokenType.Less or TokenType.Greater or
@@ -538,12 +637,21 @@ public class StashFormatter
         TokenType.PipePipe or TokenType.Pipe or TokenType.GreaterGreater or
         TokenType.AmpersandGreater or TokenType.AmpersandGreaterGreater;
 
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="t"/> ends a value expression,
+    /// used to distinguish postfix <c>++</c>/<c>--</c> (no space) from prefix (no space on right).
+    /// </summary>
     private static bool IsValueEnd(TokenType t) => t is
         TokenType.Identifier or TokenType.RightParen or TokenType.RightBracket or
         TokenType.IntegerLiteral or TokenType.FloatLiteral or TokenType.StringLiteral or
         TokenType.InterpolatedString or TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral or
         TokenType.True or TokenType.False or TokenType.Null or TokenType.PlusPlus or TokenType.MinusMinus;
 
+    /// <summary>
+    /// Returns <see langword="true"/> if <paramref name="t"/> is a token type that places a
+    /// following <c>-</c> or <c>+</c> in a unary (prefix) position rather than a binary position,
+    /// suppressing the space between the operator and its operand.
+    /// </summary>
     private static bool IsUnaryContext(TokenType t) => t is
         TokenType.LeftParen or TokenType.LeftBracket or TokenType.Equal or
         TokenType.Comma or TokenType.Semicolon or TokenType.Colon or

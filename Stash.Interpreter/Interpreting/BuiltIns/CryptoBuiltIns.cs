@@ -24,6 +24,7 @@ public static class CryptoBuiltIns
             return HashToHex(MD5.HashData(Encoding.UTF8.GetBytes(s)));
         }));
 
+        // crypto.sha1(input) — Returns the SHA-1 hash of the input string as a lowercase hex string.
         crypto.Define("sha1", new BuiltInFunction("crypto.sha1", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -34,6 +35,7 @@ public static class CryptoBuiltIns
             return HashToHex(SHA1.HashData(Encoding.UTF8.GetBytes(s)));
         }));
 
+        // crypto.sha256(input) — Returns the SHA-256 hash of the input string as a lowercase hex string.
         crypto.Define("sha256", new BuiltInFunction("crypto.sha256", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -44,6 +46,7 @@ public static class CryptoBuiltIns
             return HashToHex(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
         }));
 
+        // crypto.sha512(input) — Returns the SHA-512 hash of the input string as a lowercase hex string.
         crypto.Define("sha512", new BuiltInFunction("crypto.sha512", 1, (_, args) =>
         {
             if (args[0] is not string s)
@@ -54,6 +57,8 @@ public static class CryptoBuiltIns
             return HashToHex(SHA512.HashData(Encoding.UTF8.GetBytes(s)));
         }));
 
+        // crypto.hmac(algo, key, data) — Computes the HMAC of 'data' using 'key' with the specified algorithm.
+        //   'algo' must be one of: "md5", "sha1", "sha256", "sha512". Returns a lowercase hex string.
         crypto.Define("hmac", new BuiltInFunction("crypto.hmac", 3, (_, args) =>
         {
             if (args[0] is not string algo)
@@ -87,6 +92,8 @@ public static class CryptoBuiltIns
             return HashToHex(hash);
         }));
 
+        // crypto.hashFile(path [, algo]) — Hashes the contents of a file using the specified algorithm (default: "sha256").
+        //   Returns the hash as a lowercase hex string.
         crypto.Define("hashFile", new BuiltInFunction("crypto.hashFile", -1, (_, args) =>
         {
             if (args.Count < 1 || args.Count > 2)
@@ -127,11 +134,13 @@ public static class CryptoBuiltIns
             return HashToHex(ComputeHash(algo, fileBytes));
         }));
 
+        // crypto.uuid() — Generates and returns a new random UUID (version 4) as a lowercase hyphenated string.
         crypto.Define("uuid", new BuiltInFunction("crypto.uuid", 0, (_, _) =>
         {
             return Guid.NewGuid().ToString();
         }));
 
+        // crypto.randomBytes(n) — Generates 'n' cryptographically secure random bytes and returns them as a lowercase hex string.
         crypto.Define("randomBytes", new BuiltInFunction("crypto.randomBytes", 1, (_, args) =>
         {
             if (args[0] is not long n)
@@ -156,9 +165,21 @@ public static class CryptoBuiltIns
         globals.Define("crypto", crypto);
     }
 
+    /// <summary>
+    /// Converts a byte array to a lowercase hexadecimal string.
+    /// </summary>
+    /// <param name="hash">The byte array to convert.</param>
+    /// <returns>A lowercase hex string representation of <paramref name="hash"/>.</returns>
     private static string HashToHex(byte[] hash) =>
         Convert.ToHexString(hash).ToLowerInvariant();
 
+    /// <summary>
+    /// Computes a hash of the given data using the specified algorithm name.
+    /// </summary>
+    /// <param name="algo">The algorithm name: <c>md5</c>, <c>sha1</c>, <c>sha256</c>, or <c>sha512</c>.</param>
+    /// <param name="data">The raw bytes to hash.</param>
+    /// <returns>The computed hash bytes.</returns>
+    /// <exception cref="RuntimeError">Thrown when <paramref name="algo"/> is not a recognized algorithm.</exception>
     private static byte[] ComputeHash(string algo, byte[] data) =>
         algo.ToLowerInvariant() switch
         {
