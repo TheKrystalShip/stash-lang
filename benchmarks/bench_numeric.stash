@@ -1,0 +1,140 @@
+// =============================================================================
+// Benchmark: Numeric Fast Path
+// Stresses boxing/unboxing of numeric values, virtual dispatch overhead,
+// and intermediate arithmetic result allocation.
+//
+// Tests:
+//   1. Integer addition loop — boxing of sum + i per iteration
+//   2. Nested arithmetic — intermediate result boxing overhead
+//   3. Comparison-heavy loop — boolean boxing in while conditions
+//   4. Prefix increment — UpdateExpr fast path
+//   5. Complex formula — multiple nested sub-expressions
+//   6. Fibonacci(32) — recursive arithmetic + comparison
+//   7. Mixed arithmetic (all operators) — +, -, *, /, %
+//   8. Multiply chain — deeply nested intermediate boxing
+// =============================================================================
+
+io.println("=== Numeric Fast Path Benchmark ===");
+io.println("");
+
+// 1. Pure integer arithmetic loop — boxing of sum + i, i + 1
+fn bench_int_add() {
+    let sum = 0;
+    let i = 0;
+    while (i < 3000000) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+let start = time.millis();
+let checksum = bench_int_add();
+let elapsed = time.millis() - start;
+io.println("1. Integer add loop (3M)     : ${elapsed} ms  (checksum: ${checksum})");
+
+// 2. Nested arithmetic expressions — intermediate result boxing
+fn bench_nested_arith() {
+    let result = 0;
+    let i = 0;
+    while (i < 1000000) {
+        result = (i * 3 + i * 7) - (i * 2 + i * 4);
+        i = i + 1;
+    }
+    return result;
+}
+start = time.millis();
+checksum = bench_nested_arith();
+elapsed = time.millis() - start;
+io.println("2. Nested arithmetic (1M)    : ${elapsed} ms  (checksum: ${checksum})");
+
+// 3. Comparison-heavy while loop — boolean boxing in conditions
+fn bench_comparison() {
+    let count = 0;
+    let i = 0;
+    let limit = 5000000;
+    while (i < limit) {
+        count = count + 1;
+        i = i + 1;
+    }
+    return count;
+}
+start = time.millis();
+checksum = bench_comparison();
+elapsed = time.millis() - start;
+io.println("3. Comparison loop (5M)      : ${elapsed} ms  (checksum: ${checksum})");
+
+// 4. Prefix increment — tests UpdateExpr fast path
+fn bench_increment() {
+    let i = 0;
+    while (i < 3000000) {
+        ++i;
+    }
+    return i;
+}
+start = time.millis();
+checksum = bench_increment();
+elapsed = time.millis() - start;
+io.println("4. Prefix increment (3M)     : ${elapsed} ms  (checksum: ${checksum})");
+
+// 5. Complex formula — multiple nested sub-expressions
+fn bench_formula() {
+    let sum = 0;
+    let i = 1;
+    while (i <= 500000) {
+        let a = i * 2;
+        let b = i * 3;
+        let c = i + 1;
+        sum = sum + (a * a + b * b) / (c + 1);
+        i = i + 1;
+    }
+    return sum;
+}
+start = time.millis();
+checksum = bench_formula();
+elapsed = time.millis() - start;
+io.println("5. Complex formula (500K)    : ${elapsed} ms  (checksum: ${checksum})");
+
+// 6. Fibonacci(32) — recursive with arithmetic + comparison
+fn fib(n) {
+    if (n < 2) {
+        return n;
+    }
+    return fib(n - 1) + fib(n - 2);
+}
+start = time.millis();
+checksum = fib(32);
+elapsed = time.millis() - start;
+io.println("6. Fibonacci(32)             : ${elapsed} ms  (checksum: ${checksum})");
+
+// 7. Mixed arithmetic — all operators: +, -, *, /, %
+fn bench_mixed() {
+    let sum = 0;
+    let i = 1;
+    while (i <= 2000000) {
+        sum = sum + (i * 7 + i / 3 - i % 5);
+        i = i + 1;
+    }
+    return sum;
+}
+start = time.millis();
+checksum = bench_mixed();
+elapsed = time.millis() - start;
+io.println("7. Mixed arithmetic (2M)     : ${elapsed} ms  (checksum: ${checksum})");
+
+// 8. Multiplication chain — deeply nested intermediate boxing
+fn bench_mul_chain() {
+    let sum = 0;
+    let i = 1;
+    while (i <= 1000000) {
+        sum = sum + i * i * i % 1000000;
+        i = i + 1;
+    }
+    return sum;
+}
+start = time.millis();
+checksum = bench_mul_chain();
+elapsed = time.millis() - start;
+io.println("8. Multiply chain (1M)       : ${elapsed} ms  (checksum: ${checksum})");
+
+io.println("");
+io.println("Done.");

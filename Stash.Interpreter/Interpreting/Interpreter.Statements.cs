@@ -120,7 +120,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitWhileStmt(WhileStmt stmt)
     {
-        while (IsTruthy(stmt.Condition.Accept(this)))
+        while (EvalConditionTruthy(stmt.Condition))
         {
             try
             {
@@ -156,7 +156,7 @@ public partial class Interpreter
             {
                 // Continue to condition check
             }
-        } while (IsTruthy(stmt.Condition.Accept(this)));
+        } while (EvalConditionTruthy(stmt.Condition));
 
         return null;
     }

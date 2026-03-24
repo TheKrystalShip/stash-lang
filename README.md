@@ -253,11 +253,11 @@ Stash's .NET-backed interpreter outperforms Bash across the board. Both language
 
 | Benchmark                 | What it tests                                            |    Stash |      Bash |   Speedup |
 | ------------------------- | -------------------------------------------------------- | -------: | --------: | --------: |
-| **Algorithms**            | Recursion, sorting, searching, struct usage              | 2,272 ms | 10,605 ms |  **4.7×** |
-| **Function Calls**        | Dispatch overhead across 0–4 argument arities            | 2,225 ms |  3,697 ms |  **1.7×** |
-| **Expression Throughput** | Dense arithmetic, 70 variables, string interpolation     | 1,221 ms |  4,936 ms |  **4.0×** |
-| **Built-in Functions**    | 13 stdlib calls per iteration (math, string, conversion) |   784 ms | 23,237 ms | **29.6×** |
-| **Scope Lookup**          | Variable resolution across 5-level nested closures       | 1,648 ms |  3,284 ms |  **2.0×** |
+| **Algorithms**            | Recursion, sorting, searching, struct usage              | 2,130 ms | 10,610 ms |  **5.0×** |
+| **Function Calls**        | Dispatch overhead across 0–4 argument arities            | 1,944 ms |  3,712 ms |  **1.9×** |
+| **Expression Throughput** | Dense arithmetic, 70 variables, string interpolation     | 1,375 ms |  4,865 ms |  **3.5×** |
+| **Built-in Functions**    | 13 stdlib calls per iteration (math, string, conversion) |   830 ms | 24,000 ms | **28.9×** |
+| **Scope Lookup**          | Variable resolution across 5-level nested closures       | 1,599 ms |  3,125 ms |  **2.0×** |
 
 > Measured on the same machine, same workload. Full scripts in [`benchmarks/`](benchmarks/).
 >
