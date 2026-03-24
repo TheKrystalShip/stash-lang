@@ -11,7 +11,13 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>The interpreter to register resolved scope distances into.</summary>
     private readonly Interpreter _interpreter;
     /// <summary>Stack of scope dictionaries tracking declared/defined variables at each nesting level.</summary>
-    private readonly Stack<Dictionary<string, bool>> _scopes = new();
+    private readonly Stack<ScopeInfo> _scopes = new();
+
+    private class ScopeInfo
+    {
+        public readonly Dictionary<string, (bool Initialized, int Slot)> Variables = new();
+        public int NextSlot;
+    }
 
     /// <summary>Tracks the kind of function currently being resolved.</summary>
     private enum FunctionType
@@ -59,7 +65,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>Pushes a new scope onto the scope stack.</summary>
     private void BeginScope()
     {
-        _scopes.Push(new Dictionary<string, bool>());
+        _scopes.Push(new ScopeInfo());
     }
 
     /// <summary>Pops the current scope from the scope stack.</summary>
@@ -68,7 +74,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         _scopes.Pop();
     }
 
-    /// <summary>Declares a variable in the current scope as not yet initialized.</summary>
+    /// <summary>Declares a variable in the current scope as not yet initialized, assigning it the next slot index.</summary>
     private void Declare(string name)
     {
         if (_scopes.Count == 0)
@@ -76,10 +82,11 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
             return;
         }
 
-        _scopes.Peek()[name] = false;
+        var scope = _scopes.Peek();
+        scope.Variables[name] = (false, scope.NextSlot++);
     }
 
-    /// <summary>Marks a variable in the current scope as fully initialized.</summary>
+    /// <summary>Marks a variable in the current scope as fully initialized, preserving its slot index.</summary>
     private void Define(string name)
     {
         if (_scopes.Count == 0)
@@ -87,7 +94,11 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
             return;
         }
 
-        _scopes.Peek()[name] = true;
+        var scope = _scopes.Peek();
+        if (scope.Variables.TryGetValue(name, out var info))
+        {
+            scope.Variables[name] = (true, info.Slot);
+        }
     }
 
     /// <summary>Walks the scope stack to find the distance to a variable's declaration and registers it in the interpreter.</summary>
@@ -96,9 +107,9 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         int i = 0;
         foreach (var scope in _scopes)
         {
-            if (scope.ContainsKey(name))
+            if (scope.Variables.TryGetValue(name, out var info))
             {
-                _interpreter.Resolve(expr, i);
+                _interpreter.Resolve(expr, i, info.Slot);
                 return;
             }
             i++;
@@ -222,6 +233,11 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         Resolve(stmt.Iterable);
         BeginScope();
+        if (stmt.IndexName is not null)
+        {
+            Declare(stmt.IndexName.Lexeme);
+            Define(stmt.IndexName.Lexeme);
+        }
         Declare(stmt.VariableName.Lexeme);
         Define(stmt.VariableName.Lexeme);
         Resolve(stmt.Body.Statements);

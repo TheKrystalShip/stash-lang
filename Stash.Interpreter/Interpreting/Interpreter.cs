@@ -105,7 +105,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>Callbacks registered via <c>process.onExit()</c> to run when a tracked process exits.</summary>
     internal readonly Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks = new(ReferenceEqualityComparer.Instance);
     /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime.</summary>
-    private readonly Dictionary<Expr, int> _locals = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<Expr, (int Distance, int Slot)> _locals = new(ReferenceEqualityComparer.Instance);
     /// <summary>When true, variable lookups walk the scope chain instead of using resolver distances. Set during DAP evaluate requests.</summary>
     private bool _isAdHocEval = false;
     /// <summary>The output writer for <c>io.println</c> and <c>io.print</c>. Defaults to <see cref="Console.Out"/>.</summary>
@@ -300,9 +300,9 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>
     /// Records the lexical scope distance for a variable reference, as computed by the Resolver.
     /// </summary>
-    public void Resolve(Expr expr, int distance)
+    public void Resolve(Expr expr, int distance, int slot)
     {
-        _locals[expr] = distance;
+        _locals[expr] = (distance, slot);
     }
 
     /// <summary>

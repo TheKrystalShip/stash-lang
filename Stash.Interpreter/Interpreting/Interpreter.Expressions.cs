@@ -22,13 +22,9 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitIdentifierExpr(IdentifierExpr expr)
     {
-        if (_locals.TryGetValue(expr, out int distance))
+        if (_locals.TryGetValue(expr, out var resolved))
         {
-            return _environment.GetAt(distance, expr.Name.Lexeme);
-        }
-        if (_isAdHocEval)
-        {
-            return _environment.Get(expr.Name.Lexeme, expr.Span);
+            return _environment.GetAtSlot(resolved.Distance, resolved.Slot);
         }
         return _environment.Get(expr.Name.Lexeme, expr.Span);
     }
@@ -90,13 +86,9 @@ public partial class Interpreter
         // Write back
         if (expr.Operand is IdentifierExpr id)
         {
-            if (_locals.TryGetValue(expr, out int distance))
+            if (_locals.TryGetValue(expr, out var resolved))
             {
-                _environment.AssignAt(distance, id.Name.Lexeme, newValue, id.Name.Span);
-            }
-            else if (_isAdHocEval)
-            {
-                _environment.Assign(id.Name.Lexeme, newValue, id.Name.Span);
+                _environment.SetAtSlot(resolved.Distance, resolved.Slot, id.Name.Lexeme, newValue, id.Name.Span);
             }
             else
             {
@@ -386,13 +378,9 @@ public partial class Interpreter
     public object? VisitAssignExpr(AssignExpr expr)
     {
         object? value = expr.Value.Accept(this);
-        if (_locals.TryGetValue(expr, out int distance))
+        if (_locals.TryGetValue(expr, out var resolved))
         {
-            _environment.AssignAt(distance, expr.Name.Lexeme, value, expr.Name.Span);
-        }
-        else if (_isAdHocEval)
-        {
-            _environment.Assign(expr.Name.Lexeme, value, expr.Name.Span);
+            _environment.SetAtSlot(resolved.Distance, resolved.Slot, expr.Name.Lexeme, value, expr.Name.Span);
         }
         else
         {

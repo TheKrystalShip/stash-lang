@@ -1,0 +1,186 @@
+// =============================================================================
+// Benchmark: Environment Stress Test
+// Specifically designed to stress variable lookup and environment chain walking.
+// Measures the bottleneck that slot-based environments aim to eliminate.
+//
+// Tests:
+//   1. Tight loop variable access — millions of reads/writes
+//   2. Deep scope chain lookups — variables at varying distances
+//   3. Closure-heavy workload — captured variables across scopes
+//   4. Function call + parameter binding overhead
+//   5. Recursive fibonacci — deep call stack with local variables
+//   6. Nested loop variable churn — many short-lived scopes
+// =============================================================================
+
+// --- Test 1: Tight loop variable access ---
+// Pure variable read/write in a while loop. Every iteration does:
+//   2 reads (sum, i) + 2 writes (sum, i) + arithmetic
+
+fn bench_tight_loop() {
+    let iterations = 2000000;
+    let sum = 0;
+    let i = 0;
+    while (i < iterations) {
+        sum = sum + i;
+        i = i + 1;
+    }
+    return sum;
+}
+
+// --- Test 2: Deep scope chain lookups ---
+// Variables declared at different nesting levels, accessed from the deepest scope.
+// Forces the environment to walk up the chain for each read.
+
+fn bench_scope_chain() {
+    let total = 0;
+    let iterations = 200000;
+    let a = 1;
+    let b = 2;
+    let c = 3;
+    fn inner() {
+        let d = 4;
+        let e = 5;
+        fn innermost() {
+            // Each access walks 0-2 levels up the environment chain
+            return a + b + c + d + e;
+        }
+        return innermost();
+    }
+    let i = 0;
+    while (i < iterations) {
+        total = total + inner();
+        i = i + 1;
+    }
+    return total;
+}
+
+// --- Test 3: Closure-heavy workload ---
+// Creates closures that capture variables, then calls them repeatedly.
+
+fn make_adder(x) {
+    return (y) => x + y;
+}
+
+fn make_multiplier(x) {
+    return (y) => x * y;
+}
+
+fn bench_closures() {
+    let add5 = make_adder(5);
+    let add10 = make_adder(10);
+    let mul3 = make_multiplier(3);
+    let mul7 = make_multiplier(7);
+
+    let iterations = 500000;
+    let sum = 0;
+    let i = 0;
+    while (i < iterations) {
+        sum = sum + add5(i) + add10(i) + mul3(i) + mul7(i);
+        i = i + 1;
+    }
+    return sum;
+}
+
+// --- Test 4: Function call + parameter binding ---
+// Each iteration calls 4 functions with varying arities.
+// Measures environment creation + parameter Define overhead.
+
+fn f0() { return 1; }
+fn f1(a) { return a + 1; }
+fn f2(a, b) { return a + b; }
+fn f3(a, b, c) { return a + b + c; }
+fn f4(a, b, c, d) { return a + b + c + d; }
+
+fn bench_function_calls() {
+    let iterations = 300000;
+    let sum = 0;
+    let i = 0;
+    while (i < iterations) {
+        sum = sum + f0() + f1(i) + f2(i, 2) + f3(i, 2, 3) + f4(i, 1, 2, 3);
+        i = i + 1;
+    }
+    return sum;
+}
+
+// --- Test 5: Recursive fibonacci ---
+// Deep recursion with local variable allocation on every call.
+// fib(30) creates millions of call frames.
+
+fn fib(n) {
+    if (n <= 1) { return n; }
+    return fib(n - 1) + fib(n - 2);
+}
+
+fn bench_fibonacci() {
+    return fib(30);
+}
+
+// --- Test 6: Nested loop variable churn ---
+// Triple-nested loops creating new scopes. Each inner iteration
+// declares and accesses variables in a fresh environment.
+
+fn bench_nested_loops() {
+    let total = 0;
+    let i = 0;
+    while (i < 200) {
+        let j = 0;
+        while (j < 200) {
+            let k = 0;
+            while (k < 50) {
+                let val = i + j + k;
+                total = total + val;
+                k = k + 1;
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return total;
+}
+
+// =============================================================================
+// Run all benchmarks
+// =============================================================================
+
+io.println("=== Environment Stress Benchmark ===");
+io.println("");
+
+// 1. Tight loop
+let t0 = time.millis();
+let r1 = bench_tight_loop();
+let t1 = time.millis();
+io.println($"1. Tight loop (2M iters)     : {t1 - t0} ms  (checksum: {r1})");
+
+// 2. Scope chain
+let t2 = time.millis();
+let r2 = bench_scope_chain();
+let t3 = time.millis();
+io.println($"2. Scope chain (200K iters)  : {t3 - t2} ms  (checksum: {r2})");
+
+// 3. Closures
+let t4 = time.millis();
+let r3 = bench_closures();
+let t5 = time.millis();
+io.println($"3. Closures (500K iters)     : {t5 - t4} ms  (checksum: {r3})");
+
+// 4. Function calls
+let t6 = time.millis();
+let r4 = bench_function_calls();
+let t7 = time.millis();
+io.println($"4. Function calls (300K)     : {t7 - t6} ms  (checksum: {r4})");
+
+// 5. Fibonacci
+let t8 = time.millis();
+let r5 = bench_fibonacci();
+let t9 = time.millis();
+io.println($"5. Fibonacci(30)             : {t9 - t8} ms  (checksum: {r5})");
+
+// 6. Nested loops
+let t10 = time.millis();
+let r6 = bench_nested_loops();
+let t11 = time.millis();
+io.println($"6. Nested loops (200x200x50) : {t11 - t10} ms  (checksum: {r6})");
+
+let total = (t1-t0) + (t3-t2) + (t5-t4) + (t7-t6) + (t9-t8) + (t11-t10);
+io.println("");
+io.println($"Total: {total} ms");
