@@ -48,7 +48,7 @@ There are three players:
 2. **Stash.Dap** — translates between the DAP wire format and the interpreter. Owns `DebugSession`, which is the central coordinator.
 3. **Stash.Interpreter** — the tree-walk evaluator. It calls back into `DebugSession` via the `IDebugger` interface at every statement and function boundary.
 
-The interpreter thread and the DAP I/O thread are distinct. `ManualResetEventSlim` gates keep them synchronized.
+The interpreter threads and the DAP I/O thread are distinct. Per-thread `ManualResetEventSlim` gates keep them synchronized independently.
 
 ---
 
@@ -125,6 +125,44 @@ StashConfigurationDoneHandler
         ▼
 Interpreter thread unblocks, execution begins
 ```
+
+---
+
+### Threading Model
+
+The main interpreter runs in a dedicated `System.Threading.Thread`. Each `task.run()` call spawns a child interpreter on the .NET ThreadPool, registered as a separate DAP thread. Parallel array operations (`arr.parMap`, `arr.parFilter`, `arr.parForEach`) run on ThreadPool threads but are NOT registered as debug threads — they execute without debugger attachment to avoid complexity.
+
+**Per-thread debug state:** Each thread has its own:
+- `ManualResetEventSlim` pause gate for independent pause/resume
+- Stepping state (`StepMode`, step depth)
+- Paused location (`SourceSpan`, `Environment`)
+
+**Thread lifecycle:**
+- The main thread (ID=1) is registered at launch
+- `task.run()` threads are registered via `IDebugger.OnThreadStarted()`
+- Threads are deregistered via `IDebugger.OnThreadExited()` when the task completes
+- The `threads` request returns all currently active threads
+
+**Synchronization:** `OnBeforeExecute()` runs on the interpreter's own thread and blocks that thread's pause gate independently. Breakpoints, stepping, and pause requests are all per-thread. Variable references are global — clearing on any thread's pause invalidates references for all threads (matching DAP semantics).
+
+---
+
+### Multi-Threaded Debugging
+
+Stash supports debugging concurrent tasks spawned via `task.run()`. Each task appears as a separate thread in the DAP client (e.g., VS Code's Call Stack panel).
+
+**Supported features per thread:**
+- Independent breakpoint hitting
+- Independent stepping (Step In, Step Over, Step Out, Continue)
+- Independent pause/resume
+- Per-thread stack traces
+- Per-thread variable inspection (via frame IDs)
+
+**Parallel array operations** (`arr.parMap`, `arr.parFilter`, `arr.parForEach`) run without debugger attachment. Breakpoints inside their callbacks are not hit during debugging. This is intentional — these are short-lived parallel operations, not long-running threads.
+
+**Limitations:**
+- Variable references are global, not per-thread. When any thread pauses, previously cached variable references become invalid.
+- Thread events (`thread started`/`thread exited`) are not sent via DAP events (OmniSharp v0.19.9 limitation). The client discovers threads via the `threads` request.
 
 ---
 
@@ -497,7 +535,7 @@ Unit tests for `DebugSession` in isolation:
 Handler-level tests that exercise the 19 request handlers:
 
 - `Initialize` — capabilities response shape
-- `Threads` — single thread response
+- `Threads` — all active threads response (main + spawned tasks)
 - `SetBreakpoints` — breakpoint validation and confirmation
 - `Continue`, `Next`, `StepIn`, `StepOut` — step mode transitions
 - `Evaluate` — expression evaluation and error responses
@@ -549,15 +587,15 @@ dotnet test
 
 ## Design Decisions
 
-### Single Interpreter Thread + Gate Synchronization
+### Per-Thread Gate Synchronization
 
-The interpreter runs on a dedicated background thread; the DAP I/O runs on a separate thread managed by OmniSharp. Rather than marshalling work items or using locks around every statement, a `ManualResetEventSlim` (`_pauseGate`) acts as a simple gate:
+The main interpreter and each `task.run()` child interpreter run on dedicated threads; the DAP I/O runs on a separate thread managed by OmniSharp. Rather than marshalling work items or using locks around every statement, each interpreter thread owns a `ManualResetEventSlim` pause gate that acts as a simple gate for that thread:
 
-- **Running**: gate is _set_ — `_pauseGate.Wait()` returns immediately.
-- **Paused**: gate is _reset_ — interpreter thread blocks inside `OnBeforeExecute()`.
-- **Resume**: any handler (Continue, Next, StepIn, StepOut) calls `_pauseGate.Set()`.
+- **Running**: gate is _set_ — `gate.Wait()` returns immediately.
+- **Paused**: gate is _reset_ — the interpreter thread blocks inside `OnBeforeExecute()`.
+- **Resume**: any handler (Continue, Next, StepIn, StepOut) calls `gate.Set()` on the targeted thread's gate.
 
-This avoids complex lock choreography while keeping the interpreter's inner loop clean.
+This avoids complex lock choreography while keeping each interpreter's inner loop clean. Threads pause and resume independently — pausing one task does not affect others.
 
 ### Configuration Done Gate
 
@@ -610,7 +648,7 @@ The `Initialize` response declares the following capabilities:
 | Limitation             | Notes                                                                                                                                                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Launch only**        | `attach` mode is not supported; the DAP server always launches a new interpreter process                                                                                      |
-| **Single thread**      | The Stash interpreter is single-threaded; DAP multi-thread concepts (pause all threads, per-thread stepping) do not apply                                                     |
+| **Parallel ops**       | `arr.parMap`, `arr.parFilter`, and `arr.parForEach` callbacks run without debugger attachment — breakpoints inside them are not hit during debugging                              |
 | **`uncaught` = `all`** | Currently both exception filters behave identically; distinguishing caught vs. uncaught exceptions requires restructuring the interpreter's error model                       |
 | **No source maps**     | `import` statements load other `.stash` files; breakpoints in imported modules use the imported file's absolute path correctly, but there is no higher-level source-map layer |
 

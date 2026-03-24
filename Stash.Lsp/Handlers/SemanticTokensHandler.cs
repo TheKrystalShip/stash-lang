@@ -4,6 +4,7 @@ namespace Stash.Lsp.Handlers;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -295,9 +296,36 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         // (e.g., `let cwd = env.cwd()` would color the method as a variable).
         if (afterDot)
         {
+            // When preceded by a built-in namespace (e.g., task.status), prioritize
+            // namespace function/constant lookup over symbol-table field matches.
+            // This prevents struct field names (e.g., TaskHandle.status) from
+            // shadowing the namespace function of the same name.
+            if (tokenList != null && tokenIndex >= 2
+                && tokenList[tokenIndex - 2].Type == TokenType.Identifier
+                && BuiltInRegistry.IsBuiltInNamespace(tokenList[tokenIndex - 2].Lexeme))
+            {
+                var qualifiedName = tokenList[tokenIndex - 2].Lexeme + "." + name;
+                if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out _))
+                {
+                    builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
+                    return;
+                }
+                if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out _))
+                {
+                    builder.Push(line, col, length, TokenTypeVariable, ModifierReadonly);
+                    return;
+                }
+                var nsName = tokenList[tokenIndex - 2].Lexeme;
+                if (BuiltInRegistry.Enums.Any(e => e.Name == name && e.Namespace == nsName))
+                {
+                    builder.Push(line, col, length, TokenTypeType, 0);
+                    return;
+                }
+            }
+
             var definition = result.Symbols.FindDefinition(name, spanLine, spanCol);
             if (definition != null && definition.Kind is StashSymbolKind.Field or StashSymbolKind.Function
-                    or StashSymbolKind.EnumMember)
+                    or StashSymbolKind.Method or StashSymbolKind.EnumMember)
             {
                 var (tokenType, modifiers) = MapSymbolKind(definition, token);
                 builder.Push(line, col, length, tokenType, modifiers);
@@ -330,6 +358,11 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             if (definition != null)
             {
                 var (tokenType, modifiers) = MapSymbolKind(definition, token);
+                if (name == "self")
+                {
+                    tokenType = TokenTypeKeyword;
+                }
+
                 builder.Push(line, col, length, tokenType, modifiers);
             }
             else if (BuiltInRegistry.IsBuiltInFunction(name))
@@ -399,8 +432,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 // Process embedded expression tokens
                 TokenType prevSubType = TokenType.Eof;
-                foreach (var subToken in subTokens)
+                for (int j = 0; j < subTokens.Count; j++)
                 {
+                    var subToken = subTokens[j];
                     if (subToken.Type == TokenType.Eof)
                     {
                         continue;
@@ -422,7 +456,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     }
                     else if (subToken.Type == TokenType.Identifier)
                     {
-                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot);
+                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot,
+                            tokenList: subTokens, tokenIndex: j);
                     }
                     else if (afterDot && (IsKeyword(subToken.Type) || subToken.Type is TokenType.True or TokenType.False or TokenType.Null))
                     {
@@ -440,7 +475,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeString, 0);
                     }
-                    else if (IsOperator(subToken.Type))
+                    else if (subToken.Type == TokenType.Dot || IsOperator(subToken.Type))
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
                     }
@@ -480,8 +515,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             if (part is List<Token> subTokens)
             {
                 TokenType prevSubType = TokenType.Eof;
-                foreach (var subToken in subTokens)
+                for (int j = 0; j < subTokens.Count; j++)
                 {
+                    var subToken = subTokens[j];
                     if (subToken.Type == TokenType.Eof)
                     {
                         continue;
@@ -503,7 +539,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     }
                     else if (subToken.Type == TokenType.Identifier)
                     {
-                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot);
+                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot,
+                            tokenList: subTokens, tokenIndex: j);
                     }
                     else if (afterDot && (IsKeyword(subToken.Type) || subToken.Type is TokenType.True or TokenType.False or TokenType.Null))
                     {
@@ -521,7 +558,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeString, 0);
                     }
-                    else if (IsOperator(subToken.Type))
+                    else if (subToken.Type == TokenType.Dot || IsOperator(subToken.Type))
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
                     }
@@ -698,6 +735,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         int tokenType = definition.Kind switch
         {
             StashSymbolKind.Function => TokenTypeFunction,
+            StashSymbolKind.Method => TokenTypeFunction,
             StashSymbolKind.Variable => TokenTypeVariable,
             StashSymbolKind.Constant => TokenTypeVariable,
             StashSymbolKind.Parameter => TokenTypeParameter,

@@ -11,6 +11,9 @@ public class StashBoundMethod : IStashCallable
     private readonly StashInstance _instance;
     private readonly StashFunction _method;
 
+    public StashInstance Instance => _instance;
+    public StashFunction Method => _method;
+
     public StashBoundMethod(StashInstance instance, StashFunction method)
     {
         _instance = instance;

@@ -33,7 +33,7 @@ public class StashNextHandler : NextHandlerBase
     /// <returns>A <see cref="Task{NextResponse}"/> representing the response.</returns>
     public override Task<NextResponse> Handle(NextArguments request, CancellationToken cancellationToken)
     {
-        _session.Next();
+        _session.Next((int)request.ThreadId);
         return Task.FromResult(new NextResponse());
     }
 }

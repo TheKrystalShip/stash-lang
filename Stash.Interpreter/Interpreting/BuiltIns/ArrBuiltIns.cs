@@ -2,6 +2,8 @@ namespace Stash.Interpreting.BuiltIns;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Stash.Interpreting.Types;
 
 /// <summary>
@@ -360,6 +362,10 @@ public static class ArrBuiltIns
 
             return null;
         }));
+
+        arr.Define("parMap", new BuiltInFunction("arr.parMap", -1, ParMap));
+        arr.Define("parFilter", new BuiltInFunction("arr.parFilter", -1, ParFilter));
+        arr.Define("parForEach", new BuiltInFunction("arr.parForEach", -1, ParForEach));
 
         arr.Define("find", new BuiltInFunction("arr.find", 2, (interp, args) =>
         {
@@ -843,6 +849,171 @@ public static class ArrBuiltIns
         }));
 
         globals.Define("arr", arr);
+    }
+
+    private static object? ParMap(Interpreter interpreter, List<object?> args)
+    {
+        if (args.Count < 2 || args[0] is not List<object?> list || args[1] is not IStashCallable callable)
+        {
+            throw new RuntimeError("arr.parMap() expects (array, function, [maxConcurrency]).");
+        }
+
+        int maxConcurrency = ParseMaxConcurrency(args, "arr.parMap");
+        int count = list.Count;
+        var results = new object?[count];
+        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        var options = new ParallelOptions { MaxDegreeOfParallelism = maxConcurrency };
+        Parallel.For(0, count, options, i =>
+        {
+            Interpreter? child = null;
+            try
+            {
+                Stash.Interpreting.Environment snapshot = Stash.Interpreting.Environment.Snapshot(interpreter._ctx.Environment);
+                child = interpreter.Fork(snapshot, interpreter.CancellationToken, attachDebugger: false);
+                results[i] = callable.Call(child, new List<object?> { list[i] });
+            }
+            catch (Exception ex)
+            {
+                exceptions.Add(ex);
+            }
+            finally
+            {
+                child?.CleanupTrackedProcesses();
+            }
+        });
+
+        if (!exceptions.IsEmpty)
+        {
+            Exception first = exceptions.First();
+            if (first is RuntimeError re)
+            {
+                throw re;
+            }
+
+            throw new RuntimeError($"arr.parMap() failed: {first.Message}");
+        }
+
+        return new List<object?>(results);
+    }
+
+    private static object? ParFilter(Interpreter interpreter, List<object?> args)
+    {
+        if (args.Count < 2 || args[0] is not List<object?> list || args[1] is not IStashCallable callable)
+        {
+            throw new RuntimeError("arr.parFilter() expects (array, function, [maxConcurrency]).");
+        }
+
+        int maxConcurrency = ParseMaxConcurrency(args, "arr.parFilter");
+        int count = list.Count;
+        var keep = new bool[count];
+        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        var options = new ParallelOptions { MaxDegreeOfParallelism = maxConcurrency };
+        Parallel.For(0, count, options, i =>
+        {
+            Interpreter? child = null;
+            try
+            {
+                Stash.Interpreting.Environment snapshot = Stash.Interpreting.Environment.Snapshot(interpreter._ctx.Environment);
+                child = interpreter.Fork(snapshot, interpreter.CancellationToken, attachDebugger: false);
+                object? result = callable.Call(child, new List<object?> { list[i] });
+                keep[i] = RuntimeValues.IsTruthy(result);
+            }
+            catch (Exception ex)
+            {
+                exceptions.Add(ex);
+            }
+            finally
+            {
+                child?.CleanupTrackedProcesses();
+            }
+        });
+
+        if (!exceptions.IsEmpty)
+        {
+            Exception first = exceptions.First();
+            if (first is RuntimeError re)
+            {
+                throw re;
+            }
+
+            throw new RuntimeError($"arr.parFilter() failed: {first.Message}");
+        }
+
+        var filtered = new List<object?>();
+        for (int i = 0; i < count; i++)
+        {
+            if (keep[i])
+            {
+                filtered.Add(list[i]);
+            }
+        }
+        return filtered;
+    }
+
+    private static object? ParForEach(Interpreter interpreter, List<object?> args)
+    {
+        if (args.Count < 2 || args[0] is not List<object?> list || args[1] is not IStashCallable callable)
+        {
+            throw new RuntimeError("arr.parForEach() expects (array, function, [maxConcurrency]).");
+        }
+
+        int maxConcurrency = ParseMaxConcurrency(args, "arr.parForEach");
+        var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
+
+        var options = new ParallelOptions { MaxDegreeOfParallelism = maxConcurrency };
+        Parallel.For(0, list.Count, options, i =>
+        {
+            Interpreter? child = null;
+            try
+            {
+                Stash.Interpreting.Environment snapshot = Stash.Interpreting.Environment.Snapshot(interpreter._ctx.Environment);
+                child = interpreter.Fork(snapshot, interpreter.CancellationToken, attachDebugger: false);
+                callable.Call(child, new List<object?> { list[i] });
+            }
+            catch (Exception ex)
+            {
+                exceptions.Add(ex);
+            }
+            finally
+            {
+                child?.CleanupTrackedProcesses();
+            }
+        });
+
+        if (!exceptions.IsEmpty)
+        {
+            Exception first = exceptions.First();
+            if (first is RuntimeError re)
+            {
+                throw re;
+            }
+
+            throw new RuntimeError($"arr.parForEach() failed: {first.Message}");
+        }
+
+        return null;
+    }
+
+    private static int ParseMaxConcurrency(List<object?> args, string fnName)
+    {
+        if (args.Count < 3 || args[2] is null)
+        {
+            return -1; // -1 means unlimited (use all available cores)
+        }
+
+        if (args[2] is long n)
+        {
+            if (n < 1)
+            {
+                throw new RuntimeError($"Third argument to '{fnName}' (maxConcurrency) must be >= 1.");
+            }
+
+            return (int)n;
+        }
+
+        throw new RuntimeError($"Third argument to '{fnName}' (maxConcurrency) must be an integer.");
     }
 
     private static int CompareValues(object? a, object? b)

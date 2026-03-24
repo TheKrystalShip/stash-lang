@@ -35,6 +35,7 @@ namespace Stash;
 /// <summary>CLI entry point for the Stash language: REPL, file execution, debug mode, and test runner.</summary>
 public class Program
 {
+    private static Interpreter? _activeInterpreter;
     /// <summary>Parses CLI arguments and dispatches to the appropriate execution mode.</summary>
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
@@ -107,6 +108,18 @@ public class Program
         string[] scriptArgs = scriptArgStart >= 0 && scriptArgStart < args.Length
             ? args[scriptArgStart..]
             : Array.Empty<string>();
+
+        // Register cleanup handlers for graceful shutdown
+        Console.CancelKeyPress += (_, e) =>
+        {
+            _activeInterpreter?.CleanupTrackedProcesses();
+            // Don't cancel — let the runtime terminate naturally after cleanup
+        };
+
+        AppDomain.CurrentDomain.ProcessExit += (_, _) =>
+        {
+            _activeInterpreter?.CleanupTrackedProcesses();
+        };
 
         // Mode 1: -c command string
         if (commandString is not null)
@@ -212,6 +225,7 @@ public class Program
 
         // Stage 3: Interpret
         var interpreter = new Interpreter();
+        _activeInterpreter = interpreter;
         interpreter.SetScriptArgs(scriptArgs);
         try
         {
@@ -225,6 +239,7 @@ public class Program
         finally
         {
             interpreter.CleanupTrackedProcesses();
+            _activeInterpreter = null;
         }
     }
 
@@ -272,6 +287,7 @@ public class Program
 
         // Stage 3: Interpret
         var interpreter = new Interpreter();
+        _activeInterpreter = interpreter;
         interpreter.CurrentFile = path;
         interpreter.SetScriptArgs(scriptArgs);
         try
@@ -286,6 +302,7 @@ public class Program
         finally
         {
             interpreter.CleanupTrackedProcesses();
+            _activeInterpreter = null;
         }
     }
 
@@ -329,6 +346,7 @@ public class Program
         }
 
         var interpreter = new Interpreter();
+        _activeInterpreter = interpreter;
         interpreter.CurrentFile = path;
         interpreter.SetScriptArgs(scriptArgs);
 
@@ -350,6 +368,7 @@ public class Program
         finally
         {
             interpreter.CleanupTrackedProcesses();
+            _activeInterpreter = null;
         }
 
         Console.WriteLine("Script execution completed.");
@@ -397,6 +416,7 @@ public class Program
         }
 
         var interpreter = new Interpreter();
+        _activeInterpreter = interpreter;
         interpreter.CurrentFile = path;
         interpreter.SetScriptArgs(scriptArgs);
 
@@ -432,6 +452,7 @@ public class Program
         finally
         {
             interpreter.CleanupTrackedProcesses();
+            _activeInterpreter = null;
         }
 
         // Emit TAP plan and exit with appropriate code
@@ -490,6 +511,7 @@ public class Program
 
         // Stage 3: Interpret with test harness
         var interpreter = new Interpreter();
+        _activeInterpreter = interpreter;
         interpreter.CurrentFile = path;
         interpreter.SetScriptArgs(scriptArgs);
 
@@ -518,6 +540,7 @@ public class Program
         finally
         {
             interpreter.CleanupTrackedProcesses();
+            _activeInterpreter = null;
         }
 
         // Emit TAP plan and exit with appropriate code
@@ -538,6 +561,7 @@ public class Program
         // The interpreter holds a variable environment that persists across lines,
         // so reusing the instance is essential.
         var interpreter = new Interpreter();
+        _activeInterpreter = interpreter;
         var editor = new LineEditor();
 
         try
@@ -635,6 +659,7 @@ public class Program
         finally
         {
             interpreter.CleanupTrackedProcesses();
+            _activeInterpreter = null;
         }
     }
 

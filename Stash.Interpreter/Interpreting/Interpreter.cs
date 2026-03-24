@@ -62,66 +62,32 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 {
     /// <summary>The global scope environment containing built-in functions and top-level declarations.</summary>
     private readonly Environment _globals;
-    /// <summary>The current lexical scope. Changes as the interpreter enters and exits blocks.</summary>
-    private Environment _environment;
-    /// <summary>Pending standard input to pipe into the next command execution.</summary>
-    private string? _pendingStdin;
-    /// <summary>The message from the last caught <see cref="RuntimeError"/> in a <c>try?</c> expression. Exposed via <c>err.last()</c>.</summary>
-    internal string? LastError;
-    /// <summary>Cache of already-loaded modules, keyed by resolved absolute path. Prevents re-execution on repeated imports.</summary>
-    private readonly Dictionary<string, Environment> _moduleCache = new();
-    /// <summary>Set of module paths currently being imported, used to detect circular imports.</summary>
-    private readonly HashSet<string> _importStack = new();
-    /// <summary>The file path of the script currently being executed. Used for resolving relative imports.</summary>
-    private string? _currentFile;
-    /// <summary>The runtime call stack, tracking active function invocations for debugging and error reporting.</summary>
-    private readonly List<CallFrame> _callStack = new();
+    /// <summary>The capability flags controlling which built-in namespaces are available.</summary>
+    private readonly StashCapabilities _capabilities;
+    /// <summary>Maximum allowed statement count. Zero means unlimited.</summary>
+    private long _stepLimit;
     /// <summary>The attached debugger, if any. When non-null, debug hooks are invoked during execution.</summary>
     private IDebugger? _debugger;
     /// <summary>Set of all source file paths loaded during execution (main script + imports). Used for DAP "loadedSources".</summary>
-    private readonly HashSet<string> _loadedSources = new(StringComparer.OrdinalIgnoreCase);
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _loadedSources = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>The test harness for reporting test results. When set, <c>test()</c> and <c>describe()</c> report to it.</summary>
     private Stash.Testing.ITestHarness? _testHarness;
-    /// <summary>The name of the current <c>describe</c> block, used to namespace test names.</summary>
-    private string? _currentDescribe;
-    /// <summary>Optional test name filter patterns. When set, only matching tests execute.</summary>
-    private string[]? _testFilter;
-    /// <summary>When true, <c>test()</c> records names and locations without executing test bodies.</summary>
-    private bool _discoveryMode;
-    /// <summary>Stack of <c>beforeEach</c> hook lists, one per nested <c>describe</c> block.</summary>
-    private readonly List<List<IStashCallable>> _beforeEachHooks = new();
-    /// <summary>Stack of <c>afterEach</c> hook lists, one per nested <c>describe</c> block.</summary>
-    private readonly List<List<IStashCallable>> _afterEachHooks = new();
-    /// <summary>Stack of <c>afterAll</c> hook lists, one per nested <c>describe</c> block.</summary>
-    private readonly List<List<IStashCallable>> _afterAllHooks = new();
-    /// <summary>The source span of the statement currently being executed. Used by the debugger to track position.</summary>
-    private SourceSpan? _currentSpan;
+    /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime. Thread-safe for concurrent resolver writes during parallel execution.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Expr, (int Distance, int Slot)> _locals = new(ReferenceEqualityComparer.Instance);
     /// <summary>The raw script arguments, parsed by <c>args</c> declarations.</summary>
     internal string[] ScriptArgs = Array.Empty<string>();
-    /// <summary>Background processes launched by <c>process.spawn()</c>, tracked for cleanup on script exit.</summary>
-    internal readonly List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses = new();
-    /// <summary>Cache mapping process handles to their wait results, preventing duplicate <c>process.wait()</c> calls.</summary>
-    internal readonly Dictionary<StashInstance, StashInstance> ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
-    /// <summary>Callbacks registered via <c>process.onExit()</c> to run when a tracked process exits.</summary>
-    internal readonly Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks = new(ReferenceEqualityComparer.Instance);
-    /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime.</summary>
-    private readonly Dictionary<Expr, (int Distance, int Slot)> _locals = new(ReferenceEqualityComparer.Instance);
-    /// <summary>When true, variable lookups walk the scope chain instead of using resolver distances. Set during DAP evaluate requests.</summary>
-    private bool _isAdHocEval = false;
-    /// <summary>The output writer for <c>io.println</c> and <c>io.print</c>. Defaults to <see cref="Console.Out"/>.</summary>
-    private TextWriter _output = Console.Out;
-    /// <summary>The error output writer. Defaults to <see cref="Console.Error"/>.</summary>
-    private TextWriter _errorOutput = Console.Error;
-    /// <summary>The input reader for <c>io.readLine</c>. Defaults to <see cref="Console.In"/>.</summary>
-    private TextReader _input = Console.In;
-    /// <summary>The capability flags controlling which built-in namespaces are available.</summary>
-    private readonly StashCapabilities _capabilities;
-    /// <summary>Token checked at each statement boundary to support cooperative cancellation.</summary>
-    private CancellationToken _cancellationToken;
-    /// <summary>Number of statements executed since the last reset.</summary>
-    private long _stepCount;
-    /// <summary>Maximum allowed statement count. Zero means unlimited.</summary>
-    private long _stepLimit;
+    /// <summary>The mutable per-execution state. Encapsulates environment, call stack, I/O, and other state that varies per execution path.</summary>
+    internal ExecutionContext _ctx;
+    private readonly object _cleanupLock = new();
+    internal TaskRegistry TaskRegistry { get; private set; }
+
+    // Private shims — allow partial-class files to continue using short field names while state lives in _ctx.
+    private Environment _environment { get => _ctx.Environment; set => _ctx.Environment = value; }
+    private string? _pendingStdin { get => _ctx.PendingStdin; set => _ctx.PendingStdin = value; }
+    private Dictionary<string, Environment> _moduleCache => _ctx.ModuleCache;
+    private HashSet<string> _importStack => _ctx.ImportStack;
+    private string? _currentFile { get => _ctx.CurrentFile; set => _ctx.CurrentFile = value; }
+    private List<CallFrame> _callStack => _ctx.CallStack;
 
     /// <summary>
     /// Gets or sets the current file path being executed.
@@ -129,8 +95,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public string? CurrentFile
     {
-        get => _currentFile;
-        set => _currentFile = value;
+        get => _ctx.CurrentFile;
+        set => _ctx.CurrentFile = value;
     }
 
     /// <summary>
@@ -151,6 +117,12 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <summary>
+    /// Logical thread ID for debugging. The main interpreter uses 1; forked interpreters
+    /// for task.run() get unique IDs assigned by the task namespace.
+    /// </summary>
+    public int DebugThreadId { get; set; } = 1;
+
+    /// <summary>
     /// Gets or sets the test harness. When set, test() and describe() report results to it.
     /// </summary>
     public Stash.Testing.ITestHarness? TestHarness
@@ -164,8 +136,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public string? CurrentDescribe
     {
-        get => _currentDescribe;
-        set => _currentDescribe = value;
+        get => _ctx.CurrentDescribe;
+        set => _ctx.CurrentDescribe = value;
     }
 
     /// <summary>
@@ -174,8 +146,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public string[]? TestFilter
     {
-        get => _testFilter;
-        set => _testFilter = value;
+        get => _ctx.TestFilter;
+        set => _ctx.TestFilter = value;
     }
 
     /// <summary>
@@ -184,16 +156,16 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public bool DiscoveryMode
     {
-        get => _discoveryMode;
-        set => _discoveryMode = value;
+        get => _ctx.DiscoveryMode;
+        set => _ctx.DiscoveryMode = value;
     }
 
     /// <summary>Gets the stack of <c>beforeEach</c> hook lists.</summary>
-    internal List<List<IStashCallable>> BeforeEachHooks => _beforeEachHooks;
+    internal List<List<IStashCallable>> BeforeEachHooks => _ctx.BeforeEachHooks;
     /// <summary>Gets the stack of <c>afterEach</c> hook lists.</summary>
-    internal List<List<IStashCallable>> AfterEachHooks => _afterEachHooks;
+    internal List<List<IStashCallable>> AfterEachHooks => _ctx.AfterEachHooks;
     /// <summary>Gets the stack of <c>afterAll</c> hook lists.</summary>
-    internal List<List<IStashCallable>> AfterAllHooks => _afterAllHooks;
+    internal List<List<IStashCallable>> AfterAllHooks => _ctx.AfterAllHooks;
 
     /// <summary>
     /// Gets or sets the output writer used by io.println and io.print.
@@ -201,8 +173,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public TextWriter Output
     {
-        get => _output;
-        set => _output = value;
+        get => _ctx.Output;
+        set => _ctx.Output = value;
     }
 
     /// <summary>
@@ -211,8 +183,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public TextWriter ErrorOutput
     {
-        get => _errorOutput;
-        set => _errorOutput = value;
+        get => _ctx.ErrorOutput;
+        set => _ctx.ErrorOutput = value;
     }
 
     /// <summary>
@@ -221,8 +193,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public TextReader Input
     {
-        get => _input;
-        set => _input = value;
+        get => _ctx.Input;
+        set => _ctx.Input = value;
     }
 
     /// <summary>
@@ -239,8 +211,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public CancellationToken CancellationToken
     {
-        get => _cancellationToken;
-        set => _cancellationToken = value;
+        get => _ctx.CancellationToken;
+        set => _ctx.CancellationToken = value;
     }
 
     /// <summary>
@@ -257,25 +229,41 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>
     /// Gets the number of statements executed since the last reset or start of execution.
     /// </summary>
-    public long StepCount => _stepCount;
+    public long StepCount => _ctx.StepCount;
 
     /// <summary>
     /// Gets the current call stack as a read-only list.
     /// </summary>
-    public IReadOnlyList<CallFrame> CallStack => _callStack;
+    public IReadOnlyList<CallFrame> CallStack => _ctx.CallStack;
 
     /// <summary>
     /// Gets all source files that have been loaded during execution (main script + imports).
     /// Used for DAP "loadedSources" request.
     /// </summary>
-    public IReadOnlyCollection<string> LoadedSources => _loadedSources;
+    public IReadOnlyCollection<string> LoadedSources => new List<string>(_loadedSources.Keys);
 
     /// <summary>
     /// Gets the source span of the statement currently being executed.
     /// Null when the interpreter is not executing. Useful for DAP to determine
     /// the current position when paused.
     /// </summary>
-    public SourceSpan? CurrentSpan => _currentSpan;
+    public SourceSpan? CurrentSpan => _ctx.CurrentSpan;
+
+    /// <summary>The message from the last caught RuntimeError. Used by lastError() built-in.</summary>
+    internal string? LastError
+    {
+        get => _ctx.LastError;
+        set => _ctx.LastError = value;
+    }
+
+    /// <summary>Background processes tracked for cleanup. Used by ProcessBuiltIns.</summary>
+    internal List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses => _ctx.TrackedProcesses;
+
+    /// <summary>Cache mapping process handles to wait results. Used by ProcessBuiltIns.</summary>
+    internal Dictionary<StashInstance, StashInstance> ProcessWaitCache => _ctx.ProcessWaitCache;
+
+    /// <summary>Process exit callbacks. Used by ProcessBuiltIns.</summary>
+    internal Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
 
     /// <summary>
     /// Gets the global environment. Useful for DAP to enumerate global variables.
@@ -293,8 +281,55 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         _capabilities = capabilities;
         _globals = new Environment();
-        _environment = _globals;
+        _ctx = new ExecutionContext(_globals);
+        TaskRegistry = new TaskRegistry();
         DefineBuiltIns();
+    }
+
+    /// <summary>
+    /// Private constructor for creating a forked child interpreter.
+    /// Shares immutable state with the parent; uses a separate ExecutionContext.
+    /// </summary>
+    private Interpreter(Interpreter parent, ExecutionContext forkedContext)
+    {
+        _globals = parent._globals;
+        _capabilities = parent._capabilities;
+        _stepLimit = parent._stepLimit;
+        _debugger = parent._debugger;
+        _loadedSources = parent._loadedSources;
+        _testHarness = parent._testHarness;
+        _locals = parent._locals;          // ConcurrentDictionary — safe to share
+        TaskRegistry = parent.TaskRegistry; // Shared — tasks from any fork can be awaited by any other
+        ScriptArgs = parent.ScriptArgs;
+        EmbeddedMode = parent.EmbeddedMode;
+        _ctx = forkedContext;
+    }
+
+    /// <summary>
+    /// Creates a forked child interpreter for parallel task execution.
+    /// The child shares the global scope, resolver cache, and immutable configuration,
+    /// but gets an independent <see cref="ExecutionContext"/> with a snapshotted
+    /// environment chain rooted at the given <paramref name="taskScope"/>.
+    /// </summary>
+    /// <param name="taskScope">The environment scope to use as the child's current environment.
+    /// Typically a snapshot of the closure environment.</param>
+    /// <param name="cancellationToken">Cancellation token for cooperative cancellation of the task.</param>
+    public Interpreter Fork(Environment taskScope, CancellationToken cancellationToken = default, bool attachDebugger = true)
+    {
+        var forkedCtx = new ExecutionContext(taskScope)
+        {
+            Output = _ctx.Output,
+            ErrorOutput = _ctx.ErrorOutput,
+            Input = _ctx.Input,
+            CurrentFile = _ctx.CurrentFile,
+            CancellationToken = cancellationToken,
+        };
+        var child = new Interpreter(this, forkedCtx);
+        if (!attachDebugger)
+        {
+            child._debugger = null;
+        }
+        return child;
     }
 
     /// <summary>
@@ -327,7 +362,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     public void Interpret(List<Stmt> statements)
     {
         // Track loaded source
-        if (_currentFile is not null && _loadedSources.Add(_currentFile))
+        if (_currentFile is not null && _loadedSources.TryAdd(_currentFile, 0))
         {
             _debugger?.OnSourceLoaded(_currentFile);
         }
@@ -346,19 +381,19 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         catch (BreakException)
         {
             var err = new RuntimeError("'break' used outside of a loop.");
-            _debugger?.OnError(err, _callStack);
+            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ContinueException)
         {
             var err = new RuntimeError("'continue' used outside of a loop.");
-            _debugger?.OnError(err, _callStack);
+            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ReturnException)
         {
             var err = new RuntimeError("'return' used outside of a function.");
-            _debugger?.OnError(err, _callStack);
+            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
             throw err;
         }
     }
@@ -367,18 +402,18 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <param name="stmt">The statement to execute.</param>
     private void Execute(Stmt stmt)
     {
-        if (_cancellationToken.IsCancellationRequested)
+        if (_ctx.CancellationToken.IsCancellationRequested)
         {
             throw new ScriptCancelledException();
         }
 
-        if (_stepLimit > 0 && ++_stepCount > _stepLimit)
+        if (_stepLimit > 0 && ++_ctx.StepCount > _stepLimit)
         {
             throw new StepLimitExceededException(_stepLimit);
         }
 
-        _currentSpan = stmt.Span;
-        _debugger?.OnBeforeExecute(stmt.Span, _environment);
+        _ctx.CurrentSpan = stmt.Span;
+        _debugger?.OnBeforeExecute(stmt.Span, _ctx.Environment, DebugThreadId);
         stmt.Accept(this);
     }
 
@@ -397,7 +432,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     internal void InterpretResolved(List<Stmt> statements)
     {
-        if (_currentFile is not null && _loadedSources.Add(_currentFile))
+        if (_currentFile is not null && _loadedSources.TryAdd(_currentFile, 0))
         {
             _debugger?.OnSourceLoaded(_currentFile);
         }
@@ -412,13 +447,13 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         catch (BreakException)
         {
             var err = new RuntimeError("'break' used outside of a loop.");
-            _debugger?.OnError(err, _callStack);
+            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ContinueException)
         {
             var err = new RuntimeError("'continue' used outside of a loop.");
-            _debugger?.OnError(err, _callStack);
+            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ReturnException)
@@ -435,7 +470,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public void ResetStepCount()
     {
-        _stepCount = 0;
+        _ctx.StepCount = 0;
     }
 
     /// <summary>Executes a list of statements in the given environment, restoring the previous environment afterwards.</summary>
@@ -443,10 +478,10 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <param name="environment">The environment (scope) to execute in.</param>
     public void ExecuteBlock(List<Stmt> statements, Environment environment)
     {
-        Environment previous = _environment;
+        Environment previous = _ctx.Environment;
         try
         {
-            _environment = environment;
+            _ctx.Environment = environment;
             foreach (Stmt statement in statements)
             {
                 Execute(statement);
@@ -454,7 +489,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         }
         finally
         {
-            _environment = previous;
+            _ctx.Environment = previous;
         }
     }
 
@@ -464,18 +499,18 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public object? EvaluateInEnvironment(Expr expr, Environment environment)
     {
-        Environment previous = _environment;
-        bool previousAdHocEval = _isAdHocEval;
+        Environment previous = _ctx.Environment;
+        bool previousAdHocEval = _ctx.IsAdHocEval;
         try
         {
-            _environment = environment;
-            _isAdHocEval = true;
+            _ctx.Environment = environment;
+            _ctx.IsAdHocEval = true;
             return expr.Accept(this);
         }
         finally
         {
-            _environment = previous;
-            _isAdHocEval = previousAdHocEval;
+            _ctx.Environment = previous;
+            _ctx.IsAdHocEval = previousAdHocEval;
         }
     }
 
@@ -537,7 +572,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         TermBuiltIns.Register(_globals);
         SysBuiltIns.Register(_globals);
         LogBuiltIns.Register(_globals);
-        PkgBuiltIns.Register(_globals); // Reads project metadata only, not arbitrary files — intentionally ungated
+        PkgBuiltIns.Register(_globals);
+        TaskBuiltIns.Register(_globals, TaskRegistry);
 
         // Capability-gated built-ins
         if (_capabilities.HasFlag(StashCapabilities.Environment))
@@ -577,7 +613,15 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public void CleanupTrackedProcesses()
     {
-        foreach (var (_, osProcess) in TrackedProcesses)
+        List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> snapshot;
+        lock (_cleanupLock)
+        {
+            snapshot = new List<(StashInstance, System.Diagnostics.Process)>(TrackedProcesses);
+            TrackedProcesses.Clear();
+            ProcessExitCallbacks.Clear();
+        }
+
+        foreach (var (_, osProcess) in snapshot)
         {
             try
             {
@@ -591,8 +635,9 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
                 }
             }
             catch { /* Process may have already exited */ }
+
+            try { osProcess.Dispose(); }
+            catch { /* Best-effort disposal */ }
         }
-        TrackedProcesses.Clear();
-        ProcessExitCallbacks.Clear();
     }
 }

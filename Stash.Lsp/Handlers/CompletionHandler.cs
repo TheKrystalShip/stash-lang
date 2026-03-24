@@ -181,22 +181,63 @@ public class CompletionHandler : CompletionHandlerBase
 
     /// <summary>
     /// Determines whether the cursor at <paramref name="col"/> on <paramref name="line"/>
-    /// is inside an unescaped double-quoted string literal.
+    /// is inside an unescaped double-quoted string literal, accounting for interpolation
+    /// expressions (<c>$"...{expr}..."</c>) where the cursor inside <c>{}</c> is treated
+    /// as code, not string text.
     /// </summary>
     /// <param name="line">The source line text.</param>
     /// <param name="col">The 0-based cursor column.</param>
-    /// <returns><see langword="true"/> if the cursor is inside a string; otherwise <see langword="false"/>.</returns>
+    /// <returns><see langword="true"/> if the cursor is inside string text; <see langword="false"/>
+    /// if outside any string or inside an interpolation expression.</returns>
     private static bool IsInsideString(string line, int col)
     {
-        int quoteCount = 0;
+        bool inString = false;
+        bool isInterpolated = false;
+        int braceDepth = 0;
+
         for (int i = 0; i < col && i < line.Length; i++)
         {
-            if (line[i] == '"' && (i == 0 || line[i - 1] != '\\'))
+            char c = line[i];
+
+            if (!inString)
             {
-                quoteCount++;
+                if (c == '"' && (i == 0 || line[i - 1] != '\\'))
+                {
+                    inString = true;
+                    isInterpolated = i > 0 && line[i - 1] == '$';
+                    braceDepth = 0;
+                }
+            }
+            else
+            {
+                // Inside a string
+                if (isInterpolated && braceDepth > 0)
+                {
+                    // Inside an interpolation expression — track nested braces
+                    if (c == '{')
+                    {
+                        braceDepth++;
+                    }
+                    else if (c == '}')
+                    {
+                        braceDepth--;
+                    }
+                    // If braceDepth hits 0, we're back in string text
+                }
+                else if (isInterpolated && c == '{')
+                {
+                    braceDepth = 1;
+                }
+                else if (c == '"' && (i == 0 || line[i - 1] != '\\'))
+                {
+                    inString = false;
+                    isInterpolated = false;
+                }
             }
         }
-        return quoteCount % 2 != 0;
+
+        // If we're in a string but inside an interpolation expression, treat as code
+        return inString && braceDepth == 0;
     }
 
     /// <summary>
@@ -267,6 +308,15 @@ public class CompletionHandler : CompletionHandlerBase
                     Label = c.Name,
                     Kind = LspCompletionItemKind.Constant,
                     Detail = c.Detail
+                });
+            }
+            foreach (var e in BuiltInRegistry.Enums.Where(e => e.Namespace == prefix))
+            {
+                items.Add(new CompletionItem
+                {
+                    Label = e.Name,
+                    Kind = LspCompletionItemKind.Enum,
+                    Detail = e.Detail
                 });
             }
             return new CompletionList(items);
@@ -368,6 +418,30 @@ public class CompletionHandler : CompletionHandlerBase
                         Kind = LspCompletionItemKind.EnumMember,
                         Detail = sym.Detail
                     });
+                }
+            }
+
+            // Handle qualified namespace.enum prefix (e.g., task.Status.)
+            if (items.Count == 0 && prefix.Contains('.'))
+            {
+                int dotIndex = prefix.LastIndexOf('.');
+                string nsName = prefix.Substring(0, dotIndex);
+                string enumName = prefix.Substring(dotIndex + 1);
+                if (BuiltInRegistry.IsBuiltInNamespace(nsName))
+                {
+                    var nsEnumDef = allForEnum.FirstOrDefault(s => s.Name == enumName && s.Kind == Analysis.SymbolKind.Enum && s.ParentName == nsName);
+                    if (nsEnumDef != null)
+                    {
+                        foreach (var sym in allForEnum.Where(s => s.ParentName == enumName && s.Kind == Analysis.SymbolKind.EnumMember))
+                        {
+                            items.Add(new CompletionItem
+                            {
+                                Label = sym.Name,
+                                Kind = LspCompletionItemKind.EnumMember,
+                                Detail = sym.Detail
+                            });
+                        }
+                    }
                 }
             }
         }

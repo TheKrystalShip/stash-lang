@@ -94,6 +94,15 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             }
         }
 
+        foreach (var e in BuiltInRegistry.Enums)
+        {
+            _currentScope.AddSymbol(new SymbolInfo(e.Name, SymbolKind.Enum, span, span, e.Detail, parentName: e.Namespace));
+            foreach (var member in e.Members)
+            {
+                _currentScope.AddSymbol(new SymbolInfo(member, SymbolKind.EnumMember, span, detail: $"member of {e.Name}", parentName: e.Name));
+            }
+        }
+
         foreach (var fn in BuiltInRegistry.Functions)
         {
             _currentScope.AddSymbol(new SymbolInfo(fn.Name, SymbolKind.Function, span, span, fn.Detail, typeHint: fn.ReturnType, parameterNames: fn.ParamNames));

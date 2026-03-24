@@ -117,4 +117,11 @@ public class StashFunction : IStashCallable
     }
 
     public override string ToString() => $"<fn {_declaration.Name.Lexeme}>";
+
+    /// <summary>Creates a deep copy of this function with a snapshotted (deep-cloned) closure chain.</summary>
+    public StashFunction DeepCopyWithSnapshot()
+    {
+        Environment snapshotClosure = Environment.Snapshot(_closure);
+        return new StashFunction(_declaration, snapshotClosure);
+    }
 }

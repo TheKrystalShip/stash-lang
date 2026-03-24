@@ -19,23 +19,39 @@ public class DapIntegrationTests
 {
     // ── Reflection helpers ────────────────────────────────────────────────────
 
-    private static readonly FieldInfo IsPausedField =
-        typeof(DebugSession).GetField("_isPaused",
-            BindingFlags.NonPublic | BindingFlags.Instance)!;
-
-    private static readonly FieldInfo PauseReasonField =
-        typeof(DebugSession).GetField("_pauseReason",
+    private static readonly FieldInfo ThreadsField =
+        typeof(DebugSession).GetField("_threads",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
 
     private static readonly FieldInfo InterpreterThreadField =
         typeof(DebugSession).GetField("_interpreterThread",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
 
-    private static bool GetIsPaused(DebugSession session) =>
-        (bool)IsPausedField.GetValue(session)!;
+    private static object? GetMainThreadState(DebugSession session)
+    {
+        object? dict = ThreadsField.GetValue(session);
+        if (dict == null) return null;
+        MethodInfo tryGet = dict.GetType().GetMethod("TryGetValue")!;
+        object?[] parameters = new object?[] { 1, null };
+        bool found = (bool)tryGet.Invoke(dict, parameters)!;
+        return found ? parameters[1] : null;
+    }
 
-    private static PauseReason GetPauseReason(DebugSession session) =>
-        (PauseReason)PauseReasonField.GetValue(session)!;
+    private static bool GetIsPaused(DebugSession session)
+    {
+        object? ts = GetMainThreadState(session);
+        if (ts == null) return false;
+        FieldInfo field = ts.GetType().GetField("IsPaused")!;
+        return (bool)field.GetValue(ts)!;
+    }
+
+    private static PauseReason GetPauseReason(DebugSession session)
+    {
+        object? ts = GetMainThreadState(session);
+        if (ts == null) return PauseReason.Step;
+        FieldInfo field = ts.GetType().GetField("PauseReason")!;
+        return (PauseReason)field.GetValue(ts)!;
+    }
 
     private static void WaitForPause(DebugSession session, int timeoutMs = 5000)
     {

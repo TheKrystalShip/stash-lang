@@ -10,7 +10,7 @@ namespace Stash.Dap.Handlers;
 /// Handles the DAP <c>threads</c> request to enumerate all active threads in the debuggee.
 /// </summary>
 /// <remarks>
-/// The Stash runtime is single-threaded, so this handler always returns a single main thread.
+/// Returns the main thread and any active task threads spawned by <c>task.run()</c>.
 /// </remarks>
 public class StashThreadsHandler : ThreadsHandlerBase
 {
@@ -31,12 +31,12 @@ public class StashThreadsHandler : ThreadsHandlerBase
     /// </summary>
     /// <param name="request">The threads arguments.</param>
     /// <param name="cancellationToken">Token to cancel the request.</param>
-    /// <returns>A <see cref="Task{ThreadsResponse}"/> containing the single main thread.</returns>
+    /// <returns>A <see cref="Task{ThreadsResponse}"/> containing all active threads.</returns>
     public override Task<ThreadsResponse> Handle(ThreadsArguments request, CancellationToken cancellationToken)
     {
         return Task.FromResult(new ThreadsResponse
         {
-            Threads = new Container<DapThread>(new DapThread { Id = 1, Name = "Main Thread" }),
+            Threads = new Container<DapThread>(_session.GetThreads()),
         });
     }
 }

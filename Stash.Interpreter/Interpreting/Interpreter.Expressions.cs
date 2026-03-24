@@ -492,7 +492,7 @@ public partial class Interpreter
             FunctionSpan = functionSpan
         };
         _callStack.Add(callFrame);
-        _debugger?.OnFunctionEnter(functionName, expr.Span, _environment);
+        _debugger?.OnFunctionEnter(functionName, expr.Span, _environment, DebugThreadId);
 
         try
         {
@@ -502,7 +502,7 @@ public partial class Interpreter
         finally
         {
             _callStack.RemoveAt(_callStack.Count - 1);
-            _debugger?.OnFunctionExit(functionName);
+            _debugger?.OnFunctionExit(functionName, DebugThreadId);
         }
     }
 

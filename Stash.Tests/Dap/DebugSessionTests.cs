@@ -29,11 +29,11 @@ public class DebugSessionTests
         return (Variable)method.Invoke(session, new object?[] { name, value })!;
     }
 
-    private static string InvokeInterpolateLogMessage(DebugSession session, string template, Environment env)
+    private static string InvokeInterpolateLogMessage(DebugSession session, string template, Environment env, Interpreter? interpreter = null)
     {
         var method = typeof(DebugSession).GetMethod("InterpolateLogMessage",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-        return (string)method.Invoke(session, new object[] { template, env })!;
+        return (string)method.Invoke(session, new object?[] { template, env, interpreter })!;
     }
 
     private static void SetInterpreter(DebugSession session, Interpreter interpreter)
@@ -495,9 +495,10 @@ public class DebugSessionTests
     public void InterpolateLogMessage_WithExpression_Evaluates()
     {
         var session = new DebugSession();
-        SetInterpreter(session, new Interpreter());
+        var interpreter = new Interpreter();
+        SetInterpreter(session, interpreter);
         var env = new Environment();
-        var result = InvokeInterpolateLogMessage(session, "Result: {1 + 1}", env);
+        var result = InvokeInterpolateLogMessage(session, "Result: {1 + 1}", env, interpreter);
         Assert.Equal("Result: 2", result);
     }
 
@@ -505,10 +506,11 @@ public class DebugSessionTests
     public void InterpolateLogMessage_MissingCloseBrace_TreatsAsText()
     {
         var session = new DebugSession();
-        SetInterpreter(session, new Interpreter());
+        var interpreter = new Interpreter();
+        SetInterpreter(session, interpreter);
         var env = new Environment();
         // {unclosed has no matching } — characters are emitted as-is
-        var result = InvokeInterpolateLogMessage(session, "value={unclosed", env);
+        var result = InvokeInterpolateLogMessage(session, "value={unclosed", env, interpreter);
         Assert.Equal("value={unclosed", result);
     }
 
@@ -520,7 +522,7 @@ public class DebugSessionTests
         var session = new DebugSession();
         session.Disconnect();
         Assert.Throws<OperationCanceledException>(() =>
-            session.OnBeforeExecute(new SourceSpan("test.stash", 1, 1, 1, 10), new Environment()));
+            session.OnBeforeExecute(new SourceSpan("test.stash", 1, 1, 1, 10), new Environment(), 1));
     }
 
     [Fact]
@@ -529,10 +531,20 @@ public class DebugSessionTests
         var session = new DebugSession();
         var span = new SourceSpan("script.stash", 3, 1, 3, 20);
         // No step mode or pause requested — just records the span and returns.
-        session.OnBeforeExecute(span, new Environment());
-        var field = typeof(DebugSession).GetField("_pausedAtSpan",
+        // The constructor pre-registers a placeholder ThreadState for the main thread.
+        session.OnBeforeExecute(span, new Environment(), 1);
+
+        // PausedAtSpan is now on the per-thread ThreadState stored in _threads[1]
+        var threadsField = typeof(DebugSession).GetField("_threads",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-        var storedSpan = (SourceSpan?)field.GetValue(session);
+        object? dict = threadsField.GetValue(session);
+        MethodInfo tryGet = dict!.GetType().GetMethod("TryGetValue")!;
+        object?[] args = new object?[] { 1, null };
+        bool found = (bool)tryGet.Invoke(dict, args)!;
+        Assert.True(found);
+        object? threadState = args[1];
+        FieldInfo pausedAtSpanField = threadState!.GetType().GetField("PausedAtSpan")!;
+        var storedSpan = (SourceSpan?)pausedAtSpanField.GetValue(threadState);
         Assert.Equal(span, storedSpan);
     }
 

@@ -150,7 +150,7 @@ public partial class Interpreter
             _environment = moduleEnv;
 
             // Track loaded source for DAP
-            if (_loadedSources.Add(resolvedPath))
+            if (_loadedSources.TryAdd(resolvedPath, 0))
             {
                 _debugger?.OnSourceLoaded(resolvedPath);
             }

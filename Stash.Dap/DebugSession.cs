@@ -17,6 +17,7 @@ using OmniSharp.Extensions.DebugAdapter.Protocol.Events;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Models;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Server;
 using DapBreakpoint = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Breakpoint;
+using DapThread = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Thread;
 using StashBreakpoint = Stash.Debugging.Breakpoint;
 using StashEnv = Stash.Interpreting.Environment;
 
@@ -28,32 +29,27 @@ using StashEnv = Stash.Interpreting.Environment;
 /// </summary>
 public class DebugSession : IDebugger
 {
-    private const int ThreadId = 1; // Single-threaded interpreter
+    private const int MainThreadId = 1;
 
     // ── Core references ───────────────────────────────────────────────────────
 
     private IDebugAdapterServer? _server;
     private Interpreter? _interpreter;
 
-    // ── Pause/resume synchronization ─────────────────────────────────────────
+    // ── Thread registry ───────────────────────────────────────────────────────
 
-    /// <summary>
-    /// Gate starts signaled (true) so the interpreter runs freely.
-    /// Reset to block the interpreter thread; Set to unblock it.
-    /// </summary>
-    private readonly ManualResetEventSlim _pauseGate = new(initialState: true);
-    private volatile bool _isPaused;
-    private volatile bool _pauseRequested;
-    private PauseReason _pauseReason;
-    private SourceSpan? _pausedAtSpan;
-    private StashEnv? _pausedEnvironment;
+    private readonly ConcurrentDictionary<int, ThreadState> _threads = new();
+
+    public DebugSession()
+    {
+        // Pre-register a placeholder for the main thread so DAP clients can
+        // query threads (and Pause/IsPauseRequested work) before Launch is called.
+        _threads[MainThreadId] = new ThreadState { Id = MainThreadId, Name = "Main Thread" };
+    }
 
     // ── Stepping state ────────────────────────────────────────────────────────
 
     private enum StepMode { None, StepIn, StepOver, StepOut }
-
-    private volatile StepMode _stepMode = StepMode.None;
-    private int _stepDepth; // call stack depth when step was initiated
 
     // ── Breakpoints ───────────────────────────────────────────────────────────
 
@@ -122,6 +118,25 @@ public class DebugSession : IDebugger
     }
 
     /// <summary>
+    /// Per-thread debug state. Each logical thread (main + spawned tasks) has
+    /// its own pause gate, stepping state, and paused location.
+    /// </summary>
+    private sealed class ThreadState
+    {
+        public int Id { get; init; }
+        public string Name { get; init; } = "";
+        public Interpreter Interpreter { get; init; } = null!;
+        public ManualResetEventSlim PauseGate { get; } = new(initialState: true);
+        public volatile bool IsPaused;
+        public volatile bool PauseRequested;
+        public StepMode StepMode;
+        public int StepDepth;
+        public SourceSpan? PausedAtSpan;
+        public StashEnv? PausedEnvironment;
+        public PauseReason PauseReason;
+    }
+
+    /// <summary>
     /// TextWriter that forwards writes to DAP output events.
     /// Used to redirect interpreter stdout/stderr through the debug adapter.
     /// </summary>
@@ -155,7 +170,7 @@ public class DebugSession : IDebugger
     // ── IDebugger properties ──────────────────────────────────────────────────
 
     public bool StopOnEntry => _stopOnEntry;
-    public bool IsPauseRequested => _pauseRequested;
+    public bool IsPauseRequested => _threads.TryGetValue(MainThreadId, out var ts) && ts.PauseRequested;
 
     // ── Diagnostic logging ────────────────────────────────────────────────────
 
@@ -220,6 +235,15 @@ public class DebugSession : IDebugger
         // Redirect interpreter output through DAP
         _interpreter.Output = new DapOutputWriter(this, "stdout");
         _interpreter.ErrorOutput = new DapOutputWriter(this, "stderr");
+
+        // Register main thread in the thread registry
+        var mainThread = new ThreadState
+        {
+            Id = MainThreadId,
+            Name = "Main Thread",
+            Interpreter = _interpreter,
+        };
+        _threads[MainThreadId] = mainThread;
 
         // Configure test mode if requested
         if (testMode)
@@ -393,64 +417,79 @@ public class DebugSession : IDebugger
     }
 
     /// <summary>Resumes execution without stepping constraints.</summary>
-    public void Continue()
+    public void Continue(int threadId = MainThreadId)
     {
-        Trace("Continue");
-        _stepMode = StepMode.None;
-        Resume();
+        Trace($"Continue thread {threadId}");
+        var thread = GetThread(threadId);
+        if (thread == null) return;
+        thread.StepMode = StepMode.None;
+        Resume(thread);
     }
 
     /// <summary>Steps over the next statement (does not enter function calls).</summary>
-    public void Next()
+    public void Next(int threadId = MainThreadId)
     {
-        _stepMode = StepMode.StepOver;
-        _stepDepth = _interpreter?.CallStack.Count ?? 0;
-        Resume();
+        var thread = GetThread(threadId);
+        if (thread == null) return;
+        thread.StepMode = StepMode.StepOver;
+        thread.StepDepth = thread.Interpreter?.CallStack.Count ?? 0;
+        Resume(thread);
     }
 
     /// <summary>Steps into the next statement or function call.</summary>
-    public void StepIn()
+    public void StepIn(int threadId = MainThreadId)
     {
-        _stepMode = StepMode.StepIn;
-        Resume();
+        var thread = GetThread(threadId);
+        if (thread == null) return;
+        thread.StepMode = StepMode.StepIn;
+        Resume(thread);
     }
 
     /// <summary>Runs until the current function returns.</summary>
-    public void StepOut()
+    public void StepOut(int threadId = MainThreadId)
     {
-        var depth = _interpreter?.CallStack.Count ?? 0;
+        var thread = GetThread(threadId);
+        if (thread == null) return;
+        int depth = thread.Interpreter?.CallStack.Count ?? 0;
         if (depth == 0)
         {
-            // At top-level; treat as continue since there's nothing to step out of
-            Continue();
+            Continue(threadId);
             return;
         }
-        _stepMode = StepMode.StepOut;
-        _stepDepth = depth;
-        Resume();
+        thread.StepMode = StepMode.StepOut;
+        thread.StepDepth = depth;
+        Resume(thread);
     }
 
     /// <summary>Requests the interpreter to pause at the next statement.</summary>
-    public void Pause()
+    public void Pause(int threadId = MainThreadId)
     {
-        _pauseRequested = true;
+        var thread = GetThread(threadId);
+        if (thread != null)
+        {
+            thread.PauseRequested = true;
+        }
     }
 
     /// <summary>Returns the current call stack as DAP StackFrame objects.</summary>
-    public IReadOnlyList<StackFrame> GetStackTrace()
+    public IReadOnlyList<StackFrame> GetStackTrace(int threadId = MainThreadId)
     {
         var frames = new List<StackFrame>();
-        if (_interpreter == null)
+        var thread = GetThread(threadId);
+        if (thread == null)
         {
             return frames;
         }
 
-        var callStack = _interpreter.CallStack;
+        var interpreter = thread.Interpreter;
+        if (interpreter == null) return frames; // Placeholder thread — not yet launched
+        var callStack = interpreter.CallStack;
+        var pausedSpan = thread.PausedAtSpan;
 
         if (callStack.Count == 0)
         {
             // Executing at global (top-level) scope — single frame
-            frames.Add(MakeScriptFrame(0, _pausedAtSpan));
+            frames.Add(MakeScriptFrame(0, pausedSpan));
         }
         else
         {
@@ -460,11 +499,11 @@ public class DebugSession : IDebugger
             {
                 Id = topFrame.Id,
                 Name = topFrame.FunctionName,
-                Source = MakeSource(_pausedAtSpan?.File),
-                Line = _pausedAtSpan?.StartLine ?? 0,
-                Column = _pausedAtSpan?.StartColumn ?? 0,
-                EndLine = _pausedAtSpan?.EndLine,
-                EndColumn = _pausedAtSpan?.EndColumn,
+                Source = MakeSource(pausedSpan?.File),
+                Line = pausedSpan?.StartLine ?? 0,
+                Column = pausedSpan?.StartColumn ?? 0,
+                EndLine = pausedSpan?.EndLine,
+                EndColumn = pausedSpan?.EndColumn,
             });
 
             // Intermediate frames: each shows where the inner function was called from
@@ -707,16 +746,20 @@ public class DebugSession : IDebugger
     public string Evaluate(string expression, int? frameId)
     {
         Trace($"Evaluate: {expression}");
-        if (_interpreter == null)
+
+        Interpreter? interpreter = null;
+        StashEnv? env = null;
+
+        if (frameId.HasValue)
         {
-            return "No interpreter";
+            (interpreter, env) = ResolveContextForFrame(frameId.Value);
         }
 
-        var env = frameId.HasValue
-            ? (ResolveEnvironmentForFrame(frameId.Value) ?? _interpreter.Globals)
-            : (_pausedEnvironment ?? _interpreter.Globals);
+        interpreter ??= _interpreter;
+        if (interpreter == null) return "No interpreter";
+        env ??= interpreter.Globals;
 
-        var (value, error) = _interpreter.EvaluateString(expression, env);
+        var (value, error) = interpreter.EvaluateString(expression, env);
         return error != null ? $"Error: {error}" : RuntimeValues.Stringify(value);
     }
 
@@ -743,9 +786,38 @@ public class DebugSession : IDebugger
             throw new InvalidOperationException($"Unknown variable reference: {variablesReference}");
         }
 
-        // Parse and evaluate the new value expression
-        var env = _pausedEnvironment ?? _interpreter.Globals;
-        var (newValue, error) = _interpreter.EvaluateString(value, env);
+        // Parse and evaluate the new value expression — find the interpreter
+        // that owns this container's environment so task-thread variables resolve correctly.
+        Interpreter? interpreter = _interpreter;
+        StashEnv? env = null;
+        if (container.Environment != null)
+        {
+            foreach (var thread in _threads.Values)
+            {
+                if (thread.PausedEnvironment == container.Environment
+                    || thread.Interpreter.Globals == container.Environment)
+                {
+                    interpreter = thread.Interpreter;
+                    break;
+                }
+
+                bool found = false;
+                foreach (var frame in thread.Interpreter.CallStack)
+                {
+                    if (frame.LocalScope == container.Environment)
+                    {
+                        interpreter = thread.Interpreter;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (found) break;
+            }
+        }
+
+        env = container.Environment ?? interpreter!.Globals;
+        var (newValue, error) = interpreter!.EvaluateString(value, env);
         if (error != null)
         {
             throw new InvalidOperationException($"Failed to evaluate value: {error}");
@@ -803,6 +875,21 @@ public class DebugSession : IDebugger
         return FormatVariable(name, newValue);
     }
 
+    /// <summary>Returns all active threads for the DAP threads request.</summary>
+    public IReadOnlyList<DapThread> GetThreads()
+    {
+        var threads = new List<DapThread>();
+        foreach (var ts in _threads.Values.OrderBy(t => t.Id))
+        {
+            threads.Add(new DapThread
+            {
+                Id = ts.Id,
+                Name = ts.Name,
+            });
+        }
+        return threads;
+    }
+
     /// <summary>Returns all source files that have been loaded during this session.</summary>
     public IReadOnlyList<Source> GetLoadedSources()
     {
@@ -830,9 +917,13 @@ public class DebugSession : IDebugger
             _loadedSources.Clear();
         }
 
-        if (_isPaused)
+        // Resume all paused threads
+        foreach (var thread in _threads.Values)
         {
-            _pauseGate.Set();
+            if (thread.IsPaused)
+            {
+                thread.PauseGate.Set();
+            }
         }
 
         _interpreterThread?.Interrupt();
@@ -876,38 +967,42 @@ public class DebugSession : IDebugger
     /// </remarks>
     /// <param name="span">The source span of the statement about to execute.</param>
     /// <param name="environment">The active <see cref="StashEnv"/> at the pause point.</param>
+    /// <param name="threadId">The ID of the thread executing this statement.</param>
     /// <exception cref="OperationCanceledException">Thrown when the session has been terminated via <see cref="Disconnect"/>.</exception>
-    public void OnBeforeExecute(SourceSpan span, StashEnv environment)
+    public void OnBeforeExecute(SourceSpan span, StashEnv environment, int threadId)
     {
         if (_terminated)
         {
             throw new OperationCanceledException("Debug session terminated.");
         }
 
-        _pausedAtSpan = span;
-        _pausedEnvironment = environment;
+        var thread = GetThread(threadId);
+        if (thread == null) return; // Unknown thread — skip debugging
+
+        thread.PausedAtSpan = span;
+        thread.PausedEnvironment = environment;
 
         bool shouldPause = false;
         PauseReason reason = PauseReason.Step;
 
-        if (_pauseRequested)
+        if (thread.PauseRequested)
         {
-            _pauseRequested = false;
+            thread.PauseRequested = false;
             shouldPause = true;
             reason = PauseReason.Pause;
         }
-        else if (_stopOnEntry)
+        else if (_stopOnEntry && threadId == MainThreadId)
         {
             _stopOnEntry = false; // Only fire once
             shouldPause = true;
             reason = PauseReason.Entry;
         }
-        else if (ShouldStopForStep())
+        else if (ShouldStopForStep(thread))
         {
             shouldPause = true;
             reason = PauseReason.Step;
         }
-        else if (CheckBreakpointAtSpan(span, environment))
+        else if (CheckBreakpointAtSpan(span, environment, thread.Interpreter))
         {
             shouldPause = true;
             reason = PauseReason.Breakpoint;
@@ -915,18 +1010,13 @@ public class DebugSession : IDebugger
 
         if (shouldPause)
         {
-            Trace($"Paused at {span.File}:{span.StartLine} reason={reason}");
-            _isPaused = true;
-            _pauseReason = reason;
-            lock (_variableReferences)
-            {
-                _variableReferences.Clear();
-                _nextVariableReference = 1;
-            }
-            _pauseGate.Reset(); // Block interpreter thread
-            SendStopped(reason);
-            _pauseGate.Wait(); // Wait until Continue/Step/StepIn/StepOut is called
-            _isPaused = false;
+            Trace($"Paused thread {threadId} at {span.File}:{span.StartLine} reason={reason}");
+            thread.IsPaused = true;
+            thread.PauseReason = reason;
+            thread.PauseGate.Reset(); // Block interpreter thread
+            SendStopped(reason, threadId);
+            thread.PauseGate.Wait(); // Wait until Continue/Step/StepIn/StepOut is called
+            thread.IsPaused = false;
         }
     }
 
@@ -942,7 +1032,8 @@ public class DebugSession : IDebugger
     /// <param name="functionName">The name of the function being entered.</param>
     /// <param name="callSite">The <see cref="SourceSpan"/> of the call expression.</param>
     /// <param name="localScope">The newly created local <see cref="StashEnv"/> for the function call.</param>
-    public void OnFunctionEnter(string functionName, SourceSpan callSite, StashEnv localScope)
+    /// <param name="threadId">The ID of the thread entering the function.</param>
+    public void OnFunctionEnter(string functionName, SourceSpan callSite, StashEnv localScope, int threadId)
     {
         // Check for function breakpoint hit — snapshot entry under lock
         FunctionBreakpointEntry? entry;
@@ -958,10 +1049,14 @@ public class DebugSession : IDebugger
             hitCount = entry.HitCount;
         }
 
-        // Evaluate condition if present
-        if (entry.Condition != null && _interpreter != null)
+        var thread = GetThread(threadId);
+        if (thread == null) return;
+
+        // Evaluate condition if present — use the thread's own interpreter so
+        // conditions can see local variables from worker threads.
+        if (entry.Condition != null)
         {
-            var (condValue, condError) = _interpreter.EvaluateString(entry.Condition, localScope);
+            var (condValue, condError) = thread.Interpreter.EvaluateString(entry.Condition, localScope);
             if (condError != null || !RuntimeValues.IsTruthy(condValue))
             {
                 return;
@@ -974,20 +1069,15 @@ public class DebugSession : IDebugger
             return;
         }
 
-        Trace($"Function breakpoint hit: {functionName}");
-        _pausedAtSpan = callSite;
-        _pausedEnvironment = localScope;
-        _isPaused = true;
-        _pauseReason = PauseReason.FunctionBreakpoint;
-        lock (_variableReferences)
-        {
-            _variableReferences.Clear();
-            _nextVariableReference = 1;
-        }
-        _pauseGate.Reset();
-        SendStopped(PauseReason.FunctionBreakpoint);
-        _pauseGate.Wait();
-        _isPaused = false;
+        Trace($"Function breakpoint hit: {functionName} on thread {threadId}");
+        thread.PausedAtSpan = callSite;
+        thread.PausedEnvironment = localScope;
+        thread.IsPaused = true;
+        thread.PauseReason = PauseReason.FunctionBreakpoint;
+        thread.PauseGate.Reset();
+        SendStopped(PauseReason.FunctionBreakpoint, threadId);
+        thread.PauseGate.Wait();
+        thread.IsPaused = false;
     }
 
     /// <summary>
@@ -996,7 +1086,8 @@ public class DebugSession : IDebugger
     /// call-stack depth on the subsequent <see cref="OnBeforeExecute"/> call.
     /// </summary>
     /// <param name="functionName">The name of the function that has exited.</param>
-    public void OnFunctionExit(string functionName)
+    /// <param name="threadId">The ID of the thread exiting the function.</param>
+    public void OnFunctionExit(string functionName, int threadId)
     {
         // Step-out detection happens via ShouldStopForStep checking CallStack.Count
     }
@@ -1008,25 +1099,59 @@ public class DebugSession : IDebugger
     /// </summary>
     /// <param name="error">The runtime error that was raised.</param>
     /// <param name="callStack">The interpreter's call stack at the point of the error.</param>
-    public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack)
+    /// <param name="threadId">The ID of the thread on which the error occurred.</param>
+    public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack, int threadId)
     {
         SendOutput("stderr", $"Runtime error: {error.Message}\n");
 
         if (_breakOnAllExceptions)
         {
-            _pausedAtSpan = error.Span;
-            _isPaused = true;
-            _pauseReason = PauseReason.Exception;
-            lock (_variableReferences)
-            {
-                _variableReferences.Clear();
-                _nextVariableReference = 1;
-            }
-            _pauseGate.Reset();
-            SendStopped(PauseReason.Exception, error.Message);
-            _pauseGate.Wait();
-            _isPaused = false;
+            var thread = GetThread(threadId);
+            if (thread == null) return;
+
+            thread.PausedAtSpan = error.Span;
+            thread.IsPaused = true;
+            thread.PauseReason = PauseReason.Exception;
+            thread.PauseGate.Reset();
+            SendStopped(PauseReason.Exception, threadId, error.Message);
+            thread.PauseGate.Wait();
+            thread.IsPaused = false;
         }
+    }
+
+    /// <summary>
+    /// Called when a task.run() spawns a new child interpreter.
+    /// Registers the thread for multi-threaded debugging.
+    /// </summary>
+    public void OnThreadStarted(int threadId, string name, Interpreter interpreter)
+    {
+        var state = new ThreadState
+        {
+            Id = threadId,
+            Name = name,
+            Interpreter = interpreter,
+        };
+        _threads[threadId] = state;
+        Trace($"Thread started: {threadId} ({name})");
+        _server?.SendThread(new ThreadEvent { Reason = ThreadEventReason.Started, ThreadId = threadId });
+    }
+
+    /// <summary>
+    /// Called when a task completes. Deregisters the thread.
+    /// </summary>
+    public void OnThreadExited(int threadId)
+    {
+        if (_threads.TryRemove(threadId, out var state))
+        {
+            // Resume the thread if it's paused (it's about to exit)
+            if (state.IsPaused)
+            {
+                state.PauseGate.Set();
+            }
+            state.PauseGate.Dispose();
+        }
+        Trace($"Thread exited: {threadId}");
+        _server?.SendThread(new ThreadEvent { Reason = ThreadEventReason.Exited, ThreadId = threadId });
     }
 
     /// <summary>
@@ -1106,13 +1231,26 @@ public class DebugSession : IDebugger
     // ── Private helpers ────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Unblocks the interpreter thread by signaling <see cref="_pauseGate"/>.
-    /// Called by all step/continue operations after updating <see cref="_stepMode"/>.
+    /// Gets the <see cref="ThreadState"/> for the given thread ID, or null if not found.
     /// </summary>
-    private void Resume()
+    private ThreadState? GetThread(int threadId)
     {
-        _isPaused = false;
-        _pauseGate.Set();
+        _threads.TryGetValue(threadId, out var ts);
+        return ts;
+    }
+
+    /// <summary>
+    /// Unblocks the interpreter thread by signaling the thread's pause gate.
+    /// Called by all step/continue operations after updating <see cref="ThreadState.StepMode"/>.
+    /// </summary>
+    private void Resume(ThreadState thread)
+    {
+        lock (_variableReferences)
+        {
+            _variableReferences.Clear();
+        }
+        thread.IsPaused = false;
+        thread.PauseGate.Set();
     }
 
     /// <summary>
@@ -1155,8 +1293,9 @@ public class DebugSession : IDebugger
     /// to the corresponding <see cref="StoppedEventReason"/> value.
     /// </summary>
     /// <param name="reason">The reason execution has paused.</param>
+    /// <param name="threadId">The ID of the thread that paused.</param>
     /// <param name="description">Optional human-readable description forwarded to the client (e.g. exception message).</param>
-    private void SendStopped(PauseReason reason, string? description = null)
+    private void SendStopped(PauseReason reason, int threadId, string? description = null)
     {
         if (_server == null)
         {
@@ -1177,9 +1316,9 @@ public class DebugSession : IDebugger
         _server.SendStopped(new StoppedEvent
         {
             Reason = stopReason,
-            ThreadId = ThreadId,
+            ThreadId = threadId,
             Description = description,
-            AllThreadsStopped = true,
+            AllThreadsStopped = false,
         });
     }
 
@@ -1258,44 +1397,79 @@ public class DebugSession : IDebugger
     }
 
     /// <summary>
-    /// Resolves the active <see cref="StashEnv"/> for a given DAP frame ID.
-    /// The top frame uses <c>_pausedEnvironment</c> (the innermost active scope).
-    /// Deeper frames use the <see cref="CallFrame.LocalScope"/> recorded on entry.
+    /// Resolves both the <see cref="Interpreter"/> and the active <see cref="StashEnv"/> for a given DAP frame ID.
     /// </summary>
-    private StashEnv? ResolveEnvironmentForFrame(int frameId)
+    private (Interpreter? Interpreter, StashEnv? Environment) ResolveContextForFrame(int frameId)
     {
-        if (_interpreter == null)
+        foreach (var thread in _threads.Values)
         {
-            return null;
-        }
+            var interpreter = thread.Interpreter;
+            var callStack = interpreter.CallStack;
 
-        var callStack = _interpreter.CallStack;
-
-        // Global/script scope when no functions are on the stack
-        if (callStack.Count == 0 && frameId == 0)
-        {
-            return _pausedEnvironment ?? _interpreter.Globals;
-        }
-
-        // Top frame — use the active (innermost) paused environment
-        if (callStack.Count > 0 && callStack[callStack.Count - 1].Id == frameId)
-        {
-            return _pausedEnvironment ?? callStack[callStack.Count - 1].LocalScope;
-        }
-
-        // Intermediate frames — use the environment recorded when the function was entered
-        for (int i = callStack.Count - 2; i >= 0; i--)
-        {
-            if (callStack[i].Id == frameId)
+            if (callStack.Count == 0 && frameId == 0)
             {
-                return callStack[i].LocalScope;
+                return (interpreter, thread.PausedEnvironment ?? interpreter.Globals);
+            }
+
+            if (callStack.Count > 0 && callStack[callStack.Count - 1].Id == frameId)
+            {
+                return (interpreter, thread.PausedEnvironment ?? callStack[callStack.Count - 1].LocalScope);
+            }
+
+            for (int i = callStack.Count - 2; i >= 0; i--)
+            {
+                if (callStack[i].Id == frameId)
+                {
+                    return (interpreter, callStack[i].LocalScope);
+                }
+            }
+
+            if (frameId == 0 && callStack.Count > 0)
+            {
+                return (interpreter, interpreter.Globals);
             }
         }
 
-        // Synthetic script frame at the bottom
-        if (frameId == 0)
+        return (null, null);
+    }
+
+    /// <summary>
+    /// Resolves the active <see cref="StashEnv"/> for a given DAP frame ID.
+    /// Searches all active threads for the matching frame.
+    /// </summary>
+    private StashEnv? ResolveEnvironmentForFrame(int frameId)
+    {
+        foreach (var thread in _threads.Values)
         {
-            return _interpreter.Globals;
+            var interpreter = thread.Interpreter;
+            var callStack = interpreter.CallStack;
+
+            // Global/script scope when no functions are on the stack
+            if (callStack.Count == 0 && frameId == 0)
+            {
+                return thread.PausedEnvironment ?? interpreter.Globals;
+            }
+
+            // Top frame — use the active (innermost) paused environment
+            if (callStack.Count > 0 && callStack[callStack.Count - 1].Id == frameId)
+            {
+                return thread.PausedEnvironment ?? callStack[callStack.Count - 1].LocalScope;
+            }
+
+            // Intermediate frames — use the environment recorded when the function was entered
+            for (int i = callStack.Count - 2; i >= 0; i--)
+            {
+                if (callStack[i].Id == frameId)
+                {
+                    return callStack[i].LocalScope;
+                }
+            }
+
+            // Synthetic script frame at the bottom
+            if (frameId == 0 && callStack.Count > 0)
+            {
+                return interpreter.Globals;
+            }
         }
 
         return null;
@@ -1306,7 +1480,7 @@ public class DebugSession : IDebugger
     /// Handles conditions, hit counts, and logpoints.
     /// Returns true only if execution should pause.
     /// </summary>
-    private bool CheckBreakpointAtSpan(SourceSpan span, StashEnv environment)
+    private bool CheckBreakpointAtSpan(SourceSpan span, StashEnv environment, Interpreter? interpreter)
     {
         if (span.File == null)
         {
@@ -1335,9 +1509,9 @@ public class DebugSession : IDebugger
         }
 
         // Evaluate condition expression if present
-        if (hit.Condition != null && _interpreter != null)
+        if (hit.Condition != null && interpreter != null)
         {
-            var (condValue, condError) = _interpreter.EvaluateString(hit.Condition, environment);
+            var (condValue, condError) = interpreter.EvaluateString(hit.Condition, environment);
             if (condError != null || !RuntimeValues.IsTruthy(condValue))
             {
                 return false;
@@ -1354,7 +1528,7 @@ public class DebugSession : IDebugger
         // Logpoint: interpolate the message and send as output — do NOT pause
         if (hit.IsLogpoint)
         {
-            var msg = InterpolateLogMessage(hit.LogMessage!, environment);
+            var msg = InterpolateLogMessage(hit.LogMessage!, environment, interpreter);
             SendOutput("console", msg + "\n");
             return false;
         }
@@ -1415,9 +1589,9 @@ public class DebugSession : IDebugger
     /// <summary>
     /// Replaces <c>{expression}</c> placeholders in a logpoint template with evaluated values.
     /// </summary>
-    private string InterpolateLogMessage(string template, StashEnv environment)
+    private string InterpolateLogMessage(string template, StashEnv environment, Interpreter? interpreter)
     {
-        if (_interpreter == null)
+        if (interpreter == null)
         {
             return template;
         }
@@ -1432,7 +1606,7 @@ public class DebugSession : IDebugger
                 if (end > i)
                 {
                     var expr = template[(i + 1)..end];
-                    var (value, error) = _interpreter.EvaluateString(expr, environment);
+                    var (value, error) = interpreter.EvaluateString(expr, environment);
                     sb.Append(error != null ? $"{{error: {error}}}" : RuntimeValues.Stringify(value));
                     i = end + 1;
                     continue;
@@ -1568,32 +1742,33 @@ public class DebugSession : IDebugger
 
     /// <summary>
     /// Determines whether the current step mode requires pausing at this point.
-    /// Mutates <c>_stepMode</c> to <c>None</c> when a step completes.
+    /// Mutates <see cref="ThreadState.StepMode"/> to <c>None</c> when a step completes.
     /// </summary>
-    private bool ShouldStopForStep()
+    private bool ShouldStopForStep(ThreadState thread)
     {
-        var depth = _interpreter?.CallStack.Count ?? 0;
-        switch (_stepMode)
+        if (thread.Interpreter == null) return false;
+        int depth = thread.Interpreter.CallStack.Count;
+        switch (thread.StepMode)
         {
             case StepMode.StepIn:
                 // Stop at the very next statement, regardless of depth
-                _stepMode = StepMode.None;
+                thread.StepMode = StepMode.None;
                 return true;
 
             case StepMode.StepOver:
                 // Stop when we return to the same or shallower call depth
-                if (depth <= _stepDepth)
+                if (depth <= thread.StepDepth)
                 {
-                    _stepMode = StepMode.None;
+                    thread.StepMode = StepMode.None;
                     return true;
                 }
                 return false;
 
             case StepMode.StepOut:
                 // Stop when we return to a shallower call depth
-                if (depth < _stepDepth)
+                if (depth < thread.StepDepth)
                 {
-                    _stepMode = StepMode.None;
+                    thread.StepMode = StepMode.None;
                     return true;
                 }
                 return false;

@@ -28,6 +28,14 @@ public class StashInstance
         _fields = fields;
     }
 
+    /// <summary>Creates a new instance with the given type name, fields, and optional struct definition.</summary>
+    public StashInstance(string typeName, Dictionary<string, object?> fields, StashStruct? structDef)
+    {
+        TypeName = typeName;
+        Struct = structDef;
+        _fields = fields;
+    }
+
     public object? GetField(string name, SourceSpan? span)
     {
         if (_fields.TryGetValue(name, out object? value))
@@ -58,6 +66,12 @@ public class StashInstance
     /// Gets all fields of this instance for debugging/inspection.
     /// </summary>
     public IReadOnlyDictionary<string, object?> GetFields() => _fields;
+
+    /// <summary>Returns all field name-value pairs.</summary>
+    public IEnumerable<KeyValuePair<string, object?>> GetAllFields()
+    {
+        return _fields;
+    }
 
     [ThreadStatic]
     private static HashSet<StashInstance>? _toStringGuard;

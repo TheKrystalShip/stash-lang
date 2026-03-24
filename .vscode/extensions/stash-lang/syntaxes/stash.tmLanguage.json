@@ -164,6 +164,7 @@
       },
       "patterns": [
         { "include": "#comments" },
+        { "include": "#self-keyword" },
         { "include": "#function-declaration" },
         { "include": "#return-type-annotation" },
         {
@@ -172,6 +173,7 @@
           "end": "\\}",
           "endCaptures": { "0": { "name": "punctuation.section.block.end.stash" } },
           "patterns": [
+            { "include": "#self-keyword" },
             { "include": "$self" }
           ]
         },
@@ -574,6 +576,11 @@
     "identifiers": {
       "name": "variable.other.stash",
       "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
+    },
+
+    "self-keyword": {
+      "name": "variable.language.self.stash",
+      "match": "\\bself\\b"
     }
   }
 }

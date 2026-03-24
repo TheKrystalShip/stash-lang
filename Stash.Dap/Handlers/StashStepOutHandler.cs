@@ -33,7 +33,7 @@ public class StashStepOutHandler : StepOutHandlerBase
     /// <returns>A <see cref="Task{StepOutResponse}"/> representing the response.</returns>
     public override Task<StepOutResponse> Handle(StepOutArguments request, CancellationToken cancellationToken)
     {
-        _session.StepOut();
+        _session.StepOut((int)request.ThreadId);
         return Task.FromResult(new StepOutResponse());
     }
 }

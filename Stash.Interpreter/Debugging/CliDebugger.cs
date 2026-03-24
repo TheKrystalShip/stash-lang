@@ -113,7 +113,7 @@ public class CliDebugger : IDebugger
     }
 
     /// <inheritdoc />
-    public void OnBeforeExecute(SourceSpan span, StashEnv env)
+    public void OnBeforeExecute(SourceSpan span, StashEnv env, int threadId)
     {
         _currentSpan = span;
         _currentEnv = env;
@@ -184,19 +184,19 @@ public class CliDebugger : IDebugger
     }
 
     /// <inheritdoc />
-    public void OnFunctionEnter(string name, SourceSpan callSite, StashEnv env)
+    public void OnFunctionEnter(string name, SourceSpan callSite, StashEnv env, int threadId)
     {
         _currentDepth++;
     }
 
     /// <inheritdoc />
-    public void OnFunctionExit(string name)
+    public void OnFunctionExit(string name, int threadId)
     {
         _currentDepth--;
     }
 
     /// <inheritdoc />
-    public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack)
+    public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack, int threadId)
     {
         _callStack = callStack;
         Console.WriteLine($"Runtime error: {error.Message}");

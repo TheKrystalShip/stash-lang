@@ -34,7 +34,7 @@ public class StashStackTraceHandler : StackTraceHandlerBase
     /// <returns>A <see cref="Task{StackTraceResponse}"/> containing the stack frames and total frame count.</returns>
     public override Task<StackTraceResponse> Handle(StackTraceArguments request, CancellationToken cancellationToken)
     {
-        var frames = _session.GetStackTrace();
+        var frames = _session.GetStackTrace((int)request.ThreadId);
         return Task.FromResult(new StackTraceResponse
         {
             StackFrames = new Container<StackFrame>(frames),

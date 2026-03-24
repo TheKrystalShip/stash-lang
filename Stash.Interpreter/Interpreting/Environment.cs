@@ -358,4 +358,70 @@ public class Environment
             current = current.Enclosing;
         }
     }
+
+    /// <summary>
+    /// Private constructor for creating snapshot copies with a specific enclosing scope.
+    /// </summary>
+    private Environment(Environment? enclosing, bool isGlobal)
+    {
+        Enclosing = enclosing;
+        if (isGlobal)
+        {
+            _values = new Dictionary<string, object?>();
+            _constants = new HashSet<string>();
+        }
+        else
+        {
+            _slots = new object?[4];
+            _slotNames = new string[4];
+        }
+    }
+
+    /// <summary>
+    /// Creates a deep copy of the given environment chain for snapshot isolation.
+    /// The global scope (root of the chain) is shared by reference — it contains
+    /// frozen namespaces and immutable built-in bindings. Local scopes are deep-copied
+    /// with their slot values recursively cloned via <see cref="RuntimeValues.DeepCopy"/>.
+    /// </summary>
+    public static Environment Snapshot(Environment source)
+    {
+        // Global scope is intentionally shared by reference — it contains frozen
+        // built-in namespaces and constant definitions. User code that defines
+        // mutable globals must use task-local state to avoid races.
+        if (source._values is not null)
+        {
+            return source;
+        }
+
+        // First, snapshot the enclosing chain recursively
+        Environment? snapshotEnclosing = source.Enclosing is not null
+            ? Snapshot(source.Enclosing)
+            : null;
+
+        // Create a new local environment linked to the snapshotted enclosing
+        var snapshot = new Environment(snapshotEnclosing, isGlobal: false);
+
+        // Deep-copy slot data
+        if (source._slots is not null)
+        {
+            int count = source._slotCount;
+            snapshot._slots = new object?[source._slots.Length];
+            snapshot._slotNames = new string[source._slotNames!.Length];
+            snapshot._slotCount = count;
+
+            for (int i = 0; i < count; i++)
+            {
+                snapshot._slots[i] = RuntimeValues.DeepCopy(source._slots[i]);
+                snapshot._slotNames[i] = source._slotNames[i];
+            }
+
+            // Copy constant slot markers
+            if (source._constSlots is not null)
+            {
+                snapshot._constSlots = new HashSet<int>(source._constSlots);
+            }
+        }
+
+        return snapshot;
+    }
 }

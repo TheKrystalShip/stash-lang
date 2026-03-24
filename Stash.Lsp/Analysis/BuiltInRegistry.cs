@@ -43,6 +43,11 @@ public static class BuiltInRegistry
         }
     }
 
+    public record BuiltInEnum(string Name, string[] Members, string? Namespace = null)
+    {
+        public string Detail => $"enum {Name} {{ {string.Join(", ", Members)} }}";
+    }
+
     public record NamespaceFunction(string Namespace, string Name, BuiltInParam[] Parameters, string? ReturnType = null, bool IsVariadic = false, string? Documentation = null)
     {
         public string QualifiedName => $"{Namespace}.{Name}";
@@ -87,6 +92,18 @@ public static class BuiltInRegistry
             new("body", "string"),
             new("headers", "dict"),
         }),
+        new BuiltInStruct("TaskHandle", new BuiltInField[]
+        {
+            new("id", "int"),
+            new("status", "Status"),
+        }),
+    };
+
+    // ── Built-in Enums ──
+
+    public static readonly IReadOnlyList<BuiltInEnum> Enums = new[]
+    {
+        new BuiltInEnum("Status", new[] { "Running", "Completed", "Failed", "Cancelled" }, "task"),
     };
 
     // ── Built-in Global Functions ──
@@ -347,6 +364,12 @@ public static class BuiltInRegistry
             Documentation: "Returns a new array containing only elements for which the predicate function returns a truthy value.\n@param array The source array\n@param fn A predicate function that takes an element and returns a truthy or falsy value\n@return A new array of matching elements"),
         new NamespaceFunction("arr", "forEach", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") },
             Documentation: "Calls a function for each element in the array.\n@param array The array to iterate\n@param fn A function to call with each element"),
+        new NamespaceFunction("arr", "parMap", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function"), new BuiltInParam("maxConcurrency", "int") }, "array", IsVariadic: true,
+            Documentation: "Like arr.map() but runs the mapping function in parallel; results maintain order.\nApplies `fn` to each element in parallel using the .NET thread pool. Results maintain the original array order. Each parallel invocation gets a snapshot of the current scope. Optional `maxConcurrency` limits the number of parallel operations.\n@param array Array to map over\n@param fn Mapping function applied to each element\n@param maxConcurrency Maximum parallel operations (default: unlimited)\n@return A new array of transformed elements in original order"),
+        new NamespaceFunction("arr", "parFilter", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function"), new BuiltInParam("maxConcurrency", "int") }, "array", IsVariadic: true,
+            Documentation: "Like arr.filter() but tests each element in parallel; results maintain order.\nTests each element with `fn` in parallel. Elements where `fn` returns truthy are kept. Results maintain the original order. Optional `maxConcurrency` limits the number of parallel operations.\n@param array Array to filter\n@param fn Predicate function\n@param maxConcurrency Maximum parallel operations (default: unlimited)\n@return A new array of elements for which `fn` returned truthy"),
+        new NamespaceFunction("arr", "parForEach", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function"), new BuiltInParam("maxConcurrency", "int") }, "null", IsVariadic: true,
+            Documentation: "Like arr.forEach() but runs the callback in parallel; returns null.\nCalls `fn` on each element in parallel. Returns `null`. Optional `maxConcurrency` limits the number of parallel operations.\n@param array Array to iterate\n@param fn Callback function\n@param maxConcurrency Maximum parallel operations (default: unlimited)\n@return null"),
         new NamespaceFunction("arr", "find", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function") },
             Documentation: "Returns the first element for which the predicate function returns a truthy value, or null if none match.\n@param array The array to search\n@param fn A predicate function that takes an element\n@return The first matching element, or null"),
         new NamespaceFunction("arr", "reduce", new[] { new BuiltInParam("array", "array"), new BuiltInParam("fn", "function"), new BuiltInParam("initial") },
@@ -778,6 +801,19 @@ public static class BuiltInRegistry
             Documentation: "Returns the resolved dependency versions from the lock file. Falls back to manifest constraints if no lock file exists. Returns null if no stash.json is found.\n@return A dictionary of package names to version strings, or null"),
         new NamespaceFunction("pkg", "root", Array.Empty<BuiltInParam>(), "string",
             Documentation: "Returns the absolute path to the current project root (the directory containing stash.json). Returns null if no stash.json is found.\n@return The absolute path string, or null"),
+        // task namespace
+        new NamespaceFunction("task", "run", new[] { new BuiltInParam("fn", "function") }, "TaskHandle",
+            Documentation: "Spawns a new task that executes `fn` on the thread pool. The function's closure is snapshotted at spawn time. Returns a TaskHandle with a unique `id` and initial status `task.Status.Running`.\n@param fn Zero-argument function to execute in parallel\n@return A TaskHandle struct with id and status fields"),
+        new NamespaceFunction("task", "await", new[] { new BuiltInParam("handle", "TaskHandle") }, "any",
+            Documentation: "Blocks the calling thread until the given task finishes. Returns the task's return value. Throws if the task failed or was cancelled.\n@param handle Task handle returned by task.run()\n@return The task's return value"),
+        new NamespaceFunction("task", "awaitAll", new[] { new BuiltInParam("handles", "array") }, "array",
+            Documentation: "Blocks until all tasks in the array complete. Returns a list of results in the same order as the input handles. Throws on the first encountered error.\n@param handles Array of TaskHandle values\n@return An array of results in the same order as the input handles"),
+        new NamespaceFunction("task", "awaitAny", new[] { new BuiltInParam("handles", "array") }, "any",
+            Documentation: "Blocks until any task in the array completes. Returns the result of the first completed task.\n@param handles Array of TaskHandle values\n@return The result of the first completed task"),
+        new NamespaceFunction("task", "status", new[] { new BuiltInParam("handle", "TaskHandle") }, "Status",
+            Documentation: "Returns the current status of the task: `task.Status.Running`, `task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`. Does not block.\n@param handle Task handle returned by task.run()\n@return The task's current task.Status"),
+        new NamespaceFunction("task", "cancel", new[] { new BuiltInParam("handle", "TaskHandle") }, "null",
+            Documentation: "Signals the task to cancel. The cancellation is cooperative — the task must check for cancellation. Returns `null`.\n@param handle Task handle returned by task.run()\n@return null"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -831,12 +867,12 @@ public static class BuiltInRegistry
     // ── Built-in Namespace Names ──
 
     /// <summary>
-    /// The ordered list of all 25 built-in namespace names recognized by the Stash language.
+    /// The ordered list of all 26 built-in namespace names recognized by the Stash language.
     /// Used to populate completion items and to identify namespace access expressions.
     /// </summary>
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg", "task"
     };
 
     // ── Keywords ──
@@ -863,7 +899,7 @@ public static class BuiltInRegistry
     public static readonly HashSet<string> ValidTypes = new()
     {
         "string", "int", "float", "bool", "null", "array",
-        "dict", "function", "namespace", "range"
+        "dict", "function", "namespace", "range", "Status", "TaskHandle"
     };
 
     // ── Known names for semantic validation (don't warn as undefined) ──
@@ -877,6 +913,7 @@ public static class BuiltInRegistry
     public static readonly HashSet<string> KnownNames = new(
         Functions.Select(f => f.Name)
             .Concat(Structs.Select(s => s.Name))
+            .Concat(Enums.Where(e => e.Namespace == null).Select(e => e.Name))
             .Concat(NamespaceNames)
             .Concat(new[] { "args", "true", "false", "null", "println", "print", "readLine" })
     );

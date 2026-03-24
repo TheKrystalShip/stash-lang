@@ -19,22 +19,22 @@ public interface IDebugger
     /// Called before each statement is executed. Implementations can block
     /// here to pause execution (e.g., on breakpoint hit or step completion).
     /// </summary>
-    void OnBeforeExecute(SourceSpan span, StashEnv env);
+    void OnBeforeExecute(SourceSpan span, StashEnv env, int threadId);
 
     /// <summary>
     /// Called when a function is entered.
     /// </summary>
-    void OnFunctionEnter(string name, SourceSpan callSite, StashEnv env);
+    void OnFunctionEnter(string name, SourceSpan callSite, StashEnv env, int threadId);
 
     /// <summary>
     /// Called when a function returns.
     /// </summary>
-    void OnFunctionExit(string name);
+    void OnFunctionExit(string name, int threadId);
 
     /// <summary>
     /// Called when a runtime error occurs.
     /// </summary>
-    void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack);
+    void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack, int threadId);
 
     // ── New hooks (optional, default no-op) ────────────────────────────
 
@@ -69,6 +69,18 @@ public interface IDebugger
     /// <param name="category">Output category: "stdout", "stderr", or "console".</param>
     /// <param name="text">The output text.</param>
     void OnOutput(string category, string text) { }
+
+    /// <summary>
+    /// Called when a new logical thread starts (e.g., task.run() spawns a child interpreter).
+    /// The DAP adapter uses this to send thread-started events to the client.
+    /// </summary>
+    void OnThreadStarted(int threadId, string name, Interpreter interpreter) { }
+
+    /// <summary>
+    /// Called when a logical thread exits (e.g., a task completes).
+    /// The DAP adapter uses this to send thread-exited events to the client.
+    /// </summary>
+    void OnThreadExited(int threadId) { }
 
     /// <summary>
     /// Determines whether the debugger should break on the given runtime error.

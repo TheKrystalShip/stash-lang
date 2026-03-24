@@ -1,0 +1,248 @@
+#!/usr/bin/env stash
+
+// examples/parallelism.stash
+// Parallel task execution in Stash — task.run, arr.parMap, arr.parFilter, and more
+
+io.println("=" * 60);
+io.println("  Stash Parallelism Demo");
+io.println("=" * 60);
+io.println("");
+
+// ─── 1. Basic Task Spawning ──────────────────────────────────────────────────
+
+io.println("── 1. Basic Task Spawning ──");
+
+// Spawn a background computation — sums integers from 1..n
+fn sumRange(n) {
+    let total = 0;
+    let i = 1;
+    while (i <= n) {
+        total = total + i;
+        i = i + 1;
+    }
+    return total;
+}
+
+let handle = task.run(() => sumRange(100000));
+
+io.println($"  Task spawned  — id: {handle.id}, status: {handle.status}");
+
+let result = task.await(handle);
+
+io.println($"  Task complete — sum(1..100000) = {result}");
+io.println("");
+
+// ─── 2. Concurrent Tasks with Timing ────────────────────────────────────────
+
+io.println("── 2. Multiple Concurrent Tasks ──");
+
+// Each task simulates a latency-bound operation (e.g. a network call)
+fn simulateFetch(id, delay) {
+    time.sleep(delay);
+    return $"response-{id}";
+}
+
+// Sequential baseline
+let seqStart = time.millis();
+simulateFetch("a", 0.08);
+simulateFetch("b", 0.08);
+simulateFetch("c", 0.08);
+let seqMs = time.millis() - seqStart;
+
+// Parallel execution
+let parStart = time.millis();
+let h1: TaskHandle = task.run(() => simulateFetch("a", 0.08));
+let h2: TaskHandle = task.run(() => simulateFetch("b", 0.08));
+let h3: TaskHandle = task.run(() => simulateFetch("c", 0.08));
+let results = task.awaitAll([h1, h2, h3]);
+let parMs = time.millis() - parStart;
+
+io.println($"  Sequential:   {seqMs} ms");
+io.println($"  Parallel:     {parMs} ms");
+io.println($"  Results:      {arr.join(results, ", ")}");
+io.println("");
+
+// ─── 3. Task Status Checking ─────────────────────────────────────────────────
+
+io.println("── 3. Task Status Checking ──");
+
+// Spawn a slow task, peek at its status while it runs, then await it
+fn slowCompute() {
+    time.sleep(0.12);
+    return 42;
+}
+
+let slowHandle: TaskHandle = task.run(slowCompute);
+
+// Give the task a moment to get scheduled before querying
+time.sleep(0.02);
+let statusWhileRunning = task.status(slowHandle);
+io.println($"  Status while running:   {statusWhileRunning}");
+
+task.await(slowHandle);
+
+let statusAfterDone = task.status(slowHandle);
+io.println($"  Status after completed: {statusAfterDone}");
+
+// task.Status enum values for reference
+io.println($"  Known states — Running: {task.Status.Running}, Completed: {task.Status.Completed}, Failed: {task.Status.Failed}, Cancelled: {task.Status.Cancelled}");
+io.println("");
+
+// ─── 4. Parallel Map — Processing Records in Parallel ────────────────────────
+
+io.println("── 4. Parallel Map (arr.parMap) ──");
+
+// Compute SHA-256 fingerprints for a batch of config payloads — order preserved
+let configs = [
+    "host=db1.internal port=5432 db=inventory",
+    "host=db2.internal port=5432 db=orders",
+    "host=cache1.internal port=6379 db=sessions",
+    "host=cache2.internal port=6379 db=tokens",
+    "host=search.internal port=9200 db=products"
+];
+
+let parMapStart = time.millis();
+let fingerprints = arr.parMap(configs, (cfg) => {
+    let hash = crypto.sha256(cfg);
+    return str.substring(hash, 0, 16);   // first 16 chars for display
+});
+let parMapMs = time.millis() - parMapStart;
+
+io.println($"  Hashed {len(configs)} config strings in {parMapMs} ms (parallel)");
+
+let i = 0;
+while (i < len(configs)) {
+    io.println($"  [{i}] {fingerprints[i]}  ← {str.substring(configs[i], 0, 30)}...");
+    i = i + 1;
+}
+io.println("");
+
+// ─── 5. Parallel Filter — Prime Number Sieve ─────────────────────────────────
+
+io.println("── 5. Parallel Filter (arr.parFilter) ──");
+
+// Determine whether n is prime (simple trial division)
+fn isPrime(n) {
+    if (n < 2) { return false; }
+    if (n == 2) { return true; }
+    if (n % 2 == 0) { return false; }
+    let d = 3;
+    while (d * d <= n) {
+        if (n % d == 0) { return false; }
+        d = d + 2;
+    }
+    return true;
+}
+
+// Build candidate list 2..500
+let candidates = [];
+let k = 2;
+while (k <= 500) {
+    arr.push(candidates, k);
+    k = k + 1;
+}
+
+let filterStart = time.millis();
+let primes = arr.parFilter(candidates, isPrime);
+let filterMs = time.millis() - filterStart;
+
+io.println($"  Found {len(primes)} primes in 2..500 in {filterMs} ms (parallel)");
+io.println($"  First 10: {arr.join(arr.take(primes, 10), ", ")}");
+io.println($"  Last  10: {arr.join(arr.drop(primes, len(primes) - 10), ", ")}");
+io.println("");
+
+// ─── 6. Race Pattern — First Responder Wins ──────────────────────────────────
+
+io.println("── 6. Race Pattern (task.awaitAny) ──");
+
+struct DataSource {
+    name: string,
+    latency: int
+
+    fn fetch() {
+        time.sleep(self.latency / 1000.0);
+        return $"data from {self.name} (latency: {self.latency} ms)";
+    }
+}
+
+let sources = [
+    DataSource { name: "primary-db",  latency: 150 },
+    DataSource { name: "replica-db",  latency:  60 },  // fastest this run
+    DataSource { name: "cache-layer", latency:  90 }
+];
+
+// Spawn a task per source — take whichever responds first
+let raceHandles = arr.map(sources, (src) => task.run(() => src.fetch()));
+
+let raceStart = time.millis();
+let winner    = task.awaitAny(raceHandles);
+let raceMs    = time.millis() - raceStart;
+
+io.println($"  Winner in {raceMs} ms: {winner}");
+io.println("");
+
+// ─── 7. Real-World: Parallel Server Health Checks ────────────────────────────
+
+io.println("── 7. Parallel Server Health Checks ──");
+
+struct Server {
+    host: string,
+    role: string,
+    responseTime: int
+
+    fn check() {
+        // Simulate an HTTP health-check round-trip
+        time.sleep(self.responseTime / 1000.0);
+        let ok = self.responseTime < 300;
+        let statusStr = ok ? "healthy" : "degraded";
+        return {
+            host:   self.host,
+            role:   self.role,
+            ms:     self.responseTime,
+            status: statusStr
+        };
+    }
+}
+
+let fleet = [
+    Server { host: "web-01.prod",   role: "frontend",  responseTime:  45 },
+    Server { host: "web-02.prod",   role: "frontend",  responseTime:  52 },
+    Server { host: "api-01.prod",   role: "api",       responseTime:  80 },
+    Server { host: "api-02.prod",   role: "api",       responseTime: 340 },  // degraded
+    Server { host: "db-primary",    role: "database",  responseTime: 120 },
+    Server { host: "db-replica",    role: "database",  responseTime: 110 },
+    Server { host: "cache-01.prod", role: "cache",     responseTime:  15 },
+    Server { host: "cache-02.prod", role: "cache",     responseTime:  18 }
+];
+
+let checkStart = time.millis();
+let reports    = arr.parMap(fleet, (srv) => srv.check());
+let checkMs    = time.millis() - checkStart;
+
+io.println($"  Checked {len(fleet)} servers in {checkMs} ms  (would be ~{arr.reduce(fleet, (sum, s) => sum + s.responseTime, 0)} ms sequentially)");
+io.println("");
+let header = str.padEnd("Host", 22) + str.padEnd("Role", 12) + str.padEnd("Latency", 10) + "Status";
+io.println($"  {header}");
+io.println("  " + "─" * 56);
+
+for (let r in reports) {
+    let latencyStr = $"{r.ms} ms";
+    let line = str.padEnd(r.host, 22) + str.padEnd(r.role, 12) + str.padEnd(latencyStr, 10) + r.status;
+    io.println($"  {line}");
+}
+
+let healthy  = arr.filter(reports, (r) => r.status == "healthy");
+let degraded = arr.filter(reports, (r) => r.status != "healthy");
+
+io.println("");
+io.println($"  Summary: {len(healthy)}/{len(fleet)} healthy, {len(degraded)} degraded");
+
+if (len(degraded) > 0) {
+    let hosts = arr.join(arr.map(degraded, (r) => r.host), ", ");
+    io.println($"  Degraded: {hosts}");
+}
+
+io.println("");
+io.println("=" * 60);
+io.println("  Demo complete");
+io.println("=" * 60);

@@ -133,13 +133,13 @@ public class DapHandlerTests
     // ── Continue handler ──────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ContinueHandler_ReturnsAllThreadsContinued()
+    public async Task ContinueHandler_ContinuesOnlyRequestedThread()
     {
         var session = new DebugSession();
         var handler = new StashContinueHandler(session);
         var result = await handler.Handle(new ContinueArguments { ThreadId = 1 }, CancellationToken.None);
         Assert.NotNull(result);
-        Assert.True(result.AllThreadsContinued);
+        Assert.False(result.AllThreadsContinued);
     }
 
     // ── Stepping handlers ─────────────────────────────────────────────────────

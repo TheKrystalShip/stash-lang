@@ -36,8 +36,9 @@
 20. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
 21. [`term` — Terminal Formatting](#term--terminal-formatting)
 22. [`sys` — System Information](#sys--system-information)
-23. [`log` — Logging](#log--logging)
-24. [Argument Parsing](#argument-parsing)
+23. [`task` — Parallel Tasks](#task--parallel-tasks)
+24. [`log` — Logging](#log--logging)
+25. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -335,17 +336,20 @@ All `arr` functions take the target array as the first argument. Functions that 
 
 ### Higher-Order Functions
 
-| Function                         | Description                                                   |
-| -------------------------------- | ------------------------------------------------------------- |
-| `arr.map(array, fn)`             | Return new array with `fn(element)` applied to each element   |
-| `arr.filter(array, fn)`          | Return new array of elements where `fn(element)` is truthy    |
-| `arr.forEach(array, fn)`         | Call `fn(element)` for each element                           |
-| `arr.find(array, fn)`            | Return first element where `fn(element)` is truthy, or `null` |
-| `arr.findIndex(array, fn)`       | Return index of first truthy `fn(element)`, or `-1`           |
-| `arr.reduce(array, fn, initial)` | Fold array: calls `fn(accumulator, element)` for each element |
-| `arr.any(array, fn)`             | Return `true` if any element satisfies `fn`                   |
-| `arr.every(array, fn)`           | Return `true` if all elements satisfy `fn`                    |
-| `arr.count(array, fn)`           | Return count of elements where `fn(element)` is truthy        |
+| Function                                      | Description                                                                                                                                                     |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `arr.map(array, fn)`                          | Return new array with `fn(element)` applied to each element                                                                                                     |
+| `arr.filter(array, fn)`                       | Return new array of elements where `fn(element)` is truthy                                                                                                      |
+| `arr.forEach(array, fn)`                      | Call `fn(element)` for each element                                                                                                                             |
+| `arr.parMap(array, fn, [maxConcurrency])`     | Like `arr.map()` but runs the mapping function on each element in parallel; results maintain original order. Optional `maxConcurrency` limits parallel threads. |
+| `arr.parFilter(array, fn, [maxConcurrency])`  | Like `arr.filter()` but tests each element in parallel; results maintain original order. Optional `maxConcurrency` limits parallel threads.                     |
+| `arr.parForEach(array, fn, [maxConcurrency])` | Like `arr.forEach()` but runs the callback on each element in parallel; returns `null`. Optional `maxConcurrency` limits parallel threads.                      |
+| `arr.find(array, fn)`                         | Return first element where `fn(element)` is truthy, or `null`                                                                                                   |
+| `arr.findIndex(array, fn)`                    | Return index of first truthy `fn(element)`, or `-1`                                                                                                             |
+| `arr.reduce(array, fn, initial)`              | Fold array: calls `fn(accumulator, element)` for each element                                                                                                   |
+| `arr.any(array, fn)`                          | Return `true` if any element satisfies `fn`                                                                                                                     |
+| `arr.every(array, fn)`                        | Return `true` if all elements satisfy `fn`                                                                                                                      |
+| `arr.count(array, fn)`                        | Return count of elements where `fn(element)` is truthy                                                                                                          |
 
 ### Aggregation & Grouping
 
@@ -395,6 +399,16 @@ let big = arr.filter(nums, (x) => x > 2);        // [3, 4, 5]
 let sum = arr.reduce(nums, (acc, x) => acc + x, 0); // 14
 let found = arr.find(nums, (x) => x > 3);        // 4
 arr.forEach(nums, (x) => io.println(x));          // prints each element
+
+// Parallel higher-order functions
+let pDoubled = arr.parMap(nums, (x) => x * 2);      // parallel map, unlimited concurrency
+let pBig = arr.parFilter(nums, (x) => x > 2);       // parallel filter, unlimited concurrency
+arr.parForEach(nums, (x) => io.println(x));          // parallel forEach, unlimited
+
+// Limit concurrency with optional third argument
+let limited = arr.parMap(urls, (url) => {
+    return $(curl -s ${url}).stdout;
+}, 4);  // max 4 parallel operations
 
 // Predicates
 let hasEven = arr.any(nums, (x) => x % 2 == 0);    // true
@@ -1862,6 +1876,227 @@ Each network interface dict contains:
 | `type`      | string | Interface type (e.g., `"Ethernet"`, `"Loopback"`) |
 | `status`    | string | Operational status (e.g., `"Up"`, `"Down"`)       |
 | `addresses` | array  | Array of IP address strings                       |
+
+---
+
+## `task` — Parallel Tasks
+
+The `task` namespace provides lightweight parallelism for Stash scripts. Tasks run as .NET `Task<T>` instances on the thread pool — not OS threads. Each task receives a snapshot of the current environment at spawn time, isolating it from mutations in the caller.
+
+### Built-in Types
+
+#### `task.Status` Enum
+
+`task.Status` is a **built-in enum** available in the `task` namespace. It is used to check the current state of a task.
+
+| Member                  | Description                            |
+| ----------------------- | -------------------------------------- |
+| `task.Status.Running`   | Task is currently executing            |
+| `task.Status.Completed` | Task finished successfully             |
+| `task.Status.Failed`    | Task threw an unhandled error          |
+| `task.Status.Cancelled` | Task was cancelled via `task.cancel()` |
+
+#### `TaskHandle` Struct
+
+`TaskHandle` is a **built-in struct** returned by `task.run()`. It is passed to all other task functions.
+
+| Field    | Type          | Description                            |
+| -------- | ------------- | -------------------------------------- |
+| `id`     | `int`         | Unique task identifier                 |
+| `status` | `task.Status` | Initial status (`task.Status.Running`) |
+
+### Functions
+
+| Function                 | Description                                                                  |
+| ------------------------ | ---------------------------------------------------------------------------- |
+| `task.run(fn)`           | Spawn a parallel task; returns a `TaskHandle` struct                         |
+| `task.await(handle)`     | Block until the task completes and return its result                         |
+| `task.awaitAll(handles)` | Wait for all tasks to complete; returns a list of results in input order     |
+| `task.awaitAny(handles)` | Wait for any task to complete; returns the result of the first finished task |
+| `task.status(handle)`    | Return the task's current status as a `task.Status` enum value               |
+| `task.cancel(handle)`    | Request cooperative cancellation of a running task; returns `null`           |
+
+### `task.run(fn)`
+
+Spawns a parallel task that executes the given zero-argument function. Returns a `TaskHandle` struct that can be passed to `task.await()`, `task.status()`, or `task.cancel()`. The function's closure environment is snapshotted at spawn time — mutations to captured variables after `task.run()` are not visible to the task.
+
+```stash
+let handle = task.run(() => {
+    time.sleep(1);
+    return 42;
+});
+
+// Do other work while task runs...
+io.println("Task is running...");
+io.println(handle.id);  // unique task id
+
+let result = task.await(handle);
+io.println("Result: " + result);  // 42
+```
+
+### `task.await(handle)`
+
+Blocks until the task completes and returns its result. If the task threw an error, the error is re-thrown. If the task was cancelled, throws a `"Task was cancelled"` error.
+
+```stash
+let t = task.run(() => {
+    return $(hostname).stdout;
+});
+
+let hostname = task.await(t);
+io.println("Host: " + hostname);
+```
+
+### `task.awaitAll(handles)`
+
+Takes a list of task handles and waits for all to complete. Returns a list of results in the same order as the input handles.
+
+```stash
+let tasks = [
+    task.run(() => $(curl -s https://api1.example.com/status).stdout),
+    task.run(() => $(curl -s https://api2.example.com/status).stdout),
+    task.run(() => $(curl -s https://api3.example.com/status).stdout)
+];
+
+let results = task.awaitAll(tasks);
+for (let r in results) {
+    io.println(r);
+}
+```
+
+### `task.awaitAny(handles)`
+
+Takes a list of task handles and waits for any one to complete. Returns the result of the first completed task.
+
+```stash
+let tasks = [
+    task.run(() => { time.sleep(3); return "slow"; }),
+    task.run(() => { time.sleep(1); return "fast"; }),
+    task.run(() => { time.sleep(2); return "medium"; })
+];
+
+let first = task.awaitAny(tasks);
+io.println("First finished: " + first);  // "fast"
+```
+
+### `task.status(handle)`
+
+Returns the current status of a task as a `task.Status` enum value.
+
+| Value                   | Description                            |
+| ----------------------- | -------------------------------------- |
+| `task.Status.Running`   | Task is currently executing            |
+| `task.Status.Completed` | Task finished successfully             |
+| `task.Status.Failed`    | Task threw an unhandled error          |
+| `task.Status.Cancelled` | Task was cancelled via `task.cancel()` |
+
+```stash
+let handle = task.run(() => {
+    time.sleep(5);
+    return "done";
+});
+
+io.println(task.status(handle));  // task.Status.Running
+time.sleep(6);
+io.println(task.status(handle));  // task.Status.Completed
+
+if (task.status(handle) == task.Status.Completed) {
+    io.println("Done!");
+}
+```
+
+### `task.cancel(handle)`
+
+Requests cooperative cancellation of a running task. Returns `null`. The task may not cancel immediately — it cancels at the next statement boundary.
+
+```stash
+let t = task.run(() => {
+    for (let i = 0; i < 1000; i++) {
+        time.sleep(0.1);
+    }
+    return "done";
+});
+
+time.sleep(0.5);
+task.cancel(t);
+io.println(task.status(t));  // task.Status.Cancelled (soon after)
+```
+
+## Threading Model
+
+Stash's parallelism is based on **environment snapshotting** — each parallel task or operation receives a deep copy of the current scope chain at spawn time. This provides strong isolation without locks.
+
+### What's Isolated (Safe)
+
+Each parallel task or `arr.parMap/parFilter/parForEach` callback gets:
+
+- **Local variables:** Deep-copied via `Environment.Snapshot()`. Mutations inside the task do not affect the caller, and vice versa.
+- **Closure captures:** Variables captured by closures are snapshotted — the task sees their values at spawn time.
+- **Execution state:** Each task has its own `ExecutionContext` (return values, loop control flow, call stack depth).
+
+```stash
+let count = 0;
+let tasks = arr.map([1, 2, 3], (x) => {
+    return task.run(() => {
+        count = count + x;  // modifies a COPY — original `count` is unchanged
+        return count;
+    });
+});
+let results = task.awaitAll(tasks);
+// count is still 0 — each task modified its own copy
+```
+
+### What's Shared (Read-Only Safe)
+
+These are shared across tasks but are effectively immutable:
+
+- **Built-in namespaces:** All 26 namespaces (`io`, `arr`, `str`, etc.) are frozen after registration. Safe to call from any task.
+- **Global scope reference:** The global (outermost) environment is shared by reference for access to global functions and constants. This is safe for reads.
+- **Struct and enum definitions:** Type definitions are immutable once created.
+
+### What's Unsafe (Avoid)
+
+- **Mutating global variables** from parallel tasks is a data race. Each task snapshots globals at spawn time, but writes go to the snapshot — they will be silently lost.
+- **Shared mutable objects:** If a dictionary or struct instance is reachable from the global scope, multiple tasks may read stale copies. Do not rely on cross-task mutation.
+
+```stash
+// UNSAFE — do not do this
+let shared = { value: 0 };
+arr.parForEach([1, 2, 3, 4, 5], (x) => {
+    shared.value = shared.value + x;  // race condition — each task has its own copy
+});
+// shared.value is still 0, NOT 15
+```
+
+### Concurrency Control
+
+Use the optional `maxConcurrency` parameter on `arr.parMap`, `arr.parFilter`, and `arr.parForEach` to limit the number of parallel operations:
+
+```stash
+// Process at most 4 items at a time
+let results = arr.parMap(urls, (url) => {
+    return $(curl -s ${url}).stdout;
+}, 4);
+```
+
+When omitted, the runtime uses all available processor cores. Set `maxConcurrency` to:
+
+- **1** for sequential execution (useful for debugging)
+- **A small number** when calling rate-limited APIs or managing resource-intensive operations
+- **Omit** for CPU-bound work that benefits from full parallelism
+
+### Summary Table
+
+| Aspect              | Behavior                      | Safe? |
+| ------------------- | ----------------------------- | ----- |
+| Local variables     | Deep-copied per task          | Yes   |
+| Closure captures    | Snapshotted at spawn          | Yes   |
+| Built-in namespaces | Shared, immutable             | Yes   |
+| Global functions    | Shared via global scope       | Yes   |
+| Global variables    | Snapshotted — writes are lost | No    |
+| Mutable objects     | Each task gets its own copy   | No\*  |
+
+\* Mutations are safe within each task's copy, but changes are not visible to other tasks or the caller.
 
 ---
 

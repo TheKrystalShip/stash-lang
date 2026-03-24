@@ -65,6 +65,7 @@ io.println("Error count: " + errors.stdout);
 - **Real data structures.** Structs, enums, and dictionaries let you model your domain instead of juggling parallel arrays and magic strings.
 - **C-style syntax.** If you know C, C++, C#, Java, or JavaScript, you can read Stash immediately — braces, semicolons, `if`/`else`/`while`/`for`.
 - **Sensible error handling.** `try` catches errors inline, `??` provides fallbacks, and `lastError()` gives you details — no ceremony.
+- **Built-in parallelism.** `task.run(() => work())` spawns isolated parallel tasks with snapshot semantics — no shared-state bugs. `arr.parMap`, `arr.parFilter`, and `arr.parForEach` parallelize data processing in one line.
 - **Modules.** `import { deploy, Server } from "utils.stash"` — selective imports with module caching and circular dependency detection.
 - **Lambdas and switch expressions.** `(x) => x * 2` for inline functions, `value switch { 1 => "one", _ => "other" }` for concise multi-way branching.
 
@@ -120,6 +121,18 @@ fn add(a: int, b: int) -> int {
 
 let double = (x) => x * 2;
 let result = arr.map([1, 2, 3], double);  // [2, 4, 6]
+```
+
+#### Parallelism
+
+```stash
+// Spawn isolated parallel tasks
+let h1 = task.run(() => crypto.sha256("file1"));
+let h2 = task.run(() => crypto.sha256("file2"));
+let results = task.awaitAll([h1, h2]);
+
+// Parallel data processing
+let hashes = arr.parMap(files, (f) => crypto.sha256(f));
 ```
 
 #### Switch Expressions

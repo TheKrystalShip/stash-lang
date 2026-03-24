@@ -107,6 +107,12 @@ public class StashDictionary
         return _entries.ToList();
     }
 
+    /// <summary>Returns all key-value pairs in the dictionary.</summary>
+    public IEnumerable<KeyValuePair<object, object?>> GetAllEntries()
+    {
+        return _entries.ToList();
+    }
+
     /// <summary>
     /// Returns an enumerable of all keys for iteration support.
     /// </summary>

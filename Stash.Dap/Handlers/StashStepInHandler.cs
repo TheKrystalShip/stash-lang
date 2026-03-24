@@ -32,7 +32,7 @@ public class StashStepInHandler : StepInHandlerBase
     /// <returns>A <see cref="Task{StepInResponse}"/> representing the response.</returns>
     public override Task<StepInResponse> Handle(StepInArguments request, CancellationToken cancellationToken)
     {
-        _session.StepIn();
+        _session.StepIn((int)request.ThreadId);
         return Task.FromResult(new StepInResponse());
     }
 }

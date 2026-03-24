@@ -223,4 +223,78 @@ public static class RuntimeValues
             ["exitCode"] = exitCode
         });
     }
+
+    /// <summary>
+    /// Creates a deep copy of a Stash runtime value. Immutable values (primitives, enums,
+    /// ranges, namespaces) are returned as-is. Mutable values (lists, dictionaries, struct
+    /// instances, functions/lambdas with closures) are recursively cloned.
+    /// </summary>
+    public static object? DeepCopy(object? value)
+    {
+        return value switch
+        {
+            // Immutable — return as-is
+            null => null,
+            bool => value,
+            long => value,
+            double => value,
+            string => value,
+            StashEnumValue => value,
+            StashEnum => value,
+            StashStruct => value,
+            StashRange => value,
+            StashNamespace => value,        // Frozen after init
+            BuiltInFunction => value,       // Stateless delegate wrapper
+
+            // Mutable collections — deep clone
+            List<object?> list => DeepCopyList(list),
+            StashDictionary dict => DeepCopyDictionary(dict),
+            StashInstance instance => DeepCopyInstance(instance),
+
+            // Callables with closures — clone with snapshotted closure chain
+            StashFunction func => func.DeepCopyWithSnapshot(),
+            StashLambda lambda => lambda.DeepCopyWithSnapshot(),
+            StashBoundMethod bound => DeepCopyBoundMethod(bound),
+
+            // Unknown — return as-is (safety fallback)
+            _ => value,
+        };
+    }
+
+    private static List<object?> DeepCopyList(List<object?> list)
+    {
+        var copy = new List<object?>(list.Count);
+        for (int i = 0; i < list.Count; i++)
+        {
+            copy.Add(DeepCopy(list[i]));
+        }
+        return copy;
+    }
+
+    private static StashDictionary DeepCopyDictionary(StashDictionary dict)
+    {
+        var copy = new StashDictionary();
+        foreach (var (key, val) in dict.GetAllEntries())
+        {
+            copy.Set(key, DeepCopy(val));
+        }
+        return copy;
+    }
+
+    private static StashInstance DeepCopyInstance(StashInstance instance)
+    {
+        var fieldsCopy = new Dictionary<string, object?>();
+        foreach (var (name, val) in instance.GetAllFields())
+        {
+            fieldsCopy[name] = DeepCopy(val);
+        }
+        return new StashInstance(instance.TypeName, fieldsCopy, instance.Struct);
+    }
+
+    private static StashBoundMethod DeepCopyBoundMethod(StashBoundMethod bound)
+    {
+        var copiedInstance = (StashInstance)DeepCopy(bound.Instance)!;
+        var copiedMethod = bound.Method.DeepCopyWithSnapshot();
+        return new StashBoundMethod(copiedInstance, copiedMethod);
+    }
 }

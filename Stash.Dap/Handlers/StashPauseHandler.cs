@@ -32,7 +32,7 @@ public class StashPauseHandler : PauseHandlerBase
     /// <returns>A <see cref="Task{PauseResponse}"/> representing the response.</returns>
     public override Task<PauseResponse> Handle(PauseArguments request, CancellationToken cancellationToken)
     {
-        _session.Pause();
+        _session.Pause((int)request.ThreadId);
         return Task.FromResult(new PauseResponse());
     }
 }

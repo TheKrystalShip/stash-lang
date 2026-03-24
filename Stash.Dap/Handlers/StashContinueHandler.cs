@@ -32,7 +32,7 @@ public class StashContinueHandler : ContinueHandlerBase
     /// <returns>A <see cref="Task{ContinueResponse}"/> indicating all threads have continued.</returns>
     public override Task<ContinueResponse> Handle(ContinueArguments request, CancellationToken cancellationToken)
     {
-        _session.Continue();
-        return Task.FromResult(new ContinueResponse { AllThreadsContinued = true });
+        _session.Continue((int)request.ThreadId);
+        return Task.FromResult(new ContinueResponse { AllThreadsContinued = false });
     }
 }

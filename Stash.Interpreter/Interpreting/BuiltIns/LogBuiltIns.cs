@@ -31,6 +31,9 @@ public static class LogBuiltIns
     /// <summary>Optional file writer for redirecting log output. When <see langword="null"/>, output goes to <see cref="Interpreter.ErrorOutput"/>.</summary>
     private static TextWriter? _fileWriter;
 
+    /// <summary>Lock object protecting all mutable static state for concurrent access.</summary>
+    private static readonly object _lock = new();
+
     /// <summary>Ordered list of log level names, from least to most severe. <c>off</c> disables all logging.</summary>
     private static readonly string[] _levelOrder = ["debug", "info", "warn", "error", "off"];
 
@@ -59,7 +62,10 @@ public static class LogBuiltIns
     /// <returns><see langword="true"/> if the message should be logged; otherwise <see langword="false"/>.</returns>
     private static bool ShouldLog(string msgLevel)
     {
-        return GetLevelIndex(msgLevel) >= GetLevelIndex(_level);
+        lock (_lock)
+        {
+            return GetLevelIndex(msgLevel) >= GetLevelIndex(_level);
+        }
     }
 
     /// <summary>
@@ -71,7 +77,12 @@ public static class LogBuiltIns
     private static string FormatMessage(string level, string msg)
     {
         var now = DateTimeOffset.UtcNow.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-        return _format
+        string fmt;
+        lock (_lock)
+        {
+            fmt = _format;
+        }
+        return fmt
             .Replace("{time}", now)
             .Replace("{level}", level.ToUpperInvariant())
             .Replace("{msg}", msg);
@@ -156,7 +167,11 @@ public static class LogBuiltIns
                 throw new RuntimeError("'log.setLevel' level must be one of: \"debug\", \"info\", \"warn\", \"error\", \"off\".");
             }
 
-            _level = normalized;
+            lock (_lock)
+            {
+                _level = normalized;
+            }
+
             return null;
         }));
 
@@ -169,7 +184,11 @@ public static class LogBuiltIns
                 throw new RuntimeError("Argument to 'log.setFormat' must be a string.");
             }
 
-            _format = fmt;
+            lock (_lock)
+            {
+                _format = fmt;
+            }
+
             return null;
         }));
 
@@ -181,8 +200,12 @@ public static class LogBuiltIns
                 throw new RuntimeError("Argument to 'log.toFile' must be a string.");
             }
 
-            _fileWriter?.Dispose();
-            _fileWriter = new StreamWriter(path, append: true) { AutoFlush = true };
+            lock (_lock)
+            {
+                _fileWriter?.Dispose();
+                _fileWriter = new StreamWriter(path, append: true) { AutoFlush = true };
+            }
+
             return null;
         }));
 
@@ -196,13 +219,16 @@ public static class LogBuiltIns
     /// <param name="message">The fully-formatted log message to write.</param>
     private static void WriteLog(Interpreter interp, string message)
     {
-        if (_fileWriter != null)
+        lock (_lock)
         {
-            _fileWriter.WriteLine(message);
-        }
-        else
-        {
-            interp.ErrorOutput.WriteLine(message);
+            if (_fileWriter != null)
+            {
+                _fileWriter.WriteLine(message);
+            }
+            else
+            {
+                interp.ErrorOutput.WriteLine(message);
+            }
         }
     }
 }

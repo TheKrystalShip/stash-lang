@@ -82,4 +82,11 @@ public class StashLambda : IStashCallable
     }
 
     public override string ToString() => "<lambda>";
+
+    /// <summary>Creates a deep copy of this lambda with a snapshotted (deep-cloned) closure chain.</summary>
+    public StashLambda DeepCopyWithSnapshot()
+    {
+        Environment snapshotClosure = Environment.Snapshot(_closure);
+        return new StashLambda(_declaration, snapshotClosure);
+    }
 }

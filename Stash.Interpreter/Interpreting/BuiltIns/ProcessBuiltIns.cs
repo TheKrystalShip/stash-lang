@@ -190,6 +190,15 @@ public static class ProcessBuiltIns
 
             var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
 
+            // Remove from tracking and dispose the OS process handle
+            int idx = interp.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+            if (idx >= 0)
+            {
+                interp.TrackedProcesses.RemoveAt(idx);
+            }
+            try { osProcess.Dispose(); }
+            catch { /* Best-effort disposal */ }
+
             // Cache the result so subsequent wait() calls return the same data
             interp.ProcessWaitCache[handle] = result;
             FireExitCallbacks(interp, handle, result);
@@ -226,6 +235,16 @@ public static class ProcessBuiltIns
             Task.WaitAll(stdoutTask, stderrTask);
 
             var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+
+            // Remove from tracking and dispose the OS process handle
+            int idx = interp.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+            if (idx >= 0)
+            {
+                interp.TrackedProcesses.RemoveAt(idx);
+            }
+            try { osProcess.Dispose(); }
+            catch { /* Best-effort disposal */ }
+
             interp.ProcessWaitCache[handle] = result;
             FireExitCallbacks(interp, handle, result);
             return result;
@@ -593,6 +612,15 @@ public static class ProcessBuiltIns
                 Task.WaitAll(stdoutTask, stderrTask);
 
                 var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+
+                int idx = interp.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+                if (idx >= 0)
+                {
+                    interp.TrackedProcesses.RemoveAt(idx);
+                }
+                try { osProcess.Dispose(); }
+                catch { /* Best-effort disposal */ }
+
                 interp.ProcessWaitCache[handle] = result;
                 FireExitCallbacks(interp, handle, result);
                 results.Add(result);
@@ -646,6 +674,15 @@ public static class ProcessBuiltIns
                     Task.WaitAll(stdoutTask, stderrTask);
 
                     var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+
+                    int idx = interp.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+                    if (idx >= 0)
+                    {
+                        interp.TrackedProcesses.RemoveAt(idx);
+                    }
+                    try { osProcess.Dispose(); }
+                    catch { /* Best-effort disposal */ }
+
                     interp.ProcessWaitCache[handle] = result;
                     FireExitCallbacks(interp, handle, result);
                     return result;
@@ -664,6 +701,15 @@ public static class ProcessBuiltIns
                         Task.WaitAll(stdoutTask, stderrTask);
 
                         var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
+
+                        int idx = interp.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
+                        if (idx >= 0)
+                        {
+                            interp.TrackedProcesses.RemoveAt(idx);
+                        }
+                        try { osProcess.Dispose(); }
+                        catch { /* Best-effort disposal */ }
+
                         interp.ProcessWaitCache[handle] = result;
                         FireExitCallbacks(interp, handle, result);
                         return result;

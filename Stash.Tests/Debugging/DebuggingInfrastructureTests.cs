@@ -436,7 +436,7 @@ public class DebuggingInfrastructureTests
         public Action<SourceSpan, Environment>? OnBeforeExecuteCallback { get; set; }
         public Action<string, SourceSpan, Environment>? OnFunctionEnterCallback { get; set; }
 
-        public void OnBeforeExecute(SourceSpan span, Environment env)
+        public void OnBeforeExecute(SourceSpan span, Environment env, int threadId)
         {
             OnBeforeExecuteCalled = true;
             LastSpan = span;
@@ -444,18 +444,18 @@ public class DebuggingInfrastructureTests
             OnBeforeExecuteCallback?.Invoke(span, env);
         }
 
-        public void OnFunctionEnter(string name, SourceSpan callSite, Environment env)
+        public void OnFunctionEnter(string name, SourceSpan callSite, Environment env, int threadId)
         {
             FunctionsEntered.Add(name);
             OnFunctionEnterCallback?.Invoke(name, callSite, env);
         }
 
-        public void OnFunctionExit(string name)
+        public void OnFunctionExit(string name, int threadId)
         {
             FunctionsExited.Add(name);
         }
 
-        public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack)
+        public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack, int threadId)
         {
             OnErrorCalled = true;
         }

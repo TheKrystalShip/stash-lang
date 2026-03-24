@@ -25,9 +25,6 @@ using Stash.Interpreting.Types;
 /// </remarks>
 public static class MathBuiltIns
 {
-    /// <summary>Shared random number generator for <c>math.random()</c> and <c>math.randomInt()</c>.</summary>
-    private static readonly Random _random = new();
-
     /// <summary>
     /// Registers all <c>math</c> namespace functions and constants into the global environment.
     /// </summary>
@@ -160,7 +157,7 @@ public static class MathBuiltIns
         // math.random() — Returns a random double in the range [0.0, 1.0).
         math.Define("random", new BuiltInFunction("math.random", 0, (interp, args) =>
         {
-            return _random.NextDouble();
+            return Random.Shared.NextDouble();
         }));
 
         // math.randomInt(min, max) — Returns a random integer in the inclusive range [min, max].
@@ -177,7 +174,7 @@ public static class MathBuiltIns
                 throw new RuntimeError("Second argument to 'math.randomInt' must be an integer.");
             }
 
-            return (long)_random.NextInt64(min, max + 1);
+            return (long)Random.Shared.NextInt64(min, max + 1);
         }));
 
         // math.clamp(n, min, max) — Returns n clamped to the range [min, max].
