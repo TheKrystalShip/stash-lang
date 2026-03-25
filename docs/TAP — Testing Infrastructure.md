@@ -30,9 +30,9 @@
 
 ## 1. Overview
 
-Stash provides built-in testing primitives that enable structured, tooling-friendly test execution. Test scripts are ordinary Stash scripts — no special file format, no magic. `test()` and `assert.equal()` are regular function calls. The language provides the hooks; users can build full testing frameworks on top.
+Stash provides built-in testing primitives that enable structured, tooling-friendly test execution. Test scripts are ordinary Stash scripts — no special file format, no magic. `test.it()` and `assert.equal()` are regular function calls. The language provides the hooks; users can build full testing frameworks on top.
 
-By default, runtime errors crash the script. The testing harness changes this: in test mode (`--test`), assertion failures inside `test()` blocks are caught and recorded rather than crashing. Execution continues to the next test, collecting all results.
+By default, runtime errors crash the script. The testing harness changes this: in test mode (`--test`), assertion failures inside `test.it()` blocks are caught and recorded rather than crashing. Execution continues to the next test, collecting all results.
 
 **Key design goals:**
 
@@ -87,73 +87,73 @@ stash --test math_test.stash          # Run tests with TAP output
 stash --test tests/                    # Run all .stash files in directory
 ```
 
-The `--test` flag activates test mode: a `TapReporter` is attached as the test harness, execution proceeds normally, and `test()` calls run through the harness. Scripts not using `test()` can still be run with `--test` without side effects.
+The `--test` flag activates test mode: a `TapReporter` is attached as the test harness, execution proceeds normally, and `test.it()` calls run through the harness. Scripts not using `test.it()` can still be run with `--test` without side effects.
 
 ---
 
 ## 4. Test Registration
 
-### `test(name, fn)` — Register and Run a Test Case
+### `test.it(name, fn)` — Register and Run a Test Case
 
 ```stash
-test("addition works", () => {
+test.it("addition works", () => {
     assert.equal(1 + 1, 2);
 });
 ```
 
-Each `test()` call:
+Each `test.it()` call:
 
 1. Notifies the harness that a test is starting.
 2. Executes the lambda in an error-catching wrapper.
 3. Reports pass or fail to the harness.
 4. **Continues execution** — failures do not crash the script.
 
-### `describe(name, fn)` — Group Tests
+### `test.describe(name, fn)` — Group Tests
 
 ```stash
-describe("math operations", () => {
-    test("addition", () => {
+test.describe("math operations", () => {
+    test.it("addition", () => {
         assert.equal(2 + 3, 5);
     });
-    test("multiplication", () => {
+    test.it("multiplication", () => {
         assert.equal(3 * 4, 12);
     });
 });
 ```
 
-`describe()` blocks produce hierarchical test names (e.g., `math operations > addition`). Nesting is supported.
+`test.describe()` blocks produce hierarchical test names (e.g., `math operations > addition`). Nesting is supported.
 
-### `skip(name, fn)` — Register a Skipped Test
+### `test.skip(name, fn)` — Register a Skipped Test
 
 ```stash
-skip("not yet implemented", () => {
+test.skip("not yet implemented", () => {
     // Body is never executed
     assert.fail("should not reach here");
 });
 ```
 
-`skip()` registers a test that is intentionally not run. The test body is provided for documentation but is never executed. In TAP output, skipped tests emit `ok N - <name> # SKIP skipped`.
+`test.skip()` registers a test that is intentionally not run. The test body is provided for documentation but is never executed. In TAP output, skipped tests emit `ok N - <name> # SKIP skipped`.
 
-Use `skip()` for:
+Use `test.skip()` for:
 
 - Work-in-progress tests that aren't ready yet
 - Tests for features that are known broken
 - Platform-specific tests that don't apply to the current environment
 
-### Global Test Functions Summary
+### `test` Namespace Functions Summary
 
 | Function             | Description                                                     |
 | -------------------- | --------------------------------------------------------------- |
-| `test(name, fn)`     | Register and run a test case                                    |
-| `skip(name, fn)`     | Register a skipped test (body is not executed)                  |
-| `describe(name, fn)` | Group tests under a descriptive name                            |
-| `beforeAll(fn)`      | Run `fn()` once before tests in the current `describe` block    |
-| `afterAll(fn)`       | Run `fn()` once after all tests in the current `describe` block |
-| `beforeEach(fn)`     | Run `fn()` before each `test()` in the current `describe` scope |
-| `afterEach(fn)`      | Run `fn()` after each `test()` in the current `describe` scope  |
-| `captureOutput(fn)`  | Execute `fn()` with output redirected; returns captured string  |
+| `test.it(name, fn)`     | Register and run a test case                                    |
+| `test.skip(name, fn)`     | Register a skipped test (body is not executed)                  |
+| `test.describe(name, fn)` | Group tests under a descriptive name                            |
+| `test.beforeAll(fn)`      | Run `fn()` once before tests in the current `test.describe` block    |
+| `test.afterAll(fn)`       | Run `fn()` once after all tests in the current `test.describe` block |
+| `test.beforeEach(fn)`     | Run `fn()` before each `test.it()` in the current `test.describe` scope |
+| `test.afterEach(fn)`      | Run `fn()` after each `test.it()` in the current `test.describe` scope  |
+| `test.captureOutput(fn)`  | Execute `fn()` with output redirected; returns captured string  |
 
-These are global functions (not namespaced) because they are used at the top level of test scripts.
+These functions are accessed via the `test` namespace.
 
 ---
 
@@ -218,10 +218,10 @@ ok 3 - null handling
 
 ## 7. Output Capture
 
-`captureOutput(fn)` temporarily redirects the interpreter's output writer to an in-memory string buffer, executes `fn()`, then restores the original writer and returns the captured string.
+`test.captureOutput(fn)` temporarily redirects the interpreter's output writer to an in-memory string buffer, executes `fn()`, then restores the original writer and returns the captured string.
 
 ```stash
-let output = captureOutput(() => {
+let output = test.captureOutput(() => {
     io.println("hello");
     io.print("world");
 });
@@ -234,59 +234,59 @@ This allows tests to assert on what a function prints without polluting the TAP 
 
 ## 8. Setup & Teardown Hooks
 
-Lifecycle hooks provide setup and teardown logic scoped to `describe()` blocks. All four hooks must be called inside a `describe()` block — using them at the top level throws a `RuntimeError`.
+Lifecycle hooks provide setup and teardown logic scoped to `test.describe()` blocks. All four hooks must be called inside a `test.describe()` block — using them at the top level throws a `RuntimeError`.
 
-### `beforeAll(fn)` — One-Time Setup
+### `test.beforeAll(fn)` — One-Time Setup
 
 ```stash
-describe("database tests", () => {
+test.describe("database tests", () => {
     let items = [];
 
-    beforeAll(() => {
+    test.beforeAll(() => {
         arr.push(items, "initialized");
     });
 
-    test("items is initialized", () => {
+    test.it("items is initialized", () => {
         assert.equal(items[0], "initialized");
     });
 });
 ```
 
-`beforeAll(fn)` executes `fn()` immediately when encountered. Since Stash executes synchronously and top-to-bottom, placing `beforeAll()` at the top of a `describe()` block ensures it runs before any tests.
+`test.beforeAll(fn)` executes `fn()` immediately when encountered. Since Stash executes synchronously and top-to-bottom, placing `test.beforeAll()` at the top of a `test.describe()` block ensures it runs before any tests.
 
-### `afterAll(fn)` — One-Time Teardown
+### `test.afterAll(fn)` — One-Time Teardown
 
 ```stash
-describe("resources", () => {
-    afterAll(() => {
+test.describe("resources", () => {
+    test.afterAll(() => {
         // Runs after all tests in this describe block finish
     });
 
-    test("uses resource", () => { /* ... */ });
+    test.it("uses resource", () => { /* ... */ });
 });
 ```
 
-`afterAll(fn)` registers `fn` to run when the `describe()` block ends. It runs in the `finally` block, so it executes even if a test fails.
+`test.afterAll(fn)` registers `fn` to run when the `test.describe()` block ends. It runs in the `finally` block, so it executes even if a test fails.
 
-### `beforeEach(fn)` / `afterEach(fn)` — Per-Test Hooks
+### `test.beforeEach(fn)` / `test.afterEach(fn)` — Per-Test Hooks
 
 ```stash
-describe("counter", () => {
+test.describe("counter", () => {
     let count = [0];
 
-    beforeEach(() => {
+    test.beforeEach(() => {
         count[0] = 0;  // Reset before each test
     });
 
-    afterEach(() => {
+    test.afterEach(() => {
         // Runs after each test body completes
     });
 
-    test("starts at zero", () => {
+    test.it("starts at zero", () => {
         assert.equal(count[0], 0);
     });
 
-    test("is reset between tests", () => {
+    test.it("is reset between tests", () => {
         assert.equal(count[0], 0);
     });
 });
@@ -294,18 +294,18 @@ describe("counter", () => {
 
 ### Hook Inheritance in Nested Describes
 
-Hooks from parent `describe()` blocks are inherited by nested blocks. `beforeEach` hooks run outermost-to-innermost; `afterEach` hooks run innermost-to-outermost:
+Hooks from parent `test.describe()` blocks are inherited by nested blocks. `test.beforeEach` hooks run outermost-to-innermost; `test.afterEach` hooks run innermost-to-outermost:
 
 ```stash
-describe("outer", () => {
-    beforeEach(() => { /* runs first */ });
-    afterEach(() => { /* runs last */ });
+test.describe("outer", () => {
+    test.beforeEach(() => { /* runs first */ });
+    test.afterEach(() => { /* runs last */ });
 
-    describe("inner", () => {
-        beforeEach(() => { /* runs second */ });
-        afterEach(() => { /* runs first in cleanup */ });
+    test.describe("inner", () => {
+        test.beforeEach(() => { /* runs second */ });
+        test.afterEach(() => { /* runs first in cleanup */ });
 
-        test("example", () => {
+        test.it("example", () => {
             // Execution order:
             // 1. outer beforeEach
             // 2. inner beforeEach
@@ -317,7 +317,7 @@ describe("outer", () => {
 });
 ```
 
-Hooks do **not** leak between sibling `describe()` blocks — each block manages its own hook scope.
+Hooks do **not** leak between sibling `test.describe()` blocks — each block manages its own hook scope.
 
 ---
 
@@ -332,20 +332,20 @@ Stash.Interpreter/
 │   ├── TapReporter.cs         # TAP output implementation
 │   └── AssertionError.cs      # Structured assertion failure exception
 └── Interpreting/
-    └── TestBuiltIns.cs        # test(), skip(), describe(), hooks, assert.*, captureOutput()
+    └── TestBuiltIns.cs        # test.it(), test.skip(), test.describe(), hooks, assert.*, test.captureOutput()
 ```
 
-The `test()`, `skip()`, `describe()`, lifecycle hooks, and the `assert` namespace are registered in `TestBuiltIns.cs`, following the same pattern as other [built-in function registries](../Stash%20—%20Standard%20Library%20Reference.md#overview).
+The `test.it()`, `test.skip()`, `test.describe()`, lifecycle hooks, and the `assert` namespace are registered in `TestBuiltIns.cs`, following the same pattern as other [built-in function registries](../Stash%20—%20Standard%20Library%20Reference.md#overview).
 
 ### Integration Points
 
 - **CLI (`Program.cs`)** — The `--test` flag instantiates a `TapReporter` and assigns it to `Interpreter.TestHarness` before script execution.
 - **Interpreter** — Exposes `ITestHarness? TestHarness { get; set; }`. All harness calls are guarded: `TestHarness?.OnTestStart(...)`.
-- **`test()` built-in** — Catches `RuntimeError` and `AssertionException` inside the test lambda and routes them to `OnTestFail`. Runs `beforeEach`/`afterEach` hooks around the test body. All other exceptions propagate normally.
-- **`skip()` built-in** — Calls `OnTestSkip` on the harness without executing the test body.
-- **`describe()` built-in** — Pushes hook layers on entry and pops them on exit. Runs `afterAll` hooks in a `finally` block.
-- **Lifecycle hooks** — `beforeAll` executes immediately. `afterAll` defers to the `describe` `finally` block. `beforeEach`/`afterEach` append to a per-`describe` hook stack; `test()` iterates all levels.
-- **`assert.*` functions** — In test mode, throw `AssertionException` (caught by the `test()` wrapper). Outside test mode, throw `RuntimeError` (crashes the script).
+- **`test.it()` built-in** — Catches `RuntimeError` and `AssertionException` inside the test lambda and routes them to `OnTestFail`. Runs `beforeEach`/`afterEach` hooks around the test body. All other exceptions propagate normally.
+- **`test.skip()` built-in** — Calls `OnTestSkip` on the harness without executing the test body.
+- **`test.describe()` built-in** — Pushes hook layers on entry and pops them on exit. Runs `afterAll` hooks in a `finally` block.
+- **Lifecycle hooks** — `beforeAll` executes immediately. `afterAll` defers to the `test.describe` `finally` block. `beforeEach`/`afterEach` append to a per-`test.describe` hook stack; `test.it()` iterates all levels.
+- **`assert.*` functions** — In test mode, throw `AssertionException` (caught by the `test.it()` wrapper). Outside test mode, throw `RuntimeError` (crashes the script).
 
 ---
 
@@ -364,40 +364,40 @@ The `test()`, `skip()`, `describe()`, lifecycle hooks, and the `assert` namespac
 
 import { deploy, Server } from "deploy.stash";
 
-describe("deployment", () => {
+test.describe("deployment", () => {
     let srv = null;
 
-    beforeEach(() => {
+    test.beforeEach(() => {
         srv = Server { host: "localhost", port: 22, status: "unknown" };
     });
 
-    afterAll(() => {
+    test.afterAll(() => {
         srv = null;  // Cleanup
     });
 
-    test("creates server instance", () => {
+    test.it("creates server instance", () => {
         assert.equal(srv.host, "localhost");
         assert.equal(srv.port, 22);
     });
 
-    test("deploy returns boolean", () => {
+    test.it("deploy returns boolean", () => {
         let result = deploy(srv, "app.tar.gz");
         assert.equal(typeof(result), "bool");
     });
 
-    skip("rollback not implemented yet", () => {
+    test.skip("rollback not implemented yet", () => {
         let result = rollback(srv);
         assert.true(result);
     });
 });
 
-describe("language features", () => {
-    test("null coalescing works", () => {
+test.describe("language features", () => {
+    test.it("null coalescing works", () => {
         let val = null ?? "default";
         assert.equal(val, "default");
     });
 
-    test("type coercion does not happen", () => {
+    test.it("type coercion does not happen", () => {
         assert.notEqual(5, "5");
         assert.notEqual(0, false);
         assert.notEqual(0, null);

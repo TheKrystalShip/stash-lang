@@ -6,11 +6,11 @@
  * Run with: stash --test lifecycle_hooks.test.stash
  *
  * Demonstrates:
- *   - skip() for marking tests as pending
- *   - beforeAll() / afterAll() for one-time setup and teardown
- *   - beforeEach() / afterEach() for per-test setup and teardown
- *   - Nested describe blocks inheriting parent hooks
- *   - All hooks combined with skip() in the middle
+ *   - test.skip() for marking tests as pending
+ *   - test.beforeAll() / test.afterAll() for one-time setup and teardown
+ *   - test.beforeEach() / test.afterEach() for per-test setup and teardown
+ *   - Nested test.describe() blocks inheriting parent hooks
+ *   - All hooks combined with test.skip() in the middle
  */
 
 // Shared state uses single-element arrays because closures capture
@@ -26,112 +26,112 @@ fn push_event(log, name) {
 
 // ---
 
-describe("skip()", () => {
-    test("this test runs", () => {
+test.describe("test.skip()", () => {
+    test.it("this test runs", () => {
         assert.equal(2 + 2, 4);
     });
 
-    skip("not yet implemented", () => {
+    test.skip("not yet implemented", () => {
         // body never executes — safe to reference unfinished logic
         assert.fail("should never reach here");
     });
 
-    skip("known flaky on CI", () => {
+    test.skip("known flaky on CI", () => {
         assert.equal(1, 2); // wrong, but body is never run
     });
 
-    test("this also runs", () => {
+    test.it("this also runs", () => {
         assert.true(true);
     });
 });
 
-describe("beforeAll / afterAll", () => {
+test.describe("beforeAll / afterAll", () => {
     let items = [];
 
-    beforeAll(() => {
+    test.beforeAll(() => {
         arr.push(items, "initialized");
     });
 
-    afterAll(() => {
+    test.afterAll(() => {
         arr.push(items, "cleaned up");
     });
 
-    test("beforeAll ran before the first test", () => {
+    test.it("beforeAll ran before the first test", () => {
         assert.equal(len(items), 1);
         assert.equal(items[0], "initialized");
     });
 
-    test("items grows as tests add data", () => {
+    test.it("items grows as tests add data", () => {
         arr.push(items, "test data");
         assert.equal(len(items), 2);
         assert.equal(items[1], "test data");
     });
 
-    test("afterAll has not run yet", () => {
+    test.it("afterAll has not run yet", () => {
         // afterAll appends "cleaned up", but it hasn't fired yet
         assert.false("cleaned up" in items);
     });
 });
 
-describe("beforeEach / afterEach", () => {
+test.describe("beforeEach / afterEach", () => {
     let counter = [0];
 
-    beforeEach(() => {
+    test.beforeEach(() => {
         counter[0] = 1; // reset and prime to 1 before every test
     });
 
-    afterEach(() => {
+    test.afterEach(() => {
         // counter must be >= 1 after each test body
         assert.greater(counter[0], 0);
     });
 
-    test("counter starts at 1", () => {
+    test.it("counter starts at 1", () => {
         assert.equal(counter[0], 1);
     });
 
-    test("mutations in one test do not bleed into the next", () => {
+    test.it("mutations in one test do not bleed into the next", () => {
         // beforeEach reset it back to 1; previous test's change is gone
         assert.equal(counter[0], 1);
         counter[0] = 99;
     });
 
-    test("counter is 1 again after reset", () => {
+    test.it("counter is 1 again after reset", () => {
         assert.equal(counter[0], 1);
         counter[0] += 4;
         assert.equal(counter[0], 5);
     });
 });
 
-describe("nested hooks", () => {
+test.describe("nested hooks", () => {
     let log = make_log();
 
-    beforeEach(() => {
+    test.beforeEach(() => {
         push_event(log, "outer-before");
     });
 
-    afterEach(() => {
+    test.afterEach(() => {
         push_event(log, "outer-after");
     });
 
-    test("outer test", () => {
+    test.it("outer test", () => {
         push_event(log, "outer-test");
     });
 
-    describe("inner group", () => {
-        beforeEach(() => {
+    test.describe("inner group", () => {
+        test.beforeEach(() => {
             push_event(log, "inner-before");
         });
 
-        afterEach(() => {
+        test.afterEach(() => {
             push_event(log, "inner-after");
         });
 
-        test("inner test", () => {
+        test.it("inner test", () => {
             push_event(log, "inner-test");
         });
     });
 
-    test("verify hook execution order", () => {
+    test.it("verify hook execution order", () => {
         // By now, the log contains all events from the two preceding tests.
         // Outer test:  outer-before → outer-test → outer-after
         // Inner test:  outer-before → inner-before → inner-test → inner-after → outer-after
@@ -148,28 +148,28 @@ describe("nested hooks", () => {
     });
 });
 
-describe("combined lifecycle", () => {
+test.describe("combined lifecycle", () => {
     let events = make_log();
 
-    beforeAll(() => { push_event(events, "SETUP"); });
-    afterAll(() => { push_event(events, "TEARDOWN"); });
-    beforeEach(() => { push_event(events, "before"); });
-    afterEach(() => { push_event(events, "after"); });
+    test.beforeAll(() => { push_event(events, "SETUP"); });
+    test.afterAll(() => { push_event(events, "TEARDOWN"); });
+    test.beforeEach(() => { push_event(events, "before"); });
+    test.afterEach(() => { push_event(events, "after"); });
 
-    test("first", () => {
+    test.it("first", () => {
         push_event(events, "test-1");
     });
 
-    test("second", () => {
+    test.it("second", () => {
         push_event(events, "test-2");
     });
 
-    skip("third (pending)", () => {
+    test.skip("third (pending)", () => {
         // skipped tests don't run hooks either
         push_event(events, "test-3");
     });
 
-    test("verify full lifecycle sequence", () => {
+    test.it("verify full lifecycle sequence", () => {
         // SETUP
         // before → test-1 → after
         // before → test-2 → after

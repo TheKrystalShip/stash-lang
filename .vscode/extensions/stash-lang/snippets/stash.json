@@ -183,67 +183,67 @@
     "description": "Interpolated triple-quoted multi-line string"
   },
   "Test Case": {
-    "prefix": "test",
+    "prefix": "test.it",
     "body": [
-      "test(\"${1:test name}\", () => {",
+      "test.it(\"${1:test name}\", () => {",
       "\t$0",
       "});"
     ],
     "description": "Define a test case"
   },
-  "Test Describe": {
-    "prefix": "describe",
+  "Describe Block": {
+    "prefix": "test.describe",
     "body": [
-      "describe(\"${1:group name}\", () => {",
+      "test.describe(\"${1:group name}\", () => {",
       "\t$0",
       "});"
     ],
     "description": "Group tests under a descriptive name"
   },
   "Skip Test": {
-    "prefix": "skip",
+    "prefix": "test.skip",
     "body": [
-      "skip(\"${1:test name}\", () => {",
+      "test.skip(\"${1:test name}\", () => {",
       "\t$0",
       "});"
     ],
-    "description": "Skip a test (body is not executed)"
+    "description": "Skip a test case"
   },
   "Before All Hook": {
-    "prefix": "beforeAll",
+    "prefix": "test.beforeAll",
     "body": [
-      "beforeAll(() => {",
+      "test.beforeAll(() => {",
       "\t$0",
       "});"
     ],
-    "description": "Run once before all tests in the describe block"
+    "description": "Run once before all tests in the test.describe block"
   },
   "After All Hook": {
-    "prefix": "afterAll",
+    "prefix": "test.afterAll",
     "body": [
-      "afterAll(() => {",
+      "test.afterAll(() => {",
       "\t$0",
       "});"
     ],
-    "description": "Run once after all tests in the describe block"
+    "description": "Run once after all tests in the test.describe block"
   },
   "Before Each Hook": {
-    "prefix": "beforeEach",
+    "prefix": "test.beforeEach",
     "body": [
-      "beforeEach(() => {",
+      "test.beforeEach(() => {",
       "\t$0",
       "});"
     ],
-    "description": "Run before each test in the describe block"
+    "description": "Run before each test in the test.describe block"
   },
   "After Each Hook": {
-    "prefix": "afterEach",
+    "prefix": "test.afterEach",
     "body": [
-      "afterEach(() => {",
+      "test.afterEach(() => {",
       "\t$0",
       "});"
     ],
-    "description": "Run after each test in the describe block"
+    "description": "Run after each test in the test.describe block"
   },
   "Assert Equal": {
     "prefix": "aeq",

@@ -172,7 +172,7 @@ let sources = [
 ];
 
 // Spawn a task per source — take whichever responds first
-let raceHandles = arr.map(sources, (src) => task.run(() => src.fetch()));
+let raceHandles = arr.map(sources, (src) => task.run(src.fetch));
 
 let raceStart = time.millis();
 let winner    = task.awaitAny(raceHandles);

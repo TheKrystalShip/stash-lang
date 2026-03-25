@@ -1663,9 +1663,6 @@ io.println(counter()); // 2
 | `typeof(val)`      | Return the type of a value as string      |
 | `len(val)`         | Length of a string or array               |
 | `lastError()`      | Last error message (string) or null       |
-| `test(s, f)`       | Run a test                                |
-| `declare(s, f)`    | Group tests together                      |
-| `captureOutput(f)` | Redirects the output of any internal call |
 
 All other built-in functions are organized into namespaces (see below).
 
@@ -1673,7 +1670,7 @@ All other built-in functions are organized into namespaces (see below).
 
 Stash organizes built-in functions into **namespaces** accessed via dot notation. A small set of fundamental functions remain global (see above); everything else lives in a namespace.
 
-Available namespaces: `io`, `conv`, `env`, `fs`, `path`, `str`, `arr`, `dict`, `math`, `time`, `json`, `ini`, `config`, `http`, `process`, `assert`.
+Available namespaces: `io`, `conv`, `env`, `fs`, `path`, `str`, `arr`, `dict`, `math`, `time`, `json`, `ini`, `config`, `http`, `process`, `assert`, `test`.
 
 Namespace members are accessed with dot notation: `fs.exists("/etc/hosts")`. Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
@@ -2028,7 +2025,7 @@ The debug hook interface above enables integration with VS Code and other editor
 
 ### Testing Hooks
 
-The testing infrastructure follows the same architectural pattern — an `ITestHarness` interface with the same null-guard approach for zero overhead. For testing built-ins (`test()`, `describe()`, `assert` namespace) and TAP output, see [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md).
+The testing infrastructure follows the same architectural pattern — an `ITestHarness` interface with the same null-guard approach for zero overhead. For testing built-ins (`test.it()`, `test.describe()`, `assert` namespace) and TAP output, see [TAP — Testing Infrastructure](specs/TAP%20—%20Testing%20Infrastructure.md).
 
 ---
 

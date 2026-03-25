@@ -110,29 +110,14 @@ public static class BuiltInRegistry
 
     public static readonly IReadOnlyList<BuiltInFunction> Functions = new[]
     {
+        // Introspection and utilities
         new BuiltInFunction("typeof", new[] { new BuiltInParam("value") }, "string",
             Documentation: "Returns the type name of a value as a string.\n@param value The value to inspect\n@return The type name: \"int\", \"float\", \"string\", \"bool\", \"null\", \"array\", \"dict\", \"struct\", \"function\", \"namespace\", \"range\", or \"enum\""),
         new BuiltInFunction("len", new[] { new BuiltInParam("value") }, "int",
             Documentation: "Returns the length of a string, array, or dictionary.\n@param value A string, array, or dictionary\n@return The number of characters, elements, or entries"),
         new BuiltInFunction("lastError", Array.Empty<BuiltInParam>(), "string",
             Documentation: "Returns the last runtime error message, or null if no error has occurred.\n@return The error message string, or null"),
-
-        new BuiltInFunction("test", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
-            Documentation: "Defines a test case with a name and a function body. The function is executed and the result is reported in TAP format.\n@param name The name of the test case\n@param fn The test function to execute"),
-        new BuiltInFunction("skip", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
-            Documentation: "Defines a test case that will be skipped. The test is recorded but not executed.\n@param name The name of the skipped test\n@param fn The test function (not executed)"),
-        new BuiltInFunction("describe", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
-            Documentation: "Groups related test cases into a named test suite. Tests defined inside the function body are logically grouped under this name.\n@param name The name of the test suite\n@param fn A function containing test() calls"),
-        new BuiltInFunction("beforeAll", new[] { new BuiltInParam("fn", "function") },
-            Documentation: "Registers a setup function that runs once before all tests in the current suite.\n@param fn The setup function to execute"),
-        new BuiltInFunction("afterAll", new[] { new BuiltInParam("fn", "function") },
-            Documentation: "Registers a teardown function that runs once after all tests in the current suite.\n@param fn The teardown function to execute"),
-        new BuiltInFunction("beforeEach", new[] { new BuiltInParam("fn", "function") },
-            Documentation: "Registers a setup function that runs before each test in the current suite.\n@param fn The setup function to execute before each test"),
-        new BuiltInFunction("afterEach", new[] { new BuiltInParam("fn", "function") },
-            Documentation: "Registers a teardown function that runs after each test in the current suite.\n@param fn The teardown function to execute after each test"),
-        new BuiltInFunction("captureOutput", new[] { new BuiltInParam("fn", "function") }, "string",
-            Documentation: "Executes a function while capturing all standard output. Returns the captured output as a string.\n@param fn The function whose output to capture\n@return The captured stdout output as a string"),
+        // Utility functions
         new BuiltInFunction("range", new[] { new BuiltInParam("start_or_end", "int"), new BuiltInParam("end", "int"), new BuiltInParam("step", "int") }, "array",
             Documentation: "Creates an array of integers in sequence. With one argument, generates 0 to end (exclusive). With two, generates start to end (exclusive). With three, uses the given step.\n@param start_or_end The end value (if one arg) or start value (if two/three args)\n@param end The end value (exclusive)\n@param step The increment between values\n@return An array of integers"),
         new BuiltInFunction("exit", new[] { new BuiltInParam("code", "int") },
@@ -551,6 +536,23 @@ public static class BuiltInRegistry
             Documentation: "Asserts that calling the function throws a runtime error. Throws an assertion error if no error occurs.\n@param fn The function expected to throw\n@return The error message from the thrown error"),
         new NamespaceFunction("assert", "fail", new[] { new BuiltInParam("message", "string") },
             Documentation: "Immediately fails the test with the specified message.\n@param message The failure message"),
+        // test namespace
+        new NamespaceFunction("test", "it", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
+            Documentation: "Defines a test case with a name and a function body. The function is executed and the result is reported in TAP format.\n@param name The name of the test case\n@param fn The test function to execute"),
+        new NamespaceFunction("test", "skip", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
+            Documentation: "Defines a test case that will be skipped. The test is recorded but not executed.\n@param name The name of the skipped test\n@param fn The test function (not executed)"),
+        new NamespaceFunction("test", "describe", new[] { new BuiltInParam("name", "string"), new BuiltInParam("fn", "function") },
+            Documentation: "Groups related test cases into a named test suite. Tests defined inside the function body are logically grouped under this name.\n@param name The name of the test suite\n@param fn A function containing test.it() calls"),
+        new NamespaceFunction("test", "beforeAll", new[] { new BuiltInParam("fn", "function") },
+            Documentation: "Registers a setup function that runs once before all tests in the current suite.\n@param fn The setup function to execute"),
+        new NamespaceFunction("test", "afterAll", new[] { new BuiltInParam("fn", "function") },
+            Documentation: "Registers a teardown function that runs once after all tests in the current suite.\n@param fn The teardown function to execute"),
+        new NamespaceFunction("test", "beforeEach", new[] { new BuiltInParam("fn", "function") },
+            Documentation: "Registers a setup function that runs before each test in the current suite.\n@param fn The setup function to execute before each test"),
+        new NamespaceFunction("test", "afterEach", new[] { new BuiltInParam("fn", "function") },
+            Documentation: "Registers a teardown function that runs after each test in the current suite.\n@param fn The teardown function to execute after each test"),
+        new NamespaceFunction("test", "captureOutput", new[] { new BuiltInParam("fn", "function") }, "string",
+            Documentation: "Executes a function while capturing all standard output. Returns the captured output as a string.\n@param fn The function whose output to capture\n@return The captured stdout output as a string"),
         // math namespace
         new NamespaceFunction("math", "abs", new[] { new BuiltInParam("n", "number") }, "number",
             Documentation: "Returns the absolute value of a number.\n@param n The number\n@return The absolute value"),
@@ -801,18 +803,19 @@ public static class BuiltInRegistry
             Documentation: "Returns the resolved dependency versions from the lock file. Falls back to manifest constraints if no lock file exists. Returns null if no stash.json is found.\n@return A dictionary of package names to version strings, or null"),
         new NamespaceFunction("pkg", "root", Array.Empty<BuiltInParam>(), "string",
             Documentation: "Returns the absolute path to the current project root (the directory containing stash.json). Returns null if no stash.json is found.\n@return The absolute path string, or null"),
+
         // task namespace
         new NamespaceFunction("task", "run", new[] { new BuiltInParam("fn", "function") }, "TaskHandle",
             Documentation: "Spawns a new task that executes `fn` on the thread pool. The function's closure is snapshotted at spawn time. Returns a TaskHandle with a unique `id` and initial status `task.Status.Running`.\n@param fn Zero-argument function to execute in parallel\n@return A TaskHandle struct with id and status fields"),
-        new NamespaceFunction("task", "await", new[] { new BuiltInParam("handle", "TaskHandle") }, "any",
+        new NamespaceFunction("task", "await", new[] { new BuiltInParam("handle", "TaskHandle") },
             Documentation: "Blocks the calling thread until the given task finishes. Returns the task's return value. Throws if the task failed or was cancelled.\n@param handle Task handle returned by task.run()\n@return The task's return value"),
         new NamespaceFunction("task", "awaitAll", new[] { new BuiltInParam("handles", "array") }, "array",
             Documentation: "Blocks until all tasks in the array complete. Returns a list of results in the same order as the input handles. Throws on the first encountered error.\n@param handles Array of TaskHandle values\n@return An array of results in the same order as the input handles"),
-        new NamespaceFunction("task", "awaitAny", new[] { new BuiltInParam("handles", "array") }, "any",
+        new NamespaceFunction("task", "awaitAny", new[] { new BuiltInParam("handles", "array") },
             Documentation: "Blocks until any task in the array completes. Returns the result of the first completed task.\n@param handles Array of TaskHandle values\n@return The result of the first completed task"),
         new NamespaceFunction("task", "status", new[] { new BuiltInParam("handle", "TaskHandle") }, "Status",
             Documentation: "Returns the current status of the task: `task.Status.Running`, `task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`. Does not block.\n@param handle Task handle returned by task.run()\n@return The task's current task.Status"),
-        new NamespaceFunction("task", "cancel", new[] { new BuiltInParam("handle", "TaskHandle") }, "null",
+        new NamespaceFunction("task", "cancel", new[] { new BuiltInParam("handle", "TaskHandle") },
             Documentation: "Signals the task to cancel. The cancellation is cooperative — the task must check for cancellation. Returns `null`.\n@param handle Task handle returned by task.run()\n@return null"),
     };
 
@@ -826,42 +829,29 @@ public static class BuiltInRegistry
     /// </summary>
     public static readonly IReadOnlyList<NamespaceConstant> NamespaceConstants = new[]
     {
-        new NamespaceConstant("process", "SIGHUP",  "int", "1",
-            Documentation: "Hangup signal (1). Sent when a terminal is closed or a controlling process ends."),
-        new NamespaceConstant("process", "SIGINT",  "int", "2",
-            Documentation: "Interrupt signal (2). Sent when the user presses Ctrl+C."),
-        new NamespaceConstant("process", "SIGQUIT", "int", "3",
-            Documentation: "Quit signal (3). Similar to SIGINT but also produces a core dump."),
-        new NamespaceConstant("process", "SIGKILL", "int", "9",
-            Documentation: "Kill signal (9). Immediately terminates a process. Cannot be caught or ignored."),
-        new NamespaceConstant("process", "SIGUSR1", "int", "10",
-            Documentation: "User-defined signal 1 (10). Available for custom application-level signaling."),
-        new NamespaceConstant("process", "SIGUSR2", "int", "12",
-            Documentation: "User-defined signal 2 (12). Available for custom application-level signaling."),
-        new NamespaceConstant("process", "SIGTERM", "int", "15",
-            Documentation: "Termination signal (15). Requests graceful shutdown. Can be caught for cleanup."),
-        new NamespaceConstant("math", "PI", "float", "3.141592653589793",
-            Documentation: "The ratio of a circle's circumference to its diameter (π ≈ 3.14159)."),
-        new NamespaceConstant("math", "E",  "float", "2.718281828459045",
-            Documentation: "Euler's number, the base of natural logarithms (e ≈ 2.71828)."),
-        new NamespaceConstant("term", "BLACK",   "string", "black",
-            Documentation: "Color constant for black. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "RED",     "string", "red",
-            Documentation: "Color constant for red. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "GREEN",   "string", "green",
-            Documentation: "Color constant for green. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "YELLOW",  "string", "yellow",
-            Documentation: "Color constant for yellow. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "BLUE",    "string", "blue",
-            Documentation: "Color constant for blue. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "MAGENTA", "string", "magenta",
-            Documentation: "Color constant for magenta. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "CYAN",    "string", "cyan",
-            Documentation: "Color constant for cyan. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "WHITE",   "string", "white",
-            Documentation: "Color constant for white. Use with term.color() or term.style()."),
-        new NamespaceConstant("term", "GRAY",    "string", "gray",
-            Documentation: "Color constant for gray. Use with term.color() or term.style()."),
+        // process namespace
+        new NamespaceConstant("process", "SIGHUP",  "int", "1", Documentation: "Hangup signal (1). Sent when a terminal is closed or a controlling process ends."),
+        new NamespaceConstant("process", "SIGINT",  "int", "2", Documentation: "Interrupt signal (2). Sent when the user presses Ctrl+C."),
+        new NamespaceConstant("process", "SIGQUIT", "int", "3", Documentation: "Quit signal (3). Similar to SIGINT but also produces a core dump."),
+        new NamespaceConstant("process", "SIGKILL", "int", "9", Documentation: "Kill signal (9). Immediately terminates a process. Cannot be caught or ignored."),
+        new NamespaceConstant("process", "SIGUSR1", "int", "10", Documentation: "User-defined signal 1 (10). Available for custom application-level signaling."),
+        new NamespaceConstant("process", "SIGUSR2", "int", "12", Documentation: "User-defined signal 2 (12). Available for custom application-level signaling."),
+        new NamespaceConstant("process", "SIGTERM", "int", "15", Documentation: "Termination signal (15). Requests graceful shutdown. Can be caught for cleanup."),
+
+        // math namespace
+        new NamespaceConstant("math", "PI", "float", "3.141592653589793", Documentation: "The ratio of a circle's circumference to its diameter (π ≈ 3.14159)."),
+        new NamespaceConstant("math", "E", "float", "2.718281828459045", Documentation: "Euler's number, the base of natural logarithms (e ≈ 2.71828)."),
+
+        // term namespace
+        new NamespaceConstant("term", "BLACK", "string", "black", Documentation: "Color constant for black. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "RED", "string", "red", Documentation: "Color constant for red. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "GREEN", "string", "green", Documentation: "Color constant for green. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "YELLOW", "string", "yellow", Documentation: "Color constant for yellow. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "BLUE", "string", "blue", Documentation: "Color constant for blue. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "MAGENTA", "string", "magenta", Documentation: "Color constant for magenta. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "CYAN", "string", "cyan", Documentation: "Color constant for cyan. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "WHITE", "string", "white", Documentation: "Color constant for white. Use with term.color() or term.style()."),
+        new NamespaceConstant("term", "GRAY", "string", "gray", Documentation: "Color constant for gray. Use with term.color() or term.style()."),
     };
 
     // ── Built-in Namespace Names ──
@@ -872,7 +862,10 @@ public static class BuiltInRegistry
     /// </summary>
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
-        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str", "assert", "math", "time", "json", "http", "ini", "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg", "task"
+        "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str",
+        "assert", "test", "math", "time", "json", "http", "ini", "config", "tpl",
+        "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg",
+        "task"
     };
 
     // ── Keywords ──
@@ -898,8 +891,9 @@ public static class BuiltInRegistry
     /// </summary>
     public static readonly HashSet<string> ValidTypes = new()
     {
-        "string", "int", "float", "bool", "null", "array",
-        "dict", "function", "namespace", "range", "Status", "TaskHandle"
+        "string", "int", "float", "bool", "null", "array", "dict", "function",
+        "namespace", "range", "Status", "TaskHandle", "CommandResult", "Process",
+        "HttpResponse"
     };
 
     // ── Known names for semantic validation (don't warn as undefined) ──

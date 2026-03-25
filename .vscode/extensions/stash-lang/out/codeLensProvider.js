@@ -35,7 +35,7 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.StashTestCodeLensProvider = void 0;
 const vscode = __importStar(require("vscode"));
-const TEST_CALL_RE = /\b(describe|test|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
+const TEST_CALL_RE = /\btest\.(describe|it|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
 class StashTestCodeLensProvider {
     constructor() {
         this._onDidChange = new vscode.EventEmitter();

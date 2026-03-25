@@ -56,7 +56,7 @@ public class TestDiscoveryTests
     public void FullyQualifiedName_TopLevelTest_IncludesFilename()
     {
         var (_, output) = RunWithHarness("""
-            test("addition", () => { assert.true(true); });
+            test.it("addition", () => { assert.true(true); });
             """, "math.test.stash");
 
         Assert.Contains("ok 1 - math.test.stash > addition", output);
@@ -66,8 +66,8 @@ public class TestDiscoveryTests
     public void FullyQualifiedName_DescribeTest_IncludesFilename()
     {
         var (_, output) = RunWithHarness("""
-            describe("math", () => {
-                test("addition", () => { assert.true(true); });
+            test.describe("math", () => {
+                test.it("addition", () => { assert.true(true); });
             });
             """, "math.test.stash");
 
@@ -78,9 +78,9 @@ public class TestDiscoveryTests
     public void FullyQualifiedName_NestedDescribes_IncludesFilename()
     {
         var (_, output) = RunWithHarness("""
-            describe("outer", () => {
-                describe("inner", () => {
-                    test("check", () => { assert.true(true); });
+            test.describe("outer", () => {
+                test.describe("inner", () => {
+                    test.it("check", () => { assert.true(true); });
                 });
             });
             """, "test.stash");
@@ -92,7 +92,7 @@ public class TestDiscoveryTests
     public void FullyQualifiedName_NoFile_UsesUnknown()
     {
         var (_, output) = RunWithHarness("""
-            test("check", () => { assert.true(true); });
+            test.it("check", () => { assert.true(true); });
             """);
 
         Assert.Contains("ok 1 - unknown > check", output);
@@ -102,7 +102,7 @@ public class TestDiscoveryTests
     public void FullyQualifiedName_AbsolutePath_UsesOnlyFilename()
     {
         var (_, output) = RunWithHarness("""
-            test("check", () => { assert.true(true); });
+            test.it("check", () => { assert.true(true); });
             """, "/home/user/project/tests/math.test.stash");
 
         Assert.Contains("ok 1 - math.test.stash > check", output);
@@ -112,8 +112,8 @@ public class TestDiscoveryTests
     public void FullyQualifiedName_SuiteComment_IncludesFilename()
     {
         var (_, output) = RunWithHarness("""
-            describe("math", () => {
-                test("check", () => { assert.true(true); });
+            test.describe("math", () => {
+                test.it("check", () => { assert.true(true); });
             });
             """, "test.stash");
 
@@ -126,8 +126,8 @@ public class TestDiscoveryTests
     public void Discovery_EmitsDiscoveredComments()
     {
         var (_, output) = RunDiscovery("""
-            test("addition", () => { assert.equal(1+1, 2); });
-            test("subtraction", () => { assert.equal(3-1, 2); });
+            test.it("addition", () => { assert.equal(1+1, 2); });
+            test.it("subtraction", () => { assert.equal(3-1, 2); });
             """, "math.test.stash");
 
         Assert.Contains("# discovered: math.test.stash > addition", output);
@@ -139,7 +139,7 @@ public class TestDiscoveryTests
     {
         // If test bodies executed, the assertion would fail. In discovery mode, they don't.
         var (reporter, _) = RunDiscovery("""
-            test("will fail if run", () => { assert.equal(1, 2); });
+            test.it("will fail if run", () => { assert.equal(1, 2); });
             """, "test.stash");
 
         // No tests should have passed or failed — bodies weren't executed
@@ -151,7 +151,7 @@ public class TestDiscoveryTests
     public void Discovery_PlanLineIsZero()
     {
         var (_, output) = RunDiscovery("""
-            test("check", () => { assert.true(true); });
+            test.it("check", () => { assert.true(true); });
             """, "test.stash");
 
         Assert.Contains("1..0", output);
@@ -160,11 +160,11 @@ public class TestDiscoveryTests
     [Fact]
     public void Discovery_DescribeBlocksStillExecute()
     {
-        // describe() bodies execute so nested tests are discovered
+        // test.describe() bodies execute so nested tests are discovered
         var (_, output) = RunDiscovery("""
-            describe("math", () => {
-                test("add", () => { assert.true(true); });
-                test("sub", () => { assert.true(true); });
+            test.describe("math", () => {
+                test.it("add", () => { assert.true(true); });
+                test.it("sub", () => { assert.true(true); });
             });
             """, "test.stash");
 
@@ -176,9 +176,9 @@ public class TestDiscoveryTests
     public void Discovery_NestedDescribes_FullyQualified()
     {
         var (_, output) = RunDiscovery("""
-            describe("outer", () => {
-                describe("inner", () => {
-                    test("check", () => { assert.true(true); });
+            test.describe("outer", () => {
+                test.describe("inner", () => {
+                    test.it("check", () => { assert.true(true); });
                 });
             });
             """, "test.stash");
@@ -190,7 +190,7 @@ public class TestDiscoveryTests
     public void Discovery_TapHeader_Written()
     {
         var (_, output) = RunDiscovery("""
-            test("check", () => { assert.true(true); });
+            test.it("check", () => { assert.true(true); });
             """, "test.stash");
 
         Assert.Contains("TAP version 14", output);
@@ -200,11 +200,11 @@ public class TestDiscoveryTests
     public void Discovery_DynamicTests_Discovered()
     {
         // Dynamic test generation via loop — discovery mode still discovers them
-        // because describe() bodies execute, and test() still registers names
+        // because test.describe() bodies execute, and test.it() still registers names
         var (_, output) = RunDiscovery("""
             let items = ["a", "b", "c"];
             for (let item in items) {
-                test(item, () => { assert.true(true); });
+                test.it(item, () => { assert.true(true); });
             }
             """, "test.stash");
 
@@ -218,8 +218,8 @@ public class TestDiscoveryTests
     {
         // When both discovery mode and filter are active, only matching tests are discovered
         var lexer = new Lexer("""
-            test("alpha", () => { assert.true(true); });
-            test("beta", () => { assert.true(true); });
+            test.it("alpha", () => { assert.true(true); });
+            test.it("beta", () => { assert.true(true); });
             """);
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);

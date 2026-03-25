@@ -10,7 +10,7 @@ using Stash.Interpreting.Types;
 using Stash.Testing;
 
 /// <summary>
-/// Registers the 'assert' namespace and global test functions (test, describe).
+/// Registers the 'assert' namespace and the 'test' namespace (test.it, test.describe, test.skip, etc.).
 /// </summary>
 public static class TestBuiltIns
 {
@@ -143,18 +143,19 @@ public static class TestBuiltIns
 
         globals.Define("assert", assert);
 
-        // ── Global test functions ────────────────────────────────────
+        // ── test namespace ───────────────────────────────────────────
+        var test = new StashNamespace("test");
 
-        // test(name, fn) — register and execute a test case
-        globals.Define("test", new BuiltInFunction("test", 2, (interp, args) =>
+        // test.it(name, fn) — register and execute a test case
+        test.Define("it", new BuiltInFunction("test.it", 2, (interp, args) =>
         {
             if (args[0] is not string name)
             {
-                throw new RuntimeError("test() requires a string name as first argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.it() requires a string name as first argument.", interp.CurrentSpan);
             }
             if (args[1] is not IStashCallable body)
             {
-                throw new RuntimeError("test() requires a function as second argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.it() requires a function as second argument.", interp.CurrentSpan);
             }
 
             var harness = interp.TestHarness;
@@ -237,16 +238,16 @@ public static class TestBuiltIns
             return null;
         }));
 
-        // skip(name, fn) — register a skipped test; body is never executed
-        globals.Define("skip", new BuiltInFunction("skip", 2, (interp, args) =>
+        // test.skip(name, fn) — register a skipped test; body is never executed
+        test.Define("skip", new BuiltInFunction("test.skip", 2, (interp, args) =>
         {
             if (args[0] is not string name)
             {
-                throw new RuntimeError("skip() requires a string name as first argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.skip() requires a string name as first argument.", interp.CurrentSpan);
             }
             if (args[1] is not IStashCallable)
             {
-                throw new RuntimeError("skip() requires a function as second argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.skip() requires a function as second argument.", interp.CurrentSpan);
             }
 
             string fullName = BuildFullName(interp, interp.CurrentDescribe, name);
@@ -273,16 +274,16 @@ public static class TestBuiltIns
             return null;
         }));
 
-        // describe(name, fn) — group tests
-        globals.Define("describe", new BuiltInFunction("describe", 2, (interp, args) =>
+        // test.describe(name, fn) — group tests
+        test.Define("describe", new BuiltInFunction("test.describe", 2, (interp, args) =>
         {
             if (args[0] is not string name)
             {
-                throw new RuntimeError("describe() requires a string name as first argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.describe() requires a string name as first argument.", interp.CurrentSpan);
             }
             if (args[1] is not IStashCallable body)
             {
-                throw new RuntimeError("describe() requires a function as second argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.describe() requires a function as second argument.", interp.CurrentSpan);
             }
 
             var harness = interp.TestHarness;
@@ -344,72 +345,72 @@ public static class TestBuiltIns
             return null;
         }));
 
-        // beforeAll(fn) — execute fn() immediately inside a describe block (runs before any tests below it)
-        globals.Define("beforeAll", new BuiltInFunction("beforeAll", 1, (interp, args) =>
+        // test.beforeAll(fn) — execute fn() immediately inside a describe block (runs before any tests below it)
+        test.Define("beforeAll", new BuiltInFunction("test.beforeAll", 1, (interp, args) =>
         {
             if (args[0] is not IStashCallable callable)
             {
-                throw new RuntimeError("beforeAll() requires a function argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.beforeAll() requires a function argument.", interp.CurrentSpan);
             }
             if (interp.BeforeEachHooks.Count == 0)
             {
-                throw new RuntimeError("beforeAll() must be used inside a describe() block.", interp.CurrentSpan);
+                throw new RuntimeError("test.beforeAll() must be used inside a test.describe() block.", interp.CurrentSpan);
             }
             callable.Call(interp, new List<object?>());
             return null;
         }));
 
-        // afterAll(fn) — register fn() to run when the current describe block ends
-        globals.Define("afterAll", new BuiltInFunction("afterAll", 1, (interp, args) =>
+        // test.afterAll(fn) — register fn() to run when the current describe block ends
+        test.Define("afterAll", new BuiltInFunction("test.afterAll", 1, (interp, args) =>
         {
             if (args[0] is not IStashCallable callable)
             {
-                throw new RuntimeError("afterAll() requires a function argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.afterAll() requires a function argument.", interp.CurrentSpan);
             }
             if (interp.AfterAllHooks.Count == 0)
             {
-                throw new RuntimeError("afterAll() must be used inside a describe() block.", interp.CurrentSpan);
+                throw new RuntimeError("test.afterAll() must be used inside a test.describe() block.", interp.CurrentSpan);
             }
             interp.AfterAllHooks[^1].Add(callable);
             return null;
         }));
 
-        // beforeEach(fn) — register fn() to run before each test in the current describe scope
-        globals.Define("beforeEach", new BuiltInFunction("beforeEach", 1, (interp, args) =>
+        // test.beforeEach(fn) — register fn() to run before each test in the current describe scope
+        test.Define("beforeEach", new BuiltInFunction("test.beforeEach", 1, (interp, args) =>
         {
             if (args[0] is not IStashCallable callable)
             {
-                throw new RuntimeError("beforeEach() requires a function argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.beforeEach() requires a function argument.", interp.CurrentSpan);
             }
             if (interp.BeforeEachHooks.Count == 0)
             {
-                throw new RuntimeError("beforeEach() must be used inside a describe() block.", interp.CurrentSpan);
+                throw new RuntimeError("test.beforeEach() must be used inside a test.describe() block.", interp.CurrentSpan);
             }
             interp.BeforeEachHooks[^1].Add(callable);
             return null;
         }));
 
-        // afterEach(fn) — register fn() to run after each test in the current describe scope
-        globals.Define("afterEach", new BuiltInFunction("afterEach", 1, (interp, args) =>
+        // test.afterEach(fn) — register fn() to run after each test in the current describe scope
+        test.Define("afterEach", new BuiltInFunction("test.afterEach", 1, (interp, args) =>
         {
             if (args[0] is not IStashCallable callable)
             {
-                throw new RuntimeError("afterEach() requires a function argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.afterEach() requires a function argument.", interp.CurrentSpan);
             }
             if (interp.AfterEachHooks.Count == 0)
             {
-                throw new RuntimeError("afterEach() must be used inside a describe() block.", interp.CurrentSpan);
+                throw new RuntimeError("test.afterEach() must be used inside a test.describe() block.", interp.CurrentSpan);
             }
             interp.AfterEachHooks[^1].Add(callable);
             return null;
         }));
 
-        // captureOutput(fn) — execute fn() with output redirected to a string, returns captured output
-        globals.Define("captureOutput", new BuiltInFunction("captureOutput", 1, (interp, args) =>
+        // test.captureOutput(fn) — execute fn() with output redirected to a string, returns captured output
+        test.Define("captureOutput", new BuiltInFunction("test.captureOutput", 1, (interp, args) =>
         {
             if (args[0] is not IStashCallable callable)
             {
-                throw new RuntimeError("captureOutput() requires a function argument.", interp.CurrentSpan);
+                throw new RuntimeError("test.captureOutput() requires a function argument.", interp.CurrentSpan);
             }
 
             var previousOutput = interp.Output;
@@ -425,6 +426,8 @@ public static class TestBuiltIns
             }
             return sw.ToString();
         }));
+
+        globals.Define("test", test);
     }
 
     private static string BuildFullName(Interpreter interp, string? currentDescribe, string testName)

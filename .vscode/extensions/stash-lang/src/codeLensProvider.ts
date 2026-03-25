@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 
-const TEST_CALL_RE = /\b(describe|test|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
+const TEST_CALL_RE = /\btest\.(describe|it|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
 
 export class StashTestCodeLensProvider implements vscode.CodeLensProvider {
     private _onDidChange = new vscode.EventEmitter<void>();

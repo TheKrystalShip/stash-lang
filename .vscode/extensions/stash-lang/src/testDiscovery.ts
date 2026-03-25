@@ -14,8 +14,8 @@ export interface DiscoveredTest {
     line: number;
     /** 0-based column number */
     column: number;
-    /** Entry kind — describes are containers, test/skip are leaf tests */
-    kind: 'describe' | 'test' | 'skip';
+    /** Entry kind — describes are containers, it/skip are leaf tests */
+    kind: 'describe' | 'it' | 'skip';
 }
 
 // ---------------------------------------------------------------------------
@@ -23,12 +23,12 @@ export interface DiscoveredTest {
 // ---------------------------------------------------------------------------
 
 /**
- * Matches describe("name", ...) or test("name", ...) calls.
- * Group 1: "describe" | "test"
+ * Matches test.describe("name", ...), test.it("name", ...), or test.skip("name", ...) calls.
+ * Group 1: "describe" | "it" | "skip"
  * Group 2: the string delimiter (' " `)
  * Group 3: the literal name
  */
-const CALL_RE = /\b(describe|test|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
+const CALL_RE = /\btest\.(describe|it|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
 
 /**
  * Scan `text` for describe/test patterns and return discovered tests.
@@ -136,7 +136,7 @@ export function parseTestsFromText(text: string, fileName: string): DiscoveredTe
 
     while ((match = CALL_RE.exec(text)) !== null) {
         const matchStart = match.index;
-        const kind = match[1] as 'describe' | 'test' | 'skip';
+        const kind = match[1] as 'describe' | 'it' | 'skip';
         const name = match[3].replace(/\\(['"`\\])/g, '$1');
 
         // Advance the brace-depth cursor up to (but not including) this match.
@@ -217,7 +217,7 @@ export function parseTestsFromText(text: string, fileName: string): DiscoveredTe
             // next iteration.
 
         } else {
-            // kind === 'test' or 'skip'
+            // kind === 'it' or 'skip'
             const ancestors: string[] = [
                 fileName,
                 ...describeStack.map(d => d.name),
@@ -279,7 +279,7 @@ export async function discoverTestsDynamic(
                     uri: file,
                     line: line - 1,     // convert 1-based → 0-based
                     column: column - 1, // convert 1-based → 0-based
-                    kind: 'test',
+                    kind: 'it',
                 });
             },
         });

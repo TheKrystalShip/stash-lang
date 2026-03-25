@@ -35,8 +35,8 @@ public class TestFilterTests
     public void Filter_ExactMatch_RunsOnlyMatchingTest()
     {
         var (reporter, output) = RunWithFilter("""
-            test("add", () => { assert.true(true); });
-            test("subtract", () => { assert.true(true); });
+            test.it("add", () => { assert.true(true); });
+            test.it("subtract", () => { assert.true(true); });
             """,
             ["test.stash > add"],
             "test.stash");
@@ -50,9 +50,9 @@ public class TestFilterTests
     public void Filter_ExactMatch_WithDescribe()
     {
         var (reporter, output) = RunWithFilter("""
-            describe("math", () => {
-                test("add", () => { assert.true(true); });
-                test("sub", () => { assert.true(true); });
+            test.describe("math", () => {
+                test.it("add", () => { assert.true(true); });
+                test.it("sub", () => { assert.true(true); });
             });
             """,
             ["test.stash > math > add"],
@@ -69,12 +69,12 @@ public class TestFilterTests
     public void Filter_PrefixMatch_RunsEntireBlock()
     {
         var (reporter, _) = RunWithFilter("""
-            describe("math", () => {
-                test("add", () => { assert.true(true); });
-                test("sub", () => { assert.true(true); });
+            test.describe("math", () => {
+                test.it("add", () => { assert.true(true); });
+                test.it("sub", () => { assert.true(true); });
             });
-            describe("strings", () => {
-                test("concat", () => { assert.true(true); });
+            test.describe("strings", () => {
+                test.it("concat", () => { assert.true(true); });
             });
             """,
             ["test.stash > math"],
@@ -89,9 +89,9 @@ public class TestFilterTests
     public void Filter_MultiplePatterns_RunsAllMatching()
     {
         var (reporter, output) = RunWithFilter("""
-            test("alpha", () => { assert.true(true); });
-            test("beta", () => { assert.true(true); });
-            test("gamma", () => { assert.true(true); });
+            test.it("alpha", () => { assert.true(true); });
+            test.it("beta", () => { assert.true(true); });
+            test.it("gamma", () => { assert.true(true); });
             """,
             ["test.stash > alpha", "test.stash > gamma"],
             "test.stash");
@@ -106,7 +106,7 @@ public class TestFilterTests
     public void Filter_NoMatch_ProducesNoOutput()
     {
         var (reporter, output) = RunWithFilter("""
-            test("existing", () => { assert.true(true); });
+            test.it("existing", () => { assert.true(true); });
             """,
             ["test.stash > nonexistent"],
             "test.stash");
@@ -122,11 +122,11 @@ public class TestFilterTests
     public void Filter_DescribeSkipped_WhenNoChildrenMatch()
     {
         var (_, output) = RunWithFilter("""
-            describe("math", () => {
-                test("add", () => { assert.true(true); });
+            test.describe("math", () => {
+                test.it("add", () => { assert.true(true); });
             });
-            describe("strings", () => {
-                test("concat", () => { assert.true(true); });
+            test.describe("strings", () => {
+                test.it("concat", () => { assert.true(true); });
             });
             """,
             ["test.stash > strings > concat"],
@@ -143,10 +143,10 @@ public class TestFilterTests
     public void Filter_NestedDescribes_PrefixMatchIncludesAll()
     {
         var (reporter, _) = RunWithFilter("""
-            describe("outer", () => {
-                describe("inner", () => {
-                    test("a", () => { assert.true(true); });
-                    test("b", () => { assert.true(true); });
+            test.describe("outer", () => {
+                test.describe("inner", () => {
+                    test.it("a", () => { assert.true(true); });
+                    test.it("b", () => { assert.true(true); });
                 });
             });
             """,
@@ -162,8 +162,8 @@ public class TestFilterTests
     public void Filter_MatchingFailingTest_RecordsFail()
     {
         var (reporter, _) = RunWithFilter("""
-            test("bad", () => { assert.equal(1, 2); });
-            test("good", () => { assert.true(true); });
+            test.it("bad", () => { assert.equal(1, 2); });
+            test.it("good", () => { assert.true(true); });
             """,
             ["test.stash > bad"],
             "test.stash");
@@ -179,9 +179,9 @@ public class TestFilterTests
     {
         // When TestFilter is null, all tests should run
         var lexer = new Lexer("""
-            test("a", () => { assert.true(true); });
-            test("b", () => { assert.true(true); });
-            test("c", () => { assert.true(true); });
+            test.it("a", () => { assert.true(true); });
+            test.it("b", () => { assert.true(true); });
+            test.it("c", () => { assert.true(true); });
             """);
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);

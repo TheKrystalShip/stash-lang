@@ -8,12 +8,12 @@ const tapParser_1 = require("./tapParser");
 // Static discovery
 // ---------------------------------------------------------------------------
 /**
- * Matches describe("name", ...) or test("name", ...) calls.
- * Group 1: "describe" | "test"
+ * Matches test.describe("name", ...), test.it("name", ...), or test.skip("name", ...) calls.
+ * Group 1: "describe" | "it" | "skip"
  * Group 2: the string delimiter (' " `)
  * Group 3: the literal name
  */
-const CALL_RE = /\b(describe|test|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
+const CALL_RE = /\btest\.(describe|it|skip)\s*\(\s*(['"`])((?:[^\\]|\\.)*?)\2/g;
 /**
  * Scan `text` for describe/test patterns and return discovered tests.
  * Line numbers are 0-based (VS Code convention).
@@ -184,7 +184,7 @@ function parseTestsFromText(text, fileName) {
             // next iteration.
         }
         else {
-            // kind === 'test' or 'skip'
+            // kind === 'it' or 'skip'
             const ancestors = [
                 fileName,
                 ...describeStack.map(d => d.name),
@@ -236,7 +236,7 @@ async function discoverTestsDynamic(filePath, interpreterPath) {
                     uri: file,
                     line: line - 1, // convert 1-based → 0-based
                     column: column - 1, // convert 1-based → 0-based
-                    kind: 'test',
+                    kind: 'it',
                 });
             },
         });

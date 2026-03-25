@@ -6,9 +6,9 @@
  * Run with: stash --test testing.test.stash
  *
  * Comprehensive test suite demonstrating the built-in testing infrastructure:
- *   - describe() / test() for structure
+ *   - test.describe() / test.it() for structure
  *   - assert.* for assertions
- *   - captureOutput() for testing printed output
+ *   - test.captureOutput() for testing printed output
  */
 
 // --- Helper functions ---
@@ -33,25 +33,25 @@ fn to_slug(title) {
 
 // --- Tests ---
 
-describe("math", () => {
-    test("factorial base cases", () => {
+test.describe("math", () => {
+    test.it("factorial base cases", () => {
         assert.equal(factorial(0), 1);
         assert.equal(factorial(1), 1);
     });
 
-    test("factorial recursive", () => {
+    test.it("factorial recursive", () => {
         assert.equal(factorial(5), 120);
         assert.equal(factorial(10), 3628800);
     });
 
-    test("fibonacci sequence", () => {
+    test.it("fibonacci sequence", () => {
         assert.equal(fibonacci(0), 0);
         assert.equal(fibonacci(1), 1);
         assert.equal(fibonacci(6), 8);
         assert.equal(fibonacci(10), 55);
     });
 
-    test("arithmetic operators", () => {
+    test.it("arithmetic operators", () => {
         assert.equal(10 + 5, 15);
         assert.equal(10 - 5, 5);
         assert.equal(10 * 5, 50);
@@ -59,20 +59,20 @@ describe("math", () => {
         assert.equal(10 % 3, 1);
     });
 
-    test("math.pow and math.sqrt", () => {
+    test.it("math.pow and math.sqrt", () => {
         assert.equal(math.pow(2, 10), 1024.0);
         assert.equal(math.pow(3, 3), 27.0);
         assert.equal(math.sqrt(9), 3.0);
         assert.equal(math.sqrt(4.0), 2.0);
     });
 
-    test("math.clamp constrains values", () => {
+    test.it("math.clamp constrains values", () => {
         assert.equal(math.clamp(5, 0, 10), 5);
         assert.equal(math.clamp(-3, 0, 10), 0);
         assert.equal(math.clamp(15, 0, 10), 10);
     });
 
-    test("math.abs and rounding", () => {
+    test.it("math.abs and rounding", () => {
         assert.equal(math.abs(-7), 7);
         assert.equal(math.abs(7), 7);
         assert.equal(math.floor(3.9), 3);
@@ -80,38 +80,38 @@ describe("math", () => {
     });
 });
 
-describe("strings", () => {
-    test("case conversion", () => {
+test.describe("strings", () => {
+    test.it("case conversion", () => {
         assert.equal(str.upper("hello"), "HELLO");
         assert.equal(str.lower("HELLO"), "hello");
     });
 
-    test("trimming", () => {
+    test.it("trimming", () => {
         assert.equal(str.trim("  hello  "), "hello");
         assert.equal(str.trimStart("  hello  "), "hello  ");
         assert.equal(str.trimEnd("  hello  "), "  hello");
     });
 
-    test("searching", () => {
+    test.it("searching", () => {
         assert.true(str.contains("hello world", "world"));
         assert.false(str.contains("hello world", "xyz"));
         assert.equal(str.indexOf("hello", "ll"), 2);
         assert.equal(str.indexOf("hello", "xyz"), -1);
     });
 
-    test("startsWith and endsWith", () => {
+    test.it("startsWith and endsWith", () => {
         assert.true(str.startsWith("hello world", "hello"));
         assert.false(str.startsWith("hello world", "world"));
         assert.true(str.endsWith("hello world", "world"));
         assert.false(str.endsWith("hello world", "hello"));
     });
 
-    test("replace and replaceAll", () => {
+    test.it("replace and replaceAll", () => {
         assert.equal(str.replace("hello world", "world", "Stash"), "hello Stash");
         assert.equal(str.replaceAll("aabbaa", "a", "x"), "xxbbxx");
     });
 
-    test("split and join", () => {
+    test.it("split and join", () => {
         let parts = str.split("a,b,c", ",");
         assert.equal(len(parts), 3);
         assert.equal(parts[0], "a");
@@ -119,13 +119,13 @@ describe("strings", () => {
         assert.equal(arr.join(parts, "-"), "a-b-c");
     });
 
-    test("slug generation", () => {
+    test.it("slug generation", () => {
         assert.equal(to_slug("Hello World"), "hello-world");
         assert.equal(to_slug("  My Post  "), "my-post");
         assert.equal(to_slug("Stash_Lang"), "stash-lang");
     });
 
-    test("string interpolation", () => {
+    test.it("string interpolation", () => {
         let name = "Stash";
         let version = 2;
         assert.equal($"Hello, {name}!", "Hello, Stash!");
@@ -134,15 +134,15 @@ describe("strings", () => {
     });
 });
 
-describe("arrays", () => {
-    test("indexing and length", () => {
+test.describe("arrays", () => {
+    test.it("indexing and length", () => {
         let a = [10, 20, 30];
         assert.equal(len(a), 3);
         assert.equal(a[0], 10);
         assert.equal(a[2], 30);
     });
 
-    test("push and pop", () => {
+    test.it("push and pop", () => {
         let a = [1, 2];
         arr.push(a, 3);
         assert.equal(len(a), 3);
@@ -153,14 +153,14 @@ describe("arrays", () => {
         assert.equal(len(a), 2);
     });
 
-    test("map transforms elements", () => {
+    test.it("map transforms elements", () => {
         let nums = [1, 2, 3, 4];
         let doubled = arr.map(nums, (x) => x * 2);
         assert.equal(doubled[0], 2);
         assert.equal(doubled[3], 8);
     });
 
-    test("filter selects elements", () => {
+    test.it("filter selects elements", () => {
         let nums = [1, 2, 3, 4, 5, 6];
         let evens = arr.filter(nums, (x) => x % 2 == 0);
         assert.equal(len(evens), 3);
@@ -168,7 +168,7 @@ describe("arrays", () => {
         assert.equal(evens[2], 6);
     });
 
-    test("reduce accumulates", () => {
+    test.it("reduce accumulates", () => {
         let nums = [1, 2, 3, 4, 5];
         let sum = arr.reduce(nums, (acc, x) => acc + x, 0);
         assert.equal(sum, 15);
@@ -176,7 +176,7 @@ describe("arrays", () => {
         assert.equal(product, 24);
     });
 
-    test("sort in-place", () => {
+    test.it("sort in-place", () => {
         let nums = [3, 1, 4, 1, 5];
         arr.sort(nums);
         assert.equal(nums[0], 1);
@@ -185,7 +185,7 @@ describe("arrays", () => {
         assert.equal(nums[4], 5);
     });
 
-    test("find and indexOf", () => {
+    test.it("find and indexOf", () => {
         let nums = [10, 20, 30, 40];
         let found = arr.find(nums, (x) => x > 25);
         assert.equal(found, 30);
@@ -194,7 +194,7 @@ describe("arrays", () => {
         assert.null(arr.find(nums, (x) => x > 100));
     });
 
-    test("slice creates sub-array", () => {
+    test.it("slice creates sub-array", () => {
         let nums = [1, 2, 3, 4, 5];
         let sub = arr.slice(nums, 1, 4);
         assert.equal(len(sub), 3);
@@ -202,15 +202,15 @@ describe("arrays", () => {
         assert.equal(sub[2], 4);
     });
 
-    test("in operator checks membership", () => {
+    test.it("in operator checks membership", () => {
         let fruits = ["apple", "banana", "cherry"];
         assert.true("banana" in fruits);
         assert.false("mango" in fruits);
     });
 });
 
-describe("dictionaries", () => {
-    test("CRUD operations", () => {
+test.describe("dictionaries", () => {
+    test.it("CRUD operations", () => {
         let d = dict.new();
         d["name"] = "Alice";
         d["age"] = 30;
@@ -222,7 +222,7 @@ describe("dictionaries", () => {
         assert.false(dict.has(d, "email"));
     });
 
-    test("dot access", () => {
+    test.it("dot access", () => {
         let d = dict.new();
         d["city"] = "Berlin";
         d["country"] = "Germany";
@@ -230,7 +230,7 @@ describe("dictionaries", () => {
         assert.equal(d.country, "Germany");
     });
 
-    test("merge combines dictionaries", () => {
+    test.it("merge combines dictionaries", () => {
         let defaults = dict.new();
         defaults["color"] = "blue";
         defaults["timeout"] = 30;
@@ -243,7 +243,7 @@ describe("dictionaries", () => {
         assert.equal(merged["timeout"], 30);
     });
 
-    test("keys and values", () => {
+    test.it("keys and values", () => {
         let d = dict.new();
         d["x"] = 1;
         d["y"] = 2;
@@ -254,7 +254,7 @@ describe("dictionaries", () => {
         assert.equal(len(dict.values(d)), 2);
     });
 
-    test("for-in key-value iteration", () => {
+    test.it("for-in key-value iteration", () => {
         let d = dict.new();
         d["a"] = 1;
         d["b"] = 2;
@@ -267,8 +267,8 @@ describe("dictionaries", () => {
     });
 });
 
-describe("types", () => {
-    test("typeof on all core types", () => {
+test.describe("types", () => {
+    test.it("typeof on all core types", () => {
         assert.equal(typeof(42), "int");
         assert.equal(typeof(3.14), "float");
         assert.equal(typeof("hi"), "string");
@@ -280,7 +280,7 @@ describe("types", () => {
         assert.equal(typeof(f), "function");
     });
 
-    test("no type coercion on equality", () => {
+    test.it("no type coercion on equality", () => {
         assert.notEqual(5, "5");
         assert.notEqual(0, false);
         assert.notEqual(0, null);
@@ -288,7 +288,7 @@ describe("types", () => {
         assert.notEqual(1, true);
     });
 
-    test("truthiness rules", () => {
+    test.it("truthiness rules", () => {
         // falsy values
         assert.false(false);
         assert.false(null);
@@ -305,8 +305,8 @@ describe("types", () => {
     });
 });
 
-describe("control flow", () => {
-    test("switch expression", () => {
+test.describe("control flow", () => {
+    test.it("switch expression", () => {
         let classify = (n) => n switch {
             0 => "zero",
             1 => "one",
@@ -317,7 +317,7 @@ describe("control flow", () => {
         assert.equal(classify(99), "many");
     });
 
-    test("range iteration", () => {
+    test.it("range iteration", () => {
         let result = [];
         for (let i in 1..6) {
             arr.push(result, i);
@@ -327,7 +327,7 @@ describe("control flow", () => {
         assert.equal(result[4], 5);
     });
 
-    test("range with step", () => {
+    test.it("range with step", () => {
         let evens = [];
         for (let i in 0..10..2) {
             arr.push(evens, i);
@@ -337,14 +337,14 @@ describe("control flow", () => {
         assert.equal(evens[4], 8);
     });
 
-    test("array destructuring", () => {
+    test.it("array destructuring", () => {
         let [x, y, z] = [10, 20, 30];
         assert.equal(x, 10);
         assert.equal(y, 20);
         assert.equal(z, 30);
     });
 
-    test("dict destructuring", () => {
+    test.it("dict destructuring", () => {
         let d = dict.new();
         d["host"] = "localhost";
         d["port"] = 8080;
@@ -353,13 +353,13 @@ describe("control flow", () => {
         assert.equal(port, 8080);
     });
 
-    test("ternary operator", () => {
+    test.it("ternary operator", () => {
         let max = (a, b) => a > b ? a : b;
         assert.equal(max(3, 7), 7);
         assert.equal(max(9, 4), 9);
     });
 
-    test("try and null coalescing", () => {
+    test.it("try and null coalescing", () => {
         let bad = try conv.toInt("not_a_number");
         assert.null(bad);
         assert.equal(bad ?? 42, 42);
@@ -368,7 +368,7 @@ describe("control flow", () => {
         assert.equal(good, 123);
     });
 
-    test("assert.throws captures runtime error", () => {
+    test.it("assert.throws captures runtime error", () => {
         let msg = assert.throws(() => {
             let a = [1, 2, 3];
             let _ = a[10]; // out-of-bounds
@@ -378,8 +378,8 @@ describe("control flow", () => {
     });
 });
 
-describe("closures and lambdas", () => {
-    test("closure captures enclosing scope", () => {
+test.describe("closures and lambdas", () => {
+    test.it("closure captures enclosing scope", () => {
         fn makeCounter() {
             let count = 0;
             return () => {
@@ -394,7 +394,7 @@ describe("closures and lambdas", () => {
         assert.equal(counter(), 3);
     });
 
-    test("two closures are independent", () => {
+    test.it("two closures are independent", () => {
         fn makeAdder(n) {
             return (x) => x + n;
         }
@@ -404,13 +404,13 @@ describe("closures and lambdas", () => {
         assert.equal(add20(5), 25);
     });
 
-    test("lambda as argument", () => {
+    test.it("lambda as argument", () => {
         fn apply(f, x) { return f(x); }
         assert.equal(apply((x) => x * x, 6), 36);
         assert.equal(apply((x) => x + 1, 99), 100);
     });
 
-    test("currying via closures", () => {
+    test.it("currying via closures", () => {
         fn multiply(a) {
             return (b) => a * b;
         }
@@ -420,7 +420,7 @@ describe("closures and lambdas", () => {
         assert.equal(triple(7), 21);
     });
 
-    test("default parameters", () => {
+    test.it("default parameters", () => {
         fn greet(name, greeting = "Hello") {
             return "${greeting}, ${name}!";
         }
@@ -428,7 +428,7 @@ describe("closures and lambdas", () => {
         assert.equal(greet("Bob", "Hi"), "Hi, Bob!");
     });
 
-    test("multiple default parameters", () => {
+    test.it("multiple default parameters", () => {
         fn connect(host, port = 8080, secure = false) {
             let scheme = secure ? "https" : "http";
             return "${scheme}://${host}:${port}";
@@ -438,23 +438,23 @@ describe("closures and lambdas", () => {
     });
 });
 
-describe("output capture", () => {
-    test("captures println output", () => {
-        let output = captureOutput(() => {
+test.describe("output capture", () => {
+    test.it("captures println output", () => {
+        let output = test.captureOutput(() => {
             io.println("Hello, world!");
         });
         assert.equal(output, "Hello, world!\n");
     });
 
-    test("captures print without newline", () => {
-        let output = captureOutput(() => {
+    test.it("captures print without newline", () => {
+        let output = test.captureOutput(() => {
             io.print("no newline");
         });
         assert.equal(output, "no newline");
     });
 
-    test("captures multiple print calls", () => {
-        let output = captureOutput(() => {
+    test.it("captures multiple print calls", () => {
+        let output = test.captureOutput(() => {
             io.print("one ");
             io.print("two ");
             io.println("three");
@@ -462,18 +462,18 @@ describe("output capture", () => {
         assert.equal(output, "one two three\n");
     });
 
-    test("empty output when nothing printed", () => {
-        let output = captureOutput(() => {
+    test.it("empty output when nothing printed", () => {
+        let output = test.captureOutput(() => {
             let x = 42;
         });
         assert.equal(output, "");
     });
 
-    test("inner output does not leak to outer", () => {
+    test.it("inner output does not leak to outer", () => {
         let inner_result = "";
-        let outer = captureOutput(() => {
+        let outer = test.captureOutput(() => {
             io.print("A");
-            inner_result = captureOutput(() => {
+            inner_result = test.captureOutput(() => {
                 io.print("B");
             });
             io.print("C");
