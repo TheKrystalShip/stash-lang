@@ -89,7 +89,8 @@ public sealed class SearchController : ControllerBase
                 Description = p.Description,
                 Latest = p.Latest,
                 Keywords = keywords ?? new List<string>(),
-                UpdatedAt = p.UpdatedAt.ToString("o")
+                UpdatedAt = p.UpdatedAt.ToString("o"),
+                Deprecated = p.Deprecated
             };
         }).ToList();
 

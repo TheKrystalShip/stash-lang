@@ -43,4 +43,16 @@ public sealed class PackageRecord
 
     /// <summary>The UTC timestamp of the most recent metadata or version update.</summary>
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>Whether the entire package has been deprecated.</summary>
+    public bool Deprecated { get; set; }
+
+    /// <summary>A human-readable deprecation message, or <c>null</c> if not deprecated.</summary>
+    public string? DeprecationMessage { get; set; }
+
+    /// <summary>The suggested replacement package name, or <c>null</c> if no alternative exists.</summary>
+    public string? DeprecationAlternative { get; set; }
+
+    /// <summary>The username of the user who deprecated this package, or <c>null</c> if not deprecated.</summary>
+    public string? DeprecatedBy { get; set; }
 }

@@ -102,7 +102,7 @@ Stash.Registry/
 ├── Services/                     # Business logic
 │   ├── PackageService.cs         # Publish/unpublish workflows
 │   ├── AuditService.cs           # Audit logging
-│   └── DeprecationService.cs     # (stub)
+│   └── DeprecationService.cs     # Package/version deprecation
 ├── Storage/                      # Package file storage
 │   ├── IPackageStorage.cs        # Store, Retrieve, Delete, Exists, GetSize
 │   ├── FileSystemStorage.cs      # Local disk with path traversal protection
@@ -127,6 +127,7 @@ Client (stash pkg CLI)
 │  Controllers                │ ← Auth, Packages, Search, Admin
 │    │                        │
 │    ├── PackageService       │ ← Business logic (publish, unpublish)
+│    ├── DeprecationService   │ ← Package/version deprecation
 │    ├── AuditService         │ ← Action logging
 │    └── IAuthProvider        │ ← Local / LDAP / OIDC
 ├─────────────────────────────┤
@@ -141,25 +142,29 @@ Client (stash pkg CLI)
 
 ### Endpoint Summary
 
-| Method | Path                                         | Auth          | Description                              |
-| ------ | -------------------------------------------- | ------------- | ---------------------------------------- |
-| GET    | `/`                                          | None          | Health check                             |
-| POST   | `/api/v1/auth/login`                         | None          | Authenticate and receive JWT             |
-| POST   | `/api/v1/auth/register`                      | None          | Create account (if registration enabled) |
-| GET    | `/api/v1/auth/whoami`                        | Bearer        | Get current user info                    |
-| POST   | `/api/v1/auth/tokens`                        | Bearer        | Create scoped token                      |
-| DELETE | `/api/v1/auth/tokens/{id}`                   | Bearer        | Revoke token                             |
-| GET    | `/api/v1/packages/{name}`                    | None          | Get package metadata and all versions    |
-| GET    | `/api/v1/packages/{name}/{version}`          | None          | Get specific version details             |
-| GET    | `/api/v1/packages/{name}/{version}/download` | None          | Download tarball                         |
-| PUT    | `/api/v1/packages/{name}`                    | publish scope | Publish a package version                |
-| DELETE | `/api/v1/packages/{name}/{version}`          | publish scope | Unpublish version (within window)        |
-| GET    | `/api/v1/search?q=...&page=...&pageSize=...` | None          | Search packages                          |
-| GET    | `/api/v1/admin/stats`                        | admin         | Registry statistics                      |
-| POST   | `/api/v1/admin/users`                        | admin         | Create user                              |
-| DELETE | `/api/v1/admin/users/{username}`             | admin         | Delete user                              |
-| PUT    | `/api/v1/admin/packages/{name}/owners`       | admin         | Add or remove package owners             |
-| GET    | `/api/v1/admin/audit-log`                    | admin         | Query audit log                          |
+| Method | Path                                          | Auth          | Description                              |
+| ------ | --------------------------------------------- | ------------- | ---------------------------------------- |
+| GET    | `/`                                           | None          | Health check                             |
+| POST   | `/api/v1/auth/login`                          | None          | Authenticate and receive JWT             |
+| POST   | `/api/v1/auth/register`                       | None          | Create account (if registration enabled) |
+| GET    | `/api/v1/auth/whoami`                         | Bearer        | Get current user info                    |
+| POST   | `/api/v1/auth/tokens`                         | Bearer        | Create scoped token                      |
+| DELETE | `/api/v1/auth/tokens/{id}`                    | Bearer        | Revoke token                             |
+| GET    | `/api/v1/packages/{name}`                     | None          | Get package metadata and all versions    |
+| GET    | `/api/v1/packages/{name}/{version}`           | None          | Get specific version details             |
+| GET    | `/api/v1/packages/{name}/{version}/download`  | None          | Download tarball                         |
+| PUT    | `/api/v1/packages/{name}`                     | publish scope | Publish a package version                |
+| DELETE | `/api/v1/packages/{name}/{version}`           | publish scope | Unpublish version (within window)        |
+| PATCH  | `/api/v1/packages/{name}/deprecate`           | publish scope | Deprecate package                        |
+| DELETE | `/api/v1/packages/{name}/deprecate`           | publish scope | Undeprecate package                      |
+| PATCH  | `/api/v1/packages/{name}/{version}/deprecate` | publish scope | Deprecate version                        |
+| DELETE | `/api/v1/packages/{name}/{version}/deprecate` | publish scope | Undeprecate version                      |
+| GET    | `/api/v1/search?q=...&page=...&pageSize=...`  | None          | Search packages                          |
+| GET    | `/api/v1/admin/stats`                         | admin         | Registry statistics                      |
+| POST   | `/api/v1/admin/users`                         | admin         | Create user                              |
+| DELETE | `/api/v1/admin/users/{username}`              | admin         | Delete user                              |
+| PUT    | `/api/v1/admin/packages/{name}/owners`        | admin         | Add or remove package owners             |
+| GET    | `/api/v1/admin/audit-log`                     | admin         | Query audit log                          |
 
 ---
 
@@ -336,7 +341,9 @@ Returns package metadata and the full version list.
       "dependencies": {},
       "integrity": "sha256-abc123...",
       "publishedAt": "2026-03-10T14:00:00.000Z",
-      "publishedBy": "alice"
+      "publishedBy": "alice",
+      "deprecated": false,
+      "deprecationMessage": null
     },
     "1.1.0": {
       "version": "1.1.0",
@@ -344,9 +351,14 @@ Returns package metadata and the full version list.
       "dependencies": {},
       "integrity": "sha256-def456...",
       "publishedAt": "2026-02-20T09:00:00.000Z",
-      "publishedBy": "alice"
+      "publishedBy": "alice",
+      "deprecated": false,
+      "deprecationMessage": null
     }
   },
+  "deprecated": false,
+  "deprecationMessage": null,
+  "deprecationAlternative": null,
   "latest": "1.2.0",
   "createdAt": "2026-02-01T10:00:00.000Z",
   "updatedAt": "2026-03-10T14:00:00.000Z"
@@ -376,7 +388,9 @@ Returns details for a specific version.
   "dependencies": {},
   "integrity": "sha256-abc123...",
   "publishedAt": "2026-03-10T14:00:00.000Z",
-  "publishedBy": "alice"
+  "publishedBy": "alice",
+  "deprecated": false,
+  "deprecationMessage": null
 }
 ```
 
@@ -461,6 +475,134 @@ Unpublish a version. The caller must be a package owner, and publication must be
 
 ---
 
+### Deprecation Endpoints
+
+Deprecation marks a package or version as no longer recommended. Deprecated packages and versions remain fully installable — deprecation is purely informational. Requires a token with `publish` scope and package ownership, or the `admin` role.
+
+#### PATCH /api/v1/packages/{name}/deprecate
+
+Mark a package as deprecated with a message and optional alternative.
+
+**Request:**
+
+```json
+{
+  "message": "This package is no longer maintained.",
+  "alternative": "stash-http-v2"
+}
+```
+
+| Field         | Type   | Required | Description                        |
+| ------------- | ------ | -------- | ---------------------------------- |
+| `message`     | string | yes      | Deprecation reason (non-empty)     |
+| `alternative` | string | no       | Suggested replacement package name |
+
+**Response `200 OK`:**
+
+```json
+{
+  "ok": true,
+  "package": "stash-http",
+  "version": null,
+  "deprecated": true
+}
+```
+
+**Error responses:**
+
+| Status | Description                       |
+| ------ | --------------------------------- |
+| 400    | Empty message or validation error |
+| 403    | Not a package owner               |
+| 404    | Package not found                 |
+
+---
+
+#### DELETE /api/v1/packages/{name}/deprecate
+
+Remove the deprecation status from a package.
+
+**Response `200 OK`:**
+
+```json
+{
+  "ok": true,
+  "package": "stash-http",
+  "version": null,
+  "deprecated": false
+}
+```
+
+**Error responses:**
+
+| Status | Description         |
+| ------ | ------------------- |
+| 403    | Not a package owner |
+| 404    | Package not found   |
+
+---
+
+#### PATCH /api/v1/packages/{name}/{version}/deprecate
+
+Mark a specific version as deprecated.
+
+**Request:**
+
+```json
+{
+  "message": "Use 2.0.0 instead — this version has a known bug."
+}
+```
+
+| Field     | Type   | Required | Description                    |
+| --------- | ------ | -------- | ------------------------------ |
+| `message` | string | yes      | Deprecation reason (non-empty) |
+
+**Response `200 OK`:**
+
+```json
+{
+  "ok": true,
+  "package": "stash-http",
+  "version": "1.1.0",
+  "deprecated": true
+}
+```
+
+**Error responses:**
+
+| Status | Description                  |
+| ------ | ---------------------------- |
+| 400    | Empty message                |
+| 403    | Not a package owner          |
+| 404    | Package or version not found |
+
+---
+
+#### DELETE /api/v1/packages/{name}/{version}/deprecate
+
+Remove the deprecation status from a specific version.
+
+**Response `200 OK`:**
+
+```json
+{
+  "ok": true,
+  "package": "stash-http",
+  "version": "1.1.0",
+  "deprecated": false
+}
+```
+
+**Error responses:**
+
+| Status | Description                  |
+| ------ | ---------------------------- |
+| 403    | Not a package owner          |
+| 404    | Package or version not found |
+
+---
+
 ### Search Endpoint
 
 #### GET /api/v1/search
@@ -485,7 +627,8 @@ Search packages by name or description.
       "description": "HTTP client utilities for Stash",
       "latest": "1.2.0",
       "keywords": ["http", "client"],
-      "updatedAt": "2026-03-10T14:00:00.000Z"
+      "updatedAt": "2026-03-10T14:00:00.000Z",
+      "deprecated": false
     }
   ],
   "totalCount": 3,
@@ -862,31 +1005,38 @@ The database contains six tables managed by EF Core. Column names shown are the 
 
 Stores one record per package name. The package name is the primary key — there is no auto-increment integer ID.
 
-| Column        | Type     | Constraints | Description                        |
-| ------------- | -------- | ----------- | ---------------------------------- |
-| `name`        | string   | PK          | Package name (e.g. `"stash-http"`) |
-| `description` | string   |             | Short description                  |
-| `license`     | string   |             | SPDX license identifier            |
-| `repository`  | string   |             | Source repository URL              |
-| `readme`      | string   |             | Extracted README.md content        |
-| `keywords`    | string   |             | JSON array stored as string        |
-| `latest`      | string   | not null    | Latest published version tag       |
-| `created_at`  | datetime |             | First publication timestamp        |
-| `updated_at`  | datetime |             | Last modification timestamp        |
+| Column                    | Type     | Constraints   | Description                        |
+| ------------------------- | -------- | ------------- | ---------------------------------- |
+| `name`                    | string   | PK            | Package name (e.g. `"stash-http"`) |
+| `description`             | string   |               | Short description                  |
+| `license`                 | string   |               | SPDX license identifier            |
+| `repository`              | string   |               | Source repository URL              |
+| `readme`                  | string   |               | Extracted README.md content        |
+| `keywords`                | string   |               | JSON array stored as string        |
+| `latest`                  | string   | not null      | Latest published version tag       |
+| `created_at`              | datetime |               | First publication timestamp        |
+| `updated_at`              | datetime |               | Last modification timestamp        |
+| `deprecated`              | bool     | default false | Whether the package is deprecated  |
+| `deprecation_message`     | string   |               | Deprecation reason                 |
+| `deprecation_alternative` | string   |               | Suggested replacement package      |
+| `deprecated_by`           | string   |               | User who set the deprecation       |
 
 #### versions
 
 One record per published version. Composite primary key on `(package_name, version)`.
 
-| Column          | Type     | Constraints             | Description                        |
-| --------------- | -------- | ----------------------- | ---------------------------------- |
-| `package_name`  | string   | PK, FK → packages(name) | Owning package                     |
-| `version`       | string   | PK                      | Semver version string              |
-| `stash_version` | string   |                         | Required Stash interpreter version |
-| `dependencies`  | string   |                         | JSON object of dependencies        |
-| `integrity`     | string   | not null                | `sha256-<base64>` hash of tarball  |
-| `published_at`  | datetime |                         | Publication timestamp              |
-| `published_by`  | string   | not null                | Publishing username                |
+| Column                | Type     | Constraints             | Description                        |
+| --------------------- | -------- | ----------------------- | ---------------------------------- |
+| `package_name`        | string   | PK, FK → packages(name) | Owning package                     |
+| `version`             | string   | PK                      | Semver version string              |
+| `stash_version`       | string   |                         | Required Stash interpreter version |
+| `dependencies`        | string   |                         | JSON object of dependencies        |
+| `integrity`           | string   | not null                | `sha256-<base64>` hash of tarball  |
+| `published_at`        | datetime |                         | Publication timestamp              |
+| `published_by`        | string   | not null                | Publishing username                |
+| `deprecated`          | bool     | default false           | Whether this version is deprecated |
+| `deprecation_message` | string   |                         | Deprecation reason                 |
+| `deprecated_by`       | string   |                         | User who set the deprecation       |
 
 Foreign key cascades on delete — removing a package removes all its versions.
 
@@ -1086,16 +1236,20 @@ All state-changing operations produce an immutable audit log entry. No read-only
 
 ### Logged Actions
 
-| Action         | Trigger                     |
-| -------------- | --------------------------- |
-| `publish`      | Package version published   |
-| `unpublish`    | Package version unpublished |
-| `user.create`  | User account created        |
-| `user.disable` | User account disabled       |
-| `owner.add`    | Package owner added         |
-| `owner.remove` | Package owner removed       |
-| `token.create` | Token created               |
-| `token.revoke` | Token revoked               |
+| Action                | Trigger                     |
+| --------------------- | --------------------------- |
+| `publish`             | Package version published   |
+| `unpublish`           | Package version unpublished |
+| `user.create`         | User account created        |
+| `user.disable`        | User account disabled       |
+| `owner.add`           | Package owner added         |
+| `owner.remove`        | Package owner removed       |
+| `token.create`        | Token created               |
+| `token.revoke`        | Token revoked               |
+| `package.deprecate`   | Package deprecated          |
+| `package.undeprecate` | Package deprecation removed |
+| `version.deprecate`   | Version deprecated          |
+| `version.undeprecate` | Version deprecation removed |
 
 ### Entry Schema
 
@@ -1231,7 +1385,7 @@ stash pkg search http-client --registry https://other-registry.example.com/api/v
 | LDAP authentication                  | ❌ stub        |
 | OIDC authentication                  | ❌ stub        |
 | S3 package storage                   | ❌ stub        |
-| Package deprecation                  | ❌ not started |
+| Package deprecation                  | ✅             |
 | Memory-hard password hashing (PA-3)  | ❌ not started |
 
 ---
@@ -1243,7 +1397,7 @@ stash pkg search http-client --registry https://other-registry.example.com/api/v
 | Database ORM        | EF Core                                  | Type-safe queries, migration support, and transparent multi-provider (SQLite/PostgreSQL) via a single `DbContext`                                    |
 | Auth tokens         | JWT                                      | Stateless verification, standard claims format, scope embedding without database round-trips on every read request                                   |
 | Token revocation    | JTI database check on `OnTokenValidated` | Immediate revocation is required despite JWT being stateless — JTI lookup adds one indexed query per authenticated request                           |
-| Config format       | JSON file (`appsettings.json`)              | Simple, no external dependencies, consistent with the `stash.json` package manifest format already familiar to Stash users                           |
+| Config format       | JSON file (`appsettings.json`)           | Simple, no external dependencies, consistent with the `stash.json` package manifest format already familiar to Stash users                           |
 | Storage abstraction | `IPackageStorage` interface              | Swap filesystem for S3 (or any other backend) via config alone, with no controller or service code changes                                           |
 | Rate limiting       | Custom middleware                        | Lightweight, no external service dependencies, category-aware (different limits for publish vs. download), and trivially disableable for development |
 | API style           | Controller-based REST                    | Clear route-to-controller mapping, attribute-based authorization, straightforward unit testability via `WebApplicationFactory`                       |

@@ -1,69 +1,91 @@
 using System;
+using System.Threading.Tasks;
+using Stash.Registry.Database;
 
 namespace Stash.Registry.Services;
 
-// BLOCKED: PA-1 — deprecation mechanism TBD.
-// This service will handle package and version deprecation once the
-// deprecation spec is finalized. Currently a stub.
-
 /// <summary>
-/// Stub service for package and version deprecation operations.
+/// Service for package and version deprecation operations.
 /// </summary>
 /// <remarks>
-/// <para>
-/// All methods in this class throw <see cref="NotSupportedException"/> because the
-/// deprecation mechanism has not yet been specified. Tracked under issue PA-1.
-/// </para>
-/// <para>
-/// Once the deprecation spec is finalised, this service will coordinate with
-/// <see cref="IRegistryDatabase"/> to set and clear deprecation messages on package
-/// and version records, and expose the results through the package metadata endpoints.
-/// </para>
+/// Coordinates with <see cref="IRegistryDatabase"/> to set and clear deprecation
+/// messages on package and version records. Deprecation is purely informational —
+/// deprecated versions remain fully resolvable and installable, but consumers see
+/// a warning.
 /// </remarks>
 public sealed class DeprecationService
 {
-    /// <summary>
-    /// Marks an entire package as deprecated with the supplied message.
-    /// </summary>
-    /// <remarks>
-    /// Not yet implemented — tracked under PA-1. Always throws <see cref="NotSupportedException"/>.
-    /// </remarks>
-    /// <param name="packageName">The name of the package to deprecate.</param>
-    /// <param name="message">A human-readable deprecation message to store alongside the package.</param>
-    /// <exception cref="NotSupportedException">Always thrown; deprecation is not yet implemented.</exception>
-    public void DeprecatePackage(string packageName, string message)
+    private readonly IRegistryDatabase _db;
+
+    public DeprecationService(IRegistryDatabase db)
     {
-        // BLOCKED: PA-1
-        throw new NotSupportedException("Package deprecation is not yet implemented.");
+        _db = db;
     }
 
     /// <summary>
-    /// Marks a specific version of a package as deprecated with the supplied message.
+    /// Marks an entire package as deprecated with the supplied message and optional alternative.
     /// </summary>
-    /// <remarks>
-    /// Not yet implemented — tracked under PA-1. Always throws <see cref="NotSupportedException"/>.
-    /// </remarks>
-    /// <param name="packageName">The name of the package containing the version to deprecate.</param>
-    /// <param name="version">The version string to deprecate.</param>
-    /// <param name="message">A human-readable deprecation message to store alongside the version.</param>
-    /// <exception cref="NotSupportedException">Always thrown; deprecation is not yet implemented.</exception>
-    public void DeprecateVersion(string packageName, string version, string message)
+    /// <param name="packageName">The name of the package to deprecate.</param>
+    /// <param name="message">A human-readable deprecation message.</param>
+    /// <param name="alternative">The suggested replacement package name, or <c>null</c>.</param>
+    /// <param name="deprecatedBy">The username performing the deprecation.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the package does not exist.</exception>
+    public async Task DeprecatePackageAsync(string packageName, string message, string? alternative, string deprecatedBy)
     {
-        // BLOCKED: PA-1
-        throw new NotSupportedException("Version deprecation is not yet implemented.");
+        if (!await _db.PackageExistsAsync(packageName))
+        {
+            throw new InvalidOperationException($"Package '{packageName}' not found.");
+        }
+
+        await _db.DeprecatePackageAsync(packageName, message, alternative, deprecatedBy);
     }
 
     /// <summary>
     /// Removes the deprecation status from a previously deprecated package.
     /// </summary>
-    /// <remarks>
-    /// Not yet implemented — tracked under PA-1. Always throws <see cref="NotSupportedException"/>.
-    /// </remarks>
     /// <param name="packageName">The name of the package to undeprecate.</param>
-    /// <exception cref="NotSupportedException">Always thrown; deprecation is not yet implemented.</exception>
-    public void UndeprecatePackage(string packageName)
+    /// <exception cref="InvalidOperationException">Thrown if the package does not exist.</exception>
+    public async Task UndeprecatePackageAsync(string packageName)
     {
-        // BLOCKED: PA-1
-        throw new NotSupportedException("Package undeprecation is not yet implemented.");
+        if (!await _db.PackageExistsAsync(packageName))
+        {
+            throw new InvalidOperationException($"Package '{packageName}' not found.");
+        }
+
+        await _db.UndeprecatePackageAsync(packageName);
+    }
+
+    /// <summary>
+    /// Marks a specific version of a package as deprecated with the supplied message.
+    /// </summary>
+    /// <param name="packageName">The name of the package containing the version to deprecate.</param>
+    /// <param name="version">The version string to deprecate.</param>
+    /// <param name="message">A human-readable deprecation message.</param>
+    /// <param name="deprecatedBy">The username performing the deprecation.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the package or version does not exist.</exception>
+    public async Task DeprecateVersionAsync(string packageName, string version, string message, string deprecatedBy)
+    {
+        if (!await _db.VersionExistsAsync(packageName, version))
+        {
+            throw new InvalidOperationException($"Version '{version}' of package '{packageName}' not found.");
+        }
+
+        await _db.DeprecateVersionAsync(packageName, version, message, deprecatedBy);
+    }
+
+    /// <summary>
+    /// Removes the deprecation status from a specific version.
+    /// </summary>
+    /// <param name="packageName">The name of the package containing the version.</param>
+    /// <param name="version">The version string to undeprecate.</param>
+    /// <exception cref="InvalidOperationException">Thrown if the package or version does not exist.</exception>
+    public async Task UndeprecateVersionAsync(string packageName, string version)
+    {
+        if (!await _db.VersionExistsAsync(packageName, version))
+        {
+            throw new InvalidOperationException($"Version '{version}' of package '{packageName}' not found.");
+        }
+
+        await _db.UndeprecateVersionAsync(packageName, version);
     }
 }

@@ -41,4 +41,13 @@ public sealed class VersionRecord
 
     /// <summary>The username of the user who published this version (required).</summary>
     public string PublishedBy { get; set; } = "";
+
+    /// <summary>Whether this version has been deprecated.</summary>
+    public bool Deprecated { get; set; }
+
+    /// <summary>A human-readable deprecation message, or <c>null</c> if not deprecated.</summary>
+    public string? DeprecationMessage { get; set; }
+
+    /// <summary>The username of the user who deprecated this version, or <c>null</c> if not deprecated.</summary>
+    public string? DeprecatedBy { get; set; }
 }

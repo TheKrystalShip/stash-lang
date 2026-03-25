@@ -35,6 +35,7 @@ public class PackagesController : ControllerBase
     private readonly IPackageStorage _storage;
     private readonly PackageService _packageService;
     private readonly AuditService _auditService;
+    private readonly DeprecationService _deprecationService;
     private readonly RegistryConfig _config;
 
     /// <summary>
@@ -44,18 +45,21 @@ public class PackagesController : ControllerBase
     /// <param name="storage">Blob storage backend for package tarballs.</param>
     /// <param name="packageService">Service that encapsulates publish and unpublish logic.</param>
     /// <param name="auditService">Service that records package-related audit events.</param>
+    /// <param name="deprecationService">Service that handles package and version deprecation.</param>
     /// <param name="config">Registry-wide configuration.</param>
     public PackagesController(
         IRegistryDatabase db,
         IPackageStorage storage,
         PackageService packageService,
         AuditService auditService,
+        DeprecationService deprecationService,
         RegistryConfig config)
     {
         _db = db;
         _storage = storage;
         _packageService = packageService;
         _auditService = auditService;
+        _deprecationService = deprecationService;
         _config = config;
     }
 
@@ -109,7 +113,10 @@ public class PackagesController : ControllerBase
             Versions = versionsDict,
             Latest = package.Latest,
             CreatedAt = package.CreatedAt.ToString("o"),
-            UpdatedAt = package.UpdatedAt.ToString("o")
+            UpdatedAt = package.UpdatedAt.ToString("o"),
+            Deprecated = package.Deprecated,
+            DeprecationMessage = package.DeprecationMessage,
+            DeprecationAlternative = package.DeprecationAlternative
         };
 
         return Ok(response);
@@ -259,6 +266,174 @@ public class PackagesController : ControllerBase
         }
     }
 
+    // ── Deprecation endpoints ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Marks an entire package as deprecated.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
+    /// <c>400</c> if the request body is invalid or the package does not exist,
+    /// or <c>403</c> if the caller is not an owner.
+    /// </returns>
+    [Authorize(Policy = "RequirePublishScope")]
+    [HttpPatch("{name}/deprecate")]
+    public async Task<IActionResult> DeprecatePackage(string name, [FromBody] DeprecatePackageRequest request)
+    {
+        string decodedName = Uri.UnescapeDataString(name);
+        string username = User.Identity!.Name!;
+
+        if (!await _db.PackageExistsAsync(decodedName))
+        {
+            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+        }
+
+        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isAdmin = User.IsInRole("admin");
+        if (!isOwner && !isAdmin)
+        {
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+        }
+
+        try
+        {
+            await _deprecationService.DeprecatePackageAsync(decodedName, request.Message, request.Alternative, username);
+            string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _auditService.LogPackageDeprecateAsync(decodedName, username, ip);
+            return Ok(new DeprecationResponse { Package = decodedName, Deprecated = true });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Removes the deprecation status from a package.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
+    /// <c>400</c> if the package does not exist,
+    /// or <c>403</c> if the caller is not an owner.
+    /// </returns>
+    [Authorize(Policy = "RequirePublishScope")]
+    [HttpDelete("{name}/deprecate")]
+    public async Task<IActionResult> UndeprecatePackage(string name)
+    {
+        string decodedName = Uri.UnescapeDataString(name);
+        string username = User.Identity!.Name!;
+
+        if (!await _db.PackageExistsAsync(decodedName))
+        {
+            return NotFound(new ErrorResponse { Error = $"Package '{decodedName}' not found." });
+        }
+
+        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isAdmin = User.IsInRole("admin");
+        if (!isOwner && !isAdmin)
+        {
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+        }
+
+        try
+        {
+            await _deprecationService.UndeprecatePackageAsync(decodedName);
+            string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _auditService.LogPackageUndeprecateAsync(decodedName, username, ip);
+            return Ok(new DeprecationResponse { Package = decodedName, Deprecated = false });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Marks a specific version of a package as deprecated.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="version">The exact semantic version string.</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
+    /// <c>400</c> if the package or version does not exist,
+    /// or <c>403</c> if the caller is not an owner.
+    /// </returns>
+    [Authorize(Policy = "RequirePublishScope")]
+    [HttpPatch("{name}/{version}/deprecate")]
+    public async Task<IActionResult> DeprecateVersion(string name, string version, [FromBody] DeprecateVersionRequest request)
+    {
+        string decodedName = Uri.UnescapeDataString(name);
+        string username = User.Identity!.Name!;
+
+        if (!await _db.VersionExistsAsync(decodedName, version))
+        {
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+        }
+
+        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isAdmin = User.IsInRole("admin");
+        if (!isOwner && !isAdmin)
+        {
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+        }
+
+        try
+        {
+            await _deprecationService.DeprecateVersionAsync(decodedName, version, request.Message, username);
+            string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _auditService.LogVersionDeprecateAsync(decodedName, version, username, ip);
+            return Ok(new DeprecationResponse { Package = decodedName, Version = version, Deprecated = true });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = ex.Message });
+        }
+    }
+
+    /// <summary>
+    /// Removes the deprecation status from a specific version.
+    /// </summary>
+    /// <param name="name">The URL-encoded package name.</param>
+    /// <param name="version">The exact semantic version string.</param>
+    /// <returns>
+    /// <c>200</c> with a <see cref="DeprecationResponse"/> on success,
+    /// <c>400</c> if the package or version does not exist,
+    /// or <c>403</c> if the caller is not an owner.
+    /// </returns>
+    [Authorize(Policy = "RequirePublishScope")]
+    [HttpDelete("{name}/{version}/deprecate")]
+    public async Task<IActionResult> UndeprecateVersion(string name, string version)
+    {
+        string decodedName = Uri.UnescapeDataString(name);
+        string username = User.Identity!.Name!;
+
+        if (!await _db.VersionExistsAsync(decodedName, version))
+        {
+            return NotFound(new ErrorResponse { Error = $"Version '{version}' of package '{decodedName}' not found." });
+        }
+
+        bool isOwner = await _db.IsOwnerAsync(decodedName, username);
+        bool isAdmin = User.IsInRole("admin");
+        if (!isOwner && !isAdmin)
+        {
+            return StatusCode(403, new ErrorResponse { Error = $"User '{username}' is not an owner of '{decodedName}'." });
+        }
+
+        try
+        {
+            await _deprecationService.UndeprecateVersionAsync(decodedName, version);
+            string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+            await _auditService.LogVersionUndeprecateAsync(decodedName, version, username, ip);
+            return Ok(new DeprecationResponse { Package = decodedName, Version = version, Deprecated = false });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new ErrorResponse { Error = ex.Message });
+        }
+    }
+
     /// <summary>
     /// Maps a <see cref="VersionRecord"/> entity to its API response shape.
     /// </summary>
@@ -279,7 +454,9 @@ public class PackagesController : ControllerBase
             Dependencies = deps ?? new Dictionary<string, object>(),
             Integrity = vr.Integrity,
             PublishedAt = vr.PublishedAt.ToString("o"),
-            PublishedBy = vr.PublishedBy
+            PublishedBy = vr.PublishedBy,
+            Deprecated = vr.Deprecated,
+            DeprecationMessage = vr.DeprecationMessage
         };
     }
 }

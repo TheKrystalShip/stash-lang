@@ -372,6 +372,10 @@ docker run -d \
 | GET    | `/api/v1/packages/{name}/{version}/download` | —       | Download tarball    |
 | PUT    | `/api/v1/packages/{name}`                    | Publish | Publish version     |
 | DELETE | `/api/v1/packages/{name}/{version}`          | Publish | Unpublish version   |
+| PATCH  | `/api/v1/packages/{name}/deprecate`          | Publish | Deprecate package   |
+| DELETE | `/api/v1/packages/{name}/deprecate`          | Publish | Undeprecate package |
+| PATCH  | `/api/v1/packages/{name}/{version}/deprecate`| Publish | Deprecate version   |
+| DELETE | `/api/v1/packages/{name}/{version}/deprecate`| Publish | Undeprecate version |
 | GET    | `/api/v1/search?q=query`                     | —       | Search packages     |
 | GET    | `/api/v1/admin/stats`                        | Admin   | Registry stats      |
 | POST   | `/api/v1/admin/users`                        | Admin   | Create user         |
@@ -410,6 +414,42 @@ The unpublish window (default `72h`) has expired. Extend `Security.UnpublishWind
 
 **Tokens stop working after restart**
 `Security.JwtSigningKey` is not set. A new random key is generated each start, invalidating all previous tokens.
+
+## Package Deprecation
+
+Packages and individual versions can be marked as deprecated. Deprecated packages remain fully installable — deprecation serves as a soft warning to consumers.
+
+### Deprecate a package
+
+```bash
+curl -X PATCH http://localhost:8080/api/v1/packages/my-package/deprecate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "This package is no longer maintained.", "alternative": "my-new-package"}'
+```
+
+### Deprecate a specific version
+
+```bash
+curl -X PATCH http://localhost:8080/api/v1/packages/my-package/1.0.0/deprecate \
+  -H "Authorization: Bearer <token>" \
+  -H "Content-Type: application/json" \
+  -d '{"message": "Use 2.0.0 instead — this version has a known bug."}'
+```
+
+### Remove deprecation
+
+```bash
+# Undeprecate a package
+curl -X DELETE http://localhost:8080/api/v1/packages/my-package/deprecate \
+  -H "Authorization: Bearer <token>"
+
+# Undeprecate a specific version
+curl -X DELETE http://localhost:8080/api/v1/packages/my-package/1.0.0/deprecate \
+  -H "Authorization: Bearer <token>"
+```
+
+Deprecation requires a token with `publish` scope and package ownership (or admin role). Search results include a `deprecated` flag so consumers can filter or warn on deprecated packages.
 
 ## Further Documentation
 

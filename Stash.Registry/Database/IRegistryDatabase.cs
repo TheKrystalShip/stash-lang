@@ -117,6 +117,39 @@ public interface IRegistryDatabase
     /// <param name="readme">The new readme text, or <c>null</c> to clear it.</param>
     Task UpdatePackageReadmeAsync(string name, string? readme);
 
+    // Deprecation operations
+
+    /// <summary>
+    /// Marks an entire package as deprecated with the supplied message and optional alternative.
+    /// </summary>
+    /// <param name="name">The package name.</param>
+    /// <param name="message">A human-readable deprecation message.</param>
+    /// <param name="alternative">The suggested replacement package name, or <c>null</c>.</param>
+    /// <param name="deprecatedBy">The username of the user performing the deprecation.</param>
+    Task DeprecatePackageAsync(string name, string message, string? alternative, string deprecatedBy);
+
+    /// <summary>
+    /// Removes the deprecation status from a package.
+    /// </summary>
+    /// <param name="name">The package name to undeprecate.</param>
+    Task UndeprecatePackageAsync(string name);
+
+    /// <summary>
+    /// Marks a specific version of a package as deprecated.
+    /// </summary>
+    /// <param name="name">The package name.</param>
+    /// <param name="version">The version string to deprecate.</param>
+    /// <param name="message">A human-readable deprecation message.</param>
+    /// <param name="deprecatedBy">The username of the user performing the deprecation.</param>
+    Task DeprecateVersionAsync(string name, string version, string message, string deprecatedBy);
+
+    /// <summary>
+    /// Removes the deprecation status from a specific version.
+    /// </summary>
+    /// <param name="name">The package name.</param>
+    /// <param name="version">The version string to undeprecate.</param>
+    Task UndeprecateVersionAsync(string name, string version);
+
     // User operations
     /// <summary>
     /// Retrieves a user record by username.

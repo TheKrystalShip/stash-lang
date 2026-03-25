@@ -112,6 +112,56 @@ public sealed class AuditService
         });
     }
 
+    public async Task LogPackageDeprecateAsync(string package, string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = "package.deprecate",
+            Package = package,
+            User = user,
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    public async Task LogPackageUndeprecateAsync(string package, string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = "package.undeprecate",
+            Package = package,
+            User = user,
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    public async Task LogVersionDeprecateAsync(string package, string version, string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = "version.deprecate",
+            Package = package,
+            Version = version,
+            User = user,
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    public async Task LogVersionUndeprecateAsync(string package, string version, string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = "version.undeprecate",
+            Package = package,
+            Version = version,
+            User = user,
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
     public async Task<SearchResult<AuditEntry>> GetAuditLogAsync(int page, int pageSize, string? packageName = null, string? action = null)
     {
         return await _db.GetAuditLogAsync(page, pageSize, packageName, action);

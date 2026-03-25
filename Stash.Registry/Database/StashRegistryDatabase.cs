@@ -180,6 +180,64 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         }
     }
 
+    // ── Deprecation operations ─────────────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task DeprecatePackageAsync(string name, string message, string? alternative, string deprecatedBy)
+    {
+        var package = await _context.Packages.FindAsync(name);
+        if (package != null)
+        {
+            package.Deprecated = true;
+            package.DeprecationMessage = message;
+            package.DeprecationAlternative = alternative;
+            package.DeprecatedBy = deprecatedBy;
+            package.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task UndeprecatePackageAsync(string name)
+    {
+        var package = await _context.Packages.FindAsync(name);
+        if (package != null)
+        {
+            package.Deprecated = false;
+            package.DeprecationMessage = null;
+            package.DeprecationAlternative = null;
+            package.DeprecatedBy = null;
+            package.UpdatedAt = DateTime.UtcNow;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task DeprecateVersionAsync(string name, string version, string message, string deprecatedBy)
+    {
+        var record = await _context.Versions.FindAsync(name, version);
+        if (record != null)
+        {
+            record.Deprecated = true;
+            record.DeprecationMessage = message;
+            record.DeprecatedBy = deprecatedBy;
+            await _context.SaveChangesAsync();
+        }
+    }
+
+    /// <inheritdoc/>
+    public async Task UndeprecateVersionAsync(string name, string version)
+    {
+        var record = await _context.Versions.FindAsync(name, version);
+        if (record != null)
+        {
+            record.Deprecated = false;
+            record.DeprecationMessage = null;
+            record.DeprecatedBy = null;
+            await _context.SaveChangesAsync();
+        }
+    }
+
     // ── User operations ───────────────────────────────────────────────────────
 
     /// <inheritdoc/>

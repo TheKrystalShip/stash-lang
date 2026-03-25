@@ -28,6 +28,10 @@ public sealed class PackageSummaryResponse
     /// <summary>The ISO 8601 timestamp of when the package was last updated.</summary>
     [JsonPropertyName("updatedAt")]
     public required string UpdatedAt { get; set; }
+
+    /// <summary>Whether the package has been deprecated.</summary>
+    [JsonPropertyName("deprecated")]
+    public bool Deprecated { get; set; }
 }
 
 /// <summary>

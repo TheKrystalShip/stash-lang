@@ -60,6 +60,10 @@ public sealed class RegistryDbContext : DbContext
             entity.Property(e => e.Latest).HasColumnName("latest").IsRequired();
             entity.Property(e => e.CreatedAt).HasColumnName("created_at");
             entity.Property(e => e.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(e => e.Deprecated).HasColumnName("deprecated").HasDefaultValue(false);
+            entity.Property(e => e.DeprecationMessage).HasColumnName("deprecation_message");
+            entity.Property(e => e.DeprecationAlternative).HasColumnName("deprecation_alternative");
+            entity.Property(e => e.DeprecatedBy).HasColumnName("deprecated_by");
         });
 
         modelBuilder.Entity<VersionRecord>(entity =>
@@ -78,6 +82,9 @@ public sealed class RegistryDbContext : DbContext
                 .HasForeignKey(e => e.PackageName)
                 .HasPrincipalKey(e => e.Name)
                 .OnDelete(DeleteBehavior.Cascade);
+            entity.Property(e => e.Deprecated).HasColumnName("deprecated").HasDefaultValue(false);
+            entity.Property(e => e.DeprecationMessage).HasColumnName("deprecation_message");
+            entity.Property(e => e.DeprecatedBy).HasColumnName("deprecated_by");
         });
 
         modelBuilder.Entity<UserRecord>(entity =>

@@ -166,6 +166,7 @@ public sealed class Startup
 
         services.AddScoped<PackageService>();
         services.AddScoped<AuditService>();
+        services.AddScoped<DeprecationService>();
 
         services.AddOpenApi();
     }
