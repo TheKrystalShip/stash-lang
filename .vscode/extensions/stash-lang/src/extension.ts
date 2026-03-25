@@ -4,6 +4,7 @@ import * as path from "path";
 import {
   LanguageClient,
   LanguageClientOptions,
+  RevealOutputChannelOn,
   ServerOptions,
 } from "vscode-languageclient/node";
 import { activateTesting } from "./testing";
@@ -11,11 +12,17 @@ import { resolveBinary } from "./resolveBinary";
 
 let client: LanguageClient | undefined;
 let debugOutput: vscode.OutputChannel | undefined;
+let lspTrace: vscode.OutputChannel | undefined;
 
 export function activate(context: vscode.ExtensionContext) {
   debugOutput = vscode.window.createOutputChannel("Stash Debug");
   context.subscriptions.push(debugOutput);
   debugOutput.appendLine("Stash extension activated");
+
+  const lspOutput = vscode.window.createOutputChannel("Stash Language Server");
+  context.subscriptions.push(lspOutput);
+  lspTrace = vscode.window.createOutputChannel("Stash Language Server (Trace)");
+  context.subscriptions.push(lspTrace);
 
   const config = vscode.workspace.getConfiguration("stash");
   const customPath: string = config.get<string>("lspPath", "");
@@ -27,10 +34,18 @@ export function activate(context: vscode.ExtensionContext) {
     debug: { command: serverCommand, transport: 0 },
   };
 
+  const indexingEnabled = config.get<boolean>("workspaceIndexing.enabled", false);
+
   const clientOptions: LanguageClientOptions = {
     documentSelector: [{ scheme: "file", language: "stash" }],
+    outputChannel: lspOutput,
+    traceOutputChannel: lspTrace,
+    revealOutputChannelOn: RevealOutputChannelOn.Never,
     synchronize: {
       configurationSection: "stash",
+      fileEvents: indexingEnabled
+        ? vscode.workspace.createFileSystemWatcher("**/*.stash")
+        : undefined,
     },
   };
 
@@ -80,6 +95,7 @@ export function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate(): Thenable<void> | undefined {
+  lspTrace?.dispose();
   return client?.stop();
 }
 

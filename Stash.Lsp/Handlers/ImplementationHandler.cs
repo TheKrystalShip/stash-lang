@@ -8,6 +8,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Microsoft.Extensions.Logging;
 using Stash.Lsp.Analysis;
 
 /// <summary>
@@ -35,16 +36,19 @@ public class ImplementationHandler : ImplementationHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<ImplementationHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="ImplementationHandler"/> with the services
     /// needed to find type-use locations.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and cross-file reference search.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public ImplementationHandler(AnalysisEngine analysis, DocumentManager documents)
+    public ImplementationHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<ImplementationHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -59,11 +63,13 @@ public class ImplementationHandler : ImplementationHandlerBase
     /// </returns>
     public override Task<LocationOrLocationLinks?> Handle(ImplementationParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Implementation request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
         if (ctx == null)
         {
+            _logger.LogTrace("Implementation: nothing found at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
@@ -74,6 +80,7 @@ public class ImplementationHandler : ImplementationHandlerBase
         var symbol = result.Symbols.FindDefinition(word, line, col);
         if (symbol == null)
         {
+            _logger.LogTrace("Implementation: nothing found at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
@@ -97,6 +104,7 @@ public class ImplementationHandler : ImplementationHandlerBase
 
         if (typeName == null)
         {
+            _logger.LogTrace("Implementation: nothing found at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
@@ -128,9 +136,11 @@ public class ImplementationHandler : ImplementationHandlerBase
 
         if (locations.Count == 0)
         {
+            _logger.LogTrace("Implementation: nothing found at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
+        _logger.LogDebug("Implementation: {Count} locations for {Uri}", locations.Count, request.TextDocument.Uri);
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(locations));
     }
 

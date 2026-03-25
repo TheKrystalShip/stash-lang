@@ -1278,6 +1278,18 @@ public class Lexer
                         _current += 2;
                         _column += 2;
                     }
+                    else if (_source[_current] == '{')
+                    {
+                        // Interpolation inside quoted string within command literal
+                        if (textSegment.Length > 0)
+                        {
+                            parts.Add(textSegment.ToString());
+                            textSegment.Clear();
+                        }
+                        _current++;
+                        _column++;
+                        ScanInterpolatedExpression(parts);
+                    }
                     else
                     {
                         if (_source[_current] == '\n')

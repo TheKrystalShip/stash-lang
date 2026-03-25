@@ -7,6 +7,7 @@ using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
@@ -44,13 +45,16 @@ public class CodeActionHandler : CodeActionHandlerBase
 {
     private readonly AnalysisEngine _analysis;
 
+    private readonly ILogger<CodeActionHandler> _logger;
+
     /// <summary>
     /// Initialises the handler with the analysis engine used to retrieve cached document results.
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
-    public CodeActionHandler(AnalysisEngine analysis)
+    public CodeActionHandler(AnalysisEngine analysis, ILogger<CodeActionHandler> logger)
     {
         _analysis = analysis;
+        _logger = logger;
     }
 
     /// <summary>
@@ -84,6 +88,7 @@ public class CodeActionHandler : CodeActionHandlerBase
     public override Task<CommandOrCodeActionContainer?> Handle(CodeActionParams request,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("CodeAction request for {Uri}", request.TextDocument.Uri);
         var uri = request.TextDocument.Uri.ToUri();
         var result = _analysis.GetCachedResult(uri);
         if (result == null)
@@ -180,6 +185,7 @@ public class CodeActionHandler : CodeActionHandlerBase
             }
         }
 
+        _logger.LogDebug("CodeAction: {Count} actions for {Uri}", actions.Count, request.TextDocument.Uri);
         return Task.FromResult<CommandOrCodeActionContainer?>(
             new CommandOrCodeActionContainer(actions));
     }

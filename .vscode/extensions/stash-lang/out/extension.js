@@ -43,10 +43,15 @@ const testing_1 = require("./testing");
 const resolveBinary_1 = require("./resolveBinary");
 let client;
 let debugOutput;
+let lspTrace;
 function activate(context) {
     debugOutput = vscode.window.createOutputChannel("Stash Debug");
     context.subscriptions.push(debugOutput);
     debugOutput.appendLine("Stash extension activated");
+    const lspOutput = vscode.window.createOutputChannel("Stash Language Server");
+    context.subscriptions.push(lspOutput);
+    lspTrace = vscode.window.createOutputChannel("Stash Language Server (Trace)");
+    context.subscriptions.push(lspTrace);
     const config = vscode.workspace.getConfiguration("stash");
     const customPath = config.get("lspPath", "");
     const serverCommand = customPath || (0, resolveBinary_1.resolveBinary)("stash-lsp");
@@ -54,10 +59,17 @@ function activate(context) {
         run: { command: serverCommand, transport: 0 },
         debug: { command: serverCommand, transport: 0 },
     };
+    const indexingEnabled = config.get("workspaceIndexing.enabled", false);
     const clientOptions = {
         documentSelector: [{ scheme: "file", language: "stash" }],
+        outputChannel: lspOutput,
+        traceOutputChannel: lspTrace,
+        revealOutputChannelOn: node_1.RevealOutputChannelOn.Never,
         synchronize: {
             configurationSection: "stash",
+            fileEvents: indexingEnabled
+                ? vscode.workspace.createFileSystemWatcher("**/*.stash")
+                : undefined,
         },
     };
     client = new node_1.LanguageClient("stashLanguageServer", "Stash Language Server", serverOptions, clientOptions);
@@ -83,6 +95,7 @@ function activate(context) {
     context.subscriptions.push(registration);
 }
 function deactivate() {
+    lspTrace?.dispose();
     return client?.stop();
 }
 class StashDebugAdapterFactory {

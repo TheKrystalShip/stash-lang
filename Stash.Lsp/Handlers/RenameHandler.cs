@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
@@ -33,16 +34,19 @@ public class RenameHandler : RenameHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<RenameHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="RenameHandler"/> with the services
     /// needed to produce rename workspace edits.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and reference lookup.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public RenameHandler(AnalysisEngine analysis, DocumentManager documents)
+    public RenameHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<RenameHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -57,6 +61,7 @@ public class RenameHandler : RenameHandlerBase
     /// </returns>
     public override Task<WorkspaceEdit?> Handle(RenameParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Rename request at {Uri}:{Line}:{Col} → {NewName}", request.TextDocument.Uri, request.Position.Line, request.Position.Character, request.NewName);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
@@ -93,6 +98,7 @@ public class RenameHandler : RenameHandlerBase
             }
         };
 
+        _logger.LogDebug("Rename: {Count} edits for {Uri}", edits.Count, request.TextDocument.Uri);
         return Task.FromResult<WorkspaceEdit?>(workspaceEdit);
     }
 

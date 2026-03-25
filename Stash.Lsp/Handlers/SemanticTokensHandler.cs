@@ -9,6 +9,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lexing;
 using Stash.Lsp.Analysis;
@@ -37,6 +38,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
 
     /// <summary>Per-document cached <see cref="SemanticTokensDocument"/> instances keyed by URI.</summary>
     private readonly ConcurrentDictionary<Uri, SemanticTokensDocument> _documents = new();
+
+    private readonly ILogger<SemanticTokensHandler> _logger;
 
     // Token type indices (must match legend registration)
 
@@ -88,9 +91,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     /// Initialises the handler with an <see cref="AnalysisEngine"/> used to retrieve cached analysis results.
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
-    public SemanticTokensHandler(AnalysisEngine analysis)
+    public SemanticTokensHandler(AnalysisEngine analysis, ILogger<SemanticTokensHandler> logger)
     {
         _analysis = analysis;
+        _logger = logger;
     }
 
     /// <summary>
@@ -138,6 +142,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     /// <returns>A completed task after all tokens have been classified and pushed.</returns>
     protected override Task Tokenize(SemanticTokensBuilder builder, ITextDocumentIdentifierParams identifier, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("SemanticTokens request for {Uri}", identifier.TextDocument.Uri);
         var result = _analysis.GetCachedResult(identifier.TextDocument.Uri.ToUri());
         if (result == null)
         {
@@ -249,6 +254,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             }
         } // end for
 
+        _logger.LogDebug("SemanticTokens: tokenized {Uri}", identifier.TextDocument.Uri);
         return Task.CompletedTask;
     }
 
@@ -319,6 +325,39 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 if (BuiltInRegistry.Enums.Any(e => e.Name == name && e.Namespace == nsName))
                 {
                     builder.Push(line, col, length, TokenTypeType, 0);
+                    return;
+                }
+            }
+
+            // Check if preceded by a namespace import alias (e.g., utils.LogLevel)
+            if (tokenList != null && tokenIndex >= 2
+                && tokenList[tokenIndex - 2].Type == TokenType.Identifier
+                && result.NamespaceImports.TryGetValue(tokenList[tokenIndex - 2].Lexeme, out var importedModule))
+            {
+                var importedSym = importedModule.Symbols.All
+                    .FirstOrDefault(s => s.Name == name);
+                if (importedSym != null)
+                {
+                    var (tokenType, modifiers) = MapSymbolKind(importedSym, token);
+                    builder.Push(line, col, length, tokenType, modifiers);
+                    return;
+                }
+            }
+
+            // Check for chained access: alias.Enum.Member (e.g., utils.LogLevel.Error)
+            if (tokenList != null && tokenIndex >= 4
+                && tokenList[tokenIndex - 4].Type == TokenType.Identifier
+                && tokenList[tokenIndex - 3].Type == TokenType.Dot
+                && tokenList[tokenIndex - 2].Type == TokenType.Identifier
+                && result.NamespaceImports.TryGetValue(tokenList[tokenIndex - 4].Lexeme, out var chainedModule))
+            {
+                var parentName = tokenList[tokenIndex - 2].Lexeme;
+                var memberSym = chainedModule.Symbols.All
+                    .FirstOrDefault(s => s.Name == name && s.ParentName == parentName);
+                if (memberSym != null)
+                {
+                    var (tokenType, modifiers) = MapSymbolKind(memberSym, token);
+                    builder.Push(line, col, length, tokenType, modifiers);
                     return;
                 }
             }
@@ -510,10 +549,39 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             return;
         }
 
+        int baseLine = token.Span.StartLine - 1;
+        int baseCol = token.Span.StartColumn - 1;
+        string lexeme = token.Lexeme;
+
+        // Determine prefix length: $" is 2 chars, " alone is 1 char
+        int prefixLen = lexeme.StartsWith("$\"") ? 2 : 1;
+
+        // Cursor tracking for multi-line support
+        int curLine = baseLine;
+        int curCol = baseCol;
+        int offset = 0;
+
+        // Emit opening prefix ($" or ") as string
+        builder.Push(curLine, curCol, prefixLen, TokenTypeString, 0);
+        AdvanceCursor(lexeme, ref offset, prefixLen, ref curLine, ref curCol);
+
         foreach (var part in parts)
         {
-            if (part is List<Token> subTokens)
+            if (part is string textSegment)
             {
+                if (textSegment.Length > 0)
+                {
+                    EmitStringSegment(builder, lexeme, offset, textSegment.Length, curLine, curCol);
+                }
+                AdvanceCursor(lexeme, ref offset, textSegment.Length, ref curLine, ref curCol);
+            }
+            else if (part is List<Token> subTokens)
+            {
+                // Emit opening { as operator for distinct coloring
+                builder.Push(curLine, curCol, 1, TokenTypeOperator, 0);
+                AdvanceCursor(lexeme, ref offset, 1, ref curLine, ref curCol);
+
+                // Classify sub-tokens within the expression
                 TokenType prevSubType = TokenType.Eof;
                 for (int j = 0; j < subTokens.Count; j++)
                 {
@@ -570,7 +638,82 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
 
                     prevSubType = subToken.Type;
                 }
+
+                // Find the matching } by scanning with brace-depth tracking
+                // offset is currently past the opening {, so depth starts at 1
+                int depth = 1;
+                int scanPos = offset;
+                while (scanPos < lexeme.Length && depth > 0)
+                {
+                    char c = lexeme[scanPos];
+                    if (c == '{') depth++;
+                    else if (c == '}') depth--;
+                    if (depth > 0) scanPos++;
+                }
+
+                // Emit closing } as operator for distinct coloring
+                int charsBeforeClosingBrace = scanPos - offset;
+                if (charsBeforeClosingBrace > 0)
+                {
+                    AdvanceCursor(lexeme, ref offset, charsBeforeClosingBrace, ref curLine, ref curCol);
+                }
+                if (depth == 0)
+                {
+                    builder.Push(curLine, curCol, 1, TokenTypeOperator, 0);
+                }
+                AdvanceCursor(lexeme, ref offset, 1, ref curLine, ref curCol);
             }
+        }
+
+        // Emit closing " as string
+        if (offset < lexeme.Length)
+        {
+            builder.Push(curLine, curCol, 1, TokenTypeString, 0);
+        }
+    }
+
+    private static void AdvanceCursor(string lexeme, ref int offset, int count, ref int line, ref int col)
+    {
+        for (int i = 0; i < count && offset < lexeme.Length; i++)
+        {
+            if (lexeme[offset] == '\n')
+            {
+                line++;
+                col = 0;
+            }
+            else
+            {
+                col++;
+            }
+            offset++;
+        }
+    }
+
+    private void EmitStringSegment(SemanticTokensBuilder builder, string lexeme, int offset, int length, int startLine, int startCol)
+    {
+        int currentLine = startLine;
+        int currentCol = startCol;
+        int segStart = offset;
+
+        for (int i = 0; i < length; i++)
+        {
+            if (offset + i < lexeme.Length && lexeme[offset + i] == '\n')
+            {
+                int segLen = offset + i - segStart;
+                if (segLen > 0)
+                {
+                    builder.Push(currentLine, currentCol, segLen, TokenTypeString, 0);
+                }
+                currentLine++;
+                currentCol = 0;
+                segStart = offset + i + 1;
+            }
+        }
+
+        int remainingLen = offset + length - segStart;
+        if (remainingLen > 0)
+        {
+            builder.Push(currentLine, currentCol, remainingLen, TokenTypeString, 0);
         }
     }
 

@@ -76,7 +76,7 @@ Built on OmniSharp, the Stash LSP provides 21 handlers covering the full editing
 | **Find All References** | `Shift+F12`          | Find every usage of a symbol in the current file and across imports                |
 | **Document Highlights** | _(automatic)_        | All occurrences of the symbol under the cursor are highlighted                     |
 | **Document Symbols**    | _(outline panel)_    | Hierarchical symbol tree: struct fields, enum members, nested functions            |
-| **Workspace Symbols**   | `Ctrl+T`             | Fuzzy-search functions, structs, enums, and variables across all open files        |
+| **Workspace Symbols**   | `Ctrl+T`             | Fuzzy-search functions, structs, enums, and variables across open and indexed files |
 | **Document Links**      | `Ctrl+Click`         | `import` paths are clickable — opens the referenced file directly                  |
 | **Call Hierarchy**      | _(right-click menu)_ | View incoming and outgoing calls for any function                                  |
 
@@ -148,6 +148,25 @@ The LSP resolves `import` statements to provide a seamless multi-file editing ex
 - Namespace imports (`import "path" as alias`) enable dot-completion on the alias
 - Selective imports (`import { a, b } from "path"`) inject symbols into the current scope
 - Invalid import paths and unknown import names are reported as diagnostics
+
+#### Workspace Indexing
+
+When `stash.workspaceIndexing.enabled` is set to `true`, the LSP server scans all `.stash` files in the workspace in the background to build a complete cross-file reference index.
+
+**What changes:**
+
+- **Code Lens** — reference counts above functions, structs, and enums reflect all workspace files, not just open ones
+- **Workspace Symbols** (`Ctrl+T`) — search results include symbols from every `.stash` file in the workspace
+- **Progressive updates** — reference counts tick up gradually as files are analyzed, rather than appearing all at once
+
+**How it works:**
+
+- Scans all workspace folders for `.stash` files on server startup
+- Respects `.stashignore` patterns — vendor directories, build output, and other excluded paths are skipped
+- Skips files currently open in the editor (they already have fresher analysis)
+- Watches for external file changes (create, modify, delete) to keep the index current
+
+> **Note:** Background indexing increases memory usage proportional to the number of `.stash` files in the workspace. It is disabled by default and recommended for projects where workspace-wide reference counts are valuable.
 
 ---
 
@@ -284,6 +303,7 @@ describe("math utils") {
 | `stash.dapPath`              | `""`              | Path to the Stash DAP debug adapter binary. If empty, looks for `stash-dap` on `PATH`. |
 | `stash.interpreterPath`      | `""`              | Path to the Stash interpreter binary. If empty, looks for `stash` on `PATH`.           |
 | `stash.formatting.enabled`   | `true`            | Enable or disable the document formatter.                                              |
+| `stash.workspaceIndexing.enabled` | `false`      | Enable background scanning of all `.stash` files for workspace-wide reference counts and symbol search. Respects `.stashignore`. |
 | `stash.testing.filePattern`  | `**/*.test.stash` | Glob pattern for test file discovery.                                                  |
 | `stash.testing.autoDiscover` | `true`            | Automatically discover tests in matching files.                                        |
 

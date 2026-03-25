@@ -73,7 +73,7 @@ public class StashFormatter
     /// Categorises the syntactic context currently being formatted, used to decide between
     /// inline spacing (struct initializers) and block formatting (bodies, enums).
     /// </summary>
-    private enum FormatterContext { TopLevel, EnumBody, StructBody, Block, Parens, Brackets, StructInit }
+    private enum FormatterContext { TopLevel, EnumBody, StructBody, Block, Parens, Brackets, StructInit, SwitchBody }
 
     /// <summary>
     /// The type of whitespace to insert before the current token as determined by
@@ -104,6 +104,7 @@ public class StashFormatter
         bool prevClosedInline = false;
         int ternaryDepth = 0;
         var multiLineBrackets = new Stack<bool>();
+        var multiLineBraces = new Stack<bool>();
 
         for (int i = 0; i < tokens.Count; i++)
         {
@@ -116,9 +117,21 @@ public class StashFormatter
             var context = contextStack.Count > 0 ? contextStack.Peek() : FormatterContext.TopLevel;
 
             // Decrement indent BEFORE determining whitespace for }
+            bool closingMultiLineStructInit = false;
             if (token.Type == TokenType.RightBrace)
             {
-                if (context != FormatterContext.StructInit)
+                if (context == FormatterContext.StructInit)
+                {
+                    if (multiLineBraces.Count > 0)
+                    {
+                        closingMultiLineStructInit = multiLineBraces.Pop();
+                    }
+                    if (closingMultiLineStructInit)
+                    {
+                        indentLevel = Math.Max(0, indentLevel - 1);
+                    }
+                }
+                else
                 {
                     indentLevel = Math.Max(0, indentLevel - 1);
                 }
@@ -155,6 +168,26 @@ public class StashFormatter
                     ws = Whitespace.NewLine;
                 }
                 else if (token.Type == TokenType.RightBracket)
+                {
+                    ws = Whitespace.NewLine;
+                }
+            }
+
+            // Preserve multi-line struct initializer formatting
+            bool isMultiLineStructInit = context == FormatterContext.StructInit
+                && multiLineBraces.Count > 0
+                && multiLineBraces.Peek();
+            if (isMultiLineStructInit || closingMultiLineStructInit)
+            {
+                if (prevType == TokenType.LeftBrace)
+                {
+                    ws = Whitespace.NewLine;
+                }
+                else if (prevType == TokenType.Comma)
+                {
+                    ws = Whitespace.NewLine;
+                }
+                else if (closingMultiLineStructInit)
                 {
                     ws = Whitespace.NewLine;
                 }
@@ -210,6 +243,11 @@ public class StashFormatter
                     contextStack.Push(FormatterContext.StructBody);
                     indentLevel++;
                 }
+                else if (pendingKeyword == "switch")
+                {
+                    contextStack.Push(FormatterContext.SwitchBody);
+                    indentLevel++;
+                }
                 else if (pendingKeyword != null)
                 {
                     // fn, if, else, while, for — always a block
@@ -219,10 +257,28 @@ public class StashFormatter
                 else if (prevType == TokenType.Import)
                 {
                     contextStack.Push(FormatterContext.StructInit);
+                    bool isMultiLine = (i + 1 < tokens.Count
+                        && tokens[i + 1].Type != TokenType.Eof
+                        && tokens[i + 1].Span.StartLine > token.Span.StartLine)
+                        || CountStructInitFields(tokens, i) >= 3;
+                    multiLineBraces.Push(isMultiLine);
+                    if (isMultiLine)
+                    {
+                        indentLevel++;
+                    }
                 }
                 else if (prevType == TokenType.Identifier)
                 {
                     contextStack.Push(FormatterContext.StructInit);
+                    bool isMultiLine = (i + 1 < tokens.Count
+                        && tokens[i + 1].Type != TokenType.Eof
+                        && tokens[i + 1].Span.StartLine > token.Span.StartLine)
+                        || CountStructInitFields(tokens, i) >= 3;
+                    multiLineBraces.Push(isMultiLine);
+                    if (isMultiLine)
+                    {
+                        indentLevel++;
+                    }
                 }
                 else
                 {
@@ -292,6 +348,10 @@ public class StashFormatter
             else if (token.Type is TokenType.For)
             {
                 pendingKeyword = "for";
+            }
+            else if (token.Type is TokenType.Switch)
+            {
+                pendingKeyword = "switch";
             }
             else if (token.Type is TokenType.Semicolon)
             {
@@ -438,8 +498,8 @@ public class StashFormatter
             return Whitespace.NewLine;
         }
 
-        // Rule 16: prev == Comma && context is EnumBody or StructBody
-        if (prev == TokenType.Comma && context is FormatterContext.EnumBody or FormatterContext.StructBody)
+        // Rule 16: prev == Comma && context is EnumBody, StructBody, or SwitchBody
+        if (prev == TokenType.Comma && context is FormatterContext.EnumBody or FormatterContext.StructBody or FormatterContext.SwitchBody)
         {
             return Whitespace.NewLine;
         }
@@ -596,6 +656,30 @@ public class StashFormatter
                 sb.Append(lines[i].TrimEnd());
             }
         }
+    }
+
+    private static int CountStructInitFields(List<Token> tokens, int openBraceIndex)
+    {
+        int depth = 0;
+        int commas = 0;
+        for (int j = openBraceIndex + 1; j < tokens.Count; j++)
+        {
+            var t = tokens[j];
+            if (t.Type is TokenType.LeftBrace or TokenType.LeftParen or TokenType.LeftBracket)
+            {
+                depth++;
+            }
+            else if (t.Type is TokenType.RightBrace or TokenType.RightParen or TokenType.RightBracket)
+            {
+                if (depth == 0) break;
+                depth--;
+            }
+            else if (t.Type == TokenType.Comma && depth == 0)
+            {
+                commas++;
+            }
+        }
+        return commas + 1;
     }
 
     /// <summary>

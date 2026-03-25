@@ -91,7 +91,8 @@ Stash.Lsp/                         # LSP server
 │   ├── SymbolCollector.cs         # AST visitor that builds scope tree and reference list
 │   ├── SymbolInfo.cs              # Symbol representation (name, kind, span, type hint, parameter types)
 │   ├── TextUtilities.cs           # Word-at-position and dot-prefix extraction
-│   └── TypeInferenceEngine.cs     # Static type deduction for variables and expressions
+    ├── TypeInferenceEngine.cs     # Static type deduction for variables and expressions
+    └── WorkspaceScanner.cs        # Background workspace file scanner and indexer
 └── Handlers/
     ├── TextDocumentSyncHandler.cs  # didOpen, didChange, didClose + publishes diagnostics
     ├── DocumentSymbolHandler.cs    # Outline view (hierarchical)
@@ -115,7 +116,8 @@ Stash.Lsp/                         # LSP server
     ├── CallHierarchyHandler.cs     # Incoming/outgoing call hierarchy
     ├── LinkedEditingRangeHandler.cs # Linked editing for symbol occurrences
     ├── TypeDefinitionHandler.cs    # Go to type definition (struct/enum of a variable)
-    └── ImplementationHandler.cs    # Find all instantiations of a struct/enum
+    ├── ImplementationHandler.cs    # Find all instantiations of a struct/enum
+    └── DidChangeWatchedFilesHandler.cs # File watcher for external .stash file changes
 
 .vscode/extensions/stash-lang/        # VS Code extension
 ├── package.json                      # activationEvents, LSP client deps
@@ -171,6 +173,7 @@ All analysis infrastructure has been implemented. Here are the key components:
 | **Symbol Info**        | `SymbolInfo.cs`                         | Symbol representation: name, kind, span, type hint, parameter types, explicit type hint tracking     |
 | **Reference Info**     | `ReferenceInfo.cs`                      | Reference occurrence tracking with read/write/call/type-use distinction                              |
 | **Analysis Result**    | `AnalysisResult.cs`                     | Complete analysis output per document (tokens, AST, errors, scope tree, imports)                     |
+| **Workspace Scanner**  | `WorkspaceScanner.cs`                   | Background file discovery using bounded async channel; feeds `.stash` files through analysis engine  |
 
 ### Analysis Pipeline
 
@@ -364,6 +367,46 @@ Cross-file analysis is implemented via `ImportResolver`:
 
 ---
 
+### Phase F: Workspace Indexing ✅
+
+**Status**: Complete
+
+Progressive background discovery of all `.stash` files in the workspace. When enabled, the server builds a complete cross-file reference index without requiring files to be opened.
+
+**LSP Methods:**
+
+- `workspace/didChangeWatchedFiles` — react to external file create/change/delete events
+- `codeLens/refresh` — request client to re-fetch code lens (reference counts)
+- `semanticTokens/refresh` — request client to re-fetch semantic tokens
+
+**New components:**
+
+| Component | File | Purpose |
+| --- | --- | --- |
+| **WorkspaceScanner** | `WorkspaceScanner.cs` | Background file discovery and analysis. Uses `System.Threading.Channels` for bounded async queue (capacity 1000). Respects `.stashignore` patterns. Sends progressive refresh notifications every 10 files. |
+| **DidChangeWatchedFilesHandler** | `DidChangeWatchedFilesHandler.cs` | Handles `workspace/didChangeWatchedFiles` to keep the background index current. Registered for `**/*.stash` glob pattern. |
+
+**Configuration:**
+
+- `stash.workspaceIndexing.enabled` (default: `false`) — opt-in toggle in VS Code settings
+- Controlled via `LspSettings.WorkspaceIndexingEnabled`, read by `ConfigurationHandler`
+
+**Design decisions:**
+
+- **Opt-in by default.** Background scanning can increase memory usage for large workspaces. Users enable it explicitly when they want workspace-wide reference counts and symbol search.
+- **Respects `.stashignore`.** Vendor directories, build output, and other excluded paths are skipped automatically.
+- **Skips open files.** Files already open in the editor have fresher analysis from `TextDocumentSyncHandler` — the scanner does not overwrite them.
+- **Progressive updates.** Reference counts tick up gradually as files are analyzed, rather than appearing all at once after a long scan. The server sends `codeLens/refresh` and `semanticTokens/refresh` every 10 files.
+- **Thread-safe.** Workspace roots protected by lock; channel is bounded with `DropOldest` backpressure; file I/O errors are caught and logged without stopping the scan.
+
+**Impact on existing features:**
+
+- **Code Lens** — reference counts now reflect all workspace files (not just open ones) when indexing is enabled
+- **Workspace Symbols** (`Ctrl+T`) — search results include symbols from all indexed files, not just open documents
+- **Find All References** — cross-file references discovered through the analysis cache are available for background-indexed files
+
+---
+
 ### Beyond Original Roadmap
 
 The following features were implemented beyond the original Phase A–E plan:
@@ -382,6 +425,7 @@ The following features were implemented beyond the original Phase A–E plan:
 | **Linked Editing Range** | `LinkedEditingRangeHandler` | Linked editing for symbol occurrences (renames all when 2+ references exist)                                                                                 |
 | **Type Inference**       | `TypeInferenceEngine`       | Static type deduction from struct init, command expressions, function returns, literals, dot-access field types; used by SemanticValidator for type checking |
 | **Semantic Validation**  | `SemanticValidator`         | Catches undefined variables, const reassignment, wrong arity, misplaced control flow, type hint violations                                                   |
+| **Workspace Indexing**   | `WorkspaceScanner` + `DidChangeWatchedFilesHandler` | Background discovery and indexing of all `.stash` files; opt-in via `stash.workspaceIndexing.enabled`                                    |
 
 ### Type Hint Enforcement
 
@@ -460,6 +504,7 @@ All features below marked ✅ are fully implemented and tested.
 | `textDocument/typeDefinition`             | `TypeDefinitionHandler`     | ✅     |
 | `textDocument/implementation`             | `ImplementationHandler`     | ✅     |
 | `workspace/symbol`                        | `WorkspaceSymbolHandler`    | ✅     |
+| `workspace/didChangeWatchedFiles`          | `DidChangeWatchedFilesHandler` | ✅  |
 
 ### Not Yet Implemented
 
@@ -468,7 +513,6 @@ All features below marked ✅ are fully implemented and tested.
 | `textDocument/rangeFormatting`    | Format selection only (full document formatting exists) |
 | `textDocument/onTypeFormatting`   | Auto-format on typing trigger characters                |
 | `textDocument/colorPresentation`  | Color picker support (not applicable)                   |
-| `workspace/didChangeWatchedFiles` | File watcher for external changes                       |
 
 ---
 

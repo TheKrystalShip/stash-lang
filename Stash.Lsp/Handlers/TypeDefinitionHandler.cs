@@ -7,6 +7,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Microsoft.Extensions.Logging;
 using Stash.Lsp.Analysis;
 
 /// <summary>
@@ -35,16 +36,19 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<TypeDefinitionHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="TypeDefinitionHandler"/> with the services
     /// needed to resolve go-to-type-definition locations.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and import resolution.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public TypeDefinitionHandler(AnalysisEngine analysis, DocumentManager documents)
+    public TypeDefinitionHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<TypeDefinitionHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -59,11 +63,13 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
     /// </returns>
     public override Task<LocationOrLocationLinks?> Handle(TypeDefinitionParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("TypeDefinition request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
         if (ctx == null)
         {
+            _logger.LogTrace("TypeDefinition: no type found at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
@@ -85,12 +91,14 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
 
         if (symbol == null)
         {
+            _logger.LogTrace("TypeDefinition: no type found at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
         // If the symbol IS a struct or enum, return its own location
         if (symbol.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum)
         {
+            _logger.LogDebug("TypeDefinition: resolved for {Uri}", request.TextDocument.Uri);
             return MakeLocationAsync(request.TextDocument.Uri, symbol, result);
         }
 
@@ -98,6 +106,7 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         var typeName = symbol.TypeHint;
         if (typeName == null)
         {
+            _logger.LogTrace("TypeDefinition: no type found at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
@@ -107,9 +116,11 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
 
         if (typeSymbol != null)
         {
+            _logger.LogDebug("TypeDefinition: resolved for {Uri}", request.TextDocument.Uri);
             return MakeLocationAsync(request.TextDocument.Uri, typeSymbol, result);
         }
 
+        _logger.LogTrace("TypeDefinition: no type found at {Uri}", request.TextDocument.Uri);
         return Task.FromResult<LocationOrLocationLinks?>(null);
     }
 

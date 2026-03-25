@@ -4,6 +4,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
@@ -23,13 +24,16 @@ public class FormattingHandler : DocumentFormattingHandlerBase
 {
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<FormattingHandler> _logger;
+
     /// <summary>
     /// Initialises the handler with the document manager used to retrieve the current document text.
     /// </summary>
     /// <param name="documents">The document manager that holds the in-memory text for open documents.</param>
-    public FormattingHandler(DocumentManager documents)
+    public FormattingHandler(DocumentManager documents, ILogger<FormattingHandler> logger)
     {
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -60,6 +64,7 @@ public class FormattingHandler : DocumentFormattingHandlerBase
     public override Task<TextEditContainer?> Handle(DocumentFormattingParams request,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Formatting request for {Uri}", request.TextDocument.Uri);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         if (text == null)
@@ -74,6 +79,7 @@ public class FormattingHandler : DocumentFormattingHandlerBase
 
         if (formatted == text)
         {
+            _logger.LogDebug("Formatting: no changes for {Uri}", request.TextDocument.Uri);
             return Task.FromResult<TextEditContainer?>(new TextEditContainer());
         }
 
@@ -88,6 +94,7 @@ public class FormattingHandler : DocumentFormattingHandlerBase
             NewText = formatted
         };
 
+        _logger.LogDebug("Formatting: applied for {Uri}", request.TextDocument.Uri);
         return Task.FromResult<TextEditContainer?>(new TextEditContainer(edit));
     }
 }

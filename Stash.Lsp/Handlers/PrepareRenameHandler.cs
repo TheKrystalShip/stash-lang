@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
@@ -34,16 +35,19 @@ public class PrepareRenameHandler : PrepareRenameHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<PrepareRenameHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="PrepareRenameHandler"/> with the services
     /// needed to validate rename requests.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and reference lookup.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public PrepareRenameHandler(AnalysisEngine analysis, DocumentManager documents)
+    public PrepareRenameHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<PrepareRenameHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -58,11 +62,13 @@ public class PrepareRenameHandler : PrepareRenameHandlerBase
     /// </returns>
     public override Task<RangeOrPlaceholderRange?> Handle(PrepareRenameParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("PrepareRename request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
         if (ctx == null)
         {
+            _logger.LogDebug("PrepareRename: not renameable at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<RangeOrPlaceholderRange?>(null);
         }
 
@@ -73,6 +79,7 @@ public class PrepareRenameHandler : PrepareRenameHandlerBase
 
         if (references.Count == 0)
         {
+            _logger.LogDebug("PrepareRename: not renameable at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<RangeOrPlaceholderRange?>(null);
         }
 
@@ -83,6 +90,7 @@ public class PrepareRenameHandler : PrepareRenameHandlerBase
             col <= r.Span.EndColumn)
             ?? references[0];
 
+        _logger.LogDebug("PrepareRename: symbol renameable at {Uri}", request.TextDocument.Uri);
         return Task.FromResult<RangeOrPlaceholderRange?>(
             new RangeOrPlaceholderRange(new PlaceholderRange
             {

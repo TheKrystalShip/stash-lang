@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
 using Stash.Lsp.Analysis;
@@ -42,16 +43,18 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
+    private readonly ILogger<FoldingRangeHandler> _logger;
 
     /// <summary>
     /// Initialises the handler with the required analysis engine and document manager.
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
     /// <param name="documents">The document manager used to retrieve raw document text for comment scanning.</param>
-    public FoldingRangeHandler(AnalysisEngine analysis, DocumentManager documents)
+    public FoldingRangeHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<FoldingRangeHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -79,6 +82,7 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
     public override Task<Container<FoldingRange>?> Handle(FoldingRangeRequestParam request,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("FoldingRange request for {Uri}", request.TextDocument.Uri);
         var uri = request.TextDocument.Uri.ToUri();
         var result = _analysis.GetCachedResult(uri);
         if (result == null)
@@ -101,6 +105,7 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
             CollectCommentRanges(text, ranges);
         }
 
+        _logger.LogDebug("FoldingRange: {Count} ranges for {Uri}", ranges.Count, request.TextDocument.Uri);
         return Task.FromResult<Container<FoldingRange>?>(new Container<FoldingRange>(ranges));
     }
 

@@ -3,6 +3,7 @@ namespace Stash.Lsp.Handlers;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -39,16 +40,19 @@ public class DefinitionHandler : DefinitionHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<DefinitionHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="DefinitionHandler"/> with the services
     /// needed to resolve go-to-definition locations.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and import resolution.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public DefinitionHandler(AnalysisEngine analysis, DocumentManager documents)
+    public DefinitionHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<DefinitionHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -63,6 +67,7 @@ public class DefinitionHandler : DefinitionHandlerBase
     /// </returns>
     public override Task<LocationOrLocationLinks?> Handle(DefinitionParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("GoToDefinition request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, request.Position.Line, request.Position.Character);
@@ -144,6 +149,7 @@ public class DefinitionHandler : DefinitionHandlerBase
             Range = symbol.Span.ToLspRange()
         };
 
+        _logger.LogDebug("GoToDefinition: resolved to {Uri}:{Line}", request.TextDocument.Uri, symbol.Span.StartLine);
         return Task.FromResult<LocationOrLocationLinks?>(new LocationOrLocationLinks(location));
     }
 

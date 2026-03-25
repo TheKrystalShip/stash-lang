@@ -3,6 +3,7 @@ namespace Stash.Lsp.Handlers;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -39,16 +40,19 @@ public class HoverHandler : HoverHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<HoverHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="HoverHandler"/> with the services needed
     /// to resolve hover information.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and context resolution.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public HoverHandler(AnalysisEngine analysis, DocumentManager documents)
+    public HoverHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<HoverHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -63,11 +67,13 @@ public class HoverHandler : HoverHandlerBase
     /// </returns>
     public override Task<Hover?> Handle(HoverParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Hover request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
         if (ctx == null)
         {
+            _logger.LogTrace("Hover: no info at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
             return Task.FromResult<Hover?>(null);
         }
 
@@ -173,6 +179,7 @@ public class HoverHandler : HoverHandlerBase
                 });
             }
 
+            _logger.LogTrace("Hover: no info at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
             return Task.FromResult<Hover?>(null);
         }
 
@@ -200,6 +207,7 @@ public class HoverHandler : HoverHandlerBase
             md += "\n\n---\n\n" + FormatDocumentation(symbol.Documentation);
         }
 
+        _logger.LogDebug("Hover: resolved for {Uri}", request.TextDocument.Uri);
         return Task.FromResult<Hover?>(new Hover
         {
             Contents = new MarkedStringsOrMarkupContent(new MarkupContent

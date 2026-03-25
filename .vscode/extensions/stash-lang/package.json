@@ -173,6 +173,12 @@
           ],
           "description": "Minimum log level for the Stash language server. Logs appear in the Output panel under 'Stash Language Server'."
         },
+        "stash.trace.server": {
+          "type": "string",
+          "enum": ["off", "messages", "verbose"],
+          "default": "verbose",
+          "markdownDescription": "Trace level for LSP server communication. Controls the threshold for `window/logMessage` notifications from the server. Set to `verbose` for full logging (actual log level is controlled by `#stash.lsp.logLevel#`). Set to `off` to disable."
+        },
         "stash.inlayHints.enabled": {
           "type": "boolean",
           "default": true,
@@ -182,6 +188,11 @@
           "type": "boolean",
           "default": true,
           "description": "Enable or disable code lens (reference counts above functions, structs, and enums)."
+        },
+        "stash.workspaceIndexing.enabled": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Enable background workspace indexing for progressive code discovery. When enabled, the language server scans all `.stash` files in the workspace in the background to build a complete reference index — this powers accurate reference counts, workspace-wide symbol search, and cross-file navigation even for files you haven't opened yet. Respects `.stashignore` patterns for excluding directories (e.g. `stashes/`, `.git/`). May increase memory usage in large projects."
         },
         "stash.formatting.enabled": {
           "type": "boolean",

@@ -145,6 +145,41 @@ public static class InitCommand
         File.WriteAllText(manifestPath, json + "\n");
 
         Console.WriteLine($"Created {manifestPath}");
+
+        // Generate .stashignore if it doesn't exist
+        string ignorePath = Path.Combine(projectDir, ".stashignore");
+        if (!File.Exists(ignorePath))
+        {
+            const string defaultIgnore =
+                """
+                # Dependencies
+                stashes/
+
+                # Lock file
+                stash-lock.json
+
+                # Environment files
+                .env
+                .env.*
+
+                # Version control
+                .git/
+
+                # IDE / editor directories
+                .vscode/
+                .idea/
+
+                # OS files
+                .DS_Store
+                Thumbs.db
+
+                # Build output
+                *.exe
+                *.dll
+                """;
+            File.WriteAllText(ignorePath, defaultIgnore + "\n");
+            Console.WriteLine($"Created {ignorePath}");
+        }
     }
 
     /// <summary>

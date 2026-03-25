@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Microsoft.Extensions.Logging;
 using Stash.Lsp.Analysis;
 
 /// <summary>
@@ -29,16 +30,18 @@ public class LinkedEditingRangeHandler : LinkedEditingRangeHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
+    private readonly ILogger<LinkedEditingRangeHandler> _logger;
 
     /// <summary>
     /// Initialises the handler with the required analysis engine and document manager.
     /// </summary>
     /// <param name="analysis">The analysis engine used to retrieve cached document results.</param>
     /// <param name="documents">The document manager used to obtain the current document text.</param>
-    public LinkedEditingRangeHandler(AnalysisEngine analysis, DocumentManager documents)
+    public LinkedEditingRangeHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<LinkedEditingRangeHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -52,6 +55,7 @@ public class LinkedEditingRangeHandler : LinkedEditingRangeHandlerBase
     /// </returns>
     public override Task<LinkedEditingRanges> Handle(LinkedEditingRangeParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("LinkedEditingRange request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var lspLine = (int)request.Position.Line;
@@ -60,6 +64,7 @@ public class LinkedEditingRangeHandler : LinkedEditingRangeHandlerBase
         var ctx = _analysis.GetContextAt(uri, text, lspLine, lspCharacter);
         if (ctx == null)
         {
+            _logger.LogTrace("LinkedEditingRange: no linked ranges at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LinkedEditingRanges>(null!);
         }
 
@@ -70,6 +75,7 @@ public class LinkedEditingRangeHandler : LinkedEditingRangeHandlerBase
         var references = result.Symbols.FindReferences(word, line, col);
         if (references.Count < 2)
         {
+            _logger.LogTrace("LinkedEditingRange: no linked ranges at {Uri}", request.TextDocument.Uri);
             return Task.FromResult<LinkedEditingRanges>(null!);
         }
 
@@ -79,6 +85,7 @@ public class LinkedEditingRangeHandler : LinkedEditingRangeHandlerBase
             ranges.Add(reference.Span.ToLspRange());
         }
 
+        _logger.LogDebug("LinkedEditingRange: {Count} ranges for {Uri}", ranges.Count, request.TextDocument.Uri);
         return Task.FromResult<LinkedEditingRanges>(new LinkedEditingRanges
         {
             Ranges = new Container<Range>(ranges),

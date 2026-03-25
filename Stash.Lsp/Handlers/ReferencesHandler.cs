@@ -2,6 +2,7 @@ namespace Stash.Lsp.Handlers;
 
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
@@ -28,16 +29,19 @@ public class ReferencesHandler : ReferencesHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<ReferencesHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="ReferencesHandler"/> with the services
     /// needed to locate symbol references.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data and cross-file reference search.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public ReferencesHandler(AnalysisEngine analysis, DocumentManager documents)
+    public ReferencesHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<ReferencesHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -52,6 +56,7 @@ public class ReferencesHandler : ReferencesHandlerBase
     /// </returns>
     public override Task<LocationContainer?> Handle(ReferenceParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("FindReferences request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
@@ -91,6 +96,7 @@ public class ReferencesHandler : ReferencesHandlerBase
             });
         }
 
+        _logger.LogDebug("FindReferences: {Count} locations for {Uri}", locations.Count, request.TextDocument.Uri);
         return Task.FromResult<LocationContainer?>(new LocationContainer(locations));
     }
 

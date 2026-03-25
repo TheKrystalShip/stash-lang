@@ -13,6 +13,7 @@
     { "include": "#control-keywords" },
     { "include": "#constants" },
     { "include": "#return-type-annotation" },
+    { "include": "#brace-block" },
     { "include": "#command-literal" },
     { "include": "#triple-quoted-interpolated-string" },
     { "include": "#triple-quoted-string" },
@@ -212,6 +213,16 @@
       }
     },
 
+    "brace-block": {
+      "begin": "\\{",
+      "beginCaptures": { "0": { "name": "punctuation.section.block.begin.stash" } },
+      "end": "\\}",
+      "endCaptures": { "0": { "name": "punctuation.section.block.end.stash" } },
+      "patterns": [
+        { "include": "$self" }
+      ]
+    },
+
     "control-keywords": {
       "patterns": [
         {
@@ -297,8 +308,9 @@
       },
       "patterns": [
         { "include": "#string-escape" },
+        { "include": "#command-interpolation" },
         {
-          "match": "[^\"\\\\]+"
+          "match": "[^\"\\\\{}]+"
         }
       ]
     },
@@ -317,8 +329,9 @@
         {
           "match": "\\\\."
         },
+        { "include": "#command-interpolation" },
         {
-          "match": "[^'\\\\]+"
+          "match": "[^'\\\\{}]+"
         }
       ]
     },

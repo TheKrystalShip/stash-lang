@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -35,14 +36,17 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
     /// <summary>The analysis engine used to obtain cached symbol hierarchies.</summary>
     private readonly AnalysisEngine _analysis;
 
+    private readonly ILogger<DocumentSymbolHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="DocumentSymbolHandler"/> with the analysis
     /// engine used to retrieve document symbol trees.
     /// </summary>
     /// <param name="analysis">Analysis engine providing hierarchical <see cref="SymbolInfo"/> data.</param>
-    public DocumentSymbolHandler(AnalysisEngine analysis)
+    public DocumentSymbolHandler(AnalysisEngine analysis, ILogger<DocumentSymbolHandler> logger)
     {
         _analysis = analysis;
+        _logger = logger;
     }
 
     /// <summary>
@@ -58,6 +62,7 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
     public override Task<SymbolInformationOrDocumentSymbolContainer?> Handle(
         DocumentSymbolParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("DocumentSymbol request for {Uri}", request.TextDocument.Uri);
         AnalysisResult? result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
         {
@@ -105,6 +110,7 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
             symbols.Add(new SymbolInformationOrDocumentSymbol(docSymbol));
         }
 
+        _logger.LogDebug("DocumentSymbol: {Count} symbols for {Uri}", symbols.Count, request.TextDocument.Uri);
         return Task.FromResult<SymbolInformationOrDocumentSymbolContainer?>(
             new SymbolInformationOrDocumentSymbolContainer(symbols));
     }

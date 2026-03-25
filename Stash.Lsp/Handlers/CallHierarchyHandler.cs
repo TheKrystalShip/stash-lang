@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Lsp.Analysis.SymbolKind;
@@ -55,16 +56,18 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
+    private readonly ILogger<CallHierarchyHandler> _logger;
 
     /// <summary>
     /// Initialises the handler with the required analysis engine and document manager.
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached results and context resolution.</param>
     /// <param name="documents">The document manager used to enumerate open documents and retrieve text.</param>
-    public CallHierarchyHandler(AnalysisEngine analysis, DocumentManager documents)
+    public CallHierarchyHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<CallHierarchyHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -78,6 +81,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
     /// </returns>
     public override Task<Container<CallHierarchyItem>?> Handle(CallHierarchyPrepareParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("CallHierarchy prepare at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
@@ -97,6 +101,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
         }
 
         var item = BuildItem(symbol, request.TextDocument.Uri);
+        _logger.LogDebug("CallHierarchy prepare: resolved {Name} at {Uri}", word, request.TextDocument.Uri);
         return Task.FromResult<Container<CallHierarchyItem>?>(new Container<CallHierarchyItem>(item));
     }
 
@@ -111,6 +116,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
     /// </returns>
     public override Task<Container<CallHierarchyIncomingCall>?> Handle(CallHierarchyIncomingCallsParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("CallHierarchy incoming calls for {Name}", request.Item.Name);
         var targetName = request.Item.Name;
         var incomingCalls = new List<CallHierarchyIncomingCall>();
 
@@ -164,6 +170,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
             }
         }
 
+        _logger.LogDebug("CallHierarchy incoming: {Count} callers for {Name}", incomingCalls.Count, request.Item.Name);
         return Task.FromResult<Container<CallHierarchyIncomingCall>?>(new Container<CallHierarchyIncomingCall>(incomingCalls));
     }
 
@@ -179,6 +186,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
     /// </returns>
     public override Task<Container<CallHierarchyOutgoingCall>?> Handle(CallHierarchyOutgoingCallsParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("CallHierarchy outgoing calls for {Name}", request.Item.Name);
         var sourceName = request.Item.Name;
         var sourceUri = request.Item.Uri.ToUri();
 
@@ -246,6 +254,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
             });
         }
 
+        _logger.LogDebug("CallHierarchy outgoing: {Count} callees for {Name}", outgoingCalls.Count, request.Item.Name);
         return Task.FromResult<Container<CallHierarchyOutgoingCall>?>(new Container<CallHierarchyOutgoingCall>(outgoingCalls));
     }
 

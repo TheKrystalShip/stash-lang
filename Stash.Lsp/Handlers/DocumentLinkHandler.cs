@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
 using Stash.Lexing;
@@ -34,13 +35,16 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
 {
     private readonly AnalysisEngine _analysis;
 
+    private readonly ILogger<DocumentLinkHandler> _logger;
+
     /// <summary>
     /// Initialises the handler with the analysis engine used to retrieve cached document results.
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
-    public DocumentLinkHandler(AnalysisEngine analysis)
+    public DocumentLinkHandler(AnalysisEngine analysis, ILogger<DocumentLinkHandler> logger)
     {
         _analysis = analysis;
+        _logger = logger;
     }
 
     /// <summary>
@@ -78,6 +82,7 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
     public override Task<DocumentLinkContainer?> Handle(DocumentLinkParams request,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("DocumentLink request for {Uri}", request.TextDocument.Uri);
         var uri = request.TextDocument.Uri.ToUri();
         var result = _analysis.GetCachedResult(uri);
         if (result == null)
@@ -101,6 +106,7 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
             }
         }
 
+        _logger.LogDebug("DocumentLink: {Count} links for {Uri}", links.Count, request.TextDocument.Uri);
         return Task.FromResult<DocumentLinkContainer?>(new DocumentLinkContainer(links));
     }
 

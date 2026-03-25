@@ -8,6 +8,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
+using Microsoft.Extensions.Logging;
 using Stash.Lsp.Analysis;
 using LspSymbolKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.SymbolKind;
 
@@ -36,16 +37,19 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
     /// <summary>The document manager used to enumerate currently open document URIs.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<WorkspaceSymbolHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="WorkspaceSymbolHandler"/> with the services
     /// needed to search symbols across open workspace files.
     /// </summary>
     /// <param name="analysis">Analysis engine providing <see cref="AnalysisResult"/> data per document.</param>
     /// <param name="documents">Document manager for enumerating open document URIs.</param>
-    public WorkspaceSymbolHandler(AnalysisEngine analysis, DocumentManager documents)
+    public WorkspaceSymbolHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<WorkspaceSymbolHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -67,10 +71,18 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
     public override Task<Container<WorkspaceSymbol>?> Handle(WorkspaceSymbolParams request,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("WorkspaceSymbol request: {Query}", request.Query);
         var query = request.Query ?? "";
         var symbols = new List<WorkspaceSymbol>();
 
-        foreach (var uri in _documents.GetOpenDocumentUris())
+        // Combine open document URIs with background-indexed URIs
+        var uris = new HashSet<Uri>(_documents.GetOpenDocumentUris());
+        foreach (var cachedUri in _analysis.GetAllCachedUris())
+        {
+            uris.Add(cachedUri);
+        }
+
+        foreach (var uri in uris)
         {
             var result = _analysis.GetCachedResult(uri);
             if (result == null)
@@ -116,6 +128,7 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
             }
         }
 
+        _logger.LogDebug("WorkspaceSymbol: {Count} symbols matching '{Query}'", symbols.Count, request.Query);
         return Task.FromResult<Container<WorkspaceSymbol>?>(
             new Container<WorkspaceSymbol>(symbols));
     }

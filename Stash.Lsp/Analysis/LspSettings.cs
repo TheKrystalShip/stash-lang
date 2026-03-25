@@ -41,4 +41,11 @@ public class LspSettings
     /// Defaults to <see langword="true"/>.
     /// </summary>
     public bool CodeLensEnabled { get; set; } = true;
+
+    /// <summary>
+    /// Gets or sets whether background workspace indexing is enabled.
+    /// When enabled, the server scans all <c>.stash</c> files in the workspace to build
+    /// a complete reference index. Defaults to <see langword="false"/>.
+    /// </summary>
+    public bool WorkspaceIndexingEnabled { get; set; } = false;
 }

@@ -2,6 +2,7 @@ namespace Stash.Lsp.Handlers;
 
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -23,16 +24,18 @@ public class DocumentHighlightHandler : DocumentHighlightHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
+    private readonly ILogger<DocumentHighlightHandler> _logger;
 
     /// <summary>
     /// Initialises the handler with the dependencies required to resolve symbol references.
     /// </summary>
     /// <param name="analysis">The analysis engine used to retrieve cached document results.</param>
     /// <param name="documents">The document manager used to obtain the current document text.</param>
-    public DocumentHighlightHandler(AnalysisEngine analysis, DocumentManager documents)
+    public DocumentHighlightHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<DocumentHighlightHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -46,6 +49,7 @@ public class DocumentHighlightHandler : DocumentHighlightHandlerBase
     /// </returns>
     public override Task<DocumentHighlightContainer?> Handle(DocumentHighlightParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("DocumentHighlight request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var ctx = _analysis.GetContextAt(uri, text, (int)request.Position.Line, (int)request.Position.Character);
@@ -76,6 +80,7 @@ public class DocumentHighlightHandler : DocumentHighlightHandlerBase
             });
         }
 
+        _logger.LogDebug("DocumentHighlight: {Count} highlights for {Uri}", highlights.Count, request.TextDocument.Uri);
         return Task.FromResult<DocumentHighlightContainer?>(new DocumentHighlightContainer(highlights));
     }
 

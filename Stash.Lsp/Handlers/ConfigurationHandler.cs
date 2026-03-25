@@ -112,10 +112,18 @@ public class ConfigurationHandler : DidChangeConfigurationHandlerBase
             {
                 _settings.CodeLensEnabled = codeLensEnabled.Value<bool>();
             }
+
+            // stash.workspaceIndexing.*
+            var workspaceIndexing = stash["workspaceIndexing"] as JObject;
+            var indexingEnabled = workspaceIndexing?["enabled"];
+            if (indexingEnabled != null && indexingEnabled.Type == JTokenType.Boolean)
+            {
+                _settings.WorkspaceIndexingEnabled = indexingEnabled.Value<bool>();
+            }
         }
 
-        _logger.LogInformation("Configuration updated — logLevel: {LogLevel}, debounce: {Debounce}ms, inlayHints: {Inlay}, codeLens: {CodeLens}",
-            _settings.LogLevel, _settings.DebounceDelayMs, _settings.InlayHintsEnabled, _settings.CodeLensEnabled);
+        _logger.LogInformation("Configuration updated — logLevel: {LogLevel}, debounce: {Debounce}ms, inlayHints: {Inlay}, codeLens: {CodeLens}, workspaceIndexing: {Indexing}",
+            _settings.LogLevel, _settings.DebounceDelayMs, _settings.InlayHintsEnabled, _settings.CodeLensEnabled, _settings.WorkspaceIndexingEnabled);
         return Unit.Task;
     }
 }

@@ -8,101 +8,117 @@ import "lib/utils.stash" as utils;
 // ─── Domain Types ────────────────────────────────────────────
 
 enum DeployResult {
-    Success,
-    Failed,
-    Skipped
+  Success,
+  Failed,
+  Skipped
 }
 
 enum Environment {
-    Staging,
-    Production
+  Staging,
+  Production
 }
 
 struct Target {
-    host,
-    user,
-    role,
-    env
-
-    fn label() {
-        let env_name = self.env switch {
-            Environment.Staging => "staging",
-            Environment.Production => "prod",
-            _ => "unknown"
-        };
-        return $"{self.user}@{self.host} ({self.role}/{env_name})";
-    }
+  host,
+  user,
+  role,
+  env fn label() {
+    let env_name = self.env switch {
+      Environment.Staging => "staging",
+      Environment.Production => "prod",
+      _ => "unknown"
+    };
+    return $"{self.user}@{self.host} ({self.role}/{env_name})";
+  }
 }
 
 struct DeployStatus {
-    target,
-    result,
-    attempts,
-    message
+  target,
+  result,
+  attempts,
+  message
 }
 
 // ─── Configuration ───────────────────────────────────────────
 
 const MAX_RETRIES = 3;
+
 const PACKAGE = "app-v2.1.0.tar.gz";
 
 let targets = [
-    Target { host: "127.0.0.1", user: "deploy", role: "web", env: Environment.Staging },
-    Target { host: "192.168.1.50", user: "deploy", role: "web", env: Environment.Production },
-    Target { host: "192.168.1.51", user: "deploy", role: "api", env: Environment.Production },
-    Target { host: "192.168.99.99", user: "deploy", role: "worker", env: Environment.Production }
+  Target {
+    host: "127.0.0.1",
+    user: "deploy",
+    role: "web",
+    env: Environment.Staging
+  },
+  Target {
+    host: "192.168.1.50",
+    user: "deploy",
+    role: "web",
+    env: Environment.Production
+  },
+  Target {
+    host: "192.168.1.51",
+    user: "deploy",
+    role: "api",
+    env: Environment.Production
+  },
+  Target {
+    host: "192.168.99.99",
+    user: "deploy",
+    role: "worker",
+    env: Environment.Production
+  }
 ];
 
 // ─── Deployment Functions ────────────────────────────────────
 
 fn check_host(host: string) {
-    let result = try $(ping -c 1 -W 2 {host});
-    return result != null && result.exitCode == 0;
+  let result = try $(ping -c 1 -W 2 {host});
+  return result != null && result.exitCode == 0;
 }
 
 fn deploy_to(target, package: string) {
-    utils.log(utils.LogLevel.Info, $"Deploying {package} to {target.label()}");
+  utils.log(utils.LogLevel.Info, $"Deploying {package} to {target.label()}");
 
-    // Pre-flight: check connectivity
-    if (!check_host(target.host)) {
-        utils.log(utils.LogLevel.Error, $"  Host {target.host} unreachable — skipping");
-        return DeployStatus {
-            target: target,
-            result: DeployResult.Skipped,
-            attempts: 0,
-            message: "Host unreachable"
-        };
-    }
-
-    // Retry loop
-    let attempt = 1;
-    while (attempt <= MAX_RETRIES) {
-        utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
-
-        // Simulate deployment command
-        let result = $(echo "scp {package} {target.user}@{target.host}:/opt/");
-
-        if (result.exitCode == 0) {
-            utils.log(utils.LogLevel.Info, $"  Deployed successfully on attempt {attempt}");
-            return DeployStatus {
-                target: target,
-                result: DeployResult.Success,
-                attempts: attempt,
-                message: "OK"
-            };
-        }
-
-        utils.log(utils.LogLevel.Warn, $"  Attempt {attempt} failed: {result.stderr}");
-        attempt++;
-    }
-
-    utils.log(utils.LogLevel.Error, $"  All {MAX_RETRIES} attempts failed");
+  // Pre-flight: check connectivity
+  if (!check_host(target.host)) {
+    utils.log(utils.LogLevel.Error, $"  Host {target.host} unreachable — skipping");
     return DeployStatus {
-        target: target,
-        result: DeployResult.Failed,
-        attempts: MAX_RETRIES,
-        message: "Max retries exceeded"
+      target: target,
+      result: DeployResult.Skipped,
+      attempts: 0,
+      message: "Host unreachable"
     };
+  }
+
+  // Retry loop
+  let attempt = 1;
+  while (attempt <= MAX_RETRIES) {
+    utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
+
+    // Simulate deployment command
+    let result = $(echo "scp {package} {target.user}@{target.host}:/opt/");
+    if (result.exitCode == 0) {
+      utils.log(utils.LogLevel.Info, $"  Deployed successfully on attempt {attempt}");
+      return DeployStatus {
+        target: target,
+        result: DeployResult.Success,
+        attempts: attempt,
+        message: "OK"
+      };
+    }
+    utils.log(utils.LogLevel.Warn, $"  Attempt {attempt} failed: {result.stderr}");
+    attempt++;
+  }
+  utils.log(utils.LogLevel.Error, $"  All {MAX_RETRIES} attempts failed");
+  return DeployStatus {
+    target: target,
+    result: DeployResult.Failed,
+    attempts: MAX_RETRIES,
+    message: "Max retries exceeded"
+  };
 }
 
 // ─── Execute Pipeline ────────────────────────────────────────
@@ -114,13 +130,14 @@ io.println($"  Retries:  {MAX_RETRIES}");
 io.println();
 
 let results = [];
+
 let start_time = time.millis();
 
 for (let i, target in targets) {
-    io.println($"[{i + 1}/{len(targets)}] {target.label()}");
-    let status = deploy_to(target, PACKAGE);
-    arr.push(results, status);
-    io.println();
+  io.println($"[{i + 1}/{len(targets)}] {target.label()}");
+  let status = deploy_to(target, PACKAGE);
+  arr.push(results, status);
+  io.println();
 }
 
 let elapsed = time.millis() - start_time;
@@ -131,18 +148,20 @@ utils.banner("Deployment Summary");
 io.println();
 
 let successes = arr.filter(results, (r) => r.result == DeployResult.Success);
+
 let failures = arr.filter(results, (r) => r.result == DeployResult.Failed);
+
 let skipped = arr.filter(results, (r) => r.result == DeployResult.Skipped);
 
 for (let status in results) {
-    let icon = status.result switch {
-        DeployResult.Success => "[OK]   ",
-        DeployResult.Failed => "[FAIL] ",
-        DeployResult.Skipped => "[SKIP] ",
-        _ => "[??]   "
-    };
-    let target_label = str.padEnd(status.target.label(), 45);
-    io.println($"  {icon} {target_label} ({status.message})");
+  let icon = status.result switch {
+    DeployResult.Success => "[OK]   ",
+    DeployResult.Failed => "[FAIL] ",
+    DeployResult.Skipped => "[SKIP] ",
+    _ => "[??]   "
+  };
+  let target_label = str.padEnd(status.target.label(), 45);
+  io.println($"  {icon} {target_label} ({status.message})");
 }
 
 io.println();
@@ -155,5 +174,5 @@ io.println($"  Duration:  {elapsed}ms");
 io.println("-" * 55);
 
 if (len(failures) > 0) {
-    utils.log(utils.LogLevel.Error, "Some deployments failed — review output above");
+  utils.log(utils.LogLevel.Error, "Some deployments failed — review output above");
 }

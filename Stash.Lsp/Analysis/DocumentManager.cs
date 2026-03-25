@@ -3,6 +3,7 @@ namespace Stash.Lsp.Analysis;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 
 /// <summary>
@@ -24,8 +25,15 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 /// </remarks>
 public class DocumentManager
 {
+    private readonly ILogger<DocumentManager> _logger;
+
     /// <summary>Backing store mapping each open document URI to its current text and version.</summary>
     private readonly ConcurrentDictionary<Uri, DocumentState> _documents = new();
+
+    public DocumentManager(ILogger<DocumentManager> logger)
+    {
+        _logger = logger;
+    }
 
     /// <summary>
     /// Records a newly opened document and stores its initial text and LSP version.
@@ -36,6 +44,7 @@ public class DocumentManager
     public void Open(Uri uri, string text, int version)
     {
         _documents[uri] = new DocumentState(text, version);
+        _logger.LogDebug("Document opened in store: {Uri}", uri);
     }
 
     /// <summary>
@@ -47,6 +56,7 @@ public class DocumentManager
     public void Update(Uri uri, string text, int version)
     {
         _documents[uri] = new DocumentState(text, version);
+        _logger.LogTrace("Document updated in store: {Uri}", uri);
     }
 
     /// <summary>
@@ -56,6 +66,7 @@ public class DocumentManager
     public void Close(Uri uri)
     {
         _documents.TryRemove(uri, out _);
+        _logger.LogDebug("Document removed from store: {Uri}", uri);
     }
 
     /// <summary>

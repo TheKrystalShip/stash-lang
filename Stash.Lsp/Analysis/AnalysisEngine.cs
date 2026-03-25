@@ -4,6 +4,8 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using Microsoft.Extensions.Logging;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -21,11 +23,18 @@ using Stash.Parsing;
 /// </remarks>
 public class AnalysisEngine
 {
+    private readonly ILogger<AnalysisEngine> _logger;
+
     /// <summary>Thread-safe cache mapping document URIs to their most recent analysis results.</summary>
     private readonly ConcurrentDictionary<Uri, AnalysisResult> _cache = new();
 
     /// <summary>Resolver responsible for locating and parsing imported Stash modules.</summary>
     private readonly ImportResolver _importResolver = new();
+
+    public AnalysisEngine(ILogger<AnalysisEngine> logger)
+    {
+        _logger = logger;
+    }
 
     /// <summary>Gets the <see cref="ImportResolver"/> used to resolve cross-file imports.</summary>
     public ImportResolver ImportResolver => _importResolver;
@@ -41,6 +50,7 @@ public class AnalysisEngine
     /// </returns>
     public AnalysisResult Analyze(Uri uri, string source)
     {
+        _logger.LogDebug("Analyzing {Uri}", uri);
         var filePath = uri.IsFile ? uri.LocalPath : uri.ToString();
 
         var lexer = new Lexer(source, filePath, preserveTrivia: true);
@@ -116,6 +126,7 @@ public class AnalysisEngine
         var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors,
             lexer.StructuredErrors, parser.StructuredErrors, symbols, semanticDiagnostics,
             importResolution.NamespaceImports);
+        _logger.LogDebug("Analysis complete: {Uri} — {DiagCount} diagnostics, {SymbolCount} symbols", uri, result.SemanticDiagnostics.Count, result.Symbols.All.Count);
         _cache[uri] = result;
         return result;
     }
@@ -129,6 +140,15 @@ public class AnalysisEngine
     public AnalysisResult? GetCachedResult(Uri uri)
     {
         return _cache.TryGetValue(uri, out var result) ? result : null;
+    }
+
+    /// <summary>
+    /// Returns all URIs currently in the analysis cache, including both open documents
+    /// and background-indexed files.
+    /// </summary>
+    public IReadOnlyCollection<Uri> GetAllCachedUris()
+    {
+        return _cache.Keys.ToArray();
     }
 
     /// <summary>
@@ -175,6 +195,7 @@ public class AnalysisEngine
     /// </summary>
     public List<(Uri Uri, SourceSpan Span)> FindCrossFileReferences(Uri sourceUri, string symbolName)
     {
+        _logger.LogTrace("FindCrossFileReferences: {Symbol} in {Uri}", symbolName, sourceUri);
         var results = new List<(Uri, SourceSpan)>();
         if (!sourceUri.IsFile)
         {

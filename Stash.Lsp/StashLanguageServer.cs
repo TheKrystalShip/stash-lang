@@ -1,6 +1,7 @@
 namespace Stash.Lsp;
 
 using System;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -32,6 +33,7 @@ public static class StashLanguageServer
                 .ConfigureLogging(logging =>
                 {
                     logging.SetMinimumLevel(LogLevel.Trace);
+                    logging.AddLanguageProtocolLogging();
                     logging.AddFilter((category, level) => level >= settings.LogLevel);
                 })
                 .WithServices(services =>
@@ -39,6 +41,7 @@ public static class StashLanguageServer
                     services.AddSingleton(settings);
                     services.AddSingleton<DocumentManager>();
                     services.AddSingleton<AnalysisEngine>();
+                    services.AddSingleton<WorkspaceScanner>();
                 })
                 .WithHandler<TextDocumentSyncHandler>()
                 .WithHandler<DocumentSymbolHandler>()
@@ -64,12 +67,52 @@ public static class StashLanguageServer
                 .WithHandler<TypeDefinitionHandler>()
                 .WithHandler<ImplementationHandler>()
                 .WithHandler<ConfigurationHandler>()
+                .WithHandler<DidChangeWatchedFilesHandler>()
                 .OnInitialize((server, request, cancellationToken) =>
                 {
                     return Task.CompletedTask;
                 })
                 .OnInitialized((server, request, response, cancellationToken) =>
                 {
+                    var logger = server.Services.GetService<ILoggerFactory>()
+                        ?.CreateLogger(nameof(StashLanguageServer));
+                    try
+                    {
+                        var scanner = server.Services.GetRequiredService<WorkspaceScanner>();
+                        var roots = new List<string>();
+
+                        if (request.WorkspaceFolders is not null)
+                        {
+                            foreach (var folder in request.WorkspaceFolders)
+                            {
+                                var folderUri = folder.Uri.ToUri();
+                                if (folderUri.IsFile)
+                                {
+                                    roots.Add(folderUri.LocalPath);
+                                }
+                            }
+                        }
+                        else if (request.RootUri is not null)
+                        {
+                            var rootUri = request.RootUri.ToUri();
+                            if (rootUri.IsFile)
+                            {
+                                roots.Add(rootUri.LocalPath);
+                            }
+                        }
+                        else if (request.RootPath != null)
+                        {
+                            roots.Add(request.RootPath);
+                        }
+
+                        scanner.SetRoots(roots);
+                        logger?.LogInformation("Stash LSP server initialized with {RootCount} workspace root(s)", roots.Count);
+                    }
+                    catch (Exception ex)
+                    {
+                        logger?.LogError(ex, "Failed to initialize workspace scanner");
+                    }
+
                     return Task.CompletedTask;
                 })
         ).ConfigureAwait(false);

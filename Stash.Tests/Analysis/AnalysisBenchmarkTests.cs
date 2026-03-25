@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Lsp.Analysis;
@@ -67,7 +68,7 @@ public class AnalysisBenchmarkTests
 
         foreach (var (name, source, lines) in scripts)
         {
-            var engine = new AnalysisEngine();
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
             var uri = new Uri($"file:///bench/{name}");
 
             // Warmup
@@ -233,7 +234,7 @@ public class AnalysisBenchmarkTests
             () => new SemanticValidator(scopeTree0).Validate(stmts0));
 
         // Full pipeline via AnalysisEngine.Analyze
-        var engine = new AnalysisEngine();
+        var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
         var uri = new Uri($"file:///bench/{name}");
         double fullPipelineAvg = MeasureStage(
             () => engine.Analyze(uri, source),
@@ -315,7 +316,7 @@ public class AnalysisBenchmarkTests
     public void ColdVsWarm_AnalysisEngine()
     {
         var scripts = LoadExampleScripts();
-        var engine = new AnalysisEngine();
+        var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
 
         var coldTimes = new double[scripts.Count];
         var warmTimes = new double[scripts.Count];

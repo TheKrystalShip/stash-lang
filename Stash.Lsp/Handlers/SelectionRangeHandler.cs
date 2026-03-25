@@ -1,10 +1,12 @@
 namespace Stash.Lsp.Handlers;
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
 using Stash.Lsp.Analysis;
@@ -33,13 +35,16 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
 {
     private readonly AnalysisEngine _analysis;
 
+    private readonly ILogger<SelectionRangeHandler> _logger;
+
     /// <summary>
     /// Initialises the handler with the analysis engine used to retrieve cached document results.
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
-    public SelectionRangeHandler(AnalysisEngine analysis)
+    public SelectionRangeHandler(AnalysisEngine analysis, ILogger<SelectionRangeHandler> logger)
     {
         _analysis = analysis;
+        _logger = logger;
     }
 
     /// <summary>
@@ -67,6 +72,7 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
     public override Task<Container<SelectionRange>?> Handle(SelectionRangeParams request,
         CancellationToken cancellationToken)
     {
+        _logger.LogDebug("SelectionRange request for {Uri}, {Count} positions", request.TextDocument.Uri, request.Positions.Count());
         var result = _analysis.GetCachedResult(request.TextDocument.Uri.ToUri());
         if (result == null)
         {
@@ -121,6 +127,7 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
             });
         }
 
+        _logger.LogDebug("SelectionRange: {Count} ranges for {Uri}", ranges.Count, request.TextDocument.Uri);
         return Task.FromResult<Container<SelectionRange>?>(new Container<SelectionRange>(ranges));
     }
 

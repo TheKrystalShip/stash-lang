@@ -6,6 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 
@@ -35,16 +36,19 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<SignatureHelpHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="SignatureHelpHandler"/> with the services
     /// needed to resolve function signatures.
     /// </summary>
     /// <param name="analysis">Analysis engine providing cached <see cref="AnalysisResult"/> data.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public SignatureHelpHandler(AnalysisEngine analysis, DocumentManager documents)
+    public SignatureHelpHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<SignatureHelpHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -59,6 +63,7 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
     /// </returns>
     public override Task<SignatureHelp?> Handle(SignatureHelpParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("SignatureHelp request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var text = _documents.GetText(request.TextDocument.Uri.ToUri());
         if (text == null)
         {
@@ -87,11 +92,13 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         // Try built-in signatures first
         if (BuiltInRegistry.TryGetFunction(functionName, out var builtInFn))
         {
+            _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
             return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, ExtractParamLabels(builtInFn.Detail), activeParam, builtInFn.Documentation));
         }
 
         if (BuiltInRegistry.TryGetNamespaceFunction(functionName, out var nsFn))
         {
+            _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
             return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, ExtractParamLabels(nsFn.Detail), activeParam, nsFn.Documentation));
         }
 
@@ -107,11 +114,13 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
 
             if (definition != null && definition.Kind == Analysis.SymbolKind.Function && definition.Detail != null)
             {
+                _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
                 var paramLabels = ExtractParamLabels(definition.Detail);
                 return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(definition.Detail, paramLabels, activeParam));
             }
         }
 
+        _logger.LogTrace("SignatureHelp: no signature context at {Uri}", request.TextDocument.Uri);
         return Task.FromResult<SignatureHelp?>(null);
     }
 

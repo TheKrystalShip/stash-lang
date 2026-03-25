@@ -1,4 +1,5 @@
 using Stash.Lsp.Analysis;
+using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -315,7 +316,7 @@ public class ImportResolverTests
 
         try
         {
-            var engine = new AnalysisEngine();
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
             var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
 
             var visible = result.Symbols.GetVisibleSymbols(999, 0).ToList();
@@ -340,7 +341,7 @@ public class ImportResolverTests
 
         try
         {
-            var engine = new AnalysisEngine();
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
             var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
 
             Assert.True(result.NamespaceImports.ContainsKey("utils"));
@@ -363,7 +364,7 @@ public class ImportResolverTests
 
         try
         {
-            var engine = new AnalysisEngine();
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
             var result = engine.Analyze(mainUri, File.ReadAllText(mainPath));
 
             Assert.Contains(result.SemanticDiagnostics, d => d.Message.Contains("Cannot find module"));
@@ -383,7 +384,7 @@ public class ImportResolverTests
 
         try
         {
-            var engine = new AnalysisEngine();
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
             var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
 
             Assert.Contains(result.SemanticDiagnostics, d => d.Message.Contains("does not export"));
@@ -403,7 +404,7 @@ public class ImportResolverTests
 
         try
         {
-            var engine = new AnalysisEngine();
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
             var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
 
             var definition = result.Symbols.FindDefinition("helper", 999, 0);

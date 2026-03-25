@@ -6,6 +6,7 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
@@ -40,16 +41,19 @@ public class CompletionHandler : CompletionHandlerBase
     /// <summary>The document manager used to retrieve the current text of open files.</summary>
     private readonly DocumentManager _documents;
 
+    private readonly ILogger<CompletionHandler> _logger;
+
     /// <summary>
     /// Initialises a new instance of <see cref="CompletionHandler"/> with the services
     /// needed to resolve completion items.
     /// </summary>
     /// <param name="analysis">Analysis engine providing cached <see cref="AnalysisResult"/> data.</param>
     /// <param name="documents">Document manager for reading open file contents.</param>
-    public CompletionHandler(AnalysisEngine analysis, DocumentManager documents)
+    public CompletionHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<CompletionHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _logger = logger;
     }
 
     /// <summary>
@@ -61,6 +65,7 @@ public class CompletionHandler : CompletionHandlerBase
     /// <returns>A <see cref="CompletionList"/> with matching completion items, or an empty list when inside a non-import string.</returns>
     public override Task<CompletionList> Handle(CompletionParams request, CancellationToken cancellationToken)
     {
+        _logger.LogDebug("Completion request at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
         var uri = request.TextDocument.Uri.ToUri();
         var text = _documents.GetText(uri);
         var line = (int)request.Position.Line;
@@ -98,12 +103,16 @@ public class CompletionHandler : CompletionHandlerBase
             var prefix = GetDotPrefix(currentLine, col);
             if (prefix != null)
             {
-                return Task.FromResult(HandleDotCompletion(prefix, uri, line, col));
+                var completionList = HandleDotCompletion(prefix, uri, line, col);
+                _logger.LogDebug("Completion: {Count} items for {Uri}", completionList.Items?.Count() ?? 0, request.TextDocument.Uri);
+                return Task.FromResult(completionList);
             }
         }
 
         // Default: full completion list
-        return Task.FromResult(BuildFullCompletionList(uri, line + 1, col + 1));
+        var fullList = BuildFullCompletionList(uri, line + 1, col + 1);
+        _logger.LogDebug("Completion: {Count} items for {Uri}", fullList.Items?.Count() ?? 0, request.TextDocument.Uri);
+        return Task.FromResult(fullList);
     }
 
     /// <summary>
@@ -442,6 +451,30 @@ public class CompletionHandler : CompletionHandlerBase
                             });
                         }
                     }
+                }
+            }
+        }
+
+        // Check if prefix is an enum from a namespace import (e.g., utils.LogLevel.)
+        if (items.Count == 0 && result != null)
+        {
+            foreach (var (_, modInfo) in result.NamespaceImports)
+            {
+                var importedEnum = modInfo.Symbols.All
+                    .FirstOrDefault(s => s.Name == prefix && s.Kind == Analysis.SymbolKind.Enum);
+                if (importedEnum != null)
+                {
+                    foreach (var member in modInfo.Symbols.All
+                        .Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.EnumMember))
+                    {
+                        items.Add(new CompletionItem
+                        {
+                            Label = member.Name,
+                            Kind = LspCompletionItemKind.EnumMember,
+                            Detail = member.Detail
+                        });
+                    }
+                    break;
                 }
             }
         }

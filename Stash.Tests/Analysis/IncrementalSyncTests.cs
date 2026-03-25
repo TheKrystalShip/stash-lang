@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Reflection;
+using Microsoft.Extensions.Logging.Abstractions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
@@ -12,7 +13,7 @@ public class IncrementalSyncTests
 
     private static DocumentManager CreateWithDocument(string text)
     {
-        var mgr = new DocumentManager();
+        var mgr = new DocumentManager(NullLogger<DocumentManager>.Instance);
         mgr.Open(TestUri, text, 1);
         return mgr;
     }
@@ -32,7 +33,7 @@ public class IncrementalSyncTests
     [Fact]
     public void ApplyIncrementalChanges_ReturnsNull_WhenDocumentNotOpen()
     {
-        var mgr = new DocumentManager();
+        var mgr = new DocumentManager(NullLogger<DocumentManager>.Instance);
         var unknownUri = new Uri("file:///unknown.stash");
 
         var result = mgr.ApplyIncrementalChanges(unknownUri, 2,
