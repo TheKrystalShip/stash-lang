@@ -19,10 +19,12 @@ enum Environment {
 }
 
 struct Target {
-  host,
-  user,
-  role,
-  env fn label() {
+  host: string,
+  user: string,
+  role: string,
+  env: Environment
+
+  fn label() {
     let env_name = self.env switch {
       Environment.Staging => "staging",
       Environment.Production => "prod",
@@ -33,10 +35,10 @@ struct Target {
 }
 
 struct DeployStatus {
-  target,
-  result,
-  attempts,
-  message
+  target: Target,
+  result: DeployResult,
+  attempts: int,
+  message: string
 }
 
 // ─── Configuration ───────────────────────────────────────────
@@ -79,9 +81,8 @@ fn check_host(host: string) {
   return result != null && result.exitCode == 0;
 }
 
-fn deploy_to(target, package: string) {
+fn deploy_to(target: Target, package: string) {
   utils.log(utils.LogLevel.Info, $"Deploying {package} to {target.label()}");
-
   // Pre-flight: check connectivity
   if (!check_host(target.host)) {
     utils.log(utils.LogLevel.Error, $"  Host {target.host} unreachable — skipping");
@@ -92,12 +93,10 @@ fn deploy_to(target, package: string) {
       message: "Host unreachable"
     };
   }
-
   // Retry loop
   let attempt = 1;
   while (attempt <= MAX_RETRIES) {
     utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
-
     // Simulate deployment command
     let result = $(echo "scp {package} {target.user}@{target.host}:/opt/");
     if (result.exitCode == 0) {
@@ -124,10 +123,13 @@ fn deploy_to(target, package: string) {
 // ─── Execute Pipeline ────────────────────────────────────────
 
 utils.banner("Deployment Pipeline");
-io.println($"  Package:  {PACKAGE}");
-io.println($"  Targets:  {len(targets)}");
-io.println($"  Retries:  {MAX_RETRIES}");
-io.println();
+
+io.println($"""
+  Package: {PACKAGE}
+  Targets: {len(targets)}
+  Retries: {MAX_RETRIES}
+"""
+);
 
 let results = [];
 
@@ -145,6 +147,7 @@ let elapsed = time.millis() - start_time;
 // ─── Results Summary ─────────────────────────────────────────
 
 utils.banner("Deployment Summary");
+
 io.println();
 
 let successes = arr.filter(results, (r) => r.result == DeployResult.Success);
@@ -165,12 +168,18 @@ for (let status in results) {
 }
 
 io.println();
+
 io.println("-" * 55);
-io.println($"  Succeeded: {len(successes)}");
-io.println($"  Failed:    {len(failures)}");
-io.println($"  Skipped:   {len(skipped)}");
-io.println($"  Total:     {len(targets)}");
-io.println($"  Duration:  {elapsed}ms");
+
+io.println($"""
+  Succeded: {len(successes)}
+  Failed:   {len(failures)}
+  Skipped:  {len(skipped)}
+  Total:    {len(targets)}
+  Duration: {elapsed}ms
+"""
+);
+
 io.println("-" * 55);
 
 if (len(failures) > 0) {

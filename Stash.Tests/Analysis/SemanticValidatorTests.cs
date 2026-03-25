@@ -49,7 +49,7 @@ public class SemanticValidatorTests
     [Fact]
     public void ContinueInsideLoop_NoError()
     {
-        var diagnostics = Validate("for (let i in [1]) { continue; }");
+        var diagnostics = Validate("for (let _ in [1]) { continue; }");
 
         Assert.Empty(diagnostics);
     }
@@ -156,7 +156,7 @@ public class SemanticValidatorTests
     [Fact]
     public void DefinedVariable_NoWarning()
     {
-        var diagnostics = Validate("let x = 1; let y = x;");
+        var diagnostics = Validate("let x = 1; let y = x; io.println(y);");
 
         Assert.Empty(diagnostics);
     }
@@ -174,14 +174,14 @@ public class SemanticValidatorTests
     [Fact]
     public void TypeHintedVarDecl_ProducesNoErrors()
     {
-        var diagnostics = Validate("let name: string = \"Alice\";");
+        var diagnostics = Validate("let name: string = \"Alice\"; io.println(name);");
         Assert.Empty(diagnostics);
     }
 
     [Fact]
     public void TypeHintedConstDecl_ProducesNoErrors()
     {
-        var diagnostics = Validate("const PI: float = 3.14;");
+        var diagnostics = Validate("const PI: float = 3.14; io.println(PI);");
         Assert.Empty(diagnostics);
     }
 
@@ -202,7 +202,7 @@ public class SemanticValidatorTests
     [Fact]
     public void TypeHintedForIn_ProducesNoErrors()
     {
-        var diagnostics = Validate("let names = [\"a\"]; for (let item: string in names) { }");
+        var diagnostics = Validate("let names = [\"a\"]; for (let _: string in names) { }");
         Assert.Empty(diagnostics);
     }
 
@@ -216,6 +216,8 @@ public class SemanticValidatorTests
             fn process(item: string, count) -> bool {
                 return true;
             }
+            io.println(cfg);
+            io.println(MAX);
         ";
         var diagnostics = Validate(source);
         Assert.Empty(diagnostics);

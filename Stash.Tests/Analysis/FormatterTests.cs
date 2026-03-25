@@ -44,6 +44,27 @@ public class FormatterTests
     }
 
     [Fact]
+    public void Format_StructWithMethod_BlankLineBeforeMethod()
+    {
+        var result = Format("struct Foo{x:int,y:int fn bar(){return self.x;}}");
+        Assert.Equal("struct Foo {\n  x: int,\n  y: int\n\n  fn bar() {\n    return self.x;\n  }\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_StructWithMethod_TrailingComma_BlankLineBeforeMethod()
+    {
+        var result = Format("struct Foo{x:int,y:int, fn bar(){return self.x;}}");
+        Assert.Equal("struct Foo {\n  x: int,\n  y: int,\n\n  fn bar() {\n    return self.x;\n  }\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_StructWithMultipleMethods_BlankLineBetween()
+    {
+        var result = Format("struct Foo{x:int fn bar(){return self.x;}fn baz(){return self.x+1;}}");
+        Assert.Equal("struct Foo {\n  x: int\n\n  fn bar() {\n    return self.x;\n  }\n\n  fn baz() {\n    return self.x + 1;\n  }\n}\n", result);
+    }
+
+    [Fact]
     public void Format_IfElse()
     {
         var result = Format("if(x>0){return true;}else{return false;}");
@@ -301,14 +322,14 @@ public class FormatterTests
         Assert.Contains("import \"lib/utils.stash\" as utils;", formatted);
         // Enum formatted with members on separate lines
         Assert.Contains("enum DeployResult {\n  Success,\n  Failed,\n  Skipped\n}", formatted);
-        // Struct formatted with fields on separate lines (no type annotations)
-        Assert.Contains("struct Target {\n  host,\n  user,\n  role,\n  env", formatted);
+        // Struct formatted with fields on separate lines
+        Assert.Contains("struct Target {\n  host: string,\n  user: string,\n  role: string,\n  env: Environment", formatted);
         // Function without return type annotation
         Assert.Contains("fn check_host(host: string) {", formatted);
         // Uses 2-space indent
         Assert.Contains("  let result", formatted);
         // Another function present in the file
-        Assert.Contains("fn deploy_to(target, package: string) {", formatted);
+        Assert.Contains("fn deploy_to(target: Target, package: string) {", formatted);
     }
 
     [Fact]

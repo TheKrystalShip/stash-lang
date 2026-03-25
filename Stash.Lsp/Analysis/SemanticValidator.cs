@@ -140,6 +140,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 reference.Span));
         }
 
+        CheckUnusedSymbols();
+
         return _diagnostics;
     }
 
@@ -425,6 +427,88 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 reachable = false;
                 terminatingStmt = stmt;
             }
+        }
+    }
+
+    private void CheckUnusedSymbols()
+    {
+        var globalSymbols = new HashSet<SymbolInfo>(_scopeTree.GlobalScope.Symbols);
+
+        foreach (var symbol in _scopeTree.All)
+        {
+            // Skip built-ins (injected at line 0)
+            if (symbol.Span.StartLine == 0)
+            {
+                continue;
+            }
+
+            // Skip intentionally unused names (convention)
+            if (symbol.Name == "_")
+            {
+                continue;
+            }
+
+            bool isTopLevel = globalSymbols.Contains(symbol);
+
+            // Top-level functions, structs, and enums are auto-exported (public API), so only
+            // flag them if they're imported. Variables and constants at file scope are still
+            // checked — they're typically not imported by name and unused ones are noise.
+            if (isTopLevel && symbol.SourceUri == null
+                && symbol.Kind is SymbolKind.Function or SymbolKind.Struct or SymbolKind.Enum)
+            {
+                continue;
+            }
+
+            // Only check variables, constants, loop variables, and imported namespaces
+            // Parameters are excluded — they are commonly unused in callbacks and interface implementations
+            if (symbol.Kind is not (SymbolKind.Variable or SymbolKind.Constant
+                or SymbolKind.LoopVariable or SymbolKind.Namespace
+                or SymbolKind.Function or SymbolKind.Struct or SymbolKind.Enum))
+            {
+                continue;
+            }
+
+            // For non-imported top-level symbols, we already skipped above.
+            // For non-top-level Function/Struct/Enum, skip — these are rare and usually intentional.
+            if (!isTopLevel && symbol.Kind is SymbolKind.Function or SymbolKind.Struct or SymbolKind.Enum)
+            {
+                continue;
+            }
+
+            // Check whether any reference in the tree resolves to this symbol.
+            // We scan References directly rather than using FindReferences() because
+            // FindReferences relies on position-based scope lookup which fails for:
+            //  - Loop variables: token is in the FOR header but scope span is the body
+            //  - Namespace imports: SymbolInfo is replaced after reference recording
+            bool isUsed = false;
+            foreach (var r in _scopeTree.References)
+            {
+                if (r.ResolvedSymbol == symbol
+                    || (symbol.Kind == SymbolKind.Namespace && r.Name == symbol.Name && r.ResolvedSymbol != null))
+                {
+                    isUsed = true;
+                    break;
+                }
+            }
+            if (isUsed)
+            {
+                continue;
+            }
+
+            string label = symbol.Kind switch
+            {
+                SymbolKind.LoopVariable => "Loop variable",
+                SymbolKind.Constant => "Constant",
+                SymbolKind.Namespace => "Import",
+                _ when symbol.SourceUri != null => "Import",
+                _ => "Variable"
+            };
+
+            _diagnostics.Add(new SemanticDiagnostic(
+                $"{label} '{symbol.Name}' is declared but never used.",
+                DiagnosticLevel.Information,
+                symbol.Span,
+                isUnnecessary: true));
         }
     }
 

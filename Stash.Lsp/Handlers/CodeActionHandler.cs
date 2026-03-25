@@ -2,6 +2,7 @@ namespace Stash.Lsp.Handlers;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol;
@@ -10,6 +11,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lsp.Analysis;
+using Stash.Parsing.AST;
 
 /// <summary>
 /// Handles LSP <c>textDocument/codeAction</c> requests to provide quick-fix actions
@@ -44,6 +46,7 @@ using Stash.Lsp.Analysis;
 public class CodeActionHandler : CodeActionHandlerBase
 {
     private readonly AnalysisEngine _analysis;
+    private readonly DocumentManager _documents;
 
     private readonly ILogger<CodeActionHandler> _logger;
 
@@ -51,9 +54,11 @@ public class CodeActionHandler : CodeActionHandlerBase
     /// Initialises the handler with the analysis engine used to retrieve cached document results.
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
-    public CodeActionHandler(AnalysisEngine analysis, ILogger<CodeActionHandler> logger)
+    /// <param name="documents">The document manager used to retrieve current document text.</param>
+    public CodeActionHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<CodeActionHandler> logger)
     {
         _analysis = analysis;
+        _documents = documents;
         _logger = logger;
     }
 
@@ -69,7 +74,8 @@ public class CodeActionHandler : CodeActionHandlerBase
         {
             DocumentSelector = new TextDocumentSelector(TextDocumentFilter.ForLanguage("stash")),
             CodeActionKinds = new Container<CodeActionKind>(
-                CodeActionKind.QuickFix
+                CodeActionKind.QuickFix,
+                CodeActionKind.Source
             )
         };
 
@@ -185,6 +191,13 @@ public class CodeActionHandler : CodeActionHandlerBase
             }
         }
 
+        // Organize imports action
+        var organizeAction = BuildOrganizeImportsAction(uri, result, request.TextDocument.Uri);
+        if (organizeAction != null)
+        {
+            actions.Add(new CommandOrCodeAction(organizeAction));
+        }
+
         _logger.LogDebug("CodeAction: {Count} actions for {Uri}", actions.Count, request.TextDocument.Uri);
         return Task.FromResult<CommandOrCodeActionContainer?>(
             new CommandOrCodeActionContainer(actions));
@@ -198,6 +211,132 @@ public class CodeActionHandler : CodeActionHandlerBase
     /// <returns>The same <see cref="CodeAction"/> as received.</returns>
     public override Task<CodeAction> Handle(CodeAction request, CancellationToken cancellationToken)
         => Task.FromResult(request);
+
+    private CodeAction? BuildOrganizeImportsAction(Uri uri, AnalysisResult result, DocumentUri documentUri)
+    {
+        var text = _documents.GetText(uri);
+        if (text == null)
+        {
+            return null;
+        }
+
+        // Collect contiguous import statements from the top of the file
+        var imports = new List<Stmt>();
+        foreach (var stmt in result.Statements)
+        {
+            if (stmt is ImportStmt or ImportAsStmt)
+            {
+                imports.Add(stmt);
+            }
+            else
+            {
+                break; // Stop at the first non-import statement
+            }
+        }
+
+        if (imports.Count == 0)
+        {
+            return null;
+        }
+
+        // Check which imported names are used
+        var keptImports = new List<string>();
+
+        foreach (var stmt in imports)
+        {
+            if (stmt is ImportStmt importStmt)
+            {
+                var usedNames = new List<string>();
+                foreach (var nameToken in importStmt.Names)
+                {
+                    var refs = result.Symbols.FindReferences(
+                        nameToken.Lexeme,
+                        nameToken.Span.StartLine,
+                        nameToken.Span.StartColumn);
+                    if (refs.Count > 1)
+                    {
+                        usedNames.Add(nameToken.Lexeme);
+                    }
+                }
+
+                if (usedNames.Count > 0)
+                {
+                    string names = string.Join(", ", usedNames);
+                    keptImports.Add($"import {{ {names} }} from {importStmt.Path.Lexeme};");
+                }
+            }
+            else if (stmt is ImportAsStmt importAsStmt)
+            {
+                var refs = result.Symbols.FindReferences(
+                    importAsStmt.Alias.Lexeme,
+                    importAsStmt.Alias.Span.StartLine,
+                    importAsStmt.Alias.Span.StartColumn);
+                if (refs.Count > 1)
+                {
+                    keptImports.Add($"import {importAsStmt.Path.Lexeme} as {importAsStmt.Alias.Lexeme};");
+                }
+            }
+        }
+
+        // Sort alphabetically by path (case-insensitive)
+        keptImports.Sort(StringComparer.OrdinalIgnoreCase);
+
+        string organizedText = keptImports.Count > 0
+            ? string.Join("\n", keptImports) + "\n"
+            : "";
+
+        // SourceSpan is 1-based, LSP Range is 0-based
+        int startLine = imports[0].Span.StartLine - 1;
+        int endLine = imports[imports.Count - 1].Span.EndLine - 1;
+
+        var lines = text.Split('\n');
+
+        // Include the newline after the last import to replace the full block cleanly
+        int rangeEndLine;
+        int rangeEndChar;
+        if (endLine + 1 < lines.Length)
+        {
+            rangeEndLine = endLine + 1;
+            rangeEndChar = 0;
+        }
+        else
+        {
+            rangeEndLine = endLine;
+            rangeEndChar = endLine < lines.Length ? lines[endLine].Length : 0;
+        }
+
+        var currentImportLines = new List<string>();
+        for (int i = startLine; i <= endLine && i < lines.Length; i++)
+        {
+            currentImportLines.Add(lines[i]);
+        }
+        string currentText = string.Join("\n", currentImportLines) + "\n";
+
+        if (organizedText == currentText)
+        {
+            return null;
+        }
+
+        return new CodeAction
+        {
+            Title = "Organize Imports",
+            Kind = CodeActionKind.Source,
+            Edit = new WorkspaceEdit
+            {
+                Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                {
+                    [documentUri] = new[]
+                    {
+                        new TextEdit
+                        {
+                            Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(startLine, 0, rangeEndLine, rangeEndChar),
+                            NewText = organizedText
+                        }
+                    }
+                }
+            }
+        };
+    }
 
     /// <summary>
     /// Computes the Levenshtein (edit) distance between two strings using a case-insensitive

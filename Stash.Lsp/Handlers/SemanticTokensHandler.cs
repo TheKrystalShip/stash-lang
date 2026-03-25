@@ -252,7 +252,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeString, 0);
                     }
-                    else if (subToken.Type == TokenType.Dot || IsOperator(subToken.Type))
+                    else if (subToken.Type == TokenType.Dot || IsOperator(subToken.Type) || IsPunctuation(subToken.Type))
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
                     }
@@ -287,8 +287,33 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         int baseCol = token.Span.StartColumn - 1;
         string lexeme = token.Lexeme;
 
-        // Determine prefix length: $" is 2 chars, " alone is 1 char
-        int prefixLen = lexeme.StartsWith("$\"") ? 2 : 1;
+        // Determine prefix length: handle triple-quoted ($""" or """) and regular ($" or ")
+        int prefixLen;
+        if (lexeme.StartsWith("$\"\"\""))
+        {
+            prefixLen = 4; // $"""
+            // Skip leading newline after opening triple quote
+            if (prefixLen < lexeme.Length && lexeme[prefixLen] == '\n')
+            {
+                prefixLen++;
+            }
+        }
+        else if (lexeme.StartsWith("\"\"\""))
+        {
+            prefixLen = 3; // """
+            if (prefixLen < lexeme.Length && lexeme[prefixLen] == '\n')
+            {
+                prefixLen++;
+            }
+        }
+        else if (lexeme.StartsWith("$\""))
+        {
+            prefixLen = 2; // $"
+        }
+        else
+        {
+            prefixLen = 1; // "
+        }
 
         // Cursor tracking for multi-line support
         int curLine = baseLine;
@@ -299,20 +324,24 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         builder.Push(curLine, curCol, prefixLen, TokenTypeString, 0);
         AdvanceCursor(lexeme, ref offset, prefixLen, ref curLine, ref curCol);
 
+        // Track whether we're at a line start (true after prefix ends with \n or after text ending with \n)
+        bool atLineStart = prefixLen > 0 && offset > 0 && lexeme[offset - 1] == '\n';
+
         foreach (var part in parts)
         {
             if (part is string textSegment)
             {
-                if (textSegment.Length > 0)
+                int lexemeLen = CalculateLexemeLength(lexeme, offset, textSegment, atLineStart);
+                if (lexemeLen > 0)
                 {
-                    EmitStringSegment(builder, lexeme, offset, textSegment.Length, curLine, curCol);
+                    EmitStringSegment(builder, lexeme, offset, lexemeLen, curLine, curCol);
                 }
-                AdvanceCursor(lexeme, ref offset, textSegment.Length, ref curLine, ref curCol);
+                AdvanceCursor(lexeme, ref offset, lexemeLen, ref curLine, ref curCol);
+                atLineStart = textSegment.Length > 0 && textSegment[^1] == '\n';
             }
             else if (part is List<Token> subTokens)
             {
-                // Emit opening { as operator for distinct coloring
-                builder.Push(curLine, curCol, 1, TokenTypeOperator, 0);
+                // Don't emit semantic token for { — let TextMate handle with punctuation.definition.interpolation scope
                 AdvanceCursor(lexeme, ref offset, 1, ref curLine, ref curCol);
 
                 // Classify sub-tokens within the expression
@@ -348,7 +377,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeString, 0);
                     }
-                    else if (subToken.Type == TokenType.Dot || IsOperator(subToken.Type))
+                    else if (subToken.Type == TokenType.Dot || IsOperator(subToken.Type) || IsPunctuation(subToken.Type))
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
                     }
@@ -384,24 +413,22 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     }
                 }
 
-                // Emit closing } as operator for distinct coloring
+                // Don't emit semantic token for } — let TextMate handle with punctuation.definition.interpolation scope
                 int charsBeforeClosingBrace = scanPos - offset;
                 if (charsBeforeClosingBrace > 0)
                 {
                     AdvanceCursor(lexeme, ref offset, charsBeforeClosingBrace, ref curLine, ref curCol);
                 }
-                if (depth == 0)
-                {
-                    builder.Push(curLine, curCol, 1, TokenTypeOperator, 0);
-                }
                 AdvanceCursor(lexeme, ref offset, 1, ref curLine, ref curCol);
+                atLineStart = false;
             }
         }
 
-        // Emit closing " as string
-        if (offset < lexeme.Length)
+        // Emit closing quote(s) as string
+        int remaining = lexeme.Length - offset;
+        if (remaining > 0)
         {
-            builder.Push(curLine, curCol, 1, TokenTypeString, 0);
+            builder.Push(curLine, curCol, remaining, TokenTypeString, 0);
         }
     }
 
@@ -448,6 +475,95 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         {
             builder.Push(currentLine, currentCol, remainingLen, TokenTypeString, 0);
         }
+    }
+
+    /// <summary>
+    /// Calculates how many characters in the raw <paramref name="lexeme"/> correspond to a
+    /// text segment from the parts list that may have had indentation stripped.
+    /// After each newline in the text, skips over leading whitespace in the lexeme that
+    /// was removed during indent stripping. The <paramref name="atLineStart"/> flag handles
+    /// the first segment which may also have stripped leading whitespace.
+    /// </summary>
+    private static int CalculateLexemeLength(string lexeme, int offset, string textSegment, bool atLineStart)
+    {
+        if (textSegment.Length == 0)
+        {
+            // Even an empty segment may correspond to stripped indent at line start
+            if (atLineStart)
+            {
+                int skip = 0;
+                while (offset + skip < lexeme.Length && lexeme[offset + skip] is ' ' or '\t')
+                {
+                    skip++;
+                }
+
+                return skip;
+            }
+            return 0;
+        }
+
+        int lexemePos = offset;
+        int textPos = 0;
+
+        // Handle stripped indent at the very start of the first segment
+        if (atLineStart)
+        {
+            int textIndent = 0;
+            while (textIndent < textSegment.Length && textSegment[textIndent] is ' ' or '\t')
+            {
+                textIndent++;
+            }
+
+            int lexIndent = 0;
+            while (lexemePos + lexIndent < lexeme.Length && lexeme[lexemePos + lexIndent] is ' ' or '\t')
+            {
+                lexIndent++;
+            }
+
+            int stripped = lexIndent - textIndent;
+            if (stripped > 0)
+            {
+                lexemePos += stripped;
+            }
+        }
+
+        while (textPos < textSegment.Length && lexemePos < lexeme.Length)
+        {
+            if (textSegment[textPos] == '\n')
+            {
+                // Match the newline in both
+                lexemePos++;
+                textPos++;
+
+                // Count whitespace at start of next line in text
+                int textIndent = 0;
+                while (textPos + textIndent < textSegment.Length && textSegment[textPos + textIndent] is ' ' or '\t')
+                {
+                    textIndent++;
+                }
+
+                // Count whitespace at start of next line in lexeme
+                int lexIndent = 0;
+                while (lexemePos + lexIndent < lexeme.Length && lexeme[lexemePos + lexIndent] is ' ' or '\t')
+                {
+                    lexIndent++;
+                }
+
+                // Skip the extra (stripped) indent in lexeme
+                int stripped = lexIndent - textIndent;
+                if (stripped > 0)
+                {
+                    lexemePos += stripped;
+                }
+            }
+            else
+            {
+                lexemePos++;
+                textPos++;
+            }
+        }
+
+        return lexemePos - offset;
     }
 
     /// <summary>
@@ -601,7 +717,16 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.Try or TokenType.Import or TokenType.From or TokenType.As or
         TokenType.Switch;
 
-    /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is an operator or punctuation token.</summary>
+    /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is a punctuation token.</summary>
+    private static bool IsPunctuation(TokenType type) => type is
+        TokenType.LeftParen or TokenType.RightParen or
+        TokenType.LeftBracket or TokenType.RightBracket or
+        TokenType.LeftBrace or TokenType.RightBrace or
+        TokenType.Comma or TokenType.Colon or
+        TokenType.QuestionMark or TokenType.DotDot or
+        TokenType.QuestionDot;
+
+    /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is an operator token.</summary>
     private static bool IsOperator(TokenType type) => type is
         TokenType.Plus or TokenType.Minus or TokenType.Star or TokenType.Slash or
         TokenType.Percent or TokenType.Bang or TokenType.Less or TokenType.Greater or

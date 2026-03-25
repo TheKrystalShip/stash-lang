@@ -31,7 +31,7 @@ Three singletons registered in `StashLanguageServer.cs`:
 
 ## Handler Pattern
 
-All 24 handlers inherit OmniSharp base classes and receive services via constructor injection:
+All handlers inherit OmniSharp base classes and receive services via constructor injection:
 
 ```csharp
 public class FooHandler : FooHandlerBase
@@ -56,7 +56,7 @@ public class FooHandler : FooHandlerBase
 
 Register new handlers in `StashLanguageServer.cs` via `.WithHandler<NewHandler>()`.
 
-### All 24 Handlers
+### All Handlers
 
 | Handler                                  | Feature                                               |
 | ---------------------------------------- | ----------------------------------------------------- |
@@ -73,13 +73,15 @@ Register new handlers in `StashLanguageServer.cs` via `.WithHandler<NewHandler>(
 | `SignatureHelpHandler`                   | Parameter hints at call sites                         |
 | `SemanticTokensHandler`                  | Semantic syntax highlighting                          |
 | `DocumentHighlightHandler`               | Highlight symbol occurrences                          |
-| `CodeActionHandler`                      | Quick fixes                                           |
+| `CodeActionHandler`                      | Quick fixes, organize imports                         |
 | `CodeLensHandler`                        | Reference counts above declarations                   |
 | `InlayHintHandler`                       | Inline parameter name hints                           |
 | `FoldingRangeHandler`                    | Code folding regions                                  |
 | `SelectionRangeHandler`                  | Smart selection expansion                             |
 | `DocumentLinkHandler`                    | Clickable import paths                                |
 | `FormattingHandler`                      | Document formatting                                   |
+| `RangeFormattingHandler`                 | Range formatting (format selection)                   |
+| `OnTypeFormattingHandler`                | On-type formatting (auto-indent on `}`, `;`, `\n`)    |
 | `CallHierarchyHandler`                   | Incoming/outgoing call hierarchy                      |
 | `LinkedEditingRangeHandler`              | Linked editing                                        |
 | `ConfigurationHandler`                   | Settings change propagation                           |

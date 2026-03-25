@@ -342,9 +342,9 @@ public class LspFeaturesRound4Tests
     {
         // This mirrors the deploy.stash pattern: process.exit() inside an if block
         // The io.println after the exit should be grayed out, the code after the if should NOT
-        var source = "const DEST = \"/usr/bin\";\nfn deploy() {\n  if (true) {\n    process.exit(1);\n    io.println(\"dead\");\n  }\n  io.println(\"alive\");\n}";
+        var source = "const DEST = \"/usr/bin\";\nfn deploy() {\n  if (true) {\n    process.exit(1);\n    io.println(\"dead\");\n  }\n  io.println(DEST);\n}";
         var result = FullAnalyze(source);
-        var unreachable = result.SemanticDiagnostics.Where(d => d.IsUnnecessary).ToList();
+        var unreachable = result.SemanticDiagnostics.Where(d => d.Message.Contains("Unreachable")).ToList();
         Assert.Single(unreachable);
         Assert.Contains("Unreachable", unreachable[0].Message);
         Assert.Equal(5, unreachable[0].Span.StartLine); // the "dead" line

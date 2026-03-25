@@ -507,6 +507,8 @@ All features below marked ✅ are fully implemented and tested.
 | `textDocument/documentLink`               | `DocumentLinkHandler`          | ✅     |
 | `textDocument/codeAction`                 | `CodeActionHandler`            | ✅     |
 | `textDocument/formatting`                 | `FormattingHandler`            | ✅     |
+| `textDocument/rangeFormatting`            | `RangeFormattingHandler`       | ✅     |
+| `textDocument/onTypeFormatting`           | `OnTypeFormattingHandler`      | ✅     |
 | `textDocument/inlayHint`                  | `InlayHintHandler`             | ✅     |
 | `textDocument/codeLens`                   | `CodeLensHandler`              | ✅     |
 | `textDocument/callHierarchy`              | `CallHierarchyHandler`         | ✅     |
@@ -520,8 +522,6 @@ All features below marked ✅ are fully implemented and tested.
 
 | LSP Method                       | Notes                                                   |
 | -------------------------------- | ------------------------------------------------------- |
-| `textDocument/rangeFormatting`   | Format selection only (full document formatting exists) |
-| `textDocument/onTypeFormatting`  | Auto-format on typing trigger characters                |
 | `textDocument/colorPresentation` | Color picker support (not applicable)                   |
 
 ---

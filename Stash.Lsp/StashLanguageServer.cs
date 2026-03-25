@@ -62,6 +62,8 @@ public static class StashLanguageServer
                 .WithHandler<InlayHintHandler>()
                 .WithHandler<CodeLensHandler>()
                 .WithHandler<FormattingHandler>()
+                .WithHandler<RangeFormattingHandler>()
+                .WithHandler<OnTypeFormattingHandler>()
                 .WithHandler<CallHierarchyHandler>()
                 .WithHandler<LinkedEditingRangeHandler>()
                 .WithHandler<TypeDefinitionHandler>()
