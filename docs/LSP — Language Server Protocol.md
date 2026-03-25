@@ -87,6 +87,8 @@ Stash.Lsp/                         # LSP server
 │   ├── Scope.cs                   # Single scope node (Global/Function/Block/Loop)
 │   ├── ScopeTree.cs               # Hierarchical scope tree (replaces flat symbol table)
 │   ├── SemanticValidator.cs       # Semantic error checking (undefined vars, type mismatches, control flow)
+│   ├── SemanticTokenConstants.cs  # Shared token type indices and modifier bit flags
+│   ├── SemanticTokenWalker.cs     # AST visitor that pre-classifies identifiers for semantic highlighting
 │   ├── StashFormatter.cs          # Full document code formatter
 │   ├── SymbolCollector.cs         # AST visitor that builds scope tree and reference list
 │   ├── SymbolInfo.cs              # Symbol representation (name, kind, span, type hint, parameter types)
@@ -145,7 +147,7 @@ The following existing components from `Stash.Core` are directly reusable by the
 | `Parser` (error recovery via `Synchronize()`, partial AST) | Diagnostics + analysis even with incomplete code       |
 | `SourceSpan` (1-based line/col)                            | Direct mapping to LSP `Range` (subtract 1 for 0-based) |
 | All AST nodes carry `SourceSpan Span`                      | Precise locations for definitions, references, symbols |
-| `IExprVisitor<T>` / `IStmtVisitor<T>` (19 + 14 methods)    | Visitor-based AST traversal for analysis passes        |
+| `IExprVisitor<T>` / `IStmtVisitor<T>` (25 + 17 methods)    | Visitor-based AST traversal for analysis passes        |
 | `Token` (Type, Lexeme, Span)                               | Semantic tokens, keyword identification                |
 | `FnDeclStmt` (Name, Parameters, Body)                      | Document symbols, completion, signature help           |
 | `StructDeclStmt` (Name, Fields)                            | Document symbols, completion (field names)             |
@@ -158,22 +160,24 @@ The following existing components from `Stash.Core` are directly reusable by the
 
 All analysis infrastructure has been implemented. Here are the key components:
 
-| Component              | File                                    | Purpose                                                                                              |
-| ---------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| **Document Manager**   | `DocumentManager.cs`                    | Tracks open documents with incremental change application and version tracking                       |
-| **Analysis Engine**    | `AnalysisEngine.cs`                     | Orchestrates full pipeline: lex → parse → collect symbols → resolve imports → infer types → validate |
-| **Scope Tree**         | `ScopeTree.cs` + `Scope.cs`             | Hierarchical scope tree mirroring block nesting; replaces flat symbol table                          |
-| **Symbol Collector**   | `SymbolCollector.cs`                    | AST visitor that builds scope tree and collects all symbol references                                |
-| **Semantic Validator** | `SemanticValidator.cs`                  | AST visitor producing warnings for undefined variables, misplaced control flow, type mismatches      |
-| **Import Resolver**    | `ImportResolver.cs`                     | Cross-file import resolution with module caching and dependency tracking                             |
-| **Type Inference**     | `TypeInferenceEngine.cs`                | Static type deduction from assignments, struct initialization, function returns                      |
-| **Formatter**          | `StashFormatter.cs`                     | Full document code formatter with configurable indent size and tab/space preference                  |
-| **Built-In Registry**  | `BuiltInRegistry.cs`                    | Centralized definitions for all built-in functions, structs, namespaces, keywords                    |
-| **Position Utilities** | `LspExtensions.cs` + `TextUtilities.cs` | SourceSpan ↔ LSP Range conversion, word-at-position, dot-prefix extraction                           |
-| **Symbol Info**        | `SymbolInfo.cs`                         | Symbol representation: name, kind, span, type hint, parameter types, explicit type hint tracking     |
-| **Reference Info**     | `ReferenceInfo.cs`                      | Reference occurrence tracking with read/write/call/type-use distinction                              |
-| **Analysis Result**    | `AnalysisResult.cs`                     | Complete analysis output per document (tokens, AST, errors, scope tree, imports)                     |
-| **Workspace Scanner**  | `WorkspaceScanner.cs`                   | Background file discovery using bounded async channel; feeds `.stash` files through analysis engine  |
+| Component              | File                                    | Purpose                                                                                               |
+| ---------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| **Document Manager**   | `DocumentManager.cs`                    | Tracks open documents with incremental change application and version tracking                        |
+| **Analysis Engine**    | `AnalysisEngine.cs`                     | Orchestrates full pipeline: lex → parse → collect symbols → resolve imports → infer types → validate  |
+| **Scope Tree**         | `ScopeTree.cs` + `Scope.cs`             | Hierarchical scope tree mirroring block nesting; replaces flat symbol table                           |
+| **Symbol Collector**   | `SymbolCollector.cs`                    | AST visitor that builds scope tree and collects all symbol references                                 |
+| **Semantic Validator** | `SemanticValidator.cs`                  | AST visitor producing warnings for undefined variables, misplaced control flow, type mismatches       |
+| **Import Resolver**    | `ImportResolver.cs`                     | Cross-file import resolution with module caching and dependency tracking                              |
+| **Type Inference**     | `TypeInferenceEngine.cs`                | Static type deduction from assignments, struct initialization, function returns                       |
+| **Formatter**          | `StashFormatter.cs`                     | Full document code formatter with configurable indent size and tab/space preference                   |
+| **Built-In Registry**  | `BuiltInRegistry.cs`                    | Centralized definitions for all built-in functions, structs, namespaces, keywords                     |
+| **Position Utilities** | `LspExtensions.cs` + `TextUtilities.cs` | SourceSpan ↔ LSP Range conversion, word-at-position, dot-prefix extraction                            |
+| **Symbol Info**        | `SymbolInfo.cs`                         | Symbol representation: name, kind, span, type hint, parameter types, explicit type hint tracking      |
+| **Reference Info**     | `ReferenceInfo.cs`                      | Reference occurrence tracking with read/write/call/type-use distinction                               |
+| **Analysis Result**    | `AnalysisResult.cs`                     | Complete analysis output per document (tokens, AST, errors, scope tree, imports)                      |
+| **Semantic Walker**    | `SemanticTokenWalker.cs`                | AST visitor that pre-classifies identifiers by walking the parsed tree (drives semantic highlighting) |
+| **Token Constants**    | `SemanticTokenConstants.cs`             | Shared token type indices and modifier bit flags for the semantic highlighting system                 |
+| **Workspace Scanner**  | `WorkspaceScanner.cs`                   | Background file discovery using bounded async channel; feeds `.stash` files through analysis engine   |
 
 ### Analysis Pipeline
 
@@ -214,16 +218,18 @@ AnalysisResult (cached per document URI)
 
 The analysis pipeline is optimized for sub-millisecond response on typical files:
 
-| Component           | Optimization                                                          | Impact                                                                            |
-| ------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| **Scope**           | Name-indexed symbol lookup via `Dictionary<string, List<SymbolInfo>>` | `FindDefinition()` scans only symbols matching the name, not all symbols in scope |
-| **ScopeTree**       | Lazy field index `Dictionary<(parentName, fieldName), SymbolInfo>`    | O(1) struct field lookup (was O(n) full global scope scan per dot-access)         |
-| **ScopeTree**       | Lazy children-by-parent index for `GetHierarchicalSymbols()`          | O(1) children lookup per struct/enum (was O(n) `.Where()` scan per parent)        |
-| **BuiltInRegistry** | Pre-grouped namespace member/constant dictionaries                    | O(1) namespace member lookup for completions (was O(n) scan over ~130 functions)  |
-| **AnalysisEngine**  | Manual token filtering with pre-allocated list                        | Avoids LINQ delegate allocation and intermediate list resizing                    |
-| **SemanticTokens**  | Delta token support with per-URI document caching                     | Only encodes changed tokens on subsequent requests                                |
-| **Lexer**           | `FrozenDictionary` for keyword lookup                                 | O(1) keyword identification (compile-time optimized)                              |
-| **Document Sync**   | 25ms debounce on incremental changes                                  | Coalesces rapid keystrokes into single analysis pass                              |
+| Component           | Optimization                                                          | Impact                                                                                 |
+| ------------------- | --------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **Scope**           | Name-indexed symbol lookup via `Dictionary<string, List<SymbolInfo>>` | `FindDefinition()` scans only symbols matching the name, not all symbols in scope      |
+| **ScopeTree**       | Lazy field index `Dictionary<(parentName, fieldName), SymbolInfo>`    | O(1) struct field lookup (was O(n) full global scope scan per dot-access)              |
+| **ScopeTree**       | Lazy children-by-parent index for `GetHierarchicalSymbols()`          | O(1) children lookup per struct/enum (was O(n) `.Where()` scan per parent)             |
+| **BuiltInRegistry** | Pre-grouped namespace member/constant dictionaries                    | O(1) namespace member lookup for completions (was O(n) scan over ~130 functions)       |
+| **AnalysisEngine**  | Manual token filtering with pre-allocated list                        | Avoids LINQ delegate allocation and intermediate list resizing                         |
+| **SemanticTokens**  | AST-walker pre-classifies identifiers into position-indexed map       | Context-aware classification via AST node types instead of heuristic token scanning    |
+| **SemanticTokens**  | Pre-resolved reference index from `SymbolCollector` references        | O(1) symbol lookup per identifier (avoids re-walking scope chain via `FindDefinition`) |
+| **SemanticTokens**  | Delta token support with per-URI document caching                     | Only encodes changed tokens on subsequent requests                                     |
+| **Lexer**           | `FrozenDictionary` for keyword lookup                                 | O(1) keyword identification (compile-time optimized)                                   |
+| **Document Sync**   | 25ms debounce on incremental changes                                  | Coalesces rapid keystrokes into single analysis pass                                   |
 
 ### Benchmark Results
 
@@ -346,6 +352,10 @@ Establishes the full client ↔ server pipeline with real-time diagnostic report
 
 **Implementation notes:**
 
+- Semantic tokens use a two-phase architecture:
+  1. **AST walker** (`SemanticTokenWalker`) — implements `IExprVisitor<int>` + `IStmtVisitor<int>` (42 visitor methods) to pre-classify all identifiers by walking the parsed AST. Builds a position-indexed `Dictionary<(line, col), (type, modifiers)>` map. Uses pre-resolved references from `SymbolCollector` for O(1) symbol lookup, `BuiltInRegistry` for namespace/function resolution, and `NamespaceImports` for cross-file member resolution.
+  2. **Token stream pass** (`SemanticTokensHandler.Tokenize`) — iterates the lexer token list and looks up each identifier in the walker's classification map. Non-identifier tokens (keywords, literals, operators, comments) are classified directly from their `TokenType`. Compound tokens (interpolated strings, command literals) use position-based sub-token classification.
+- Shared constants (`SemanticTokenConstants`) define the 12 token type indices and 2 modifier bit flags used by both the walker and handler.
 - `RenameHandler` returns `WorkspaceEdit` across all references
 - `PrepareRenameHandler` validates the rename target and returns a placeholder
 - References include cross-file references via `AnalysisEngine.FindCrossFileReferences()`
@@ -381,10 +391,10 @@ Progressive background discovery of all `.stash` files in the workspace. When en
 
 **New components:**
 
-| Component | File | Purpose |
-| --- | --- | --- |
-| **WorkspaceScanner** | `WorkspaceScanner.cs` | Background file discovery and analysis. Uses `System.Threading.Channels` for bounded async queue (capacity 1000). Respects `.stashignore` patterns. Sends progressive refresh notifications every 10 files. |
-| **DidChangeWatchedFilesHandler** | `DidChangeWatchedFilesHandler.cs` | Handles `workspace/didChangeWatchedFiles` to keep the background index current. Registered for `**/*.stash` glob pattern. |
+| Component                        | File                              | Purpose                                                                                                                                                                                                     |
+| -------------------------------- | --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **WorkspaceScanner**             | `WorkspaceScanner.cs`             | Background file discovery and analysis. Uses `System.Threading.Channels` for bounded async queue (capacity 1000). Respects `.stashignore` patterns. Sends progressive refresh notifications every 10 files. |
+| **DidChangeWatchedFilesHandler** | `DidChangeWatchedFilesHandler.cs` | Handles `workspace/didChangeWatchedFiles` to keep the background index current. Registered for `**/*.stash` glob pattern.                                                                                   |
 
 **Configuration:**
 
@@ -411,21 +421,21 @@ Progressive background discovery of all `.stash` files in the workspace. When en
 
 The following features were implemented beyond the original Phase A–E plan:
 
-| Feature                  | Handler                     | Description                                                                                                                                                  |
-| ------------------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Document Highlight**   | `DocumentHighlightHandler`  | Highlights all read/write references of a symbol in the current document                                                                                     |
-| **Selection Range**      | `SelectionRangeHandler`     | Expand/shrink selection through nested AST ranges                                                                                                            |
-| **Document Links**       | `DocumentLinkHandler`       | Makes `import` file paths clickable, resolving to actual file URIs                                                                                           |
-| **Code Actions**         | `CodeActionHandler`         | Quick-fix suggestions — "Did you mean?" for undefined variables (Levenshtein distance)                                                                       |
-| **Workspace Symbols**    | `WorkspaceSymbolHandler`    | Workspace-wide symbol search with case-insensitive substring matching                                                                                        |
-| **Inlay Hints**          | `InlayHintHandler`          | Inline type and parameter name hints                                                                                                                         |
-| **Code Lens**            | `CodeLensHandler`           | Reference counts displayed above functions, structs, and enums                                                                                               |
-| **Formatting**           | `FormattingHandler`         | Full document formatting with configurable indent size and tab/space preference                                                                              |
-| **Call Hierarchy**       | `CallHierarchyHandler`      | Incoming/outgoing call hierarchy for functions                                                                                                               |
-| **Linked Editing Range** | `LinkedEditingRangeHandler` | Linked editing for symbol occurrences (renames all when 2+ references exist)                                                                                 |
-| **Type Inference**       | `TypeInferenceEngine`       | Static type deduction from struct init, command expressions, function returns, literals, dot-access field types; used by SemanticValidator for type checking |
-| **Semantic Validation**  | `SemanticValidator`         | Catches undefined variables, const reassignment, wrong arity, misplaced control flow, type hint violations                                                   |
-| **Workspace Indexing**   | `WorkspaceScanner` + `DidChangeWatchedFilesHandler` | Background discovery and indexing of all `.stash` files; opt-in via `stash.workspaceIndexing.enabled`                                    |
+| Feature                  | Handler                                             | Description                                                                                                                                                  |
+| ------------------------ | --------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Document Highlight**   | `DocumentHighlightHandler`                          | Highlights all read/write references of a symbol in the current document                                                                                     |
+| **Selection Range**      | `SelectionRangeHandler`                             | Expand/shrink selection through nested AST ranges                                                                                                            |
+| **Document Links**       | `DocumentLinkHandler`                               | Makes `import` file paths clickable, resolving to actual file URIs                                                                                           |
+| **Code Actions**         | `CodeActionHandler`                                 | Quick-fix suggestions — "Did you mean?" for undefined variables (Levenshtein distance)                                                                       |
+| **Workspace Symbols**    | `WorkspaceSymbolHandler`                            | Workspace-wide symbol search with case-insensitive substring matching                                                                                        |
+| **Inlay Hints**          | `InlayHintHandler`                                  | Inline type and parameter name hints                                                                                                                         |
+| **Code Lens**            | `CodeLensHandler`                                   | Reference counts displayed above functions, structs, and enums                                                                                               |
+| **Formatting**           | `FormattingHandler`                                 | Full document formatting with configurable indent size and tab/space preference                                                                              |
+| **Call Hierarchy**       | `CallHierarchyHandler`                              | Incoming/outgoing call hierarchy for functions                                                                                                               |
+| **Linked Editing Range** | `LinkedEditingRangeHandler`                         | Linked editing for symbol occurrences (renames all when 2+ references exist)                                                                                 |
+| **Type Inference**       | `TypeInferenceEngine`                               | Static type deduction from struct init, command expressions, function returns, literals, dot-access field types; used by SemanticValidator for type checking |
+| **Semantic Validation**  | `SemanticValidator`                                 | Catches undefined variables, const reassignment, wrong arity, misplaced control flow, type hint violations                                                   |
+| **Workspace Indexing**   | `WorkspaceScanner` + `DidChangeWatchedFilesHandler` | Background discovery and indexing of all `.stash` files; opt-in via `stash.workspaceIndexing.enabled`                                                        |
 
 ### Type Hint Enforcement
 
@@ -477,42 +487,42 @@ All features below marked ✅ are fully implemented and tested.
 
 ### Implemented Features
 
-| LSP Method                                | Handler                     | Status |
-| ----------------------------------------- | --------------------------- | ------ |
-| `textDocument/didOpen/didChange/didClose` | `TextDocumentSyncHandler`   | ✅     |
-| `textDocument/publishDiagnostics`         | (inline in sync handler)    | ✅     |
-| `textDocument/documentSymbol`             | `DocumentSymbolHandler`     | ✅     |
-| `textDocument/definition`                 | `DefinitionHandler`         | ✅     |
-| `textDocument/hover`                      | `HoverHandler`              | ✅     |
-| `textDocument/completion`                 | `CompletionHandler`         | ✅     |
-| `textDocument/signatureHelp`              | `SignatureHelpHandler`      | ✅     |
-| `textDocument/references`                 | `ReferencesHandler`         | ✅     |
-| `textDocument/documentHighlight`          | `DocumentHighlightHandler`  | ✅     |
-| `textDocument/rename`                     | `RenameHandler`             | ✅     |
-| `textDocument/prepareRename`              | `PrepareRenameHandler`      | ✅     |
-| `textDocument/semanticTokens/full`        | `SemanticTokensHandler`     | ✅     |
-| `textDocument/semanticTokens/full/delta`  | `SemanticTokensHandler`     | ✅     |
-| `textDocument/foldingRange`               | `FoldingRangeHandler`       | ✅     |
-| `textDocument/selectionRange`             | `SelectionRangeHandler`     | ✅     |
-| `textDocument/documentLink`               | `DocumentLinkHandler`       | ✅     |
-| `textDocument/codeAction`                 | `CodeActionHandler`         | ✅     |
-| `textDocument/formatting`                 | `FormattingHandler`         | ✅     |
-| `textDocument/inlayHint`                  | `InlayHintHandler`          | ✅     |
-| `textDocument/codeLens`                   | `CodeLensHandler`           | ✅     |
-| `textDocument/callHierarchy`              | `CallHierarchyHandler`      | ✅     |
-| `textDocument/linkedEditingRange`         | `LinkedEditingRangeHandler` | ✅     |
-| `textDocument/typeDefinition`             | `TypeDefinitionHandler`     | ✅     |
-| `textDocument/implementation`             | `ImplementationHandler`     | ✅     |
-| `workspace/symbol`                        | `WorkspaceSymbolHandler`    | ✅     |
-| `workspace/didChangeWatchedFiles`          | `DidChangeWatchedFilesHandler` | ✅  |
+| LSP Method                                | Handler                        | Status |
+| ----------------------------------------- | ------------------------------ | ------ |
+| `textDocument/didOpen/didChange/didClose` | `TextDocumentSyncHandler`      | ✅     |
+| `textDocument/publishDiagnostics`         | (inline in sync handler)       | ✅     |
+| `textDocument/documentSymbol`             | `DocumentSymbolHandler`        | ✅     |
+| `textDocument/definition`                 | `DefinitionHandler`            | ✅     |
+| `textDocument/hover`                      | `HoverHandler`                 | ✅     |
+| `textDocument/completion`                 | `CompletionHandler`            | ✅     |
+| `textDocument/signatureHelp`              | `SignatureHelpHandler`         | ✅     |
+| `textDocument/references`                 | `ReferencesHandler`            | ✅     |
+| `textDocument/documentHighlight`          | `DocumentHighlightHandler`     | ✅     |
+| `textDocument/rename`                     | `RenameHandler`                | ✅     |
+| `textDocument/prepareRename`              | `PrepareRenameHandler`         | ✅     |
+| `textDocument/semanticTokens/full`        | `SemanticTokensHandler`        | ✅     |
+| `textDocument/semanticTokens/full/delta`  | `SemanticTokensHandler`        | ✅     |
+| `textDocument/foldingRange`               | `FoldingRangeHandler`          | ✅     |
+| `textDocument/selectionRange`             | `SelectionRangeHandler`        | ✅     |
+| `textDocument/documentLink`               | `DocumentLinkHandler`          | ✅     |
+| `textDocument/codeAction`                 | `CodeActionHandler`            | ✅     |
+| `textDocument/formatting`                 | `FormattingHandler`            | ✅     |
+| `textDocument/inlayHint`                  | `InlayHintHandler`             | ✅     |
+| `textDocument/codeLens`                   | `CodeLensHandler`              | ✅     |
+| `textDocument/callHierarchy`              | `CallHierarchyHandler`         | ✅     |
+| `textDocument/linkedEditingRange`         | `LinkedEditingRangeHandler`    | ✅     |
+| `textDocument/typeDefinition`             | `TypeDefinitionHandler`        | ✅     |
+| `textDocument/implementation`             | `ImplementationHandler`        | ✅     |
+| `workspace/symbol`                        | `WorkspaceSymbolHandler`       | ✅     |
+| `workspace/didChangeWatchedFiles`         | `DidChangeWatchedFilesHandler` | ✅     |
 
 ### Not Yet Implemented
 
-| LSP Method                        | Notes                                                   |
-| --------------------------------- | ------------------------------------------------------- |
-| `textDocument/rangeFormatting`    | Format selection only (full document formatting exists) |
-| `textDocument/onTypeFormatting`   | Auto-format on typing trigger characters                |
-| `textDocument/colorPresentation`  | Color picker support (not applicable)                   |
+| LSP Method                       | Notes                                                   |
+| -------------------------------- | ------------------------------------------------------- |
+| `textDocument/rangeFormatting`   | Format selection only (full document formatting exists) |
+| `textDocument/onTypeFormatting`  | Auto-format on typing trigger characters                |
+| `textDocument/colorPresentation` | Color picker support (not applicable)                   |
 
 ---
 

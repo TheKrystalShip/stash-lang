@@ -671,7 +671,11 @@ public class StashFormatter
             }
             else if (t.Type is TokenType.RightBrace or TokenType.RightParen or TokenType.RightBracket)
             {
-                if (depth == 0) break;
+                if (depth == 0)
+                {
+                    break;
+                }
+
                 depth--;
             }
             else if (t.Type == TokenType.Comma && depth == 0)

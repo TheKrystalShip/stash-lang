@@ -110,7 +110,10 @@ public sealed class WorkspaceScanner : IDisposable
     /// </summary>
     public void OnFileChanged(string absolutePath)
     {
-        if (!_settings.WorkspaceIndexingEnabled) return;
+        if (!_settings.WorkspaceIndexingEnabled)
+        {
+            return;
+        }
 
         _analysis.InvalidateModule(absolutePath);
         _queue.Writer.TryWrite(absolutePath);
@@ -121,7 +124,10 @@ public sealed class WorkspaceScanner : IDisposable
     /// </summary>
     public void OnFileCreated(string absolutePath)
     {
-        if (!_settings.WorkspaceIndexingEnabled) return;
+        if (!_settings.WorkspaceIndexingEnabled)
+        {
+            return;
+        }
 
         _queue.Writer.TryWrite(absolutePath);
     }
@@ -151,7 +157,10 @@ public sealed class WorkspaceScanner : IDisposable
 
         foreach (string root in roots)
         {
-            if (ct.IsCancellationRequested) break;
+            if (ct.IsCancellationRequested)
+            {
+                break;
+            }
 
             if (!Directory.Exists(root))
             {
@@ -176,10 +185,16 @@ public sealed class WorkspaceScanner : IDisposable
 
             foreach (string file in files)
             {
-                if (ct.IsCancellationRequested) break;
+                if (ct.IsCancellationRequested)
+                {
+                    break;
+                }
 
                 string relativePath = Path.GetRelativePath(root, file).Replace('\\', '/');
-                if (ignore.IsExcluded(relativePath)) continue;
+                if (ignore.IsExcluded(relativePath))
+                {
+                    continue;
+                }
 
                 await _queue.Writer.WriteAsync(file, ct);
                 totalQueued++;
@@ -197,14 +212,20 @@ public sealed class WorkspaceScanner : IDisposable
         {
             await foreach (string filePath in _queue.Reader.ReadAllAsync(ct))
             {
-                if (ct.IsCancellationRequested) break;
+                if (ct.IsCancellationRequested)
+                {
+                    break;
+                }
 
                 try
                 {
                     var uri = new Uri(filePath);
 
                     // Skip files that are currently open — they have fresher analysis
-                    if (_documents.GetText(uri) != null) continue;
+                    if (_documents.GetText(uri) != null)
+                    {
+                        continue;
+                    }
 
                     string source = await File.ReadAllTextAsync(filePath, ct);
                     _analysis.Analyze(uri, source);

@@ -1,0 +1,605 @@
+namespace Stash.Lsp.Analysis;
+
+using System.Collections.Generic;
+using static Stash.Lsp.Analysis.SemanticTokenConstants;
+using System.Linq;
+using Stash.Common;
+using Stash.Lexing;
+using Stash.Parsing.AST;
+using StashSymbolKind = Stash.Lsp.Analysis.SymbolKind;
+
+internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
+{
+    private readonly AnalysisResult _result;
+    private readonly Dictionary<(int Line, int Col), (int Type, int Modifiers)> _classified;
+    private readonly Dictionary<(int Line, int Col), SymbolInfo> _resolvedRefs;
+
+    public IReadOnlyDictionary<(int Line, int Col), (int Type, int Modifiers)> ClassifiedTokens => _classified;
+
+    public SemanticTokenWalker(AnalysisResult result)
+    {
+        _result = result;
+        _classified = new Dictionary<(int Line, int Col), (int Type, int Modifiers)>(result.Tokens.Count / 3);
+        _resolvedRefs = new Dictionary<(int Line, int Col), SymbolInfo>(result.Symbols.References.Count);
+        foreach (var reference in result.Symbols.References)
+        {
+            if (reference.ResolvedSymbol != null)
+            {
+                _resolvedRefs[(reference.Span.StartLine, reference.Span.StartColumn)] = reference.ResolvedSymbol;
+            }
+        }
+    }
+
+    public void Walk(List<Stmt> statements)
+    {
+        foreach (var stmt in statements)
+        {
+            stmt.Accept(this);
+        }
+    }
+
+    private void Emit(int line, int col, int type, int modifiers)
+    {
+        _classified[(line, col)] = (type, modifiers);
+    }
+
+    private void EmitFromToken(Token token, int type, int modifiers)
+    {
+        Emit(token.Span.StartLine - 1, token.Span.StartColumn - 1, type, modifiers);
+    }
+
+    private (int TokenType, int Modifiers) MapSymbolKind(SymbolInfo definition, Token token)
+    {
+        int tokenType = definition.Kind switch
+        {
+            StashSymbolKind.Function or StashSymbolKind.Method => TokenTypeFunction,
+            StashSymbolKind.Variable => TokenTypeVariable,
+            StashSymbolKind.Constant => TokenTypeVariable,
+            StashSymbolKind.Parameter => TokenTypeParameter,
+            StashSymbolKind.Struct => TokenTypeType,
+            StashSymbolKind.Enum => TokenTypeType,
+            StashSymbolKind.Field => TokenTypeProperty,
+            StashSymbolKind.EnumMember => TokenTypeEnumMember,
+            StashSymbolKind.LoopVariable => TokenTypeVariable,
+            StashSymbolKind.Namespace => TokenTypeNamespace,
+            _ => TokenTypeVariable,
+        };
+
+        int modifiers = 0;
+        bool isDeclaration = definition.Span.StartLine == token.Span.StartLine
+            && definition.Span.StartColumn == token.Span.StartColumn;
+        if (isDeclaration)
+        {
+            modifiers |= ModifierDeclaration;
+        }
+
+        if (definition.Kind == StashSymbolKind.Constant)
+        {
+            modifiers |= ModifierReadonly;
+        }
+
+        return (tokenType, modifiers);
+    }
+
+    private void ClassifyStandaloneIdentifier(Token token)
+    {
+        if (token.Lexeme == "self")
+        {
+            EmitFromToken(token, TokenTypeKeyword, 0);
+            return;
+        }
+
+        if (_resolvedRefs.TryGetValue((token.Span.StartLine, token.Span.StartColumn), out var def))
+        {
+            var (type, modifiers) = MapSymbolKind(def, token);
+            EmitFromToken(token, type, modifiers);
+            return;
+        }
+
+        if (BuiltInRegistry.IsBuiltInFunction(token.Lexeme))
+        {
+            EmitFromToken(token, TokenTypeFunction, ModifierReadonly);
+            return;
+        }
+
+        if (BuiltInRegistry.IsBuiltInNamespace(token.Lexeme))
+        {
+            EmitFromToken(token, TokenTypeNamespace, 0);
+        }
+    }
+
+    private void ClassifyDotMember(DotExpr dot, bool isCall)
+    {
+        string memberName = dot.Name.Lexeme;
+        Token memberToken = dot.Name;
+
+        if (dot.Object is IdentifierExpr objId)
+        {
+            string namespaceName = objId.Name.Lexeme;
+
+            if (BuiltInRegistry.IsBuiltInNamespace(namespaceName))
+            {
+                string qualifiedName = namespaceName + "." + memberName;
+
+                if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out _))
+                {
+                    EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
+                    return;
+                }
+
+                if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out _))
+                {
+                    EmitFromToken(memberToken, TokenTypeVariable, ModifierReadonly);
+                    return;
+                }
+
+                if (BuiltInRegistry.Enums.Any(e => e.Name == memberName && e.Namespace == namespaceName))
+                {
+                    EmitFromToken(memberToken, TokenTypeType, 0);
+                    return;
+                }
+            }
+
+            if (_result.NamespaceImports.TryGetValue(namespaceName, out var module))
+            {
+                var sym = module.Symbols.All.FirstOrDefault(s => s.Name == memberName);
+                if (sym != null)
+                {
+                    var (type, modifiers) = MapSymbolKind(sym, memberToken);
+                    EmitFromToken(memberToken, type, modifiers);
+                    return;
+                }
+            }
+
+            _resolvedRefs.TryGetValue((objId.Name.Span.StartLine, objId.Name.Span.StartColumn), out var parentDef);
+            if (parentDef?.Kind == StashSymbolKind.Enum)
+            {
+                EmitFromToken(memberToken, TokenTypeEnumMember, 0);
+                return;
+            }
+        }
+
+        if (dot.Object is DotExpr parentDot && parentDot.Object is IdentifierExpr aliasId)
+        {
+            if (_result.NamespaceImports.TryGetValue(aliasId.Name.Lexeme, out var chainedModule))
+            {
+                var sym = chainedModule.Symbols.All.FirstOrDefault(s => s.Name == memberName && s.ParentName == parentDot.Name.Lexeme);
+                if (sym != null)
+                {
+                    var (type, modifiers) = MapSymbolKind(sym, memberToken);
+                    EmitFromToken(memberToken, type, modifiers);
+                    return;
+                }
+            }
+        }
+
+        _resolvedRefs.TryGetValue((memberToken.Span.StartLine, memberToken.Span.StartColumn), out var def);
+        if (def != null && def.Kind is StashSymbolKind.Field or StashSymbolKind.Function or StashSymbolKind.Method or StashSymbolKind.EnumMember)
+        {
+            var (type, modifiers) = MapSymbolKind(def, memberToken);
+            EmitFromToken(memberToken, type, modifiers);
+            return;
+        }
+
+        if (BuiltInRegistry.IsBuiltInFunction(memberName))
+        {
+            EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
+            return;
+        }
+
+        if (isCall)
+        {
+            EmitFromToken(memberToken, TokenTypeFunction, 0);
+        }
+        else
+        {
+            EmitFromToken(memberToken, TokenTypeProperty, 0);
+        }
+    }
+
+    // ── Statement Visitors ──
+
+    public int VisitExprStmt(ExprStmt stmt)
+    {
+        stmt.Expression.Accept(this);
+        return 0;
+    }
+
+    public int VisitVarDeclStmt(VarDeclStmt stmt)
+    {
+        EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration);
+        if (stmt.TypeHint is not null)
+        {
+            EmitFromToken(stmt.TypeHint, TokenTypeType, 0);
+        }
+
+        stmt.Initializer?.Accept(this);
+
+        return 0;
+    }
+
+    public int VisitConstDeclStmt(ConstDeclStmt stmt)
+    {
+        EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration | ModifierReadonly);
+        if (stmt.TypeHint is not null)
+        {
+            EmitFromToken(stmt.TypeHint, TokenTypeType, 0);
+        }
+
+        stmt.Initializer.Accept(this);
+        return 0;
+    }
+
+    public int VisitBlockStmt(BlockStmt stmt)
+    {
+        foreach (var s in stmt.Statements)
+        {
+            s.Accept(this);
+        }
+        return 0;
+    }
+
+    public int VisitIfStmt(IfStmt stmt)
+    {
+        stmt.Condition.Accept(this);
+        stmt.ThenBranch.Accept(this);
+        stmt.ElseBranch?.Accept(this);
+
+        return 0;
+    }
+
+    public int VisitWhileStmt(WhileStmt stmt)
+    {
+        stmt.Condition.Accept(this);
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
+    public int VisitDoWhileStmt(DoWhileStmt stmt)
+    {
+        stmt.Body.Accept(this);
+        stmt.Condition.Accept(this);
+        return 0;
+    }
+
+    public int VisitForInStmt(ForInStmt stmt)
+    {
+        if (stmt.IndexName is not null)
+        {
+            EmitFromToken(stmt.IndexName, TokenTypeVariable, ModifierDeclaration);
+        }
+
+        EmitFromToken(stmt.VariableName, TokenTypeVariable, ModifierDeclaration);
+        if (stmt.TypeHint is not null)
+        {
+            EmitFromToken(stmt.TypeHint, TokenTypeType, 0);
+        }
+
+        stmt.Iterable.Accept(this);
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
+    public int VisitBreakStmt(BreakStmt stmt) => 0;
+
+    public int VisitContinueStmt(ContinueStmt stmt) => 0;
+
+    public int VisitFnDeclStmt(FnDeclStmt stmt)
+    {
+        EmitFromToken(stmt.Name, TokenTypeFunction, ModifierDeclaration);
+        for (int i = 0; i < stmt.Parameters.Count; i++)
+        {
+            EmitFromToken(stmt.Parameters[i], TokenTypeParameter, ModifierDeclaration);
+            if (stmt.ParameterTypes[i] is Token paramType)
+            {
+                EmitFromToken(paramType, TokenTypeType, 0);
+            }
+
+            if (stmt.DefaultValues[i] is Expr defaultVal)
+            {
+                defaultVal.Accept(this);
+            }
+        }
+        if (stmt.ReturnType is Token returnType)
+        {
+            EmitFromToken(returnType, TokenTypeType, 0);
+        }
+
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
+    public int VisitReturnStmt(ReturnStmt stmt)
+    {
+        stmt.Value?.Accept(this);
+
+        return 0;
+    }
+
+    public int VisitStructDeclStmt(StructDeclStmt stmt)
+    {
+        EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
+        for (int i = 0; i < stmt.Fields.Count; i++)
+        {
+            EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
+            if (stmt.FieldTypes[i] is Token fieldType)
+            {
+                EmitFromToken(fieldType, TokenTypeType, 0);
+            }
+        }
+        foreach (var method in stmt.Methods)
+        {
+            method.Accept(this);
+        }
+        return 0;
+    }
+
+    public int VisitEnumDeclStmt(EnumDeclStmt stmt)
+    {
+        EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
+        foreach (var member in stmt.Members)
+        {
+            EmitFromToken(member, TokenTypeEnumMember, ModifierDeclaration);
+        }
+        return 0;
+    }
+
+    public int VisitImportStmt(ImportStmt stmt)
+    {
+        foreach (var name in stmt.Names)
+        {
+            var def = _result.Symbols.FindDefinition(name.Lexeme, name.Span.StartLine, name.Span.StartColumn);
+            if (def != null)
+            {
+                var (type, modifiers) = MapSymbolKind(def, name);
+                EmitFromToken(name, type, modifiers);
+            }
+            else
+            {
+                EmitFromToken(name, TokenTypeVariable, ModifierDeclaration);
+            }
+        }
+        return 0;
+    }
+
+    public int VisitImportAsStmt(ImportAsStmt stmt)
+    {
+        EmitFromToken(stmt.Alias, TokenTypeNamespace, ModifierDeclaration);
+        return 0;
+    }
+
+    public int VisitDestructureStmt(DestructureStmt stmt)
+    {
+        foreach (var name in stmt.Names)
+        {
+            int modifiers = ModifierDeclaration | (stmt.IsConst ? ModifierReadonly : 0);
+            EmitFromToken(name, TokenTypeVariable, modifiers);
+        }
+        stmt.Initializer.Accept(this);
+        return 0;
+    }
+
+    // ── Expression Visitors ──
+
+    public int VisitLiteralExpr(LiteralExpr expr) => 0;
+
+    public int VisitIdentifierExpr(IdentifierExpr expr)
+    {
+        ClassifyStandaloneIdentifier(expr.Name);
+        return 0;
+    }
+
+    public int VisitUnaryExpr(UnaryExpr expr)
+    {
+        expr.Right.Accept(this);
+        return 0;
+    }
+
+    public int VisitUpdateExpr(UpdateExpr expr)
+    {
+        expr.Operand.Accept(this);
+        return 0;
+    }
+
+    public int VisitBinaryExpr(BinaryExpr expr)
+    {
+        expr.Left.Accept(this);
+        expr.Right.Accept(this);
+        return 0;
+    }
+
+    public int VisitGroupingExpr(GroupingExpr expr)
+    {
+        expr.Expression.Accept(this);
+        return 0;
+    }
+
+    public int VisitTernaryExpr(TernaryExpr expr)
+    {
+        expr.Condition.Accept(this);
+        expr.ThenBranch.Accept(this);
+        expr.ElseBranch.Accept(this);
+        return 0;
+    }
+
+    public int VisitAssignExpr(AssignExpr expr)
+    {
+        ClassifyStandaloneIdentifier(expr.Name);
+        expr.Value.Accept(this);
+        return 0;
+    }
+
+    public int VisitCallExpr(CallExpr expr)
+    {
+        if (expr.Callee is DotExpr dot)
+        {
+            dot.Object.Accept(this);
+            ClassifyDotMember(dot, isCall: true);
+        }
+        else
+        {
+            expr.Callee.Accept(this);
+        }
+        foreach (var arg in expr.Arguments)
+        {
+            arg.Accept(this);
+        }
+        return 0;
+    }
+
+    public int VisitArrayExpr(ArrayExpr expr)
+    {
+        foreach (var element in expr.Elements)
+        {
+            element.Accept(this);
+        }
+        return 0;
+    }
+
+    public int VisitIndexExpr(IndexExpr expr)
+    {
+        expr.Object.Accept(this);
+        expr.Index.Accept(this);
+        return 0;
+    }
+
+    public int VisitIndexAssignExpr(IndexAssignExpr expr)
+    {
+        expr.Object.Accept(this);
+        expr.Index.Accept(this);
+        expr.Value.Accept(this);
+        return 0;
+    }
+
+    public int VisitStructInitExpr(StructInitExpr expr)
+    {
+        expr.Target?.Accept(this);
+
+        EmitFromToken(expr.Name, TokenTypeType, 0);
+        foreach (var (field, value) in expr.FieldValues)
+        {
+            EmitFromToken(field, TokenTypeProperty, 0);
+            value.Accept(this);
+        }
+        return 0;
+    }
+
+    public int VisitDotExpr(DotExpr expr)
+    {
+        expr.Object.Accept(this);
+        ClassifyDotMember(expr, isCall: false);
+        return 0;
+    }
+
+    public int VisitDotAssignExpr(DotAssignExpr expr)
+    {
+        expr.Object.Accept(this);
+        EmitFromToken(expr.Name, TokenTypeProperty, 0);
+        expr.Value.Accept(this);
+        return 0;
+    }
+
+    public int VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
+    {
+        foreach (var part in expr.Parts)
+        {
+            if (part is not LiteralExpr)
+            {
+                part.Accept(this);
+            }
+        }
+        return 0;
+    }
+
+    public int VisitCommandExpr(CommandExpr expr)
+    {
+        foreach (var part in expr.Parts)
+        {
+            if (part is not LiteralExpr)
+            {
+                part.Accept(this);
+            }
+        }
+        return 0;
+    }
+
+    public int VisitPipeExpr(PipeExpr expr)
+    {
+        expr.Left.Accept(this);
+        expr.Right.Accept(this);
+        return 0;
+    }
+
+    public int VisitTryExpr(TryExpr expr)
+    {
+        expr.Expression.Accept(this);
+        return 0;
+    }
+
+    public int VisitNullCoalesceExpr(NullCoalesceExpr expr)
+    {
+        expr.Left.Accept(this);
+        expr.Right.Accept(this);
+        return 0;
+    }
+
+    public int VisitSwitchExpr(SwitchExpr expr)
+    {
+        expr.Subject.Accept(this);
+        foreach (var arm in expr.Arms)
+        {
+            arm.Pattern?.Accept(this);
+
+            arm.Body.Accept(this);
+        }
+        return 0;
+    }
+
+    public int VisitLambdaExpr(LambdaExpr expr)
+    {
+        for (int i = 0; i < expr.Parameters.Count; i++)
+        {
+            EmitFromToken(expr.Parameters[i], TokenTypeParameter, ModifierDeclaration);
+            if (expr.ParameterTypes[i] is Token paramType)
+            {
+                EmitFromToken(paramType, TokenTypeType, 0);
+            }
+
+            if (expr.DefaultValues[i] is Expr defaultVal)
+            {
+                defaultVal.Accept(this);
+            }
+        }
+        expr.ExpressionBody?.Accept(this);
+
+        expr.BlockBody?.Accept(this);
+
+        return 0;
+    }
+
+    public int VisitRedirectExpr(RedirectExpr expr)
+    {
+        expr.Expression.Accept(this);
+        expr.Target.Accept(this);
+        return 0;
+    }
+
+    public int VisitRangeExpr(RangeExpr expr)
+    {
+        expr.Start.Accept(this);
+        expr.End.Accept(this);
+        expr.Step?.Accept(this);
+
+        return 0;
+    }
+
+    public int VisitDictLiteralExpr(DictLiteralExpr expr)
+    {
+        foreach (var (key, value) in expr.Entries)
+        {
+            EmitFromToken(key, TokenTypeProperty, 0);
+            value.Accept(this);
+        }
+        return 0;
+    }
+}

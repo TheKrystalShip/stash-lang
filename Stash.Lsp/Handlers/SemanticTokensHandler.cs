@@ -4,7 +4,6 @@ namespace Stash.Lsp.Handlers;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
@@ -13,7 +12,7 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lexing;
 using Stash.Lsp.Analysis;
-using StashSymbolKind = Stash.Lsp.Analysis.SymbolKind;
+using static Stash.Lsp.Analysis.SemanticTokenConstants;
 
 /// <summary>
 /// Handles LSP <c>textDocument/semanticTokens</c> requests to provide semantic
@@ -40,52 +39,6 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     private readonly ConcurrentDictionary<Uri, SemanticTokensDocument> _documents = new();
 
     private readonly ILogger<SemanticTokensHandler> _logger;
-
-    // Token type indices (must match legend registration)
-
-    /// <summary>Token type index for namespace identifiers (index 0 in legend).</summary>
-    private const int TokenTypeNamespace = 0;
-
-    /// <summary>Token type index for type names — structs, enums, and type hint positions (index 1).</summary>
-    private const int TokenTypeType = 1;
-
-    /// <summary>Token type index for function names (index 2).</summary>
-    private const int TokenTypeFunction = 2;
-
-    /// <summary>Token type index for function parameters (index 3).</summary>
-    private const int TokenTypeParameter = 3;
-
-    /// <summary>Token type index for variables and constants (index 4).</summary>
-    private const int TokenTypeVariable = 4;
-
-    /// <summary>Token type index for struct fields and dict properties (index 5).</summary>
-    private const int TokenTypeProperty = 5;
-
-    /// <summary>Token type index for enum member identifiers (index 6).</summary>
-    private const int TokenTypeEnumMember = 6;
-
-    /// <summary>Token type index for language keywords (index 7).</summary>
-    private const int TokenTypeKeyword = 7;
-
-    /// <summary>Token type index for integer and float literals (index 8).</summary>
-    private const int TokenTypeNumber = 8;
-
-    /// <summary>Token type index for string literals (index 9).</summary>
-    private const int TokenTypeString = 9;
-
-    /// <summary>Token type index for single-line, block, and doc comments (index 10).</summary>
-    private const int TokenTypeComment = 10;
-
-    /// <summary>Token type index for operators and punctuation (index 11).</summary>
-    private const int TokenTypeOperator = 11;
-
-    // Token modifier bit flags
-
-    /// <summary>Modifier bit flag indicating the token is at its declaration site.</summary>
-    private const int ModifierDeclaration = 1 << 0;
-
-    /// <summary>Modifier bit flag indicating the token refers to a read-only binding (constant or built-in).</summary>
-    private const int ModifierReadonly = 1 << 1;
 
     /// <summary>
     /// Initialises the handler with an <see cref="AnalysisEngine"/> used to retrieve cached analysis results.
@@ -149,9 +102,12 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             return Task.CompletedTask;
         }
 
-        TokenType prevType = TokenType.Eof;
-        TokenType prevPrevType = TokenType.Eof;
+        // Phase 1: Walk AST to classify identifiers
+        var walker = new SemanticTokenWalker(result);
+        walker.Walk(result.Statements);
+        var classified = walker.ClassifiedTokens;
 
+        // Phase 2: Iterate token stream
         var tokenList = result.Tokens;
         for (int i = 0; i < tokenList.Count; i++)
         {
@@ -161,58 +117,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 continue;
             }
 
-            var line = token.Span.StartLine - 1;   // convert to 0-based
+            var line = token.Span.StartLine - 1;
             var col = token.Span.StartColumn - 1;
             var length = token.Lexeme.Length;
 
-            bool isTypeHintPosition =
-                (prevType == TokenType.Colon && prevPrevType == TokenType.Identifier) ||
-                prevType == TokenType.Arrow;
-
-            if (isTypeHintPosition && (token.Type == TokenType.Identifier || IsKeyword(token.Type)))
+            // Check if the walker classified this position
+            if (classified.TryGetValue((line, col), out var cls))
             {
-                ProcessIdentifier(builder, result, token, line, col, length, isTypeHintPosition: true);
-            }
-            else if (token.Type == TokenType.Identifier && prevType is TokenType.Let or TokenType.Const)
-            {
-                // After let/const — always a variable declaration, no resolution needed
-                int modifiers = ModifierDeclaration;
-                if (prevType == TokenType.Const)
-                {
-                    modifiers |= ModifierReadonly;
-                }
-                builder.Push(line, col, length, TokenTypeVariable, modifiers);
-            }
-            else if (token.Type == TokenType.Identifier)
-            {
-                bool afterDot = prevType == TokenType.Dot;
-                // Check if this is a dict literal key: identifier before colon, after { or ,
-                if ((prevType is TokenType.LeftBrace or TokenType.Comma)
-                    && i + 1 < tokenList.Count
-                    && tokenList[i + 1].Type == TokenType.Colon)
-                {
-                    // If the symbol resolves to a struct field, it's a struct init — let ProcessIdentifier handle it
-                    var def = result.Symbols.FindDefinition(token.Lexeme, token.Span.StartLine, token.Span.StartColumn);
-                    if (def == null || def.Kind != StashSymbolKind.Field)
-                    {
-                        builder.Push(line, col, length, TokenTypeProperty, 0);
-                    }
-                    else
-                    {
-                        ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot,
-                            tokenList: tokenList, tokenIndex: i);
-                    }
-                }
-                else
-                {
-                    ProcessIdentifier(builder, result, token, line, col, length, afterDot: afterDot,
-                        tokenList: tokenList, tokenIndex: i);
-                }
-            }
-            else if (prevType == TokenType.Dot && (IsKeyword(token.Type) || token.Type is TokenType.True or TokenType.False or TokenType.Null))
-            {
-                // Keywords/booleans after dot are member access (e.g., assert.true, assert.false)
-                builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
+                builder.Push(line, col, length, cls.Type, cls.Modifiers);
             }
             else if (IsKeyword(token.Type))
             {
@@ -228,11 +140,11 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             }
             else if (token.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
             {
-                ProcessCommandLiteral(builder, result, token);
+                ProcessCommandLiteral(builder, classified, token);
             }
             else if (token.Type == TokenType.InterpolatedString)
             {
-                ProcessCompoundToken(builder, result, token);
+                ProcessCompoundToken(builder, classified, token);
             }
             else if (IsOperator(token.Type))
             {
@@ -246,182 +158,20 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 EmitDocComment(builder, token, line, col);
             }
-
-            if (token.Type is not (TokenType.DocComment or TokenType.SingleLineComment or TokenType.BlockComment or TokenType.Shebang))
-            {
-                prevPrevType = prevType;
-                prevType = token.Type;
-            }
-        } // end for
+        }
 
         _logger.LogDebug("SemanticTokens: tokenized {Uri}", identifier.TextDocument.Uri);
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Classifies a single identifier token using symbol-table lookup and built-in registry rules.
-    /// </summary>
-    /// <param name="builder">The token builder to push classification results into.</param>
-    /// <param name="result">The cached analysis result for the document.</param>
-    /// <param name="token">The identifier token to classify.</param>
-    /// <param name="line">0-based line number of the token.</param>
-    /// <param name="col">0-based column number of the token.</param>
-    /// <param name="length">Length of the token lexeme in characters.</param>
-    /// <param name="isTypeHintPosition">
-    /// <see langword="true"/> when the token appears after a colon or arrow (type annotation),
-    /// which forces classification as <c>type</c> regardless of symbol-table lookup.
-    /// </param>
-    /// <param name="afterDot">
-    /// <see langword="true"/> when the token immediately follows a dot operator (member access).
-    /// </param>
-    /// <param name="tokenList">Full token list for lookahead/lookbehind when needed.</param>
-    /// <param name="tokenIndex">Index of <paramref name="token"/> within <paramref name="tokenList"/>.</param>
-    private void ProcessIdentifier(SemanticTokensBuilder builder, AnalysisResult result,
-        Token token, int line, int col, int length, bool isTypeHintPosition = false, bool afterDot = false,
-        IReadOnlyList<Token>? tokenList = null, int tokenIndex = -1)
-    {
-        // Note: Declaration context (after let/const) is handled directly in the caller
-        // before reaching this method — those identifiers are always variable declarations.
-        // ── Rule 1: Type hint position ──────────────────────────────
-        // After "identifier:" or "→" — always a type name.
-        if (isTypeHintPosition)
-        {
-            builder.Push(line, col, length, TokenTypeType, 0);
-            return;
-        }
-
-        var name = token.Lexeme;
-        var spanLine = token.Span.StartLine;
-        var spanCol = token.Span.StartColumn;
-
-        // ── Rule 2: After dot — member access ───────────────────────
-        // Only property or function. Never namespace/keyword/type.
-        // Exclude Variable and Constant — those are standalone declarations
-        // that can't be members. Including them causes false matches when
-        // a local variable shares the name of a namespace function
-        // (e.g., `let cwd = env.cwd()` would color the method as a variable).
-        if (afterDot)
-        {
-            // When preceded by a built-in namespace (e.g., task.status), prioritize
-            // namespace function/constant lookup over symbol-table field matches.
-            // This prevents struct field names (e.g., TaskHandle.status) from
-            // shadowing the namespace function of the same name.
-            if (tokenList != null && tokenIndex >= 2
-                && tokenList[tokenIndex - 2].Type == TokenType.Identifier
-                && BuiltInRegistry.IsBuiltInNamespace(tokenList[tokenIndex - 2].Lexeme))
-            {
-                var qualifiedName = tokenList[tokenIndex - 2].Lexeme + "." + name;
-                if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out _))
-                {
-                    builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
-                    return;
-                }
-                if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out _))
-                {
-                    builder.Push(line, col, length, TokenTypeVariable, ModifierReadonly);
-                    return;
-                }
-                var nsName = tokenList[tokenIndex - 2].Lexeme;
-                if (BuiltInRegistry.Enums.Any(e => e.Name == name && e.Namespace == nsName))
-                {
-                    builder.Push(line, col, length, TokenTypeType, 0);
-                    return;
-                }
-            }
-
-            // Check if preceded by a namespace import alias (e.g., utils.LogLevel)
-            if (tokenList != null && tokenIndex >= 2
-                && tokenList[tokenIndex - 2].Type == TokenType.Identifier
-                && result.NamespaceImports.TryGetValue(tokenList[tokenIndex - 2].Lexeme, out var importedModule))
-            {
-                var importedSym = importedModule.Symbols.All
-                    .FirstOrDefault(s => s.Name == name);
-                if (importedSym != null)
-                {
-                    var (tokenType, modifiers) = MapSymbolKind(importedSym, token);
-                    builder.Push(line, col, length, tokenType, modifiers);
-                    return;
-                }
-            }
-
-            // Check for chained access: alias.Enum.Member (e.g., utils.LogLevel.Error)
-            if (tokenList != null && tokenIndex >= 4
-                && tokenList[tokenIndex - 4].Type == TokenType.Identifier
-                && tokenList[tokenIndex - 3].Type == TokenType.Dot
-                && tokenList[tokenIndex - 2].Type == TokenType.Identifier
-                && result.NamespaceImports.TryGetValue(tokenList[tokenIndex - 4].Lexeme, out var chainedModule))
-            {
-                var parentName = tokenList[tokenIndex - 2].Lexeme;
-                var memberSym = chainedModule.Symbols.All
-                    .FirstOrDefault(s => s.Name == name && s.ParentName == parentName);
-                if (memberSym != null)
-                {
-                    var (tokenType, modifiers) = MapSymbolKind(memberSym, token);
-                    builder.Push(line, col, length, tokenType, modifiers);
-                    return;
-                }
-            }
-
-            var definition = result.Symbols.FindDefinition(name, spanLine, spanCol);
-            if (definition != null && definition.Kind is StashSymbolKind.Field or StashSymbolKind.Function
-                    or StashSymbolKind.Method or StashSymbolKind.EnumMember)
-            {
-                var (tokenType, modifiers) = MapSymbolKind(definition, token);
-                builder.Push(line, col, length, tokenType, modifiers);
-            }
-            else if (BuiltInRegistry.IsBuiltInFunction(name))
-            {
-                builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
-            }
-            else if (tokenList != null && tokenIndex >= 2
-                     && tokenList[tokenIndex - 2].Type == TokenType.Identifier)
-            {
-                var qualifiedName = tokenList[tokenIndex - 2].Lexeme + "." + name;
-                if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out _))
-                {
-                    builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
-                }
-                else if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out _))
-                {
-                    builder.Push(line, col, length, TokenTypeVariable, ModifierReadonly);
-                }
-            }
-            // else: unresolved member access — leave uncolored (dynamic dict property)
-            return;
-        }
-
-        // ── Rule 3: Standalone identifier ───────────────────────────
-        // Normal resolution: symbol table → built-in function → built-in namespace.
-        {
-            var definition = result.Symbols.FindDefinition(name, spanLine, spanCol);
-            if (definition != null)
-            {
-                var (tokenType, modifiers) = MapSymbolKind(definition, token);
-                if (name == "self")
-                {
-                    tokenType = TokenTypeKeyword;
-                }
-
-                builder.Push(line, col, length, tokenType, modifiers);
-            }
-            else if (BuiltInRegistry.IsBuiltInFunction(name))
-            {
-                builder.Push(line, col, length, TokenTypeFunction, ModifierReadonly);
-            }
-            else if (BuiltInRegistry.IsBuiltInNamespace(name))
-            {
-                builder.Push(line, col, length, TokenTypeNamespace, 0);
-            }
-        }
-    }
-
-    /// <summary>
     /// Tokenizes a command literal, highlighting the command name and any embedded expression tokens.
     /// </summary>
     /// <param name="builder">The token builder to receive classifications.</param>
-    /// <param name="result">The cached analysis result used for symbol lookup within embedded expressions.</param>
+    /// <param name="classified">Pre-classified identifier positions from the AST walker.</param>
     /// <param name="token">The command literal token whose <c>Literal</c> contains the parsed parts list.</param>
-    private void ProcessCommandLiteral(SemanticTokensBuilder builder, AnalysisResult result, Token token)
+    private void ProcessCommandLiteral(SemanticTokensBuilder builder,
+        IReadOnlyDictionary<(int Line, int Col), (int Type, int Modifiers)> classified, Token token)
     {
         if (token.Literal is not List<object> parts)
         {
@@ -470,7 +220,6 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             else if (parts[i] is List<Token> subTokens)
             {
                 // Process embedded expression tokens
-                TokenType prevSubType = TokenType.Eof;
                 for (int j = 0; j < subTokens.Count; j++)
                 {
                     var subToken = subTokens[j];
@@ -482,25 +231,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     var subLine = subToken.Span.StartLine - 1;
                     var subCol = subToken.Span.StartColumn - 1;
                     var subLength = subToken.Lexeme.Length;
-                    bool afterDot = prevSubType == TokenType.Dot;
 
-                    if (subToken.Type == TokenType.Identifier && prevSubType is TokenType.Let or TokenType.Const)
+                    if (subToken.Type == TokenType.Identifier)
                     {
-                        int modifiers = ModifierDeclaration;
-                        if (prevSubType == TokenType.Const)
+                        var key = (subToken.Span.StartLine - 1, subToken.Span.StartColumn - 1);
+                        if (classified.TryGetValue(key, out var identCls))
                         {
-                            modifiers |= ModifierReadonly;
+                            builder.Push(key.Item1, key.Item2, subToken.Lexeme.Length, identCls.Type, identCls.Modifiers);
                         }
-                        builder.Push(subLine, subCol, subLength, TokenTypeVariable, modifiers);
-                    }
-                    else if (subToken.Type == TokenType.Identifier)
-                    {
-                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot,
-                            tokenList: subTokens, tokenIndex: j);
-                    }
-                    else if (afterDot && (IsKeyword(subToken.Type) || subToken.Type is TokenType.True or TokenType.False or TokenType.Null))
-                    {
-                        builder.Push(subLine, subCol, subLength, TokenTypeFunction, ModifierReadonly);
                     }
                     else if (IsKeyword(subToken.Type))
                     {
@@ -520,18 +258,13 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     }
                     else if (subToken.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
                     {
-                        ProcessCommandLiteral(builder, result, subToken);
+                        ProcessCommandLiteral(builder, classified, subToken);
                     }
                     else if (subToken.Type == TokenType.InterpolatedString)
                     {
-                        ProcessCompoundToken(builder, result, subToken);
+                        ProcessCompoundToken(builder, classified, subToken);
                     }
-
-                    prevSubType = subToken.Type;
                 }
-                // Account for {} delimiters in offset
-                // Each interpolation adds at least 2 chars for { and }
-                // But we don't need to track textOffset past the first text segment
             }
         }
     }
@@ -540,9 +273,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
     /// Tokenizes an interpolated string literal, recursing into each embedded expression segment.
     /// </summary>
     /// <param name="builder">The token builder to receive classifications.</param>
-    /// <param name="result">The cached analysis result used for symbol lookup inside interpolations.</param>
+    /// <param name="classified">Pre-classified identifier positions from the AST walker.</param>
     /// <param name="token">The interpolated string token whose <c>Literal</c> contains the parts list.</param>
-    private void ProcessCompoundToken(SemanticTokensBuilder builder, AnalysisResult result, Token token)
+    private void ProcessCompoundToken(SemanticTokensBuilder builder,
+        IReadOnlyDictionary<(int Line, int Col), (int Type, int Modifiers)> classified, Token token)
     {
         if (token.Literal is not List<object> parts)
         {
@@ -582,7 +316,6 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 AdvanceCursor(lexeme, ref offset, 1, ref curLine, ref curCol);
 
                 // Classify sub-tokens within the expression
-                TokenType prevSubType = TokenType.Eof;
                 for (int j = 0; j < subTokens.Count; j++)
                 {
                     var subToken = subTokens[j];
@@ -594,25 +327,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     var subLine = subToken.Span.StartLine - 1;
                     var subCol = subToken.Span.StartColumn - 1;
                     var subLength = subToken.Lexeme.Length;
-                    bool afterDot = prevSubType == TokenType.Dot;
 
-                    if (subToken.Type == TokenType.Identifier && prevSubType is TokenType.Let or TokenType.Const)
+                    if (subToken.Type == TokenType.Identifier)
                     {
-                        int modifiers = ModifierDeclaration;
-                        if (prevSubType == TokenType.Const)
+                        var key = (subToken.Span.StartLine - 1, subToken.Span.StartColumn - 1);
+                        if (classified.TryGetValue(key, out var identCls))
                         {
-                            modifiers |= ModifierReadonly;
+                            builder.Push(key.Item1, key.Item2, subToken.Lexeme.Length, identCls.Type, identCls.Modifiers);
                         }
-                        builder.Push(subLine, subCol, subLength, TokenTypeVariable, modifiers);
-                    }
-                    else if (subToken.Type == TokenType.Identifier)
-                    {
-                        ProcessIdentifier(builder, result, subToken, subLine, subCol, subLength, afterDot: afterDot,
-                            tokenList: subTokens, tokenIndex: j);
-                    }
-                    else if (afterDot && (IsKeyword(subToken.Type) || subToken.Type is TokenType.True or TokenType.False or TokenType.Null))
-                    {
-                        builder.Push(subLine, subCol, subLength, TokenTypeFunction, ModifierReadonly);
                     }
                     else if (IsKeyword(subToken.Type))
                     {
@@ -630,13 +352,14 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     {
                         builder.Push(subLine, subCol, subLength, TokenTypeOperator, 0);
                     }
-                    else if (subToken.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral or TokenType.InterpolatedString)
+                    else if (subToken.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
                     {
-                        // Recurse for nested compound tokens
-                        ProcessCompoundToken(builder, result, subToken);
+                        ProcessCommandLiteral(builder, classified, subToken);
                     }
-
-                    prevSubType = subToken.Type;
+                    else if (subToken.Type == TokenType.InterpolatedString)
+                    {
+                        ProcessCompoundToken(builder, classified, subToken);
+                    }
                 }
 
                 // Find the matching } by scanning with brace-depth tracking
@@ -646,9 +369,19 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                 while (scanPos < lexeme.Length && depth > 0)
                 {
                     char c = lexeme[scanPos];
-                    if (c == '{') depth++;
-                    else if (c == '}') depth--;
-                    if (depth > 0) scanPos++;
+                    if (c == '{')
+                    {
+                        depth++;
+                    }
+                    else if (c == '}')
+                    {
+                        depth--;
+                    }
+
+                    if (depth > 0)
+                    {
+                        scanPos++;
+                    }
                 }
 
                 // Emit closing } as operator for distinct coloring
@@ -857,46 +590,6 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         }
 
         return false;
-    }
-
-    /// <summary>
-    /// Maps a <see cref="SymbolInfo"/> kind to the corresponding token type index and modifier bitmask.
-    /// </summary>
-    /// <param name="definition">The resolved symbol whose kind drives the mapping.</param>
-    /// <param name="token">The source token, used to detect whether this occurrence is the declaration site.</param>
-    /// <returns>
-    /// A tuple of (<c>tokenType</c> index, <c>modifiers</c> bitmask) ready to pass to
-    /// <see cref="SemanticTokensBuilder.Push"/>.
-    /// </returns>
-    private static (int TokenType, int Modifiers) MapSymbolKind(SymbolInfo definition, Token token)
-    {
-        bool isDeclaration = definition.Span.StartLine == token.Span.StartLine &&
-                             definition.Span.StartColumn == token.Span.StartColumn;
-
-        int modifiers = isDeclaration ? ModifierDeclaration : 0;
-
-        int tokenType = definition.Kind switch
-        {
-            StashSymbolKind.Function => TokenTypeFunction,
-            StashSymbolKind.Method => TokenTypeFunction,
-            StashSymbolKind.Variable => TokenTypeVariable,
-            StashSymbolKind.Constant => TokenTypeVariable,
-            StashSymbolKind.Parameter => TokenTypeParameter,
-            StashSymbolKind.Struct => TokenTypeType,
-            StashSymbolKind.Enum => TokenTypeType,
-            StashSymbolKind.Field => TokenTypeProperty,
-            StashSymbolKind.EnumMember => TokenTypeEnumMember,
-            StashSymbolKind.LoopVariable => TokenTypeVariable,
-            StashSymbolKind.Namespace => TokenTypeNamespace,
-            _ => TokenTypeVariable
-        };
-
-        if (definition.Kind == StashSymbolKind.Constant)
-        {
-            modifiers |= ModifierReadonly;
-        }
-
-        return (tokenType, modifiers);
     }
 
     /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is a Stash keyword token.</summary>

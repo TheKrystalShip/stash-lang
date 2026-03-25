@@ -13,7 +13,8 @@ Stash.Lsp/
 ├── Program.cs                → Entry point: calls StashLanguageServer.RunAsync()
 ├── StashLanguageServer.cs    → Server builder: DI registration + 24 handler registrations
 ├── Handlers/                 → 24 LSP request handlers (one per feature)
-└── Analysis/                 → Semantic analysis engine, symbol resolution, type inference
+└── Analysis/                 → Semantic analysis engine, symbol resolution, type inference,
+                                AST-walker semantic highlighting (SemanticTokenWalker)
 ```
 
 **Dependencies:** `OmniSharp.Extensions.LanguageServer` v0.19.9, `Stash.Core` (project reference).
@@ -109,20 +110,22 @@ Register new handlers in `StashLanguageServer.cs` via `.WithHandler<NewHandler>(
 
 ### Key Analysis Classes
 
-| File                     | Role                                                                          |
-| ------------------------ | ----------------------------------------------------------------------------- |
-| `AnalysisResult.cs`      | Output record: tokens, statements, symbols, diagnostics                       |
-| `ScopeTree.cs`           | Hierarchical scope tracking with `FindDefinition()`                           |
-| `SymbolInfo.cs`          | Symbol metadata (name, kind, type, span, documentation)                       |
-| `BuiltInRegistry.cs`     | Static registry of keywords, namespace functions, constants                   |
-| `TypeInferenceEngine.cs` | Infers types from assignments, returns, annotations                           |
-| `SemanticValidator.cs`   | Validates names, types, arity, produces diagnostics                           |
-| `ImportResolver.cs`      | Resolves imports, tracks module dependencies                                  |
-| `DocCommentResolver.cs`  | Extracts `///` doc comments and attaches to symbols                           |
-| `TextUtilities.cs`       | Dot-prefix detection, word-at-position extraction                             |
-| `StashFormatter.cs`      | Code formatting logic                                                         |
-| `LspExtensions.cs`       | `SourceSpan` → LSP `Range` conversion utilities                               |
-| `LspSettings.cs`         | Config: `DebounceDelayMs`, `LogLevel`, `InlayHintsEnabled`, `CodeLensEnabled` |
+| File                        | Role                                                                          |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| `AnalysisResult.cs`         | Output record: tokens, statements, symbols, diagnostics                       |
+| `ScopeTree.cs`              | Hierarchical scope tracking with `FindDefinition()`                           |
+| `SymbolInfo.cs`             | Symbol metadata (name, kind, type, span, documentation)                       |
+| `BuiltInRegistry.cs`        | Static registry of keywords, namespace functions, constants                   |
+| `TypeInferenceEngine.cs`    | Infers types from assignments, returns, annotations                           |
+| `SemanticValidator.cs`      | Validates names, types, arity, produces diagnostics                           |
+| `ImportResolver.cs`         | Resolves imports, tracks module dependencies                                  |
+| `DocCommentResolver.cs`     | Extracts `///` doc comments and attaches to symbols                           |
+| `TextUtilities.cs`          | Dot-prefix detection, word-at-position extraction                             |
+| `StashFormatter.cs`         | Code formatting logic                                                         |
+| `SemanticTokenWalker.cs`    | AST visitor that pre-classifies identifiers for semantic highlighting         |
+| `SemanticTokenConstants.cs` | Shared token type indices and modifier bit flags                              |
+| `LspExtensions.cs`          | `SourceSpan` → LSP `Range` conversion utilities                               |
+| `LspSettings.cs`            | Config: `DebounceDelayMs`, `LogLevel`, `InlayHintsEnabled`, `CodeLensEnabled` |
 
 ## Document Sync & Diagnostics
 

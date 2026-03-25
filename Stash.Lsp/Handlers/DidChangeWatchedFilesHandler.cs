@@ -33,7 +33,10 @@ public class DidChangeWatchedFilesHandler : DidChangeWatchedFilesHandlerBase
             try
             {
                 var uri = change.Uri.ToUri();
-                if (!uri.IsFile) continue;
+                if (!uri.IsFile)
+                {
+                    continue;
+                }
 
                 string path = uri.LocalPath;
                 _logger.LogDebug("File watch event: {Type} {Path}", change.Type, path);
