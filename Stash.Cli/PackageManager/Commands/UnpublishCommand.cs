@@ -38,11 +38,16 @@ public static class UnpublishCommand
     public static void Execute(string[] args)
     {
         string? spec = null;
+        string? cliToken = null;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--registry" && i + 1 < args.Length)
             {
                 i++;
+            }
+            else if (args[i] == "--token" && i + 1 < args.Length)
+            {
+                cliToken = args[++i];
             }
             else if (spec == null)
             {
@@ -55,7 +60,7 @@ public static class UnpublishCommand
             throw new ArgumentException("Usage: stash pkg unpublish <name>@<version>");
         }
 
-        var (registryUrl, _) = RegistryResolver.Resolve(args);
+        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
 
         int atIdx = spec.LastIndexOf('@');
         if (atIdx <= 0)
@@ -66,15 +71,26 @@ public static class UnpublishCommand
         string packageName = spec[..atIdx];
         string version = spec[(atIdx + 1)..];
 
-        var config = UserConfig.Load();
-        var entry = config.GetEntry(registryUrl);
-        if (entry?.Token == null)
+        // Get auth token — priority: --token flag > STASH_TOKEN env var > config file
+        string? token = cliToken ?? Environment.GetEnvironmentVariable("STASH_TOKEN");
+        RegistryClient client;
+        if (!string.IsNullOrEmpty(token))
         {
-            throw new InvalidOperationException($"Not logged in to registry '{registryUrl}'. Run 'stash pkg login'.");
+            client = new RegistryClient(registryUrl, token);
+        }
+        else
+        {
+            var config = UserConfig.Load();
+            var entry = config.GetEntry(registryUrl);
+            if (entry?.Token == null)
+            {
+                throw new InvalidOperationException(
+                    $"Not logged in to registry '{registryUrl}'. Run 'stash pkg login', set the STASH_TOKEN environment variable, or use --token.");
+            }
+            client = new RegistryClient(registryUrl, entry.Token, entry.RefreshToken,
+                entry.ExpiresAt, entry.MachineId, registryUrl);
         }
 
-        var client = new RegistryClient(registryUrl, entry.Token, entry.RefreshToken,
-            entry.ExpiresAt, entry.MachineId, registryUrl);
         client.Unpublish(packageName, version);
 
         Console.WriteLine($"Unpublished {packageName}@{version} from {registryUrl}.");

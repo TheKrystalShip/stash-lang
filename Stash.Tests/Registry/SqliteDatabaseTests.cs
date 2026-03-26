@@ -400,6 +400,17 @@ public sealed class SqliteDatabaseTests
         Assert.NotNull(await db.GetTokenByHashAsync("valid-hash"));
     }
 
+    [Fact]
+    public async Task GetUserTokens_Empty_ReturnsEmptyList()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("notokens", "h", "user");
+
+        List<TokenRecord> tokens = await db.GetUserTokensAsync("notokens");
+
+        Assert.Empty(tokens);
+    }
+
     // ── Ownership operations ────────────────────────────────────────────
 
     [Fact]

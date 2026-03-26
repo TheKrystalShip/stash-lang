@@ -133,6 +133,7 @@ public class PackagesController : ControllerBase
 | POST   | `/api/v1/auth/register`                      | None          | AuthController     |
 | GET    | `/api/v1/auth/whoami`                        | Bearer        | AuthController     |
 | POST   | `/api/v1/auth/tokens`                        | Bearer        | AuthController     |
+| GET    | `/api/v1/auth/tokens`                        | Bearer        | AuthController     |
 | DELETE | `/api/v1/auth/tokens/{id}`                   | Bearer        | AuthController     |
 | GET    | `/api/v1/packages/{name}`                    | None          | PackagesController |
 | GET    | `/api/v1/packages/{name}/{version}`          | None          | PackagesController |

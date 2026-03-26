@@ -47,6 +47,12 @@ public sealed class UserConfig
     private static readonly string _configPath = Path.Combine(_configDir, "config.json");
 
     /// <summary>
+    /// The built-in fallback registry URL used when no registry is specified via
+    /// <c>--registry</c>, <c>STASH_REGISTRY_URL</c>, or <see cref="DefaultRegistry"/>.
+    /// </summary>
+    public const string DefaultRegistryUrl = "https://registry.stash-lang.dev";
+
+    /// <summary>
     /// The URL of the registry used when no <c>--registry</c> flag is provided on
     /// the command line.
     /// </summary>
@@ -127,6 +133,45 @@ public sealed class UserConfig
             return entry;
         }
         return null;
+    }
+
+    /// <summary>
+    /// Resolves the token for the given registry URL, checking <c>STASH_TOKEN</c> env var first,
+    /// then falling back to the config file.
+    /// </summary>
+    public static string? ResolveToken(string registryUrl)
+    {
+        string? envToken = Environment.GetEnvironmentVariable("STASH_TOKEN");
+        if (!string.IsNullOrEmpty(envToken))
+            return envToken;
+
+        var config = Load();
+        return config.GetToken(registryUrl);
+    }
+
+    /// <summary>
+    /// Resolves the registry URL using the following priority:
+    /// <list type="number">
+    ///   <item><description><paramref name="providedUrl"/> (e.g. from <c>--registry</c> flag)</description></item>
+    ///   <item><description><c>STASH_REGISTRY_URL</c> environment variable</description></item>
+    ///   <item><description><see cref="DefaultRegistry"/> from <c>~/.stash/config.json</c></description></item>
+    ///   <item><description><see cref="DefaultRegistryUrl"/> built-in constant</description></item>
+    /// </list>
+    /// </summary>
+    public static string ResolveRegistryUrl(string? providedUrl)
+    {
+        if (!string.IsNullOrEmpty(providedUrl))
+            return providedUrl;
+
+        string? envUrl = Environment.GetEnvironmentVariable("STASH_REGISTRY_URL");
+        if (!string.IsNullOrEmpty(envUrl))
+            return envUrl;
+
+        var config = Load();
+        if (!string.IsNullOrEmpty(config.DefaultRegistry))
+            return config.DefaultRegistry;
+
+        return DefaultRegistryUrl;
     }
 
     /// <summary>

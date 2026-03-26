@@ -145,4 +145,122 @@ public sealed class UserConfigTests : IDisposable
 
         Assert.Null(reloaded.DefaultRegistry);
     }
+
+    // ── ResolveRegistryUrl ───────────────────────────────────────────────
+
+    [Fact]
+    public void ResolveRegistryUrl_WithProvidedUrl_ReturnsProvidedUrl()
+    {
+        string result = UserConfig.ResolveRegistryUrl("https://my-registry.example.com");
+
+        Assert.Equal("https://my-registry.example.com", result);
+    }
+
+    [Fact]
+    public void ResolveRegistryUrl_WithEnvVar_ReturnsEnvUrl()
+    {
+        string? original = Environment.GetEnvironmentVariable("STASH_REGISTRY_URL");
+        try
+        {
+            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", "https://ci.example.com");
+
+            string result = UserConfig.ResolveRegistryUrl(null);
+
+            Assert.Equal("https://ci.example.com", result);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", original);
+        }
+    }
+
+    [Fact]
+    public void ResolveRegistryUrl_WithNoInput_ReturnsDefault()
+    {
+        string? original = Environment.GetEnvironmentVariable("STASH_REGISTRY_URL");
+        try
+        {
+            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", null);
+
+            string result = UserConfig.ResolveRegistryUrl(null);
+
+            // Falls back to config DefaultRegistry (if set) or the built-in constant.
+            // In a clean environment with no DefaultRegistry configured, this must be
+            // the built-in default URL.
+            Assert.False(string.IsNullOrEmpty(result));
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("STASH_REGISTRY_URL", original);
+        }
+    }
+
+    // ── ResolveToken ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResolveToken_WithEnvVar_ReturnsEnvToken()
+    {
+        string? original = Environment.GetEnvironmentVariable("STASH_TOKEN");
+        try
+        {
+            Environment.SetEnvironmentVariable("STASH_TOKEN", "ci-token-xyz");
+
+            string? result = UserConfig.ResolveToken(UserConfig.DefaultRegistryUrl);
+
+            Assert.Equal("ci-token-xyz", result);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("STASH_TOKEN", original);
+        }
+    }
+
+    [Fact]
+    public void ResolveToken_WithoutEnvVar_FallsBackToConfig()
+    {
+        // Use a unique URL to avoid colliding with any real config entries.
+        string fakeUrl = $"https://test-registry-{Guid.NewGuid():N}.example.com";
+        const string testToken = "config-token-123";
+        string? originalEnv = Environment.GetEnvironmentVariable("STASH_TOKEN");
+        try
+        {
+            Environment.SetEnvironmentVariable("STASH_TOKEN", null);
+
+            // Write a known token for the fake URL into the real config on disk.
+            var setup = UserConfig.Load();
+            setup.Registries[fakeUrl] = new RegistryEntry { Token = testToken };
+            setup.Save();
+
+            string? result = UserConfig.ResolveToken(fakeUrl);
+
+            Assert.Equal(testToken, result);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("STASH_TOKEN", originalEnv);
+            // Remove the test entry so we don't pollute the developer's config.
+            var cleanup = UserConfig.Load();
+            cleanup.Registries.Remove(fakeUrl);
+            cleanup.Save();
+        }
+    }
+
+    [Fact]
+    public void ResolveToken_WithoutAny_ReturnsNull()
+    {
+        string? original = Environment.GetEnvironmentVariable("STASH_TOKEN");
+        try
+        {
+            Environment.SetEnvironmentVariable("STASH_TOKEN", null);
+
+            // A URL that will never appear in any real config.
+            string? result = UserConfig.ResolveToken("https://nonexistent-registry-00000000.example.com");
+
+            Assert.Null(result);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("STASH_TOKEN", original);
+        }
+    }
 }

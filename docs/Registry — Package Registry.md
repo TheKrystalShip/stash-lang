@@ -149,6 +149,7 @@ Client (stash pkg CLI)
 | POST   | `/api/v1/auth/register`                       | None          | Create account (if registration enabled) |
 | GET    | `/api/v1/auth/whoami`                         | Bearer        | Get current user info                    |
 | POST   | `/api/v1/auth/tokens`                         | Bearer        | Create scoped token                      |
+| GET    | `/api/v1/auth/tokens`                         | Bearer        | List API tokens                          |
 | DELETE | `/api/v1/auth/tokens/{id}`                    | Bearer        | Revoke token                             |
 | GET    | `/api/v1/packages/{name}`                     | None          | Get package metadata and all versions    |
 | GET    | `/api/v1/packages/{name}/{version}`           | None          | Get specific version details             |
@@ -284,11 +285,14 @@ Create a new named, scoped token. Useful for CI/CD pipelines.
 ```json
 {
   "scope": "publish",
-  "description": "CI deploy token"
+  "description": "CI deploy token",
+  "expiresIn": "30d"
 }
 ```
 
 Scope must be `"read"`, `"publish"`, or `"admin"`. Only admin users can create admin-scoped tokens.
+
+**`expiresIn` field (optional):** Custom token lifetime. Accepted formats: `"Xd"` (days), `"Xh"` (hours), `"Xm"` (minutes). Examples: `"30d"`, `"12h"`, `"90m"`. Minimum: `1h`. Maximum: `365d`. When omitted, the server's configured `auth.apiTokenExpiry` is used (default: `90d`).
 
 **Response `201 Created`:**
 
@@ -297,12 +301,41 @@ Scope must be `"read"`, `"publish"`, or `"admin"`. Only admin users can create a
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
   "tokenId": "550e8400-e29b-41d4-a716-446655440000",
   "scope": "publish",
-  "expiresAt": "2026-06-20T12:00:00Z",
+  "expiresAt": "2026-04-25T12:00:00Z",
   "description": "CI deploy token"
 }
 ```
 
 **Note:** The `token` value is only returned at creation time and cannot be retrieved again. The `tokenId` can be used to revoke the token later.
+
+---
+
+#### GET /api/v1/auth/tokens
+
+List all API tokens for the authenticated user. Returns metadata only — token values are never returned after creation.
+
+**Response `200 OK`:**
+
+```json
+{
+  "tokens": [
+    {
+      "tokenId": "550e8400-e29b-41d4-a716-446655440000",
+      "scope": "publish",
+      "description": "CI deploy token",
+      "createdAt": "2026-03-26T12:00:00Z",
+      "expiresAt": "2026-04-25T12:00:00Z"
+    },
+    {
+      "tokenId": "661f9511-f30c-52e5-b827-557766551111",
+      "scope": "read",
+      "description": "Read-only pipeline",
+      "createdAt": "2026-03-01T09:00:00Z",
+      "expiresAt": "2026-05-30T09:00:00Z"
+    }
+  ]
+}
+```
 
 ---
 

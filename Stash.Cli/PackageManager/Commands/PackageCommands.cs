@@ -93,6 +93,9 @@ public static class PackageCommands
                 case "unpublish":
                     UnpublishCommand.Execute(subArgs);
                     break;
+                case "token":
+                    TokenCommand.Execute(subArgs);
+                    break;
                 case "help":
                 case "--help":
                 case "-h":
@@ -155,6 +158,7 @@ public static class PackageCommands
         Console.WriteLine("  logout            Remove stored credentials");
         Console.WriteLine("  owner             Manage package owners");
         Console.WriteLine("  unpublish         Remove a published version");
+        Console.WriteLine("  token             Manage API tokens");
         Console.WriteLine("  help              Show this help message");
     }
 }

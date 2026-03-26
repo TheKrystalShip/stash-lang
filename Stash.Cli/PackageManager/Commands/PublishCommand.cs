@@ -37,7 +37,13 @@ public static class PublishCommand
     /// </exception>
     public static void Execute(string[] args)
     {
-        var (registryUrl, _) = RegistryResolver.Resolve(args);
+        string? cliToken = null;
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (args[i] == "--token" && i + 1 < args.Length)
+                cliToken = args[++i];
+        }
+        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
 
         // Load and validate manifest
         string manifestPath = Path.Combine(Directory.GetCurrentDirectory(), "stash.json");
@@ -68,12 +74,24 @@ public static class PublishCommand
             throw new InvalidOperationException("Cannot publish a private package.");
         }
 
-        // Get auth token
-        var config = UserConfig.Load();
-        var entry = config.GetEntry(registryUrl);
-        if (entry?.Token == null)
+        // Get auth token — priority: --token flag > STASH_TOKEN env var > config file
+        string? token = cliToken ?? Environment.GetEnvironmentVariable("STASH_TOKEN");
+        RegistryClient client;
+        if (!string.IsNullOrEmpty(token))
         {
-            throw new InvalidOperationException($"Not logged in to registry '{registryUrl}'. Run 'stash pkg login'.");
+            client = new RegistryClient(registryUrl, token);
+        }
+        else
+        {
+            var config = UserConfig.Load();
+            var entry = config.GetEntry(registryUrl);
+            if (entry?.Token == null)
+            {
+                throw new InvalidOperationException(
+                    $"Not logged in to registry '{registryUrl}'. Run 'stash pkg login', set the STASH_TOKEN environment variable, or use --token.");
+            }
+            client = new RegistryClient(registryUrl, entry.Token, entry.RefreshToken,
+                entry.ExpiresAt, entry.MachineId, registryUrl);
         }
 
         // Pack the tarball
@@ -92,8 +110,6 @@ public static class PublishCommand
             string integrity = "sha256-" + Convert.ToBase64String(hash);
 
             // Publish
-            var client = new RegistryClient(registryUrl, entry.Token, entry.RefreshToken,
-                entry.ExpiresAt, entry.MachineId, registryUrl);
             using var stream = new FileStream(tarballPath, FileMode.Open, FileAccess.Read);
             client.Publish(stream, integrity);
 

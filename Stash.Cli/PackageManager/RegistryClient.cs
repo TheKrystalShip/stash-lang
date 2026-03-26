@@ -678,6 +678,62 @@ public sealed class RegistryClient : IPackageSource
         return response.IsSuccessStatusCode;
     }
 
+    /// <summary>
+    /// Creates a new API token on the registry.
+    /// </summary>
+    public TokenCreateResult? CreateToken(string? scope = null, string? description = null, string? expiresIn = null)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(new TokenCreateRequest
+        {
+            Scope = scope,
+            Description = description,
+            ExpiresIn = expiresIn
+        }, CliJsonContext.Default.TokenCreateRequest);
+        var content = new StringContent(body, Encoding.UTF8, "application/json");
+        var response = _http.PostAsync($"{_baseUrl}/auth/tokens", content).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new InvalidOperationException($"Token creation failed ({response.StatusCode}): {error}");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenCreateResult);
+    }
+
+    /// <summary>
+    /// Lists all API tokens for the authenticated user.
+    /// </summary>
+    public TokenListResult? ListTokens()
+    {
+        EnsureTokenFresh();
+        var response = _http.GetAsync($"{_baseUrl}/auth/tokens").GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new InvalidOperationException($"Token listing failed ({response.StatusCode}): {error}");
+        }
+
+        string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+        return JsonSerializer.Deserialize(json, CliJsonContext.Default.TokenListResult);
+    }
+
+    /// <summary>
+    /// Revokes an API token by its ID.
+    /// </summary>
+    public bool RevokeToken(string tokenId)
+    {
+        EnsureTokenFresh();
+        var response = _http.DeleteAsync($"{_baseUrl}/auth/tokens/{Uri.EscapeDataString(tokenId)}").GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new InvalidOperationException($"Token revocation failed ({response.StatusCode}): {error}");
+        }
+        return true;
+    }
+
     // Encode scoped package names: @scope/name → @scope%2Fname
     /// <summary>
     /// URL-encodes a package name for use in registry API path segments.

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json.Serialization;
 
 namespace Stash.Registry.Contracts;
@@ -93,6 +94,10 @@ public sealed class TokenCreateRequest
     /// <summary>An optional human-readable description to identify the token's intended use.</summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
+
+    /// <summary>Optional custom expiry for the token, e.g. "30d", "12h". Defaults to the global <c>auth.apiTokenExpiry</c> when omitted.</summary>
+    [JsonPropertyName("expiresIn")]
+    public string? ExpiresIn { get; set; }
 }
 
 /// <summary>
@@ -119,6 +124,37 @@ public sealed class TokenCreateResponse
     /// <summary>The optional human-readable description provided when the token was created.</summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
+}
+
+/// <summary>
+/// A single token entry returned by the <c>GET /api/v1/auth/tokens</c> endpoint.
+/// Does not include the token value itself.
+/// </summary>
+public sealed class TokenListItem
+{
+    [JsonPropertyName("tokenId")]
+    public string TokenId { get; set; } = "";
+
+    [JsonPropertyName("scope")]
+    public string Scope { get; set; } = "";
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; }
+
+    [JsonPropertyName("expiresAt")]
+    public DateTime ExpiresAt { get; set; }
+}
+
+/// <summary>
+/// Response body returned by the <c>GET /api/v1/auth/tokens</c> endpoint.
+/// </summary>
+public sealed class TokenListResponse
+{
+    [JsonPropertyName("tokens")]
+    public List<TokenListItem> Tokens { get; set; } = [];
 }
 
 /// <summary>

@@ -27,6 +27,7 @@
 11. [`.stashignore`](#11-stashignore)
 12. [Version Ranges](#12-version-ranges)
 13. [Security](#13-security)
+14. [Environment Variables](#14-environment-variables)
 
 ---
 
@@ -382,11 +383,10 @@ stash pkg publish --registry https://registry.example.com/api/v1
 
 **Flags:**
 
-| Flag               | Description                 |
-| ------------------ | --------------------------- |
-| `--registry <url>` | Use a specific registry URL |
-
-**Requirements:**
+| Flag               | Description                                      |
+| ------------------ | ------------------------------------------------ |
+| `--registry <url>` | Use a specific registry URL                      |
+| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
 
 - `stash.json` must exist with `name` and `version` fields
 - `private` must not be `true`
@@ -440,9 +440,10 @@ stash pkg unpublish http-utils@1.2.3
 
 **Flags:**
 
-| Flag               | Description                 |
-| ------------------ | --------------------------- |
-| `--registry <url>` | Use a specific registry URL |
+| Flag               | Description                                      |
+| ------------------ | ------------------------------------------------ |
+| `--registry <url>` | Use a specific registry URL                      |
+| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
 
 Requires login. The specifier format is `name@version` — both parts are required.
 
@@ -487,11 +488,96 @@ stash pkg owner remove http-utils bob             # remove an owner
 
 **Flags:**
 
-| Flag               | Description                 |
-| ------------------ | --------------------------- |
-| `--registry <url>` | Use a specific registry URL |
+| Flag               | Description                                      |
+| ------------------ | ------------------------------------------------ |
+| `--registry <url>` | Use a specific registry URL                      |
+| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
 
 The `add` and `remove` subcommands require login.
+
+---
+
+### `stash pkg token`
+
+Manage API tokens on a Stash registry. Subcommands: `create`, `list` (alias `ls`), `revoke`.
+
+#### `stash pkg token create`
+
+Create a new scoped API token. The token value is printed once and never retrievable again.
+
+```bash
+stash pkg token create --scope publish --description "CI deploy token"
+stash pkg token create --scope publish --expires-in 30d --description "30-day CI token"
+stash pkg token create --scope read   --expires-in 12h
+```
+
+**Flags:**
+
+| Flag                     | Description                                                                 |
+| ------------------------ | --------------------------------------------------------------------------- |
+| `--scope <scope>`        | Token scope: `read`, `publish`, or `admin` (required)                       |
+| `--description <text>`   | Human-readable label for the token                                          |
+| `--expires-in <duration>`| Custom lifetime: `"30d"`, `"12h"`, `"90m"`. Min `1h`, max `365d`.          |
+| `--registry <url>`       | Use a specific registry URL                                                 |
+| `--token <token>`        | Auth token for the request (overrides config and `STASH_TOKEN`)             |
+
+**Output:**
+
+```
+Token created.
+  Token ID:   550e8400-e29b-41d4-a716-446655440000
+  Scope:      publish
+  Expires:    2026-04-25T12:00:00Z
+  Token:      eyJhbGciOiJIUzI1NiIs...
+
+Save this token now — it will not be shown again.
+```
+
+#### `stash pkg token list`
+
+List all tokens for the authenticated user. Alias: `stash pkg token ls`.
+
+```bash
+stash pkg token list
+stash pkg token ls
+stash pkg token list --registry https://registry.example.com/api/v1
+```
+
+**Flags:**
+
+| Flag               | Description                                      |
+| ------------------ | ------------------------------------------------ |
+| `--registry <url>` | Use a specific registry URL                      |
+| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
+
+**Output:**
+
+```
+Tokens for alice @ https://registry.example.com/api/v1:
+
+  ID                                    Scope     Expires                Description
+  550e8400-e29b-41d4-a716-446655440000  publish   2026-04-25T12:00:00Z  CI deploy token
+  661f9511-f30c-52e5-b827-557766551111  read      2026-05-30T09:00:00Z  Read-only pipeline
+```
+
+Token values are never shown in this output; only metadata is returned.
+
+#### `stash pkg token revoke <token-id>`
+
+Revoke a token immediately by its ID.
+
+```bash
+stash pkg token revoke 550e8400-e29b-41d4-a716-446655440000
+```
+
+**Flags:**
+
+| Flag               | Description                                      |
+| ------------------ | ------------------------------------------------ |
+| `--registry <url>` | Use a specific registry URL                      |
+| `--token <token>`  | Auth token (overrides config and `STASH_TOKEN`)  |
+
+Revocation is immediate — the revoked token is rejected on the next request.
 
 ---
 
@@ -906,3 +992,38 @@ The tarball extraction process includes path traversal protection:
 
 - Credentials stored in `~/.stash/config.json` with restricted permissions (see [Section 8](#8-registry-management))
 - Tokens can be revoked server-side at any time via the registry API
+
+---
+
+## 14. Environment Variables
+
+The Stash CLI reads two environment variables for authentication and registry configuration. These take precedence over stored config where noted.
+
+| Variable              | Description                                                                 |
+| --------------------- | --------------------------------------------------------------------------- |
+| `STASH_TOKEN`         | Bearer token used for authenticated commands when no `--token` flag is set  |
+| `STASH_REGISTRY_URL`  | Default registry URL, overrides `defaultRegistry` in `~/.stash/config.json` |
+
+### Priority order for auth token
+
+1. `--token <value>` CLI flag
+2. `STASH_TOKEN` environment variable
+3. Token stored in `~/.stash/config.json` for the target registry
+
+### Priority order for registry URL
+
+1. `--registry <url>` CLI flag
+2. `STASH_REGISTRY_URL` environment variable
+3. `defaultRegistry` in `~/.stash/config.json`
+
+### Usage in CI/CD
+
+Environment variables are the recommended approach for CI/CD pipelines — no config file setup required:
+
+```bash
+export STASH_TOKEN="$CI_SECRET_TOKEN"
+export STASH_REGISTRY_URL="https://registry.example.com/api/v1"
+stash pkg publish
+```
+
+See the [CI/CD Integration Guide](../Stash.Registry/docs/CI-CD-Integration-Guide.md) for full pipeline examples.

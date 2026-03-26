@@ -33,6 +33,11 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(List<SearchResultPackage>))]
 [JsonSerializable(typeof(LoginRequest))]
 [JsonSerializable(typeof(OwnerUpdateRequest))]
+[JsonSerializable(typeof(TokenCreateRequest))]
+[JsonSerializable(typeof(TokenCreateResult))]
+[JsonSerializable(typeof(TokenListResult))]
+[JsonSerializable(typeof(TokenListItemResult))]
+[JsonSerializable(typeof(List<TokenListItemResult>))]
 [JsonSerializable(typeof(TokenRefreshRequest))]
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,
@@ -87,6 +92,72 @@ internal sealed class TokenRefreshRequest
     /// <summary>The machine fingerprint hash.</summary>
     [JsonPropertyName("machineId")]
     public string MachineId { get; set; } = "";
+}
+
+/// <summary>
+/// Request body for <c>POST /auth/tokens</c> endpoint.
+/// </summary>
+internal sealed class TokenCreateRequest
+{
+    [JsonPropertyName("scope")]
+    public string? Scope { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("expiresIn")]
+    public string? ExpiresIn { get; set; }
+}
+
+/// <summary>
+/// Response from <c>POST /auth/tokens</c> endpoint.
+/// </summary>
+public sealed class TokenCreateResult
+{
+    [JsonPropertyName("token")]
+    public string Token { get; set; } = "";
+
+    [JsonPropertyName("tokenId")]
+    public string TokenId { get; set; } = "";
+
+    [JsonPropertyName("scope")]
+    public string Scope { get; set; } = "";
+
+    [JsonPropertyName("expiresAt")]
+    public DateTime ExpiresAt { get; set; }
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+}
+
+/// <summary>
+/// Response from <c>GET /auth/tokens</c> endpoint.
+/// </summary>
+public sealed class TokenListResult
+{
+    [JsonPropertyName("tokens")]
+    public List<TokenListItemResult> Tokens { get; set; } = [];
+}
+
+/// <summary>
+/// A single token entry in the token list response.
+/// </summary>
+public sealed class TokenListItemResult
+{
+    [JsonPropertyName("tokenId")]
+    public string TokenId { get; set; } = "";
+
+    [JsonPropertyName("scope")]
+    public string Scope { get; set; } = "";
+
+    [JsonPropertyName("description")]
+    public string? Description { get; set; }
+
+    [JsonPropertyName("createdAt")]
+    public DateTime CreatedAt { get; set; }
+
+    [JsonPropertyName("expiresAt")]
+    public DateTime ExpiresAt { get; set; }
 }
 
 /// <summary>

@@ -21,4 +21,8 @@
     <ProjectReference Include="..\Stash.Interpreter\Stash.Interpreter.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Stash.Tests" />
+  </ItemGroup>
+
 </Project>

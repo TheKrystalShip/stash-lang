@@ -36,11 +36,16 @@ public static class OwnerCommand
     public static void Execute(string[] args)
     {
         var positionalArgs = new List<string>();
+        string? cliToken = null;
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--registry" && i + 1 < args.Length)
             {
                 i++;
+            }
+            else if (args[i] == "--token" && i + 1 < args.Length)
+            {
+                cliToken = args[++i];
             }
             else
             {
@@ -56,10 +61,18 @@ public static class OwnerCommand
         string action = positionalArgs[0];
         string packageName = positionalArgs[1];
 
-        var (registryUrl, _) = RegistryResolver.Resolve(args);
-        var config = UserConfig.Load();
-        var entry = config.GetEntry(registryUrl);
-        var client = new RegistryClient(registryUrl, entry?.Token, entry?.RefreshToken,
+        string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
+
+        // Resolve token — priority: --token flag > STASH_TOKEN env var > config file
+        string? token = cliToken ?? Environment.GetEnvironmentVariable("STASH_TOKEN");
+        RegistryEntry? entry = null;
+        if (string.IsNullOrEmpty(token))
+        {
+            var config = UserConfig.Load();
+            entry = config.GetEntry(registryUrl);
+            token = entry?.Token;
+        }
+        var client = new RegistryClient(registryUrl, token, entry?.RefreshToken,
             entry?.ExpiresAt, entry?.MachineId, registryUrl);
 
         switch (action)
@@ -90,9 +103,10 @@ public static class OwnerCommand
                     }
 
                     string username = positionalArgs[2];
-                    if (entry?.Token == null)
+                    if (string.IsNullOrEmpty(token))
                     {
-                        throw new InvalidOperationException("Not logged in. Run 'stash pkg login'.");
+                        throw new InvalidOperationException(
+                            "Not logged in. Run 'stash pkg login', set the STASH_TOKEN environment variable, or use --token.");
                     }
 
                     bool ok = client.AddOwner(packageName, username);
@@ -115,9 +129,10 @@ public static class OwnerCommand
                     }
 
                     string username = positionalArgs[2];
-                    if (entry?.Token == null)
+                    if (string.IsNullOrEmpty(token))
                     {
-                        throw new InvalidOperationException("Not logged in. Run 'stash pkg login'.");
+                        throw new InvalidOperationException(
+                            "Not logged in. Run 'stash pkg login', set the STASH_TOKEN environment variable, or use --token.");
                     }
 
                     bool ok = client.RemoveOwner(packageName, username);

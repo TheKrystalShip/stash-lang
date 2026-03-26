@@ -244,6 +244,36 @@ public class AuthController : ControllerBase
     }
 
     /// <summary>
+    /// Lists all API tokens for the authenticated user (metadata only — no token values).
+    /// </summary>
+    /// <returns>
+    /// <c>200</c> with a <see cref="TokenListResponse"/> containing the user's tokens,
+    /// or <c>401</c> if unauthenticated.
+    /// </returns>
+    [HttpGet("tokens")]
+    [Authorize]
+    public async Task<IActionResult> ListTokens()
+    {
+        string username = User.Identity!.Name!;
+
+        List<TokenRecord> tokens = await _db.GetUserTokensAsync(username);
+
+        var response = new TokenListResponse
+        {
+            Tokens = tokens.Select(t => new TokenListItem
+            {
+                TokenId = t.Id,
+                Scope = t.Scope,
+                Description = t.Description,
+                CreatedAt = t.CreatedAt,
+                ExpiresAt = t.ExpiresAt
+            }).ToList()
+        };
+
+        return Ok(response);
+    }
+
+    /// <summary>
     /// Creates a new API token for the authenticated user.
     /// </summary>
     /// <remarks>
@@ -290,8 +320,28 @@ public class AuthController : ControllerBase
             return StatusCode(403, new ErrorResponse { Error = "Only admin users can create admin-scoped tokens." });
         }
 
+        string expirySpec = string.IsNullOrEmpty(body?.ExpiresIn) ? _config.Auth.ApiTokenExpiry : body!.ExpiresIn!;
+        DateTime expiresAt;
+        try
+        {
+            expiresAt = AuthHelper.ParseTokenExpiry(expirySpec);
+        }
+        catch (Exception) when (expirySpec != _config.Auth.ApiTokenExpiry)
+        {
+            return BadRequest(new ErrorResponse { Error = $"Invalid expiresIn format: '{body?.ExpiresIn}'. Use formats like '30d', '12h', or '90m'." });
+        }
+
+        TimeSpan duration = expiresAt - DateTime.UtcNow;
+
+        if (!string.IsNullOrEmpty(body?.ExpiresIn))
+        {
+            if (duration < TimeSpan.FromHours(1))
+                return BadRequest(new ErrorResponse { Error = "Token expiry must be at least 1 hour" });
+            if (duration > TimeSpan.FromDays(365))
+                return BadRequest(new ErrorResponse { Error = "Token expiry must not exceed 365 days" });
+        }
+
         string tokenId = Guid.NewGuid().ToString();
-        DateTime expiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.ApiTokenExpiry);
         string jwt = _jwtService.CreateToken(username, role, scope, expiresAt, tokenId);
 
         await _db.CreateTokenAsync(new TokenRecord
