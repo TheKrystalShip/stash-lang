@@ -1,0 +1,203 @@
+#!/usr/bin/env stash
+
+// Error Handling Showcase
+// try expression · ?? defaults · Error inspection · throw · rethrow · practical config loader
+
+// ─── 1. Basic try Expression ────────────────────────────────────
+
+io.println("=== 1. Basic try Expression ===");
+
+// try wraps an operation — returns the value on success, an Error object on failure
+
+let good = try conv.toInt("42");
+
+io.println($"  try conv.toInt(\"42\")    ->  {good}");
+
+// On failure, try returns an Error object (never null, never throws)
+
+let bad = try conv.toInt("not-a-number");
+
+io.println($"  try conv.toInt(\"...\")   ->  {bad}");
+
+// Access .message and .type fields on the Error object
+
+io.println($"  bad.message             ->  {bad.message}");
+
+io.println($"  bad.type                ->  {bad.type}");
+
+io.println();
+
+// ─── 2. try with ?? (Default Values) ────────────────────────────
+
+io.println("=== 2. try with ?? (Default Values) ===");
+
+// Error is falsy, so ?? kicks in when an operation fails
+
+let port = try conv.toInt("8080") ?? 3000;
+
+io.println($"  parse \"8080\" ?? 3000    ->  {port}");
+
+let fallback_port = try conv.toInt("bad") ?? 3000;
+
+io.println($"  parse \"bad\"  ?? 3000    ->  {fallback_port}");
+
+// Same pattern for file reads — fall back to empty string on missing file
+
+let contents = try fs.readFile("/tmp/stash-demo.conf") ?? "";
+
+io.println($"  readFile ?? \"\"          ->  \"{contents}\"");
+
+// ??= assigns a default only when the current value is null or an error value
+
+let cfg_host = try fs.readFile("/tmp/no-such-host") ?? null;
+
+cfg_host ??= "localhost";
+
+io.println($"  ??= fallback host       ->  {cfg_host}");
+
+io.println();
+
+// ─── 3. Error Inspection ────────────────────────────────────────
+
+io.println("=== 3. Error Inspection ===");
+
+let err = try conv.toInt("oops");
+
+// typeof returns "Error" for Error objects
+
+io.println($"  typeof(err)             ->  {typeof(err)}");
+
+// `is Error` type guard — checks Error values specifically
+
+io.println($"  err is Error            ->  {err is Error}");
+
+io.println($"  42  is Error            ->  {42 is Error}");
+
+// Full field access
+
+io.println($"  err.message             ->  {err.message}");
+
+io.println($"  err.type                ->  {err.type}");
+
+// lastError() retrieves the most recent Error regardless of try
+
+try conv.toFloat("xyz");
+
+let last = lastError();
+
+io.println($"  lastError().type        ->  {last.type}");
+
+io.println();
+
+// ─── 4. The throw Statement ─────────────────────────────────────
+
+io.println("=== 4. The throw Statement ===");
+
+// throw a simple string — becomes a RuntimeError; wrap in a fn so try can catch it
+
+fn throwSimple() {
+    throw "something went wrong";
+}
+
+let simple = try throwSimple();
+
+io.println($"  throw string -> type    ->  {simple.type}");
+
+io.println($"  throw string -> message ->  {simple.message}");
+
+// throw a dict to attach a custom type and message
+
+fn throwTyped() {
+    throw { type: "ValidationError", message: "age must be >= 0" };
+}
+
+let typed = try throwTyped();
+
+io.println($"  throw dict   -> type    ->  {typed.type}");
+
+io.println($"  throw dict   -> message ->  {typed.message}");
+
+io.println();
+
+// ─── 5. Rethrow Pattern ──────────────────────────────────────────
+
+io.println("=== 5. Rethrow Pattern ===");
+
+fn parsePositive(s) {
+    let n = try conv.toInt(s);
+    // Inspect: if it's a parse error, rethrow with context
+    if (n is Error) {
+        throw { type: n.type, message: $"parsePositive: {n.message}" };
+    }
+    // Validate domain constraint and throw a typed error if violated
+    if (n < 0) {
+        throw { type: "RangeError", message: $"expected positive, got {n}" };
+    }
+    return n;
+}
+
+let ok = try parsePositive("7");
+
+io.println($"  parsePositive(\"7\")      ->  {ok}");
+
+let parse_err = try parsePositive("abc");
+
+io.println($"  parsePositive(\"abc\")    ->  [{parse_err.type}] {parse_err.message}");
+
+let range_err = try parsePositive("-3");
+
+io.println($"  parsePositive(\"-3\")     ->  [{range_err.type}] {range_err.message}");
+
+io.println();
+
+// ─── 6. Practical Example — Config Loader ───────────────────────
+
+io.println("=== 6. Practical Example — Config Loader ===");
+
+fn loadConfig(path) {
+    // Read the file; fall back to a minimal default config on failure
+    let raw = try fs.readFile(path) ?? "host=localhost\nport=8080\ntimeout=30";
+    let cfg = dict.new();
+    for (let line in str.split(raw, "\n")) {
+        let trimmed = str.trim(line);
+        if (trimmed == "") {
+            continue;
+        }
+        let parts = str.split(trimmed, "=");
+        if ("=" in trimmed) {
+            cfg[str.trim(parts[0])] = str.trim(parts[1]);
+        }
+    }
+    // Validate and coerce numeric fields — throw on invalid values
+    let port = try conv.toInt(cfg["port"] ?? "8080");
+    if (port is Error) {
+        throw { type: "ConfigError", message: $"invalid port: {cfg["port"]}" };
+    }
+    if (port < 1 || port > 65535) {
+        throw { type: "ConfigError", message: $"port out of range: {port}" };
+    }
+    let timeout = try conv.toInt(cfg["timeout"] ?? "30");
+    if (timeout is Error) {
+        throw { type: "ConfigError", message: $"invalid timeout: {cfg["timeout"]}" };
+    }
+    if (timeout < 1) {
+        throw { type: "ConfigError", message: $"timeout must be positive: {timeout}" };
+    }
+    cfg["port"] = port;
+    cfg["timeout"] = timeout;
+    return cfg;
+}
+
+// Load from a missing file — falls back to defaults silently
+
+let config = try loadConfig("/tmp/app.conf");
+
+if (config is Error) {
+    io.println($"  loadConfig failed: {config.message}");
+} else {
+    io.println($"  host     ->  {config["host"]}");
+    io.println($"  port     ->  {config["port"]}");
+    io.println($"  timeout  ->  {config["timeout"]}s");
+}
+
+io.println();

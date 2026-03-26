@@ -19,8 +19,8 @@ public class ExecutionContext
     /// <summary>The current lexical scope. Changes as the interpreter enters and exits blocks.</summary>
     public Environment Environment { get; set; }
 
-    /// <summary>The message from the last caught RuntimeError in a try expression.</summary>
-    public string? LastError { get; set; }
+    /// <summary>The last caught error. Used by lastError() built-in and try expressions.</summary>
+    public object? LastError { get; set; }
 
     /// <summary>Pending standard input to pipe into the next command execution.</summary>
     public string? PendingStdin { get; set; }

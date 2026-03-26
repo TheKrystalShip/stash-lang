@@ -15,6 +15,9 @@ public class IsExpr : Expr
     /// </summary>
     public Expr Left { get; }
 
+    /// <summary>Gets the <c>is</c> keyword token.</summary>
+    public Token Keyword { get; }
+
     /// <summary>
     /// Gets the type name token (e.g. <c>int</c>, <c>string</c>, <c>array</c>).
     /// </summary>
@@ -24,11 +27,13 @@ public class IsExpr : Expr
     /// Creates a new type-checking expression node.
     /// </summary>
     /// <param name="left">The expression to check.</param>
+    /// <param name="keyword">The <c>is</c> keyword token.</param>
     /// <param name="typeName">The type name token.</param>
     /// <param name="span">The source span covering the entire expression.</param>
-    public IsExpr(Expr left, Token typeName, SourceSpan span) : base(span)
+    public IsExpr(Expr left, Token keyword, Token typeName, SourceSpan span) : base(span)
     {
         Left = left;
+        Keyword = keyword;
         TypeName = typeName;
     }
 

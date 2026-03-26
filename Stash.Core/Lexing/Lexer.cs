@@ -96,6 +96,7 @@ public class Lexer
             ["false"] = TokenType.False,
             ["null"] = TokenType.Null,
             ["try"] = TokenType.Try,
+            ["throw"] = TokenType.Throw,
             ["import"] = TokenType.Import,
             ["from"] = TokenType.From,
             ["as"] = TokenType.As,

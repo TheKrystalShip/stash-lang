@@ -270,6 +270,31 @@ public partial class Interpreter
     }
 
     /// <inheritdoc />
+    public object? VisitThrowStmt(ThrowStmt stmt)
+    {
+        object? value = stmt.Value.Accept(this);
+
+        if (value is string message)
+        {
+            throw new RuntimeError(message, stmt.Span);
+        }
+
+        if (value is StashDictionary dict)
+        {
+            string msg = dict.Get("message") as string ?? "Unknown error";
+            string type = dict.Get("type") as string ?? "Error";
+            throw new RuntimeError(msg, stmt.Span, type);
+        }
+
+        if (value is StashError error)
+        {
+            throw new RuntimeError(error.Message, stmt.Span, error.Type);
+        }
+
+        throw new RuntimeError(RuntimeValues.Stringify(value), stmt.Span);
+    }
+
+    /// <inheritdoc />
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
         var function = new StashFunction(stmt, _environment);

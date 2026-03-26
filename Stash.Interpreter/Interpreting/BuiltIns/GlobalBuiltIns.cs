@@ -23,6 +23,7 @@ public static class GlobalBuiltIns
                 string => "string",
                 bool => "bool",
                 List<object?> => "array",
+                StashError => "Error",
                 StashInstance => "struct",
                 StashStruct => "struct",
                 StashEnumValue => "enum",

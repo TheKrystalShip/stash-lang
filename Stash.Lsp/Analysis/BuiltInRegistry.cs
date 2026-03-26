@@ -130,11 +130,11 @@ public static class BuiltInRegistry
     {
         // Introspection and utilities
         new BuiltInFunction("typeof", new[] { new BuiltInParam("value") }, "string",
-            Documentation: "Returns the type name of a value as a string.\n@param value The value to inspect\n@return The type name: \"int\", \"float\", \"string\", \"bool\", \"null\", \"array\", \"dict\", \"struct\", \"function\", \"namespace\", \"range\", or \"enum\""),
+            Documentation: "Returns the type name of a value as a string.\n@param value The value to inspect\n@return The type name: \"int\", \"float\", \"string\", \"bool\", \"null\", \"array\", \"dict\", \"struct\", \"enum\", \"function\", \"namespace\", \"range\", or \"Error\""),
         new BuiltInFunction("len", new[] { new BuiltInParam("value") }, "int",
             Documentation: "Returns the length of a string, array, or dictionary.\n@param value A string, array, or dictionary\n@return The number of characters, elements, or entries"),
-        new BuiltInFunction("lastError", Array.Empty<BuiltInParam>(), "string",
-            Documentation: "Returns the last runtime error message, or null if no error has occurred.\n@return The error message string, or null"),
+        new BuiltInFunction("lastError", Array.Empty<BuiltInParam>(), "Error",
+            Documentation: "Returns the last error value as an Error object, or null if no error has occurred.\n@return An Error object with .message, .type, and .stack fields, or null"),
         // Utility functions
         new BuiltInFunction("range", new[] { new BuiltInParam("start_or_end", "int"), new BuiltInParam("end", "int"), new BuiltInParam("step", "int") }, "array",
             Documentation: "Creates an array of integers in sequence. With one argument, generates 0 to end (exclusive). With two, generates start to end (exclusive). With three, uses the given step.\n@param start_or_end The end value (if one arg) or start value (if two/three args)\n@param end The end value (exclusive)\n@param step The increment between values\n@return An array of integers"),
@@ -960,8 +960,32 @@ public static class BuiltInRegistry
     public static readonly HashSet<string> ValidTypes = new()
     {
         "string", "int", "float", "bool", "null", "array", "dict", "function",
-        "namespace", "range", "Status", "TaskHandle", "CommandResult", "Process",
+        "namespace", "range", "Error", "Status", "TaskHandle", "CommandResult", "Process",
         "HttpResponse"
+    };
+
+    /// <summary>Describes a built-in type for hover and completion.</summary>
+    public record TypeDescription(string Signature, string Description);
+
+    /// <summary>
+    /// Descriptions for the built-in type names accepted by the <c>is</c> operator.
+    /// Used by hover and completion handlers.
+    /// </summary>
+    public static readonly Dictionary<string, TypeDescription> TypeDescriptions = new()
+    {
+        ["int"] = new("int", "Integer type. Whole numbers like `42`, `-7`, `0`."),
+        ["float"] = new("float", "Floating-point type. Decimal numbers like `3.14`, `-0.5`."),
+        ["string"] = new("string", "String type. Immutable text like `\"hello\"`."),
+        ["bool"] = new("bool", "Boolean type. Either `true` or `false`."),
+        ["null"] = new("null", "The null type. Represents the absence of a value."),
+        ["array"] = new("array", "Array type. Ordered, mixed-type, dynamic-size collections like `[1, 2, 3]`."),
+        ["dict"] = new("dict", "Dictionary type. Key-value maps like `{ key: \"value\" }`."),
+        ["struct"] = new("struct", "Struct type. Named structured data with fields."),
+        ["enum"] = new("enum", "Enum type. Named constants like `Status.Active`."),
+        ["function"] = new("function", "Function type. Functions and lambdas."),
+        ["range"] = new("range", "Range type. Lazy integer sequences like `1..10`."),
+        ["namespace"] = new("namespace", "Namespace type. Built-in module namespaces like `io`, `fs`."),
+        ["Error"] = new("Error", "Error type. Returned by `try` on failure. Has `.message`, `.type`, and `.stack` fields."),
     };
 
     // ── Known names for semantic validation (don't warn as undefined) ──

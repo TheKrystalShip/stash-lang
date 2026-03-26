@@ -22,6 +22,11 @@ public static class RuntimeValues
             return false;
         }
 
+        if (value is StashError)
+        {
+            return false;
+        }
+
         if (value is bool b)
         {
             return b;
@@ -63,6 +68,11 @@ public static class RuntimeValues
         if (value is double d)
         {
             return d.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        }
+
+        if (value is StashError error)
+        {
+            return error.ToString();
         }
 
         if (value is StashInstance instance)
@@ -243,6 +253,7 @@ public static class RuntimeValues
             StashEnum => value,
             StashStruct => value,
             StashRange => value,
+            StashError => value,
             StashNamespace => value,        // Frozen after init
             BuiltInFunction => value,       // Stateless delegate wrapper
 

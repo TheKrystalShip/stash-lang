@@ -29,6 +29,12 @@ public class RuntimeError : Exception
     public SourceSpan? Span { get; }
 
     /// <summary>
+    /// The error type name supplied by user code via <c>throw { type: "...", message: "..." }</c>,
+    /// or <c>null</c> for built-in runtime errors (which default to <c>"RuntimeError"</c>).
+    /// </summary>
+    public string? ErrorType { get; }
+
+    /// <summary>
     /// Initializes a new <see cref="RuntimeError"/> with a human-readable message and an
     /// optional source location.
     /// </summary>
@@ -37,8 +43,10 @@ public class RuntimeError : Exception
     /// The <see cref="SourceSpan"/> of the operator or expression that triggered the error.
     /// When provided, the REPL uses this to display <c>[runtime error at line:column]</c>.
     /// </param>
-    public RuntimeError(string message, SourceSpan? span = null) : base(message)
+    /// <param name="errorType">Optional user-defined error type name (e.g., <c>"DeployError"</c>).</param>
+    public RuntimeError(string message, SourceSpan? span = null, string? errorType = null) : base(message)
     {
         Span = span;
+        ErrorType = errorType;
     }
 }

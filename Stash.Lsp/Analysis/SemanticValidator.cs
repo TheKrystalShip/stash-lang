@@ -377,7 +377,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns><see langword="true"/> if no statement after this one can be reached.</returns>
     private static bool IsTerminatingStatement(Stmt stmt)
     {
-        if (stmt is ReturnStmt || stmt is BreakStmt || stmt is ContinueStmt)
+        if (stmt is ReturnStmt || stmt is BreakStmt || stmt is ContinueStmt || stmt is ThrowStmt)
         {
             return true;
         }
@@ -572,6 +572,13 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <summary>No-op — import-as statements are validated separately by <see cref="ImportResolver"/>.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitImportAsStmt(ImportAsStmt stmt) => null;
+
+    /// <inheritdoc />
+    public object? VisitThrowStmt(ThrowStmt stmt)
+    {
+        stmt.Value.Accept(this);
+        return null;
+    }
 
     // Expression visitors
 

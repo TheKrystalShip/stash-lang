@@ -179,6 +179,20 @@ public class HoverHandler : HoverHandlerBase
                 });
             }
 
+            // Built-in type names (used in `is` expressions and type annotations)
+            if (!afterDot && BuiltInRegistry.TypeDescriptions.TryGetValue(word, out var typeDesc))
+            {
+                var markdown = $"```stash\n{typeDesc.Signature}\n```\n*built-in type*\n\n---\n\n{typeDesc.Description}";
+                return Task.FromResult<Hover?>(new Hover
+                {
+                    Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                    {
+                        Kind = MarkupKind.Markdown,
+                        Value = markdown
+                    })
+                });
+            }
+
             _logger.LogTrace("Hover: no info at {Uri}:{Line}:{Col}", request.TextDocument.Uri, request.Position.Line, request.Position.Character);
             return Task.FromResult<Hover?>(null);
         }

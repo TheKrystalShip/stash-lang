@@ -256,6 +256,13 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitThrowStmt(ThrowStmt stmt)
+    {
+        Resolve(stmt.Value);
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitBreakStmt(BreakStmt stmt) => null;
     /// <inheritdoc />
     public object? VisitContinueStmt(ContinueStmt stmt) => null;

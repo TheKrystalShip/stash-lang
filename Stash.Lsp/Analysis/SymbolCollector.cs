@@ -545,6 +545,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>No-op — <c>throw</c> introduces no symbols; the value is walked for nested declarations.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitThrowStmt(ThrowStmt stmt)
+    {
+        stmt.Value.Accept(this);
+        return null;
+    }
+
     /// <summary>No-op — <c>break</c> introduces no symbols.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitBreakStmt(BreakStmt stmt) => null;

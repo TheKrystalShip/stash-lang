@@ -526,6 +526,15 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitThrowStmt(ThrowStmt stmt)
+    {
+        EmitToken(); // throw
+        Space();
+        stmt.Value.Accept(this);
+        EmitToken(); // ;
+        return 0;
+    }
+
     public int VisitBreakStmt(BreakStmt stmt)
     {
         EmitToken(); // break

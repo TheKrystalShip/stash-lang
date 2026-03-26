@@ -50,11 +50,11 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 
 ### Global Functions
 
-| Function      | Description                          |
-| ------------- | ------------------------------------ |
-| `typeof(val)` | Return the type of a value as string |
-| `len(val)`    | Length of a string or array          |
-| `lastError()` | Last error message (string) or null  |
+| Function      | Description                                                                 |
+| ------------- | --------------------------------------------------------------------------- |
+| `typeof(val)` | Return the type of a value as string (returns `"Error"` for error values)   |
+| `len(val)`    | Length of a string or array                                                 |
+| `lastError()` | Last error value (Error object with `.message`, `.type`, `.stack`) or null  |
 
 ---
 

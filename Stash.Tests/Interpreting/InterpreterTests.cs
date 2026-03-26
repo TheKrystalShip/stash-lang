@@ -2214,10 +2214,12 @@ public class InterpreterTests
     // ===== Phase 5: Try Expression =====
 
     [Fact]
-    public void TryExpr_CatchesRuntimeError_ReturnsNull()
+    public void TryExpr_CatchesRuntimeError_ReturnsError()
     {
-        // toInt("abc") throws RuntimeError, try catches it
-        Assert.Null(Run("let result = try conv.toInt(\"abc\");"));
+        // toInt("abc") throws RuntimeError, try catches it and returns StashError
+        object? result = Run("let result = try conv.toInt(\"abc\");");
+        Assert.IsType<StashError>(result);
+        Assert.Contains("Cannot parse", ((StashError)result!).Message);
     }
 
     [Fact]
@@ -2227,21 +2229,24 @@ public class InterpreterTests
     }
 
     [Fact]
-    public void TryExpr_DivisionByZero_ReturnsNull()
+    public void TryExpr_DivisionByZero_ReturnsError()
     {
-        Assert.Null(Run("let result = try (1 / 0);"));
+        object? result = Run("let result = try (1 / 0);");
+        Assert.IsType<StashError>(result);
     }
 
     [Fact]
-    public void TryExpr_UndefinedVariable_ReturnsNull()
+    public void TryExpr_UndefinedVariable_ReturnsError()
     {
-        Assert.Null(Run("let result = try undefinedVar;"));
+        object? result = Run("let result = try undefinedVar;");
+        Assert.IsType<StashError>(result);
     }
 
     [Fact]
-    public void TryExpr_InvalidFieldAccess_ReturnsNull()
+    public void TryExpr_InvalidFieldAccess_ReturnsError()
     {
-        Assert.Null(Run("struct S { x } let s = S { x: 1 }; let result = try s.nonexistent;"));
+        object? result = Run("struct S { x } let s = S { x: 1 }; let result = try s.nonexistent;");
+        Assert.IsType<StashError>(result);
     }
 
     // ===== Phase 5: Null Coalescing (??) =====
@@ -2320,8 +2325,8 @@ public class InterpreterTests
             let result = lastError();
         ";
         var resultVal = Run(source);
-        Assert.IsType<string>(resultVal);
-        Assert.Contains("Cannot parse", (string)resultVal!);
+        Assert.IsType<StashError>(resultVal);
+        Assert.Contains("Cannot parse", ((StashError)resultVal!).Message);
     }
 
     [Fact]
@@ -2335,7 +2340,7 @@ public class InterpreterTests
         // After successful try, lastError should still be from the failed one
         // (only set on error, not cleared on success)
         var resultVal = Run(source);
-        Assert.IsType<string>(resultVal);
+        Assert.IsType<StashError>(resultVal);
     }
 
     [Fact]
@@ -2346,8 +2351,223 @@ public class InterpreterTests
             let result = lastError();
         ";
         var resultVal = Run(source);
+        Assert.IsType<StashError>(resultVal);
+        Assert.Contains("zero", ((StashError)resultVal!).Message.ToLower());
+    }
+
+    // ===== Error Handling: StashError & Throw =====
+
+    [Fact]
+    public void TryExpr_ReturnsStashError_WithMessage()
+    {
+        var source = @"
+            let err = try conv.toInt(""abc"");
+            let result = err.message;
+        ";
+        var resultVal = Run(source);
         Assert.IsType<string>(resultVal);
-        Assert.Contains("zero", ((string)resultVal!).ToLower());
+        Assert.Contains("Cannot parse", (string)resultVal!);
+    }
+
+    [Fact]
+    public void TryExpr_ReturnsStashError_WithType()
+    {
+        var source = @"
+            let err = try conv.toInt(""abc"");
+            let result = err.type;
+        ";
+        var resultVal = Run(source);
+        Assert.Equal("RuntimeError", resultVal);
+    }
+
+    [Fact]
+    public void TryExpr_ErrorIsFalsy()
+    {
+        var source = @"
+            let err = try conv.toInt(""abc"");
+            let result = !err;
+        ";
+        Assert.Equal(true, Run(source));
+    }
+
+    [Fact]
+    public void TryExpr_ErrorWithNullCoalescing_ReturnsDefault()
+    {
+        var source = @"
+            let result = try conv.toInt(""abc"") ?? 42;
+        ";
+        Assert.Equal(42L, Run(source));
+    }
+
+    [Fact]
+    public void TryExpr_SuccessWithNullCoalescing_ReturnsValue()
+    {
+        var source = @"
+            let result = try conv.toInt(""42"") ?? 0;
+        ";
+        Assert.Equal(42L, Run(source));
+    }
+
+    [Fact]
+    public void TryExpr_ErrorIsError_ViaIsOperator()
+    {
+        var source = @"
+            let err = try conv.toInt(""abc"");
+            let result = err is Error;
+        ";
+        Assert.Equal(true, Run(source));
+    }
+
+    [Fact]
+    public void TryExpr_SuccessIsNotError_ViaIsOperator()
+    {
+        var source = @"
+            let val = try conv.toInt(""42"");
+            let result = val is Error;
+        ";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void Typeof_Error_ReturnsError()
+    {
+        var source = @"
+            let err = try conv.toInt(""abc"");
+            let result = typeof(err);
+        ";
+        Assert.Equal("Error", Run(source));
+    }
+
+    [Fact]
+    public void Throw_String_CrashesScript()
+    {
+        RunExpectingError("throw \"something went wrong\";");
+    }
+
+    [Fact]
+    public void Throw_String_CaughtByTry()
+    {
+        var source = @"
+            fn failing() {
+                throw ""custom error"";
+            }
+            let err = try failing();
+            let result = err.message;
+        ";
+        Assert.Equal("custom error", Run(source));
+    }
+
+    [Fact]
+    public void Throw_Dict_CaughtByTry()
+    {
+        var source = @"
+            fn failing() {
+                throw { type: ""DeployError"", message: ""rollback needed"" };
+            }
+            let err = try failing();
+            let result = err.message;
+        ";
+        Assert.Equal("rollback needed", Run(source));
+    }
+
+    [Fact]
+    public void Throw_Dict_PreservesType()
+    {
+        var source = @"
+            fn failing() {
+                throw { type: ""DeployError"", message: ""rollback needed"" };
+            }
+            let err = try failing();
+            let result = err.type;
+        ";
+        Assert.Equal("DeployError", Run(source));
+    }
+
+    [Fact]
+    public void Throw_CanBeReThrown()
+    {
+        var source = @"
+            fn inner() {
+                throw ""inner error"";
+            }
+            fn outer() {
+                let err = try inner();
+                throw err;
+            }
+            let err = try outer();
+            let result = err.message;
+        ";
+        Assert.Equal("inner error", Run(source));
+    }
+
+    [Fact]
+    public void TryExpr_NullCoalescing_ChainsCorrectly()
+    {
+        var source = @"
+            let result = try conv.toInt(""abc"") ?? try conv.toInt(""def"") ?? 99;
+        ";
+        Assert.Equal(99L, Run(source));
+    }
+
+    [Fact]
+    public void TryExpr_ErrorInConditional_IsFalsy()
+    {
+        var source = @"
+            let err = try conv.toInt(""abc"");
+            let result = err ? ""truthy"" : ""falsy"";
+        ";
+        Assert.Equal("falsy", Run(source));
+    }
+
+    [Fact]
+    public void LastError_ReturnsStashError_NotString()
+    {
+        var source = @"
+            let x = try (1 / 0);
+            let err = lastError();
+            let result = err is Error;
+        ";
+        Assert.Equal(true, Run(source));
+    }
+
+    [Fact]
+    public void Throw_Integer_CrashesScript()
+    {
+        RunExpectingError("throw 42;");
+    }
+
+    [Fact]
+    public void Throw_Null_CrashesScript()
+    {
+        RunExpectingError("throw null;");
+    }
+
+    [Fact]
+    public void NullCoalescingAssign_OverwritesStashError()
+    {
+        var source = @"
+            let x = try conv.toInt(""abc"");
+            x ??= 99;
+            let result = x;
+        ";
+        Assert.Equal(99L, Run(source));
+    }
+
+    [Fact]
+    public void Throw_Dict_TypePreservedThroughRethrow()
+    {
+        var source = @"
+            fn inner() {
+                throw { type: ""DeployError"", message: ""server down"" };
+            }
+            fn outer() {
+                let err = try inner();
+                throw err;
+            }
+            let err = try outer();
+            let result = err.type;
+        ";
+        Assert.Equal("DeployError", Run(source));
     }
 
     // ===== Phase 5: Imports =====

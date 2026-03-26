@@ -109,6 +109,14 @@ public class CompletionHandler : CompletionHandlerBase
             }
         }
 
+        // Type name completions after `is` keyword
+        if (currentLine != null && IsAfterIsKeyword(currentLine, col))
+        {
+            var typeItems = BuildTypeCompletionList();
+            _logger.LogDebug("Completion: {Count} type items for {Uri}", typeItems.Items?.Count() ?? 0, request.TextDocument.Uri);
+            return Task.FromResult(typeItems);
+        }
+
         // Default: full completion list
         var fullList = BuildFullCompletionList(uri, line + 1, col + 1);
         _logger.LogDebug("Completion: {Count} items for {Uri}", fullList.Items?.Count() ?? 0, request.TextDocument.Uri);
@@ -247,6 +255,54 @@ public class CompletionHandler : CompletionHandlerBase
 
         // If we're in a string but inside an interpolation expression, treat as code
         return inString && braceDepth == 0;
+    }
+
+    /// <summary>
+    /// Detects whether the cursor is immediately after the <c>is</c> keyword, indicating
+    /// that type name completions should be offered instead of the full symbol list.
+    /// </summary>
+    /// <param name="line">The source line text.</param>
+    /// <param name="col">The 0-based cursor column.</param>
+    /// <returns><see langword="true"/> if the text before the cursor ends with <c>is </c> or the cursor is typing a word preceded by <c>is </c>.</returns>
+    private static bool IsAfterIsKeyword(string line, int col)
+    {
+        // Walk backwards from cursor to find the start of the current partial word
+        int pos = col;
+        while (pos > 0 && (char.IsLetterOrDigit(line[pos - 1]) || line[pos - 1] == '_'))
+            pos--;
+
+        // Skip whitespace before the partial word
+        while (pos > 0 && char.IsWhiteSpace(line[pos - 1]))
+            pos--;
+
+        // Check if the two characters before are "is" preceded by a non-identifier char (or start of line)
+        if (pos >= 2 && line[pos - 1] == 's' && line[pos - 2] == 'i')
+        {
+            // Ensure "is" is a whole word (not part of "this", "exists", etc.)
+            return pos - 2 == 0 || !char.IsLetterOrDigit(line[pos - 3]) && line[pos - 3] != '_';
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Builds a completion list containing all valid type names for <c>is</c> expressions.
+    /// </summary>
+    /// <returns>A <see cref="CompletionList"/> with type name completion items.</returns>
+    private static CompletionList BuildTypeCompletionList()
+    {
+        var items = new List<CompletionItem>();
+        foreach (var (name, desc) in BuiltInRegistry.TypeDescriptions)
+        {
+            items.Add(new CompletionItem
+            {
+                Label = name,
+                Kind = LspCompletionItemKind.TypeParameter,
+                Detail = desc.Signature,
+                Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = desc.Description }
+            });
+        }
+        return new CompletionList(items);
     }
 
     /// <summary>

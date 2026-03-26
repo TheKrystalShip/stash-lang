@@ -262,10 +262,11 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)       |
 | `dict`   | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)         |
 | `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d) |
+| `Error`  | `try failingFn()`              | Error value (see Section 7b)           |
 
 ### Type Coercion & Truthiness
 
-**Truthiness:** The following values are **falsy**: `false`, `null`, `0` (integer zero), `0.0` (float zero), `""` (empty string). All other values are **truthy** (including empty arrays and struct instances).
+**Truthiness:** The following values are **falsy**: `false`, `null`, `0` (integer zero), `0.0` (float zero), `""` (empty string), and **error values** (see [Section 7b](#7b-error-handling)). All other values are **truthy** (including empty arrays and struct instances).
 
 **String concatenation (`+`):** When one operand of `+` is a string, the other operand is automatically converted to its string representation. `"count: " + 5` produces `"count: 5"`.
 
@@ -432,7 +433,7 @@ count /= 4;        // count = count / 4  → 6
 count %= 4;        // count = count % 4  → 2
 ```
 
-The `??=` (null-coalescing assignment) assigns only if the variable is currently `null`:
+**The `??=` (null-coalescing assignment)** assigns only if the variable is currently `null` or an error value:
 
 ```stash
 let name = null;
@@ -715,6 +716,7 @@ expression is typeName
 | `function`  | Functions and lambdas                          |
 | `range`     | Range values (`1..10`)                         |
 | `namespace` | Namespace values (e.g. `io`, `fs`)             |
+| `Error`     | Error values returned by `try`                 |
 
 Using an unrecognised type name is a runtime error.
 
@@ -1494,20 +1496,20 @@ Standard `break` and `continue` within loops.
 
 ### Null-Coalescing Operator (`??`)
 
-The `??` operator returns the left operand if it is not `null`, otherwise returns the right operand:
+The `??` operator returns the left operand if it is neither `null` nor an error value, otherwise returns the right operand:
 
 ```stash
 let name = inputName ?? "default";
 let config = try fs.readFile("/etc/app.conf") ?? "fallback config";
 ```
 
-This is the same semantics as C#'s `??` operator. The right operand is only evaluated if the left operand is `null` (short-circuit evaluation).
+The right operand is only evaluated if the left operand is `null` **or an error value** (short-circuit evaluation). This makes `??` the natural companion to `try` — a failed `try` returns an error (which is falsy), so `??` provides the default.
 
 ---
 
 ## 7b. Error Handling
 
-Stash uses a **`try` expression** model — lightweight, no exception machinery, no Go-style verbosity.
+Stash uses a **`try` expression** model with first-class **error values** — lightweight, no exception machinery, no Go-style verbosity.
 
 ### Philosophy
 
@@ -1515,31 +1517,108 @@ By default, runtime errors **crash the script** with a stack trace. This is the 
 
 ### The `try` Expression
 
-`try` is a **prefix expression** that wraps any expression. If the wrapped expression produces a runtime error, `try` catches it and returns `null` instead of crashing.
+`try` is a **prefix expression** that wraps any expression. On success, `try` returns the value normally. On failure, `try` catches the error and returns an **Error value** instead of crashing.
 
 ```stash
-// Without try — script crashes if file doesn't exist
-let content = fs.readFile("/etc/missing.conf");
+// Without try — script crashes if the conversion fails
+let n = conv.toInt("not-a-number");
 
-// With try — error becomes null
-let content = try fs.readFile("/etc/missing.conf");
+// With try — returns an Error value on failure
+let n = try conv.toInt("not-a-number");
+io.println(n);           // "RuntimeError: Cannot parse 'not-a-number' as integer."
+io.println(n.message);   // "Cannot parse 'not-a-number' as integer."
+io.println(n.type);      // "RuntimeError"
 
-// With try + ?? — error becomes a default value
-let content = try fs.readFile("/etc/missing.conf") ?? "default config";
+// On success — returns the value directly
+let n = try conv.toInt("42");
+io.println(n);           // 42
 ```
 
-### Error Details
+### Error Values
 
-When you need to know _what_ went wrong, the `lastError()` built-in returns the **most recent** error message as a string (or `null` if no error occurred):
+Error values are first-class values with their own type. They carry three fields:
+
+| Field      | Type       | Description                        |
+| ---------- | ---------- | ---------------------------------- |
+| `.message` | `string`   | Human-readable error description   |
+| `.type`    | `string`   | Error category (e.g. `"RuntimeError"`, `"TypeError"`) |
+| `.stack`   | `array?`   | Call stack at the point of failure  |
+
+Error values are **falsy** — they evaluate to `false` in boolean contexts. This makes them compose naturally with `??`:
 
 ```stash
+// try + ?? — elegant defaults for fallible operations
+let port = try conv.toInt(input) ?? 3000;
+let config = try fs.readFile("/etc/app.conf") ?? "fallback";
+
+// Type checking
+typeof(err) == "Error"    // true
+err is Error              // true
+
+// lastError() returns the most recent Error value
 let data = try conv.toInt("abc");
-if (data == null) {
-    io.println(lastError());  // "Cannot parse 'abc' as integer"
-}
+let last = lastError();
+io.println(last.message);    // "Cannot parse 'abc' as integer."
 ```
 
-**Note:** `lastError()` returns only the single most recent error. If multiple `try` expressions execute in sequence, only the last error is retained. This is a known limitation — sufficient for v1 scripting use cases.
+**Note:** `lastError()` returns only the single most recent error. If multiple `try` expressions execute in sequence, only the last error is retained.
+
+### The `throw` Statement
+
+`throw` raises a runtime error from user code. The throw value determines the error's type and message:
+
+```stash
+// Throw a string — becomes a RuntimeError
+throw "something went wrong";
+
+// Throw a dict — use `type` for the error category, `message` for details
+// `type` defaults to "Error" if omitted; `message` defaults to "Unknown error"
+throw { type: "ValidationError", message: "age must be >= 0" };
+
+// Any other value is stringified and thrown as a RuntimeError
+throw 42;    // RuntimeError with message "42"
+```
+
+Thrown errors are caught by `try` just like built-in errors:
+
+```stash
+fn validateAge(age) {
+    if (age < 0) {
+        throw { type: "ValidationError", message: "age must be >= 0" };
+    }
+    return age;
+}
+
+let result = try validateAge(-5);
+io.println(result.type);       // "ValidationError"
+io.println(result.message);    // "age must be >= 0"
+
+let safe = try validateAge(-1) ?? 0;  // falls back to 0
+```
+
+### Rethrow Pattern
+
+Catch an error with `try`, inspect it, and rethrow to add context. The error type is preserved:
+
+```stash
+fn parsePositive(s) {
+    let n = try conv.toInt(s);
+    if (n is Error) {
+        throw { type: n.type, message: $"parsePositive: {n.message}" };
+    }
+    if (n < 0) {
+        throw { type: "RangeError", message: $"expected positive, got {n}" };
+    }
+    return n;
+}
+
+let err = try parsePositive("abc");
+io.println(err.type);      // "RuntimeError" (preserved from conv.toInt)
+io.println(err.message);   // "parsePositive: Cannot parse 'abc' as integer."
+
+let err2 = try parsePositive("-3");
+io.println(err2.type);     // "RangeError"
+```
 
 ### Shell Commands Don't Need `try`
 
@@ -1552,17 +1631,48 @@ if (result.exitCode != 0) {
 }
 ```
 
+### Complete Example
+
+```stash
+fn loadConfig(path) {
+    let raw = try fs.readFile(path) ?? "host=localhost\nport=8080";
+    let cfg = dict.new();
+    for (let line in str.split(raw, "\n")) {
+        let trimmed = str.trim(line);
+        if (trimmed == "") { continue; }
+        if (!("=" in trimmed)) { continue; }
+        let parts = str.split(trimmed, "=");
+        cfg[str.trim(parts[0])] = str.trim(parts[1]);
+    }
+
+    let port = try conv.toInt(cfg["port"]);
+    if (port is Error) {
+        throw { type: "ConfigError", message: $"invalid port: {cfg["port"]}" };
+    }
+
+    cfg["port"] = port;
+    return cfg;
+}
+
+let config = try loadConfig("/etc/app.conf");
+if (config is Error) {
+    io.println($"Config failed: {config.message}");
+} else {
+    io.println($"Server: {config["host"]}:{config["port"]}");
+}
+```
+
 ### Implementation
 
-`try` is a single AST node (`TryExpr`) wrapping another expression. The interpreter catches its own `RuntimeError` when evaluating the inner expression and returns `null`. The caught error message is stored for `lastError()`. When no `try` is present, errors propagate normally and crash with a stack trace.
+`try` is a single AST node (`TryExpr`) wrapping another expression. On failure, the interpreter catches the internal `RuntimeError`, converts it to a `StashError` value (with message, type, and stack trace), stores it for `lastError()`, and returns it. `throw` is a statement node (`ThrowStmt`) that raises a `RuntimeError` from user code. Error values are falsy, making them compatible with `??` for default-value patterns.
 
 ### Comparison With Alternatives
 
-| Approach         | Verdict                                                                                 |
-| ---------------- | --------------------------------------------------------------------------------------- |
-| Try/catch blocks | Rejected — requires exception machinery; overkill for a scripting language              |
-| Go-style results | Rejected — too verbose; error check after every operation                               |
-| `try` expression | **Chosen** — lightweight, opt-in, composes with `??`, minimal implementation complexity |
+| Approach         | Verdict                                                                                     |
+| ---------------- | ------------------------------------------------------------------------------------------- |
+| Try/catch blocks | Rejected — requires exception machinery; overkill for a scripting language                  |
+| Go-style results | Rejected — too verbose; error check after every operation                                   |
+| `try` expression | **Chosen** — lightweight, opt-in, composes with `??`, first-class error values for inspection |
 
 ---
 
@@ -1743,7 +1853,7 @@ io.println(counter()); // 2
 | ------------------ | ----------------------------------------- |
 | `typeof(val)`      | Return the type of a value as string. See also the `is` operator ([Section 4c](#4c-the-is-operator)) for inline type checking. |
 | `len(val)`         | Length of a string or array               |
-| `lastError()`      | Last error message (string) or null       |
+| `lastError()`      | Last error value (Error object) or null   |
 
 All other built-in functions are organized into namespaces (see below).
 

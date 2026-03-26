@@ -1167,6 +1167,41 @@ public class ParserTests
         Assert.Equal(TokenType.Minus, unary.Operator.Type);
     }
 
+    // ===== Phase 5: Throw Statement =====
+
+    [Fact]
+    public void Parse_Throw_WithStringLiteral()
+    {
+        var stmts = ParseProgram("throw \"error message\";");
+        var throwStmt = Assert.IsType<ThrowStmt>(Assert.Single(stmts));
+        var value = Assert.IsType<LiteralExpr>(throwStmt.Value);
+        Assert.Equal("error message", value.Value);
+    }
+
+    [Fact]
+    public void Parse_Throw_WithDictLiteral()
+    {
+        var stmts = ParseProgram("throw { type: \"TypeError\", message: \"bad type\" };");
+        var throwStmt = Assert.IsType<ThrowStmt>(Assert.Single(stmts));
+        Assert.IsType<DictLiteralExpr>(throwStmt.Value);
+    }
+
+    [Fact]
+    public void Parse_Throw_WithExpression()
+    {
+        var stmts = ParseProgram("throw someVar;");
+        var throwStmt = Assert.IsType<ThrowStmt>(Assert.Single(stmts));
+        var variable = Assert.IsType<IdentifierExpr>(throwStmt.Value);
+        Assert.Equal("someVar", variable.Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_Throw_MissingExpression_ReportsError()
+    {
+        var parser = ParseProgramWithParser("throw ;");
+        Assert.NotEmpty(parser.Errors);
+    }
+
     // ===== Phase 5: Null Coalescing (??) =====
 
     [Fact]

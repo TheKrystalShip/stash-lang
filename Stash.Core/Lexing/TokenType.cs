@@ -225,6 +225,9 @@ public enum TokenType
     /// <summary>The <c>try</c> keyword. Begins a try/catch error-handling block.</summary>
     Try,
 
+    /// <summary>The <c>throw</c> keyword. Throws an error value, unwinding the call stack to the nearest enclosing <c>try</c> expression.</summary>
+    Throw,
+
     /// <summary>The <c>import</c> keyword. Imports bindings from another module.</summary>
     Import,
 

@@ -490,6 +490,11 @@ public class Parser
             return ReturnStatement();
         }
 
+        if (Match(TokenType.Throw))
+        {
+            return ThrowStatement();
+        }
+
         if (Match(TokenType.Break))
         {
             return BreakStatement();
@@ -637,6 +642,19 @@ public class Parser
 
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after return value.");
         return new ReturnStmt(value, MakeSpan(keyword.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a throw statement: <c>throw expr;</c>.
+    /// The <c>throw</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="ThrowStmt"/>.</returns>
+    private Stmt ThrowStatement()
+    {
+        Token keyword = Previous();
+        Expr value = Expression();
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after throw value.");
+        return new ThrowStmt(keyword, value, MakeSpan(keyword.Span, semi.Span));
     }
 
     /// <summary>
@@ -1037,6 +1055,7 @@ public class Parser
 
         while (Match(TokenType.Is))
         {
+            Token isKeyword = Previous();
             Token typeName;
             if (Match(TokenType.Null))
             {
@@ -1055,11 +1074,11 @@ public class Parser
                 typeName = Consume(TokenType.Identifier, "Expected type name after 'is'.");
             }
             string name = typeName.Lexeme;
-            if (name is not ("int" or "float" or "string" or "bool" or "null" or "array" or "dict" or "struct" or "enum" or "function" or "range" or "namespace"))
+            if (name is not ("int" or "float" or "string" or "bool" or "null" or "array" or "dict" or "struct" or "enum" or "function" or "range" or "namespace" or "Error"))
             {
-                throw Error(typeName, $"Unknown type name '{name}'. Expected one of: int, float, string, bool, null, array, dict, struct, enum, function, range, namespace.");
+                throw Error(typeName, $"Unknown type name '{name}'. Expected one of: int, float, string, bool, null, array, dict, struct, enum, function, range, namespace, Error.");
             }
-            expr = new IsExpr(expr, typeName, MakeSpan(expr.Span, typeName.Span));
+            expr = new IsExpr(expr, isKeyword, typeName, MakeSpan(expr.Span, typeName.Span));
         }
 
         return expr;

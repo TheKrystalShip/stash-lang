@@ -316,6 +316,13 @@ internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitThrowStmt(ThrowStmt stmt)
+    {
+        EmitFromToken(stmt.Keyword, TokenTypeKeyword, 0);
+        stmt.Value.Accept(this);
+        return 0;
+    }
+
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
         EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
@@ -411,6 +418,7 @@ internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     public int VisitIsExpr(IsExpr expr)
     {
         expr.Left.Accept(this);
+        EmitFromToken(expr.TypeName, TokenTypeType, 0);
         return 0;
     }
 

@@ -178,9 +178,7 @@ public static class TaskBuiltIns
             catch { /* Exceptions captured in state */ }
         }
 
-        // Clean up ALL tasks and collect results
-        string? firstError = null;
-        bool wasCancelled = false;
+        // Clean up ALL tasks and collect results — failed/cancelled tasks become StashError values
         var results = new List<object?>();
 
         foreach (var (handle, state, id) in entries)
@@ -189,26 +187,18 @@ public static class TaskBuiltIns
             state.Cts.Dispose();
             handle.SetField("status", state.Status, null);
 
-            if (firstError is null && state.Status.MemberName == "Failed")
+            if (state.Status.MemberName == "Failed")
             {
-                firstError = state.Error ?? "Task failed.";
+                results.Add(new StashError(state.Error ?? "Task failed.", "TaskError"));
             }
-            else if (firstError is null && !wasCancelled && state.Status.MemberName == "Cancelled")
+            else if (state.Status.MemberName == "Cancelled")
             {
-                wasCancelled = true;
+                results.Add(new StashError("Task was cancelled.", "TaskCancelled"));
             }
-
-            results.Add(state.Result);
-        }
-
-        if (firstError is not null)
-        {
-            throw new RuntimeError(firstError);
-        }
-
-        if (wasCancelled)
-        {
-            throw new RuntimeError("Task was cancelled.");
+            else
+            {
+                results.Add(state.Result);
+            }
         }
 
         return results;

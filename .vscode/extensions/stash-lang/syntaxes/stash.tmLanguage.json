@@ -227,7 +227,7 @@
       "patterns": [
         {
           "name": "keyword.control.stash",
-          "match": "\\b(if|else|while|for|in|return|break|continue|try|switch|as)\\b"
+          "match": "\\b(if|else|while|do|for|in|return|break|continue|try|throw|switch|as)\\b"
         }
       ]
     },
@@ -241,6 +241,16 @@
         {
           "name": "constant.language.null.stash",
           "match": "(?<!\\.)\\bnull\\b"
+        },
+        {
+          "name": "constant.language.stash",
+          "match": "(?<!\\.)\\b(is|and|or|in)\\b"
+        },
+        {
+          "match": "\\bis\\s+(int|float|string|bool|null|array|dict|struct|enum|function|range|namespace|Error)\\b",
+          "captures": {
+            "1": { "name": "entity.name.type.stash" }
+          }
         }
       ]
     },

@@ -74,6 +74,11 @@ public interface IStmtVisitor<T>
     T VisitReturnStmt(ReturnStmt stmt);
 
     /// <summary>
+    /// Visits a <see cref="ThrowStmt"/> node (<c>throw expr;</c>).
+    /// </summary>
+    T VisitThrowStmt(ThrowStmt stmt);
+
+    /// <summary>
     /// Visits a <see cref="StructDeclStmt"/> node (struct declaration <c>struct Name { ... }</c>).
     /// </summary>
     T VisitStructDeclStmt(StructDeclStmt stmt);

@@ -334,6 +334,7 @@ public partial class Interpreter
             "string" => value is string,
             "bool" => value is bool,
             "array" => value is List<object?>,
+            "Error" => value is StashError,
             "struct" => value is StashInstance or StashStruct,
             "enum" => value is StashEnumValue or StashEnum,
             "dict" => value is StashDictionary,
@@ -381,8 +382,9 @@ public partial class Interpreter
         }
         catch (RuntimeError e)
         {
-            LastError = e.Message;
-            return null;
+            var error = StashError.FromRuntimeError(e, _ctx.CallStack);
+            LastError = error;
+            return error;
         }
     }
 
@@ -390,7 +392,7 @@ public partial class Interpreter
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         object? left = expr.Left.Accept(this);
-        if (left is not null)
+        if (left is not null and not StashError)
         {
             return left;
         }
@@ -586,6 +588,17 @@ public partial class Interpreter
         if (expr.IsOptional && obj is null)
         {
             return null;
+        }
+
+        if (obj is StashError error)
+        {
+            return expr.Name.Lexeme switch
+            {
+                "message" => error.Message,
+                "type" => error.Type,
+                "stack" => error.Stack is not null ? new List<object?>(error.Stack) : null,
+                _ => throw new RuntimeError($"Error has no field '{expr.Name.Lexeme}'. Available fields: message, type, stack.", expr.Name.Span)
+            };
         }
 
         if (obj is StashInstance instance)

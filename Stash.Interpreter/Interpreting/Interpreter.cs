@@ -249,8 +249,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// </summary>
     public SourceSpan? CurrentSpan => _ctx.CurrentSpan;
 
-    /// <summary>The message from the last caught RuntimeError. Used by lastError() built-in.</summary>
-    internal string? LastError
+    /// <summary>The last caught error. Used by lastError() built-in and try expressions.</summary>
+    internal object? LastError
     {
         get => _ctx.LastError;
         set => _ctx.LastError = value;
