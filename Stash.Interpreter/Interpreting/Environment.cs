@@ -1,5 +1,6 @@
 namespace Stash.Interpreting;
 
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 
 /// <summary>
@@ -9,10 +10,10 @@ using System.Collections.Generic;
 /// </summary>
 public class Environment
 {
-    /// <summary>Dictionary storage for the global scope. Null for local scopes.</summary>
-    private readonly Dictionary<string, object?>? _values;
-    /// <summary>Constant names for the global scope. Null for local scopes.</summary>
-    private readonly HashSet<string>? _constants;
+    /// <summary>Dictionary storage for the global scope. Null for local scopes. Uses ConcurrentDictionary for thread safety when globals are shared across parallel tasks.</summary>
+    private readonly ConcurrentDictionary<string, object?>? _values;
+    /// <summary>Constant names for the global scope. Null for local scopes. Uses ConcurrentDictionary (as a concurrent set) for thread safety.</summary>
+    private readonly ConcurrentDictionary<string, byte>? _constants;
 
     /// <summary>Slot array for fast indexed variable access in local scopes. Null for global scope.</summary>
     private object?[]? _slots;
@@ -34,8 +35,8 @@ public class Environment
     public Environment()
     {
         Enclosing = null;
-        _values = new Dictionary<string, object?>();
-        _constants = new HashSet<string>();
+        _values = new ConcurrentDictionary<string, object?>();
+        _constants = new ConcurrentDictionary<string, byte>();
     }
 
     /// <summary>
@@ -56,7 +57,7 @@ public class Environment
         if (_values is not null)
         {
             _values[name] = value;
-            _constants!.Remove(name);
+            _constants!.TryRemove(name, out _);
         }
         else if (_slots is not null)
         {
@@ -74,7 +75,7 @@ public class Environment
         if (_values is not null)
         {
             _values[name] = value;
-            _constants!.Add(name);
+            _constants![name] = 0;
         }
         else if (_slots is not null)
         {
@@ -130,7 +131,7 @@ public class Environment
             {
                 if (env._values.ContainsKey(name))
                 {
-                    if (env._constants!.Contains(name))
+                    if (env._constants!.ContainsKey(name))
                     {
                         throw new RuntimeError($"Cannot reassign constant '{name}'.", span);
                     }
@@ -189,7 +190,7 @@ public class Environment
 
         if (env._values is not null)
         {
-            if (env._constants!.Contains(name))
+            if (env._constants!.ContainsKey(name))
             {
                 throw new RuntimeError($"Cannot reassign constant '{name}'.", span);
             }
@@ -328,7 +329,7 @@ public class Environment
     {
         if (_constants is not null)
         {
-            return _constants.Contains(name);
+            return _constants.ContainsKey(name);
         }
         if (_constSlots is null)
         {
@@ -367,8 +368,8 @@ public class Environment
         Enclosing = enclosing;
         if (isGlobal)
         {
-            _values = new Dictionary<string, object?>();
-            _constants = new HashSet<string>();
+            _values = new ConcurrentDictionary<string, object?>();
+            _constants = new ConcurrentDictionary<string, byte>();
         }
         else
         {

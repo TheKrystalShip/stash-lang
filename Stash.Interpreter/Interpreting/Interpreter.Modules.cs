@@ -99,80 +99,92 @@ public partial class Interpreter
         throw new RuntimeError($"Cannot find module '{modulePath}'.", span);
     }
 
-    /// <summary>Loads and executes a module file, returning its top-level environment. Results are cached to prevent re-execution on repeated imports.</summary>
+    /// <summary>Loads and executes a module file, returning its top-level environment. Results are cached in a shared, thread-safe cache to prevent re-execution on repeated imports — even across parallel tasks.</summary>
     /// <param name="resolvedPath">The absolute file path of the module to load.</param>
     /// <param name="span">The source span of the import statement, used for error reporting.</param>
     /// <returns>The top-level <see cref="Environment"/> of the executed module.</returns>
     private Environment LoadModule(string resolvedPath, SourceSpan span)
     {
-        if (_moduleCache.TryGetValue(resolvedPath, out Environment? cached))
+        // Fast path: module already loaded (by this interpreter or another fork)
+        if (_sharedModuleCache.TryGetValue(resolvedPath, out Environment? cached))
         {
             return cached;
         }
 
-        string source;
-        try
+        // Serialize first-time loading per module path to prevent double-execution
+        var moduleLock = _moduleLocks.GetOrAdd(resolvedPath, static _ => new object());
+        lock (moduleLock)
         {
-            source = System.IO.File.ReadAllText(resolvedPath);
-        }
-        catch (System.IO.IOException e)
-        {
-            throw new RuntimeError($"Cannot read module '{resolvedPath}': {e.Message}", span);
-        }
-
-        // Lex
-        var lexer = new Lexer(source, resolvedPath);
-        var tokens = lexer.ScanTokens();
-        if (lexer.Errors.Count > 0)
-        {
-            throw new RuntimeError($"Lex errors in module '{resolvedPath}': {lexer.Errors[0]}", span);
-        }
-
-        // Parse
-        var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        if (parser.Errors.Count > 0)
-        {
-            throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", span);
-        }
-
-        // Execute in isolated environment
-        var moduleEnv = new Environment(_globals);
-
-        // Save current state
-        Environment previousEnv = _environment;
-        string? previousFile = _currentFile;
-
-        try
-        {
-            _importStack.Add(resolvedPath);
-            _currentFile = resolvedPath;
-            _environment = moduleEnv;
-
-            // Track loaded source for DAP
-            if (_loadedSources.TryAdd(resolvedPath, 0))
+            // Double-check after acquiring lock
+            if (_sharedModuleCache.TryGetValue(resolvedPath, out cached))
             {
-                _debugger?.OnSourceLoaded(resolvedPath);
+                return cached;
             }
 
-            // Resolve variable references for O(1) lookup
-            var resolver = new Resolver(this);
-            resolver.Resolve(statements);
-
-            // Execute the module
-            foreach (Stmt statement in statements)
+            string source;
+            try
             {
-                Execute(statement);
+                source = System.IO.File.ReadAllText(resolvedPath);
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError($"Cannot read module '{resolvedPath}': {e.Message}", span);
             }
 
-            _moduleCache[resolvedPath] = moduleEnv;
-            return moduleEnv;
-        }
-        finally
-        {
-            _environment = previousEnv;
-            _currentFile = previousFile;
-            _importStack.Remove(resolvedPath);
+            // Lex
+            var lexer = new Lexer(source, resolvedPath);
+            var tokens = lexer.ScanTokens();
+            if (lexer.Errors.Count > 0)
+            {
+                throw new RuntimeError($"Lex errors in module '{resolvedPath}': {lexer.Errors[0]}", span);
+            }
+
+            // Parse
+            var parser = new Parser(tokens);
+            var statements = parser.ParseProgram();
+            if (parser.Errors.Count > 0)
+            {
+                throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", span);
+            }
+
+            // Execute in isolated environment
+            var moduleEnv = new Environment(_globals);
+
+            // Save current state
+            Environment previousEnv = _environment;
+            string? previousFile = _currentFile;
+
+            try
+            {
+                _importStack.Add(resolvedPath);
+                _currentFile = resolvedPath;
+                _environment = moduleEnv;
+
+                // Track loaded source for DAP
+                if (_loadedSources.TryAdd(resolvedPath, 0))
+                {
+                    _debugger?.OnSourceLoaded(resolvedPath);
+                }
+
+                // Resolve variable references for O(1) lookup
+                var resolver = new Resolver(this);
+                resolver.Resolve(statements);
+
+                // Execute the module
+                foreach (Stmt statement in statements)
+                {
+                    Execute(statement);
+                }
+
+                _sharedModuleCache[resolvedPath] = moduleEnv;
+                return moduleEnv;
+            }
+            finally
+            {
+                _environment = previousEnv;
+                _currentFile = previousFile;
+                _importStack.Remove(resolvedPath);
+            }
         }
     }
 }

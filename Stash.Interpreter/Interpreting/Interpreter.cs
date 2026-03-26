@@ -70,6 +70,10 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     private IDebugger? _debugger;
     /// <summary>Set of all source file paths loaded during execution (main script + imports). Used for DAP "loadedSources".</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> _loadedSources = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Shared module cache ensuring each module is loaded at most once, even across parallel tasks. Keyed by resolved absolute path.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Environment> _sharedModuleCache = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Per-module lock objects for serializing first-time module loading.</summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _moduleLocks = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>The test harness for reporting test results. When set, <c>test()</c> and <c>describe()</c> report to it.</summary>
     private Stash.Testing.ITestHarness? _testHarness;
     /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime. Thread-safe for concurrent resolver writes during parallel execution.</summary>
@@ -84,7 +88,6 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     // Private shims — allow partial-class files to continue using short field names while state lives in _ctx.
     private Environment _environment { get => _ctx.Environment; set => _ctx.Environment = value; }
     private string? _pendingStdin { get => _ctx.PendingStdin; set => _ctx.PendingStdin = value; }
-    private Dictionary<string, Environment> _moduleCache => _ctx.ModuleCache;
     private HashSet<string> _importStack => _ctx.ImportStack;
     private string? _currentFile { get => _ctx.CurrentFile; set => _ctx.CurrentFile = value; }
     private List<CallFrame> _callStack => _ctx.CallStack;
@@ -297,6 +300,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         _stepLimit = parent._stepLimit;
         _debugger = parent._debugger;
         _loadedSources = parent._loadedSources;
+        _sharedModuleCache = parent._sharedModuleCache;
+        _moduleLocks = parent._moduleLocks;
         _testHarness = parent._testHarness;
         _locals = parent._locals;          // ConcurrentDictionary — safe to share
         TaskRegistry = parent.TaskRegistry; // Shared — tasks from any fork can be awaited by any other
@@ -316,6 +321,17 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <param name="cancellationToken">Cancellation token for cooperative cancellation of the task.</param>
     public Interpreter Fork(Environment taskScope, CancellationToken cancellationToken = default, bool attachDebugger = true)
     {
+        // Upgrade to synchronized writers on first fork to prevent interleaved output.
+        // The same wrapper is shared between parent and all children so they share the lock.
+        if (_ctx.Output is not SynchronizedTextWriter)
+        {
+            _ctx.Output = new SynchronizedTextWriter(_ctx.Output);
+        }
+        if (_ctx.ErrorOutput is not SynchronizedTextWriter)
+        {
+            _ctx.ErrorOutput = new SynchronizedTextWriter(_ctx.ErrorOutput);
+        }
+
         var forkedCtx = new ExecutionContext(taskScope)
         {
             Output = _ctx.Output,

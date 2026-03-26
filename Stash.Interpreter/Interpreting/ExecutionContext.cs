@@ -40,9 +40,6 @@ public class ExecutionContext
     /// <summary>The runtime call stack, tracking active function invocations.</summary>
     public List<CallFrame> CallStack { get; }
 
-    /// <summary>Cache of already-loaded modules, keyed by resolved absolute path.</summary>
-    public Dictionary<string, Environment> ModuleCache { get; }
-
     /// <summary>Set of module paths currently being imported, used to detect circular imports.</summary>
     public HashSet<string> ImportStack { get; }
 
@@ -94,7 +91,6 @@ public class ExecutionContext
         ErrorOutput = Console.Error;
         Input = Console.In;
         CallStack = new();
-        ModuleCache = new();
         ImportStack = new();
         TrackedProcesses = new();
         ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
