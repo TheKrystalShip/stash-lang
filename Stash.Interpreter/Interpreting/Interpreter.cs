@@ -595,6 +595,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         if (_capabilities.HasFlag(StashCapabilities.Network))
         {
             HttpBuiltIns.Register(_globals);
+            SshBuiltIns.Register(_globals);
+            SftpBuiltIns.Register(_globals);
         }
 
         // Freeze all built-in namespaces for optimal read performance.

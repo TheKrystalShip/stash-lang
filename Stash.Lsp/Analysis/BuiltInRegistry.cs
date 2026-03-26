@@ -97,6 +97,24 @@ public static class BuiltInRegistry
             new("id", "int"),
             new("status", "Status"),
         }),
+        new BuiltInStruct("SshConnection", new BuiltInField[]
+        {
+            new("host", "string"),
+            new("port", "int"),
+            new("username", "string"),
+        }),
+        new BuiltInStruct("SftpConnection", new BuiltInField[]
+        {
+            new("host", "string"),
+            new("port", "int"),
+            new("username", "string"),
+        }),
+        new BuiltInStruct("SshTunnel", new BuiltInField[]
+        {
+            new("localPort", "int"),
+            new("remoteHost", "string"),
+            new("remotePort", "int"),
+        }),
     };
 
     // ── Built-in Enums ──
@@ -817,6 +835,56 @@ public static class BuiltInRegistry
             Documentation: "Returns the current status of the task: `task.Status.Running`, `task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`. Does not block.\n@param handle Task handle returned by task.run()\n@return The task's current task.Status"),
         new NamespaceFunction("task", "cancel", new[] { new BuiltInParam("handle", "TaskHandle") },
             Documentation: "Signals the task to cancel. The cancellation is cooperative — the task must check for cancellation. Returns `null`.\n@param handle Task handle returned by task.run()\n@return null"),
+
+        // ssh namespace
+        new NamespaceFunction("ssh", "connect", new[] { new BuiltInParam("options", "dict") }, "SshConnection",
+            Documentation: "Connects to a remote host via SSH. Options: host (string), port (int, default 22), username (string), password (string) or privateKey (string path), passphrase (string).\n@param options Connection configuration dict\n@return An SshConnection handle"),
+        new NamespaceFunction("ssh", "exec", new[] { new BuiltInParam("conn", "SshConnection"), new BuiltInParam("command", "string") }, "CommandResult",
+            Documentation: "Executes a command on the remote host and returns the result.\n@param conn The SshConnection handle\n@param command The shell command to execute\n@return A CommandResult with stdout, stderr, and exitCode fields"),
+        new NamespaceFunction("ssh", "execAll", new[] { new BuiltInParam("conn", "SshConnection"), new BuiltInParam("commands", "array") }, "array",
+            Documentation: "Executes an array of commands sequentially on the remote host.\n@param conn The SshConnection handle\n@param commands An array of command strings\n@return An array of CommandResult structs"),
+        new NamespaceFunction("ssh", "shell", new[] { new BuiltInParam("conn", "SshConnection"), new BuiltInParam("commands", "array") }, "string",
+            Documentation: "Runs commands through an interactive shell stream. Useful for stateful sessions or commands requiring a TTY.\n@param conn The SshConnection handle\n@param commands An array of command strings\n@return The combined shell output as a string"),
+        new NamespaceFunction("ssh", "close", new[] { new BuiltInParam("conn", "SshConnection") },
+            Documentation: "Disconnects and disposes the SSH connection.\n@param conn The SshConnection handle to close"),
+        new NamespaceFunction("ssh", "isConnected", new[] { new BuiltInParam("conn", "SshConnection") }, "bool",
+            Documentation: "Checks whether the SSH connection is still active.\n@param conn The SshConnection handle\n@return true if the connection is active"),
+        new NamespaceFunction("ssh", "tunnel", new[] { new BuiltInParam("conn", "SshConnection"), new BuiltInParam("options", "dict") }, "SshTunnel",
+            Documentation: "Creates a local port forward (SSH tunnel). Options: remoteHost (string), remotePort (int), localPort (int, default auto).\n@param conn The SshConnection handle\n@param options Tunnel configuration dict\n@return An SshTunnel handle with localPort, remoteHost, remotePort"),
+        new NamespaceFunction("ssh", "closeTunnel", new[] { new BuiltInParam("tunnel", "SshTunnel") },
+            Documentation: "Closes an SSH tunnel (port forward).\n@param tunnel The SshTunnel handle to close"),
+
+        // sftp namespace
+        new NamespaceFunction("sftp", "connect", new[] { new BuiltInParam("options", "dict") }, "SftpConnection",
+            Documentation: "Connects to a remote host via SFTP. Options: host (string), port (int, default 22), username (string), password (string) or privateKey (string path), passphrase (string).\n@param options Connection configuration dict\n@return An SftpConnection handle"),
+        new NamespaceFunction("sftp", "upload", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("localPath", "string"), new BuiltInParam("remotePath", "string") },
+            Documentation: "Uploads a local file to the remote host.\n@param conn The SftpConnection handle\n@param localPath Path to the local file\n@param remotePath Destination path on the remote host"),
+        new NamespaceFunction("sftp", "download", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string"), new BuiltInParam("localPath", "string") },
+            Documentation: "Downloads a remote file to the local host.\n@param conn The SftpConnection handle\n@param remotePath Path to the remote file\n@param localPath Destination path on the local host"),
+        new NamespaceFunction("sftp", "readFile", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string") }, "string",
+            Documentation: "Reads a remote file and returns its contents as a string.\n@param conn The SftpConnection handle\n@param remotePath Path to the remote file\n@return The file contents as a UTF-8 string"),
+        new NamespaceFunction("sftp", "writeFile", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string"), new BuiltInParam("content", "string") },
+            Documentation: "Writes a string to a remote file.\n@param conn The SftpConnection handle\n@param remotePath Destination path on the remote host\n@param content The string content to write"),
+        new NamespaceFunction("sftp", "list", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string") }, "array",
+            Documentation: "Lists entries in a remote directory. Returns an array of dicts with name, size, isDir, and modified fields.\n@param conn The SftpConnection handle\n@param remotePath Path to the remote directory\n@return An array of file info dicts"),
+        new NamespaceFunction("sftp", "delete", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string") },
+            Documentation: "Deletes a remote file.\n@param conn The SftpConnection handle\n@param remotePath Path to the remote file to delete"),
+        new NamespaceFunction("sftp", "mkdir", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string") },
+            Documentation: "Creates a remote directory.\n@param conn The SftpConnection handle\n@param remotePath Path for the new directory"),
+        new NamespaceFunction("sftp", "rmdir", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string") },
+            Documentation: "Removes a remote directory.\n@param conn The SftpConnection handle\n@param remotePath Path to the directory to remove"),
+        new NamespaceFunction("sftp", "exists", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string") }, "bool",
+            Documentation: "Checks if a remote path exists.\n@param conn The SftpConnection handle\n@param remotePath The remote path to check\n@return true if the path exists"),
+        new NamespaceFunction("sftp", "stat", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string") }, "dict",
+            Documentation: "Gets file attributes for a remote path. Returns a dict with size, isDir, modified, and permissions fields.\n@param conn The SftpConnection handle\n@param remotePath The remote path to inspect\n@return A dict with file attribute information"),
+        new NamespaceFunction("sftp", "chmod", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("remotePath", "string"), new BuiltInParam("mode", "int") },
+            Documentation: "Changes file permissions on a remote path. Mode is octal notation as an integer (e.g., 755).\n@param conn The SftpConnection handle\n@param remotePath The remote path to modify\n@param mode Permission mode in octal notation (e.g., 755, 644)"),
+        new NamespaceFunction("sftp", "rename", new[] { new BuiltInParam("conn", "SftpConnection"), new BuiltInParam("oldPath", "string"), new BuiltInParam("newPath", "string") },
+            Documentation: "Renames or moves a remote file.\n@param conn The SftpConnection handle\n@param oldPath Current path of the file\n@param newPath New path for the file"),
+        new NamespaceFunction("sftp", "close", new[] { new BuiltInParam("conn", "SftpConnection") },
+            Documentation: "Disconnects and disposes the SFTP connection.\n@param conn The SftpConnection handle to close"),
+        new NamespaceFunction("sftp", "isConnected", new[] { new BuiltInParam("conn", "SftpConnection") }, "bool",
+            Documentation: "Checks whether the SFTP connection is still active.\n@param conn The SftpConnection handle\n@return true if the connection is active"),
     };
 
     // ── Built-in Namespace Constants ──
@@ -865,7 +933,7 @@ public static class BuiltInRegistry
         "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str",
         "assert", "test", "math", "time", "json", "http", "ini", "config", "tpl",
         "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg",
-        "task"
+        "task", "ssh", "sftp"
     };
 
     // ── Keywords ──

@@ -13,4 +13,8 @@
     <ProjectReference Include="..\Stash.Core\Stash.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <PackageReference Include="SSH.NET" Version="2025.1.0" />
+  </ItemGroup>
+
 </Project>

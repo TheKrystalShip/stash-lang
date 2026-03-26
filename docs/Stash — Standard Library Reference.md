@@ -2022,6 +2022,214 @@ task.cancel(t);
 io.println(task.status(t));  // task.Status.Cancelled (soon after)
 ```
 
+## `ssh` — SSH Remote Execution
+
+The `ssh` namespace provides functions for connecting to remote hosts via SSH and executing commands. Requires the **Network** capability.
+
+| Function          | Signature          | Returns         | Description                            |
+| ----------------- | ------------------ | --------------- | -------------------------------------- |
+| `ssh.connect`     | `(options)`        | `SshConnection` | Connect to a remote host               |
+| `ssh.exec`        | `(conn, command)`  | `CommandResult` | Execute a remote command               |
+| `ssh.execAll`     | `(conn, commands)` | `array`         | Execute multiple commands sequentially |
+| `ssh.shell`       | `(conn, commands)` | `string`        | Run commands in an interactive shell   |
+| `ssh.close`       | `(conn)`           | `null`          | Close the connection                   |
+| `ssh.isConnected` | `(conn)`           | `bool`          | Check if connection is active          |
+| `ssh.tunnel`      | `(conn, options)`  | `SshTunnel`     | Create a local port forward            |
+| `ssh.closeTunnel` | `(tunnel)`         | `null`          | Close a port forward                   |
+
+### Connection Options
+
+`ssh.connect` accepts a dict with the following keys:
+
+| Key          | Type     | Required | Description                             |
+| ------------ | -------- | -------- | --------------------------------------- |
+| `host`       | `string` | Yes      | Remote hostname or IP address           |
+| `port`       | `int`    | No       | SSH port (default: 22)                  |
+| `username`   | `string` | Yes      | Login username                          |
+| `password`   | `string` | No\*     | Password authentication                 |
+| `privateKey` | `string` | No\*     | Path to private key file (supports `~`) |
+| `passphrase` | `string` | No       | Passphrase for encrypted private keys   |
+
+\* Must provide either `password` or `privateKey`.
+
+### Return Types
+
+**SshConnection** — `{ host: string, port: int, username: string }`
+
+**SshTunnel** — `{ localPort: int, remoteHost: string, remotePort: int }`
+
+**CommandResult** — `{ stdout: string, stderr: string, exitCode: int }` (reused from process namespace)
+
+### Examples
+
+```stash
+// Connect with password
+let conn = ssh.connect({
+    "host": "192.168.1.100",
+    "username": "admin",
+    "password": "secret"
+});
+
+// Execute a command
+let result = ssh.exec(conn, "uname -a");
+println(result.stdout);
+
+// Execute multiple commands
+let results = ssh.execAll(conn, [
+    "df -h",
+    "free -m",
+    "uptime"
+]);
+
+for r in results {
+    println(r.stdout);
+}
+
+// Interactive shell (for sudo, etc.)
+let output = ssh.shell(conn, [
+    "sudo apt update",
+    "sudo apt upgrade -y"
+]);
+println(output);
+
+// SSH tunnel (port forward)
+let tunnel = ssh.tunnel(conn, {
+    "remoteHost": "127.0.0.1",
+    "remotePort": 3306,
+    "localPort": 3307
+});
+println("MySQL available on localhost:" + conv.toStr(tunnel.localPort));
+
+// Clean up
+ssh.closeTunnel(tunnel);
+ssh.close(conn);
+```
+
+```stash
+// Connect with private key
+let conn = ssh.connect({
+    "host": "prod-server.example.com",
+    "username": "deploy",
+    "privateKey": "~/.ssh/id_rsa"
+});
+
+let result = ssh.exec(conn, "docker ps");
+println(result.stdout);
+
+if result.exitCode != 0 {
+    println("Error: " + result.stderr);
+}
+
+ssh.close(conn);
+```
+
+## `sftp` — SFTP File Transfer
+
+The `sftp` namespace provides functions for transferring files and managing remote file systems over SFTP. Requires the **Network** capability.
+
+| Function           | Signature                       | Returns          | Description                   |
+| ------------------ | ------------------------------- | ---------------- | ----------------------------- |
+| `sftp.connect`     | `(options)`                     | `SftpConnection` | Connect to a remote host      |
+| `sftp.upload`      | `(conn, localPath, remotePath)` | `null`           | Upload a local file           |
+| `sftp.download`    | `(conn, remotePath, localPath)` | `null`           | Download a remote file        |
+| `sftp.readFile`    | `(conn, remotePath)`            | `string`         | Read remote file as string    |
+| `sftp.writeFile`   | `(conn, remotePath, content)`   | `null`           | Write string to remote file   |
+| `sftp.list`        | `(conn, remotePath)`            | `array`          | List directory entries        |
+| `sftp.delete`      | `(conn, remotePath)`            | `null`           | Delete a remote file          |
+| `sftp.mkdir`       | `(conn, remotePath)`            | `null`           | Create a remote directory     |
+| `sftp.rmdir`       | `(conn, remotePath)`            | `null`           | Remove a remote directory     |
+| `sftp.exists`      | `(conn, remotePath)`            | `bool`           | Check if path exists          |
+| `sftp.stat`        | `(conn, remotePath)`            | `dict`           | Get file attributes           |
+| `sftp.chmod`       | `(conn, remotePath, mode)`      | `null`           | Change file permissions       |
+| `sftp.rename`      | `(conn, oldPath, newPath)`      | `null`           | Rename or move a file         |
+| `sftp.close`       | `(conn)`                        | `null`           | Close the connection          |
+| `sftp.isConnected` | `(conn)`                        | `bool`           | Check if connection is active |
+
+### Connection Options
+
+Same as `ssh.connect` — see [SSH Connection Options](#connection-options) above.
+
+### Return Types
+
+**SftpConnection** — `{ host: string, port: int, username: string }`
+
+**sftp.list** returns an array of dicts:
+
+```stash
+[
+    { "name": "file.txt", "size": 1024, "isDir": false, "modified": "2024-01-15T10:30:00Z" },
+    { "name": "subdir",   "size": 4096, "isDir": true,  "modified": "2024-01-14T08:00:00Z" }
+]
+```
+
+**sftp.stat** returns a dict:
+
+```stash
+{ "size": 1024, "isDir": false, "modified": "2024-01-15T10:30:00Z", "permissions": "644" }
+```
+
+### Examples
+
+```stash
+// Connect
+let conn = sftp.connect({
+    "host": "192.168.1.100",
+    "username": "admin",
+    "password": "secret"
+});
+
+// Upload and download files
+sftp.upload(conn, "./local-config.yaml", "/etc/app/config.yaml");
+sftp.download(conn, "/var/log/app.log", "./app.log");
+
+// Read and write remote files
+let config = sftp.readFile(conn, "/etc/app/config.yaml");
+println(config);
+
+sftp.writeFile(conn, "/tmp/hello.txt", "Hello from Stash!");
+
+// List directory contents
+let files = sftp.list(conn, "/var/log");
+for f in files {
+    let kind = f.isDir ? "DIR " : "FILE";
+    println(kind + " " + f.name + " (" + conv.toStr(f.size) + " bytes)");
+}
+
+// File management
+sftp.mkdir(conn, "/tmp/deploy");
+sftp.rename(conn, "/tmp/old-name.txt", "/tmp/new-name.txt");
+sftp.chmod(conn, "/tmp/script.sh", 755);
+
+if sftp.exists(conn, "/tmp/deploy") {
+    let info = sftp.stat(conn, "/tmp/deploy");
+    println("Directory size: " + conv.toStr(info.size));
+}
+
+sftp.delete(conn, "/tmp/hello.txt");
+sftp.rmdir(conn, "/tmp/deploy");
+
+sftp.close(conn);
+```
+
+```stash
+// Deploy workflow
+let conn = sftp.connect({
+    "host": "prod.example.com",
+    "username": "deploy",
+    "privateKey": "~/.ssh/deploy_key"
+});
+
+// Upload application files
+sftp.mkdir(conn, "/opt/app/releases/v2.0");
+sftp.upload(conn, "./dist/app.tar.gz", "/opt/app/releases/v2.0/app.tar.gz");
+sftp.writeFile(conn, "/opt/app/releases/v2.0/version.txt", "2.0.0");
+
+// Set permissions
+sftp.chmod(conn, "/opt/app/releases/v2.0/app.tar.gz", 644);
+
+sftp.close(conn);
+```
+
 ## Threading Model
 
 Stash's parallelism is based on **environment snapshotting** — each parallel task or operation receives a deep copy of the current scope chain at spawn time. This provides strong isolation without locks.
