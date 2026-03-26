@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -32,6 +33,7 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(List<SearchResultPackage>))]
 [JsonSerializable(typeof(LoginRequest))]
 [JsonSerializable(typeof(OwnerUpdateRequest))]
+[JsonSerializable(typeof(TokenRefreshRequest))]
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -66,4 +68,45 @@ internal sealed class OwnerUpdateRequest
     /// <summary>Usernames to revoke ownership from.</summary>
     [JsonPropertyName("remove")]
     public string[] Remove { get; set; } = [];
+}
+
+/// <summary>
+/// Request body sent to <c>POST /auth/tokens/refresh</c> to exchange a refresh token
+/// for a new access/refresh token pair.
+/// </summary>
+internal sealed class TokenRefreshRequest
+{
+    /// <summary>The refresh token string.</summary>
+    [JsonPropertyName("refreshToken")]
+    public string RefreshToken { get; set; } = "";
+
+    /// <summary>The expired access token.</summary>
+    [JsonPropertyName("accessToken")]
+    public string AccessToken { get; set; } = "";
+
+    /// <summary>The machine fingerprint hash.</summary>
+    [JsonPropertyName("machineId")]
+    public string MachineId { get; set; } = "";
+}
+
+/// <summary>
+/// Holds the parsed response from a successful login, including both
+/// access and refresh tokens with their metadata.
+/// </summary>
+public sealed class LoginResult
+{
+    /// <summary>The short-lived access token.</summary>
+    public string Token { get; set; } = "";
+
+    /// <summary>UTC expiry of the access token.</summary>
+    public DateTime? ExpiresAt { get; set; }
+
+    /// <summary>The long-lived refresh token.</summary>
+    public string? RefreshToken { get; set; }
+
+    /// <summary>UTC expiry of the refresh token.</summary>
+    public DateTime? RefreshTokenExpiresAt { get; set; }
+
+    /// <summary>The machine fingerprint used during login.</summary>
+    public string? MachineId { get; set; }
 }

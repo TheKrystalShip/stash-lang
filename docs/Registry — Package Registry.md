@@ -203,9 +203,19 @@ Authenticate with username and password. Returns a JWT.
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "expiresAt": "2026-06-20T12:00:00Z"
+  "expiresAt": "2026-06-20T13:00:00Z",
+  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+  "refreshTokenExpiresAt": "2026-09-18T12:00:00Z"
 }
 ```
+
+**Headers:**
+
+| Header         | Required | Description                                                                                       |
+| -------------- | -------- | ------------------------------------------------------------------------------------------------- |
+| `X-Machine-Id` | No       | SHA-256 machine fingerprint. When provided, a refresh token is issued alongside the access token. |
+
+When `X-Machine-Id` is omitted, only the access token is returned (`refreshToken` and `refreshTokenExpiresAt` will be `null`). The access token lifetime is controlled by `auth.accessTokenExpiry` (default `1h`); the refresh token lifetime by `auth.refreshTokenExpiry` (default `90d`).
 
 **Error responses:**
 
@@ -314,6 +324,48 @@ Revoke a token by its ID. Takes effect immediately — the token record is remov
 | ------ | ----------------------------------------- |
 | 403    | Token belongs to another user (non-admin) |
 | 404    | Token not found                           |
+
+---
+
+#### POST /api/v1/auth/tokens/refresh
+
+Exchange a valid refresh token and its paired (possibly expired) access token for a new token pair. Implements OAuth2-style token rotation — each refresh consumes the old refresh token and issues a new one.
+
+**Request:**
+
+```json
+{
+  "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "machineId": "a1b2c3d4e5f6..."
+}
+```
+
+**Response `200 OK`:**
+
+```json
+{
+  "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "refreshToken": "bmV3IHJlZnJlc2ggdG9rZW4...",
+  "expiresAt": "2026-06-20T14:00:00Z",
+  "refreshTokenExpiresAt": "2026-09-18T13:00:00Z"
+}
+```
+
+**Error responses:**
+
+| Status | Description                                                                                                                                           |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | Missing required fields                                                                                                                               |
+| 401    | Invalid access token signature, token pair mismatch, machine fingerprint mismatch, expired refresh token, or consumed refresh token (theft detection) |
+| 429    | Rate limit exceeded                                                                                                                                   |
+
+**Security features:**
+
+- **Token rotation:** Each refresh consumes the old refresh token and issues a new pair. The old refresh token cannot be reused.
+- **Theft detection:** If a consumed refresh token is presented, all tokens in the family are revoked and a `token_theft_detected` audit event is logged.
+- **Machine binding:** The `machineId` must match the fingerprint used during login. It is validated against both the JWT `machine_id` claim and the database record.
+- **Token pair binding:** The access token's JTI claim must match the refresh token's paired `AccessTokenId`.
 
 ---
 
@@ -771,13 +823,14 @@ The registry uses JWT (JSON Web Tokens) with HMAC-SHA256 symmetric signing. Ever
 
 **Token claims:**
 
-| Claim   | Description                                |
-| ------- | ------------------------------------------ |
-| `sub`   | Username                                   |
-| `jti`   | Unique token ID (for revocation)           |
-| `scope` | Token scope: `read`, `publish`, or `admin` |
-| `role`  | User role: `user` or `admin`               |
-| `exp`   | Expiry timestamp                           |
+| Claim        | Description                                |
+| ------------ | ------------------------------------------ |
+| `sub`        | Username                                   |
+| `jti`        | Unique token ID (for revocation)           |
+| `scope`      | Token scope: `read`, `publish`, or `admin` |
+| `role`       | User role: `user` or `admin`               |
+| `exp`        | Expiry timestamp                           |
+| `machine_id` | Machine fingerprint (optional)             |
 
 ### Token Scopes
 
@@ -798,6 +851,22 @@ The registry uses JWT (JSON Web Tokens) with HMAC-SHA256 symmetric signing. Ever
 ### Token Revocation
 
 Token revocation works through the token records table. Each JWT contains a `jti` claim whose value matches the `id` column of the `tokens` table. When a token is deleted (via `DELETE /api/v1/auth/tokens/{id}`), the corresponding record is removed from the database. The `OnTokenValidated` event in the JWT bearer middleware looks up every incoming token's `jti` in the database — if the record is missing, the request is rejected. Revocation takes effect on the next request.
+
+### Refresh Token Rotation
+
+The registry supports OAuth2-style refresh token rotation for CLI clients. When a client logs in with an `X-Machine-Id` header, the server issues both a short-lived access token (default: 1 hour) and a long-lived refresh token (default: 90 days).
+
+**Token lifecycle:**
+
+1. **Login** — Client sends credentials + machine fingerprint → server returns access token + refresh token
+2. **Use** — Client sends access token with each API request
+3. **Refresh** — When the access token nears expiry (within 5 minutes), the client calls `POST /auth/tokens/refresh` with the refresh token, expired access token, and machine fingerprint → server returns a new token pair
+4. **Rotation** — Each refresh consumes the old refresh token. The old tokens are invalidated.
+5. **Theft detection** — If a consumed refresh token is presented again, the server assumes token theft and revokes all tokens in the family (all rotations sharing the same `FamilyId`).
+
+**Token families:** All refresh tokens created from the same login share a `FamilyId`. This allows the server to revoke the entire chain when theft is detected, regardless of how many rotations have occurred.
+
+**Machine binding:** Refresh tokens are bound to the machine fingerprint provided during login. The fingerprint is a SHA-256 hash of `hostname:username:platform`. Refresh requests from a different machine are rejected.
 
 ### Auth Provider Backends
 
@@ -857,7 +926,9 @@ The registry reads configuration from `appsettings.json` in the working director
   "Auth": {
     "Type": "local",
     "RegistrationEnabled": true,
-    "TokenExpiry": "90d",
+    "ApiTokenExpiry": "90d",
+    "AccessTokenExpiry": "1h",
+    "RefreshTokenExpiry": "90d",
     "LdapServer": "",
     "LdapBaseDn": "",
     "LdapUserFilter": "",
@@ -948,18 +1019,20 @@ Host=localhost;Port=5432;Database=stash_registry;Username=stash;Password=secret
 
 ### Auth
 
-| Property              | Type   | Default   | Description                                                                       |
-| --------------------- | ------ | --------- | --------------------------------------------------------------------------------- |
-| `Type`                | string | `"local"` | Auth provider: `"local"`, `"ldap"`, or `"oidc"`.                                  |
-| `RegistrationEnabled` | bool   | `true`    | Allow unauthenticated users to create accounts.                                   |
-| `TokenExpiry`         | string | `"90d"`   | Default JWT lifetime. Accepts duration strings: `"30d"`, `"24h"`, `"3600s"`.      |
-| `LdapServer`          | string | `""`      | LDAP server URI (e.g. `"ldap://ldap.example.com"`). Used when `Type` is `"ldap"`. |
-| `LdapBaseDn`          | string | `""`      | LDAP base DN for user searches.                                                   |
-| `LdapPort`            | int    | `389`     | LDAP server port.                                                                 |
-| `LdapUserFilter`      | string | `""`      | LDAP filter template (e.g. `"(uid={0})"`).                                        |
-| `OidcAuthority`       | string | `""`      | OIDC issuer URL. Used when `Type` is `"oidc"`.                                    |
-| `OidcClientId`        | string | `""`      | OIDC client ID.                                                                   |
-| `OidcClientSecret`    | string | `""`      | OIDC client secret.                                                               |
+| Property              | Type   | Default   | Description                                                                                      |
+| --------------------- | ------ | --------- | ------------------------------------------------------------------------------------------------ |
+| `Type`                | string | `"local"` | Auth provider: `"local"`, `"ldap"`, or `"oidc"`.                                                 |
+| `RegistrationEnabled` | bool   | `true`    | Allow unauthenticated users to create accounts.                                                  |
+| `ApiTokenExpiry`      | string | `"90d"`   | Lifetime of manually created API tokens (`POST /auth/tokens`). Accepts duration strings.         |
+| `AccessTokenExpiry`   | string | `"1h"`    | Lifetime of short-lived access tokens issued during login and refresh. Accepts duration strings. |
+| `RefreshTokenExpiry`  | string | `"90d"`   | Lifetime of long-lived refresh tokens issued during login. Accepts duration strings.             |
+| `LdapServer`          | string | `""`      | LDAP server URI (e.g. `"ldap://ldap.example.com"`). Used when `Type` is `"ldap"`.                |
+| `LdapBaseDn`          | string | `""`      | LDAP base DN for user searches.                                                                  |
+| `LdapPort`            | int    | `389`     | LDAP server port.                                                                                |
+| `LdapUserFilter`      | string | `""`      | LDAP filter template (e.g. `"(uid={0})"`).                                                       |
+| `OidcAuthority`       | string | `""`      | OIDC issuer URL. Used when `Type` is `"oidc"`.                                                   |
+| `OidcClientId`        | string | `""`      | OIDC client ID.                                                                                  |
+| `OidcClientSecret`    | string | `""`      | OIDC client secret.                                                                              |
 
 ---
 
@@ -1067,6 +1140,25 @@ Scoped API tokens. Each token is identified by a GUID that also serves as the JW
 
 Foreign key cascades on delete — removing a user removes all their tokens.
 
+#### refresh_tokens
+
+OAuth2 refresh tokens for automatic token renewal. Each record is part of a token family that shares the same `family_id` across rotations.
+
+| Column            | Type     | Constraints                    | Description                                                 |
+| ----------------- | -------- | ------------------------------ | ----------------------------------------------------------- |
+| `id`              | string   | PK                             | Unique refresh token ID (UUID)                              |
+| `username`        | string   | FK → users(username), not null | Token owner                                                 |
+| `token_hash`      | string   | not null, indexed              | SHA-256 hash of the refresh token value                     |
+| `access_token_id` | string   | not null                       | ID of the paired access token                               |
+| `family_id`       | string   | not null, indexed              | Token family ID shared across all rotations                 |
+| `machine_id`      | string   | not null                       | SHA-256 machine fingerprint the token is bound to           |
+| `scope`           | string   | not null, default `"publish"`  | Inherited permission scope                                  |
+| `created_at`      | datetime |                                | Creation timestamp                                          |
+| `expires_at`      | datetime |                                | Expiry timestamp                                            |
+| `consumed`        | bool     | default false                  | Whether this token has been used (consumed during rotation) |
+
+Foreign key cascades on delete — removing a user removes all their refresh tokens. Indexes on `token_hash` and `family_id` for efficient lookup and family revocation.
+
 #### owners
 
 Package ownership mapping. Composite primary key on `(package_name, username)`.
@@ -1172,6 +1264,7 @@ Swapping storage backends requires only changing `storage.type` in `appsettings.
 | `Publish`  | Username   | Package publish and unpublish |
 | `Download` | IP address | Package download              |
 | `Search`   | IP address | Search endpoint               |
+| `Refresh`  | IP address | Token refresh endpoint        |
 
 ### Behavior
 
@@ -1236,20 +1329,21 @@ All state-changing operations produce an immutable audit log entry. No read-only
 
 ### Logged Actions
 
-| Action                | Trigger                     |
-| --------------------- | --------------------------- |
-| `publish`             | Package version published   |
-| `unpublish`           | Package version unpublished |
-| `user.create`         | User account created        |
-| `user.disable`        | User account disabled       |
-| `owner.add`           | Package owner added         |
-| `owner.remove`        | Package owner removed       |
-| `token.create`        | Token created               |
-| `token.revoke`        | Token revoked               |
-| `package.deprecate`   | Package deprecated          |
-| `package.undeprecate` | Package deprecation removed |
-| `version.deprecate`   | Version deprecated          |
-| `version.undeprecate` | Version deprecation removed |
+| Action                 | Trigger                                                             |
+| ---------------------- | ------------------------------------------------------------------- |
+| `publish`              | Package version published                                           |
+| `unpublish`            | Package version unpublished                                         |
+| `user.create`          | User account created                                                |
+| `user.disable`         | User account disabled                                               |
+| `owner.add`            | Package owner added                                                 |
+| `owner.remove`         | Package owner removed                                               |
+| `token.create`         | Token created                                                       |
+| `token.revoke`         | Token revoked                                                       |
+| `token_theft_detected` | Consumed refresh token presented — all tokens in the family revoked |
+| `package.deprecate`    | Package deprecated                                                  |
+| `package.undeprecate`  | Package deprecation removed                                         |
+| `version.deprecate`    | Version deprecated                                                  |
+| `version.undeprecate`  | Version deprecation removed                                         |
 
 ### Entry Schema
 
@@ -1334,14 +1428,17 @@ Registries are stored as a URL-keyed dictionary. Each entry holds an optional au
   "defaultRegistry": "https://registry.example.com/api/v1",
   "registries": {
     "https://registry.example.com/api/v1": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
-    },
-    "https://internal.corp/api/v1": {
-      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9..."
+      "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+      "expiresAt": "2026-06-20T13:00:00Z",
+      "refreshToken": "dGhpcyBpcyBhIHJlZnJlc2ggdG9rZW4...",
+      "refreshTokenExpiresAt": "2026-09-18T12:00:00Z",
+      "machineId": "a1b2c3d4e5f6..."
     }
   }
 }
 ```
+
+The CLI automatically refreshes access tokens when they are within 5 minutes of expiry. On successful refresh, both the new access token and new refresh token are persisted to the config file. If refresh fails (network error, expired refresh token), the CLI falls back to the existing access token silently.
 
 Logging in to a registry adds an entry and sets `defaultRegistry` if none is configured. Logging out removes the token and clears `defaultRegistry` if it pointed to the logged-out registry.
 

@@ -22,13 +22,21 @@ public sealed class LoginRequest
 /// </summary>
 public sealed class LoginResponse
 {
-    /// <summary>The bearer token to use in subsequent <c>Authorization</c> headers.</summary>
+    /// <summary>The short-lived access token to use in subsequent <c>Authorization</c> headers.</summary>
     [JsonPropertyName("token")]
     public required string Token { get; set; }
 
-    /// <summary>The UTC date and time at which the token expires.</summary>
+    /// <summary>The UTC date and time at which the access token expires.</summary>
     [JsonPropertyName("expiresAt")]
     public required DateTime ExpiresAt { get; set; }
+
+    /// <summary>The long-lived refresh token for obtaining new access tokens without re-authenticating.</summary>
+    [JsonPropertyName("refreshToken")]
+    public string? RefreshToken { get; set; }
+
+    /// <summary>The UTC date and time at which the refresh token expires.</summary>
+    [JsonPropertyName("refreshTokenExpiresAt")]
+    public DateTime? RefreshTokenExpiresAt { get; set; }
 }
 
 /// <summary>
@@ -111,4 +119,44 @@ public sealed class TokenCreateResponse
     /// <summary>The optional human-readable description provided when the token was created.</summary>
     [JsonPropertyName("description")]
     public string? Description { get; set; }
+}
+
+/// <summary>
+/// Request body for the <c>POST /api/v1/auth/tokens/refresh</c> endpoint.
+/// </summary>
+public sealed class RefreshTokenRequest
+{
+    /// <summary>The refresh token string issued during login or a previous refresh.</summary>
+    [JsonPropertyName("refreshToken")]
+    public string? RefreshToken { get; set; }
+
+    /// <summary>The expired access token to be renewed.</summary>
+    [JsonPropertyName("accessToken")]
+    public string? AccessToken { get; set; }
+
+    /// <summary>The SHA-256 machine fingerprint of the requesting client.</summary>
+    [JsonPropertyName("machineId")]
+    public string? MachineId { get; set; }
+}
+
+/// <summary>
+/// Response body returned by the <c>POST /api/v1/auth/tokens/refresh</c> endpoint on success.
+/// </summary>
+public sealed class RefreshTokenResponse
+{
+    /// <summary>The new short-lived access token.</summary>
+    [JsonPropertyName("accessToken")]
+    public required string AccessToken { get; set; }
+
+    /// <summary>The new refresh token (rotation — the old one is invalidated).</summary>
+    [JsonPropertyName("refreshToken")]
+    public required string RefreshToken { get; set; }
+
+    /// <summary>The UTC date and time at which the new access token expires.</summary>
+    [JsonPropertyName("expiresAt")]
+    public required DateTime ExpiresAt { get; set; }
+
+    /// <summary>The UTC date and time at which the new refresh token expires.</summary>
+    [JsonPropertyName("refreshTokenExpiresAt")]
+    public DateTime? RefreshTokenExpiresAt { get; set; }
 }

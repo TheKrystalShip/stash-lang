@@ -507,4 +507,356 @@ public sealed class SqliteDatabaseTests
         Assert.Equal(1, result.TotalCount);
         Assert.Equal("unpublish", result.Items[0].Action);
     }
+
+    // ── Refresh token operations ──────────────────────────────────────────
+
+    [Fact]
+    public async Task CreateRefreshToken_PersistsRecord()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("alice", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-1",
+            Username = "alice",
+            TokenHash = "hash-abc",
+            AccessTokenId = "at-1",
+            FamilyId = "family-1",
+            MachineId = "machine-1",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90),
+            Consumed = false
+        });
+
+        var found = await db.GetRefreshTokenByHashAsync("hash-abc");
+        Assert.NotNull(found);
+        Assert.Equal("rt-1", found.Id);
+        Assert.Equal("alice", found.Username);
+        Assert.Equal("machine-1", found.MachineId);
+        Assert.Equal("at-1", found.AccessTokenId);
+        Assert.False(found.Consumed);
+    }
+
+    [Fact]
+    public async Task GetRefreshTokenByHash_ReturnsNullWhenNotFound()
+    {
+        var db = CreateTestDb();
+        var found = await db.GetRefreshTokenByHashAsync("nonexistent-hash");
+        Assert.Null(found);
+    }
+
+    [Fact]
+    public async Task ConsumeRefreshToken_SetsConsumedFlag()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("bob", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-2",
+            Username = "bob",
+            TokenHash = "hash-def",
+            AccessTokenId = "at-2",
+            FamilyId = "family-2",
+            MachineId = "machine-2",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90),
+            Consumed = false
+        });
+
+        bool result = await db.ConsumeRefreshTokenAsync("rt-2");
+
+        Assert.True(result);
+        var found = await db.GetRefreshTokenByHashAsync("hash-def");
+        Assert.NotNull(found);
+        Assert.True(found.Consumed);
+    }
+
+    [Fact]
+    public async Task ConsumeRefreshToken_AlreadyConsumed_ReturnsFalse()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("henry", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-ac",
+            Username = "henry",
+            TokenHash = "hash-ac",
+            AccessTokenId = "at-ac",
+            FamilyId = "family-ac",
+            MachineId = "machine-ac",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90),
+            Consumed = false
+        });
+
+        bool first = await db.ConsumeRefreshTokenAsync("rt-ac");
+        bool second = await db.ConsumeRefreshTokenAsync("rt-ac");
+
+        Assert.True(first);
+        Assert.False(second);
+    }
+
+    [Fact]
+    public async Task ConsumeRefreshToken_NoOpWhenNotFound()
+    {
+        var db = CreateTestDb();
+        bool result = await db.ConsumeRefreshTokenAsync("nonexistent-id");
+        Assert.False(result);
+    }
+
+    [Fact]
+    public async Task DeleteRefreshTokensByAccessToken_RemovesMatchingTokens()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("carol", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-3",
+            Username = "carol",
+            TokenHash = "hash-111",
+            AccessTokenId = "at-shared",
+            FamilyId = "family-3",
+            MachineId = "machine-3",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-4",
+            Username = "carol",
+            TokenHash = "hash-222",
+            AccessTokenId = "at-shared",
+            FamilyId = "family-3",
+            MachineId = "machine-3",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-5",
+            Username = "carol",
+            TokenHash = "hash-333",
+            AccessTokenId = "at-other",
+            FamilyId = "family-3b",
+            MachineId = "machine-3",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+
+        await db.DeleteRefreshTokensByAccessTokenAsync("at-shared");
+
+        Assert.Null(await db.GetRefreshTokenByHashAsync("hash-111"));
+        Assert.Null(await db.GetRefreshTokenByHashAsync("hash-222"));
+        Assert.NotNull(await db.GetRefreshTokenByHashAsync("hash-333"));
+    }
+
+    [Fact]
+    public async Task DeleteUserRefreshTokens_RemovesAllForUser()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("dave", "hash", "user");
+        await db.CreateUserAsync("eve", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-6",
+            Username = "dave",
+            TokenHash = "hash-aaa",
+            AccessTokenId = "at-d1",
+            FamilyId = "family-d1",
+            MachineId = "machine-d",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-7",
+            Username = "eve",
+            TokenHash = "hash-bbb",
+            AccessTokenId = "at-e1",
+            FamilyId = "family-e1",
+            MachineId = "machine-e",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+
+        await db.DeleteUserRefreshTokensAsync("dave");
+
+        Assert.Null(await db.GetRefreshTokenByHashAsync("hash-aaa"));
+        Assert.NotNull(await db.GetRefreshTokenByHashAsync("hash-bbb"));
+    }
+
+    [Fact]
+    public async Task CleanExpiredRefreshTokens_RemovesOnlyExpired()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("frank", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-8",
+            Username = "frank",
+            TokenHash = "hash-expired",
+            AccessTokenId = "at-f1",
+            FamilyId = "family-f1",
+            MachineId = "machine-f",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow.AddDays(-100),
+            ExpiresAt = DateTime.UtcNow.AddDays(-1) // expired
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-9",
+            Username = "frank",
+            TokenHash = "hash-valid",
+            AccessTokenId = "at-f2",
+            FamilyId = "family-f2",
+            MachineId = "machine-f",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90) // valid
+        });
+
+        await db.CleanExpiredRefreshTokensAsync();
+
+        Assert.Null(await db.GetRefreshTokenByHashAsync("hash-expired"));
+        Assert.NotNull(await db.GetRefreshTokenByHashAsync("hash-valid"));
+    }
+
+    [Fact]
+    public async Task RefreshToken_CascadeDeleteOnUserRemoval()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("grace", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-10",
+            Username = "grace",
+            TokenHash = "hash-grace",
+            AccessTokenId = "at-g1",
+            FamilyId = "family-g1",
+            MachineId = "machine-g",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+
+        await db.DeleteUserAsync("grace");
+
+        Assert.Null(await db.GetRefreshTokenByHashAsync("hash-grace"));
+    }
+
+    [Fact]
+    public async Task GetRefreshTokensByFamily_ReturnsMatchingTokens()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("ivan", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-f1",
+            Username = "ivan",
+            TokenHash = "hash-f1",
+            AccessTokenId = "at-f1",
+            FamilyId = "family-abc",
+            MachineId = "machine-i",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-f2",
+            Username = "ivan",
+            TokenHash = "hash-f2",
+            AccessTokenId = "at-f2",
+            FamilyId = "family-abc",
+            MachineId = "machine-i",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-f3",
+            Username = "ivan",
+            TokenHash = "hash-f3",
+            AccessTokenId = "at-f3",
+            FamilyId = "family-other",
+            MachineId = "machine-i",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+
+        List<RefreshTokenRecord> results = await db.GetRefreshTokensByFamilyAsync("family-abc");
+
+        Assert.Equal(2, results.Count);
+        Assert.All(results, r => Assert.Equal("family-abc", r.FamilyId));
+        Assert.Contains(results, r => r.Id == "rt-f1");
+        Assert.Contains(results, r => r.Id == "rt-f2");
+    }
+
+    [Fact]
+    public async Task DeleteRefreshTokensByFamily_RemovesAllInFamily()
+    {
+        var db = CreateTestDb();
+        await db.CreateUserAsync("julia", "hash", "user");
+
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-d1",
+            Username = "julia",
+            TokenHash = "hash-d1",
+            AccessTokenId = "at-d1",
+            FamilyId = "family-del",
+            MachineId = "machine-j",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-d2",
+            Username = "julia",
+            TokenHash = "hash-d2",
+            AccessTokenId = "at-d2",
+            FamilyId = "family-del",
+            MachineId = "machine-j",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+        await db.CreateRefreshTokenAsync(new RefreshTokenRecord
+        {
+            Id = "rt-d3",
+            Username = "julia",
+            TokenHash = "hash-d3",
+            AccessTokenId = "at-d3",
+            FamilyId = "family-keep",
+            MachineId = "machine-j",
+            Scope = "publish",
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = DateTime.UtcNow.AddDays(90)
+        });
+
+        await db.DeleteRefreshTokensByFamilyAsync("family-del");
+
+        Assert.Null(await db.GetRefreshTokenByHashAsync("hash-d1"));
+        Assert.Null(await db.GetRefreshTokenByHashAsync("hash-d2"));
+        Assert.NotNull(await db.GetRefreshTokenByHashAsync("hash-d3"));
+    }
 }

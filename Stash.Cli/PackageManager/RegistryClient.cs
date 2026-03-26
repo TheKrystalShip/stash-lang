@@ -47,8 +47,20 @@ public sealed class RegistryClient : IPackageSource
     /// <summary>The base URL of the registry, with any trailing slash removed.</summary>
     private readonly string _baseUrl;
 
-    /// <summary>Optional bearer token sent with every request when non-<c>null</c>.</summary>
-    private readonly string? _token;
+    /// <summary>Current access token, updated on refresh.</summary>
+    private string? _token;
+
+    /// <summary>Current refresh token, updated on refresh.</summary>
+    private string? _refreshToken;
+
+    /// <summary>UTC expiry time of the current access token.</summary>
+    private DateTime? _tokenExpiresAt;
+
+    /// <summary>Machine fingerprint for refresh token binding.</summary>
+    private readonly string? _machineId;
+
+    /// <summary>The canonical registry URL used for config updates.</summary>
+    private readonly string? _registryUrl;
 
     /// <summary>Shared <see cref="HttpClient"/> instance used for all registry requests.</summary>
     private readonly HttpClient _http;
@@ -64,15 +76,107 @@ public sealed class RegistryClient : IPackageSource
     /// An optional bearer authentication token. When provided it is sent with every
     /// HTTP request as <c>Authorization: Bearer &lt;token&gt;</c>.
     /// </param>
-    public RegistryClient(string baseUrl, string? token = null)
+    /// <param name="refreshToken">An optional refresh token for automatic token renewal.</param>
+    /// <param name="tokenExpiresAt">The UTC expiry time of the access token.</param>
+    /// <param name="machineId">The machine fingerprint for refresh token binding.</param>
+    /// <param name="registryUrl">The canonical registry URL for persisting refreshed tokens.</param>
+    public RegistryClient(string baseUrl, string? token = null, string? refreshToken = null,
+        DateTime? tokenExpiresAt = null, string? machineId = null, string? registryUrl = null)
     {
         _baseUrl = baseUrl.TrimEnd('/');
         _token = token;
+        _refreshToken = refreshToken;
+        _tokenExpiresAt = tokenExpiresAt;
+        _machineId = machineId;
+        _registryUrl = registryUrl;
         _http = new HttpClient();
         if (_token != null)
         {
             _http.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Bearer", _token);
+        }
+    }
+
+    /// <summary>
+    /// Checks if the access token is expired or near expiry and attempts an automatic
+    /// refresh using the stored refresh token. Updates the stored configuration on success.
+    /// </summary>
+    private void EnsureTokenFresh()
+    {
+        if (_token == null || _refreshToken == null || _machineId == null || _tokenExpiresAt == null)
+        {
+            return;
+        }
+
+        // Refresh if token expires within 5 minutes
+        if (_tokenExpiresAt.Value > DateTime.UtcNow.AddMinutes(5))
+        {
+            return;
+        }
+
+        try
+        {
+            string body = JsonSerializer.Serialize(new TokenRefreshRequest
+            {
+                RefreshToken = _refreshToken,
+                AccessToken = _token,
+                MachineId = _machineId
+            }, CliJsonContext.Default.TokenRefreshRequest);
+            var content = new StringContent(body, Encoding.UTF8, "application/json");
+            var response = _http.PostAsync($"{_baseUrl}/auth/tokens/refresh", content).GetAwaiter().GetResult();
+
+            if (!response.IsSuccessStatusCode)
+            {
+                return;
+            }
+
+            string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            string? newAccessToken = null;
+            string? newRefreshToken = null;
+            DateTime? newExpiresAt = null;
+            DateTime? newRefreshTokenExpiresAt = null;
+
+            if (root.TryGetProperty("accessToken", out var at))
+            {
+                newAccessToken = at.GetString();
+            }
+            if (root.TryGetProperty("refreshToken", out var rt))
+            {
+                newRefreshToken = rt.GetString();
+            }
+            if (root.TryGetProperty("expiresAt", out var exp))
+            {
+                newExpiresAt = exp.GetDateTime();
+            }
+            if (root.TryGetProperty("refreshTokenExpiresAt", out var rtExp))
+            {
+                newRefreshTokenExpiresAt = rtExp.GetDateTime();
+            }
+
+            if (newAccessToken != null && newRefreshToken != null)
+            {
+                _token = newAccessToken;
+                _refreshToken = newRefreshToken;
+                _tokenExpiresAt = newExpiresAt;
+
+                // Update the Authorization header
+                _http.DefaultRequestHeaders.Authorization =
+                    new AuthenticationHeaderValue("Bearer", _token);
+
+                // Persist the new tokens to disk
+                if (_registryUrl != null)
+                {
+                    var config = UserConfig.Load();
+                    config.SetToken(_registryUrl, _token, _tokenExpiresAt, _refreshToken, newRefreshTokenExpiresAt, _machineId);
+                }
+            }
+        }
+        catch
+        {
+            // Refresh failed silently — the original token will be used
         }
     }
 
@@ -250,24 +354,22 @@ public sealed class RegistryClient : IPackageSource
     // Registry-specific operations
 
     /// <summary>
-    /// Authenticates with the registry and returns a bearer token on success.
+    /// Authenticates with the registry and returns the login response on success.
     /// </summary>
     /// <remarks>
-    /// Issues <c>POST /auth/login</c> with a JSON body containing
-    /// <c>username</c> and <c>password</c>, then reads the <c>token</c> field from
-    /// the response.
+    /// Issues <c>POST /auth/login</c> with the machine fingerprint header so
+    /// the server can bind a refresh token to this machine.
     /// </remarks>
-    /// <param name="username">The account username.</param>
-    /// <param name="password">The account password.</param>
-    /// <returns>
-    /// The bearer token string, or <c>null</c> when authentication fails
-    /// (non-success HTTP status).
-    /// </returns>
-    public string? Login(string username, string password)
+    public LoginResult? Login(string username, string password)
     {
+        string machineId = MachineFingerprint.Generate();
         var body = JsonSerializer.Serialize(new LoginRequest { Username = username, Password = password }, CliJsonContext.Default.LoginRequest);
-        var content = new StringContent(body, Encoding.UTF8, "application/json");
-        var response = _http.PostAsync($"{_baseUrl}/auth/login", content).GetAwaiter().GetResult();
+        var request = new HttpRequestMessage(HttpMethod.Post, $"{_baseUrl}/auth/login")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        request.Headers.Add("X-Machine-Id", machineId);
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
             return null;
@@ -275,12 +377,43 @@ public sealed class RegistryClient : IPackageSource
 
         string json = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
         using var doc = JsonDocument.Parse(json);
-        if (doc.RootElement.TryGetProperty("token", out var token))
+        var root = doc.RootElement;
+
+        string? token = null;
+        DateTime? expiresAt = null;
+        string? refreshToken = null;
+        DateTime? refreshTokenExpiresAt = null;
+
+        if (root.TryGetProperty("token", out var t))
         {
-            return token.GetString();
+            token = t.GetString();
+        }
+        if (root.TryGetProperty("expiresAt", out var exp))
+        {
+            expiresAt = exp.GetDateTime();
+        }
+        if (root.TryGetProperty("refreshToken", out var rt))
+        {
+            refreshToken = rt.GetString();
+        }
+        if (root.TryGetProperty("refreshTokenExpiresAt", out var rtExp))
+        {
+            refreshTokenExpiresAt = rtExp.GetDateTime();
         }
 
-        return null;
+        if (token == null)
+        {
+            return null;
+        }
+
+        return new LoginResult
+        {
+            Token = token,
+            ExpiresAt = expiresAt,
+            RefreshToken = refreshToken,
+            RefreshTokenExpiresAt = refreshTokenExpiresAt,
+            MachineId = machineId
+        };
     }
 
     /// <summary>
@@ -314,6 +447,7 @@ public sealed class RegistryClient : IPackageSource
     /// </returns>
     public string? Whoami()
     {
+        EnsureTokenFresh();
         var response = _http.GetAsync($"{_baseUrl}/auth/whoami").GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
@@ -355,6 +489,7 @@ public sealed class RegistryClient : IPackageSource
     /// </exception>
     public bool Publish(Stream tarball, string? integrity = null)
     {
+        EnsureTokenFresh();
         // We need to get the package name from the tarball to construct the URL.
         // Read the tarball into memory, extract name from stash.json
         using var ms = new MemoryStream();
@@ -398,6 +533,7 @@ public sealed class RegistryClient : IPackageSource
     /// </exception>
     public bool Unpublish(string packageName, string version)
     {
+        EnsureTokenFresh();
         var response = _http.DeleteAsync($"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}").GetAwaiter().GetResult();
         if (!response.IsSuccessStatusCode)
         {
@@ -516,6 +652,7 @@ public sealed class RegistryClient : IPackageSource
     /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
     public bool AddOwner(string packageName, string username)
     {
+        EnsureTokenFresh();
         var body = JsonSerializer.Serialize(new OwnerUpdateRequest { Add = [username], Remove = [] }, CliJsonContext.Default.OwnerUpdateRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = _http.PutAsync($"{_baseUrl}/admin/packages/{EncodePackageName(packageName)}/owners", content).GetAwaiter().GetResult();
@@ -534,6 +671,7 @@ public sealed class RegistryClient : IPackageSource
     /// <returns><c>true</c> when the server accepts the change; <c>false</c> otherwise.</returns>
     public bool RemoveOwner(string packageName, string username)
     {
+        EnsureTokenFresh();
         var body = JsonSerializer.Serialize(new OwnerUpdateRequest { Add = [], Remove = [username] }, CliJsonContext.Default.OwnerUpdateRequest);
         var content = new StringContent(body, Encoding.UTF8, "application/json");
         var response = _http.PutAsync($"{_baseUrl}/admin/packages/{EncodePackageName(packageName)}/owners", content).GetAwaiter().GetResult();

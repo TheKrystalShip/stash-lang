@@ -51,13 +51,14 @@ public static class LoginCommand
         }
 
         var client = new RegistryClient(registryUrl);
-        string? token = client.Login(username, password);
-        if (token == null)
+        var result = client.Login(username, password);
+        if (result == null)
         {
             throw new InvalidOperationException("Login failed. Check your credentials.");
         }
 
-        config.SetToken(registryUrl, token);
+        config.SetToken(registryUrl, result.Token, result.ExpiresAt,
+            result.RefreshToken, result.RefreshTokenExpiresAt, result.MachineId);
         Console.WriteLine($"Logged in as {username} to {registryUrl}.");
 
         if (string.IsNullOrEmpty(config.DefaultRegistry))

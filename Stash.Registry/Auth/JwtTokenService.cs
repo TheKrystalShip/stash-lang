@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
@@ -111,10 +112,14 @@ public sealed class JwtTokenService
     /// written to the <c>jti</c> claim and stored in <see cref="Database.IRegistryDatabase"/>
     /// to support revocation checks performed in <see cref="Startup.ConfigureServices"/>.
     /// </param>
+    /// <param name="machineId">
+    /// An optional SHA-256 machine fingerprint. When provided, a <c>machine_id</c> claim is
+    /// embedded in the token to enable machine-bound refresh token validation.
+    /// </param>
     /// <returns>A compact-serialised JWT string suitable for use as a Bearer token.</returns>
-    public string CreateToken(string username, string role, string scope, DateTime expiresAt, string tokenId)
+    public string CreateToken(string username, string role, string scope, DateTime expiresAt, string tokenId, string? machineId = null)
     {
-        var claims = new[]
+        var claimsList = new List<Claim>
         {
             new Claim(JwtRegisteredClaimNames.Sub, username),
             new Claim(JwtRegisteredClaimNames.Jti, tokenId),
@@ -122,13 +127,17 @@ public sealed class JwtTokenService
             new Claim(ClaimTypes.Role, role),
             new Claim("token_scope", scope)
         };
+        if (!string.IsNullOrEmpty(machineId))
+        {
+            claimsList.Add(new Claim("machine_id", machineId));
+        }
 
         var credentials = new SigningCredentials(_signingKey, SecurityAlgorithms.HmacSha256);
 
         var token = new JwtSecurityToken(
             issuer: Issuer,
             audience: Audience,
-            claims: claims,
+            claims: claimsList,
             notBefore: DateTime.UtcNow,
             expires: expiresAt,
             signingCredentials: credentials);
@@ -159,6 +168,28 @@ public sealed class JwtTokenService
             ValidateAudience = true,
             ValidAudience = Audience,
             ValidateLifetime = true,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = _signingKey,
+            ClockSkew = TimeSpan.FromSeconds(30),
+            NameClaimType = ClaimTypes.Name,
+            RoleClaimType = ClaimTypes.Role
+        };
+    }
+
+    /// <summary>
+    /// Builds <see cref="TokenValidationParameters"/> that accept expired tokens.
+    /// Used by the refresh endpoint to validate the signature and read claims from
+    /// an expired access token.
+    /// </summary>
+    public TokenValidationParameters GetExpiredTokenValidationParameters()
+    {
+        return new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = Issuer,
+            ValidateAudience = true,
+            ValidAudience = Audience,
+            ValidateLifetime = false,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = _signingKey,
             ClockSkew = TimeSpan.FromSeconds(30),

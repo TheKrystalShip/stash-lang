@@ -344,6 +344,64 @@ public sealed class StashRegistryDatabase : IRegistryDatabase
         await _context.SaveChangesAsync();
     }
 
+    // ── Refresh token operations ──────────────────────────────────────────
+
+    /// <inheritdoc/>
+    public async Task CreateRefreshTokenAsync(RefreshTokenRecord token)
+    {
+        _context.RefreshTokens.Add(token);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<RefreshTokenRecord?> GetRefreshTokenByHashAsync(string tokenHash)
+    {
+        return await _context.RefreshTokens.AsNoTracking().FirstOrDefaultAsync(t => t.TokenHash == tokenHash);
+    }
+
+    /// <inheritdoc/>
+    public async Task<bool> ConsumeRefreshTokenAsync(string id)
+    {
+        int rows = await _context.RefreshTokens
+            .Where(t => t.Id == id && !t.Consumed)
+            .ExecuteUpdateAsync(s => s.SetProperty(t => t.Consumed, true));
+        return rows > 0;
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteRefreshTokensByAccessTokenAsync(string accessTokenId)
+    {
+        await _context.RefreshTokens.Where(t => t.AccessTokenId == accessTokenId).ExecuteDeleteAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task<List<RefreshTokenRecord>> GetRefreshTokensByFamilyAsync(string familyId)
+    {
+        return await _context.RefreshTokens.AsNoTracking().Where(t => t.FamilyId == familyId).ToListAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteRefreshTokensByFamilyAsync(string familyId)
+    {
+        await _context.RefreshTokens.Where(t => t.FamilyId == familyId).ExecuteDeleteAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task DeleteUserRefreshTokensAsync(string username)
+    {
+        var tokens = await _context.RefreshTokens.Where(t => t.Username == username).ToListAsync();
+        _context.RefreshTokens.RemoveRange(tokens);
+        await _context.SaveChangesAsync();
+    }
+
+    /// <inheritdoc/>
+    public async Task CleanExpiredRefreshTokensAsync()
+    {
+        var expired = await _context.RefreshTokens.Where(t => t.ExpiresAt < DateTime.UtcNow).ToListAsync();
+        _context.RefreshTokens.RemoveRange(expired);
+        await _context.SaveChangesAsync();
+    }
+
     // ── Ownership operations ──────────────────────────────────────────────────
 
     /// <inheritdoc/>

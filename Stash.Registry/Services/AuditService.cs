@@ -112,6 +112,35 @@ public sealed class AuditService
         });
     }
 
+    public async Task LogTokenRefreshAsync(string user, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = "token.refresh",
+            User = user,
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
+    /// <summary>
+    /// Records a token theft detection event where a consumed refresh token was reused.
+    /// </summary>
+    /// <param name="user">The username associated with the compromised token family.</param>
+    /// <param name="familyId">The token family identifier that was revoked.</param>
+    /// <param name="ip">The IP address of the request that triggered detection, if available.</param>
+    public async Task LogTokenTheftDetectedAsync(string user, string familyId, string? ip)
+    {
+        await _db.AddAuditEntryAsync(new AuditEntry
+        {
+            Action = "token_theft_detected",
+            User = user,
+            Target = familyId,
+            Ip = ip,
+            Timestamp = DateTime.UtcNow
+        });
+    }
+
     public async Task LogPackageDeprecateAsync(string package, string user, string? ip)
     {
         await _db.AddAuditEntryAsync(new AuditEntry

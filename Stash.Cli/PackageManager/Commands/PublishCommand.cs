@@ -70,8 +70,8 @@ public static class PublishCommand
 
         // Get auth token
         var config = UserConfig.Load();
-        string? token = config.GetToken(registryUrl);
-        if (token == null)
+        var entry = config.GetEntry(registryUrl);
+        if (entry?.Token == null)
         {
             throw new InvalidOperationException($"Not logged in to registry '{registryUrl}'. Run 'stash pkg login'.");
         }
@@ -92,7 +92,8 @@ public static class PublishCommand
             string integrity = "sha256-" + Convert.ToBase64String(hash);
 
             // Publish
-            var client = new RegistryClient(registryUrl, token);
+            var client = new RegistryClient(registryUrl, entry.Token, entry.RefreshToken,
+                entry.ExpiresAt, entry.MachineId, registryUrl);
             using var stream = new FileStream(tarballPath, FileMode.Open, FileAccess.Read);
             client.Publish(stream, integrity);
 

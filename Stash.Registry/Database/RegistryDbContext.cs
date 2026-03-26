@@ -35,6 +35,9 @@ public sealed class RegistryDbContext : DbContext
     /// <summary>Gets the <see cref="TokenRecord"/> table.</summary>
     public DbSet<TokenRecord> Tokens => Set<TokenRecord>();
 
+    /// <summary>Gets the <see cref="RefreshTokenRecord"/> table.</summary>
+    public DbSet<RefreshTokenRecord> RefreshTokens => Set<RefreshTokenRecord>();
+
     /// <summary>Gets the <see cref="OwnerEntry"/> table.</summary>
     public DbSet<OwnerEntry> Owners => Set<OwnerEntry>();
 
@@ -113,6 +116,29 @@ public sealed class RegistryDbContext : DbContext
                 .HasForeignKey(e => e.Username)
                 .HasPrincipalKey(e => e.Username)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<RefreshTokenRecord>(entity =>
+        {
+            entity.ToTable("refresh_tokens");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).HasColumnName("id");
+            entity.Property(e => e.Username).HasColumnName("username").IsRequired();
+            entity.Property(e => e.TokenHash).HasColumnName("token_hash").IsRequired();
+            entity.Property(e => e.AccessTokenId).HasColumnName("access_token_id").IsRequired();
+            entity.Property(e => e.FamilyId).HasColumnName("family_id").IsRequired();
+            entity.Property(e => e.MachineId).HasColumnName("machine_id").IsRequired();
+            entity.Property(e => e.Scope).HasColumnName("scope").IsRequired().HasDefaultValue("publish");
+            entity.Property(e => e.CreatedAt).HasColumnName("created_at");
+            entity.Property(e => e.ExpiresAt).HasColumnName("expires_at");
+            entity.Property(e => e.Consumed).HasColumnName("consumed").HasDefaultValue(false);
+            entity.HasOne<UserRecord>()
+                .WithMany()
+                .HasForeignKey(e => e.Username)
+                .HasPrincipalKey(e => e.Username)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasIndex(e => e.TokenHash);
+            entity.HasIndex(e => e.FamilyId);
         });
 
         modelBuilder.Entity<OwnerEntry>(entity =>

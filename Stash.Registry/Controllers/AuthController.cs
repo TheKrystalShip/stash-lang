@@ -1,10 +1,15 @@
 using System;
 using System.Collections.Generic;
+using System.IdentityModel.Tokens.Jwt;
+using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.IdentityModel.Tokens;
 using Stash.Registry.Auth;
 using Stash.Registry.Configuration;
 using Stash.Registry.Contracts;
@@ -101,21 +106,53 @@ public class AuthController : ControllerBase
 
         var user = await _db.GetUserAsync(username);
         string role = user?.Role ?? "user";
-        string tokenId = Guid.NewGuid().ToString();
-        DateTime expiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.TokenExpiry);
-        string jwt = _jwtService.CreateToken(username, role, "publish", expiresAt, tokenId);
+        string? machineId = Request.Headers["X-Machine-Id"].FirstOrDefault();
+
+        // Create short-lived access token
+        string accessTokenId = Guid.NewGuid().ToString();
+        DateTime accessExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.AccessTokenExpiry);
+        string accessJwt = _jwtService.CreateToken(username, role, "publish", accessExpiresAt, accessTokenId, machineId);
 
         await _db.CreateTokenAsync(new TokenRecord
         {
-            Id = tokenId,
+            Id = accessTokenId,
             Username = username,
             TokenHash = "",
             Scope = "publish",
             CreatedAt = DateTime.UtcNow,
-            ExpiresAt = expiresAt
+            ExpiresAt = accessExpiresAt
         });
 
-        return Ok(new LoginResponse { Token = jwt, ExpiresAt = expiresAt });
+        // Create long-lived refresh token
+        string? refreshTokenString = null;
+        DateTime? refreshExpiresAt = null;
+        if (!string.IsNullOrEmpty(machineId))
+        {
+            refreshTokenString = GenerateRefreshToken();
+            string refreshTokenHash = HashToken(refreshTokenString);
+            refreshExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.RefreshTokenExpiry);
+
+            await _db.CreateRefreshTokenAsync(new Database.Models.RefreshTokenRecord
+            {
+                Id = Guid.NewGuid().ToString(),
+                Username = username,
+                TokenHash = refreshTokenHash,
+                AccessTokenId = accessTokenId,
+                FamilyId = accessTokenId,
+                MachineId = machineId,
+                Scope = "publish",
+                CreatedAt = DateTime.UtcNow,
+                ExpiresAt = refreshExpiresAt.Value
+            });
+        }
+
+        return Ok(new LoginResponse
+        {
+            Token = accessJwt,
+            ExpiresAt = accessExpiresAt,
+            RefreshToken = refreshTokenString,
+            RefreshTokenExpiresAt = refreshExpiresAt
+        });
     }
 
     /// <summary>
@@ -254,7 +291,7 @@ public class AuthController : ControllerBase
         }
 
         string tokenId = Guid.NewGuid().ToString();
-        DateTime expiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.TokenExpiry);
+        DateTime expiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.ApiTokenExpiry);
         string jwt = _jwtService.CreateToken(username, role, scope, expiresAt, tokenId);
 
         await _db.CreateTokenAsync(new TokenRecord
@@ -321,5 +358,192 @@ public class AuthController : ControllerBase
         await _auditService.LogTokenRevokeAsync(username, record.Id, ip);
 
         return Ok(new SuccessResponse());
+    }
+
+    /// <summary>
+    /// Exchanges a valid refresh token for a new access/refresh token pair.
+    /// </summary>
+    /// <remarks>
+    /// Implements OAuth2-style token rotation. The refresh token is consumed on use,
+    /// preventing replay attacks. The client must present the same machine fingerprint
+    /// that was used during login. If a consumed refresh token is presented, all tokens
+    /// in the family are revoked as a security measure.
+    /// </remarks>
+    [HttpPost("tokens/refresh")]
+    [AllowAnonymous]
+    public async Task<IActionResult> RefreshToken()
+    {
+        RefreshTokenRequest? body;
+        try
+        {
+            body = await JsonSerializer.DeserializeAsync<RefreshTokenRequest>(Request.Body, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        }
+        catch (JsonException)
+        {
+            return BadRequest(new ErrorResponse { Error = "Invalid JSON body." });
+        }
+
+        if (string.IsNullOrEmpty(body?.RefreshToken) || string.IsNullOrEmpty(body?.AccessToken) || string.IsNullOrEmpty(body?.MachineId))
+        {
+            return BadRequest(new ErrorResponse { Error = "refreshToken, accessToken, and machineId are required." });
+        }
+
+        // Validate the expired access token's signature (but not lifetime)
+        ClaimsPrincipal? principal;
+        try
+        {
+            var tokenHandler = new JwtSecurityTokenHandler();
+            principal = tokenHandler.ValidateToken(body.AccessToken, _jwtService.GetExpiredTokenValidationParameters(), out _);
+        }
+        catch (SecurityTokenException)
+        {
+            return Unauthorized(new ErrorResponse { Error = "Invalid access token." });
+        }
+
+        string? tokenUsername = principal.Identity?.Name;
+        string? tokenJti = principal.FindFirstValue(JwtRegisteredClaimNames.Jti);
+        if (string.IsNullOrEmpty(tokenUsername) || string.IsNullOrEmpty(tokenJti))
+        {
+            return Unauthorized(new ErrorResponse { Error = "Invalid access token claims." });
+        }
+
+        // Cross-validate machine_id claim from the JWT against the request body
+        string? tokenMachineId = principal.FindFirstValue("machine_id");
+        if (!string.Equals(tokenMachineId, body.MachineId, StringComparison.Ordinal))
+        {
+            return Unauthorized(new ErrorResponse { Error = "Machine fingerprint mismatch." });
+        }
+
+        // Look up the refresh token by hash
+        string refreshTokenHash = HashToken(body.RefreshToken);
+        var refreshRecord = await _db.GetRefreshTokenByHashAsync(refreshTokenHash);
+        if (refreshRecord == null)
+        {
+            return Unauthorized(new ErrorResponse { Error = "Invalid refresh token." });
+        }
+
+        // Verify the access token is the one paired with this refresh token
+        if (!string.Equals(tokenJti, refreshRecord.AccessTokenId, StringComparison.Ordinal))
+        {
+            return Unauthorized(new ErrorResponse { Error = "Token pair mismatch." });
+        }
+
+        // Check if refresh token has been consumed (possible token theft)
+        if (refreshRecord.Consumed)
+        {
+            await RevokeTokenFamilyAsync(refreshRecord.FamilyId, refreshRecord.Username);
+            return Unauthorized(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
+        }
+
+        // Validate refresh token belongs to the right user
+        if (!string.Equals(refreshRecord.Username, tokenUsername, StringComparison.Ordinal))
+        {
+            return Unauthorized(new ErrorResponse { Error = "Token mismatch." });
+        }
+
+        // Validate machine fingerprint matches
+        if (!string.Equals(refreshRecord.MachineId, body.MachineId, StringComparison.Ordinal))
+        {
+            return Unauthorized(new ErrorResponse { Error = "Machine fingerprint mismatch. Please log in again." });
+        }
+
+        // Check refresh token hasn't expired
+        if (refreshRecord.ExpiresAt < DateTime.UtcNow)
+        {
+            return Unauthorized(new ErrorResponse { Error = "Refresh token has expired. Please log in again." });
+        }
+
+        // Atomically consume the old refresh token (rotation)
+        bool consumed = await _db.ConsumeRefreshTokenAsync(refreshRecord.Id);
+        if (!consumed)
+        {
+            await RevokeTokenFamilyAsync(refreshRecord.FamilyId, refreshRecord.Username);
+            return Unauthorized(new ErrorResponse { Error = "Refresh token has already been used. All tokens have been revoked for security." });
+        }
+
+        // Look up the user to get current role
+        var user = await _db.GetUserAsync(tokenUsername);
+        string role = user?.Role ?? "user";
+
+        // Delete the old access token record
+        await _db.DeleteTokenAsync(tokenJti);
+
+        // Create new access token
+        string newAccessTokenId = Guid.NewGuid().ToString();
+        DateTime newAccessExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.AccessTokenExpiry);
+        string newAccessJwt = _jwtService.CreateToken(tokenUsername, role, refreshRecord.Scope, newAccessExpiresAt, newAccessTokenId, body.MachineId);
+
+        await _db.CreateTokenAsync(new TokenRecord
+        {
+            Id = newAccessTokenId,
+            Username = tokenUsername,
+            TokenHash = "",
+            Scope = refreshRecord.Scope,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = newAccessExpiresAt
+        });
+
+        // Create new refresh token (rotation)
+        string newRefreshTokenString = GenerateRefreshToken();
+        string newRefreshTokenHash = HashToken(newRefreshTokenString);
+        DateTime newRefreshExpiresAt = AuthHelper.ParseTokenExpiry(_config.Auth.RefreshTokenExpiry);
+
+        await _db.CreateRefreshTokenAsync(new Database.Models.RefreshTokenRecord
+        {
+            Id = Guid.NewGuid().ToString(),
+            Username = tokenUsername,
+            TokenHash = newRefreshTokenHash,
+            AccessTokenId = newAccessTokenId,
+            FamilyId = refreshRecord.FamilyId,
+            MachineId = body.MachineId,
+            Scope = refreshRecord.Scope,
+            CreatedAt = DateTime.UtcNow,
+            ExpiresAt = newRefreshExpiresAt
+        });
+
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        await _auditService.LogTokenRefreshAsync(tokenUsername, ip);
+
+        return Ok(new RefreshTokenResponse
+        {
+            AccessToken = newAccessJwt,
+            RefreshToken = newRefreshTokenString,
+            ExpiresAt = newAccessExpiresAt,
+            RefreshTokenExpiresAt = newRefreshExpiresAt
+        });
+    }
+
+    /// <summary>
+    /// Revokes an entire refresh token family and their associated access tokens.
+    /// </summary>
+    private async Task RevokeTokenFamilyAsync(string familyId, string username)
+    {
+        var familyTokens = await _db.GetRefreshTokensByFamilyAsync(familyId);
+        foreach (var ft in familyTokens)
+        {
+            await _db.DeleteTokenAsync(ft.AccessTokenId);
+        }
+        await _db.DeleteRefreshTokensByFamilyAsync(familyId);
+
+        string? ip = HttpContext.Connection.RemoteIpAddress?.ToString();
+        await _auditService.LogTokenTheftDetectedAsync(username, familyId, ip);
+    }
+
+    /// <summary>
+    /// Generates a cryptographically random refresh token string.
+    /// </summary>
+    private static string GenerateRefreshToken()
+    {
+        byte[] bytes = RandomNumberGenerator.GetBytes(32);
+        return Convert.ToBase64String(bytes);
+    }
+
+    /// <summary>
+    /// Computes the SHA-256 hex digest of a token string.
+    /// </summary>
+    private static string HashToken(string token)
+    {
+        byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(token));
+        return Convert.ToHexStringLower(bytes);
     }
 }

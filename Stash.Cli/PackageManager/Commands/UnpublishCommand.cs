@@ -67,13 +67,14 @@ public static class UnpublishCommand
         string version = spec[(atIdx + 1)..];
 
         var config = UserConfig.Load();
-        string? token = config.GetToken(registryUrl);
-        if (token == null)
+        var entry = config.GetEntry(registryUrl);
+        if (entry?.Token == null)
         {
             throw new InvalidOperationException($"Not logged in to registry '{registryUrl}'. Run 'stash pkg login'.");
         }
 
-        var client = new RegistryClient(registryUrl, token);
+        var client = new RegistryClient(registryUrl, entry.Token, entry.RefreshToken,
+            entry.ExpiresAt, entry.MachineId, registryUrl);
         client.Unpublish(packageName, version);
 
         Console.WriteLine($"Unpublished {packageName}@{version} from {registryUrl}.");

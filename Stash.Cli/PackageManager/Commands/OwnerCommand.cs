@@ -58,44 +58,45 @@ public static class OwnerCommand
 
         var (registryUrl, _) = RegistryResolver.Resolve(args);
         var config = UserConfig.Load();
-        string? token = config.GetToken(registryUrl);
-        var client = new RegistryClient(registryUrl, token);
+        var entry = config.GetEntry(registryUrl);
+        var client = new RegistryClient(registryUrl, entry?.Token, entry?.RefreshToken,
+            entry?.ExpiresAt, entry?.MachineId, registryUrl);
 
         switch (action)
         {
             case "list":
             case "ls":
-            {
-                List<string>? owners = client.GetOwners(packageName);
-                if (owners == null)
                 {
-                    Console.Error.WriteLine($"Package '{packageName}' not found.");
-                    Environment.Exit(1);
-                    return;
-                }
-                Console.WriteLine($"Owners of {packageName}:");
-                foreach (string owner in owners)
+                    List<string>? owners = client.GetOwners(packageName);
+                    if (owners == null)
+                    {
+                        Console.Error.WriteLine($"Package '{packageName}' not found.");
+                        Environment.Exit(1);
+                        return;
+                    }
+                    Console.WriteLine($"Owners of {packageName}:");
+                    foreach (string owner in owners)
                     {
                         Console.WriteLine($"  {owner}");
                     }
 
                     break;
-            }
+                }
             case "add":
-            {
-                if (positionalArgs.Count < 3)
+                {
+                    if (positionalArgs.Count < 3)
                     {
                         throw new ArgumentException("Usage: stash pkg owner add <package> <username>");
                     }
 
                     string username = positionalArgs[2];
-                if (token == null)
+                    if (entry?.Token == null)
                     {
                         throw new InvalidOperationException("Not logged in. Run 'stash pkg login'.");
                     }
 
                     bool ok = client.AddOwner(packageName, username);
-                if (ok)
+                    if (ok)
                     {
                         Console.WriteLine($"Added {username} as owner of {packageName}.");
                     }
@@ -105,22 +106,22 @@ public static class OwnerCommand
                     }
 
                     break;
-            }
+                }
             case "remove":
-            {
-                if (positionalArgs.Count < 3)
+                {
+                    if (positionalArgs.Count < 3)
                     {
                         throw new ArgumentException("Usage: stash pkg owner remove <package> <username>");
                     }
 
                     string username = positionalArgs[2];
-                if (token == null)
+                    if (entry?.Token == null)
                     {
                         throw new InvalidOperationException("Not logged in. Run 'stash pkg login'.");
                     }
 
                     bool ok = client.RemoveOwner(packageName, username);
-                if (ok)
+                    if (ok)
                     {
                         Console.WriteLine($"Removed {username} from owners of {packageName}.");
                     }
@@ -130,7 +131,7 @@ public static class OwnerCommand
                     }
 
                     break;
-            }
+                }
             default:
                 throw new ArgumentException($"Unknown owner subcommand: {action}. Use list, add, or remove.");
         }

@@ -178,6 +178,11 @@ public sealed class RateLimitingMiddleware
             return "auth";
         }
 
+        if (method == "POST" && path.EndsWith("/auth/tokens/refresh", StringComparison.OrdinalIgnoreCase))
+        {
+            return "refresh";
+        }
+
         if (method == "PUT" && path.Contains("/packages/", StringComparison.OrdinalIgnoreCase))
         {
             return "publish";
@@ -243,6 +248,7 @@ public sealed class RateLimitingMiddleware
         return category switch
         {
             "auth" => (_config.Auth.MaxAttempts, _config.Auth.WindowSeconds),
+            "refresh" => (_config.Auth.MaxAttempts, _config.Auth.WindowSeconds),
             "publish" => (_config.Publish.MaxPerHour, 3600),
             "download" => (_config.Download.MaxPerMinute, 60),
             "search" => (_config.Search.MaxPerMinute, 60),

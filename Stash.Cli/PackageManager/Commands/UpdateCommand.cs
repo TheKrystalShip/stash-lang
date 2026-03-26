@@ -85,7 +85,9 @@ public static class UpdateCommand
         {
             var (registryUrl, _) = RegistryResolver.Resolve(args);
             var config = UserConfig.Load();
-            var source = new RegistryClient(registryUrl, config.GetToken(registryUrl));
+            var entry = config.GetEntry(registryUrl);
+            var source = new RegistryClient(registryUrl, entry?.Token, entry?.RefreshToken,
+                entry?.ExpiresAt, entry?.MachineId, registryUrl);
             PackageInstaller.Install(projectDir, source);
             Console.WriteLine("Dependencies updated.");
         }

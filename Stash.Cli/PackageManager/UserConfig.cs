@@ -118,15 +118,23 @@ public sealed class UserConfig
     }
 
     /// <summary>
-    /// Stores an authentication token for the specified registry URL and immediately
-    /// saves the configuration to disk.
+    /// Retrieves the full registry entry for the specified registry URL.
     /// </summary>
-    /// <param name="registryUrl">
-    /// The registry URL to associate the token with. A new <see cref="RegistryEntry"/>
-    /// is created if none exists.
-    /// </param>
-    /// <param name="token">The bearer token to store.</param>
-    public void SetToken(string registryUrl, string token)
+    public RegistryEntry? GetEntry(string registryUrl)
+    {
+        if (Registries.TryGetValue(registryUrl, out var entry))
+        {
+            return entry;
+        }
+        return null;
+    }
+
+    /// <summary>
+    /// Stores an access token and optional refresh token for the specified registry URL
+    /// and immediately saves the configuration to disk.
+    /// </summary>
+    public void SetToken(string registryUrl, string token, DateTime? expiresAt = null,
+        string? refreshToken = null, DateTime? refreshTokenExpiresAt = null, string? machineId = null)
     {
         if (!Registries.TryGetValue(registryUrl, out var entry))
         {
@@ -134,6 +142,10 @@ public sealed class UserConfig
             Registries[registryUrl] = entry;
         }
         entry.Token = token;
+        entry.ExpiresAt = expiresAt;
+        entry.RefreshToken = refreshToken;
+        entry.RefreshTokenExpiresAt = refreshTokenExpiresAt;
+        entry.MachineId = machineId;
         Save();
     }
 
@@ -148,6 +160,10 @@ public sealed class UserConfig
         if (Registries.TryGetValue(registryUrl, out var entry))
         {
             entry.Token = null;
+            entry.ExpiresAt = null;
+            entry.RefreshToken = null;
+            entry.RefreshTokenExpiresAt = null;
+            entry.MachineId = null;
             if (entry.Url == null)
             {
                 Registries.Remove(registryUrl);
@@ -199,9 +215,25 @@ public sealed class RegistryEntry
     public string? Url { get; set; }
 
     /// <summary>
-    /// The bearer authentication token used when communicating with this registry,
+    /// The short-lived access token used when communicating with this registry,
     /// or <c>null</c> when the user is not logged in.
     /// </summary>
     [JsonPropertyName("token")]
     public string? Token { get; set; }
+
+    /// <summary>The UTC expiry time of the access token.</summary>
+    [JsonPropertyName("expiresAt")]
+    public DateTime? ExpiresAt { get; set; }
+
+    /// <summary>The long-lived refresh token for obtaining new access tokens.</summary>
+    [JsonPropertyName("refreshToken")]
+    public string? RefreshToken { get; set; }
+
+    /// <summary>The UTC expiry time of the refresh token.</summary>
+    [JsonPropertyName("refreshTokenExpiresAt")]
+    public DateTime? RefreshTokenExpiresAt { get; set; }
+
+    /// <summary>The machine fingerprint hash that was used when the token was issued.</summary>
+    [JsonPropertyName("machineId")]
+    public string? MachineId { get; set; }
 }

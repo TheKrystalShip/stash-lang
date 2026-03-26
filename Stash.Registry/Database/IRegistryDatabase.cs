@@ -224,6 +224,58 @@ public interface IRegistryDatabase
     /// </summary>
     Task CleanExpiredTokensAsync();
 
+    // Refresh token operations
+
+    /// <summary>
+    /// Persists a new refresh token record.
+    /// </summary>
+    /// <param name="token">The <see cref="RefreshTokenRecord"/> to store.</param>
+    Task CreateRefreshTokenAsync(RefreshTokenRecord token);
+
+    /// <summary>
+    /// Looks up a refresh token record by its SHA-256 hash.
+    /// </summary>
+    /// <param name="tokenHash">The SHA-256 hex digest of the refresh token.</param>
+    /// <returns>The matching <see cref="RefreshTokenRecord"/>, or <c>null</c> if not found.</returns>
+    Task<RefreshTokenRecord?> GetRefreshTokenByHashAsync(string tokenHash);
+
+    /// <summary>
+    /// Atomically marks a refresh token as consumed. Returns <c>true</c> if the
+    /// token was successfully consumed, or <c>false</c> if it was already consumed.
+    /// </summary>
+    /// <param name="id">The refresh token ID to mark as consumed.</param>
+    /// <returns><c>true</c> if the update affected exactly one row; <c>false</c> otherwise.</returns>
+    Task<bool> ConsumeRefreshTokenAsync(string id);
+
+    /// <summary>
+    /// Deletes all refresh tokens associated with a specific access token.
+    /// </summary>
+    /// <param name="accessTokenId">The access token ID whose refresh tokens should be removed.</param>
+    Task DeleteRefreshTokensByAccessTokenAsync(string accessTokenId);
+
+    /// <summary>
+    /// Returns all refresh token records belonging to a specific token family.
+    /// </summary>
+    /// <param name="familyId">The family identifier shared across rotations.</param>
+    Task<List<RefreshTokenRecord>> GetRefreshTokensByFamilyAsync(string familyId);
+
+    /// <summary>
+    /// Deletes all refresh tokens belonging to a specific token family.
+    /// </summary>
+    /// <param name="familyId">The family identifier shared across rotations.</param>
+    Task DeleteRefreshTokensByFamilyAsync(string familyId);
+
+    /// <summary>
+    /// Deletes all refresh tokens for a given user.
+    /// </summary>
+    /// <param name="username">The username whose refresh tokens should be removed.</param>
+    Task DeleteUserRefreshTokensAsync(string username);
+
+    /// <summary>
+    /// Removes all refresh token records that have expired.
+    /// </summary>
+    Task CleanExpiredRefreshTokensAsync();
+
     // Ownership operations
     /// <summary>
     /// Returns the list of owners for a package, ordered alphabetically.

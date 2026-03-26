@@ -54,7 +54,9 @@ public static class SearchCommand
 
         var (registryUrl, _) = RegistryResolver.Resolve(args);
         var config = UserConfig.Load();
-        var client = new RegistryClient(registryUrl, config.GetToken(registryUrl));
+        var entry = config.GetEntry(registryUrl);
+        var client = new RegistryClient(registryUrl, entry?.Token, entry?.RefreshToken,
+            entry?.ExpiresAt, entry?.MachineId, registryUrl);
 
         var results = client.Search(query, page);
         if (results == null || results.Packages.Count == 0)

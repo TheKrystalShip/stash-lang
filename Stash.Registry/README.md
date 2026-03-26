@@ -118,7 +118,9 @@ dotnet run --project Stash.Registry/ -- /path/to/custom-config.json
   "Auth": {
     "Type": "local",
     "RegistrationEnabled": true,
-    "TokenExpiry": "90d",
+    "ApiTokenExpiry": "90d",
+    "AccessTokenExpiry": "1h",
+    "RefreshTokenExpiry": "90d",
     "LdapServer": "",
     "LdapBaseDn": "",
     "LdapUserFilter": "",
@@ -194,11 +196,13 @@ dotnet run --project Stash.Registry/ -- /path/to/custom-config.json
 
 ### Auth Configuration
 
-| Property            | Type   | Default | Description                              |
-| ------------------- | ------ | ------- | ---------------------------------------- |
-| Type                | string | `local` | `local`, `ldap` (stub), or `oidc` (stub) |
-| RegistrationEnabled | bool   | `true`  | Allow self-registration                  |
-| TokenExpiry         | string | `90d`   | Token lifetime (`90d`, `24h`, `30m`)     |
+| Property            | Type   | Default | Description                                                                                      |
+| ------------------- | ------ | ------- | ------------------------------------------------------------------------------------------------ |
+| Type                | string | `local` | `local`, `ldap` (stub), or `oidc` (stub)                                                         |
+| RegistrationEnabled | bool   | `true`  | Allow self-registration                                                                          |
+| ApiTokenExpiry      | string | `90d`   | Lifetime of manually created API tokens (`POST /auth/tokens`). Accepts duration strings.         |
+| AccessTokenExpiry   | string | `1h`    | Lifetime of short-lived access tokens issued during login and refresh. Accepts duration strings. |
+| RefreshTokenExpiry  | string | `90d`   | Lifetime of long-lived refresh tokens issued during login. Accepts duration strings.             |
 
 ### Security Configuration
 
@@ -359,29 +363,30 @@ docker run -d \
 
 ## API Quick Reference
 
-| Method | Endpoint                                     | Auth    | Description         |
-| ------ | -------------------------------------------- | ------- | ------------------- |
-| GET    | `/`                                          | —       | Health check        |
-| POST   | `/api/v1/auth/login`                         | —       | Login, get JWT      |
-| POST   | `/api/v1/auth/register`                      | —       | Register account    |
-| GET    | `/api/v1/auth/whoami`                        | Bearer  | Current user info   |
-| POST   | `/api/v1/auth/tokens`                        | Bearer  | Create scoped token |
-| DELETE | `/api/v1/auth/tokens/{id}`                   | Bearer  | Revoke token        |
-| GET    | `/api/v1/packages/{name}`                    | —       | Package metadata    |
-| GET    | `/api/v1/packages/{name}/{version}`          | —       | Version details     |
-| GET    | `/api/v1/packages/{name}/{version}/download` | —       | Download tarball    |
-| PUT    | `/api/v1/packages/{name}`                    | Publish | Publish version     |
-| DELETE | `/api/v1/packages/{name}/{version}`          | Publish | Unpublish version   |
-| PATCH  | `/api/v1/packages/{name}/deprecate`          | Publish | Deprecate package   |
-| DELETE | `/api/v1/packages/{name}/deprecate`          | Publish | Undeprecate package |
-| PATCH  | `/api/v1/packages/{name}/{version}/deprecate`| Publish | Deprecate version   |
-| DELETE | `/api/v1/packages/{name}/{version}/deprecate`| Publish | Undeprecate version |
-| GET    | `/api/v1/search?q=query`                     | —       | Search packages     |
-| GET    | `/api/v1/admin/stats`                        | Admin   | Registry stats      |
-| POST   | `/api/v1/admin/users`                        | Admin   | Create user         |
-| DELETE | `/api/v1/admin/users/{username}`             | Admin   | Delete user         |
-| PUT    | `/api/v1/admin/packages/{name}/owners`       | Admin   | Manage owners       |
-| GET    | `/api/v1/admin/audit-log`                    | Admin   | Audit log           |
+| Method | Endpoint                                      | Auth    | Description         |
+| ------ | --------------------------------------------- | ------- | ------------------- |
+| GET    | `/`                                           | —       | Health check        |
+| POST   | `/api/v1/auth/login`                          | —       | Login, get JWT      |
+| POST   | `/api/v1/auth/register`                       | —       | Register account    |
+| GET    | `/api/v1/auth/whoami`                         | Bearer  | Current user info   |
+| POST   | `/api/v1/auth/tokens`                         | Bearer  | Create scoped token |
+| DELETE | `/api/v1/auth/tokens/{id}`                    | Bearer  | Revoke token        |
+| POST   | `/api/v1/auth/tokens/refresh`                 | —       | Refresh token pair  |
+| GET    | `/api/v1/packages/{name}`                     | —       | Package metadata    |
+| GET    | `/api/v1/packages/{name}/{version}`           | —       | Version details     |
+| GET    | `/api/v1/packages/{name}/{version}/download`  | —       | Download tarball    |
+| PUT    | `/api/v1/packages/{name}`                     | Publish | Publish version     |
+| DELETE | `/api/v1/packages/{name}/{version}`           | Publish | Unpublish version   |
+| PATCH  | `/api/v1/packages/{name}/deprecate`           | Publish | Deprecate package   |
+| DELETE | `/api/v1/packages/{name}/deprecate`           | Publish | Undeprecate package |
+| PATCH  | `/api/v1/packages/{name}/{version}/deprecate` | Publish | Deprecate version   |
+| DELETE | `/api/v1/packages/{name}/{version}/deprecate` | Publish | Undeprecate version |
+| GET    | `/api/v1/search?q=query`                      | —       | Search packages     |
+| GET    | `/api/v1/admin/stats`                         | Admin   | Registry stats      |
+| POST   | `/api/v1/admin/users`                         | Admin   | Create user         |
+| DELETE | `/api/v1/admin/users/{username}`              | Admin   | Delete user         |
+| PUT    | `/api/v1/admin/packages/{name}/owners`        | Admin   | Manage owners       |
+| GET    | `/api/v1/admin/audit-log`                     | Admin   | Audit log           |
 
 ### OpenAPI
 
