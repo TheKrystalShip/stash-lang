@@ -39,6 +39,8 @@ namespace Stash.Cli.PackageManager;
 [JsonSerializable(typeof(TokenListItemResult))]
 [JsonSerializable(typeof(List<TokenListItemResult>))]
 [JsonSerializable(typeof(TokenRefreshRequest))]
+[JsonSerializable(typeof(DeprecatePackageCliRequest))]
+[JsonSerializable(typeof(DeprecateVersionCliRequest))]
 [JsonSourceGenerationOptions(
     PropertyNameCaseInsensitive = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -92,6 +94,27 @@ internal sealed class TokenRefreshRequest
     /// <summary>The machine fingerprint hash.</summary>
     [JsonPropertyName("machineId")]
     public string MachineId { get; set; } = "";
+}
+
+/// <summary>
+/// Request body sent to <c>PATCH /packages/{name}/deprecate</c>.
+/// </summary>
+internal sealed class DeprecatePackageCliRequest
+{
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
+
+    [JsonPropertyName("alternative")]
+    public string? Alternative { get; set; }
+}
+
+/// <summary>
+/// Request body sent to <c>PATCH /packages/{name}/{version}/deprecate</c>.
+/// </summary>
+internal sealed class DeprecateVersionCliRequest
+{
+    [JsonPropertyName("message")]
+    public string Message { get; set; } = "";
 }
 
 /// <summary>

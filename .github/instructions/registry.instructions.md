@@ -16,7 +16,7 @@ Stash.Registry/
 ├── appsettings.json              → Default configuration
 ├── Auth/                         → Authentication providers & JWT
 │   ├── IAuthProvider.cs          → Interface: Authenticate, CreateUser, UserExists
-│   ├── LocalAuthProvider.cs      → Built-in password auth (SHA-256)
+│   ├── LocalAuthProvider.cs      → Built-in password auth (Argon2id)
 │   ├── LdapAuthProvider.cs       → LDAP integration (stub)
 │   ├── OidcAuthProvider.cs       → OpenID Connect (stub)
 │   └── JwtTokenService.cs        → JWT token creation & validation
@@ -256,4 +256,3 @@ When adding new features, add corresponding tests in `Stash.Tests/Registry/`. Us
 | `OidcAuthProvider`   | Stub   | Implements `IAuthProvider`, all no-ops  |
 | `S3Storage`          | Stub   | Implements `IPackageStorage`, all throw |
 | `DeprecationService` | Stub   | Not started                             |
-| Password hashing     | PA-3   | Currently SHA-256, should be Argon2id   |

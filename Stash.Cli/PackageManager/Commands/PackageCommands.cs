@@ -13,7 +13,8 @@ namespace Stash.Cli.PackageManager.Commands;
 /// <c>init</c>, <c>install</c>/<c>i</c>, <c>uninstall</c>/<c>remove</c>,
 /// <c>list</c>/<c>ls</c>, <c>pack</c>, <c>update</c>, <c>outdated</c>,
 /// <c>publish</c>, <c>search</c>, <c>info</c>, <c>login</c>, <c>logout</c>,
-/// <c>owner</c>, <c>unpublish</c>, and <c>help</c>.
+/// <c>owner</c>, <c>unpublish</c>, <c>deprecate</c>, <c>undeprecate</c>,
+/// and <c>help</c>.
 /// </para>
 /// <para>
 /// Exceptions of types <see cref="InvalidOperationException"/>,
@@ -93,6 +94,12 @@ public static class PackageCommands
                 case "unpublish":
                     UnpublishCommand.Execute(subArgs);
                     break;
+                case "deprecate":
+                    DeprecateCommand.Execute(subArgs);
+                    break;
+                case "undeprecate":
+                    DeprecateCommand.ExecuteUndo(subArgs);
+                    break;
                 case "token":
                     TokenCommand.Execute(subArgs);
                     break;
@@ -158,6 +165,8 @@ public static class PackageCommands
         Console.WriteLine("  logout            Remove stored credentials");
         Console.WriteLine("  owner             Manage package owners");
         Console.WriteLine("  unpublish         Remove a published version");
+        Console.WriteLine("  deprecate         Deprecate a package or version");
+        Console.WriteLine("  undeprecate       Remove deprecation status");
         Console.WriteLine("  token             Manage API tokens");
         Console.WriteLine("  help              Show this help message");
     }

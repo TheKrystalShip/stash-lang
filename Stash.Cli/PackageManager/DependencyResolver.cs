@@ -389,7 +389,6 @@ public sealed class DependencyResolver
                     // Reconstruct cycle path
                     int cycleStart = path.IndexOf(neighbor);
                     var cyclePath = path.Skip(cycleStart).Append(neighbor);
-                    // TODO: PA-2 — finalize error message format
                     throw new InvalidOperationException(
                         $"Circular dependency detected: {string.Join(" → ", cyclePath)}");
                 }

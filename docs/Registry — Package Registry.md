@@ -63,7 +63,7 @@ Stash.Registry/
 ├── appsettings.json                 # Default configuration
 ├── Auth/                         # Authentication providers & JWT
 │   ├── IAuthProvider.cs          # Interface: Authenticate, CreateUser, UserExists
-│   ├── LocalAuthProvider.cs      # Built-in password auth (SHA-256)
+│   ├── LocalAuthProvider.cs      # Built-in password auth (Argon2id)
 │   ├── LdapAuthProvider.cs       # LDAP integration (stub)
 │   ├── OidcAuthProvider.cs       # OpenID Connect (stub)
 │   └── JwtTokenService.cs        # JWT token creation & validation
@@ -905,11 +905,11 @@ The registry supports OAuth2-style refresh token rotation for CLI clients. When 
 
 The registry supports three authentication provider backends, configured via `auth.type`:
 
-| Provider | Status | Description                                                      |
-| -------- | ------ | ---------------------------------------------------------------- |
-| `local`  | ✅     | Built-in password authentication. Passwords hashed with SHA-256. |
-| `ldap`   | ❌     | LDAP/Active Directory integration. Stub — not yet implemented.   |
-| `oidc`   | ❌     | OpenID Connect delegation. Stub — not yet implemented.           |
+| Provider | Status | Description                                                                          |
+| -------- | ------ | ------------------------------------------------------------------------------------ |
+| `local`  | ✅     | Built-in password authentication. Passwords hashed with Argon2id (OWASP parameters). |
+| `ldap`   | ❌     | LDAP/Active Directory integration. Stub — not yet implemented.                       |
+| `oidc`   | ❌     | OpenID Connect delegation. Stub — not yet implemented.                               |
 
 All providers implement `IAuthProvider`:
 
@@ -1150,12 +1150,12 @@ Foreign key cascades on delete — removing a package removes all its versions.
 
 Registry user accounts. Username is the primary key.
 
-| Column          | Type     | Constraints                | Description                |
-| --------------- | -------- | -------------------------- | -------------------------- |
-| `username`      | string   | PK                         | Login name                 |
-| `password_hash` | string   | not null                   | SHA-256 hash of password   |
-| `role`          | string   | not null, default `"user"` | `"user"` or `"admin"`      |
-| `created_at`    | datetime |                            | Account creation timestamp |
+| Column          | Type     | Constraints                | Description                        |
+| --------------- | -------- | -------------------------- | ---------------------------------- |
+| `username`      | string   | PK                         | Login name                         |
+| `password_hash` | string   | not null                   | Argon2id hash in PHC string format |
+| `role`          | string   | not null, default `"user"` | `"user"` or `"admin"`              |
+| `created_at`    | datetime |                            | Account creation timestamp         |
 
 #### tokens
 
@@ -1352,7 +1352,7 @@ Every published package has a `sha256-<base64>` integrity hash stored in the ver
 
 ### Known Limitations
 
-- **Password hashing:** Passwords are currently hashed with SHA-256. This is not a memory-hard function and is vulnerable to GPU-accelerated brute-force attacks. Migration to bcrypt or Argon2id is tracked as PA-3 and listed in the implementation status table.
+- **LDAP and OIDC authentication:** LDAP and OIDC providers are stubs — only local authentication is currently functional.
 
 ---
 
@@ -1498,37 +1498,38 @@ stash pkg search http-client --registry https://other-registry.example.com/api/v
 
 ## 13. Implementation Status
 
-| Feature                              | Status         |
-| ------------------------------------ | -------------- |
-| Package publishing & unpublishing    | ✅             |
-| Package search with pagination       | ✅             |
-| JWT authentication with token scopes | ✅             |
-| Local auth provider                  | ✅             |
-| SQLite database backend              | ✅             |
-| PostgreSQL database backend          | ✅             |
-| Filesystem package storage           | ✅             |
-| Rate limiting middleware             | ✅             |
-| Audit logging                        | ✅             |
-| Package ownership management         | ✅             |
-| TLS support                          | ✅             |
-| Configurable via JSON                | ✅             |
-| LDAP authentication                  | ❌ stub        |
-| OIDC authentication                  | ❌ stub        |
-| S3 package storage                   | ❌ stub        |
-| Package deprecation                  | ✅             |
-| Memory-hard password hashing (PA-3)  | ❌ not started |
+| Feature                              | Status  |
+| ------------------------------------ | ------- |
+| Package publishing & unpublishing    | ✅      |
+| Package search with pagination       | ✅      |
+| JWT authentication with token scopes | ✅      |
+| Local auth provider                  | ✅      |
+| SQLite database backend              | ✅      |
+| PostgreSQL database backend          | ✅      |
+| Filesystem package storage           | ✅      |
+| Rate limiting middleware             | ✅      |
+| Audit logging                        | ✅      |
+| Package ownership management         | ✅      |
+| TLS support                          | ✅      |
+| Configurable via JSON                | ✅      |
+| LDAP authentication                  | ❌ stub |
+| OIDC authentication                  | ❌ stub |
+| S3 package storage                   | ❌ stub |
+| Package deprecation                  | ✅      |
+| Argon2id password hashing            | ✅      |
 
 ---
 
 ## 14. Design Decisions
 
-| Decision            | Choice                                   | Rationale                                                                                                                                            |
-| ------------------- | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Database ORM        | EF Core                                  | Type-safe queries, migration support, and transparent multi-provider (SQLite/PostgreSQL) via a single `DbContext`                                    |
-| Auth tokens         | JWT                                      | Stateless verification, standard claims format, scope embedding without database round-trips on every read request                                   |
-| Token revocation    | JTI database check on `OnTokenValidated` | Immediate revocation is required despite JWT being stateless — JTI lookup adds one indexed query per authenticated request                           |
-| Config format       | JSON file (`appsettings.json`)           | Simple, no external dependencies, consistent with the `stash.json` package manifest format already familiar to Stash users                           |
-| Storage abstraction | `IPackageStorage` interface              | Swap filesystem for S3 (or any other backend) via config alone, with no controller or service code changes                                           |
-| Rate limiting       | Custom middleware                        | Lightweight, no external service dependencies, category-aware (different limits for publish vs. download), and trivially disableable for development |
-| API style           | Controller-based REST                    | Clear route-to-controller mapping, attribute-based authorization, straightforward unit testability via `WebApplicationFactory`                       |
-| API versioning      | URL prefix (`/api/v1/`)                  | Explicit, highly visible, no content negotiation complexity — the registry is a simple CRUD service, not an evolving multi-version API               |
+| Decision            | Choice                                   | Rationale                                                                                                                                                                                                                                                                               |
+| ------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Database ORM        | EF Core                                  | Type-safe queries, migration support, and transparent multi-provider (SQLite/PostgreSQL) via a single `DbContext`                                                                                                                                                                       |
+| Auth tokens         | JWT                                      | Stateless verification, standard claims format, scope embedding without database round-trips on every read request                                                                                                                                                                      |
+| Token revocation    | JTI database check on `OnTokenValidated` | Immediate revocation is required despite JWT being stateless — JTI lookup adds one indexed query per authenticated request                                                                                                                                                              |
+| Config format       | JSON file (`appsettings.json`)           | Simple, no external dependencies, consistent with the `stash.json` package manifest format already familiar to Stash users                                                                                                                                                              |
+| Storage abstraction | `IPackageStorage` interface              | Swap filesystem for S3 (or any other backend) via config alone, with no controller or service code changes                                                                                                                                                                              |
+| Rate limiting       | Custom middleware                        | Lightweight, no external service dependencies, category-aware (different limits for publish vs. download), and trivially disableable for development                                                                                                                                    |
+| API style           | Controller-based REST                    | Clear route-to-controller mapping, attribute-based authorization, straightforward unit testability via `WebApplicationFactory`                                                                                                                                                          |
+| API versioning      | URL prefix (`/api/v1/`)                  | Explicit, highly visible, no content negotiation complexity — the registry is a simple CRUD service, not an evolving multi-version API                                                                                                                                                  |
+| Circular deps       | Hard reject (all cycles)                 | Circular package dependencies are unconditionally rejected during resolution. DFS-based detection reports the full cycle path. Matches language-level circular import rejection and Cargo/Go conventions. Relaxing later is backward-compatible; tightening later would break packages. |

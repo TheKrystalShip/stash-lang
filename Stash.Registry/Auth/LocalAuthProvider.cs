@@ -2,6 +2,7 @@ using System;
 using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
+using Konscious.Security.Cryptography;
 using Stash.Registry.Database;
 
 namespace Stash.Registry.Auth;
@@ -17,16 +18,8 @@ namespace Stash.Registry.Auth;
 /// in <c>appsettings.json</c>.
 /// </para>
 /// <para>
-/// <b>Password hashing — current state:</b> passwords are hashed with SHA-256
-/// (<see cref="System.Security.Cryptography.SHA256.HashData"/>) and stored as lowercase
-/// hexadecimal strings. SHA-256 is a cryptographic hash function but is <em>not</em>
-/// suitable for storing human-chosen passwords in production because it is fast to compute,
-/// making brute-force attacks practical.
-/// </para>
-/// <para>
-/// <b>Planned migration (blocked on PA-3):</b> the hashing algorithm must be replaced with
-/// a memory-hard, password-specific KDF — Argon2id, bcrypt, or scrypt — before this
-/// provider is used in any internet-facing deployment.
+/// Passwords are hashed with Argon2id using OWASP-recommended parameters (m=19456, t=2, p=1)
+/// and a random 128-bit salt, stored in PHC string format.
 /// </para>
 /// <para>
 /// After successful authentication the caller (typically a login controller) issues a JWT
@@ -54,14 +47,13 @@ public sealed class LocalAuthProvider : IAuthProvider
     }
 
     /// <summary>
-    /// Authenticates <paramref name="username"/> by hashing <paramref name="password"/>
-    /// with SHA-256 and comparing the result against the stored hash.
+    /// Authenticates by verifying the password against the stored Argon2id hash.
     /// </summary>
     /// <param name="username">The username to look up in the local database.</param>
     /// <param name="password">The plaintext password provided by the user at login.</param>
     /// <returns>
-    /// <see langword="true"/> if the user exists and the SHA-256 hash of
-    /// <paramref name="password"/> matches the stored hash; <see langword="false"/> otherwise.
+    /// <see langword="true"/> if the user exists and the password matches the stored
+    /// Argon2id hash; <see langword="false"/> otherwise.
     /// </returns>
     public async Task<bool> AuthenticateAsync(string username, string password)
     {
@@ -71,15 +63,14 @@ public sealed class LocalAuthProvider : IAuthProvider
             return false;
         }
 
-        string hash = HashPassword(password);
-        return string.Equals(user.PasswordHash, hash, StringComparison.Ordinal);
+        return VerifyPassword(password, user.PasswordHash);
     }
 
     /// <summary>
-    /// Creates a new user account in the local database with a SHA-256-hashed password.
+    /// Creates a new user with an Argon2id-hashed password.
     /// </summary>
     /// <param name="username">The desired username for the new account. Must be unique.</param>
-    /// <param name="password">The plaintext password; hashed with SHA-256 before storage.</param>
+    /// <param name="password">The plaintext password; hashed with Argon2id before storage.</param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when a user with <paramref name="username"/> already exists in the database.
     /// </exception>
@@ -110,26 +101,78 @@ public sealed class LocalAuthProvider : IAuthProvider
         return await _db.GetUserAsync(username) != null;
     }
 
-    // BLOCKED: PA-3 — password hashing algorithm TBD.
-    // SHA-256 is insufficient for human-chosen passwords (low entropy, fast to brute-force).
-    // Must be replaced with a memory-hard algorithm (argon2id, bcrypt, or scrypt)
-    // before production use. This is a temporary dev-only solution.
     /// <summary>
-    /// Computes a SHA-256 hex digest of <paramref name="password"/>.
+    /// Hashes a password with Argon2id using a random 128-bit salt and OWASP-recommended parameters.
+    /// Returns a PHC-format string: $argon2id$v=19$m=19456,t=2,p=1$&lt;base64-salt&gt;$&lt;base64-hash&gt;
     /// </summary>
-    /// <param name="password">The plaintext password to hash.</param>
-    /// <returns>
-    /// A 64-character lowercase hexadecimal string representing the SHA-256 digest of
-    /// the UTF-8 encoding of <paramref name="password"/>.
-    /// </returns>
-    /// <remarks>
-    /// <b>⚠ Security warning:</b> SHA-256 is a general-purpose hash; it is fast and therefore
-    /// unsuitable for password storage against offline brute-force attacks. This method will be
-    /// replaced with Argon2id (or an equivalent memory-hard KDF) as part of PA-3.
-    /// </remarks>
     private static string HashPassword(string password)
     {
-        byte[] bytes = SHA256.HashData(Encoding.UTF8.GetBytes(password));
-        return Convert.ToHexStringLower(bytes);
+        byte[] salt = RandomNumberGenerator.GetBytes(16);
+        byte[] hash = ComputeArgon2id(password, salt);
+        string saltB64 = Convert.ToBase64String(salt);
+        string hashB64 = Convert.ToBase64String(hash);
+        return $"$argon2id$v=19$m=19456,t=2,p=1${saltB64}${hashB64}";
+    }
+
+    /// <summary>
+    /// Verifies a password against a stored PHC-format Argon2id hash.
+    /// </summary>
+    private static bool VerifyPassword(string password, string storedHash)
+    {
+        // PHC format: $argon2id$v=19$m=19456,t=2,p=1$<salt>$<hash>
+        string[] parts = storedHash.Split('$');
+        if (parts.Length != 6 || parts[1] != "argon2id" || parts[2] != "v=19")
+        {
+            return false;
+        }
+
+        try
+        {
+            byte[] salt = Convert.FromBase64String(parts[4]);
+            byte[] expectedHash = Convert.FromBase64String(parts[5]);
+            byte[] computedHash = ComputeArgon2id(password, salt, parts[3]);
+
+            return CryptographicOperations.FixedTimeEquals(computedHash, expectedHash);
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Computes an Argon2id hash with the given salt, using parameters from the PHC params string
+    /// or OWASP defaults (m=19456, t=2, p=1).
+    /// </summary>
+    private static byte[] ComputeArgon2id(string password, byte[] salt, string? paramsString = null)
+    {
+        int memorySize = 19456;
+        int iterations = 2;
+        int parallelism = 1;
+
+        if (paramsString != null)
+        {
+            foreach (string param in paramsString.Split(','))
+            {
+                string[] kv = param.Split('=');
+                if (kv.Length == 2)
+                {
+                    switch (kv[0])
+                    {
+                        case "m": memorySize = int.Parse(kv[1]); break;
+                        case "t": iterations = int.Parse(kv[1]); break;
+                        case "p": parallelism = int.Parse(kv[1]); break;
+                    }
+                }
+            }
+        }
+
+        using var argon2 = new Argon2id(Encoding.UTF8.GetBytes(password));
+        argon2.Salt = salt;
+        argon2.MemorySize = memorySize;
+        argon2.Iterations = iterations;
+        argon2.DegreeOfParallelism = parallelism;
+
+        return argon2.GetBytes(32);
     }
 }

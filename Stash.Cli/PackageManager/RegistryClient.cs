@@ -734,6 +734,121 @@ public sealed class RegistryClient : IPackageSource
         return true;
     }
 
+    /// <summary>
+    /// Marks an entire package as deprecated on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>PATCH /packages/{name}/deprecate</c> with a JSON body containing the
+    /// deprecation message and an optional alternative package name.
+    /// </remarks>
+    /// <param name="packageName">The name of the package to deprecate.</param>
+    /// <param name="message">A human-readable deprecation message shown to consumers.</param>
+    /// <param name="alternative">
+    /// An optional replacement package name to recommend to consumers.
+    /// </param>
+    /// <returns><c>true</c> when the server confirms the deprecation.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// </exception>
+    public bool DeprecatePackage(string packageName, string message, string? alternative)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new DeprecatePackageCliRequest { Message = message, Alternative = alternative },
+            CliJsonContext.Default.DeprecatePackageCliRequest);
+        var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{EncodePackageName(packageName)}/deprecate")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new InvalidOperationException($"Deprecate package failed ({response.StatusCode}): {error}");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the deprecation flag from an entire package on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>DELETE /packages/{name}/deprecate</c>.
+    /// </remarks>
+    /// <param name="packageName">The name of the package to undeprecate.</param>
+    /// <returns><c>true</c> when the server confirms the removal.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// </exception>
+    public bool UndeprecatePackage(string packageName)
+    {
+        EnsureTokenFresh();
+        var response = _http.DeleteAsync($"{_baseUrl}/packages/{EncodePackageName(packageName)}/deprecate").GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new InvalidOperationException($"Undeprecate package failed ({response.StatusCode}): {error}");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Marks a specific version of a package as deprecated on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>PATCH /packages/{name}/{version}/deprecate</c> with a JSON body
+    /// containing the deprecation message.
+    /// </remarks>
+    /// <param name="packageName">The name of the package.</param>
+    /// <param name="version">The version string to deprecate.</param>
+    /// <param name="message">A human-readable deprecation message shown to consumers.</param>
+    /// <returns><c>true</c> when the server confirms the deprecation.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// </exception>
+    public bool DeprecateVersion(string packageName, string version, string message)
+    {
+        EnsureTokenFresh();
+        string body = JsonSerializer.Serialize(
+            new DeprecateVersionCliRequest { Message = message },
+            CliJsonContext.Default.DeprecateVersionCliRequest);
+        var request = new HttpRequestMessage(HttpMethod.Patch, $"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}/deprecate")
+        {
+            Content = new StringContent(body, Encoding.UTF8, "application/json")
+        };
+        var response = _http.SendAsync(request).GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new InvalidOperationException($"Deprecate version failed ({response.StatusCode}): {error}");
+        }
+        return true;
+    }
+
+    /// <summary>
+    /// Removes the deprecation flag from a specific version of a package on the registry.
+    /// </summary>
+    /// <remarks>
+    /// Issues <c>DELETE /packages/{name}/{version}/deprecate</c>.
+    /// </remarks>
+    /// <param name="packageName">The name of the package.</param>
+    /// <param name="version">The version string to undeprecate.</param>
+    /// <returns><c>true</c> when the server confirms the removal.</returns>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the server returns a non-success response.
+    /// </exception>
+    public bool UndeprecateVersion(string packageName, string version)
+    {
+        EnsureTokenFresh();
+        var response = _http.DeleteAsync($"{_baseUrl}/packages/{EncodePackageName(packageName)}/{version}/deprecate").GetAwaiter().GetResult();
+        if (!response.IsSuccessStatusCode)
+        {
+            string error = response.Content.ReadAsStringAsync().GetAwaiter().GetResult();
+            throw new InvalidOperationException($"Undeprecate version failed ({response.StatusCode}): {error}");
+        }
+        return true;
+    }
+
     // Encode scoped package names: @scope/name → @scope%2Fname
     /// <summary>
     /// URL-encodes a package name for use in registry API path segments.
