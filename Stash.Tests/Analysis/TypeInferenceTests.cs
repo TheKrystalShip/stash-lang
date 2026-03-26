@@ -266,4 +266,88 @@ public class TypeInferenceTests
         Assert.NotNull(symbol);
         Assert.Equal("dict", symbol.TypeHint);
     }
+
+    [Fact]
+    public void IsNarrowing_ErrorType_NarrowedInThenBranch()
+    {
+        const string src = "let x = try conv.toInt(\"abc\");\nif (x is Error) {\n    let y = x;\n}";
+        var (tree, _) = AnalyzeWithStatements(src);
+        string? narrowedType = tree.GetNarrowedTypeHint("x", 3, 13);
+        Assert.Equal("Error", narrowedType);
+    }
+
+    [Fact]
+    public void IsNarrowing_UserStruct_NarrowedInThenBranch()
+    {
+        const string src = "struct Point { x: int, y: int }\nlet p = Point { x: 1, y: 2 };\nif (p is Point) {\n    let q = p;\n}";
+        var (tree, _) = AnalyzeWithStatements(src);
+        string? narrowedType = tree.GetNarrowedTypeHint("p", 4, 13);
+        Assert.Equal("Point", narrowedType);
+    }
+
+    [Fact]
+    public void IsNarrowing_DoesNotLeakToElseBranch()
+    {
+        const string src = "let x = try conv.toInt(\"abc\");\nif (x is Error) {\n    let a = x;\n} else {\n    let b = x;\n}";
+        var (tree, _) = AnalyzeWithStatements(src);
+        string? thenType = tree.GetNarrowedTypeHint("x", 3, 13);
+        Assert.Equal("Error", thenType);
+
+        string? elseType = tree.GetNarrowedTypeHint("x", 5, 13);
+        Assert.Null(elseType);
+    }
+
+    [Fact]
+    public void IsNarrowing_NestedIf_BothNarrowingsApply()
+    {
+        const string src = "let x = try conv.toInt(\"abc\");\nlet y = try conv.toFloat(\"xyz\");\nif (x is Error) {\n    if (y is Error) {\n        let a = x;\n        let b = y;\n    }\n}";
+        var (tree, _) = AnalyzeWithStatements(src);
+        string? xType = tree.GetNarrowedTypeHint("x", 5, 17);
+        Assert.Equal("Error", xType);
+
+        string? yType = tree.GetNarrowedTypeHint("y", 6, 17);
+        Assert.Equal("Error", yType);
+    }
+
+    [Fact]
+    public void IsNarrowing_OutsideBlock_OriginalTypePreserved()
+    {
+        const string src = "let x = try conv.toInt(\"abc\");\nif (x is Error) {\n    let a = x;\n}\nlet z = x;";
+        var (tree, _) = AnalyzeWithStatements(src);
+        string? insideType = tree.GetNarrowedTypeHint("x", 3, 13);
+        Assert.Equal("Error", insideType);
+
+        string? outsideType = tree.GetNarrowedTypeHint("x", 5, 9);
+        Assert.Null(outsideType);
+    }
+
+    [Fact]
+    public void IsNarrowing_ElseIf_NarrowsCorrectly()
+    {
+        const string src = "let x = try conv.toInt(\"abc\");\nif (x is int) {\n    let a = x;\n} else if (x is Error) {\n    let b = x;\n}";
+        var (tree, _) = AnalyzeWithStatements(src);
+        string? thenType = tree.GetNarrowedTypeHint("x", 3, 13);
+        Assert.Equal("int", thenType);
+
+        string? elseIfType = tree.GetNarrowedTypeHint("x", 5, 13);
+        Assert.Equal("Error", elseIfType);
+    }
+
+    [Fact]
+    public void IsNarrowing_ErrorBuiltInStruct_HasFields()
+    {
+        const string src = "let x = 1";
+        var (tree, _) = AnalyzeWithStatements(src);
+
+        var messageField = tree.FindField("Error", "message");
+        var typeField = tree.FindField("Error", "type");
+        var stackField = tree.FindField("Error", "stack");
+
+        Assert.NotNull(messageField);
+        Assert.NotNull(typeField);
+        Assert.NotNull(stackField);
+        Assert.Equal("string", messageField.TypeHint);
+        Assert.Equal("string", typeField.TypeHint);
+        Assert.Equal("array", stackField.TypeHint);
+    }
 }

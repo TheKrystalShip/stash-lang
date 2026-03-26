@@ -2037,13 +2037,12 @@ public class ParserTests
     }
 
     [Fact]
-    public void Parse_IsExpression_InvalidType_ProducesError()
+    public void Parse_IsExpression_UserDefinedType_Accepted()
     {
-        var lexer = new Lexer("x is invalid");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        parser.Parse();
-        Assert.NotEmpty(parser.Errors);
+        // User-defined struct/enum names are now accepted in `is` expressions
+        var result = ParseExpr("x is MyStruct");
+        var isExpr = Assert.IsType<IsExpr>(result);
+        Assert.Equal("MyStruct", isExpr.TypeName.Lexeme);
     }
 
     [Fact]

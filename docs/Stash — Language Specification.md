@@ -698,7 +698,7 @@ null is null       // true
 expression is typeName
 ```
 
-`typeName` is a **bare identifier** — one of the valid built-in type names. It is not a string literal and not an expression.
+`typeName` is a **bare identifier** — a built-in type name or a user-defined struct/enum name. It is not a string literal and not an expression.
 
 ### Valid Type Names
 
@@ -717,12 +717,14 @@ expression is typeName
 | `range`     | Range values (`1..10`)                         |
 | `namespace` | Namespace values (e.g. `io`, `fs`)             |
 | `Error`     | Error values returned by `try`                 |
+| *StructName* | Instances of the named struct (e.g. `Point`)  |
+| *EnumName*  | Values of the named enum (e.g. `Color`)        |
 
-Using an unrecognised type name is a runtime error.
+An unrecognised type name evaluates to `false` (no runtime error).
 
 ### Relationship to `typeof()`
 
-`x is T` is equivalent to `typeof(x) == "T"`. The `is` operator is a concise inline alternative:
+For built-in types, `x is T` is equivalent to `typeof(x) == "T"`. For user-defined struct and enum names, `is` performs a specific type-name match (e.g. `p is Point` checks whether `p` is specifically a `Point` instance, not just any struct). The `is` operator is a concise inline alternative to `typeof()`:
 
 ```stash
 // These are equivalent:
@@ -744,19 +746,31 @@ value is string
 null is null       // true
 [1, 2] is array    // true
 
+// User-defined struct types
+struct Point { x: int, y: int }
+let p = Point { x: 1, y: 2 };
+p is Point         // true
+p is struct        // true  (matches any struct)
+
+// User-defined enum types
+enum Color { Red, Green, Blue }
+let c = Color.Red;
+c is Color         // true
+c is enum          // true  (matches any enum)
+
 // Use in conditions
 if (value is string) {
-    println("It's a string!")
+    io.println("It's a string!");
 }
 
 // Combine with logical operators
 if (x is int && x > 0) {
-    println("Positive integer")
+    io.println("Positive integer");
 }
 
 // Negation
 if (!(x is null)) {
-    println("Not null")
+    io.println("Not null");
 }
 ```
 

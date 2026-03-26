@@ -103,6 +103,25 @@ public class ScopeTree
         return _fieldIndex.TryGetValue((parentName, fieldName), out var field) ? field : null;
     }
 
+    /// <summary>
+    /// Returns the narrowed type hint for a variable at the given position, if it is
+    /// inside a scope with an active <c>is</c>-expression type narrowing.
+    /// Walks from the innermost scope outward.
+    /// </summary>
+    public string? GetNarrowedTypeHint(string name, int line, int column)
+    {
+        var scope = FindScopeAt(line, column);
+        while (scope != null)
+        {
+            if (scope.TypeNarrowings != null && scope.TypeNarrowings.TryGetValue(name, out string? typeHint))
+            {
+                return typeHint;
+            }
+            scope = scope.Parent;
+        }
+        return null;
+    }
+
     private Dictionary<(string, string), SymbolInfo> BuildFieldIndex()
     {
         var index = new Dictionary<(string, string), SymbolInfo>();

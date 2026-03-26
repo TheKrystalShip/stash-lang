@@ -341,7 +341,8 @@ public partial class Interpreter
             "range" => value is StashRange,
             "namespace" => value is StashNamespace,
             "function" => value is IStashCallable,
-            _ => false
+            _ => (value is StashInstance instance && instance.TypeName == typeName) ||
+                 (value is StashEnumValue enumVal && enumVal.TypeName == typeName)
         };
     }
 

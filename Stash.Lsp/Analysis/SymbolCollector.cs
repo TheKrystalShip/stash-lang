@@ -38,6 +38,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     private readonly List<ReferenceInfo> _references = new();
 
     /// <summary>
+    /// Holds narrowing info extracted from an <c>is</c> expression condition.  The
+    /// <see cref="BlockStmt"/> target ensures only the exact then-branch block applies
+    /// the narrowing, preventing accidental consumption by unrelated blocks.
+    /// </summary>
+    private (string Name, string TypeHint, BlockStmt Target)? _pendingNarrowing;
+
+    /// <summary>
     /// Gets or sets whether built-in symbols from <see cref="BuiltInRegistry"/> are
     /// pre-registered into the global scope before traversal begins. Defaults to <see langword="true"/>.
     /// Set to <see langword="false"/> in tests or when built-ins are injected separately.
@@ -432,12 +439,23 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     /// <summary>
     /// Opens a <see cref="ScopeKind.Block"/> scope, visits all nested statements, then closes it.
+    /// If this block is the target of a pending <c>is</c>-expression narrowing, a type
+    /// narrowing entry is added to the scope so that completion and hover resolve the
+    /// narrowed type without affecting symbol references.
     /// </summary>
     /// <param name="stmt">The block statement.</param>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         PushScope(ScopeKind.Block, stmt.Span);
+
+        // Apply type narrowing only to the exact block that was the then-branch target
+        if (_pendingNarrowing is { } narrowing && ReferenceEquals(stmt, narrowing.Target))
+        {
+            _pendingNarrowing = null;
+            _currentScope.AddTypeNarrowing(narrowing.Name, narrowing.TypeHint);
+        }
+
         foreach (var s in stmt.Statements)
         {
             s.Accept(this);
@@ -449,14 +467,44 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     /// <summary>
     /// Recurses into the condition expression and both branches of an <c>if</c> statement.
+    /// When the condition is an <c>is</c> expression (e.g. <c>x is Error</c>), sets
+    /// <see cref="_pendingNarrowing"/> so the then-branch scope receives a type narrowing
+    /// with the narrowed type hint.
     /// </summary>
     /// <param name="stmt">The if statement.</param>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitIfStmt(IfStmt stmt)
     {
         stmt.Condition.Accept(this);
+
+        // Type narrowing: if condition is `x is T` and then-branch is a block,
+        // mark the block as the narrowing target so it receives the type override.
+        if (stmt.ThenBranch is BlockStmt thenBlock)
+        {
+            var narrowing = ExtractIsNarrowing(stmt.Condition);
+            if (narrowing != null)
+            {
+                _pendingNarrowing = (narrowing.Value.Name, narrowing.Value.TypeHint, thenBlock);
+            }
+        }
+
         stmt.ThenBranch.Accept(this);
+        _pendingNarrowing = null;
+
         stmt.ElseBranch?.Accept(this);
+        return null;
+    }
+
+    /// <summary>
+    /// If the condition is an <c>is</c> expression with an identifier on the left
+    /// (e.g. <c>x is Error</c>), extracts the variable name and target type name.
+    /// </summary>
+    private static (string Name, string TypeHint)? ExtractIsNarrowing(Expr condition)
+    {
+        if (condition is IsExpr isExpr && isExpr.Left is IdentifierExpr ident)
+        {
+            return (ident.Name.Lexeme, isExpr.TypeName.Lexeme);
+        }
         return null;
     }
 

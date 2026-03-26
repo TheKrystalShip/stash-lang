@@ -71,4 +71,12 @@ public class Scope
     {
         return _symbolsByName.TryGetValue(name, out var list) ? list : Array.Empty<SymbolInfo>();
     }
+
+    public Dictionary<string, string>? TypeNarrowings { get; private set; }
+
+    public void AddTypeNarrowing(string name, string typeHint)
+    {
+        TypeNarrowings ??= new();
+        TypeNarrowings[name] = typeHint;
+    }
 }

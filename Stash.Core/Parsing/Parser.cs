@@ -1073,11 +1073,6 @@ public class Parser
             {
                 typeName = Consume(TokenType.Identifier, "Expected type name after 'is'.");
             }
-            string name = typeName.Lexeme;
-            if (name is not ("int" or "float" or "string" or "bool" or "null" or "array" or "dict" or "struct" or "enum" or "function" or "range" or "namespace" or "Error"))
-            {
-                throw Error(typeName, $"Unknown type name '{name}'. Expected one of: int, float, string, bool, null, array, dict, struct, enum, function, range, namespace, Error.");
-            }
             expr = new IsExpr(expr, isKeyword, typeName, MakeSpan(expr.Span, typeName.Span));
         }
 

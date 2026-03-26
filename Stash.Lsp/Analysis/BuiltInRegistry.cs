@@ -115,6 +115,12 @@ public static class BuiltInRegistry
             new("remoteHost", "string"),
             new("remotePort", "int"),
         }),
+        new BuiltInStruct("Error", new BuiltInField[]
+        {
+            new("message", "string"),
+            new("type", "string"),
+            new("stack", "array"),
+        }),
     };
 
     // ── Built-in Enums ──

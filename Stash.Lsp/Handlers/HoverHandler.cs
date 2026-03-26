@@ -200,13 +200,14 @@ public class HoverHandler : HoverHandlerBase
         // Normal symbol hover
         var detail = symbol.Detail ?? symbol.Name;
 
-        // Append inferred type if the symbol has a TypeHint not already shown in detail
-        if (symbol.TypeHint != null &&
+        // Append effective type (narrowed or inferred) if not already shown in detail
+        string? effectiveType = result.Symbols.GetNarrowedTypeHint(word, (int)line, (int)col) ?? symbol.TypeHint;
+        if (effectiveType != null &&
             symbol.Kind is Analysis.SymbolKind.Variable or Analysis.SymbolKind.Constant
                 or Analysis.SymbolKind.Parameter or Analysis.SymbolKind.LoopVariable &&
-            !detail.Contains($": {symbol.TypeHint}"))
+            !detail.Contains($": {effectiveType}"))
         {
-            detail += $": {symbol.TypeHint}";
+            detail += $": {effectiveType}";
         }
 
         var md = $"```stash\n{detail}\n```\n*{symbol.Kind}*";

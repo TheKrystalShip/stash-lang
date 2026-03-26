@@ -409,15 +409,16 @@ public class CompletionHandler : CompletionHandlerBase
             var symbols = result.Symbols.GetVisibleSymbols(lspLine + 1, lspCol + 1);
             var prefixDef = symbols.FirstOrDefault(s => s.Name == prefix);
 
-            // If prefix is a variable/parameter with a type hint (explicit or inferred), resolve to that struct's fields
+            // If prefix is a variable/parameter, resolve to its struct type via narrowing or type hint
             var structName = prefix;
-            if (prefixDef != null && prefixDef.TypeHint != null &&
+            if (prefixDef != null &&
                 (prefixDef.Kind == Analysis.SymbolKind.Variable ||
                  prefixDef.Kind == Analysis.SymbolKind.Constant ||
                  prefixDef.Kind == Analysis.SymbolKind.Parameter ||
                  prefixDef.Kind == Analysis.SymbolKind.LoopVariable))
             {
-                structName = prefixDef.TypeHint;
+                var narrowedType = result.Symbols.GetNarrowedTypeHint(prefix, lspLine + 1, lspCol + 1);
+                structName = narrowedType ?? prefixDef.TypeHint ?? prefix;
             }
 
             if (prefixDef == null || prefixDef.Kind != Analysis.SymbolKind.Struct)

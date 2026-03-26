@@ -8068,4 +8068,60 @@ public class InterpreterTests
         // "42 is int == true" should parse as "(42 is int) == true" and return true
         Assert.Equal(true, Run("let result = 42 is int == true;"));
     }
+
+    [Fact]
+    public void IsExpr_UserDefinedStruct_MatchesTypeName()
+    {
+        string source = @"
+            struct Point { x: int, y: int }
+            let p = Point { x: 1, y: 2 };
+            let result = p is Point;
+        ";
+        Assert.Equal(true, Run(source));
+    }
+
+    [Fact]
+    public void IsExpr_UserDefinedStruct_DoesNotMatchOtherStruct()
+    {
+        string source = @"
+            struct Point { x: int, y: int }
+            struct Size { width: int, height: int }
+            let p = Point { x: 1, y: 2 };
+            let result = p is Size;
+        ";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void IsExpr_UserDefinedEnum_MatchesTypeName()
+    {
+        string source = @"
+            enum Color { Red, Green, Blue }
+            let c = Color.Red;
+            let result = c is Color;
+        ";
+        Assert.Equal(true, Run(source));
+    }
+
+    [Fact]
+    public void IsExpr_UserDefinedEnum_DoesNotMatchOtherEnum()
+    {
+        string source = @"
+            enum Color { Red, Green, Blue }
+            enum Size { Small, Medium, Large }
+            let c = Color.Red;
+            let result = c is Size;
+        ";
+        Assert.Equal(false, Run(source));
+    }
+
+    [Fact]
+    public void IsExpr_UnknownTypeName_ReturnsFalse()
+    {
+        string source = @"
+            let x = 42;
+            let result = x is NonExistent;
+        ";
+        Assert.Equal(false, Run(source));
+    }
 }
