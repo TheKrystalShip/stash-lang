@@ -562,6 +562,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
         TimeBuiltIns.Register(_globals);
         JsonBuiltIns.Register(_globals);
         IniBuiltIns.Register(_globals);
+        YamlBuiltIns.Register(_globals);
+        TomlBuiltIns.Register(_globals);
         ConfigBuiltIns.Register(_globals);
         TestBuiltIns.Register(_globals);
         PathBuiltIns.Register(_globals);

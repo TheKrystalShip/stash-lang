@@ -1,0 +1,234 @@
+#!/usr/bin/env stash
+
+// examples/toml.stash
+// TOML Toolkit — parsing, serialization, validation, and practical workflows
+
+io.println("=" * 54);
+io.println("  TOML Toolkit");
+io.println("=" * 54);
+
+// ─── Basic Parsing ───────────────────────────────────────────────────────────
+
+io.println("\n-- Basic Parsing --");
+
+let simple = "title = \"My App\"\nversion = 3\nenabled = true";
+let cfg = toml.parse(simple);
+
+io.println($"  title:   {cfg.title}");
+io.println($"  version: {cfg.version}  (type: {typeof(cfg.version)})");
+io.println($"  enabled: {cfg.enabled}  (type: {typeof(cfg.enabled)})");
+
+// ─── Tables (Sections) ──────────────────────────────────────────────────────
+
+io.println("\n-- Tables (Sections) --");
+
+let tables_toml = "title = \"My Server\"\n\n[server]\nhost = \"0.0.0.0\"\nport = 8080\nworkers = 4\n\n[database]\nhost = \"db.internal\"\nport = 5432\nname = \"mydb\"";
+let app = toml.parse(tables_toml);
+
+io.println($"  title:          {app.title}");
+io.println($"  server.host:    {app.server.host}");
+io.println($"  server.port:    {app.server.port}");
+io.println($"  database.host:  {app.database.host}");
+io.println($"  database.name:  {app.database.name}");
+
+// Optional chaining for keys that may not exist
+let cache_ttl = app?.cache?.ttl ?? 300;
+io.println($"  cache.ttl:      {cache_ttl}  (defaulted via ??)");
+
+// ─── Nested Tables ───────────────────────────────────────────────────────────
+
+io.println("\n-- Nested Tables --");
+
+let nested_toml = "[server]\nhost = \"0.0.0.0\"\nport = 443\n\n[server.tls]\nenabled = true\ncert = \"/etc/ssl/cert.pem\"\nkey = \"/etc/ssl/key.pem\"";
+let tls_cfg = toml.parse(nested_toml);
+
+io.println($"  server.host:        {tls_cfg.server.host}");
+io.println($"  server.port:        {tls_cfg.server.port}");
+io.println($"  server.tls.enabled: {tls_cfg.server.tls.enabled}");
+io.println($"  server.tls.cert:    {tls_cfg.server.tls.cert}");
+
+// ─── Arrays ──────────────────────────────────────────────────────────────────
+
+io.println("\n-- Arrays --");
+
+let arr_toml = "ports = [80, 443, 8080]\ntags = [\"production\", \"stable\", \"v2\"]\nmixed = [1, 2, 3]";
+let arr_cfg = toml.parse(arr_toml);
+
+io.println("  Ports:");
+for (let port in arr_cfg.ports) {
+    io.println($"    - {port}  (type: {typeof(port)})");
+}
+
+io.println("  Tags:");
+for (let i in 0..len(arr_cfg.tags)) {
+    io.println($"    [{i}] {arr_cfg.tags[i]}");
+}
+
+// ─── Array of Tables ─────────────────────────────────────────────────────────
+
+io.println("\n-- Array of Tables --");
+
+let aot_toml = "[[servers]]\nname = \"alpha\"\nip = \"10.0.0.1\"\nrole = \"primary\"\n\n[[servers]]\nname = \"beta\"\nip = \"10.0.0.2\"\nrole = \"replica\"\n\n[[servers]]\nname = \"gamma\"\nip = \"10.0.0.3\"\nrole = \"replica\"";
+let cluster = toml.parse(aot_toml);
+
+io.println("  Server fleet:");
+for (let srv in cluster.servers) {
+    io.println($"    {srv.name}  ip={srv.ip}  role={srv.role}");
+}
+
+// ─── Type Mapping ────────────────────────────────────────────────────────────
+
+io.println("\n-- Type Mapping --");
+
+let types_toml = "string_val = \"hello\"\nint_val = 42\nfloat_val = 3.14\nbool_val = false";
+let types = toml.parse(types_toml);
+
+io.println($"  string:  {types.string_val}  (type: {typeof(types.string_val)})");
+io.println($"  int:     {types.int_val}  (type: {typeof(types.int_val)})");
+io.println($"  float:   {types.float_val}  (type: {typeof(types.float_val)})");
+io.println($"  bool:    {types.bool_val}  (type: {typeof(types.bool_val)})");
+io.println("  Note: TOML has no null type — all values must be present.");
+
+// ─── Serialization (Stringify) ───────────────────────────────────────────────
+
+io.println("\n-- Serialization (Stringify) --");
+
+let out = dict.new();
+out["title"] = "My Service";
+out["version"] = 2;
+
+let db = dict.new();
+db["host"] = "localhost";
+db["port"] = 5432;
+db["ssl"] = true;
+out["database"] = db;
+
+out["tags"] = ["production", "stable"];
+
+let toml_out = toml.stringify(out);
+io.println("  Serialized dict to TOML:");
+for (let line in str.split(toml_out, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+
+// ─── Round-Trip ──────────────────────────────────────────────────────────────
+
+io.println("\n-- Round-Trip (Parse → Modify → Stringify) --");
+
+let original = "title = \"myapp\"\n\n[server]\nhost = \"0.0.0.0\"\nport = 8080\ndebug = false";
+io.println($"  Original TOML:");
+for (let line in str.split(original, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+
+let parsed = toml.parse(original);
+parsed.server.port = 9090;
+parsed.server.debug = true;
+
+let updated = toml.stringify(parsed);
+io.println($"  Modified TOML:");
+for (let line in str.split(updated, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+
+// ─── Validation ──────────────────────────────────────────────────────────────
+
+io.println("\n-- Validation --");
+
+let samples = [
+    ["key = \"value\"",                  true],
+    ["[section]\nk = 1",                true],
+    ["num = 42\nbool = true",           true],
+    ["arr = [1, 2, 3]",                 true],
+    ["[invalid",                         false],
+    ["= no_key",                         false],
+    ["",                                 true]
+];
+
+for (let sample in samples) {
+    let text = sample[0];
+    let expected = sample[1];
+    let result = toml.valid(text);
+    let status = result == expected ? "✓" : "✗";
+    let display = str.replace(text, "\n", "\\n");
+    if (display == "") { display = "(empty)"; }
+    io.println($"  {status} toml.valid(\"{display}\") = {result}");
+}
+
+// ─── Practical: Cargo.toml-style Project Config ──────────────────────────────
+
+io.println("\n-- Practical: Cargo.toml-style Project Config --");
+
+let cargo_toml = "[package]\nname = \"my-project\"\nversion = \"0.1.0\"\nedition = \"2024\"\ndescription = \"A sample project\"\n\n[dependencies]\nserde = \"1.0\"\ntokio = \"1.35\"\n\n[[bin]]\nname = \"server\"\npath = \"src/server.rs\"\n\n[[bin]]\nname = \"cli\"\npath = \"src/cli.rs\"";
+
+let cargo = toml.parse(cargo_toml);
+
+io.println($"  Package: {cargo.package.name} v{cargo.package.version}");
+io.println($"  Edition: {cargo.package.edition}");
+io.println($"  Description: {cargo.package.description}");
+
+io.println("  Dependencies:");
+for (let name, ver in cargo.dependencies) {
+    io.println($"    {name} = \"{ver}\"");
+}
+
+io.println("  Binaries:");
+for (let bin in cargo.bin) {
+    io.println($"    {bin.name} → {bin.path}");
+}
+
+// ─── Practical: Config File I/O via config namespace ─────────────────────────
+
+io.println("\n-- Practical: File I/O via config namespace --");
+
+let tmp_path = path.join(env.get("HOME") ?? "/tmp", ".stash_toml_demo.toml");
+
+let file_cfg = dict.new();
+file_cfg["title"] = "demo";
+
+let server = dict.new();
+server["host"] = "0.0.0.0";
+server["port"] = 8080;
+file_cfg["server"] = server;
+
+file_cfg["tags"] = ["auth", "logging", "metrics"];
+
+config.write(tmp_path, file_cfg);
+io.println($"  Wrote config to: {tmp_path}");
+
+let loaded = config.read(tmp_path);
+io.println($"  Read back:  title={loaded.title}  server.port={loaded.server.port}");
+io.println($"  Tags:       {loaded.tags}");
+
+// Clean up
+fs.delete(tmp_path);
+io.println($"  Cleaned up temp file.");
+
+// ─── Practical: Format Conversion (TOML → JSON) ─────────────────────────────
+
+io.println("\n-- Practical: Format Conversion (TOML → JSON) --");
+
+let source_toml = "[app]\nname = \"converter\"\nversion = 1\n\n[app.settings]\ntheme = \"dark\"\nlanguage = \"en\"";
+let toml_data = toml.parse(source_toml);
+
+let json_out = json.pretty(toml_data);
+io.println("  TOML source:");
+for (let line in str.split(source_toml, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+io.println("  Converted to JSON:");
+for (let line in str.split(json_out, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+
+io.println("\n" + "=" * 54);

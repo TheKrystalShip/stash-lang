@@ -10,7 +10,7 @@ using Stash.Interpreting.Types;
 
 /// <summary>
 /// Registers the <c>config</c> namespace providing unified configuration file reading and writing
-/// across formats (read, write, parse, stringify). Supports JSON and INI formats.
+/// across formats (read, write, parse, stringify). Supports JSON, INI, YAML, and TOML formats.
 /// </summary>
 public static class ConfigBuiltIns
 {
@@ -113,9 +113,9 @@ public static class ConfigBuiltIns
         globals.Define("config", config);
     }
 
-    /// <summary>Detects the configuration format from a file extension (.json, .ini, .cfg, .conf, .properties).</summary>
+    /// <summary>Detects the configuration format from a file extension (.json, .ini, .cfg, .conf, .properties, .yaml, .yml, .toml).</summary>
     /// <param name="path">The file path whose extension is inspected.</param>
-    /// <returns><c>"json"</c> or <c>"ini"</c> based on the extension.</returns>
+    /// <returns><c>"json"</c>, <c>"ini"</c>, <c>"yaml"</c>, or <c>"toml"</c> based on the extension.</returns>
     private static string DetectFormat(string path)
     {
         string ext = Path.GetExtension(path).ToLowerInvariant();
@@ -123,13 +123,15 @@ public static class ConfigBuiltIns
         {
             ".json" => "json",
             ".ini" or ".cfg" or ".conf" or ".properties" => "ini",
+            ".yaml" or ".yml" => "yaml",
+            ".toml" => "toml",
             _ => throw new RuntimeError($"config: unsupported file extension '{ext}'. Use the format parameter to specify the format explicitly.")
         };
     }
 
     /// <summary>Parses configuration text using the specified format.</summary>
     /// <param name="text">The configuration text to parse.</param>
-    /// <param name="format">The format name (<c>"json"</c> or <c>"ini"</c>).</param>
+    /// <param name="format">The format name (<c>"json"</c>, <c>"ini"</c>, <c>"yaml"</c>, or <c>"toml"</c>).</param>
     /// <param name="callerName">The calling function name, used in error messages.</param>
     /// <returns>A parsed Stash value.</returns>
     private static object? ParseByFormat(string text, string format, string callerName)
@@ -138,13 +140,15 @@ public static class ConfigBuiltIns
         {
             "json" => ParseJson(text, callerName),
             "ini" => IniBuiltIns.ParseIni(text),
-            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini'.")
+            "yaml" => YamlBuiltIns.ParseYaml(text),
+            "toml" => TomlBuiltIns.ParseToml(text),
+            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml'.")
         };
     }
 
     /// <summary>Serializes a Stash value to the specified configuration format.</summary>
     /// <param name="data">The Stash value to serialize.</param>
-    /// <param name="format">The format name (<c>"json"</c> or <c>"ini"</c>).</param>
+    /// <param name="format">The format name (<c>"json"</c>, <c>"ini"</c>, <c>"yaml"</c>, or <c>"toml"</c>).</param>
     /// <param name="callerName">The calling function name, used in error messages.</param>
     /// <returns>A serialized configuration string.</returns>
     private static string StringifyByFormat(object? data, string format, string callerName)
@@ -152,10 +156,14 @@ public static class ConfigBuiltIns
         return format.ToLowerInvariant() switch
         {
             "json" => PrettyValue(data, 0),
-            "ini" => data is StashDictionary dict
-                ? IniBuiltIns.StringifyIni(dict)
+            "ini" => data is StashDictionary iniDict
+                ? IniBuiltIns.StringifyIni(iniDict)
                 : throw new RuntimeError($"{callerName}: INI format requires a dict value."),
-            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini'.")
+            "yaml" => YamlBuiltIns.StringifyYaml(data),
+            "toml" => data is StashDictionary tomlDict
+                ? TomlBuiltIns.StringifyToml(tomlDict)
+                : throw new RuntimeError($"{callerName}: TOML format requires a dict value."),
+            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml'.")
         };
     }
 

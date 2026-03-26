@@ -166,3 +166,108 @@ io.println($"  db.host      = {db_host}");
 io.println($"  db.port      = {db_port}");
 io.println($"  db.tls       = {db_tls}  (optional, defaulted)");
 io.println();
+
+// --- 7. YAML config: parse, modify, stringify ---
+
+io.println("=== 7. YAML Config: Parse, Modify, Stringify ===");
+
+let yaml_src = "app: myservice\nserver:\n  host: 0.0.0.0\n  port: 8080\nlogging:\n  level: info\n  file: /var/log/app.log";
+let yaml_cfg = yaml.parse(yaml_src);
+
+io.println($"  Before:  server.port={yaml_cfg.server.port}  logging.level={yaml_cfg.logging.level}");
+
+yaml_cfg.server.port = 9090;
+yaml_cfg.logging.level = "debug";
+
+io.println($"  After:   server.port={yaml_cfg.server.port}  logging.level={yaml_cfg.logging.level}");
+
+let out_yaml = yaml.stringify(yaml_cfg);
+io.println("  Serialized:");
+for (let line in str.split(out_yaml, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+io.println();
+
+// --- 8. TOML config: parse, modify, stringify ---
+
+io.println("=== 8. TOML Config: Parse, Modify, Stringify ===");
+
+let toml_src = "[server]\nhost = \"0.0.0.0\"\nport = 8080\nworkers = 4\n\n[logging]\nlevel = \"info\"\nfile = \"/var/log/app.log\"";
+let toml_cfg = toml.parse(toml_src);
+
+io.println($"  Before:  server.port={toml_cfg.server.port}  logging.level={toml_cfg.logging.level}");
+
+toml_cfg.server.port = 9090;
+toml_cfg.logging.level = "debug";
+
+io.println($"  After:   server.port={toml_cfg.server.port}  logging.level={toml_cfg.logging.level}");
+
+let out_toml = toml.stringify(toml_cfg);
+io.println("  Serialized:");
+for (let line in str.split(out_toml, "\n")) {
+    if (str.trim(line) != "") {
+        io.println($"    {line}");
+    }
+}
+io.println();
+
+// --- 9. Cross-Format Conversion: all four formats ---
+
+io.println("=== 9. Cross-Format Conversion ===");
+
+let source_ini = "[app]\nname = myservice\nport = 8080\n\n[database]\nhost = localhost\nport = 5432";
+let source_data = ini.parse(source_ini);
+
+io.println("  INI source parsed. Converting to all formats:");
+
+io.println("\n  → JSON:");
+for (let line in str.split(json.pretty(source_data), "\n")) {
+    if (str.trim(line) != "") { io.println($"    {line}"); }
+}
+
+io.println("\n  → YAML:");
+for (let line in str.split(yaml.stringify(source_data), "\n")) {
+    if (str.trim(line) != "") { io.println($"    {line}"); }
+}
+
+io.println("\n  → TOML:");
+for (let line in str.split(toml.stringify(source_data), "\n")) {
+    if (str.trim(line) != "") { io.println($"    {line}"); }
+}
+
+io.println("\n  → INI (round-trip):");
+for (let line in str.split(ini.stringify(source_data), "\n")) {
+    if (str.trim(line) != "") { io.println($"    {line}"); }
+}
+io.println();
+
+// --- 10. Config namespace: auto-detect all formats ---
+
+io.println("=== 10. Config Namespace: Auto-detect Formats ===");
+
+io.println("  config.parse with explicit format:");
+
+let json_text = "{\"port\": 8080}";
+let ini_text = "[server]\nport = 8080";
+let yaml_text = "port: 8080";
+let toml_text = "port = 8080";
+
+let json_port = config.parse(json_text, "json").port;
+let ini_port = config.parse(ini_text, "ini").server.port;
+let yaml_port = config.parse(yaml_text, "yaml").port;
+let toml_port = config.parse(toml_text, "toml").port;
+io.println($"  JSON: port = {json_port}");
+io.println($"  INI:  port = {ini_port}");
+io.println($"  YAML: port = {yaml_port}");
+io.println($"  TOML: port = {toml_port}");
+
+io.println("\n  config.stringify with explicit format:");
+let d = dict.new();
+d["port"] = 8080;
+d["host"] = "localhost";
+io.println("  → JSON: " + str.trim(config.stringify(d, "json")));
+io.println("  → YAML: " + str.trim(config.stringify(d, "yaml")));
+io.println("  → TOML: " + str.trim(config.stringify(d, "toml")));
+io.println();

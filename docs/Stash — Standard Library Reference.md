@@ -27,18 +27,22 @@
 11. [`time` — Time & Date](#time--time--date)
 12. [`json` — JSON](#json--json)
 13. [`ini` — INI Configuration](#ini--ini-configuration)
-14. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
-15. [`http` — HTTP Requests](#http--http-requests)
-16. [`process` — Process Management](#process--process-management)
-17. [`tpl` — Templating](#tpl--templating)
-18. [`store` — In-Memory Store](#store--in-memory-store)
-19. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-20. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-21. [`term` — Terminal Formatting](#term--terminal-formatting)
-22. [`sys` — System Information](#sys--system-information)
-23. [`task` — Parallel Tasks](#task--parallel-tasks)
-24. [`log` — Logging](#log--logging)
-25. [Argument Parsing](#argument-parsing)
+14. [`yaml` — YAML](#yaml--yaml)
+15. [`toml` — TOML](#toml--toml)
+16. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
+17. [`http` — HTTP Requests](#http--http-requests)
+18. [`process` — Process Management](#process--process-management)
+19. [`tpl` — Templating](#tpl--templating)
+20. [`store` — In-Memory Store](#store--in-memory-store)
+21. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+22. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+23. [`term` — Terminal Formatting](#term--terminal-formatting)
+24. [`sys` — System Information](#sys--system-information)
+25. [`task` — Parallel Tasks](#task--parallel-tasks)
+26. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+27. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+28. [`log` — Logging](#log--logging)
+29. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -699,19 +703,201 @@ let output = ini.stringify(cfg);
 
 ---
 
+## `yaml` — YAML
+
+The `yaml` namespace provides parsing and serialization of YAML (YAML Ain't Markup Language) documents. Supports YAML 1.2 including mappings, sequences, nested structures, multi-document streams, and scalar types.
+
+| Function              | Description                                    |
+| --------------------- | ---------------------------------------------- |
+| `yaml.parse(text)`    | Parse a YAML string into a Stash value         |
+| `yaml.stringify(val)` | Serialize a Stash value to a YAML string       |
+| `yaml.valid(text)`    | Return `true` if the string is valid YAML      |
+
+### `yaml.parse(text)`
+
+Parses a YAML string and returns the corresponding Stash value. Mappings become dictionaries, sequences become arrays, and scalar values are converted to their appropriate Stash types.
+
+```stash
+let text = "name: myapp\nversion: 2\nenabled: true";
+let cfg = yaml.parse(text);
+
+io.println(cfg.name);      // "myapp"
+io.println(cfg.version);   // 2
+io.println(cfg.enabled);   // true
+```
+
+#### Nested Structures
+
+```stash
+let yaml_text = "database:\n  host: localhost\n  port: 5432\n  replicas:\n    - db1\n    - db2";
+let cfg = yaml.parse(yaml_text);
+
+io.println(cfg.database.host);         // "localhost"
+io.println(cfg.database.port);         // 5432
+io.println(cfg.database.replicas[0]);  // "db1"
+```
+
+#### Type Mapping
+
+| YAML type        | Stash type       | Example                             |
+| ---------------- | ---------------- | ----------------------------------- |
+| Mapping          | `dict`           | `key: value` → dictionary           |
+| Sequence         | `array`          | `- item` → array                    |
+| Integer          | `int` (long)     | `port: 5432` → `5432`              |
+| Float            | `float` (double) | `ratio: 3.14` → `3.14`             |
+| Boolean          | `bool`           | `enabled: true` → `true`           |
+| Null             | `null`           | `value: null` → `null`             |
+| String           | `string`         | `name: Alice` → `"Alice"`          |
+
+### `yaml.stringify(value)`
+
+Serializes a Stash value to a YAML-formatted string.
+
+```stash
+let cfg = {
+    "server": {
+        "host": "0.0.0.0",
+        "port": 8080
+    },
+    "features": ["auth", "logging"]
+};
+let output = yaml.stringify(cfg);
+io.println(output);
+// server:
+//   host: 0.0.0.0
+//   port: 8080
+// features:
+//   - auth
+//   - logging
+```
+
+Round-trip example:
+
+```stash
+let original = "name: myapp\nversion: 1";
+let data = yaml.parse(original);
+data.version = 2;
+let updated = yaml.stringify(data);
+io.println(updated);
+```
+
+### `yaml.valid(text)`
+
+Returns `true` if the input string is valid YAML, `false` otherwise.
+
+```stash
+io.println(yaml.valid("key: value"));       // true
+io.println(yaml.valid("key: [1, 2, 3]"));   // true
+io.println(yaml.valid(": invalid: yaml:")); // false
+```
+
+---
+
+## `toml` — TOML
+
+The `toml` namespace provides parsing and serialization of TOML (Tom's Obvious Minimal Language) documents. Supports TOML 1.0 including tables, arrays, inline tables, and array of tables.
+
+| Function               | Description                                    |
+| ---------------------- | ---------------------------------------------- |
+| `toml.parse(text)`     | Parse a TOML string into a dictionary          |
+| `toml.stringify(dict)` | Serialize a dictionary to a TOML string        |
+| `toml.valid(text)`     | Return `true` if the string is valid TOML      |
+
+### `toml.parse(text)`
+
+Parses a TOML string and returns a dictionary. Tables become nested dictionaries, arrays become Stash arrays, and scalar values are converted to their appropriate types.
+
+```stash
+let text = "title = \"My App\"\n\n[database]\nhost = \"localhost\"\nport = 5432";
+let cfg = toml.parse(text);
+
+io.println(cfg.title);          // "My App"
+io.println(cfg.database.host);  // "localhost"
+io.println(cfg.database.port);  // 5432
+```
+
+#### Array of Tables
+
+```stash
+let text = "[[servers]]\nname = \"alpha\"\nip = \"10.0.0.1\"\n\n[[servers]]\nname = \"beta\"\nip = \"10.0.0.2\"";
+let cfg = toml.parse(text);
+
+io.println(cfg.servers[0].name);  // "alpha"
+io.println(cfg.servers[1].ip);    // "10.0.0.2"
+```
+
+#### Type Mapping
+
+| TOML type        | Stash type       | Example                                     |
+| ---------------- | ---------------- | ------------------------------------------- |
+| Table            | `dict`           | `[section]` → nested dictionary             |
+| Array            | `array`          | `arr = [1, 2]` → array                     |
+| Array of Tables  | `array` of dicts | `[[items]]` → array of dictionaries         |
+| Integer          | `int` (long)     | `port = 5432` → `5432`                     |
+| Float            | `float` (double) | `ratio = 3.14` → `3.14`                    |
+| Boolean          | `bool`           | `enabled = true` → `true`                  |
+| String           | `string`         | `name = "Alice"` → `"Alice"`               |
+| Datetime         | `string`         | `dt = 2024-01-15T10:30:00Z` → `"2024..."` |
+
+### `toml.stringify(dict)`
+
+Serializes a dictionary to a TOML-formatted string. Only dictionaries can be serialized to TOML (TOML documents must be tables at the root level).
+
+```stash
+let cfg = {
+    "title": "My App",
+    "database": {
+        "host": "localhost",
+        "port": 5432
+    }
+};
+let output = toml.stringify(cfg);
+io.println(output);
+// title = "My App"
+//
+// [database]
+// host = "localhost"
+// port = 5432
+```
+
+Round-trip example:
+
+```stash
+let text = "title = \"App\"\n\n[server]\nport = 8080";
+let cfg = toml.parse(text);
+cfg.server.port = 9090;
+let updated = toml.stringify(cfg);
+io.println(updated);
+```
+
+### `toml.valid(text)`
+
+Returns `true` if the input string is valid TOML, `false` otherwise.
+
+```stash
+io.println(toml.valid("key = \"value\""));          // true
+io.println(toml.valid("[section]\nk = 1"));          // true
+io.println(toml.valid("[invalid"));                   // false
+```
+
+---
+
 ## `config` — Format-Agnostic Configuration
 
 The `config` namespace provides a unified, format-agnostic API for reading and writing configuration files. It auto-detects the format from the file extension and delegates to the appropriate parser.
 
 ### Supported Formats
 
-| Extension     | Format | Parser                                                               |
-| ------------- | ------ | -------------------------------------------------------------------- |
-| `.json`       | JSON   | Built-in JSON parser                                                 |
-| `.ini`        | INI    | Built-in INI parser (see [`ini` namespace](#ini--ini-configuration)) |
-| `.cfg`        | INI    | Same as `.ini`                                                       |
-| `.conf`       | INI    | Same as `.ini`                                                       |
-| `.properties` | INI    | Same as `.ini`                                                       |
+| Extension     | Format | Parser                                                                |
+| ------------- | ------ | --------------------------------------------------------------------- |
+| `.json`       | JSON   | Built-in JSON parser                                                  |
+| `.ini`        | INI    | Built-in INI parser (see [`ini` namespace](#ini--ini-configuration))  |
+| `.cfg`        | INI    | Same as `.ini`                                                        |
+| `.conf`       | INI    | Same as `.ini`                                                        |
+| `.properties` | INI    | Same as `.ini`                                                        |
+| `.yaml`       | YAML   | Built-in YAML parser (see [`yaml` namespace](#yaml--yaml))            |
+| `.yml`        | YAML   | Same as `.yaml`                                                       |
+| `.toml`       | TOML   | Built-in TOML parser (see [`toml` namespace](#toml--toml))            |
 
 ### `config.read(path)` / `config.read(path, format)`
 
@@ -784,11 +970,6 @@ cfg.logging.level = "debug";
 config.write("/etc/myservice/config.ini", cfg);
 io.println("Configuration updated.");
 ```
-
-### Future Extensions
-
-- **YAML support** (`.yaml`, `.yml`)
-- **TOML support** (`.toml`)
 
 ---
 

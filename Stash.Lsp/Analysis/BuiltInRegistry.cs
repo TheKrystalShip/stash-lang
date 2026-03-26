@@ -688,15 +688,29 @@ public static class BuiltInRegistry
             Documentation: "Parses INI-formatted text into a dictionary. Sections become nested dictionaries.\n@param text The INI text to parse\n@return A dictionary representing the INI structure"),
         new NamespaceFunction("ini", "stringify", new[] { new BuiltInParam("data", "dict") }, "string",
             Documentation: "Converts a dictionary to INI-formatted text.\n@param data The dictionary to serialize\n@return The INI text representation"),
+        // yaml namespace
+        new NamespaceFunction("yaml", "parse", new[] { new BuiltInParam("text", "string") },
+            Documentation: "Parses a YAML string into a Stash value (dict, array, string, number, bool, or null).\n@param text The YAML string to parse\n@return The parsed value"),
+        new NamespaceFunction("yaml", "stringify", new[] { new BuiltInParam("value") }, "string",
+            Documentation: "Converts a Stash value to a YAML string.\n@param value The value to serialize\n@return The YAML string representation"),
+        new NamespaceFunction("yaml", "valid", new[] { new BuiltInParam("text", "string") }, "bool",
+            Documentation: "Checks whether a string is valid YAML without parsing it into a value.\n@param text The string to validate\n@return true if the string is valid YAML"),
+        // toml namespace
+        new NamespaceFunction("toml", "parse", new[] { new BuiltInParam("text", "string") }, "dict",
+            Documentation: "Parses a TOML string into a dictionary. Tables become nested dictionaries. Arrays of tables become arrays of dictionaries.\n@param text The TOML string to parse\n@return A dictionary representing the TOML structure"),
+        new NamespaceFunction("toml", "stringify", new[] { new BuiltInParam("data", "dict") }, "string",
+            Documentation: "Converts a dictionary to a TOML string.\n@param data The dictionary to serialize\n@return The TOML string representation"),
+        new NamespaceFunction("toml", "valid", new[] { new BuiltInParam("text", "string") }, "bool",
+            Documentation: "Checks whether a string is valid TOML without parsing it into a value.\n@param text The string to validate\n@return true if the string is valid TOML"),
         // config namespace
         new NamespaceFunction("config", "read", new[] { new BuiltInParam("path", "string"), new BuiltInParam("format", "string") }, "dict", IsVariadic: true,
-            Documentation: "Reads a configuration file and returns its contents as a dictionary. Auto-detects format from file extension (.json, .ini) or uses the explicit format parameter.\n@param path The path to the configuration file\n@param format Optional format override (\"json\" or \"ini\")\n@return A dictionary representing the configuration"),
+            Documentation: "Reads a configuration file and returns its contents as a dictionary. Auto-detects format from file extension (.json, .ini, .yaml, .yml, .toml) or uses the explicit format parameter.\n@param path The path to the configuration file\n@param format Optional format override (\"json\", \"ini\", \"yaml\", or \"toml\")\n@return A dictionary representing the configuration"),
         new NamespaceFunction("config", "write", new[] { new BuiltInParam("path", "string"), new BuiltInParam("data"), new BuiltInParam("format", "string") }, null, IsVariadic: true,
-            Documentation: "Writes data to a configuration file. Auto-detects format from file extension or uses the explicit format parameter.\n@param path The path to the configuration file\n@param data The data to write\n@param format Optional format override (\"json\" or \"ini\")"),
+            Documentation: "Writes data to a configuration file. Auto-detects format from file extension or uses the explicit format parameter.\n@param path The path to the configuration file\n@param data The data to write\n@param format Optional format override (\"json\", \"ini\", \"yaml\", or \"toml\")"),
         new NamespaceFunction("config", "parse", new[] { new BuiltInParam("text", "string"), new BuiltInParam("format", "string") }, "dict",
-            Documentation: "Parses configuration text in the specified format.\n@param text The configuration text to parse\n@param format The format to use (\"json\" or \"ini\")\n@return A dictionary representing the configuration"),
+            Documentation: "Parses configuration text in the specified format.\n@param text The configuration text to parse\n@param format The format to use (\"json\", \"ini\", \"yaml\", or \"toml\")\n@return A dictionary representing the configuration"),
         new NamespaceFunction("config", "stringify", new[] { new BuiltInParam("data"), new BuiltInParam("format", "string") }, "string",
-            Documentation: "Converts data to a configuration text string in the specified format.\n@param data The data to serialize\n@param format The format to use (\"json\" or \"ini\")\n@return The configuration text"),
+            Documentation: "Converts data to a configuration text string in the specified format.\n@param data The data to serialize\n@param format The format to use (\"json\", \"ini\", \"yaml\", or \"toml\")\n@return The configuration text"),
         // tpl namespace
         new NamespaceFunction("tpl", "render", new[] { new BuiltInParam("template", "string"), new BuiltInParam("data", "dict") }, "string",
             Documentation: "Renders a template string with the given data dictionary. Supports {{ variable }}, {% if %}, {% for %}, and {% include %} directives.\n@param template The template string or a compiled template\n@param data A dictionary of variables available in the template\n@return The rendered output string"),
@@ -937,9 +951,9 @@ public static class BuiltInRegistry
     public static readonly IReadOnlyList<string> NamespaceNames = new[]
     {
         "io", "conv", "env", "process", "fs", "path", "arr", "dict", "str",
-        "assert", "test", "math", "time", "json", "http", "ini", "config", "tpl",
-        "store", "args", "crypto", "encoding", "term", "sys", "log", "pkg",
-        "task", "ssh", "sftp"
+        "assert", "test", "math", "time", "json", "http", "ini", "yaml", "toml",
+        "config", "tpl", "store", "args", "crypto", "encoding", "term", "sys",
+        "log", "pkg", "task", "ssh", "sftp"
     };
 
     // ── Keywords ──
