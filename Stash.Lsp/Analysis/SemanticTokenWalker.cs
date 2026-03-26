@@ -408,6 +408,12 @@ internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitIsExpr(IsExpr expr)
+    {
+        expr.Left.Accept(this);
+        return 0;
+    }
+
     public int VisitGroupingExpr(GroupingExpr expr)
     {
         expr.Expression.Accept(this);

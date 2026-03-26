@@ -188,4 +188,11 @@ public interface IExprVisitor<T>
     /// <param name="expr">The dictionary literal expression node to visit.</param>
     /// <returns>The result of evaluating the dictionary literal.</returns>
     T VisitDictLiteralExpr(DictLiteralExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="IsExpr"/> node (type-checking expression <c>value is typeName</c>).
+    /// </summary>
+    /// <param name="expr">The is expression node to visit.</param>
+    /// <returns><c>true</c> if the value matches the specified type; otherwise <c>false</c>.</returns>
+    T VisitIsExpr(IsExpr expr);
 }

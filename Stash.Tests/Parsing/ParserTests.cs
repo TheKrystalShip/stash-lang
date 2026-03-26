@@ -1939,4 +1939,87 @@ public class ParserTests
         Assert.Equal(DestructureStmt.PatternKind.Object, destructure.Kind);
         Assert.True(destructure.IsConst);
     }
+
+    // --- Is Expression Tests ---
+
+    [Fact]
+    public void Parse_IsExpression_ReturnsIsExpr()
+    {
+        var result = ParseExpr("x is int");
+        var isExpr = Assert.IsType<IsExpr>(result);
+        var left = Assert.IsType<IdentifierExpr>(isExpr.Left);
+        Assert.Equal("x", left.Name.Lexeme);
+        Assert.Equal("int", isExpr.TypeName.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_IsExpression_WithStringType_ReturnsIsExpr()
+    {
+        var result = ParseExpr("x is string");
+        var isExpr = Assert.IsType<IsExpr>(result);
+        Assert.Equal("string", isExpr.TypeName.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_IsExpression_WithNullType_ReturnsIsExpr()
+    {
+        var result = ParseExpr("x is null");
+        var isExpr = Assert.IsType<IsExpr>(result);
+        Assert.Equal("null", isExpr.TypeName.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_IsExpression_WithComplexLeftSide_ReturnsIsExpr()
+    {
+        var result = ParseExpr("(1 + 2) is int");
+        var isExpr = Assert.IsType<IsExpr>(result);
+        Assert.IsType<GroupingExpr>(isExpr.Left);
+        Assert.Equal("int", isExpr.TypeName.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_IsExpression_PrecedenceWithEquality_EqualityIsLower()
+    {
+        // "x is int == true" should parse as "(x is int) == true"
+        var result = ParseExpr("x is int == true");
+        var equality = Assert.IsType<BinaryExpr>(result);
+        Assert.Equal(TokenType.EqualEqual, equality.Operator.Type);
+        var isExpr = Assert.IsType<IsExpr>(equality.Left);
+        Assert.Equal("int", isExpr.TypeName.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_IsExpression_PrecedenceWithLogicalAnd()
+    {
+        // "x is int && y is string" should parse as "(x is int) && (y is string)"
+        var result = ParseExpr("x is int && y is string");
+        var andExpr = Assert.IsType<BinaryExpr>(result);
+        Assert.Equal(TokenType.AmpersandAmpersand, andExpr.Operator.Type);
+        var leftIs = Assert.IsType<IsExpr>(andExpr.Left);
+        Assert.Equal("int", leftIs.TypeName.Lexeme);
+        var rightIs = Assert.IsType<IsExpr>(andExpr.Right);
+        Assert.Equal("string", rightIs.TypeName.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_IsExpression_InvalidType_ProducesError()
+    {
+        var lexer = new Lexer("x is invalid");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        parser.Parse();
+        Assert.NotEmpty(parser.Errors);
+    }
+
+    [Fact]
+    public void Parse_IsExpression_AllValidTypes()
+    {
+        string[] types = { "int", "float", "string", "bool", "null", "array", "dict", "struct", "enum", "function", "range", "namespace" };
+        foreach (string type in types)
+        {
+            var result = ParseExpr($"x is {type}");
+            var isExpr = Assert.IsType<IsExpr>(result);
+            Assert.Equal(type, isExpr.TypeName.Lexeme);
+        }
+    }
 }

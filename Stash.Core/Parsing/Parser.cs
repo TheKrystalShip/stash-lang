@@ -1035,6 +1035,33 @@ public class Parser
             expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
         }
 
+        while (Match(TokenType.Is))
+        {
+            Token typeName;
+            if (Match(TokenType.Null))
+            {
+                typeName = Previous();
+            }
+            else if (Match(TokenType.Struct))
+            {
+                typeName = Previous();
+            }
+            else if (Match(TokenType.Enum))
+            {
+                typeName = Previous();
+            }
+            else
+            {
+                typeName = Consume(TokenType.Identifier, "Expected type name after 'is'.");
+            }
+            string name = typeName.Lexeme;
+            if (name is not ("int" or "float" or "string" or "bool" or "null" or "array" or "dict" or "struct" or "enum" or "function" or "range" or "namespace"))
+            {
+                throw Error(typeName, $"Unknown type name '{name}'. Expected one of: int, float, string, bool, null, array, dict, struct, enum, function, range, namespace.");
+            }
+            expr = new IsExpr(expr, typeName, MakeSpan(expr.Span, typeName.Span));
+        }
+
         return expr;
     }
 

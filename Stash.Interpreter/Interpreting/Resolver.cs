@@ -372,6 +372,13 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitIsExpr(IsExpr expr)
+    {
+        expr.Left.Accept(this);
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
         Resolve(expr.Right);

@@ -7527,4 +7527,325 @@ public class InterpreterTests
             System.IO.Directory.Delete(tmpDir, true);
         }
     }
+
+    // --- Is Expression Tests ---
+
+    [Fact]
+    public void Is_IntType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = 42 is int;"));
+    }
+
+    [Fact]
+    public void Is_IntType_WhenFloat_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = 3.14 is int;"));
+    }
+
+    [Fact]
+    public void Is_FloatType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = 3.14 is float;"));
+    }
+
+    [Fact]
+    public void Is_FloatType_WhenInt_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = 42 is float;"));
+    }
+
+    [Fact]
+    public void Is_StringType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = \"hello\" is string;"));
+    }
+
+    [Fact]
+    public void Is_StringType_WhenInt_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = 42 is string;"));
+    }
+
+    [Fact]
+    public void Is_BoolType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = true is bool;"));
+    }
+
+    [Fact]
+    public void Is_BoolType_WhenString_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = \"true\" is bool;"));
+    }
+
+    [Fact]
+    public void Is_NullType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = null is null;"));
+    }
+
+    [Fact]
+    public void Is_NullType_WhenNotNull_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = 0 is null;"));
+    }
+
+    [Fact]
+    public void Is_ArrayType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = [1, 2, 3] is array;"));
+    }
+
+    [Fact]
+    public void Is_ArrayType_EmptyArray_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = [] is array;"));
+    }
+
+    [Fact]
+    public void Is_ArrayType_WhenDict_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = dict.new() is array;"));
+    }
+
+    [Fact]
+    public void Is_DictType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let d = dict.new(); let result = d is dict;"));
+    }
+
+    [Fact]
+    public void Is_DictType_WhenArray_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = [1, 2] is dict;"));
+    }
+
+    [Fact]
+    public void Is_FunctionType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("fn foo() {} let result = foo is function;"));
+    }
+
+    [Fact]
+    public void Is_FunctionType_Lambda_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let f = (x) => x + 1; let result = f is function;"));
+    }
+
+    [Fact]
+    public void Is_FunctionType_WhenString_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = \"fn\" is function;"));
+    }
+
+    [Fact]
+    public void Is_StructType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("struct Point { x, y } let p = Point { x: 1, y: 2 }; let result = p is struct;"));
+    }
+
+    [Fact]
+    public void Is_StructType_WhenDict_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let d = dict.new(); let result = d is struct;"));
+    }
+
+    [Fact]
+    public void Is_EnumType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("enum Color { Red, Green, Blue } let result = Color.Red is enum;"));
+    }
+
+    [Fact]
+    public void Is_EnumType_WhenString_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = \"Red\" is enum;"));
+    }
+
+    [Fact]
+    public void Is_RangeType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = (1..10) is range;"));
+    }
+
+    [Fact]
+    public void Is_RangeType_WhenArray_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = [1, 2, 3] is range;"));
+    }
+
+    [Fact]
+    public void Is_NamespaceType_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = math is namespace;"));
+    }
+
+    [Fact]
+    public void Is_NamespaceType_WhenString_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = \"math\" is namespace;"));
+    }
+
+    [Fact]
+    public void Is_WithNegation_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = !(42 is int);"));
+    }
+
+    [Fact]
+    public void Is_WithNegation_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = !(42 is string);"));
+    }
+
+    [Fact]
+    public void Is_InIfCondition_Works()
+    {
+        Assert.Equal("yes", Run("let x = 42; let result = \"no\"; if (x is int) { result = \"yes\"; }"));
+    }
+
+    [Fact]
+    public void Is_ChainingWithLogicalAnd_Works()
+    {
+        Assert.Equal(true, Run("let result = 42 is int && \"hello\" is string;"));
+    }
+
+    [Fact]
+    public void Is_ChainingWithLogicalOr_Works()
+    {
+        Assert.Equal(true, Run("let result = 42 is string || 42 is int;"));
+    }
+
+    [Fact]
+    public void Is_WithExpressionLeft_Works()
+    {
+        Assert.Equal(true, Run("let result = (1 + 2) is int;"));
+    }
+
+    [Fact]
+    public void Is_WithVariableLeft_Works()
+    {
+        Assert.Equal(true, Run("let x = \"hello\"; let result = x is string;"));
+    }
+
+    [Fact]
+    public void Is_ConsistentWithTypeof_Int()
+    {
+        Assert.Equal(true, Run("let x = 42; let result = (typeof(x) == \"int\") == (x is int);"));
+    }
+
+    [Fact]
+    public void Is_ConsistentWithTypeof_String()
+    {
+        Assert.Equal(true, Run("let x = \"hi\"; let result = (typeof(x) == \"string\") == (x is string);"));
+    }
+
+    [Fact]
+    public void Is_ConsistentWithTypeof_Null()
+    {
+        Assert.Equal(true, Run("let x = null; let result = (typeof(x) == \"null\") == (x is null);"));
+    }
+
+    [Fact]
+    public void Is_FalseBool_IsBool()
+    {
+        Assert.Equal(true, Run("let result = false is bool;"));
+    }
+
+    [Fact]
+    public void Is_ZeroInt_IsInt()
+    {
+        Assert.Equal(true, Run("let result = 0 is int;"));
+    }
+
+    [Fact]
+    public void Is_EmptyString_IsString()
+    {
+        Assert.Equal(true, Run("let result = \"\" is string;"));
+    }
+
+    [Fact]
+    public void Is_BuiltInFunction_IsFunction()
+    {
+        Assert.Equal(true, Run("let result = typeof is function;"));
+    }
+
+    [Fact]
+    public void Is_BoolType_TrueValue_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = true is bool;"));
+    }
+
+    [Fact]
+    public void Is_BoolType_FalseValue_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = false is bool;"));
+    }
+
+    [Fact]
+    public void Is_NullType_WhenZero_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = 0 is null;"));
+    }
+
+    [Fact]
+    public void Is_NullType_WhenFalse_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = false is null;"));
+    }
+
+    [Fact]
+    public void Is_NullType_WhenEmptyString_ReturnsFalse()
+    {
+        Assert.Equal(false, Run("let result = \"\" is null;"));
+    }
+
+    [Fact]
+    public void Is_FunctionType_NamedFunction_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("fn foo() {} let result = foo is function;"));
+    }
+
+    [Fact]
+    public void Is_FunctionType_BuiltIn_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("let result = typeof is function;"));
+    }
+
+    [Fact]
+    public void Is_StructType_Instance_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("struct Point { x, y } let p = Point { x: 1, y: 2 }; let result = p is struct;"));
+    }
+
+    [Fact]
+    public void Is_EnumType_Value_ReturnsTrue()
+    {
+        Assert.Equal(true, Run("enum Color { Red, Green, Blue } let result = Color.Red is enum;"));
+    }
+
+    [Fact]
+    public void Is_ConsistentWithTypeof_Array()
+    {
+        Assert.Equal(true, Run("let x = [1, 2]; let result = (typeof(x) == \"array\") == (x is array);"));
+    }
+
+    [Fact]
+    public void Is_ConsistentWithTypeof_Bool()
+    {
+        Assert.Equal(true, Run("let x = true; let result = (typeof(x) == \"bool\") == (x is bool);"));
+    }
+
+    [Fact]
+    public void Is_ConsistentWithTypeof_Float()
+    {
+        Assert.Equal(true, Run("let x = 1.5; let result = (typeof(x) == \"float\") == (x is float);"));
+    }
+
+    [Fact]
+    public void Is_WithEqualityComparison_CorrectPrecedence()
+    {
+        // "42 is int == true" should parse as "(42 is int) == true" and return true
+        Assert.Equal(true, Run("let result = 42 is int == true;"));
+    }
 }

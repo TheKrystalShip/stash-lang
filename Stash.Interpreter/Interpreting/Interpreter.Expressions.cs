@@ -321,6 +321,30 @@ public partial class Interpreter
     }
 
     /// <inheritdoc />
+    public object? VisitIsExpr(IsExpr expr)
+    {
+        object? value = expr.Left.Accept(this);
+        string typeName = expr.TypeName.Lexeme;
+
+        return typeName switch
+        {
+            "null" => value is null,
+            "int" => value is long,
+            "float" => value is double,
+            "string" => value is string,
+            "bool" => value is bool,
+            "array" => value is List<object?>,
+            "struct" => value is StashInstance or StashStruct,
+            "enum" => value is StashEnumValue or StashEnum,
+            "dict" => value is StashDictionary,
+            "range" => value is StashRange,
+            "namespace" => value is StashNamespace,
+            "function" => value is IStashCallable,
+            _ => false
+        };
+    }
+
+    /// <inheritdoc />
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
         object? condition = expr.Condition.Accept(this);

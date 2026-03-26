@@ -683,6 +683,16 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitIsExpr(IsExpr expr)
+    {
+        expr.Left.Accept(this);
+        Space();
+        EmitToken(); // is
+        Space();
+        EmitToken(); // type name
+        return 0;
+    }
+
     public int VisitUnaryExpr(UnaryExpr expr)
     {
         EmitToken(); // ! or -

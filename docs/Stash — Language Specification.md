@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -83,7 +83,7 @@ Variables declared with `let` are **mutable** — they can be reassigned after d
 
 ### Operators
 
-Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `?.` (optional chaining, see [Section 5e](#5e-optional-chaining)), `++` (increment), `--` (decrement). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)).
+Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `?.` (optional chaining, see [Section 5e](#5e-optional-chaining)), `++` (increment), `--` (decrement). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)). Type checking: `is` (see [Section 4c](#4c-the-is-operator)).
 
 Keyword aliases: `and` is a synonym for `&&`, and `or` is a synonym for `||`. They are pure syntactic sugar — identical precedence, same short-circuit evaluation, identical semantics.
 
@@ -675,7 +675,88 @@ Using `in` against any other type is a runtime error.
 
 ### Precedence
 
-`in` has the same precedence as the comparison operators (`<`, `>`, `<=`, `>=`) and is non-associative with them. `x in a..b` is parsed as `x in (a..b)` because `..` binds tighter.
+`in` has the same precedence as the comparison operators (`<`, `>`, `<=`, `>=`) and is non-associative with them. `x in a..b` is parsed as `x in (a..b)` because `..` binds tighter. The `is` operator shares this same precedence level — see [Section 4c](#4c-the-is-operator).
+
+---
+
+## 4c. The `is` Operator
+
+The `is` operator tests the **type** of a value at runtime, returning `true` if the value matches the given type name, `false` otherwise.
+
+```stash
+42 is int          // true
+"hello" is string  // true
+3.14 is int        // false
+null is null       // true
+[1, 2] is array    // true
+```
+
+### Syntax
+
+```
+expression is typeName
+```
+
+`typeName` is a **bare identifier** — one of the valid built-in type names. It is not a string literal and not an expression.
+
+### Valid Type Names
+
+| Type name   | Matches                                        |
+| ----------- | ---------------------------------------------- |
+| `int`       | Integer values                                 |
+| `float`     | Floating-point values                          |
+| `string`    | String values                                  |
+| `bool`      | Boolean values (`true` / `false`)              |
+| `null`      | The `null` value                               |
+| `array`     | Array values                                   |
+| `dict`      | Dictionary values                              |
+| `struct`    | Struct instances (any struct type)             |
+| `enum`      | Enum values (any enum type)                    |
+| `function`  | Functions and lambdas                          |
+| `range`     | Range values (`1..10`)                         |
+| `namespace` | Namespace values (e.g. `io`, `fs`)             |
+
+Using an unrecognised type name is a runtime error.
+
+### Relationship to `typeof()`
+
+`x is T` is equivalent to `typeof(x) == "T"`. The `is` operator is a concise inline alternative:
+
+```stash
+// These are equivalent:
+typeof(value) == "string"
+value is string
+```
+
+### Precedence
+
+`is` has the same precedence as the comparison operators (`<`, `>`, `<=`, `>=`) and `in` — they all sit at the comparison level. `is` is non-associative with the other comparison operators.
+
+### Examples
+
+```stash
+// Basic type checks
+42 is int          // true
+"hello" is string  // true
+3.14 is int        // false
+null is null       // true
+[1, 2] is array    // true
+
+// Use in conditions
+if (value is string) {
+    println("It's a string!")
+}
+
+// Combine with logical operators
+if (x is int && x > 0) {
+    println("Positive integer")
+}
+
+// Negation
+if (!(x is null)) {
+    println("Not null")
+}
+```
 
 ---
 
@@ -1660,7 +1741,7 @@ io.println(counter()); // 2
 
 | Function           | Description                               |
 | ------------------ | ----------------------------------------- |
-| `typeof(val)`      | Return the type of a value as string      |
+| `typeof(val)`      | Return the type of a value as string. See also the `is` operator ([Section 4c](#4c-the-is-operator)) for inline type checking. |
 | `len(val)`         | Length of a string or array               |
 | `lastError()`      | Last error message (string) or null       |
 
@@ -1880,7 +1961,7 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`
 
 `and` and `or` are keyword aliases for `&&` and `||` respectively — they have identical precedence, short-circuit behavior, and semantics.
 
@@ -2219,7 +2300,7 @@ pipe           → logic_or ( "|" logic_or )* ;
 logic_or       → logic_and ( "||" | "or" logic_and )* ;
 logic_and      → equality ( "&&" | "and" equality )* ;
 equality       → comparison ( ("==" | "!=") comparison )* ;
-comparison     → range ( ("<" | ">" | "<=" | ">=" | "in") range )* ;
+comparison     → range ( ("<" | ">" | "<=" | ">=" | "in" | "is") range )* ;
 range          → term ( ".." term ( ".." term )? )? ;
 term           → factor ( ("+" | "-") factor )* ;
 factor         → unary ( ("*" | "/" | "%") unary )* ;

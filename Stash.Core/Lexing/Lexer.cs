@@ -100,6 +100,7 @@ public class Lexer
             ["from"] = TokenType.From,
             ["as"] = TokenType.As,
             ["switch"] = TokenType.Switch,
+            ["is"] = TokenType.Is,
             ["and"] = TokenType.AmpersandAmpersand,
             ["or"] = TokenType.PipePipe,
         }.ToFrozenDictionary();

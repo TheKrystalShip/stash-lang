@@ -633,6 +633,12 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitIsExpr(IsExpr expr)
+    {
+        expr.Left.Accept(this);
+        return null;
+    }
+
     /// <summary>Recurses into the inner expression of a grouping.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitGroupingExpr(GroupingExpr expr)

@@ -237,6 +237,9 @@ public enum TokenType
     /// <summary>The <c>switch</c> keyword. Begins a switch expression (<c>subject switch { pattern => result }</c>).</summary>
     Switch,
 
+    /// <summary>The <c>is</c> keyword. Tests whether a value matches a specified type.</summary>
+    Is,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>
