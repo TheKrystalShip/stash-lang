@@ -1,0 +1,39 @@
+# Version control
+**/.git
+**/.gitignore
+
+# IDE and editor files
+**/.vs
+**/.vscode
+**/.idea
+**/*.user
+**/*.suo
+
+# Build outputs
+**/bin/
+**/obj/
+
+# Documentation and non-essential files
+docs/
+examples/
+benchmarks/
+README.md
+LICENSE
+
+# Projects not needed to build Stash.Registry (which only depends on Stash.Core)
+Stash.Analysis/
+Stash.Interpreter/
+Stash.Cli/
+Stash.Lsp/
+Stash.Dap/
+Stash.Playground/
+Stash.Tests/
+
+# Build scripts
+build.ps1
+build.sh
+build.stash
+
+# Docker files (no need to bake them into the image layer)
+**/Dockerfile*
+**/.dockerignore
