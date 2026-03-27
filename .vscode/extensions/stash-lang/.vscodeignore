@@ -1,3 +1,9 @@
 src/**
 tsconfig.json
 node_modules/**
+.gitignore
+build.stash
+package-lock.json
+out/**/*.js.map
+.vscode/**
+*.vsix

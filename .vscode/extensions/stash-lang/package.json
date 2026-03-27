@@ -4,12 +4,29 @@
   "description": "Full language support for the Stash scripting language — syntax highlighting, LSP-powered diagnostics, autocomplete, formatting, navigation, and more",
   "version": "0.1.0",
   "publisher": "TheKrystalShip",
+  "license": "GPL-3.0",
   "icon": "images/stash-icon.png",
   "main": "./out/extension.js",
   "repository": {
     "type": "git",
     "url": "https://github.com/TheKrystalShip/stash-lang"
   },
+  "homepage": "https://github.com/TheKrystalShip/stash-lang",
+  "bugs": {
+    "url": "https://github.com/TheKrystalShip/stash-lang/issues"
+  },
+  "keywords": [
+    "stash",
+    "scripting",
+    "sysadmin",
+    "shell",
+    "devops",
+    "automation",
+    "language",
+    "lsp",
+    "debugger",
+    "testing"
+  ],
   "engines": {
     "vscode": "^1.75.0"
   },
@@ -18,7 +35,6 @@
     "Programming Languages",
     "Snippets",
     "Formatters",
-    "Linters",
     "Debuggers",
     "Testing"
   ],
@@ -176,7 +192,7 @@
         "stash.trace.server": {
           "type": "string",
           "enum": ["off", "messages", "verbose"],
-          "default": "verbose",
+          "default": "off",
           "markdownDescription": "Trace level for LSP server communication. Controls the threshold for `window/logMessage` notifications from the server. Set to `verbose` for full logging (actual log level is controlled by `#stash.lsp.logLevel#`). Set to `off` to disable."
         },
         "stash.inlayHints.enabled": {
@@ -305,12 +321,18 @@
       }
     ]
   },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
   "dependencies": {
     "vscode-languageclient": "^9.0.1"
   },
   "devDependencies": {
     "@types/node": "^25.4.0",
     "@types/vscode": "^1.75.0",
+    "@vscode/vsce": "^3.3.2",
     "typescript": "^5.9.3"
   }
 }
