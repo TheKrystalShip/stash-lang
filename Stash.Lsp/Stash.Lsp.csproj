@@ -11,6 +11,11 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <DebugType>embedded</DebugType>
     <PublishAot>false</PublishAot>
+    <SelfContained>true</SelfContained>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>partial</TrimMode>
+    <PublishReadyToRun>true</PublishReadyToRun>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
   </PropertyGroup>
 
   <ItemGroup>

@@ -17,7 +17,7 @@ $INTERPRETER_SOURCE = ".\Stash.Cli\bin\Release\net10.0\$RUNTIME\publish\Stash.ex
 $INTERPRETER_DEST = "$env:USERPROFILE\.local\bin\stash.exe"
 
 $REGISTRY_SOURCE = ".\Stash.Registry\bin\Release\net10.0\$RUNTIME\publish\StashRegistry.exe"
-$REGISTRY_DEST = "$env:USERPROFILE\.local\bin\stash-registry.exe
+$REGISTRY_DEST = "$env:USERPROFILE\.local\bin\stash-registry.exe"
 
 $VSCODE_EXTENSION_DIR = ".\.vscode\extensions\stash-lang"
 
@@ -35,12 +35,12 @@ dotnet clean
 if ($LASTEXITCODE -ne 0) { Write-Host "Clean failed."; exit 1 }
 Write-Host "Clean complete. Starting build..."
 
-dotnet publish -c Release -r $RUNTIME
+dotnet publish -c Release -r $RUNTIME --self-contained
 if ($LASTEXITCODE -ne 0) { Write-Host "CLI build failed."; exit 1 }
 Write-Host "CLI build complete."
 
 # LSP — managed self-contained (NOT AOT, OmniSharp uses reflection-heavy DryIoc)
-dotnet publish Stash.Lsp -c Release -r $RUNTIME
+dotnet publish Stash.Lsp -c Release -r $RUNTIME --self-contained
 if ($LASTEXITCODE -ne 0) { Write-Host "LSP build failed."; exit 1 }
 
 # ── Deploy ──────────────────────────────────────────────────────────

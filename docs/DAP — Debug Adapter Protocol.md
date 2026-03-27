@@ -418,7 +418,7 @@ The `stash-lang` VS Code extension includes built-in debugging support. The exte
 1. **Publish the DAP server** so it's available as a standalone binary:
 
    ```bash
-   dotnet publish Stash.Dap/ -c Release -o publish/
+   dotnet publish Stash.Dap/ -c Release -r linux-x64 --self-contained
    ```
 
 2. **Make the binary accessible** — either:
@@ -498,15 +498,10 @@ dotnet run --project Stash.Dap/
 ### Publish
 
 ```bash
-# Framework-dependent (requires .NET runtime on the target machine)
-dotnet publish Stash.Dap/ -c Release -o publish/
-
-# Self-contained single-file executable
-dotnet publish Stash.Dap/ -c Release -o publish/ \
-    --self-contained true \
-    -p:PublishSingleFile=true \
-    -r linux-x64
+dotnet publish Stash.Dap/ -c Release -r linux-x64 --self-contained
 ```
+
+The DAP server is distributed as a **self-contained single-file binary** — no .NET runtime is required on target machines. The project is configured with ReadyToRun for fast startup and IL trimming for a smaller binary size.
 
 ---
 

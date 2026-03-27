@@ -41,7 +41,7 @@ echo "Cleaning and building the project..."
 dotnet clean
 echo "Clean complete. Starting build..."
 
-dotnet publish -c Release -r "$RUNTIME"
+dotnet publish -c Release -r "$RUNTIME" --self-contained
 echo "Build complete."
 
 # ── Deploy ──────────────────────────────────────────────────────────

@@ -39,7 +39,7 @@ fn cleanBuildStash() {
   }
   io.println("Clean complete. Starting build...");
 
-  result = $(dotnet publish -c Release);
+  result = $(dotnet publish -c Release -r {RUNTIME} --self-contained);
   if (result.exitCode != 0) {
     io.println($"Build failed:\n{result.stderr}");
     process.exit(1);
