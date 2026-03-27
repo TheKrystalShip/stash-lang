@@ -195,4 +195,12 @@ public interface IExprVisitor<T>
     /// <param name="expr">The is expression node to visit.</param>
     /// <returns><c>true</c> if the value matches the specified type; otherwise <c>false</c>.</returns>
     T VisitIsExpr(IsExpr expr);
+
+    /// <summary>
+    /// Visits an <see cref="AwaitExpr"/> node (prefix <c>await expr</c>).
+    /// Blocks until the inner expression's future resolves and returns its value.
+    /// </summary>
+    /// <param name="expr">The await expression node to visit.</param>
+    /// <returns>The resolved value of the future, or the value itself if not a future.</returns>
+    T VisitAwaitExpr(AwaitExpr expr);
 }

@@ -155,6 +155,13 @@ public class Parser
                 return ConstDeclaration();
             }
 
+            if (Match(TokenType.Async))
+            {
+                Token asyncToken = Previous();
+                Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
+                return FnDeclaration(isAsync: true, asyncToken: asyncToken);
+            }
+
             if (Match(TokenType.Fn))
             {
                 return FnDeclaration();
@@ -306,9 +313,10 @@ public class Parser
     /// The <c>fn</c> token has already been consumed.
     /// </summary>
     /// <returns>A <see cref="FnDeclStmt"/>.</returns>
-    private Stmt FnDeclaration()
+    private Stmt FnDeclaration(bool isAsync = false, Token? asyncToken = null)
     {
         Token fnToken = Previous();
+        SourceSpan startSpan = asyncToken?.Span ?? fnToken.Span;
         Token name = Consume(TokenType.Identifier, "Expected function name.");
         Consume(TokenType.LeftParen, "Expected '(' after function name.");
 
@@ -350,7 +358,7 @@ public class Parser
             returnType = Consume(TokenType.Identifier, "Expected return type after '->'.");
         }
         BlockStmt body = ParseBlock();
-        return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(fnToken.Span, body.Span));
+        return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(startSpan, body.Span), isAsync, asyncToken);
     }
 
     /// <summary>Parses a struct declaration: <c>struct Name { field1, field2, fn method() { ... } }</c>.</summary>
@@ -365,12 +373,12 @@ public class Parser
         List<Token?> fieldTypes = new();
         List<FnDeclStmt> methods = new();
 
-        // Parse fields (comma-separated, stop when we hit fn or })
-        if (!Check(TokenType.RightBrace) && !Check(TokenType.Fn))
+        // Parse fields (comma-separated, stop when we hit fn, async, or })
+        if (!Check(TokenType.RightBrace) && !Check(TokenType.Fn) && !Check(TokenType.Async))
         {
             do
             {
-                if (Check(TokenType.Fn))
+                if (Check(TokenType.Fn) || Check(TokenType.Async))
                 {
                     break;
                 }
@@ -385,10 +393,23 @@ public class Parser
             } while (Match(TokenType.Comma));
         }
 
-        // Parse methods
-        while (Match(TokenType.Fn))
+        // Parse methods (including async methods)
+        while (true)
         {
-            methods.Add((FnDeclStmt)FnDeclaration());
+            if (Match(TokenType.Async))
+            {
+                Token asyncToken = Previous();
+                Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
+                methods.Add((FnDeclStmt)FnDeclaration(isAsync: true, asyncToken: asyncToken));
+            }
+            else if (Match(TokenType.Fn))
+            {
+                methods.Add((FnDeclStmt)FnDeclaration());
+            }
+            else
+            {
+                break;
+            }
         }
 
         Token close = Consume(TokenType.RightBrace, "Expected '}' after struct body.");
@@ -1165,6 +1186,13 @@ public class Parser
             return new TryExpr(expression, MakeSpan(tryToken.Span, expression.Span));
         }
 
+        if (Match(TokenType.Await))
+        {
+            Token awaitToken = Previous();
+            Expr expression = Unary();
+            return new AwaitExpr(expression, MakeSpan(awaitToken.Span, expression.Span));
+        }
+
         if (Match(TokenType.PlusPlus, TokenType.MinusMinus))
         {
             Token op = Previous();
@@ -1501,6 +1529,14 @@ public class Parser
             return new IdentifierExpr(name, name.Span);
         }
 
+        if (Match(TokenType.Async))
+        {
+            Token asyncToken = Previous();
+            Consume(TokenType.LeftParen, "Expected '(' after 'async'.");
+            Token open = Previous();
+            return ParseLambda(open, isAsync: true, asyncToken: asyncToken);
+        }
+
         if (Match(TokenType.LeftParen))
         {
             Token open = Previous();
@@ -1623,12 +1659,13 @@ public class Parser
     /// <see cref="IsLambdaStart"/> has confirmed this is a lambda.
     /// Supports both expression bodies <c>(x) =&gt; x + 1</c> and block bodies <c>(x) =&gt; { ... }</c>.
     /// </summary>
-    private Expr ParseLambda(Token open)
+    private Expr ParseLambda(Token open, bool isAsync = false, Token? asyncToken = null)
     {
         List<Token> parameters = new();
         List<Token?> parameterTypes = new();
         List<Expr?> defaultValues = new();
         bool hasSeenDefault = false;
+        SourceSpan startSpan = asyncToken?.Span ?? open.Span;
 
         if (!Check(TokenType.RightParen))
         {
@@ -1664,13 +1701,13 @@ public class Parser
         {
             BlockStmt block = ParseBlock();
             return new LambdaExpr(parameters, parameterTypes, defaultValues, null, block,
-                                  MakeSpan(open.Span, block.Span));
+                                  MakeSpan(startSpan, block.Span), isAsync, asyncToken);
         }
 
         // Expression body: (params) => expr
         Expr body = Assignment();
         return new LambdaExpr(parameters, parameterTypes, defaultValues, body, null,
-                              MakeSpan(open.Span, body.Span));
+                              MakeSpan(startSpan, body.Span), isAsync, asyncToken);
     }
 
     // ── Interpolated string parsing ──────────────────────────────
@@ -1921,7 +1958,9 @@ public class Parser
         if (Check(TokenType.Identifier) ||
             Check(TokenType.True) ||
             Check(TokenType.False) ||
-            Check(TokenType.Null))
+            Check(TokenType.Null) ||
+            Check(TokenType.Async) ||
+            Check(TokenType.Await))
         {
             return Advance();
         }
@@ -2011,6 +2050,7 @@ public class Parser
                 case TokenType.Let:
                 case TokenType.Const:
                 case TokenType.Fn:
+                case TokenType.Async:
                 case TokenType.Struct:
                 case TokenType.Enum:
                 case TokenType.Import:

@@ -1,6 +1,8 @@
 namespace Stash.Interpreting.Types;
 
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Stash.Interpreting.Exceptions;
 using Stash.Parsing.AST;
 
@@ -64,6 +66,11 @@ public class StashFunction : IStashCallable
             env.Define(_declaration.Parameters[i].Lexeme, value);
         }
 
+        if (_declaration.IsAsync)
+        {
+            return CallAsync(interpreter, env);
+        }
+
         try
         {
             interpreter.ExecuteBlock(_declaration.Body.Statements, env);
@@ -74,6 +81,32 @@ public class StashFunction : IStashCallable
         }
 
         return null;
+    }
+
+    private object? CallAsync(Interpreter interpreter, Environment env)
+    {
+        Environment snapshot = Environment.Snapshot(env);
+        var cts = new CancellationTokenSource();
+
+        var dotnetTask = Task.Run(() =>
+        {
+            Interpreter child = interpreter.Fork(snapshot, cts.Token);
+            try
+            {
+                child.ExecuteBlock(_declaration.Body.Statements, snapshot);
+                return (object?)null;
+            }
+            catch (ReturnException ret)
+            {
+                return ret.Value;
+            }
+            finally
+            {
+                child.CleanupTrackedProcesses();
+            }
+        });
+
+        return new StashFuture(dotnetTask, cts);
     }
 
     /// <summary>
@@ -102,6 +135,32 @@ public class StashFunction : IStashCallable
                 value = _declaration.DefaultValues[i]!.Accept(interpreter);
             }
             env.Define(_declaration.Parameters[i].Lexeme, value);
+        }
+
+        if (_declaration.IsAsync)
+        {
+            Environment snapshot = Environment.Snapshot(env);
+            var cts = new CancellationTokenSource();
+
+            var dotnetTask = Task.Run(() =>
+            {
+                Interpreter child = interpreter.Fork(snapshot, cts.Token);
+                try
+                {
+                    child.ExecuteBlock(_declaration.Body.Statements, snapshot);
+                    return (object?)null;
+                }
+                catch (ReturnException ret)
+                {
+                    return ret.Value;
+                }
+                finally
+                {
+                    child.CleanupTrackedProcesses();
+                }
+            });
+
+            return new StashFuture(dotnetTask, cts);
         }
 
         try

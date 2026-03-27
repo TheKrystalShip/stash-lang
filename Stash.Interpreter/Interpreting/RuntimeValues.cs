@@ -141,6 +141,11 @@ public static class RuntimeValues
             return range.ToString();
         }
 
+        if (value is StashFuture future)
+        {
+            return future.ToString();
+        }
+
         return value.ToString()!;
     }
 

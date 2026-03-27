@@ -286,6 +286,10 @@ internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitFnDeclStmt(FnDeclStmt stmt)
     {
+        if (stmt.AsyncKeyword is Token asyncTok)
+        {
+            EmitFromToken(asyncTok, TokenTypeKeyword, 0);
+        }
         EmitFromToken(stmt.Name, TokenTypeFunction, ModifierDeclaration);
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
@@ -550,6 +554,12 @@ internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitAwaitExpr(AwaitExpr expr)
+    {
+        expr.Expression.Accept(this);
+        return 0;
+    }
+
     public int VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         expr.Left.Accept(this);
@@ -571,6 +581,10 @@ internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitLambdaExpr(LambdaExpr expr)
     {
+        if (expr.AsyncKeyword is Token asyncTok)
+        {
+            EmitFromToken(asyncTok, TokenTypeKeyword, 0);
+        }
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
             EmitFromToken(expr.Parameters[i], TokenTypeParameter, ModifierDeclaration);

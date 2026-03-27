@@ -2096,6 +2096,10 @@ The `task` namespace provides lightweight parallelism for Stash scripts. Tasks r
 | `task.awaitAny(handles)` | Wait for any task to complete; returns the result of the first finished task |
 | `task.status(handle)`    | Return the task's current status as a `task.Status` enum value               |
 | `task.cancel(handle)`    | Request cooperative cancellation of a running task; returns `null`           |
+| `task.all(futures)`      | Return a Future that resolves to an array of all results                     |
+| `task.race(futures)`     | Return a Future that resolves to the first completed result                  |
+| `task.resolve(value)`    | Create an already-resolved Future wrapping the given value                   |
+| `task.delay(seconds)`    | Return a Future that resolves to `null` after the specified delay            |
 
 ### `task.run(fn)`
 
@@ -2201,6 +2205,84 @@ let t = task.run(() => {
 time.sleep(0.5);
 task.cancel(t);
 io.println(task.status(t));  // task.Status.Cancelled (soon after)
+```
+
+### `task.all(futures)`
+
+Takes an array of Futures (from async functions), TaskHandles (from `task.run()`), or plain values, and returns a Future that resolves to an array of all results. Results are in the same order as the input array.
+
+```stash
+async fn fetch(url) {
+    return http.get(url);
+}
+
+let futures = [
+    fetch("https://api1.example.com"),
+    fetch("https://api2.example.com"),
+    fetch("https://api3.example.com")
+];
+
+let results = await task.all(futures);
+for (let r in results) {
+    io.println(r);
+}
+```
+
+### `task.race(futures)`
+
+Takes an array of Futures or TaskHandles and returns a Future that resolves to the result of whichever completes first.
+
+```stash
+async fn query(server, latency) {
+    time.sleep(latency);
+    return $"data from {server}";
+}
+
+let winner = await task.race([
+    query("primary", 0.3),
+    query("replica", 0.1),
+    query("cache", 0.2)
+]);
+io.println(winner);  // "data from replica"
+```
+
+### `task.resolve(value)`
+
+Creates an already-resolved Future wrapping the given value. Useful for creating uniform interfaces where a Future is expected but the value is already available.
+
+```stash
+let f = task.resolve(42);
+io.println(typeof(f));  // "Future"
+let result = await f;   // 42
+```
+
+### `task.delay(seconds)`
+
+Returns a Future that resolves to `null` after the specified delay in seconds. Useful for timeouts, throttling, or timed operations.
+
+```stash
+io.println("Starting...");
+await task.delay(1.5);
+io.println("1.5 seconds later");
+```
+
+### `Future` Type
+
+`Future` is a **built-in type** returned by async functions and by `task.all()`, `task.race()`, `task.resolve()`, and `task.delay()`. It represents an asynchronous computation that may not have completed yet.
+
+| Property        | Description                                          |
+| --------------- | ---------------------------------------------------- |
+| `is Future`     | Type check — `true` for Future values                |
+| `typeof(f)`     | Returns `"Future"`                                   |
+
+Use `await` to block until a Future resolves and get its value. Errors thrown inside async functions propagate when the Future is awaited.
+
+```stash
+async fn compute() { return 42; }
+
+let f = compute();       // Returns Future immediately
+io.println(f is Future); // true
+let result = await f;    // 42
 ```
 
 ## `ssh` — SSH Remote Execution

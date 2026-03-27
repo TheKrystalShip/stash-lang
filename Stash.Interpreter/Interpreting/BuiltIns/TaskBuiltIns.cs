@@ -32,6 +32,11 @@ public static class TaskBuiltIns
         ns.Define("cancel",     new BuiltInFunction("task.cancel",   1, Cancel));
         ns.Define("Status", registry.TaskStatusEnum);
 
+        ns.Define("all",     new BuiltInFunction("task.all",     1, All));
+        ns.Define("race",    new BuiltInFunction("task.race",    1, Race));
+        ns.Define("resolve", new BuiltInFunction("task.resolve", 1, TaskResolve));
+        ns.Define("delay",   new BuiltInFunction("task.delay",   1, Delay));
+
         ns.Freeze();
         globals.Define("task", ns);
     }
@@ -304,6 +309,148 @@ public static class TaskBuiltIns
             state.Cts.Cancel();
         }
         return null;
+    }
+
+    private static object? All(Interpreter interpreter, List<object?> args)
+    {
+        if (args.Count < 1 || args[0] is not List<object?> items)
+        {
+            throw new RuntimeError("task.all() expects an array of Futures or TaskHandles.");
+        }
+
+        if (items.Count == 0)
+        {
+            return StashFuture.Resolved(new List<object?>());
+        }
+
+        // Collect all .NET tasks
+        var tasks = new List<Task<object?>>(items.Count);
+        foreach (object? item in items)
+        {
+            if (item is StashFuture future)
+            {
+                tasks.Add(future.DotNetTask);
+            }
+            else if (item is StashInstance handle && handle.TypeName == "TaskHandle")
+            {
+                long id = (long)handle.GetField("id", null)!;
+                if (!interpreter.TaskRegistry.Tasks.TryGetValue(id, out var state))
+                {
+                    throw new RuntimeError("task.all(): invalid or unknown task handle.");
+                }
+                // Wrap the Task in a Task<object?> that extracts the result
+                var tState = state;
+                tasks.Add(tState.DotNetTask.ContinueWith(t =>
+                {
+                    if (tState.Status.MemberName == "Failed")
+                        return (object?)new StashError(tState.Error ?? "Task failed.", "TaskError");
+                    if (tState.Status.MemberName == "Cancelled")
+                        return (object?)new StashError("Task was cancelled.", "TaskCancelled");
+                    return tState.Result;
+                }));
+            }
+            else
+            {
+                // Non-future values are treated as already-resolved
+                tasks.Add(Task.FromResult(item));
+            }
+        }
+
+        var cts = new CancellationTokenSource();
+        var combinedTask = Task.Run(async () =>
+        {
+            await Task.WhenAll(tasks);
+            var results = new List<object?>(tasks.Count);
+            foreach (var t in tasks)
+            {
+                results.Add(t.Result);
+            }
+            return (object?)results;
+        });
+
+        return new StashFuture(combinedTask, cts);
+    }
+
+    private static object? Race(Interpreter interpreter, List<object?> args)
+    {
+        if (args.Count < 1 || args[0] is not List<object?> items)
+        {
+            throw new RuntimeError("task.race() expects an array of Futures or TaskHandles.");
+        }
+
+        if (items.Count == 0)
+        {
+            throw new RuntimeError("task.race() expects a non-empty array.");
+        }
+
+        var tasks = new List<Task<object?>>(items.Count);
+        foreach (object? item in items)
+        {
+            if (item is StashFuture future)
+            {
+                tasks.Add(future.DotNetTask);
+            }
+            else if (item is StashInstance handle && handle.TypeName == "TaskHandle")
+            {
+                long id = (long)handle.GetField("id", null)!;
+                if (!interpreter.TaskRegistry.Tasks.TryGetValue(id, out var state))
+                {
+                    throw new RuntimeError("task.race(): invalid or unknown task handle.");
+                }
+                var tState = state;
+                tasks.Add(tState.DotNetTask.ContinueWith(t =>
+                {
+                    if (tState.Status.MemberName == "Failed")
+                        throw new RuntimeError(tState.Error ?? "Task failed.");
+                    if (tState.Status.MemberName == "Cancelled")
+                        throw new RuntimeError("Task was cancelled.");
+                    return tState.Result;
+                }));
+            }
+            else
+            {
+                tasks.Add(Task.FromResult(item));
+            }
+        }
+
+        var cts = new CancellationTokenSource();
+        var raceTask = Task.Run(async () =>
+        {
+            Task<object?> winner = await Task.WhenAny(tasks);
+            return await winner;
+        });
+
+        return new StashFuture(raceTask, cts);
+    }
+
+    private static object? TaskResolve(Interpreter interpreter, List<object?> args)
+    {
+        return StashFuture.Resolved(args.Count > 0 ? args[0] : null);
+    }
+
+    private static object? Delay(Interpreter interpreter, List<object?> args)
+    {
+        if (args.Count < 1)
+        {
+            throw new RuntimeError("task.delay() expects a number (seconds).");
+        }
+
+        double seconds = args[0] switch
+        {
+            long l => l,
+            double d => d,
+            _ => throw new RuntimeError("task.delay() expects a number (seconds).")
+        };
+
+        int ms = (int)(seconds * 1000);
+        var cts = new CancellationTokenSource();
+        var delayTask = Task.Run(async () =>
+        {
+            await Task.Delay(ms, cts.Token);
+            return (object?)null;
+        });
+
+        return new StashFuture(delayTask, cts);
     }
 
     private static long GetTaskId(StashInstance handle)

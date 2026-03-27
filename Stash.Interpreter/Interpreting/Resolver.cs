@@ -557,6 +557,13 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitAwaitExpr(AwaitExpr expr)
+    {
+        Resolve(expr.Expression);
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         Resolve(expr.Left);

@@ -243,6 +243,12 @@ public enum TokenType
     /// <summary>The <c>is</c> keyword. Tests whether a value matches a specified type.</summary>
     Is,
 
+    /// <summary>The <c>async</c> keyword. Marks a function or lambda as asynchronous.</summary>
+    Async,
+
+    /// <summary>The <c>await</c> keyword. Suspends execution until a Future resolves.</summary>
+    Await,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

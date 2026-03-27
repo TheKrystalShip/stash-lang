@@ -1,6 +1,8 @@
 namespace Stash.Interpreting.Types;
 
 using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
 using Stash.Interpreting.Exceptions;
 using Stash.Parsing.AST;
 
@@ -64,6 +66,11 @@ public class StashLambda : IStashCallable
             env.Define(_declaration.Parameters[i].Lexeme, value);
         }
 
+        if (_declaration.IsAsync)
+        {
+            return CallAsync(interpreter, env);
+        }
+
         if (_declaration.ExpressionBody != null)
         {
             return interpreter.EvaluateInEnvironment(_declaration.ExpressionBody, env);
@@ -79,6 +86,37 @@ public class StashLambda : IStashCallable
         }
 
         return null;
+    }
+
+    private object? CallAsync(Interpreter interpreter, Environment env)
+    {
+        Environment snapshot = Environment.Snapshot(env);
+        var cts = new CancellationTokenSource();
+
+        var dotnetTask = Task.Run(() =>
+        {
+            Interpreter child = interpreter.Fork(snapshot, cts.Token);
+            try
+            {
+                if (_declaration.ExpressionBody != null)
+                {
+                    return child.EvaluateInEnvironment(_declaration.ExpressionBody, snapshot);
+                }
+
+                child.ExecuteBlock(_declaration.BlockBody!.Statements, snapshot);
+                return (object?)null;
+            }
+            catch (ReturnException ret)
+            {
+                return ret.Value;
+            }
+            finally
+            {
+                child.CleanupTrackedProcesses();
+            }
+        });
+
+        return new StashFuture(dotnetTask, cts);
     }
 
     public override string ToString() => "<lambda>";

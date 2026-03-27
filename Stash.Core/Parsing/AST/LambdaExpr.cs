@@ -53,6 +53,16 @@ public class LambdaExpr : Expr
     public BlockStmt? BlockBody { get; }
 
     /// <summary>
+    /// Gets whether this lambda was declared with the <c>async</c> keyword.
+    /// </summary>
+    public bool IsAsync { get; }
+
+    /// <summary>
+    /// Gets the <c>async</c> keyword token, or <c>null</c> if not async.
+    /// </summary>
+    public Token? AsyncKeyword { get; }
+
+    /// <summary>
     /// Creates a new lambda expression node.
     /// </summary>
     /// <param name="parameters">The parameter name tokens.</param>
@@ -61,14 +71,18 @@ public class LambdaExpr : Expr
     /// <param name="expressionBody">The expression body (mutually exclusive with <paramref name="blockBody"/>).</param>
     /// <param name="blockBody">The block body (mutually exclusive with <paramref name="expressionBody"/>).</param>
     /// <param name="span">The source span covering the entire lambda expression.</param>
+    /// <param name="isAsync">Whether this lambda was declared with the <c>async</c> keyword.</param>
+    /// <param name="asyncKeyword">The <c>async</c> keyword token, or <c>null</c>.</param>
     public LambdaExpr(List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues,
-                      Expr? expressionBody, BlockStmt? blockBody, SourceSpan span) : base(span)
+                      Expr? expressionBody, BlockStmt? blockBody, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null) : base(span)
     {
         Parameters = parameters;
         ParameterTypes = parameterTypes;
         DefaultValues = defaultValues;
         ExpressionBody = expressionBody;
         BlockBody = blockBody;
+        IsAsync = isAsync;
+        AsyncKeyword = asyncKeyword;
     }
 
     /// <inheritdoc />

@@ -263,6 +263,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `dict`   | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)         |
 | `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d) |
 | `Error`  | `try failingFn()`              | Error value (see Section 7b)           |
+| `Future` | `async fn() { return 42; }`   | Async computation (see Section 8c)     |
 
 ### Type Coercion & Truthiness
 
@@ -717,6 +718,7 @@ expression is typeName
 | `range`     | Range values (`1..10`)                         |
 | `namespace` | Namespace values (e.g. `io`, `fs`)             |
 | `Error`     | Error values returned by `try`                 |
+| `Future`    | Future values returned by async functions      |
 | *StructName* | Instances of the named struct (e.g. `Point`)  |
 | *EnumName*  | Values of the named enum (e.g. `Color`)        |
 
@@ -1958,6 +1960,149 @@ A lambda expression is evaluated to a `StashLambda` — an `IStashCallable` that
 
 ---
 
+## 8c. Async Functions & Await
+
+Stash supports **language-level asynchronous programming** via `async` and `await` keywords. Async functions run their body on the .NET thread pool and return a `Future` immediately. `await` blocks until a `Future` resolves and returns its value.
+
+### Async Function Declaration
+
+Prefix any function declaration with `async` to make it asynchronous:
+
+```stash
+async fn fetchData(url) {
+    let response = http.get(url);
+    return response;
+}
+
+// Calling returns a Future immediately
+let future = fetchData("https://api.example.com/data");
+io.println(typeof(future));  // "Future"
+
+// await blocks until the Future resolves
+let data = await future;
+```
+
+### Async Lambdas
+
+Lambdas can also be async — prefix the parameter list with `async`:
+
+```stash
+let double = async (x) => x * 2;
+let result = await double(21);  // 42
+
+let process = async (data) => {
+    let parsed = json.parse(data);
+    return parsed;
+};
+```
+
+### The `await` Expression
+
+`await` is a **prefix expression** (same precedence as `try`) that blocks until a `Future` resolves:
+
+```stash
+// Await a Future from an async function
+let result = await asyncFn();
+
+// Await a TaskHandle from task.run() — interoperability
+let handle = task.run(() => 42);
+let result = await handle;
+
+// Await a non-Future value — returns it as-is (transparent await)
+let result = await 42;  // 42
+```
+
+### Parallel Execution
+
+Async functions enable composable parallelism. Call multiple async functions without awaiting, then await all results:
+
+```stash
+async fn fetch(url) {
+    return http.get(url);
+}
+
+// Spawn three parallel requests
+let f1 = fetch("https://api1.example.com");
+let f2 = fetch("https://api2.example.com");
+let f3 = fetch("https://api3.example.com");
+
+// Wait for all — total time ≈ slowest request, not sum
+let results = await task.all([f1, f2, f3]);
+```
+
+Use `task.race()` to get the first result:
+
+```stash
+let fastest = await task.race([
+    fetch("https://primary.example.com"),
+    fetch("https://replica.example.com")
+]);
+```
+
+### Error Handling
+
+Errors thrown inside async functions propagate when awaited. Use `try` to catch them:
+
+```stash
+async fn riskyOp() {
+    throw "something went wrong";
+}
+
+// Without try — crashes the script
+let result = await riskyOp();
+
+// With try — returns an Error value
+let result = try await riskyOp();
+if (result is Error) {
+    io.println(result.message);  // "something went wrong"
+}
+```
+
+### Future Type
+
+A `Future` is a first-class value representing an in-progress async computation:
+
+- **Type checking:** `value is Future` → `true` / `false`
+- **typeof:** `typeof(future)` → `"Future"`
+- **Truthiness:** Futures are truthy
+- **Stringification:** `<Future:Running>`, `<Future:Completed>`, `<Future:Faulted>`
+
+### Async Struct Methods
+
+Struct methods can be declared async:
+
+```stash
+struct ApiClient {
+    base_url: string
+
+    async fn get(path) {
+        return http.get($"{self.base_url}/{path}");
+    }
+}
+
+let client = ApiClient { base_url: "https://api.example.com" };
+let resp = await client.get("users");
+```
+
+### Companion Functions
+
+The `task` namespace provides utility functions for working with Futures (see Standard Library Reference):
+
+| Function             | Description                                                    |
+| -------------------- | -------------------------------------------------------------- |
+| `task.all(futures)`  | Returns a Future that resolves to an array of all results      |
+| `task.race(futures)` | Returns a Future that resolves to the first completed result   |
+| `task.resolve(val)`  | Creates an already-resolved Future                             |
+| `task.delay(secs)`   | Creates a Future that resolves to `null` after a delay         |
+
+### Internal Representation
+
+An `async fn` declaration sets `IsAsync = true` on the `FnDeclStmt` AST node. When called, `StashFunction.Call()` forks the interpreter via `interpreter.Fork()`, snapshots the environment via `Environment.Snapshot()`, runs the body on the .NET `ThreadPool`, and returns a `StashFuture` wrapping the resulting `Task<object?>`.
+
+`await` is parsed as an `AwaitExpr` prefix expression. The interpreter's `VisitAwaitExpr` calls `StashFuture.GetResult()` which blocks on the underlying task and unwraps exceptions. If the awaited value is a `TaskHandle` (from `task.run()`), it is automatically awaited for interoperability. If the value is neither a `Future` nor a `TaskHandle`, it is returned as-is (transparent await).
+
+---
+
 ## 9. Scoping Rules
 
 **Lexical scoping.** A variable is visible in the block where it's declared and all nested blocks.
@@ -2085,7 +2230,7 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`, `async`, `await`
 
 `and` and `or` are keyword aliases for `&&` and `||` respectively — they have identical precedence, short-circuit behavior, and semantics.
 
@@ -2128,6 +2273,7 @@ Identifiers: user-defined names
 - `CommandExpr` — `$(ls -la)`, `$(grep {pattern} {file})`
 - `InterpolatedStringExpr` — `$"Hello {name}"`, `"Hello ${name}"`
 - `TryExpr` — `try expr`
+- `AwaitExpr` — `await expr`
 - `NullCoalesceExpr` — `a ?? b`
 - `SwitchExpr` — `subject switch { pattern => result, ... }`
 - `LambdaExpr` — `(params) => expr` or `(params) => { body }`
@@ -2397,7 +2543,7 @@ declaration    → structDecl | enumDecl | fnDecl | varDecl | importDecl | state
 
 structDecl     → "struct" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
 enumDecl       → "enum" IDENTIFIER "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
-fnDecl         → "fn" IDENTIFIER "(" parameters? ")" block ;
+fnDecl         → "async"? "fn" IDENTIFIER "(" parameters? ")" block ;
 varDecl        → "let" ( IDENTIFIER | destructurePattern ) "=" expression ";" ;
 destructurePattern → "[" IDENTIFIER ("," IDENTIFIER)* "]" | "{" IDENTIFIER ("," IDENTIFIER)* "}" ;
 importDecl     → "import" "{" IDENTIFIER ("," IDENTIFIER)* "}" "from" STRING ";"
@@ -2429,7 +2575,8 @@ range          → term ( ".." term ( ".." term )? )? ;
 term           → factor ( ("+" | "-") factor )* ;
 factor         → unary ( ("*" | "/" | "%") unary )* ;
 unary          → ("!" | "-") unary | prefix ;
-prefix         → ("++" | "--") IDENTIFIER | tryExpr ;
+prefix         → ("++" | "--") IDENTIFIER | awaitExpr ;
+awaitExpr      → "await" unary | tryExpr ;
 tryExpr        → "try" unary | postfix ;
 postfix        → call ("++" | "--")? ;
 call           → primary ( "(" arguments? ")" | "." IDENTIFIER | "[" expression "]" | "switch" "{" switchArm ("," switchArm)* ","? "}" )* ;
@@ -2439,7 +2586,7 @@ primary        → NUMBER | STRING | INTERPOLATED_STRING | "true" | "false" | "n
                | "[" (expression ("," expression)*)? "]"
                | (call ".")? IDENTIFIER "{" (IDENTIFIER ":" expression ("," IDENTIFIER ":" expression)*)? "}"
                | "$(" COMMAND_TEXT ")" ;
-lambdaExpr     → "(" parameters? ")" "=>" ( block | assignment ) ;
+lambdaExpr     → "async"? "(" parameters? ")" "=>" ( block | assignment ) ;
 
 parameter      → IDENTIFIER ( ":" IDENTIFIER )? ( "=" expression )? ;
 parameters     → parameter ( "," parameter )* ;

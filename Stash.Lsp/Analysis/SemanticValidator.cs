@@ -919,6 +919,13 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc />
+    public object? VisitAwaitExpr(AwaitExpr expr)
+    {
+        expr.Expression.Accept(this);
+        return null;
+    }
+
     /// <summary>Recurses into both sides of a null-coalescing expression (<c>??</c>).</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)

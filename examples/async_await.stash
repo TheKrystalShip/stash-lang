@@ -1,0 +1,221 @@
+#!/usr/bin/env stash
+
+// examples/async_await.stash
+// Async/Await in Stash — composable asynchronous programming
+
+io.println("=" * 60);
+io.println("  Stash Async/Await Demo");
+io.println("=" * 60);
+io.println("");
+
+// ─── 1. Basic Async Function ─────────────────────────────────────────────────
+
+io.println("── 1. Basic Async Function ──");
+
+// Async functions run on a background thread and return a Future
+async fn compute(n) {
+    let total = 0;
+    for (let i in 1..n) {
+        total = total + i;
+    }
+    return total;
+}
+
+// Calling an async function returns a Future immediately
+let future = compute(100);
+io.println($"  Type of future: {typeof(future)}");
+io.println($"  Is Future: {future is Future}");
+
+// await blocks until the Future resolves
+let result = await future;
+io.println($"  Sum 1..100 = {result}");
+io.println("");
+
+// ─── 2. Parallel Async Operations ───────────────────────────────────────────
+
+io.println("── 2. Parallel Async Operations ──");
+
+async fn simulateRequest(name, delay) {
+    time.sleep(delay);
+    return $"Response from {name}";
+}
+
+// Sequential timing
+let seqStart = time.millis();
+await simulateRequest("api-1", 0.08);
+await simulateRequest("api-2", 0.08);
+await simulateRequest("api-3", 0.08);
+let seqMs = time.millis() - seqStart;
+
+// Parallel: spawn all, then await all
+let parStart = time.millis();
+let f1 = simulateRequest("api-1", 0.08);
+let f2 = simulateRequest("api-2", 0.08);
+let f3 = simulateRequest("api-3", 0.08);
+let r1 = await f1;
+let r2 = await f2;
+let r3 = await f3;
+let parMs = time.millis() - parStart;
+
+io.println($"  Sequential: {seqMs} ms");
+io.println($"  Parallel:   {parMs} ms");
+io.println($"  Results:    {r1}, {r2}, {r3}");
+io.println("");
+
+// ─── 3. task.all — Await Multiple Futures ────────────────────────────────────
+
+io.println("── 3. task.all — Await Multiple Futures ──");
+
+async fn fetchUser(id) {
+    time.sleep(0.05);
+    return { id: id, name: $"User-{id}", active: id % 2 == 0 };
+}
+
+let userIds = [1, 2, 3, 4, 5];
+let futures = arr.map(userIds, (id) => fetchUser(id));
+let users = await task.all(futures);
+
+for (let user in users) {
+    let status = user.active ? "active" : "inactive";
+    io.println($"  User {user.id}: {user.name} ({status})");
+}
+io.println("");
+
+// ─── 4. task.race — First Responder Wins ────────────────────────────────────
+
+io.println("── 4. task.race — First Response Wins ──");
+
+async fn queryServer(name, latency) {
+    time.sleep(latency / 1000.0);
+    return $"data from {name}";
+}
+
+let raceStart = time.millis();
+let winner = await task.race([
+    queryServer("primary", 150),
+    queryServer("replica", 50),
+    queryServer("cache", 80)
+]);
+let raceMs = time.millis() - raceStart;
+
+io.println($"  Winner in {raceMs} ms: {winner}");
+io.println("");
+
+// ─── 5. Error Handling with Async ────────────────────────────────────────────
+
+io.println("── 5. Error Handling with Async ──");
+
+async fn riskyOperation(shouldFail) {
+    time.sleep(0.02);
+    if (shouldFail) {
+        throw { type: "NetworkError", message: "Connection refused" };
+    }
+    return "success";
+}
+
+// try-await catches async errors
+let err = try await riskyOperation(true);
+if (err is Error) {
+    io.println($"  Caught async error: {err.type} — {err.message}");
+}
+
+let ok = try await riskyOperation(false);
+io.println($"  Successful result: {ok}");
+io.println("");
+
+// ─── 6. Async Lambdas ───────────────────────────────────────────────────────
+
+io.println("── 6. Async Lambdas ──");
+
+let double = async (x) => x * 2;
+let square = async (x) => x * x;
+
+let results = await task.all([
+    double(5),
+    square(5),
+    double(10),
+    square(10)
+]);
+
+io.println($"  double(5)  = {results[0]}");
+io.println($"  square(5)  = {results[1]}");
+io.println($"  double(10) = {results[2]}");
+io.println($"  square(10) = {results[3]}");
+io.println("");
+
+// ─── 7. Nested Async Functions ───────────────────────────────────────────────
+
+io.println("── 7. Nested Async Functions ──");
+
+async fn fetchConfig(key) {
+    time.sleep(0.02);
+    return key switch {
+        "db_host" => "db.internal",
+        "db_port" => "5432",
+        "db_name" => "inventory",
+        _ => "unknown"
+    };
+}
+
+async fn buildConnectionString() {
+    let host = await fetchConfig("db_host");
+    let port = await fetchConfig("db_port");
+    let db   = await fetchConfig("db_name");
+    return $"postgresql://{host}:{port}/{db}";
+}
+
+let connStr = await buildConnectionString();
+io.println($"  Connection: {connStr}");
+io.println("");
+
+// ─── 8. task.resolve and task.delay ──────────────────────────────────────────
+
+io.println("── 8. task.resolve and task.delay ──");
+
+// task.resolve creates an already-complete Future
+let instant = await task.resolve("instant value");
+io.println($"  Resolved: {instant}");
+
+// task.delay creates a Future that completes after a delay
+let delayStart = time.millis();
+await task.delay(0.05);
+let delayMs = time.millis() - delayStart;
+io.println($"  Delayed {delayMs} ms");
+io.println("");
+
+// ─── 9. Async Struct Methods ─────────────────────────────────────────────────
+
+io.println("── 9. Async Struct Methods ──");
+
+struct ApiClient {
+    base_url: string
+
+    async fn get(path) {
+        time.sleep(0.02);
+        return { url: $"{self.base_url}/{path}", status: 200, body: "ok" };
+    }
+}
+
+let client = ApiClient { base_url: "https://api.example.com" };
+let resp = await client.get("users");
+io.println($"  GET {resp.url} → {resp.status} {resp.body}");
+io.println("");
+
+// ─── 10. Mixing async/await with task.run ────────────────────────────────────
+
+io.println("── 10. Interop with task.run ──");
+
+// await also works on TaskHandles from task.run()
+let handle = task.run(() => {
+    time.sleep(0.02);
+    return "from task.run";
+});
+
+// Use the await keyword instead of task.await()
+let taskResult = await handle;
+io.println($"  await on TaskHandle: {taskResult}");
+io.println("");
+
+io.println("=" * 60);
+io.println("  Demo complete");
+io.println("=" * 60);

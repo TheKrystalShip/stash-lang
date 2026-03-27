@@ -30,6 +30,7 @@ public static class GlobalBuiltIns
                 StashEnum => "enum",
                 StashDictionary => "dict",
                 StashRange => "range",
+                StashFuture => "Future",
                 StashNamespace => "namespace",
                 IStashCallable => "function",
                 _ => "unknown"

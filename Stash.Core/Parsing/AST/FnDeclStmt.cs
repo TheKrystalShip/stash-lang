@@ -24,6 +24,10 @@ public class FnDeclStmt : Stmt
     public List<Expr?> DefaultValues { get; }
     /// <summary>Gets the optional return type hint token. <c>null</c> if no return type was annotated.</summary>
     public Token? ReturnType { get; }
+    /// <summary>Gets whether this function was declared with the <c>async</c> keyword.</summary>
+    public bool IsAsync { get; }
+    /// <summary>Gets the <c>async</c> keyword token, or <c>null</c> if not async.</summary>
+    public Token? AsyncKeyword { get; }
     /// <summary>Gets the function body block.</summary>
     public BlockStmt Body { get; }
 
@@ -35,7 +39,9 @@ public class FnDeclStmt : Stmt
     /// <param name="returnType">The optional return type hint token, or <c>null</c>.</param>
     /// <param name="body">The function body block.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public FnDeclStmt(Token name, List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues, Token? returnType, BlockStmt body, SourceSpan span) : base(span)
+    /// <param name="isAsync">Whether this function was declared with the <c>async</c> keyword.</param>
+    /// <param name="asyncKeyword">The <c>async</c> keyword token, or <c>null</c>.</param>
+    public FnDeclStmt(Token name, List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues, Token? returnType, BlockStmt body, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null) : base(span)
     {
         Name = name;
         Parameters = parameters;
@@ -43,6 +49,8 @@ public class FnDeclStmt : Stmt
         DefaultValues = defaultValues;
         ReturnType = returnType;
         Body = body;
+        IsAsync = isAsync;
+        AsyncKeyword = asyncKeyword;
     }
 
     /// <inheritdoc />

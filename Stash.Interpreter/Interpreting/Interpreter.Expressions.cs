@@ -341,6 +341,7 @@ public partial class Interpreter
             "range" => value is StashRange,
             "namespace" => value is StashNamespace,
             "function" => value is IStashCallable,
+            "Future" => value is StashFuture,
             _ => (value is StashInstance instance && instance.TypeName == typeName) ||
                  (value is StashEnumValue enumVal && enumVal.TypeName == typeName)
         };
@@ -387,6 +388,53 @@ public partial class Interpreter
             LastError = error;
             return error;
         }
+    }
+
+    /// <inheritdoc />
+    public object? VisitAwaitExpr(AwaitExpr expr)
+    {
+        object? value = expr.Expression.Accept(this);
+
+        if (value is StashFuture future)
+        {
+            return future.GetResult();
+        }
+
+        // Interop: await also works on TaskHandles from task.run()
+        if (value is StashInstance handle && handle.TypeName == "TaskHandle")
+        {
+            long id = (long)handle.GetField("id", null)!;
+            if (TaskRegistry.Tasks.TryGetValue(id, out var state))
+            {
+                try
+                {
+                    state.DotNetTask.GetAwaiter().GetResult();
+                }
+                catch
+                {
+                    // Exceptions captured in state
+                }
+
+                TaskRegistry.Tasks.TryRemove(id, out _);
+                state.Cts.Dispose();
+                handle.SetField("status", state.Status, null);
+
+                if (state.Status.MemberName == "Failed")
+                {
+                    throw new RuntimeError(state.Error ?? "Task failed.", expr.Span);
+                }
+
+                if (state.Status.MemberName == "Cancelled")
+                {
+                    throw new RuntimeError("Task was cancelled.", expr.Span);
+                }
+
+                return state.Result;
+            }
+        }
+
+        // Transparent: non-future values pass through
+        return value;
     }
 
     /// <inheritdoc />

@@ -855,6 +855,14 @@ public static class BuiltInRegistry
             Documentation: "Returns the current status of the task: `task.Status.Running`, `task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`. Does not block.\n@param handle Task handle returned by task.run()\n@return The task's current task.Status"),
         new NamespaceFunction("task", "cancel", new[] { new BuiltInParam("handle", "TaskHandle") },
             Documentation: "Signals the task to cancel. The cancellation is cooperative — the task must check for cancellation. Returns `null`.\n@param handle Task handle returned by task.run()\n@return null"),
+        new NamespaceFunction("task", "all", new[] { new BuiltInParam("futures", "array") }, "Future",
+            Documentation: "Returns a Future that resolves to an array of results when all input Futures complete. Accepts Futures, TaskHandles, and plain values.\n@param futures Array of Future or TaskHandle values\n@return A Future resolving to an array of results"),
+        new NamespaceFunction("task", "race", new[] { new BuiltInParam("futures", "array") }, "Future",
+            Documentation: "Returns a Future that resolves to the result of the first completed Future from the input array.\n@param futures Array of Future or TaskHandle values\n@return A Future resolving to the first completed result"),
+        new NamespaceFunction("task", "resolve", new[] { new BuiltInParam("value") }, "Future",
+            Documentation: "Creates an already-resolved Future with the given value.\n@param value The value to wrap\n@return An already-resolved Future"),
+        new NamespaceFunction("task", "delay", new[] { new BuiltInParam("seconds", "float") }, "Future",
+            Documentation: "Returns a Future that resolves to null after the specified delay.\n@param seconds Delay in seconds\n@return A Future that resolves after the delay"),
 
         // ssh namespace
         new NamespaceFunction("ssh", "connect", new[] { new BuiltInParam("options", "dict") }, "SshConnection",
@@ -968,7 +976,7 @@ public static class BuiltInRegistry
         "let", "const", "fn", "struct", "enum", "if", "else",
         "for", "in", "is", "while", "do", "return", "break", "continue",
         "true", "false", "null", "try", "import", "from", "as", "switch",
-        "and", "or", "args"
+        "and", "or", "args", "async", "await"
     };
 
     // ── Valid built-in type names (for type hint validation) ──
@@ -981,7 +989,7 @@ public static class BuiltInRegistry
     {
         "string", "int", "float", "bool", "null", "array", "dict", "function",
         "namespace", "range", "Error", "Status", "TaskHandle", "CommandResult", "Process",
-        "HttpResponse"
+        "HttpResponse", "Future"
     };
 
     /// <summary>Describes a built-in type for hover and completion.</summary>
@@ -1006,6 +1014,7 @@ public static class BuiltInRegistry
         ["range"] = new("range", "Range type. Lazy integer sequences like `1..10`."),
         ["namespace"] = new("namespace", "Namespace type. Built-in module namespaces like `io`, `fs`."),
         ["Error"] = new("Error", "Error type. Returned by `try` on failure. Has `.message`, `.type`, and `.stack` fields."),
+        ["Future"] = new("Future", "Represents an asynchronous computation that may not have completed yet. Returned by async functions. Use `await` to get the resolved value."),
     };
 
     // ── Known names for semantic validation (don't warn as undefined) ──

@@ -388,6 +388,11 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitFnDeclStmt(FnDeclStmt stmt)
     {
+        if (stmt.IsAsync)
+        {
+            EmitToken(); // async
+            Space();
+        }
         EmitToken(); // fn
         Space();
         EmitToken(); // name
@@ -995,6 +1000,11 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitLambdaExpr(LambdaExpr expr)
     {
+        if (expr.IsAsync)
+        {
+            EmitToken(); // async
+            Space();
+        }
         EmitToken(); // (
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
@@ -1048,6 +1058,14 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     public int VisitTryExpr(TryExpr expr)
     {
         EmitToken(); // try
+        Space();
+        expr.Expression.Accept(this);
+        return 0;
+    }
+
+    public int VisitAwaitExpr(AwaitExpr expr)
+    {
+        EmitToken(); // await
         Space();
         expr.Expression.Accept(this);
         return 0;
