@@ -556,6 +556,7 @@ internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitAwaitExpr(AwaitExpr expr)
     {
+        EmitFromToken(expr.Keyword, TokenTypeKeyword, 0);
         expr.Expression.Accept(this);
         return 0;
     }

@@ -1,6 +1,7 @@
 namespace Stash.Parsing.AST;
 
 using Stash.Common;
+using Stash.Lexing;
 
 /// <summary>
 /// Represents an await expression: <c>await expr</c>.
@@ -14,6 +15,11 @@ using Stash.Common;
 public class AwaitExpr : Expr
 {
     /// <summary>
+    /// Gets the <c>await</c> keyword token.
+    /// </summary>
+    public Token Keyword { get; }
+
+    /// <summary>
     /// Gets the inner expression to await.
     /// </summary>
     public Expr Expression { get; }
@@ -21,10 +27,12 @@ public class AwaitExpr : Expr
     /// <summary>
     /// Creates a new await expression node.
     /// </summary>
+    /// <param name="keyword">The <c>await</c> keyword token.</param>
     /// <param name="expression">The inner expression to await.</param>
     /// <param name="span">The source span covering the <c>await</c> keyword and the inner expression.</param>
-    public AwaitExpr(Expr expression, SourceSpan span) : base(span)
+    public AwaitExpr(Token keyword, Expr expression, SourceSpan span) : base(span)
     {
+        Keyword = keyword;
         Expression = expression;
     }
 

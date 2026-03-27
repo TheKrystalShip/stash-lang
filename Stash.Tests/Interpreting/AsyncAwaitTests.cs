@@ -254,10 +254,10 @@ let result = await ""hello"";
         Assert.Equal("hello", result);
     }
 
-    // ── Category 6: Await on TaskHandle (interoperability) ────────────────────
+    // ── Category 6: Await on Future from task.run() ────────────────────
 
     [Fact]
-    public void Await_TaskHandle_ReturnsResult()
+    public void Await_FutureFromTaskRun_ReturnsResult()
     {
         var result = Run(@"
 let handle = task.run(() => 42);
@@ -366,9 +366,6 @@ let result = typeof(f);
     }
 
     // ── Category 9: Async in struct methods ───────────────────────────────────
-    // Note: async fn inside struct bodies is not yet supported by the parser.
-    // The parser's StructDeclaration() only matches `fn` tokens, not `async fn`.
-    // Instead, we test that a struct can call an external async function.
 
     [Fact]
     public void AsyncFn_CalledFromStruct_Works()
@@ -519,7 +516,7 @@ let result = await f;
     }
 
     [Fact]
-    public void TaskAll_WithTaskHandles_ReturnsAllResults()
+    public void TaskAll_WithFuturesFromTaskRun_ReturnsAllResults()
     {
         var result = Run(@"
 let h1 = task.run(() => 10);

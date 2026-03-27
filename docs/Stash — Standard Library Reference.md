@@ -54,11 +54,11 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 
 ### Global Functions
 
-| Function      | Description                                                                 |
-| ------------- | --------------------------------------------------------------------------- |
-| `typeof(val)` | Return the type of a value as string (returns `"Error"` for error values)   |
-| `len(val)`    | Length of a string or array                                                 |
-| `lastError()` | Last error value (Error object with `.message`, `.type`, `.stack`) or null  |
+| Function      | Description                                                                |
+| ------------- | -------------------------------------------------------------------------- |
+| `typeof(val)` | Return the type of a value as string (returns `"Error"` for error values)  |
+| `len(val)`    | Length of a string or array                                                |
+| `lastError()` | Last error value (Error object with `.message`, `.type`, `.stack`) or null |
 
 ---
 
@@ -707,11 +707,11 @@ let output = ini.stringify(cfg);
 
 The `yaml` namespace provides parsing and serialization of YAML (YAML Ain't Markup Language) documents. Supports YAML 1.2 including mappings, sequences, nested structures, multi-document streams, and scalar types.
 
-| Function              | Description                                    |
-| --------------------- | ---------------------------------------------- |
-| `yaml.parse(text)`    | Parse a YAML string into a Stash value         |
-| `yaml.stringify(val)` | Serialize a Stash value to a YAML string       |
-| `yaml.valid(text)`    | Return `true` if the string is valid YAML      |
+| Function              | Description                               |
+| --------------------- | ----------------------------------------- |
+| `yaml.parse(text)`    | Parse a YAML string into a Stash value    |
+| `yaml.stringify(val)` | Serialize a Stash value to a YAML string  |
+| `yaml.valid(text)`    | Return `true` if the string is valid YAML |
 
 ### `yaml.parse(text)`
 
@@ -739,15 +739,15 @@ io.println(cfg.database.replicas[0]);  // "db1"
 
 #### Type Mapping
 
-| YAML type        | Stash type       | Example                             |
-| ---------------- | ---------------- | ----------------------------------- |
-| Mapping          | `dict`           | `key: value` → dictionary           |
-| Sequence         | `array`          | `- item` → array                    |
-| Integer          | `int` (long)     | `port: 5432` → `5432`              |
-| Float            | `float` (double) | `ratio: 3.14` → `3.14`             |
-| Boolean          | `bool`           | `enabled: true` → `true`           |
-| Null             | `null`           | `value: null` → `null`             |
-| String           | `string`         | `name: Alice` → `"Alice"`          |
+| YAML type | Stash type       | Example                   |
+| --------- | ---------------- | ------------------------- |
+| Mapping   | `dict`           | `key: value` → dictionary |
+| Sequence  | `array`          | `- item` → array          |
+| Integer   | `int` (long)     | `port: 5432` → `5432`     |
+| Float     | `float` (double) | `ratio: 3.14` → `3.14`    |
+| Boolean   | `bool`           | `enabled: true` → `true`  |
+| Null      | `null`           | `value: null` → `null`    |
+| String    | `string`         | `name: Alice` → `"Alice"` |
 
 ### `yaml.stringify(value)`
 
@@ -797,11 +797,11 @@ io.println(yaml.valid(": invalid: yaml:")); // false
 
 The `toml` namespace provides parsing and serialization of TOML (Tom's Obvious Minimal Language) documents. Supports TOML 1.0 including tables, arrays, inline tables, and array of tables.
 
-| Function               | Description                                    |
-| ---------------------- | ---------------------------------------------- |
-| `toml.parse(text)`     | Parse a TOML string into a dictionary          |
-| `toml.stringify(dict)` | Serialize a dictionary to a TOML string        |
-| `toml.valid(text)`     | Return `true` if the string is valid TOML      |
+| Function               | Description                               |
+| ---------------------- | ----------------------------------------- |
+| `toml.parse(text)`     | Parse a TOML string into a dictionary     |
+| `toml.stringify(dict)` | Serialize a dictionary to a TOML string   |
+| `toml.valid(text)`     | Return `true` if the string is valid TOML |
 
 ### `toml.parse(text)`
 
@@ -828,16 +828,16 @@ io.println(cfg.servers[1].ip);    // "10.0.0.2"
 
 #### Type Mapping
 
-| TOML type        | Stash type       | Example                                     |
-| ---------------- | ---------------- | ------------------------------------------- |
-| Table            | `dict`           | `[section]` → nested dictionary             |
-| Array            | `array`          | `arr = [1, 2]` → array                     |
-| Array of Tables  | `array` of dicts | `[[items]]` → array of dictionaries         |
-| Integer          | `int` (long)     | `port = 5432` → `5432`                     |
-| Float            | `float` (double) | `ratio = 3.14` → `3.14`                    |
-| Boolean          | `bool`           | `enabled = true` → `true`                  |
-| String           | `string`         | `name = "Alice"` → `"Alice"`               |
-| Datetime         | `string`         | `dt = 2024-01-15T10:30:00Z` → `"2024..."` |
+| TOML type       | Stash type       | Example                                   |
+| --------------- | ---------------- | ----------------------------------------- |
+| Table           | `dict`           | `[section]` → nested dictionary           |
+| Array           | `array`          | `arr = [1, 2]` → array                    |
+| Array of Tables | `array` of dicts | `[[items]]` → array of dictionaries       |
+| Integer         | `int` (long)     | `port = 5432` → `5432`                    |
+| Float           | `float` (double) | `ratio = 3.14` → `3.14`                   |
+| Boolean         | `bool`           | `enabled = true` → `true`                 |
+| String          | `string`         | `name = "Alice"` → `"Alice"`              |
+| Datetime        | `string`         | `dt = 2024-01-15T10:30:00Z` → `"2024..."` |
 
 ### `toml.stringify(dict)`
 
@@ -888,16 +888,16 @@ The `config` namespace provides a unified, format-agnostic API for reading and w
 
 ### Supported Formats
 
-| Extension     | Format | Parser                                                                |
-| ------------- | ------ | --------------------------------------------------------------------- |
-| `.json`       | JSON   | Built-in JSON parser                                                  |
-| `.ini`        | INI    | Built-in INI parser (see [`ini` namespace](#ini--ini-configuration))  |
-| `.cfg`        | INI    | Same as `.ini`                                                        |
-| `.conf`       | INI    | Same as `.ini`                                                        |
-| `.properties` | INI    | Same as `.ini`                                                        |
-| `.yaml`       | YAML   | Built-in YAML parser (see [`yaml` namespace](#yaml--yaml))            |
-| `.yml`        | YAML   | Same as `.yaml`                                                       |
-| `.toml`       | TOML   | Built-in TOML parser (see [`toml` namespace](#toml--toml))            |
+| Extension     | Format | Parser                                                               |
+| ------------- | ------ | -------------------------------------------------------------------- |
+| `.json`       | JSON   | Built-in JSON parser                                                 |
+| `.ini`        | INI    | Built-in INI parser (see [`ini` namespace](#ini--ini-configuration)) |
+| `.cfg`        | INI    | Same as `.ini`                                                       |
+| `.conf`       | INI    | Same as `.ini`                                                       |
+| `.properties` | INI    | Same as `.ini`                                                       |
+| `.yaml`       | YAML   | Built-in YAML parser (see [`yaml` namespace](#yaml--yaml))           |
+| `.yml`        | YAML   | Same as `.yaml`                                                      |
+| `.toml`       | TOML   | Built-in TOML parser (see [`toml` namespace](#toml--toml))           |
 
 ### `config.read(path)` / `config.read(path, format)`
 
@@ -2062,7 +2062,7 @@ Each network interface dict contains:
 
 ## `task` — Parallel Tasks
 
-The `task` namespace provides lightweight parallelism for Stash scripts. Tasks run as .NET `Task<T>` instances on the thread pool — not OS threads. Each task receives a snapshot of the current environment at spawn time, isolating it from mutations in the caller.
+The `task` namespace provides lightweight parallelism for Stash scripts. Tasks run as .NET `Task<T>` instances on the thread pool — not OS threads. Each task receives a snapshot of the current environment at spawn time, isolating it from mutations in the caller. All task functions work with **`Future`** — the same type returned by `async fn` declarations — so tasks and async functions are fully interchangeable.
 
 ### Built-in Types
 
@@ -2077,64 +2077,64 @@ The `task` namespace provides lightweight parallelism for Stash scripts. Tasks r
 | `task.Status.Failed`    | Task threw an unhandled error          |
 | `task.Status.Cancelled` | Task was cancelled via `task.cancel()` |
 
-#### `TaskHandle` Struct
+#### `Future` Type
 
-`TaskHandle` is a **built-in struct** returned by `task.run()`. It is passed to all other task functions.
+All task functions work with **`Future`** — the same type returned by `async fn` declarations. A Future represents an asynchronous computation that may not have completed yet. Use `await` to block until it resolves.
 
-| Field    | Type          | Description                            |
-| -------- | ------------- | -------------------------------------- |
-| `id`     | `int`         | Unique task identifier                 |
-| `status` | `task.Status` | Initial status (`task.Status.Running`) |
+| Check         | Result                   |
+| ------------- | ------------------------ |
+| `typeof(f)`   | `"Future"`               |
+| `f is Future` | `true`                   |
+| `str(f)`      | `<Future:Running>`, etc. |
 
 ### Functions
 
-| Function                 | Description                                                                  |
-| ------------------------ | ---------------------------------------------------------------------------- |
-| `task.run(fn)`           | Spawn a parallel task; returns a `TaskHandle` struct                         |
-| `task.await(handle)`     | Block until the task completes and return its result                         |
-| `task.awaitAll(handles)` | Wait for all tasks to complete; returns a list of results in input order     |
-| `task.awaitAny(handles)` | Wait for any task to complete; returns the result of the first finished task |
-| `task.status(handle)`    | Return the task's current status as a `task.Status` enum value               |
-| `task.cancel(handle)`    | Request cooperative cancellation of a running task; returns `null`           |
-| `task.all(futures)`      | Return a Future that resolves to an array of all results                     |
-| `task.race(futures)`     | Return a Future that resolves to the first completed result                  |
-| `task.resolve(value)`    | Create an already-resolved Future wrapping the given value                   |
-| `task.delay(seconds)`    | Return a Future that resolves to `null` after the specified delay            |
+| Function                 | Description                                                               |
+| ------------------------ | ------------------------------------------------------------------------- |
+| `task.run(fn)`           | Spawn a parallel task; returns a `Future`                                 |
+| `task.await(future)`     | Block until the Future resolves and return its result                     |
+| `task.awaitAll(futures)` | Wait for all Futures to resolve; returns a list of results in input order |
+| `task.awaitAny(futures)` | Wait for any Future to resolve; returns the result of the first resolved  |
+| `task.status(future)`    | Return the Future's current status as a `task.Status` enum value          |
+| `task.cancel(future)`    | Request cooperative cancellation of a running Future; returns `null`      |
+| `task.all(futures)`      | Return a Future that resolves to an array of all results                  |
+| `task.race(futures)`     | Return a Future that resolves to the first completed result               |
+| `task.resolve(value)`    | Create an already-resolved Future wrapping the given value                |
+| `task.delay(seconds)`    | Return a Future that resolves to `null` after the specified delay         |
 
 ### `task.run(fn)`
 
-Spawns a parallel task that executes the given zero-argument function. Returns a `TaskHandle` struct that can be passed to `task.await()`, `task.status()`, or `task.cancel()`. The function's closure environment is snapshotted at spawn time — mutations to captured variables after `task.run()` are not visible to the task.
+Spawns a parallel task that executes the given zero-argument function. Returns a `Future` that can be awaited with `await` or passed to `task.status()` or `task.cancel()`. The function's closure environment is snapshotted at spawn time — mutations to captured variables after `task.run()` are not visible to the task.
 
 ```stash
-let handle = task.run(() => {
+let future = task.run(() => {
     time.sleep(1);
     return 42;
 });
 
-// Do other work while task runs...
-io.println("Task is running...");
-io.println(handle.id);  // unique task id
-
-let result = task.await(handle);
+// Use await keyword or task.await()
+let result = await future;
 io.println("Result: " + result);  // 42
 ```
 
-### `task.await(handle)`
+### `task.await(future)`
 
-Blocks until the task completes and returns its result. If the task threw an error, the error is re-thrown. If the task was cancelled, throws a `"Task was cancelled"` error.
+Blocks until the Future resolves and returns its result. If the Future threw an error, the error is re-thrown. If the Future was cancelled, throws a `"Task was cancelled"` error.
 
 ```stash
-let t = task.run(() => {
+let f = task.run(() => {
     return $(hostname).stdout;
 });
 
-let hostname = task.await(t);
+let hostname = task.await(f);
 io.println("Host: " + hostname);
 ```
 
-### `task.awaitAll(handles)`
+### `task.awaitAll(futures)`
 
-Takes a list of task handles and waits for all to complete. Returns a list of results in the same order as the input handles.
+Takes a list of Futures and waits for all to resolve. Returns a list of results in the same order as the input futures.
+
+> **Note:** `task.awaitAll` is **fault-tolerant** — failed or cancelled Futures produce `Error` values in the results array instead of throwing. Use `task.all` if you prefer fail-fast behavior.
 
 ```stash
 let tasks = [
@@ -2149,9 +2149,9 @@ for (let r in results) {
 }
 ```
 
-### `task.awaitAny(handles)`
+### `task.awaitAny(futures)`
 
-Takes a list of task handles and waits for any one to complete. Returns the result of the first completed task.
+Takes a list of Futures and waits for any one to resolve. Returns the result of the first resolved Future.
 
 ```stash
 let tasks = [
@@ -2164,9 +2164,9 @@ let first = task.awaitAny(tasks);
 io.println("First finished: " + first);  // "fast"
 ```
 
-### `task.status(handle)`
+### `task.status(future)`
 
-Returns the current status of a task as a `task.Status` enum value.
+Returns the current status of a Future as a `task.Status` enum value.
 
 | Value                   | Description                            |
 | ----------------------- | -------------------------------------- |
@@ -2176,23 +2176,23 @@ Returns the current status of a task as a `task.Status` enum value.
 | `task.Status.Cancelled` | Task was cancelled via `task.cancel()` |
 
 ```stash
-let handle = task.run(() => {
+let future = task.run(() => {
     time.sleep(5);
     return "done";
 });
 
-io.println(task.status(handle));  // task.Status.Running
+io.println(task.status(future));  // task.Status.Running
 time.sleep(6);
-io.println(task.status(handle));  // task.Status.Completed
+io.println(task.status(future));  // task.Status.Completed
 
-if (task.status(handle) == task.Status.Completed) {
+if (task.status(future) == task.Status.Completed) {
     io.println("Done!");
 }
 ```
 
-### `task.cancel(handle)`
+### `task.cancel(future)`
 
-Requests cooperative cancellation of a running task. Returns `null`. The task may not cancel immediately — it cancels at the next statement boundary.
+Requests cooperative cancellation of a running Future. Returns `null`. The Future may not cancel immediately — it cancels at the next statement boundary.
 
 ```stash
 let t = task.run(() => {
@@ -2209,7 +2209,9 @@ io.println(task.status(t));  // task.Status.Cancelled (soon after)
 
 ### `task.all(futures)`
 
-Takes an array of Futures (from async functions), TaskHandles (from `task.run()`), or plain values, and returns a Future that resolves to an array of all results. Results are in the same order as the input array.
+Takes an array of Futures and returns a Future that resolves to an array of all results. Results are in the same order as the input array.
+
+> **Note:** `task.all` is **fail-fast** — if any Future in the array fails, the combined Future also fails and the error propagates when awaited. Use `task.awaitAll` if you need fault-tolerant behavior where failed Futures become `Error` values in the results array.
 
 ```stash
 async fn fetch(url) {
@@ -2230,7 +2232,7 @@ for (let r in results) {
 
 ### `task.race(futures)`
 
-Takes an array of Futures or TaskHandles and returns a Future that resolves to the result of whichever completes first.
+Takes an array of Futures and returns a Future that resolves to the result of whichever completes first.
 
 ```stash
 async fn query(server, latency) {
@@ -2268,12 +2270,12 @@ io.println("1.5 seconds later");
 
 ### `Future` Type
 
-`Future` is a **built-in type** returned by async functions and by `task.all()`, `task.race()`, `task.resolve()`, and `task.delay()`. It represents an asynchronous computation that may not have completed yet.
+`Future` is a **built-in type** returned by async functions and `task.run()`, as well as by `task.all()`, `task.race()`, `task.resolve()`, and `task.delay()`. It represents an asynchronous computation that may not have completed yet.
 
-| Property        | Description                                          |
-| --------------- | ---------------------------------------------------- |
-| `is Future`     | Type check — `true` for Future values                |
-| `typeof(f)`     | Returns `"Future"`                                   |
+| Property    | Description                           |
+| ----------- | ------------------------------------- |
+| `is Future` | Type check — `true` for Future values |
+| `typeof(f)` | Returns `"Future"`                    |
 
 Use `await` to block until a Future resolves and get its value. Errors thrown inside async functions propagate when the Future is awaited.
 

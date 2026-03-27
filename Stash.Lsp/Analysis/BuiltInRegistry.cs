@@ -92,11 +92,6 @@ public static class BuiltInRegistry
             new("body", "string"),
             new("headers", "dict"),
         }),
-        new BuiltInStruct("TaskHandle", new BuiltInField[]
-        {
-            new("id", "int"),
-            new("status", "Status"),
-        }),
         new BuiltInStruct("SshConnection", new BuiltInField[]
         {
             new("host", "string"),
@@ -843,22 +838,22 @@ public static class BuiltInRegistry
             Documentation: "Returns the absolute path to the current project root (the directory containing stash.json). Returns null if no stash.json is found.\n@return The absolute path string, or null"),
 
         // task namespace
-        new NamespaceFunction("task", "run", new[] { new BuiltInParam("fn", "function") }, "TaskHandle",
-            Documentation: "Spawns a new task that executes `fn` on the thread pool. The function's closure is snapshotted at spawn time. Returns a TaskHandle with a unique `id` and initial status `task.Status.Running`.\n@param fn Zero-argument function to execute in parallel\n@return A TaskHandle struct with id and status fields"),
-        new NamespaceFunction("task", "await", new[] { new BuiltInParam("handle", "TaskHandle") },
-            Documentation: "Blocks the calling thread until the given task finishes. Returns the task's return value. Throws if the task failed or was cancelled.\n@param handle Task handle returned by task.run()\n@return The task's return value"),
-        new NamespaceFunction("task", "awaitAll", new[] { new BuiltInParam("handles", "array") }, "array",
-            Documentation: "Blocks until all tasks in the array complete. Returns a list of results in the same order as the input handles. Throws on the first encountered error.\n@param handles Array of TaskHandle values\n@return An array of results in the same order as the input handles"),
-        new NamespaceFunction("task", "awaitAny", new[] { new BuiltInParam("handles", "array") },
-            Documentation: "Blocks until any task in the array completes. Returns the result of the first completed task.\n@param handles Array of TaskHandle values\n@return The result of the first completed task"),
-        new NamespaceFunction("task", "status", new[] { new BuiltInParam("handle", "TaskHandle") }, "Status",
-            Documentation: "Returns the current status of the task: `task.Status.Running`, `task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`. Does not block.\n@param handle Task handle returned by task.run()\n@return The task's current task.Status"),
-        new NamespaceFunction("task", "cancel", new[] { new BuiltInParam("handle", "TaskHandle") },
-            Documentation: "Signals the task to cancel. The cancellation is cooperative — the task must check for cancellation. Returns `null`.\n@param handle Task handle returned by task.run()\n@return null"),
+        new NamespaceFunction("task", "run", new[] { new BuiltInParam("fn", "function") }, "Future",
+            Documentation: "Spawns a new task that executes `fn` on the thread pool. The function's closure is snapshotted at spawn time. Returns a Future that resolves to the function's return value.\n@param fn Zero-argument function to execute in parallel\n@return A Future resolving to the function's return value"),
+        new NamespaceFunction("task", "await", new[] { new BuiltInParam("future", "Future") },
+            Documentation: "Blocks the calling thread until the given Future resolves. Returns the future's value. Throws if the future failed or was cancelled.\n@param future Future returned by task.run()\n@return The future's resolved value"),
+        new NamespaceFunction("task", "awaitAll", new[] { new BuiltInParam("futures", "array") }, "array",
+            Documentation: "Blocks until all Futures in the array complete. Returns a list of results in the same order as the input. Failed or cancelled futures become StashError values.\n@param futures Array of Future values\n@return An array of results in the same order as the input"),
+        new NamespaceFunction("task", "awaitAny", new[] { new BuiltInParam("futures", "array") },
+            Documentation: "Blocks until any Future in the array completes. Returns the result of the first completed Future. Cancels remaining futures.\n@param futures Array of Future values\n@return The result of the first completed Future"),
+        new NamespaceFunction("task", "status", new[] { new BuiltInParam("future", "Future") }, "Status",
+            Documentation: "Returns the current status of the Future: `task.Status.Running`, `task.Status.Completed`, `task.Status.Failed`, or `task.Status.Cancelled`. Does not block.\n@param future Future returned by task.run()\n@return The future's current task.Status"),
+        new NamespaceFunction("task", "cancel", new[] { new BuiltInParam("future", "Future") },
+            Documentation: "Signals the future to cancel. The cancellation is cooperative — the task must check for cancellation. Returns `null`.\n@param future Future returned by task.run()\n@return null"),
         new NamespaceFunction("task", "all", new[] { new BuiltInParam("futures", "array") }, "Future",
-            Documentation: "Returns a Future that resolves to an array of results when all input Futures complete. Accepts Futures, TaskHandles, and plain values.\n@param futures Array of Future or TaskHandle values\n@return A Future resolving to an array of results"),
+            Documentation: "Returns a Future that resolves to an array of results when all input Futures complete. Accepts Futures and plain values.\n@param futures Array of Future values or plain values\n@return A Future resolving to an array of results"),
         new NamespaceFunction("task", "race", new[] { new BuiltInParam("futures", "array") }, "Future",
-            Documentation: "Returns a Future that resolves to the result of the first completed Future from the input array.\n@param futures Array of Future or TaskHandle values\n@return A Future resolving to the first completed result"),
+            Documentation: "Returns a Future that resolves to the result of the first completed Future from the input array.\n@param futures Array of Future values or plain values\n@return A Future resolving to the first completed result"),
         new NamespaceFunction("task", "resolve", new[] { new BuiltInParam("value") }, "Future",
             Documentation: "Creates an already-resolved Future with the given value.\n@param value The value to wrap\n@return An already-resolved Future"),
         new NamespaceFunction("task", "delay", new[] { new BuiltInParam("seconds", "float") }, "Future",
@@ -988,7 +983,7 @@ public static class BuiltInRegistry
     public static readonly HashSet<string> ValidTypes = new()
     {
         "string", "int", "float", "bool", "null", "array", "dict", "function",
-        "namespace", "range", "Error", "Status", "TaskHandle", "CommandResult", "Process",
+        "namespace", "range", "Error", "Status", "CommandResult", "Process",
         "HttpResponse", "Future"
     };
 

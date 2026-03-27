@@ -1190,7 +1190,7 @@ public class Parser
         {
             Token awaitToken = Previous();
             Expr expression = Unary();
-            return new AwaitExpr(expression, MakeSpan(awaitToken.Span, expression.Span));
+            return new AwaitExpr(awaitToken, expression, MakeSpan(awaitToken.Span, expression.Span));
         }
 
         if (Match(TokenType.PlusPlus, TokenType.MinusMinus))

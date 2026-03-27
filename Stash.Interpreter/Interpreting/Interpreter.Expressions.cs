@@ -400,39 +400,6 @@ public partial class Interpreter
             return future.GetResult();
         }
 
-        // Interop: await also works on TaskHandles from task.run()
-        if (value is StashInstance handle && handle.TypeName == "TaskHandle")
-        {
-            long id = (long)handle.GetField("id", null)!;
-            if (TaskRegistry.Tasks.TryGetValue(id, out var state))
-            {
-                try
-                {
-                    state.DotNetTask.GetAwaiter().GetResult();
-                }
-                catch
-                {
-                    // Exceptions captured in state
-                }
-
-                TaskRegistry.Tasks.TryRemove(id, out _);
-                state.Cts.Dispose();
-                handle.SetField("status", state.Status, null);
-
-                if (state.Status.MemberName == "Failed")
-                {
-                    throw new RuntimeError(state.Error ?? "Task failed.", expr.Span);
-                }
-
-                if (state.Status.MemberName == "Cancelled")
-                {
-                    throw new RuntimeError("Task was cancelled.", expr.Span);
-                }
-
-                return state.Result;
-            }
-        }
-
         // Transparent: non-future values pass through
         return value;
     }

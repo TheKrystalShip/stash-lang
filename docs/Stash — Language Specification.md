@@ -263,7 +263,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `dict`   | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)         |
 | `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d) |
 | `Error`  | `try failingFn()`              | Error value (see Section 7b)           |
-| `Future` | `async fn() { return 42; }`   | Async computation (see Section 8c)     |
+| `Future` | `async fn() { return 42; }`    | Async computation (see Section 8c)     |
 
 ### Type Coercion & Truthiness
 
@@ -703,24 +703,24 @@ expression is typeName
 
 ### Valid Type Names
 
-| Type name   | Matches                                        |
-| ----------- | ---------------------------------------------- |
-| `int`       | Integer values                                 |
-| `float`     | Floating-point values                          |
-| `string`    | String values                                  |
-| `bool`      | Boolean values (`true` / `false`)              |
-| `null`      | The `null` value                               |
-| `array`     | Array values                                   |
-| `dict`      | Dictionary values                              |
-| `struct`    | Struct instances (any struct type)             |
-| `enum`      | Enum values (any enum type)                    |
-| `function`  | Functions and lambdas                          |
-| `range`     | Range values (`1..10`)                         |
-| `namespace` | Namespace values (e.g. `io`, `fs`)             |
-| `Error`     | Error values returned by `try`                 |
-| `Future`    | Future values returned by async functions      |
-| *StructName* | Instances of the named struct (e.g. `Point`)  |
-| *EnumName*  | Values of the named enum (e.g. `Color`)        |
+| Type name    | Matches                                      |
+| ------------ | -------------------------------------------- |
+| `int`        | Integer values                               |
+| `float`      | Floating-point values                        |
+| `string`     | String values                                |
+| `bool`       | Boolean values (`true` / `false`)            |
+| `null`       | The `null` value                             |
+| `array`      | Array values                                 |
+| `dict`       | Dictionary values                            |
+| `struct`     | Struct instances (any struct type)           |
+| `enum`       | Enum values (any enum type)                  |
+| `function`   | Functions and lambdas                        |
+| `range`      | Range values (`1..10`)                       |
+| `namespace`  | Namespace values (e.g. `io`, `fs`)           |
+| `Error`      | Error values returned by `try`               |
+| `Future`     | Future values returned by async functions    |
+| _StructName_ | Instances of the named struct (e.g. `Point`) |
+| _EnumName_   | Values of the named enum (e.g. `Color`)      |
 
 An unrecognised type name evaluates to `false` (no runtime error).
 
@@ -1554,11 +1554,11 @@ io.println(n);           // 42
 
 Error values are first-class values with their own type. They carry three fields:
 
-| Field      | Type       | Description                        |
-| ---------- | ---------- | ---------------------------------- |
-| `.message` | `string`   | Human-readable error description   |
-| `.type`    | `string`   | Error category (e.g. `"RuntimeError"`, `"TypeError"`) |
-| `.stack`   | `array?`   | Call stack at the point of failure  |
+| Field      | Type     | Description                                           |
+| ---------- | -------- | ----------------------------------------------------- |
+| `.message` | `string` | Human-readable error description                      |
+| `.type`    | `string` | Error category (e.g. `"RuntimeError"`, `"TypeError"`) |
+| `.stack`   | `array?` | Call stack at the point of failure                    |
 
 Error values are **falsy** — they evaluate to `false` in boolean contexts. This makes them compose naturally with `??`:
 
@@ -1684,10 +1684,10 @@ if (config is Error) {
 
 ### Comparison With Alternatives
 
-| Approach         | Verdict                                                                                     |
-| ---------------- | ------------------------------------------------------------------------------------------- |
-| Try/catch blocks | Rejected — requires exception machinery; overkill for a scripting language                  |
-| Go-style results | Rejected — too verbose; error check after every operation                                   |
+| Approach         | Verdict                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| Try/catch blocks | Rejected — requires exception machinery; overkill for a scripting language                    |
+| Go-style results | Rejected — too verbose; error check after every operation                                     |
 | `try` expression | **Chosen** — lightweight, opt-in, composes with `??`, first-class error values for inspection |
 
 ---
@@ -1865,11 +1865,11 @@ io.println(counter()); // 2
 
 ### Built-in Functions
 
-| Function           | Description                               |
-| ------------------ | ----------------------------------------- |
-| `typeof(val)`      | Return the type of a value as string. See also the `is` operator ([Section 4c](#4c-the-is-operator)) for inline type checking. |
-| `len(val)`         | Length of a string or array               |
-| `lastError()`      | Last error value (Error object) or null   |
+| Function      | Description                                                                                                                    |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `typeof(val)` | Return the type of a value as string. See also the `is` operator ([Section 4c](#4c-the-is-operator)) for inline type checking. |
+| `len(val)`    | Length of a string or array                                                                                                    |
+| `lastError()` | Last error value (Error object) or null                                                                                        |
 
 All other built-in functions are organized into namespaces (see below).
 
@@ -2004,9 +2004,9 @@ let process = async (data) => {
 // Await a Future from an async function
 let result = await asyncFn();
 
-// Await a TaskHandle from task.run() — interoperability
-let handle = task.run(() => 42);
-let result = await handle;
+// task.run() also returns a Future
+let future = task.run(() => 42);
+let result = await future;
 
 // Await a non-Future value — returns it as-is (transparent await)
 let result = await 42;  // 42
@@ -2088,18 +2088,18 @@ let resp = await client.get("users");
 
 The `task` namespace provides utility functions for working with Futures (see Standard Library Reference):
 
-| Function             | Description                                                    |
-| -------------------- | -------------------------------------------------------------- |
-| `task.all(futures)`  | Returns a Future that resolves to an array of all results      |
-| `task.race(futures)` | Returns a Future that resolves to the first completed result   |
-| `task.resolve(val)`  | Creates an already-resolved Future                             |
-| `task.delay(secs)`   | Creates a Future that resolves to `null` after a delay         |
+| Function             | Description                                                  |
+| -------------------- | ------------------------------------------------------------ |
+| `task.all(futures)`  | Returns a Future that resolves to an array of all results    |
+| `task.race(futures)` | Returns a Future that resolves to the first completed result |
+| `task.resolve(val)`  | Creates an already-resolved Future                           |
+| `task.delay(secs)`   | Creates a Future that resolves to `null` after a delay       |
 
 ### Internal Representation
 
 An `async fn` declaration sets `IsAsync = true` on the `FnDeclStmt` AST node. When called, `StashFunction.Call()` forks the interpreter via `interpreter.Fork()`, snapshots the environment via `Environment.Snapshot()`, runs the body on the .NET `ThreadPool`, and returns a `StashFuture` wrapping the resulting `Task<object?>`.
 
-`await` is parsed as an `AwaitExpr` prefix expression. The interpreter's `VisitAwaitExpr` calls `StashFuture.GetResult()` which blocks on the underlying task and unwraps exceptions. If the awaited value is a `TaskHandle` (from `task.run()`), it is automatically awaited for interoperability. If the value is neither a `Future` nor a `TaskHandle`, it is returned as-is (transparent await).
+`await` is parsed as an `AwaitExpr` prefix expression. The interpreter's `VisitAwaitExpr` calls `StashFuture.GetResult()` which blocks on the underlying task and unwraps exceptions. If the awaited value is not a `Future`, it is returned as-is (transparent await).
 
 ---
 
