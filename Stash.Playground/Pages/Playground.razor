@@ -1,0 +1,677 @@
+@page "/"
+@inject PlaygroundExecutor Executor
+@inject IJSRuntime JSRuntime
+@implements IDisposable
+
+<div class="page-wrapper">
+    <div class="top-bar">
+        <h1>Stash Playground</h1>
+        <button class="theme-toggle" @onclick="ToggleTheme">
+            @(isDarkTheme ? "☀ Light" : "☾ Dark")
+        </button>
+    </div>
+
+    <div class="toolbar">
+        <select class="example-select" @onchange="OnExampleSelected">
+            <option value="">— Load example —</option>
+            @for (int i = 0; i < Examples.Count; i++)
+            {
+                <option value="@i">@Examples[i].Name</option>
+            }
+        </select>
+        <div class="toolbar-run">
+            <span class="keyboard-hint">Ctrl+Enter</span>
+            <button @onclick="RunCode" disabled="@isRunning" class="run-button">
+                @(isRunning ? "⏳ Running..." : "▶ Run")
+            </button>
+        </div>
+    </div>
+
+    <div class="playground-container">
+        <div class="editor-panel">
+            <StandaloneCodeEditor @ref="_editor" Id="stash-editor"
+                ConstructionOptions="EditorConstructionOptions"
+                OnDidInit="EditorDidInit" />
+        </div>
+
+        <div class="output-panel">
+            <div class="panel-header">
+                <span>Output</span>
+                @if (result is not null)
+                {
+                    <span class="stats">@($"{result.ElapsedMs:F1}ms · {result.StepCount:N0} steps")</span>
+                }
+            </div>
+            <div class="output-content">
+                @if (result is not null)
+                {
+                    @if (!string.IsNullOrEmpty(result.Output))
+                    {
+                        <pre class="output">@result.Output</pre>
+                    }
+                    @if (result.ErrorMessages.Count > 0)
+                    {
+                        <pre class="errors">@string.Join("\n", result.ErrorMessages)</pre>
+                    }
+                    @if (result.Success && string.IsNullOrEmpty(result.Output) && result.ErrorMessages.Count == 0)
+                    {
+                        <pre class="output muted">(no output)</pre>
+                    }
+                }
+                else
+                {
+                    <pre class="output muted">Click "▶ Run" or press Ctrl+Enter to execute.</pre>
+                }
+            </div>
+        </div>
+    </div>
+
+    @if (!bannerDismissed)
+    {
+        <div class="limitations-banner">
+            <span class="limitations-icon">ⓘ</span>
+            <span class="limitations-text">
+                Some Stash features require OS access and are not available in the browser playground:
+                shell commands <code>$(...)</code>, file system (<code>fs</code>), HTTP requests (<code>http</code>),
+                environment variables (<code>env</code>), and process management (<code>process</code>).
+                These features are showcased below with example output.
+            </span>
+            <button class="limitations-dismiss" @onclick="() => bannerDismissed = true">✕</button>
+        </div>
+    }
+
+    <div class="showcases-section">
+        <h2 class="showcases-heading">Non-Sandboxed Feature Showcases</h2>
+        @for (int i = 0; i < Showcases.Count; i++)
+        {
+            int idx = i;
+            var showcase = Showcases[idx];
+            bool expanded = _expandedShowcases.Contains(idx);
+            <div class="showcase-card">
+                <button class="showcase-header" @onclick="() => ToggleShowcase(idx)">
+                    <span class="showcase-title">@showcase.Title</span>
+                    <span class="showcase-chevron">@(expanded ? "▲" : "▼")</span>
+                </button>
+                @if (expanded)
+                {
+                    <div class="showcase-body">
+                        <pre class="showcase-code"><code>@showcase.Code</code></pre>
+                        <div class="showcase-output-label">Example Output</div>
+                        <pre class="showcase-output">@showcase.Output</pre>
+                        <div class="showcase-info">
+                            ⓘ This feature requires a local Stash installation.
+                            <a href="https://github.com/heisen-li/stash-lang/releases" target="_blank" rel="noopener noreferrer" class="showcase-download-link">Download Stash →</a>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private StandaloneCodeEditor _editor = null!;
+    private PlaygroundResult? result;
+    private bool isRunning;
+    private bool isDarkTheme = true;
+    private DotNetObjectReference<Playground>? _dotNetRef;
+    private bool bannerDismissed;
+    private readonly HashSet<int> _expandedShowcases = [];
+
+    private sealed record Example(string Name, string Code);
+
+    private static readonly IReadOnlyList<Example> Examples =
+    [
+        new("Hello World", """
+            // Welcome to the Stash Playground!
+            // Try editing this code and clicking Run.
+
+            let greeting = "Hello, World!";
+            io.println(greeting);
+
+            // Data structures
+            struct Point { x, y }
+            let p = Point { x: 10, y: 20 };
+            io.println($"Point: ({p.x}, {p.y})");
+
+            // Arrays and functional operations
+            let numbers = [1, 2, 3, 4, 5];
+            let doubled = arr.map(numbers, (n) => n * 2);
+            io.println($"Doubled: {doubled}");
+
+            let sum = arr.reduce(numbers, (acc, n) => acc + n, 0);
+            io.println($"Sum: {sum}");
+            """),
+
+        new("Variables & Types", """
+            // Variables & Type System
+            let name = "Stash";
+            const VERSION = "1.0.0";
+            io.println($"Welcome to {name} v{VERSION}");
+
+            // Type checking with typeof and is
+            let values = [42, 3.14, "hello", true, null, [1, 2]];
+            for (let v in values) {
+                let t = typeof(v);
+                io.println($"  {v} is {t}");
+            }
+
+            // Nullish coalescing
+            let config = null;
+            let port = config ?? 8080;
+            io.println($"\nPort: {port}");
+
+            // Ternary expressions
+            let score = 85;
+            let grade = score >= 90 ? "A" : score >= 80 ? "B" : "C";
+            io.println($"Score {score} -> Grade {grade}");
+            """),
+
+        new("Structs & Enums", """
+            // Structs & Enums
+
+            struct Vector2 { x, y }
+
+            // Create instances
+            let a = Vector2 { x: 3, y: 4 };
+            let b = Vector2 { x: 1, y: 2 };
+
+            // Access fields
+            io.println($"a = ({a.x}, {a.y})");
+            io.println($"b = ({b.x}, {b.y})");
+
+            // Compute magnitude
+            let mag = math.sqrt(a.x * a.x + a.y * a.y);
+            io.println($"|a| = {mag}");
+
+            // Enums
+            enum Color { Red, Green, Blue }
+            let favorite = Color.Blue;
+            io.println($"\nFavorite color: {favorite}");
+            io.println($"Is Blue? {favorite == Color.Blue}");
+
+            // Enum with struct
+            struct Pixel { pos, color }
+            let px = Pixel {
+                pos: Vector2 { x: 100, y: 200 },
+                color: Color.Red
+            };
+            io.println($"\nPixel at ({px.pos.x}, {px.pos.y}) = {px.color}");
+            """),
+
+        new("Arrays & Functional", """
+            // Arrays & Functional Programming
+
+            let numbers = [64, 25, 12, 22, 11, 90, 45];
+            io.println($"Original:  {numbers}");
+
+            // Sort
+            let sorted = arr.sortBy(numbers, (n) => n);
+            io.println($"Sorted:    {sorted}");
+
+            // Filter & Map
+            let evens = arr.filter(numbers, (n) => n % 2 == 0);
+            let doubled = arr.map(evens, (n) => n * 2);
+            io.println($"Evens:     {evens}");
+            io.println($"Doubled:   {doubled}");
+
+            // Reduce
+            let sum = arr.reduce(numbers, (acc, n) => acc + n, 0);
+            let product = arr.reduce([1, 2, 3, 4, 5], (acc, n) => acc * n, 1);
+            io.println($"\nSum:     {sum}");
+            io.println($"Product: {product}");
+
+            // Find & Contains
+            let found = arr.find(numbers, (n) => n > 50);
+            io.println($"\nFirst > 50: {found}");
+            io.println($"Has 25?     {arr.contains(numbers, 25)}");
+
+            // Flatten
+            let matrix = [[1, 2], [3, 4], [5, 6]];
+            let flat = arr.flat(matrix);
+            io.println($"\nFlattened: {flat}");
+            """),
+
+        new("Dictionaries", """
+            // Dictionaries
+
+            let user = {
+                name: "Alice",
+                age: 30,
+                email: "alice@example.com"
+            };
+            io.println($"User: {user.name}, age {user.age}");
+
+            // Dynamic key access
+            user["role"] = "admin";
+            io.println($"Role: {user.role}");
+
+            // Keys, values, iteration
+            let keys = dict.keys(user);
+            io.println($"\nKeys: {keys}");
+
+            for (let key in keys) {
+                io.println($"  {key}: {user[key]}");
+            }
+
+            // Merge
+            let defaults = { theme: "dark", lang: "en", verbose: false };
+            let prefs = { theme: "light", verbose: true };
+            let config = dict.merge(defaults, prefs);
+            io.println($"\nConfig: theme={config.theme}, lang={config.lang}, verbose={config.verbose}");
+
+            // Has / Remove
+            io.println($"\nHas 'email'? {dict.has(user, "email")}");
+            dict.remove(user, "email");
+            io.println($"Has 'email'? {dict.has(user, "email")}");
+            """),
+
+        new("Lambdas & Closures", """
+            // Lambdas & Closures
+
+            // Higher-order functions
+            fn apply(value, transform) {
+                return transform(value);
+            }
+
+            let result = apply(5, (x) => x * x);
+            io.println($"5 squared: {result}");
+
+            // Closures capture their environment
+            fn makeCounter(start) {
+                let count = start;
+                return {
+                    next: () => { count += 1; return count; },
+                    value: () => count
+                };
+            }
+
+            let counter = makeCounter(0);
+            io.println($"\nCounter: {counter.next()}, {counter.next()}, {counter.next()}");
+            io.println($"Current: {counter.value()}");
+
+            // Currying
+            fn multiply(a) {
+                return (b) => a * b;
+            }
+
+            let double = multiply(2);
+            let triple = multiply(3);
+            io.println($"\nDouble 7: {double(7)}");
+            io.println($"Triple 7: {triple(7)}");
+
+            // Pipeline with lambdas
+            let data = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+            let evens = arr.filter(data, (n) => n % 2 == 0);
+            let squares = arr.map(evens, (n) => n * n);
+            let total = arr.reduce(squares, (a, b) => a + b, 0);
+            io.println($"\nSum of squares of evens: {total}");
+            """),
+
+        new("String Processing", """
+            // String Processing
+
+            let text = "  Hello, Stash World!  ";
+            io.println($"Original:  '{text}'");
+            io.println($"Trimmed:   '{str.trim(text)}'");
+            io.println($"Upper:     '{str.upper(text)}'");
+            io.println($"Lower:     '{str.lower(text)}'");
+
+            // Split & Join
+            let csv = "apple,banana,cherry,date";
+            let fruits = str.split(csv, ",");
+            io.println($"\nFruits: {fruits}");
+            io.println($"Joined: {arr.join(fruits, " | ")}");
+
+            // Search & Replace
+            let sentence = "the quick brown fox jumps over the lazy dog";
+            io.println($"\nContains 'fox':   {str.contains(sentence, "fox")}");
+            io.println($"Index of 'brown': {str.indexOf(sentence, "brown")}");
+            io.println($"Replaced: {str.replace(sentence, "lazy", "energetic")}");
+
+            // String builder pattern
+            let lines = ["Roses are red,", "Violets are blue,", "Stash is cool,", "And so are you!"];
+            let poem = arr.join(lines, "\n");
+            io.println($"\n{poem}");
+
+            // Interpolation with expressions
+            let items = ["sword", "shield", "potion"];
+            io.println($"\nInventory ({len(items)} items): {arr.join(items, ", ")}");
+            """),
+
+        new("Error Handling", """
+            // Error Handling
+
+            fn divide(a, b) {
+                if (b == 0) {
+                    throw "Division by zero";
+                }
+                return a / b;
+            }
+
+            // try expressions — returns Error on failure
+            let r1 = try divide(10, 3);
+            io.println($"10 / 3 = {r1}");
+
+            let r2 = try divide(10, 0);
+            if (r2 is Error) {
+                io.println($"Caught: {r2.message}");
+            }
+
+            // Try expressions return Error on failure
+            fn parseAge(input) {
+                let n = try conv.toInt(input);
+                if (n is Error) {
+                    throw $"'{input}' is not a number";
+                }
+                if (n < 0 || n > 150) {
+                    throw $"Age {n} out of range (0-150)";
+                }
+                return n;
+            }
+
+            let tests = ["25", "abc", "-5", "200", "42"];
+            for (let t in tests) {
+                let r = try parseAge(t);
+                if (r is Error) {
+                    io.println($"  parseAge(\"{t}\"): ERROR - {r.message}");
+                } else {
+                    io.println($"  parseAge(\"{t}\"): OK - {r}");
+                }
+            }
+
+            // Safe default with nullish coalescing
+            let cfg = null;
+            let timeout = cfg ?? 30;
+            io.println($"\nTimeout: {timeout}s");
+            """),
+
+        new("Pattern Matching", """
+            // Switch & Pattern Matching
+
+            fn describe(value) {
+                return typeof(value) switch {
+                    "int" => $"{value} is an integer",
+                    "float" => $"{value} is a float",
+                    "string" => $"'{value}' is a string",
+                    "bool" => $"{value} is a boolean",
+                    "null" => "null (no value)",
+                    "array" => $"array with {len(value)} elements",
+                    _ => $"unknown type: {typeof(value)}"
+                };
+            }
+
+            let values = [42, 3.14, "hello", true, null, [1, 2, 3]];
+            for (let v in values) {
+                io.println($"  {describe(v)}");
+            }
+
+            // Ternary chains — HTTP status codes
+            io.println("\nHTTP Status Codes:");
+            let codes = [200, 201, 301, 400, 404, 500, 503];
+            for (let code in codes) {
+                let msg = code == 200 ? "OK"
+                        : code == 201 ? "Created"
+                        : code == 301 ? "Moved"
+                        : code == 400 ? "Bad Request"
+                        : code == 404 ? "Not Found"
+                        : code == 500 ? "Server Error"
+                        : code == 503 ? "Unavailable"
+                        : "Unknown";
+                io.println($"  {code}: {msg}");
+            }
+
+            // FizzBuzz
+            io.println("\nFizzBuzz (1-20):");
+            for (let n in 1..21) {
+                let label = n % 15 == 0 ? "FizzBuzz"
+                          : n % 3  == 0 ? "Fizz"
+                          : n % 5  == 0 ? "Buzz"
+                          : $"{n}";
+                io.print($"{label} ");
+            }
+            io.println("");
+            """),
+
+        new("Algorithms", """
+            // Classic Algorithms
+
+            // Quicksort
+            fn quicksort(items) {
+                if (len(items) <= 1) { return items; }
+                let pivot = items[0];
+                let less    = arr.filter(items, (x) => x < pivot);
+                let equal   = arr.filter(items, (x) => x == pivot);
+                let greater = arr.filter(items, (x) => x > pivot);
+                return arr.concat(quicksort(less), arr.concat(equal, quicksort(greater)));
+            }
+
+            let data = [38, 27, 43, 3, 9, 82, 10];
+            io.println($"Input:  {data}");
+            io.println($"Sorted: {quicksort(data)}");
+
+            // Fibonacci (iterative)
+            fn fibonacci(n) {
+                if (n <= 1) { return n; }
+                let a = 0;
+                let b = 1;
+                for (let i in 2..n + 1) {
+                    let temp = a + b;
+                    a = b;
+                    b = temp;
+                }
+                return b;
+            }
+
+            io.println("\nFibonacci sequence:");
+            for (let i in 0..15) {
+                io.print($"{fibonacci(i)} ");
+            }
+            io.println("");
+
+            // Statistics
+            fn stats(nums) {
+                let n = len(nums);
+                let total = arr.reduce(nums, (a, b) => a + b, 0);
+                let mean = total / n;
+                let sorted = arr.sortBy(nums, (x) => x);
+                return { count: n, sum: total, mean: mean, min: sorted[0], max: sorted[n - 1] };
+            }
+
+            let dataset = [23, 45, 67, 12, 89, 34, 56, 78, 90, 11];
+            let s = stats(dataset);
+            io.println($"\nStats for {dataset}:");
+            io.println($"  Count: {s.count}");
+            io.println($"  Sum:   {s.sum}");
+            io.println($"  Mean:  {s.mean}");
+            io.println($"  Min:   {s.min}");
+            io.println($"  Max:   {s.max}");
+            """),
+    ];
+
+    private sealed record Showcase(string Title, string Code, string Output);
+
+    private static readonly IReadOnlyList<Showcase> Showcases =
+    [
+        new("Shell Command Execution",
+            """
+            // First-class shell integration
+            let files = $(ls -la /tmp);
+            io.println(files.stdout);
+
+            // Capture exit codes
+            let result = $(grep -r "TODO" ./src);
+            if (result.exitCode == 0) {
+                io.println($"Found matches:\n{result.stdout}");
+            } else {
+                io.println("No TODOs found!");
+            }
+            """,
+            """
+            drwxrwxrwt  12 root root 4096 Mar 27 10:00 .
+            -rw-r--r--   1 user user  512 Mar 27 09:55 script.stash
+            Found matches:
+            ./src/main.stash:  // TODO: add error handling
+            """),
+
+        new("File System Operations",
+            """
+            // Read and write files
+            let content = fs.readFile("config.json");
+            let config = json.parse(content);
+
+            config["version"] = "2.0.0";
+            fs.writeFile("config.json", json.pretty(config));
+
+            // Directory operations
+            let files = fs.listDir("./src");
+            for (let file in files) {
+                io.println(file);
+            }
+            """,
+            """
+            ./src/main.stash
+            ./src/utils.stash
+            ./src/config.stash
+            """),
+
+        new("HTTP Requests",
+            """
+            // GET request with JSON parsing
+            let resp = http.get("https://api.example.com/users");
+            let users = json.parse(resp.body);
+
+            for (let user in users) {
+                io.println($"{user["name"]} ({user["email"]})");
+            }
+
+            // POST request
+            let payload = json.stringify({title: "Hello", body: "World"});
+            let result = http.post("https://api.example.com/posts", payload);
+            io.println($"Created: {result.statusCode}");
+            """,
+            """
+            Alice Johnson (alice@example.com)
+            Bob Smith (bob@example.com)
+            Created: 201
+            """),
+
+        new("Process Management",
+            """
+            // Spawn and manage processes
+            let server = process.spawn("python3 -m http.server 8080");
+            io.println($"Server PID: {server.pid}");
+
+            time.sleep(2);
+
+            // Check if running
+            if (process.isAlive(server)) {
+                io.println("Server is running!");
+                process.kill(server);
+                io.println("Server stopped.");
+            }
+            """,
+            """
+            Server PID: 12847
+            Server is running!
+            Server stopped.
+            """),
+    ];
+
+    private StandaloneEditorConstructionOptions EditorConstructionOptions(StandaloneCodeEditor editor)
+    {
+        return new StandaloneEditorConstructionOptions
+        {
+            AutomaticLayout = true,
+            Language = "stash",
+            Theme = "stash-dark",
+            Value = Examples[0].Code,
+            FontFamily = "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
+            FontSize = 14,
+            Minimap = new EditorMinimapOptions { Enabled = false },
+            ScrollBeyondLastLine = false,
+            RenderLineHighlight = "all",
+            Padding = new EditorPaddingOptions { Top = 12 },
+            TabSize = 4,
+            InsertSpaces = true,
+        };
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            await JSRuntime.InvokeVoidAsync("setPlaygroundTheme", isDarkTheme);
+        }
+    }
+
+    private async Task EditorDidInit()
+    {
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JSRuntime.InvokeVoidAsync("addRunCommand", "stash-editor", _dotNetRef);
+    }
+
+    [JSInvokable]
+    public async Task RunFromKeyboard()
+    {
+        await RunCode();
+        StateHasChanged();
+    }
+
+    public void Dispose()
+    {
+        _dotNetRef?.Dispose();
+    }
+
+    private async Task OnExampleSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int index) && index >= 0 && index < Examples.Count)
+        {
+            result = null;
+            await _editor.SetValue(Examples[index].Code);
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        isDarkTheme = !isDarkTheme;
+        string themeName = isDarkTheme ? "stash-dark" : "stash-light";
+        await BlazorMonaco.Editor.Global.SetTheme(JSRuntime, themeName);
+        await JSRuntime.InvokeVoidAsync("setPlaygroundTheme", isDarkTheme);
+    }
+
+    private void ToggleShowcase(int index)
+    {
+        if (!_expandedShowcases.Remove(index))
+            _expandedShowcases.Add(index);
+    }
+
+    private async Task RunCode()
+    {
+        if (isRunning) return;
+
+        isRunning = true;
+        result = null;
+        StateHasChanged();
+
+        try
+        {
+            string code = await _editor.GetValue();
+            result = await Task.Run(() => Executor.Execute(code));
+        }
+        catch (Exception ex)
+        {
+            result = new PlaygroundResult
+            {
+                Output = string.Empty,
+                ErrorMessages = [$"Internal error: {ex.Message}"],
+                Success = false,
+            };
+        }
+        finally
+        {
+            isRunning = false;
+        }
+    }
+}
+

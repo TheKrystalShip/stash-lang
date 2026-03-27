@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Stash Playground</title>
+    <base href="/" />
+    <link href="css/app.css" rel="stylesheet" />
+    <style>
+        .loading-screen {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #1e1e2e;
+            gap: 1.25rem;
+            text-align: center;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        .loading-screen h2 {
+            color: #cba6f7;
+            font-size: 1.3rem;
+            font-weight: 700;
+            margin: 0;
+        }
+        .loading-screen p {
+            color: #6c7086;
+            font-size: 0.9rem;
+            margin: 0;
+        }
+        .spinner {
+            width: 44px;
+            height: 44px;
+            border: 3px solid rgba(203, 166, 247, 0.15);
+            border-top-color: #cba6f7;
+            border-radius: 50%;
+            animation: spin 0.75s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <div class="loading-screen">
+            <div class="spinner"></div>
+            <h2>Loading Stash Playground...</h2>
+            <p>Downloading the Stash interpreter (~5 MB, cached after first load)</p>
+        </div>
+    </div>
+
+    <script src="_content/BlazorMonaco/jsInterop.js"></script>
+    <script>var require = { paths: { vs: '_content/BlazorMonaco/lib/monaco-editor/min/vs' } };</script>
+    <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/loader.js"></script>
+    <script src="_content/BlazorMonaco/lib/monaco-editor/min/vs/editor/editor.main.js"></script>
+    <script src="js/stash-language.js"></script>
+    <script>
+        if (typeof monaco !== 'undefined') {
+            registerStashLanguage();
+        } else {
+            require(['vs/editor/editor.main'], function() {
+                registerStashLanguage();
+            });
+        }
+    </script>
+    <script src="_framework/blazor.webassembly.js"></script>
+</body>
+</html>

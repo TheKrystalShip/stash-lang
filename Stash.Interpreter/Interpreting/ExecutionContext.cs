@@ -87,9 +87,9 @@ public class ExecutionContext
     public ExecutionContext(Environment environment)
     {
         Environment = environment;
-        Output = Console.Out;
-        ErrorOutput = Console.Error;
-        Input = Console.In;
+        Output = GetConsoleOutOrNull();
+        ErrorOutput = GetConsoleErrorOrNull();
+        Input = GetConsoleInOrNull();
         CallStack = new();
         ImportStack = new();
         TrackedProcesses = new();
@@ -98,5 +98,23 @@ public class ExecutionContext
         BeforeEachHooks = new();
         AfterEachHooks = new();
         AfterAllHooks = new();
+    }
+
+    private static TextWriter GetConsoleOutOrNull()
+    {
+        try { return Console.Out; }
+        catch (PlatformNotSupportedException) { return TextWriter.Null; }
+    }
+
+    private static TextWriter GetConsoleErrorOrNull()
+    {
+        try { return Console.Error; }
+        catch (PlatformNotSupportedException) { return TextWriter.Null; }
+    }
+
+    private static TextReader GetConsoleInOrNull()
+    {
+        try { return Console.In; }
+        catch (PlatformNotSupportedException) { return TextReader.Null; }
     }
 }
