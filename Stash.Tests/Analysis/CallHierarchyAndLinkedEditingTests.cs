@@ -2,6 +2,7 @@ using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
 
 namespace Stash.Tests.Analysis;

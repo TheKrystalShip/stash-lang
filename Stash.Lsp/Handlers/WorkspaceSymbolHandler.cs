@@ -9,7 +9,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
 using Microsoft.Extensions.Logging;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 using LspSymbolKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.SymbolKind;
 
 /// <summary>
@@ -95,8 +97,8 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
             foreach (var sym in result.Symbols.All)
             {
                 // Skip loop variables and parameters for workspace-level search
-                if (sym.Kind == Analysis.SymbolKind.LoopVariable ||
-                    sym.Kind == Analysis.SymbolKind.Parameter)
+                if (sym.Kind == StashSymbolKind.LoopVariable ||
+                    sym.Kind == StashSymbolKind.Parameter)
                 {
                     continue;
                 }
@@ -134,21 +136,21 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
     }
 
     /// <summary>
-    /// Maps a Stash <see cref="Analysis.SymbolKind"/> to the corresponding LSP
+    /// Maps a Stash <see cref="SymbolKind"/> to the corresponding LSP
     /// <see cref="LspSymbolKind"/> for workspace symbol results.
     /// </summary>
     /// <param name="kind">The Stash symbol kind to map.</param>
     /// <returns>The equivalent LSP symbol kind.</returns>
-    private static LspSymbolKind MapSymbolKind(Analysis.SymbolKind kind) => kind switch
+    private static LspSymbolKind MapSymbolKind(StashSymbolKind kind) => kind switch
     {
-        Analysis.SymbolKind.Function => LspSymbolKind.Function,
-        Analysis.SymbolKind.Variable => LspSymbolKind.Variable,
-        Analysis.SymbolKind.Constant => LspSymbolKind.Constant,
-        Analysis.SymbolKind.Struct => LspSymbolKind.Struct,
-        Analysis.SymbolKind.Enum => LspSymbolKind.Enum,
-        Analysis.SymbolKind.EnumMember => LspSymbolKind.EnumMember,
-        Analysis.SymbolKind.Field => LspSymbolKind.Field,
-        Analysis.SymbolKind.Namespace => LspSymbolKind.Namespace,
+        StashSymbolKind.Function => LspSymbolKind.Function,
+        StashSymbolKind.Variable => LspSymbolKind.Variable,
+        StashSymbolKind.Constant => LspSymbolKind.Constant,
+        StashSymbolKind.Struct => LspSymbolKind.Struct,
+        StashSymbolKind.Enum => LspSymbolKind.Enum,
+        StashSymbolKind.EnumMember => LspSymbolKind.EnumMember,
+        StashSymbolKind.Field => LspSymbolKind.Field,
+        StashSymbolKind.Namespace => LspSymbolKind.Namespace,
         _ => LspSymbolKind.Variable
     };
 }

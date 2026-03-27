@@ -6,6 +6,7 @@ using System.Linq;
 using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Lexing;
 using Stash.Parsing;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using Xunit;
 using Xunit.Abstractions;

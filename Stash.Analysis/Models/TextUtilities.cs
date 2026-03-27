@@ -1,4 +1,4 @@
-namespace Stash.Lsp.Analysis;
+namespace Stash.Analysis;
 
 /// <summary>
 /// Stateless text-analysis helpers for extracting identifier tokens and dot-access prefixes

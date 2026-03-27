@@ -8,7 +8,9 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 using LspSymbolKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.SymbolKind;
 
 /// <summary>
@@ -126,24 +128,24 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
         };
 
     /// <summary>
-    /// Maps a Stash <see cref="Analysis.SymbolKind"/> to the corresponding LSP
+    /// Maps a Stash <see cref="SymbolKind"/> to the corresponding LSP
     /// <see cref="LspSymbolKind"/> for the document outline view.
     /// </summary>
     /// <param name="kind">The Stash symbol kind to map.</param>
     /// <returns>The equivalent LSP symbol kind.</returns>
-    private static LspSymbolKind MapSymbolKind(Analysis.SymbolKind kind) => kind switch
+    private static LspSymbolKind MapSymbolKind(StashSymbolKind kind) => kind switch
     {
-        Analysis.SymbolKind.Function => LspSymbolKind.Function,
-        Analysis.SymbolKind.Variable => LspSymbolKind.Variable,
-        Analysis.SymbolKind.Constant => LspSymbolKind.Constant,
-        Analysis.SymbolKind.Struct => LspSymbolKind.Struct,
-        Analysis.SymbolKind.Enum => LspSymbolKind.Enum,
-        Analysis.SymbolKind.EnumMember => LspSymbolKind.EnumMember,
-        Analysis.SymbolKind.Field => LspSymbolKind.Field,
-        Analysis.SymbolKind.Method => LspSymbolKind.Method,
-        Analysis.SymbolKind.Parameter => LspSymbolKind.Variable,
-        Analysis.SymbolKind.LoopVariable => LspSymbolKind.Variable,
-        Analysis.SymbolKind.Namespace => LspSymbolKind.Namespace,
+        StashSymbolKind.Function => LspSymbolKind.Function,
+        StashSymbolKind.Variable => LspSymbolKind.Variable,
+        StashSymbolKind.Constant => LspSymbolKind.Constant,
+        StashSymbolKind.Struct => LspSymbolKind.Struct,
+        StashSymbolKind.Enum => LspSymbolKind.Enum,
+        StashSymbolKind.EnumMember => LspSymbolKind.EnumMember,
+        StashSymbolKind.Field => LspSymbolKind.Field,
+        StashSymbolKind.Method => LspSymbolKind.Method,
+        StashSymbolKind.Parameter => LspSymbolKind.Variable,
+        StashSymbolKind.LoopVariable => LspSymbolKind.Variable,
+        StashSymbolKind.Namespace => LspSymbolKind.Namespace,
         _ => LspSymbolKind.Variable
     };
 }

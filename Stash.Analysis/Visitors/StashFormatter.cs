@@ -5,7 +5,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 
-namespace Stash.Lsp.Analysis;
+namespace Stash.Analysis;
 
 /// <summary>
 /// Reformats a Stash source file by parsing it into an AST and walking the tree,

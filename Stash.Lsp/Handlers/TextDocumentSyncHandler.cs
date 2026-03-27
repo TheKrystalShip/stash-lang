@@ -13,6 +13,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server;
 using OmniSharp.Extensions.LanguageServer.Protocol.Server.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Workspace;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
 
 public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
@@ -223,9 +224,9 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
                 Range = semantic.Span.ToLspRange(),
                 Severity = semantic.Level switch
                 {
-                    Analysis.DiagnosticLevel.Error => DiagnosticSeverity.Error,
-                    Analysis.DiagnosticLevel.Warning => DiagnosticSeverity.Warning,
-                    Analysis.DiagnosticLevel.Information => DiagnosticSeverity.Information,
+                    Stash.Analysis.DiagnosticLevel.Error => DiagnosticSeverity.Error,
+                    Stash.Analysis.DiagnosticLevel.Warning => DiagnosticSeverity.Warning,
+                    Stash.Analysis.DiagnosticLevel.Information => DiagnosticSeverity.Information,
                     _ => DiagnosticSeverity.Warning
                 },
                 Source = "stash",

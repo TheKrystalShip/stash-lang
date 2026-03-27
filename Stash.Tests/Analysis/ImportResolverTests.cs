@@ -1,3 +1,4 @@
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Lexing;

@@ -8,7 +8,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Microsoft.Extensions.Logging;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Handles LSP <c>textDocument/typeDefinition</c> requests to navigate to the type
@@ -96,7 +98,7 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         }
 
         // If the symbol IS a struct or enum, return its own location
-        if (symbol.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum)
+        if (symbol.Kind is StashSymbolKind.Struct or StashSymbolKind.Enum)
         {
             _logger.LogDebug("TypeDefinition: resolved for {Uri}", request.TextDocument.Uri);
             return MakeLocationAsync(request.TextDocument.Uri, symbol, result);
@@ -112,7 +114,7 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
 
         // Search for the type declaration in the scope tree
         var typeSymbol = result.Symbols.All
-            .FirstOrDefault(s => s.Name == typeName && s.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum);
+            .FirstOrDefault(s => s.Name == typeName && s.Kind is StashSymbolKind.Struct or StashSymbolKind.Enum);
 
         if (typeSymbol != null)
         {
@@ -146,7 +148,7 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
             if (moduleInfo != null)
             {
                 var originalSymbol = moduleInfo.Symbols.GetTopLevel()
-                    .FirstOrDefault(s => s.Name == symbol.Name && s.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum);
+                    .FirstOrDefault(s => s.Name == symbol.Name && s.Kind is StashSymbolKind.Struct or StashSymbolKind.Enum);
                 if (originalSymbol != null)
                 {
                     var location = new Location

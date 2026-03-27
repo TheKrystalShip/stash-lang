@@ -8,7 +8,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Handles LSP <c>textDocument/definition</c> requests to navigate to the declaration
@@ -94,7 +96,7 @@ public class DefinitionHandler : DefinitionHandlerBase
         var symbol = result.Symbols.FindDefinition(word, line, col);
 
         // After dot: suppress namespace symbol matches — this is a member access, not a namespace reference
-        if (afterDot && symbol != null && symbol.Kind is Analysis.SymbolKind.Namespace)
+        if (afterDot && symbol != null && symbol.Kind is StashSymbolKind.Namespace)
         {
             symbol = null;
         }

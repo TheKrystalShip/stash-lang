@@ -8,7 +8,9 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 using Stash.Parsing.AST;
 
 /// <summary>
@@ -268,7 +270,7 @@ public class InlayHintHandler : InlayHintsHandlerBase
             var callSpan = call.Span;
             var simpleName = funcName.Contains('.') ? funcName[(funcName.LastIndexOf('.') + 1)..] : funcName;
             var definition = result.Symbols.FindDefinition(simpleName, callSpan.StartLine, callSpan.StartColumn);
-            if (definition != null && definition.Kind == Analysis.SymbolKind.Function)
+            if (definition != null && definition.Kind == StashSymbolKind.Function)
             {
                 paramNames = definition.ParameterNames ?? ExtractParamNames(definition.Detail ?? "");
             }

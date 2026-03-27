@@ -9,7 +9,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Microsoft.Extensions.Logging;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Handles LSP <c>textDocument/implementation</c> requests to find all usages of a type
@@ -87,7 +89,7 @@ public class ImplementationHandler : ImplementationHandlerBase
         // Determine the target type name
         string? typeName = null;
 
-        if (symbol.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum)
+        if (symbol.Kind is StashSymbolKind.Struct or StashSymbolKind.Enum)
         {
             typeName = symbol.Name;
         }
@@ -95,7 +97,7 @@ public class ImplementationHandler : ImplementationHandlerBase
         {
             // Variable/param/const with a type hint — find usages of that type
             var typeSymbol = result.Symbols.All
-                .FirstOrDefault(s => s.Name == symbol.TypeHint && s.Kind is Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum);
+                .FirstOrDefault(s => s.Name == symbol.TypeHint && s.Kind is StashSymbolKind.Struct or StashSymbolKind.Enum);
             if (typeSymbol != null)
             {
                 typeName = typeSymbol.Name;

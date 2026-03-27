@@ -488,6 +488,80 @@ h1 {
    ================================================================ */
 
 /* ================================================================
+   TOOLBAR ACTIONS
+   ================================================================ */
+
+.toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.action-button {
+    background: var(--surface);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 0.35rem 0.65rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.8rem;
+    transition: background 0.15s, border-color 0.15s;
+    white-space: nowrap;
+}
+
+.action-button:hover {
+    background: var(--surface-alt);
+    border-color: var(--accent);
+}
+
+.share-button {
+    min-width: 6.5rem;
+    text-align: center;
+}
+
+/* ================================================================
+   COPY OUTPUT BUTTON
+   ================================================================ */
+
+.panel-header-right {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.copy-button {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 0.15rem 0.45rem;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 0.7rem;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    min-width: 5.5rem;
+    text-align: center;
+}
+
+.copy-button:hover {
+    background: var(--surface-alt);
+    color: var(--text);
+    border-color: var(--accent);
+}
+
+/* ================================================================
+   VERSION FOOTER
+   ================================================================ */
+
+.version-footer {
+    flex-shrink: 0;
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    padding: 0.25rem 0 0.5rem;
+    letter-spacing: 0.03em;
+}
+
+/* ================================================================
    RESPONSIVE
    ================================================================ */
 
@@ -521,5 +595,9 @@ h1 {
     .output-panel {
         height: 40vh;
         min-height: 200px;
+    }
+
+    .toolbar-actions {
+        flex-wrap: wrap;
     }
 }

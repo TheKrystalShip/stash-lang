@@ -11,8 +11,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lexing;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
-using static Stash.Lsp.Analysis.SemanticTokenConstants;
+using static Stash.Analysis.SemanticTokenConstants;
 
 /// <summary>
 /// Handles LSP <c>textDocument/semanticTokens</c> requests to provide semantic

@@ -1,4 +1,4 @@
-namespace Stash.Lsp.Analysis;
+namespace Stash.Analysis;
 
 using System;
 using System.Collections.Generic;

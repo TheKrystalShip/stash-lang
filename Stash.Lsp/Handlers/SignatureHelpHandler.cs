@@ -8,7 +8,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Handles LSP <c>textDocument/signatureHelp</c> requests to display parameter hints
@@ -112,7 +114,7 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
             var col = request.Position.Character + 1;
             var definition = result.Symbols.FindDefinition(simpleName, line, col);
 
-            if (definition != null && definition.Kind == Analysis.SymbolKind.Function && definition.Detail != null)
+            if (definition != null && definition.Kind == StashSymbolKind.Function && definition.Detail != null)
             {
                 _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
                 var paramLabels = ExtractParamLabels(definition.Detail);

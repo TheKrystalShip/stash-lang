@@ -7,7 +7,9 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Handles LSP <c>textDocument/hover</c> requests to display contextual information
@@ -98,7 +100,7 @@ public class HoverHandler : HoverHandlerBase
 
         // After dot: a namespace symbol match is a false positive — e.g., hovering
         // "time" in "e.time" must not resolve to the "time" namespace.
-        if (afterDot && symbol != null && symbol.Kind is Analysis.SymbolKind.Namespace)
+        if (afterDot && symbol != null && symbol.Kind is StashSymbolKind.Namespace)
         {
             symbol = null;
         }
@@ -203,8 +205,8 @@ public class HoverHandler : HoverHandlerBase
         // Append effective type (narrowed or inferred) if not already shown in detail
         string? effectiveType = result.Symbols.GetNarrowedTypeHint(word, (int)line, (int)col) ?? symbol.TypeHint;
         if (effectiveType != null &&
-            symbol.Kind is Analysis.SymbolKind.Variable or Analysis.SymbolKind.Constant
-                or Analysis.SymbolKind.Parameter or Analysis.SymbolKind.LoopVariable &&
+            symbol.Kind is StashSymbolKind.Variable or StashSymbolKind.Constant
+                or StashSymbolKind.Parameter or StashSymbolKind.LoopVariable &&
             !detail.Contains($": {effectiveType}"))
         {
             detail += $": {effectiveType}";

@@ -10,7 +10,9 @@ using Newtonsoft.Json.Linq;
 using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 /// <summary>
 /// Handles LSP <c>textDocument/codeLens</c> requests to display reference counts above
@@ -104,7 +106,7 @@ public class CodeLensHandler : CodeLensHandlerBase
 
         foreach (var sym in result.Symbols.GetTopLevel())
         {
-            if (sym.Kind is not (Analysis.SymbolKind.Function or Analysis.SymbolKind.Struct or Analysis.SymbolKind.Enum or Analysis.SymbolKind.Constant))
+            if (sym.Kind is not (StashSymbolKind.Function or StashSymbolKind.Struct or StashSymbolKind.Enum or StashSymbolKind.Constant))
             {
                 continue;
             }

@@ -1,16 +1,8 @@
-namespace Stash.Lsp.Analysis;
+namespace Stash.Analysis;
 
 using System;
 using System.Collections.Generic;
 using Stash.Common;
-
-public enum ScopeKind
-{
-    Global,
-    Function,
-    Block,
-    Loop
-}
 
 public class Scope
 {

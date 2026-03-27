@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using Microsoft.Extensions.Logging.Abstractions;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using LspRange = OmniSharp.Extensions.LanguageServer.Protocol.Models.Range;
 

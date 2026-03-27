@@ -19,7 +19,12 @@
                 <option value="@i">@Examples[i].Name</option>
             }
         </select>
-        <div class="toolbar-run">
+        <div class="toolbar-actions">
+            <button @onclick="FormatCode" class="action-button" title="Format code">⚡ Format</button>
+            <button @onclick="DownloadCode" class="action-button" title="Download as .stash file">⬇ Download</button>
+            <button @onclick="ShareCode" class="action-button share-button" title="Share via URL">
+                @(shareButtonText)
+            </button>
             <span class="keyboard-hint">Ctrl+Enter</span>
             <button @onclick="RunCode" disabled="@isRunning" class="run-button">
                 @(isRunning ? "⏳ Running..." : "▶ Run")
@@ -37,10 +42,18 @@
         <div class="output-panel">
             <div class="panel-header">
                 <span>Output</span>
-                @if (result is not null)
-                {
-                    <span class="stats">@($"{result.ElapsedMs:F1}ms · {result.StepCount:N0} steps")</span>
-                }
+                <div class="panel-header-right">
+                    @if (result is not null && !string.IsNullOrEmpty(result.Output))
+                    {
+                        <button @onclick="CopyOutput" class="copy-button" title="Copy output">
+                            @(copyButtonText)
+                        </button>
+                    }
+                    @if (result is not null)
+                    {
+                        <span class="stats">@($"{result.ElapsedMs:F1}ms · {result.StepCount:N0} steps")</span>
+                    }
+                </div>
             </div>
             <div class="output-content">
                 @if (result is not null)
@@ -107,6 +120,11 @@
             </div>
         }
     </div>
+
+    <div class="version-footer">
+        Stash v0.1.0-preview
+    </div>
+
 </div>
 
 @code {
@@ -117,6 +135,10 @@
     private DotNetObjectReference<Playground>? _dotNetRef;
     private bool bannerDismissed;
     private readonly HashSet<int> _expandedShowcases = [];
+    private string shareButtonText = "🔗 Share";
+    private string copyButtonText = "📋 Copy";
+    private bool _isSharing;
+    private bool _isCopying;
 
     private sealed record Example(string Name, string Code);
 
@@ -609,6 +631,23 @@
     {
         _dotNetRef = DotNetObjectReference.Create(this);
         await JSRuntime.InvokeVoidAsync("addRunCommand", "stash-editor", _dotNetRef);
+        await JSRuntime.InvokeVoidAsync("registerLanguageProviders");
+        await JSRuntime.InvokeVoidAsync("registerDiagnosticsListener", "stash-editor");
+
+        // Restore code: URL hash takes priority, then localStorage
+        string? sharedCode = await JSRuntime.InvokeAsync<string?>("getCodeFromHash");
+        if (!string.IsNullOrEmpty(sharedCode))
+        {
+            await _editor.SetValue(sharedCode);
+        }
+        else
+        {
+            string? savedCode = await JSRuntime.InvokeAsync<string?>("loadFromLocalStorage");
+            if (!string.IsNullOrEmpty(savedCode))
+            {
+                await _editor.SetValue(savedCode);
+            }
+        }
     }
 
     [JSInvokable]
@@ -644,6 +683,57 @@
     {
         if (!_expandedShowcases.Remove(index))
             _expandedShowcases.Add(index);
+    }
+
+    private async Task FormatCode()
+    {
+        await JSRuntime.InvokeVoidAsync("formatEditorCode", "stash-editor");
+    }
+
+    private async Task DownloadCode()
+    {
+        string code = await _editor.GetValue();
+        await JSRuntime.InvokeVoidAsync("downloadFile", "playground.stash", code);
+    }
+
+    private async Task ShareCode()
+    {
+        if (_isSharing) return;
+        _isSharing = true;
+        try
+        {
+            string code = await _editor.GetValue();
+            string url = await JSRuntime.InvokeAsync<string>("getShareUrl", code);
+            bool copied = await JSRuntime.InvokeAsync<bool>("copyToClipboard", url);
+            shareButtonText = copied ? "✓ Copied!" : "✗ Failed";
+            StateHasChanged();
+            await Task.Delay(2000);
+            shareButtonText = "🔗 Share";
+            StateHasChanged();
+        }
+        finally
+        {
+            _isSharing = false;
+        }
+    }
+
+    private async Task CopyOutput()
+    {
+        if (_isCopying) return;
+        _isCopying = true;
+        try
+        {
+            bool copied = await JSRuntime.InvokeAsync<bool>("copyToClipboard", result?.Output ?? string.Empty);
+            copyButtonText = copied ? "✓ Copied!" : "✗ Failed";
+            StateHasChanged();
+            await Task.Delay(2000);
+            copyButtonText = "📋 Copy";
+            StateHasChanged();
+        }
+        finally
+        {
+            _isCopying = false;
+        }
     }
 
     private async Task RunCode()

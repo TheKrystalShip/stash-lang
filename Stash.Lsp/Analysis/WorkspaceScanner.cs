@@ -1,5 +1,7 @@
 namespace Stash.Lsp.Analysis;
 
+using Stash.Analysis;
+
 using System;
 using System.Collections.Generic;
 using System.IO;

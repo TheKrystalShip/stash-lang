@@ -11,6 +11,7 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
 using Stash.Lexing;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using Stash.Parsing.AST;
 

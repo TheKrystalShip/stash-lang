@@ -11,7 +11,9 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
 
 /// <summary>
@@ -412,28 +414,28 @@ public class CompletionHandler : CompletionHandlerBase
             // If prefix is a variable/parameter, resolve to its struct type via narrowing or type hint
             var structName = prefix;
             if (prefixDef != null &&
-                (prefixDef.Kind == Analysis.SymbolKind.Variable ||
-                 prefixDef.Kind == Analysis.SymbolKind.Constant ||
-                 prefixDef.Kind == Analysis.SymbolKind.Parameter ||
-                 prefixDef.Kind == Analysis.SymbolKind.LoopVariable))
+                (prefixDef.Kind == StashSymbolKind.Variable ||
+                 prefixDef.Kind == StashSymbolKind.Constant ||
+                 prefixDef.Kind == StashSymbolKind.Parameter ||
+                 prefixDef.Kind == StashSymbolKind.LoopVariable))
             {
                 var narrowedType = result.Symbols.GetNarrowedTypeHint(prefix, lspLine + 1, lspCol + 1);
                 structName = narrowedType ?? prefixDef.TypeHint ?? prefix;
             }
 
-            if (prefixDef == null || prefixDef.Kind != Analysis.SymbolKind.Struct)
+            if (prefixDef == null || prefixDef.Kind != StashSymbolKind.Struct)
             {
                 // Check if the resolved structName matches a user-defined struct
                 var allSymbols = result.Symbols.All;
-                var structDef = allSymbols.FirstOrDefault(s => s.Name == structName && s.Kind == Analysis.SymbolKind.Struct);
+                var structDef = allSymbols.FirstOrDefault(s => s.Name == structName && s.Kind == StashSymbolKind.Struct);
                 if (structDef != null)
                 {
-                    foreach (var sym in allSymbols.Where(s => s.ParentName == structName && (s.Kind == Analysis.SymbolKind.Field || s.Kind == Analysis.SymbolKind.Method)))
+                    foreach (var sym in allSymbols.Where(s => s.ParentName == structName && (s.Kind == StashSymbolKind.Field || s.Kind == StashSymbolKind.Method)))
                     {
                         items.Add(new CompletionItem
                         {
                             Label = sym.Name,
-                            Kind = sym.Kind == Analysis.SymbolKind.Method ? LspCompletionItemKind.Method : LspCompletionItemKind.Field,
+                            Kind = sym.Kind == StashSymbolKind.Method ? LspCompletionItemKind.Method : LspCompletionItemKind.Field,
                             Detail = sym.Detail
                         });
                     }
@@ -458,25 +460,25 @@ public class CompletionHandler : CompletionHandlerBase
                 }
             }
 
-            if (prefixDef != null && prefixDef.Kind == Analysis.SymbolKind.Struct)
+            if (prefixDef != null && prefixDef.Kind == StashSymbolKind.Struct)
             {
                 var allSymbols = result.Symbols.All;
-                foreach (var sym in allSymbols.Where(s => s.ParentName == prefix && (s.Kind == Analysis.SymbolKind.Field || s.Kind == Analysis.SymbolKind.Method)))
+                foreach (var sym in allSymbols.Where(s => s.ParentName == prefix && (s.Kind == StashSymbolKind.Field || s.Kind == StashSymbolKind.Method)))
                 {
                     items.Add(new CompletionItem
                     {
                         Label = sym.Name,
-                        Kind = sym.Kind == Analysis.SymbolKind.Method ? LspCompletionItemKind.Method : LspCompletionItemKind.Field,
+                        Kind = sym.Kind == StashSymbolKind.Method ? LspCompletionItemKind.Method : LspCompletionItemKind.Field,
                         Detail = sym.Detail
                     });
                 }
             }
 
             var allForEnum = result.Symbols.All;
-            var enumDef = allForEnum.FirstOrDefault(s => s.Name == prefix && s.Kind == Analysis.SymbolKind.Enum);
+            var enumDef = allForEnum.FirstOrDefault(s => s.Name == prefix && s.Kind == StashSymbolKind.Enum);
             if (enumDef != null)
             {
-                foreach (var sym in allForEnum.Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.EnumMember))
+                foreach (var sym in allForEnum.Where(s => s.ParentName == prefix && s.Kind == StashSymbolKind.EnumMember))
                 {
                     items.Add(new CompletionItem
                     {
@@ -495,10 +497,10 @@ public class CompletionHandler : CompletionHandlerBase
                 string enumName = prefix.Substring(dotIndex + 1);
                 if (BuiltInRegistry.IsBuiltInNamespace(nsName))
                 {
-                    var nsEnumDef = allForEnum.FirstOrDefault(s => s.Name == enumName && s.Kind == Analysis.SymbolKind.Enum && s.ParentName == nsName);
+                    var nsEnumDef = allForEnum.FirstOrDefault(s => s.Name == enumName && s.Kind == StashSymbolKind.Enum && s.ParentName == nsName);
                     if (nsEnumDef != null)
                     {
-                        foreach (var sym in allForEnum.Where(s => s.ParentName == enumName && s.Kind == Analysis.SymbolKind.EnumMember))
+                        foreach (var sym in allForEnum.Where(s => s.ParentName == enumName && s.Kind == StashSymbolKind.EnumMember))
                         {
                             items.Add(new CompletionItem
                             {
@@ -518,11 +520,11 @@ public class CompletionHandler : CompletionHandlerBase
             foreach (var (_, modInfo) in result.NamespaceImports)
             {
                 var importedEnum = modInfo.Symbols.All
-                    .FirstOrDefault(s => s.Name == prefix && s.Kind == Analysis.SymbolKind.Enum);
+                    .FirstOrDefault(s => s.Name == prefix && s.Kind == StashSymbolKind.Enum);
                 if (importedEnum != null)
                 {
                     foreach (var member in modInfo.Symbols.All
-                        .Where(s => s.ParentName == prefix && s.Kind == Analysis.SymbolKind.EnumMember))
+                        .Where(s => s.ParentName == prefix && s.Kind == StashSymbolKind.EnumMember))
                     {
                         items.Add(new CompletionItem
                         {
@@ -659,23 +661,23 @@ public class CompletionHandler : CompletionHandlerBase
     }
 
     /// <summary>
-    /// Maps a Stash <see cref="Analysis.SymbolKind"/> to the corresponding LSP
+    /// Maps a Stash <see cref="SymbolKind"/> to the corresponding LSP
     /// <see cref="LspCompletionItemKind"/> for display in the editor's completion UI.
     /// </summary>
     /// <param name="kind">The Stash symbol kind to map.</param>
     /// <returns>The equivalent LSP completion item kind.</returns>
-    private static LspCompletionItemKind MapCompletionKind(Analysis.SymbolKind kind) => kind switch
+    private static LspCompletionItemKind MapCompletionKind(StashSymbolKind kind) => kind switch
     {
-        Analysis.SymbolKind.Function => LspCompletionItemKind.Function,
-        Analysis.SymbolKind.Variable => LspCompletionItemKind.Variable,
-        Analysis.SymbolKind.Constant => LspCompletionItemKind.Constant,
-        Analysis.SymbolKind.Struct => LspCompletionItemKind.Struct,
-        Analysis.SymbolKind.Enum => LspCompletionItemKind.Enum,
-        Analysis.SymbolKind.EnumMember => LspCompletionItemKind.EnumMember,
-        Analysis.SymbolKind.Field => LspCompletionItemKind.Field,
-        Analysis.SymbolKind.Parameter => LspCompletionItemKind.Variable,
-        Analysis.SymbolKind.LoopVariable => LspCompletionItemKind.Variable,
-        Analysis.SymbolKind.Namespace => LspCompletionItemKind.Module,
+        StashSymbolKind.Function => LspCompletionItemKind.Function,
+        StashSymbolKind.Variable => LspCompletionItemKind.Variable,
+        StashSymbolKind.Constant => LspCompletionItemKind.Constant,
+        StashSymbolKind.Struct => LspCompletionItemKind.Struct,
+        StashSymbolKind.Enum => LspCompletionItemKind.Enum,
+        StashSymbolKind.EnumMember => LspCompletionItemKind.EnumMember,
+        StashSymbolKind.Field => LspCompletionItemKind.Field,
+        StashSymbolKind.Parameter => LspCompletionItemKind.Variable,
+        StashSymbolKind.LoopVariable => LspCompletionItemKind.Variable,
+        StashSymbolKind.Namespace => LspCompletionItemKind.Module,
         _ => LspCompletionItemKind.Text
     };
 }

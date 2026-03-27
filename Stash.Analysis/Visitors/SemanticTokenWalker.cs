@@ -1,14 +1,14 @@
-namespace Stash.Lsp.Analysis;
+namespace Stash.Analysis;
 
 using System.Collections.Generic;
-using static Stash.Lsp.Analysis.SemanticTokenConstants;
+using static Stash.Analysis.SemanticTokenConstants;
 using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
-using StashSymbolKind = Stash.Lsp.Analysis.SymbolKind;
+using StashSymbolKind = Stash.Analysis.SymbolKind;
 
-internal class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
+public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 {
     private readonly AnalysisResult _result;
     private readonly Dictionary<(int Line, int Col), (int Type, int Modifiers)> _classified;

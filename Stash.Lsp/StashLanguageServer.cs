@@ -6,6 +6,7 @@ using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Server;
+using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using Stash.Lsp.Handlers;
 

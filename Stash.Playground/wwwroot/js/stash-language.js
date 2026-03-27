@@ -249,3 +249,237 @@ function addRunCommand(editorId, dotnetHelper) {
         console.warn('addRunCommand: editor not found for id:', editorId);
     }
 }
+
+function registerLanguageProviders() {
+    monaco.languages.registerCompletionItemProvider('stash', {
+        triggerCharacters: ['.'],
+        provideCompletionItems: async function(model, position) {
+            try {
+                var code = model.getValue();
+                // Monaco positions are 1-based; convert to 0-based for C#
+                var items = await DotNet.invokeMethodAsync('Stash.Playground', 'GetCompletions', code, position.lineNumber - 1, position.column - 1);
+                if (!items || items.length === 0) return { suggestions: [] };
+
+                var word = model.getWordUntilPosition(position);
+                var range = {
+                    startLineNumber: position.lineNumber,
+                    endLineNumber: position.lineNumber,
+                    startColumn: word.startColumn,
+                    endColumn: word.endColumn
+                };
+
+                return {
+                    suggestions: items.map(function(item) {
+                        return {
+                            label: item.label,
+                            kind: item.kind,
+                            detail: item.detail || undefined,
+                            documentation: item.documentation ? { value: item.documentation, isTrusted: true } : undefined,
+                            insertText: item.label,
+                            range: range
+                        };
+                    })
+                };
+            } catch (e) {
+                console.warn('Completion error:', e);
+                return { suggestions: [] };
+            }
+        }
+    });
+
+    monaco.languages.registerHoverProvider('stash', {
+        provideHover: async function(model, position) {
+            try {
+                var code = model.getValue();
+                // Monaco positions are 1-based; convert to 0-based for C#
+                var result = await DotNet.invokeMethodAsync('Stash.Playground', 'GetHover', code, position.lineNumber - 1, position.column - 1);
+                if (!result) return null;
+
+                var word = model.getWordAtPosition(position);
+                return {
+                    contents: [{ value: result.content, isTrusted: true }],
+                    range: word ? new monaco.Range(position.lineNumber, word.startColumn, position.lineNumber, word.endColumn) : undefined
+                };
+            } catch (e) {
+                console.warn('Hover error:', e);
+                return null;
+            }
+        }
+    });
+
+    monaco.languages.registerSignatureHelpProvider('stash', {
+        signatureHelpTriggerCharacters: ['(', ','],
+        signatureHelpRetriggerCharacters: [','],
+        provideSignatureHelp: async function(model, position) {
+            try {
+                var code = model.getValue();
+                var result = await DotNet.invokeMethodAsync('Stash.Playground', 'GetSignatureHelp', code, position.lineNumber - 1, position.column - 1);
+                if (!result) return null;
+
+                return {
+                    value: {
+                        signatures: [{
+                            label: result.label,
+                            documentation: result.documentation ? { value: result.documentation, isTrusted: true } : undefined,
+                            parameters: (result.parameters || []).map(function(p) {
+                                return {
+                                    label: p.label,
+                                    documentation: p.documentation ? { value: p.documentation, isTrusted: true } : undefined
+                                };
+                            })
+                        }],
+                        activeSignature: 0,
+                        activeParameter: result.activeParameter
+                    },
+                    dispose: function() {}
+                };
+            } catch (e) {
+                console.warn('SignatureHelp error:', e);
+                return null;
+            }
+        }
+    });
+}
+
+window.registerDiagnosticsListener = function(editorId) {
+    var editor = window.blazorMonaco.editor.getEditor(editorId);
+    if (!editor) { console.warn('registerDiagnosticsListener: editor not found:', editorId); return; }
+
+    var debounceTimer = null;
+    editor.onDidChangeModelContent(function() {
+        if (debounceTimer) clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(async function() {
+            try {
+                var code = editor.getValue();
+                var diagnostics = await DotNet.invokeMethodAsync('Stash.Playground', 'GetDiagnostics', code);
+                var model = editor.getModel();
+                if (!model) return;
+
+                var markers = (diagnostics || []).map(function(d) {
+                    return {
+                        severity: d.severity,
+                        startLineNumber: d.startLine,
+                        startColumn: d.startColumn,
+                        endLineNumber: d.endLine,
+                        endColumn: d.endColumn + 1, // Monaco markers are exclusive on end
+                        message: d.message
+                    };
+                });
+
+                monaco.editor.setModelMarkers(model, 'stash', markers);
+                window.saveToLocalStorage(code);
+            } catch (e) {
+                console.warn('Diagnostics error:', e);
+            }
+        }, 300);
+    });
+
+    // Run initial diagnostics
+    setTimeout(async function() {
+        try {
+            var code = editor.getValue();
+            var diagnostics = await DotNet.invokeMethodAsync('Stash.Playground', 'GetDiagnostics', code);
+            var model = editor.getModel();
+            if (!model) return;
+
+            var markers = (diagnostics || []).map(function(d) {
+                return {
+                    severity: d.severity,
+                    startLineNumber: d.startLine,
+                    startColumn: d.startColumn,
+                    endLineNumber: d.endLine,
+                    endColumn: d.endColumn + 1,
+                    message: d.message
+                };
+            });
+
+            monaco.editor.setModelMarkers(model, 'stash', markers);
+        } catch (e) {
+            console.warn('Initial diagnostics error:', e);
+        }
+    }, 500);
+};
+
+// ================================================================
+// Playground QoL: Share, Autosave, Format, Copy, Download
+// ================================================================
+
+// Share: encode editor code to URL hash (base64)
+window.getShareUrl = function(code) {
+    var encoded = btoa(unescape(encodeURIComponent(code)));
+    return window.location.origin + window.location.pathname + '#code=' + encoded;
+};
+
+// Share: decode code from URL hash
+window.getCodeFromHash = function() {
+    var hash = window.location.hash;
+    if (hash && hash.startsWith('#code=')) {
+        try {
+            var encoded = hash.substring(6);
+            return decodeURIComponent(escape(atob(encoded)));
+        } catch (e) {
+            console.warn('Failed to decode shared code:', e);
+            return null;
+        }
+    }
+    return null;
+};
+
+// Autosave: save to localStorage (debounced, called from diagnostics listener)
+window.saveToLocalStorage = function(code) {
+    try {
+        localStorage.setItem('stash-playground-code', code);
+    } catch (e) { /* quota exceeded — ignore */ }
+};
+
+// Autosave: load from localStorage
+window.loadFromLocalStorage = function() {
+    try {
+        return localStorage.getItem('stash-playground-code');
+    } catch (e) {
+        return null;
+    }
+};
+
+// Format: call C# formatter and update editor
+window.formatEditorCode = async function(editorId) {
+    var editor = window.blazorMonaco.editor.getEditor(editorId);
+    if (!editor) return;
+    var code = editor.getValue();
+    try {
+        var formatted = await DotNet.invokeMethodAsync('Stash.Playground', 'FormatCode', code);
+        var model = editor.getModel();
+        if (formatted && formatted !== code && model) {
+            editor.executeEdits('format', [{
+                range: model.getFullModelRange(),
+                text: formatted
+            }]);
+        }
+    } catch (e) {
+        console.warn('Format error:', e);
+    }
+};
+
+// Copy: copy text to clipboard
+window.copyToClipboard = async function(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch (e) {
+        console.warn('Copy failed:', e);
+        return false;
+    }
+};
+
+// Download: trigger file download
+window.downloadFile = function(filename, content) {
+    var blob = new Blob([content], { type: 'text/plain' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+};
