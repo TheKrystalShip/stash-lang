@@ -301,6 +301,14 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
+    {
+        Declare(stmt.Name.Lexeme);
+        Define(stmt.Name.Lexeme);
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
         foreach (var name in stmt.Names)

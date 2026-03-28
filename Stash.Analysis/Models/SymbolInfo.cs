@@ -30,7 +30,9 @@ public enum SymbolKind
     /// <summary>The iteration variable bound by a <c>for-in</c> loop, including the optional index variable.</summary>
     LoopVariable,
     /// <summary>A module alias introduced by <c>import "…" as alias</c>, or a built-in namespace (e.g. <c>http</c>, <c>fs</c>).</summary>
-    Namespace
+    Namespace,
+    /// <summary>A user-defined interface type declared with <c>interface</c>.</summary>
+    Interface
 }
 
 /// <summary>

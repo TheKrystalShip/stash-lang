@@ -618,6 +618,12 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
+    {
+        // TODO Phase B: implement formatter for interface declarations
+        return 0;
+    }
+
     public int VisitImportAsStmt(ImportAsStmt stmt)
     {
         EmitToken(); // import

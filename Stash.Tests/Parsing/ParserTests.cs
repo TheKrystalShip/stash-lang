@@ -939,6 +939,91 @@ public class ParserTests
         Assert.Equal("Red", dot.Name.Lexeme);
     }
 
+    // ── Interface declarations ──────────────────────────────────────
+
+    [Fact]
+    public void Parse_InterfaceDecl_MethodsOnly()
+    {
+        var stmts = ParseProgram("interface Printable { toString(), toJson() }");
+        var ifaceDecl = Assert.IsType<InterfaceDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("Printable", ifaceDecl.Name.Lexeme);
+        Assert.Empty(ifaceDecl.Fields);
+        Assert.Equal(2, ifaceDecl.Methods.Count);
+        Assert.Equal("toString", ifaceDecl.Methods[0].Name.Lexeme);
+        Assert.Equal("toJson", ifaceDecl.Methods[1].Name.Lexeme);
+        Assert.Empty(ifaceDecl.Methods[0].Parameters);
+        Assert.Empty(ifaceDecl.Methods[1].Parameters);
+    }
+
+    [Fact]
+    public void Parse_InterfaceDecl_FieldsOnly()
+    {
+        var stmts = ParseProgram("interface Named { name, id }");
+        var ifaceDecl = Assert.IsType<InterfaceDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("Named", ifaceDecl.Name.Lexeme);
+        Assert.Equal(2, ifaceDecl.Fields.Count);
+        Assert.Equal("name", ifaceDecl.Fields[0].Lexeme);
+        Assert.Equal("id", ifaceDecl.Fields[1].Lexeme);
+        Assert.Empty(ifaceDecl.Methods);
+    }
+
+    [Fact]
+    public void Parse_InterfaceDecl_FieldsAndMethods()
+    {
+        var stmts = ParseProgram("interface Configurable { config, reload() }");
+        var ifaceDecl = Assert.IsType<InterfaceDeclStmt>(Assert.Single(stmts));
+        Assert.Single(ifaceDecl.Fields);
+        Assert.Equal("config", ifaceDecl.Fields[0].Lexeme);
+        Assert.Single(ifaceDecl.Methods);
+        Assert.Equal("reload", ifaceDecl.Methods[0].Name.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_InterfaceDecl_MethodWithParams()
+    {
+        var stmts = ParseProgram("interface Serializable { serialize(format), deserialize(data) }");
+        var ifaceDecl = Assert.IsType<InterfaceDeclStmt>(Assert.Single(stmts));
+        Assert.Equal(2, ifaceDecl.Methods.Count);
+        Assert.Single(ifaceDecl.Methods[0].Parameters);
+        Assert.Equal("format", ifaceDecl.Methods[0].Parameters[0].Lexeme);
+        Assert.Single(ifaceDecl.Methods[1].Parameters);
+        Assert.Equal("data", ifaceDecl.Methods[1].Parameters[0].Lexeme);
+    }
+
+    [Fact]
+    public void Parse_InterfaceDecl_WithTypeHints()
+    {
+        var stmts = ParseProgram("interface Typed { name: string, getValue() -> int }");
+        var ifaceDecl = Assert.IsType<InterfaceDeclStmt>(Assert.Single(stmts));
+        Assert.Single(ifaceDecl.Fields);
+        Assert.Equal("name", ifaceDecl.Fields[0].Lexeme);
+        Assert.NotNull(ifaceDecl.FieldTypes[0]);
+        Assert.Equal("string", ifaceDecl.FieldTypes[0]!.Lexeme);
+        Assert.Single(ifaceDecl.Methods);
+        Assert.NotNull(ifaceDecl.Methods[0].ReturnType);
+        Assert.Equal("int", ifaceDecl.Methods[0].ReturnType!.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_WithInterfaces()
+    {
+        var stmts = ParseProgram("struct Foo : Bar, Baz { x, y }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Equal("Foo", structDecl.Name.Lexeme);
+        Assert.Equal(2, structDecl.Interfaces.Count);
+        Assert.Equal("Bar", structDecl.Interfaces[0].Lexeme);
+        Assert.Equal("Baz", structDecl.Interfaces[1].Lexeme);
+        Assert.Equal(2, structDecl.Fields.Count);
+    }
+
+    [Fact]
+    public void Parse_StructDecl_WithoutInterfaces_HasEmptyList()
+    {
+        var stmts = ParseProgram("struct Point { x, y }");
+        var structDecl = Assert.IsType<StructDeclStmt>(Assert.Single(stmts));
+        Assert.Empty(structDecl.Interfaces);
+    }
+
     // ── String interpolation ─────────────────────────────────────
 
     [Fact]

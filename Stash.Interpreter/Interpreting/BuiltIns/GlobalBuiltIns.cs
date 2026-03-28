@@ -28,6 +28,7 @@ public static class GlobalBuiltIns
                 StashStruct => "struct",
                 StashEnumValue => "enum",
                 StashEnum => "enum",
+                StashInterface => "interface",
                 StashDictionary => "dict",
                 StashRange => "range",
                 StashFuture => "Future",

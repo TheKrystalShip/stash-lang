@@ -95,6 +95,11 @@ public static class RuntimeValues
             return enumType.ToString();
         }
 
+        if (value is StashInterface iface)
+        {
+            return iface.ToString();
+        }
+
         if (value is StashNamespace ns)
         {
             return ns.ToString();

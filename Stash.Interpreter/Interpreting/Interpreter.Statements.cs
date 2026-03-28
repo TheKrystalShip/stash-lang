@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Common;
 using Stash.Parsing.AST;
 using Stash.Interpreting.Types;
 using Stash.Interpreting.Exceptions;
@@ -318,8 +319,67 @@ public partial class Interpreter
         }
 
         var structDef = new StashStruct(stmt.Name.Lexeme, fields, methods);
+
+        // Resolve and validate interface conformance
+        foreach (var ifaceToken in stmt.Interfaces)
+        {
+            object? resolved = _environment.Get(ifaceToken.Lexeme, ifaceToken.Span);
+            if (resolved is not StashInterface iface)
+            {
+                throw new RuntimeError($"'{ifaceToken.Lexeme}' is not an interface.", ifaceToken.Span);
+            }
+
+            if (!structDef.Interfaces.Contains(iface))
+            {
+                ValidateInterfaceConformance(structDef, iface, stmt.Span);
+                structDef.Interfaces.Add(iface);
+            }
+        }
+
         _environment.Define(stmt.Name.Lexeme, structDef);
         return null;
+    }
+
+    /// <summary>
+    /// Validates that a struct satisfies all requirements of an interface.
+    /// </summary>
+    private static void ValidateInterfaceConformance(StashStruct @struct, StashInterface iface, SourceSpan span)
+    {
+        ValidateRequiredFields(@struct, iface, span);
+        ValidateRequiredMethods(@struct, iface, span);
+    }
+
+    private static void ValidateRequiredFields(StashStruct @struct, StashInterface iface, SourceSpan span)
+    {
+        foreach (var field in iface.RequiredFields)
+        {
+            if (!@struct.Fields.Contains(field.Name))
+            {
+                throw new RuntimeError(
+                    $"Struct '{@struct.Name}' does not implement field '{field.Name}' required by interface '{iface.Name}'.",
+                    span);
+            }
+        }
+    }
+
+    private static void ValidateRequiredMethods(StashStruct @struct, StashInterface iface, SourceSpan span)
+    {
+        foreach (var method in iface.RequiredMethods)
+        {
+            if (!@struct.Methods.TryGetValue(method.Name, out StashFunction? structMethod))
+            {
+                throw new RuntimeError(
+                    $"Struct '{@struct.Name}' does not implement method '{method.Name}' required by interface '{iface.Name}'.",
+                    span);
+            }
+
+            if (structMethod.Arity != method.Arity)
+            {
+                throw new RuntimeError(
+                    $"Method '{method.Name}' in struct '{@struct.Name}' has {structMethod.Arity} parameter(s), but interface '{iface.Name}' requires {method.Arity}.",
+                    span);
+            }
+        }
     }
 
     /// <inheritdoc />
@@ -333,6 +393,40 @@ public partial class Interpreter
 
         var enumDef = new StashEnum(stmt.Name.Lexeme, members);
         _environment.Define(stmt.Name.Lexeme, enumDef);
+        return null;
+    }
+
+    /// <inheritdoc />
+    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
+    {
+        var requiredFields = new List<InterfaceField>();
+        for (int i = 0; i < stmt.Fields.Count; i++)
+        {
+            string fieldName = stmt.Fields[i].Lexeme;
+            string? typeHint = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            requiredFields.Add(new InterfaceField(fieldName, typeHint));
+        }
+
+        var requiredMethods = new List<InterfaceMethod>();
+        foreach (var method in stmt.Methods)
+        {
+            var paramNames = new List<string>();
+            var paramTypes = new List<string?>();
+            foreach (var p in method.Parameters)
+            {
+                paramNames.Add(p.Lexeme);
+            }
+            for (int i = 0; i < method.Parameters.Count; i++)
+            {
+                string? paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                paramTypes.Add(paramType);
+            }
+            string? returnType = method.ReturnType?.Lexeme;
+            requiredMethods.Add(new InterfaceMethod(method.Name.Lexeme, method.Parameters.Count, paramNames, paramTypes, returnType));
+        }
+
+        var interfaceDef = new StashInterface(stmt.Name.Lexeme, requiredFields, requiredMethods);
+        _environment.Define(stmt.Name.Lexeme, interfaceDef);
         return null;
     }
 }

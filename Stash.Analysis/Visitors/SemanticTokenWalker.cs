@@ -355,6 +355,12 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
+    {
+        EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
+        return 0;
+    }
+
     public int VisitImportStmt(ImportStmt stmt)
     {
         foreach (var name in stmt.Names)

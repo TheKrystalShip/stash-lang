@@ -177,6 +177,11 @@ public class Parser
                 return EnumDeclaration();
             }
 
+            if (Match(TokenType.Interface))
+            {
+                return InterfaceDeclaration();
+            }
+
             if (Match(TokenType.Import))
             {
                 return ImportDeclaration();
@@ -367,6 +372,16 @@ public class Parser
     {
         Token structToken = Previous();
         Token name = Consume(TokenType.Identifier, "Expected struct name.");
+
+        List<Token> interfaces = new();
+        if (Match(TokenType.Colon))
+        {
+            do
+            {
+                interfaces.Add(Consume(TokenType.Identifier, "Expected interface name."));
+            } while (Match(TokenType.Comma));
+        }
+
         Consume(TokenType.LeftBrace, "Expected '{' after struct name.");
 
         List<Token> fields = new();
@@ -413,7 +428,7 @@ public class Parser
         }
 
         Token close = Consume(TokenType.RightBrace, "Expected '}' after struct body.");
-        return new StructDeclStmt(name, fields, fieldTypes, methods, MakeSpan(structToken.Span, close.Span));
+        return new StructDeclStmt(name, fields, fieldTypes, methods, interfaces, MakeSpan(structToken.Span, close.Span));
     }
 
     /// <summary>Parses an enum declaration: <c>enum Name { Member1, Member2, ... }</c>.</summary>
@@ -435,6 +450,89 @@ public class Parser
 
         Token close = Consume(TokenType.RightBrace, "Expected '}' after enum members.");
         return new EnumDeclStmt(name, members, MakeSpan(enumToken.Span, close.Span));
+    }
+
+    /// <summary>Parses an interface declaration: <c>interface Name { field1, method1(params), ... }</c>.</summary>
+    /// <returns>An <see cref="InterfaceDeclStmt"/> node.</returns>
+    private Stmt InterfaceDeclaration()
+    {
+        Token interfaceToken = Previous();
+        Token name = Consume(TokenType.Identifier, "Expected interface name.");
+        Consume(TokenType.LeftBrace, "Expected '{' after interface name.");
+
+        List<Token> fields = new();
+        List<Token?> fieldTypes = new();
+        List<InterfaceMethodSignature> methods = new();
+        HashSet<string> memberNames = new();
+
+        if (!Check(TokenType.RightBrace))
+        {
+            do
+            {
+                if (Check(TokenType.RightBrace))
+                {
+                    break;
+                }
+
+                Token memberName = Consume(TokenType.Identifier, "Expected member name.");
+
+                if (memberNames.Contains(memberName.Lexeme))
+                {
+                    Error(memberName, $"Duplicate member '{memberName.Lexeme}' in interface '{name.Lexeme}'.");
+                }
+                memberNames.Add(memberName.Lexeme);
+
+                if (Match(TokenType.LeftParen))
+                {
+                    // Method signature: name(param1, param2, ...) -> ReturnType
+                    List<Token> parameters = new();
+                    List<Token?> parameterTypes = new();
+
+                    if (!Check(TokenType.RightParen))
+                    {
+                        do
+                        {
+                            parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
+                            Token? paramType = null;
+                            if (Match(TokenType.Colon))
+                            {
+                                paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                            }
+                            parameterTypes.Add(paramType);
+                        } while (Match(TokenType.Comma));
+                    }
+
+                    Consume(TokenType.RightParen, "Expected ')' after interface method parameters.");
+
+                    Token? returnType = null;
+                    if (Match(TokenType.Arrow))
+                    {
+                        returnType = Consume(TokenType.Identifier, "Expected return type after '->'.");
+                    }
+
+                    methods.Add(new InterfaceMethodSignature(memberName, parameters, parameterTypes, returnType));
+                }
+                else
+                {
+                    // Field requirement: name or name: Type
+                    Token? fieldType = null;
+                    if (Match(TokenType.Colon))
+                    {
+                        fieldType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    }
+                    fields.Add(memberName);
+                    fieldTypes.Add(fieldType);
+                }
+            } while (Match(TokenType.Comma));
+        }
+
+        if (fields.Count == 0 && methods.Count == 0)
+        {
+            Error(name, "An interface must have at least one member.");
+        }
+
+        Token close = Consume(TokenType.RightBrace, "Expected '}' after interface body.");
+        return new InterfaceDeclStmt(name, fields, fieldTypes, methods, MakeSpan(interfaceToken.Span, close.Span));
     }
 
     /// <summary>
@@ -2053,6 +2151,7 @@ public class Parser
                 case TokenType.Async:
                 case TokenType.Struct:
                 case TokenType.Enum:
+                case TokenType.Interface:
                 case TokenType.Import:
                 case TokenType.If:
                 case TokenType.While:

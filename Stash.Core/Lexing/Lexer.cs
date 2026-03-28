@@ -83,6 +83,7 @@ public class Lexer
             ["fn"] = TokenType.Fn,
             ["struct"] = TokenType.Struct,
             ["enum"] = TokenType.Enum,
+            ["interface"] = TokenType.Interface,
             ["if"] = TokenType.If,
             ["else"] = TokenType.Else,
             ["for"] = TokenType.For,

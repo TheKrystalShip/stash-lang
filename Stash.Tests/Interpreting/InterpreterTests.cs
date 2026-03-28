@@ -1390,6 +1390,212 @@ public class InterpreterTests
         Assert.Equal("struct", Run("struct P { x } let result = typeof(P);"));
     }
 
+    // ===== Interfaces =====
+
+    [Fact]
+    public void InterfaceDecl_DefinesInterface()
+    {
+        Assert.Equal("interface", Run("interface Printable { toString() } let result = typeof(Printable);"));
+    }
+
+    [Fact]
+    public void InterfaceDecl_Stringify()
+    {
+        Assert.Equal("<interface Printable>", Run(@"
+            interface Printable { toString() }
+            let result = conv.toStr(Printable);
+        "));
+    }
+
+    [Fact]
+    public void StructImplements_SingleInterface()
+    {
+        Assert.Equal(true, Run(@"
+            interface Printable { toString() }
+            struct Item : Printable {
+                name
+                fn toString() { return self.name; }
+            }
+            let item = Item { name: ""Widget"" };
+            let result = item is Printable;
+        "));
+    }
+
+    [Fact]
+    public void StructImplements_MultipleInterfaces()
+    {
+        Assert.Equal(true, Run(@"
+            interface Named { name }
+            interface Aged { age }
+            struct Person : Named, Aged { name, age }
+            let p = Person { name: ""Alice"", age: 30 };
+            let result = (p is Named) && (p is Aged);
+        "));
+    }
+
+    [Fact]
+    public void StructImplements_FieldAndMethodRequirements()
+    {
+        Assert.Equal("reloaded", Run(@"
+            interface Configurable { config, reload() }
+            struct Service : Configurable {
+                config, host
+                fn reload() { return ""reloaded""; }
+            }
+            let s = Service { config: ""cfg"", host: ""localhost"" };
+            let result = s.reload();
+        "));
+    }
+
+    [Fact]
+    public void StructImplements_MethodWithParams()
+    {
+        Assert.Equal("json", Run(@"
+            interface Serializable { serialize(format) }
+            struct Data : Serializable {
+                value
+                fn serialize(format) { return format; }
+            }
+            let d = Data { value: 42 };
+            let result = d.serialize(""json"");
+        "));
+    }
+
+    [Fact]
+    public void IsOperator_InterfaceNotImplemented_False()
+    {
+        Assert.Equal(false, Run(@"
+            interface Printable { toString() }
+            interface Saveable { save() }
+            struct Item : Printable {
+                name
+                fn toString() { return self.name; }
+            }
+            let item = Item { name: ""test"" };
+            let result = item is Saveable;
+        "));
+    }
+
+    [Fact]
+    public void IsOperator_NonStructValue_False()
+    {
+        Assert.Equal(false, Run(@"
+            interface Printable { toString() }
+            let result = 42 is Printable;
+        "));
+    }
+
+    [Fact]
+    public void IsOperator_NullIsNotInterface()
+    {
+        Assert.Equal(false, Run(@"
+            interface Printable { toString() }
+            let result = null is Printable;
+        "));
+    }
+
+    [Fact]
+    public void IsOperator_StructTypeCheckStillWorks()
+    {
+        Assert.Equal(true, Run(@"
+            interface Printable { toString() }
+            struct Item : Printable {
+                name
+                fn toString() { return self.name; }
+            }
+            let item = Item { name: ""test"" };
+            let result = item is Item;
+        "));
+    }
+
+    [Fact]
+    public void Typeof_InstanceOfImplementingStruct_ReturnsStruct()
+    {
+        Assert.Equal("struct", Run(@"
+            interface Printable { toString() }
+            struct Item : Printable {
+                name
+                fn toString() { return self.name; }
+            }
+            let item = Item { name: ""test"" };
+            let result = typeof(item);
+        "));
+    }
+
+    [Fact]
+    public void StructImplements_MissingField_ThrowsError()
+    {
+        RunExpectingError(@"
+            interface Identifiable { id, name }
+            struct Broken : Identifiable { id }
+        ");
+    }
+
+    [Fact]
+    public void StructImplements_MissingMethod_ThrowsError()
+    {
+        RunExpectingError(@"
+            interface Saveable { save(), load(path) }
+            struct Broken : Saveable {
+                fn save() { }
+            }
+        ");
+    }
+
+    [Fact]
+    public void StructImplements_MethodArityMismatch_ThrowsError()
+    {
+        RunExpectingError(@"
+            interface Serializable { serialize(format) }
+            struct Broken : Serializable {
+                fn serialize() { }
+            }
+        ");
+    }
+
+    [Fact]
+    public void StructImplements_NotAnInterface_ThrowsError()
+    {
+        RunExpectingError(@"
+            struct Foo { x }
+            struct Bar : Foo { x }
+        ");
+    }
+
+    [Fact]
+    public void StructWithNoInterfaces_StillWorks()
+    {
+        Assert.Equal(1L, Run("struct Point { x, y } let p = Point { x: 1, y: 2 }; let result = p.x;"));
+    }
+
+    [Fact]
+    public void Interface_FieldsWithTypeHints()
+    {
+        Assert.Equal(true, Run(@"
+            interface Typed { name: string, getValue() -> int }
+            struct Item : Typed {
+                name
+                fn getValue() { return 42; }
+            }
+            let item = Item { name: ""test"" };
+            let result = item is Typed;
+        "));
+    }
+
+    [Fact]
+    public void Interface_DuplicateImplementation_IsIdempotent()
+    {
+        Assert.Equal(true, Run(@"
+            interface Printable { toString() }
+            struct Item : Printable, Printable {
+                name
+                fn toString() { return self.name; }
+            }
+            let item = Item { name: ""test"" };
+            let result = item is Printable;
+        "));
+    }
+
     // ===== Struct Methods =====
 
     [Fact]
@@ -1647,7 +1853,7 @@ public class InterpreterTests
         Assert.Equal(42L, Run("struct Inner { val } struct Outer { inner } let i = Inner { val: 42 }; let o = Outer { inner: i }; let result = o.inner.val;"));
     }
 
-    // ===== Category 11: Enums =====
+    // ===== Category 12: Enums =====
 
     // Basic enum declaration + access
 

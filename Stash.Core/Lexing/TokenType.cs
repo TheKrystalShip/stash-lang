@@ -186,6 +186,9 @@ public enum TokenType
     /// <summary>The <c>enum</c> keyword. Declares an enum type.</summary>
     Enum,
 
+    /// <summary>The <c>interface</c> keyword. Declares an interface contract type.</summary>
+    Interface,
+
     /// <summary>The <c>if</c> keyword. Begins a conditional branch.</summary>
     If,
 

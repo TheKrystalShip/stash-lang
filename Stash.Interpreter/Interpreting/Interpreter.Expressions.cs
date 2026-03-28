@@ -342,9 +342,50 @@ public partial class Interpreter
             "namespace" => value is StashNamespace,
             "function" => value is IStashCallable,
             "Future" => value is StashFuture,
-            _ => (value is StashInstance instance && instance.TypeName == typeName) ||
-                 (value is StashEnumValue enumVal && enumVal.TypeName == typeName)
+            _ => CheckCustomType(value, typeName, expr.TypeName.Span)
         };
+    }
+
+    /// <summary>
+    /// Checks if a value matches a custom type name — struct name, enum name, or interface conformance.
+    /// </summary>
+    private bool CheckCustomType(object? value, string typeName, SourceSpan? span)
+    {
+        // Direct struct type name match
+        if (value is StashInstance instance)
+        {
+            if (instance.TypeName == typeName)
+            {
+                return true;
+            }
+
+            // Check interface conformance via resolved reference
+            object? resolved = null;
+            try
+            {
+                resolved = _environment.Get(typeName, span);
+            }
+            catch (RuntimeError)
+            {
+                // Name not found in environment — not a known type
+                return false;
+            }
+
+            if (resolved is StashInterface iface)
+            {
+                return instance.Struct?.Interfaces.Contains(iface) ?? false;
+            }
+
+            return false;
+        }
+
+        // Direct enum type name match
+        if (value is StashEnumValue enumVal)
+        {
+            return enumVal.TypeName == typeName;
+        }
+
+        return false;
     }
 
     /// <inheritdoc />

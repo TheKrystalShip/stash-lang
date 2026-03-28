@@ -506,6 +506,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt) => null;
 
+    /// <summary>No-op — interface declarations introduce no semantic constraints to validate.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt) => null;
+
     /// <summary>No-op — import statements are validated separately by <see cref="ImportResolver"/>.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitImportStmt(ImportStmt stmt) => null;

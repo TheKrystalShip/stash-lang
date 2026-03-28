@@ -388,6 +388,12 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
+    {
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Interface, stmt.Name.Span, stmt.Span, $"interface {stmt.Name.Lexeme}"));
+        return null;
+    }
+
     /// <summary>
     /// Registers a <see cref="SymbolKind.Variable"/> symbol for a <c>let</c> declaration,
     /// capturing an explicit type annotation when present, then recurses into the initializer.

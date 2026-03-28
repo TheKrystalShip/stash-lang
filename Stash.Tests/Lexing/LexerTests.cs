@@ -249,6 +249,7 @@ public class LexerTests
     [InlineData("fn", TokenType.Fn)]
     [InlineData("struct", TokenType.Struct)]
     [InlineData("enum", TokenType.Enum)]
+    [InlineData("interface", TokenType.Interface)]
     [InlineData("if", TokenType.If)]
     [InlineData("else", TokenType.Else)]
     [InlineData("for", TokenType.For)]

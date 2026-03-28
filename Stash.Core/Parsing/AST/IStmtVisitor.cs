@@ -89,6 +89,11 @@ public interface IStmtVisitor<T>
     T VisitEnumDeclStmt(EnumDeclStmt stmt);
 
     /// <summary>
+    /// Visits an <see cref="InterfaceDeclStmt"/> node (interface declaration <c>interface Name { ... }</c>).
+    /// </summary>
+    T VisitInterfaceDeclStmt(InterfaceDeclStmt stmt);
+
+    /// <summary>
     /// Visits an <see cref="ImportStmt"/> node (<c>import { name } from "file.stash";</c>).
     /// </summary>
     T VisitImportStmt(ImportStmt stmt);
