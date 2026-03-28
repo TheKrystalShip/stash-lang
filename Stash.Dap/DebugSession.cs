@@ -1712,19 +1712,14 @@ public class DebugSession : IDebugger
                 variablesReference = AllocateExpansion(name, value);
                 break;
 
-            case StashFunction fn:
+            case UserCallable uc:
                 type = "function";
-                displayValue = fn.ToString() ?? "<fn>";
+                displayValue = uc.ToString() ?? "<fn>";
                 break;
 
             case StashBoundMethod bm:
                 type = "function";
                 displayValue = bm.ToString();
-                break;
-
-            case StashLambda:
-                type = "function";
-                displayValue = "<lambda>";
                 break;
 
             case StashEnumValue enumVal:

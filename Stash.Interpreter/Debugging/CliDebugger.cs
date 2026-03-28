@@ -708,7 +708,7 @@ public class CliDebugger : IDebugger
     /// Handles all built-in Stash value types: <see langword="null"/>, <see cref="bool"/>,
     /// <see cref="string"/>, <see cref="long"/>, <see cref="double"/>,
     /// <see cref="List{T}">List&lt;object?&gt;</see>, <c>StashInstance</c>,
-    /// <c>StashEnumValue</c>, <c>StashFunction</c>, <c>StashLambda</c>,
+    /// <c>StashEnumValue</c>, <c>UserCallable</c>,
     /// <c>BuiltInFunction</c>, and <c>StashNamespace</c>. Unknown types fall back to
     /// <see cref="object.ToString"/>.
     /// </remarks>
@@ -756,13 +756,9 @@ public class CliDebugger : IDebugger
         {
             return enumVal.ToString();
         }
-        if (value is StashFunction fn)
+        if (value is UserCallable uc)
         {
-            return fn.ToString();
-        }
-        if (value is StashLambda)
-        {
-            return "<lambda>";
+            return uc.ToString()!;
         }
         if (value is BuiltInFunction bif)
         {

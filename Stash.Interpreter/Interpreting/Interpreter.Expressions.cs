@@ -608,7 +608,7 @@ public partial class Interpreter
             return function.Call(this, arguments);
         }
 
-        string functionName = callee is StashFunction sf ? sf.ToString() : callee.ToString() ?? "<unknown>";
+        string functionName = callee.ToString() ?? "<unknown>";
         if (functionName.StartsWith("<fn ") && functionName.EndsWith(">"))
         {
             functionName = functionName.Substring(4, functionName.Length - 5);
@@ -618,12 +618,7 @@ public partial class Interpreter
             functionName = functionName.Substring(13, functionName.Length - 14);
         }
 
-        SourceSpan? functionSpan = callee switch
-        {
-            StashFunction fn => fn.DefinitionSpan,
-            StashLambda lm => lm.DefinitionSpan,
-            _ => null
-        };
+        SourceSpan? functionSpan = callee is UserCallable uc ? uc.DefinitionSpan : null;
 
         var callFrame = new CallFrame
         {
