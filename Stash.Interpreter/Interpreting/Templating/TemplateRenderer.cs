@@ -5,7 +5,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Environment = Stash.Interpreting.Environment;
 
 /// <summary>

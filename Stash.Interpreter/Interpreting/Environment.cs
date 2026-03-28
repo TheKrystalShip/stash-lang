@@ -2,6 +2,7 @@ namespace Stash.Interpreting;
 
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using Stash.Runtime;
 
 /// <summary>
 /// Stores variable bindings for a lexical scope. Each environment has an optional

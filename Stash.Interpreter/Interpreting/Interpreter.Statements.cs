@@ -3,6 +3,8 @@ using System.Linq;
 using Stash.Common;
 using Stash.Parsing.AST;
 using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Interpreting.Exceptions;
 
 namespace Stash.Interpreting;
@@ -312,7 +314,7 @@ public partial class Interpreter
             fields.Add(field.Lexeme);
         }
 
-        var methods = new Dictionary<string, StashFunction>();
+        var methods = new Dictionary<string, IStashCallable>();
         foreach (var method in stmt.Methods)
         {
             methods[method.Name.Lexeme] = new StashFunction(method, _environment);
@@ -366,7 +368,7 @@ public partial class Interpreter
     {
         foreach (var method in iface.RequiredMethods)
         {
-            if (!@struct.Methods.TryGetValue(method.Name, out StashFunction? structMethod))
+            if (!@struct.Methods.TryGetValue(method.Name, out IStashCallable? structMethod))
             {
                 throw new RuntimeError(
                     $"Struct '{@struct.Name}' does not implement method '{method.Name}' required by interface '{iface.Name}'.",

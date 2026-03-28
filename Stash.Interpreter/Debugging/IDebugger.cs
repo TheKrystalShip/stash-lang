@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Stash.Common;
 using StashEnv = Stash.Interpreting.Environment;
 using Stash.Interpreting;
+using Stash.Runtime;
 
 /// <summary>
 /// Interface for debugger hooks called during interpretation.

@@ -28,6 +28,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting;
+using Stash.Runtime;
 using Stash.Testing;
 
 namespace Stash;

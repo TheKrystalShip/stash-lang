@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Stash.Interpreting;
 using Stash.Interpreting.Exceptions;
+using Stash.Runtime;
 
 namespace Stash.Playground.Services;
 

@@ -1,4 +1,6 @@
 using Stash.Interpreting;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Environment = Stash.Interpreting.Environment;
 
 namespace Stash.Tests.Interpreting;

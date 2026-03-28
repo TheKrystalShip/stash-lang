@@ -1,7 +1,6 @@
 namespace Stash.Interpreting;
 
 using System;
-using Stash.Interpreting.BuiltIns;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -10,7 +9,8 @@ using Stash.Debugging;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
-using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Interpreting.Exceptions;
 using Stash.Stdlib;
 
@@ -59,7 +59,7 @@ using Stash.Stdlib;
 /// string. This matches the Stash spec's type coercion rules for the <c>+</c> operator.
 /// </para>
 /// </remarks>
-public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
+public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>, IInterpreterContext
 {
     /// <summary>The global scope environment containing built-in functions and top-level declarations.</summary>
     private readonly Environment _globals;
@@ -76,7 +76,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>Per-module lock objects for serializing first-time module loading.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _moduleLocks = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>The test harness for reporting test results. When set, <c>test()</c> and <c>describe()</c> report to it.</summary>
-    private Stash.Testing.ITestHarness? _testHarness;
+    private Stash.Runtime.ITestHarness? _testHarness;
     /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime. Thread-safe for concurrent resolver writes during parallel execution.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Expr, (int Distance, int Slot)> _locals = new(ReferenceEqualityComparer.Instance);
     /// <summary>The raw script arguments, parsed by <c>args</c> declarations.</summary>
@@ -129,7 +129,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>
     /// Gets or sets the test harness. When set, test() and describe() report results to it.
     /// </summary>
-    public Stash.Testing.ITestHarness? TestHarness
+    public Stash.Runtime.ITestHarness? TestHarness
     {
         get => _testHarness;
         set => _testHarness = value;
@@ -268,6 +268,26 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
 
     /// <summary>Process exit callbacks. Used by ProcessBuiltIns.</summary>
     internal Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
+
+    // ── IInterpreterContext explicit interface implementations ─────────────────────────────────
+    object? IInterpreterContext.LastError { get => _ctx.LastError; set => _ctx.LastError = value; }
+    string[]? IInterpreterContext.ScriptArgs => ScriptArgs;
+    List<(StashInstance Handle, System.Diagnostics.Process Process)> IInterpreterContext.TrackedProcesses => _ctx.TrackedProcesses;
+    Dictionary<StashInstance, StashInstance> IInterpreterContext.ProcessWaitCache => _ctx.ProcessWaitCache;
+    Dictionary<StashInstance, List<IStashCallable>> IInterpreterContext.ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
+    IInterpreterContext IInterpreterContext.Fork(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(_ctx.Environment), cancellationToken);
+    IInterpreterContext IInterpreterContext.ForkParallel(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(_ctx.Environment), cancellationToken, attachDebugger: false);
+    object? IInterpreterContext.Debugger => _debugger;
+    object? IInterpreterContext.TestHarness { get => _testHarness; set => _testHarness = value as Stash.Runtime.ITestHarness; }
+    List<List<IStashCallable>> IInterpreterContext.BeforeEachHooks => _ctx.BeforeEachHooks;
+    List<List<IStashCallable>> IInterpreterContext.AfterEachHooks => _ctx.AfterEachHooks;
+    List<List<IStashCallable>> IInterpreterContext.AfterAllHooks => _ctx.AfterAllHooks;
+    string IInterpreterContext.ExpandTilde(string path) => Interpreter.ExpandTilde(path);
+    void IInterpreterContext.NotifyOutput(string category, string text) => _debugger?.OnOutput(category, text);
+    void IInterpreterContext.EmitExit(int code) { CleanupTrackedProcesses(); if (EmbeddedMode) throw new Stash.Interpreting.Exceptions.ExitException(code); System.Environment.Exit(code); }
+    object? IInterpreterContext.CompileAndRenderTemplate(string template, StashDictionary data, string? basePath) { var r = new Stash.Interpreting.Templating.TemplateRenderer(this, basePath); return r.Render(template, data); }
+    object? IInterpreterContext.CompileTemplate(string template) { var l = new Stash.Interpreting.Templating.TemplateLexer(template); var t = l.Scan(); var p = new Stash.Interpreting.Templating.TemplateParser(t); return p.Parse(); }
+    object? IInterpreterContext.RenderCompiledTemplate(object? compiled, StashDictionary data) { if (compiled is not List<Stash.Interpreting.Templating.TemplateNode> nodes) throw new RuntimeError("'tpl.render' expects a string or compiled template as the first argument."); var r = new Stash.Interpreting.Templating.TemplateRenderer(this); return r.Render(nodes, data); }
 
     /// <summary>
     /// Gets the global environment. Useful for DAP to enumerate global variables.
@@ -566,174 +586,21 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <summary>Registers all built-in function namespaces into the global environment, respecting capability flags.</summary>
     private void DefineBuiltIns()
     {
-        // Core built-ins are always registered (typeof, len, hash, range, etc.)
-        GlobalBuiltIns.Register(_globals, _capabilities);
+        // Load global functions (capability-filtered by GlobalBuiltIns itself)
+        var globalDef = StdlibDefinitions.GetGlobals(_capabilities);
+        foreach (var (name, fn) in globalDef.RuntimeFunctions)
+            _globals.Define(name, fn);
 
-        // Safe built-ins — always available (pure computation, no system access)
-        IoBuiltIns.Register(_globals);
-        ConvBuiltIns.Register(_globals);
-        ArrBuiltIns.Register(_globals);
-        DictBuiltIns.Register(_globals);
-        StrBuiltIns.Register(_globals);
-        MathBuiltIns.Register(_globals);
-        TimeBuiltIns.Register(_globals);
-        JsonBuiltIns.Register(_globals);
-        IniBuiltIns.Register(_globals);
-        YamlBuiltIns.Register(_globals);
-        TomlBuiltIns.Register(_globals);
-        ConfigBuiltIns.Register(_globals);
-        TestBuiltIns.Register(_globals);
-        PathBuiltIns.Register(_globals);
-        TplBuiltIns.Register(_globals);
-        StoreBuiltIns.Register(_globals);
-        CryptoBuiltIns.Register(_globals);
-        EncodingBuiltIns.Register(_globals);
-        TermBuiltIns.Register(_globals);
-        SysBuiltIns.Register(_globals);
-        LogBuiltIns.Register(_globals);
-        PkgBuiltIns.Register(_globals);
-        TaskBuiltIns.Register(_globals, TaskRegistry);
-
-        // Capability-gated built-ins
-        if (_capabilities.HasFlag(StashCapabilities.Environment))
+        // Load namespace definitions from the central cache, filtering by caller capabilities
+        foreach (var nsDef in StdlibDefinitions.Namespaces)
         {
-            EnvBuiltIns.Register(_globals);
-        }
-
-        if (_capabilities.HasFlag(StashCapabilities.Process))
-        {
-            ProcessBuiltIns.Register(_globals);
-            ArgsBuiltIns.Register(_globals);
-        }
-
-        if (_capabilities.HasFlag(StashCapabilities.FileSystem))
-        {
-            FsBuiltIns.Register(_globals);
-        }
-
-        if (_capabilities.HasFlag(StashCapabilities.Network))
-        {
-            HttpBuiltIns.Register(_globals);
-            SshBuiltIns.Register(_globals);
-            SftpBuiltIns.Register(_globals);
-        }
-
-        // Freeze all built-in namespaces for optimal read performance.
-        foreach (var binding in _globals.GetAllBindings())
-        {
-            if (binding.Value is Types.StashNamespace ns)
-            {
-                ns.Freeze();
-            }
-        }
-
-        ValidateBuiltIns();
-    }
-
-    private void ValidateBuiltIns()
-    {
-        var errors = new List<string>();
-
-        // Separate globals into functions and namespaces.
-        var runtimeFunctions = new Dictionary<string, BuiltInFunction>();
-        var runtimeNamespaces = new Dictionary<string, Types.StashNamespace>();
-
-        foreach (var binding in _globals.GetAllBindings())
-        {
-            if (binding.Value is BuiltInFunction fn)
-            {
-                runtimeFunctions[binding.Key] = fn;
-            }
-            else if (binding.Value is Types.StashNamespace ns)
-            {
-                runtimeNamespaces[binding.Key] = ns;
-            }
-        }
-
-        // Validate global functions: runtime → registry.
-        foreach (var (name, fn) in runtimeFunctions)
-        {
-            if (!StdlibRegistry.TryGetFunction(name, out var registryFn))
-            {
-                errors.Add($"Global function '{name}' exists at runtime but is missing from StdlibRegistry.Functions.");
+            if (nsDef.RequiredCapability != StashCapabilities.None &&
+                !_capabilities.HasFlag(nsDef.RequiredCapability))
                 continue;
-            }
 
-            if (fn.Arity >= 0 && fn.Arity != registryFn.Parameters.Length)
-            {
-                errors.Add($"Global function '{name}' arity mismatch: runtime={fn.Arity}, registry={registryFn.Parameters.Length}.");
-            }
+            _globals.Define(nsDef.Name, nsDef.Namespace);
         }
 
-        // Validate global functions: registry → runtime.
-        foreach (var registryFn in StdlibRegistry.Functions)
-        {
-            if (!runtimeFunctions.ContainsKey(registryFn.Name))
-            {
-                // 'exit' requires Process capability — skip if capability is missing.
-                if (registryFn.Name == "exit" && !_capabilities.HasFlag(StashCapabilities.Process))
-                    continue;
-
-                errors.Add($"Global function '{registryFn.Name}' is in StdlibRegistry.Functions but not registered at runtime.");
-            }
-        }
-
-        // Validate namespaces: runtime → registry.
-        foreach (var (nsName, ns) in runtimeNamespaces)
-        {
-            if (!StdlibRegistry.IsBuiltInNamespace(nsName))
-            {
-                errors.Add($"Namespace '{nsName}' exists at runtime but is missing from StdlibRegistry.NamespaceNames.");
-                continue;
-            }
-
-            foreach (var (memberName, memberValue) in ns.GetAllMembers())
-            {
-                if (memberValue is BuiltInFunction memberFn)
-                {
-                    string qualifiedName = $"{nsName}.{memberName}";
-                    if (!StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out var registryNsFn))
-                    {
-                        errors.Add($"Namespace function '{qualifiedName}' exists at runtime but is missing from StdlibRegistry.NamespaceFunctions.");
-                        continue;
-                    }
-
-                    if (memberFn.Arity >= 0 && !registryNsFn.IsVariadic && memberFn.Arity != registryNsFn.Parameters.Length)
-                    {
-                        errors.Add($"Namespace function '{qualifiedName}' arity mismatch: runtime={memberFn.Arity}, registry={registryNsFn.Parameters.Length}.");
-                    }
-                }
-                else if (memberValue is long or double or string or bool)
-                {
-                    string qualifiedName = $"{nsName}.{memberName}";
-                    if (!StdlibRegistry.TryGetNamespaceConstant(qualifiedName, out _))
-                    {
-                        errors.Add($"Namespace constant '{qualifiedName}' exists at runtime but is missing from StdlibRegistry.NamespaceConstants.");
-                    }
-                }
-            }
-        }
-
-        // Validate namespaces: registry → runtime.
-        foreach (var registryNsFn in StdlibRegistry.NamespaceFunctions)
-        {
-            if (!runtimeNamespaces.TryGetValue(registryNsFn.Namespace, out var runtimeNs))
-            {
-                // Namespace may be intentionally absent due to capability restrictions — skip.
-                continue;
-            }
-
-            if (!runtimeNs.HasMember(registryNsFn.Name))
-            {
-                errors.Add($"Namespace function '{registryNsFn.QualifiedName}' is in StdlibRegistry but not registered at runtime.");
-            }
-        }
-
-        if (errors.Count > 0)
-        {
-            throw new InvalidOperationException(
-                $"Built-in registration is out of sync with StdlibRegistry:{System.Environment.NewLine}{string.Join(System.Environment.NewLine, errors)}");
-        }
     }
 
     /// <summary>

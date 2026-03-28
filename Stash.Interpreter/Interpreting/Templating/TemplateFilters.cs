@@ -4,7 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
-using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// Static registry of all built-in template filters applied via the pipe operator

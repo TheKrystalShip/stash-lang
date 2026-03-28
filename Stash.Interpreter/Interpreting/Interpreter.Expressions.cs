@@ -8,7 +8,9 @@ using Stash.Common;
 using Stash.Debugging;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Runtime;
 using Stash.Interpreting.Types;
+using Stash.Runtime.Types;
 
 public partial class Interpreter
 {
@@ -481,7 +483,7 @@ public partial class Interpreter
         }
         catch (RuntimeError e)
         {
-            var error = StashError.FromRuntimeError(e, _ctx.CallStack);
+            var error = StashError.FromRuntimeError(e, _ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
             LastError = error;
             return error;
         }

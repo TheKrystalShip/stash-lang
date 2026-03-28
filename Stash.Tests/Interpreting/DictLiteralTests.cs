@@ -3,6 +3,8 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting;
 using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 
 namespace Stash.Tests.Interpreting;
 

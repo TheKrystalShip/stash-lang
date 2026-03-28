@@ -1,7 +1,10 @@
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Interpreting;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Testing;
+using AssertionError = Stash.Runtime.AssertionError;
 
 namespace Stash.Tests.Interpreting;
 

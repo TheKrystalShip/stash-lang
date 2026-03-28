@@ -8,7 +8,8 @@ using System.Collections.Generic;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
-using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Interpreting.Exceptions;
 
 /// <summary>
@@ -317,7 +318,7 @@ public class StashEngine
     /// Creates a built-in function with access to the interpreter instance.
     /// Use this when the function needs to call interpreter methods (e.g., output, stringify).
     /// </summary>
-    public BuiltInFunction CreateFunction(string name, int arity, Func<Interpreter, List<object?>, object?> body)
+    public BuiltInFunction CreateFunction(string name, int arity, Func<IInterpreterContext, List<object?>, object?> body)
     {
         return new BuiltInFunction(name, arity, body);
     }

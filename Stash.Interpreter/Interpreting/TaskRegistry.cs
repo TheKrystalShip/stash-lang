@@ -1,6 +1,6 @@
 namespace Stash.Interpreting;
 
-using Stash.Interpreting.Types;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// Per-interpreter registry for parallel task state. Holds the task.Status enum

@@ -1,10 +1,14 @@
 using Stash.Interpreting;
 using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Stdlib;
 
-using RuntimeBuiltInFunction = Stash.Interpreting.BuiltInFunction;
+using RuntimeBuiltInFunction = Stash.Runtime.BuiltInFunction;
 
 public class StdlibConsistencyTests
 {
@@ -231,5 +235,31 @@ public class StdlibConsistencyTests
     {
         var ex = Record.Exception(() => new Interpreter(StashCapabilities.None));
         Assert.Null(ex);
+    }
+
+    [Fact]
+    public void Construction_WithNoCapabilities_ExcludesCapabilityGatedNamespaces()
+    {
+        var interpreter = new Interpreter(StashCapabilities.None);
+        var definedNamespaces = interpreter.Globals.GetAllBindings()
+            .Where(b => b.Value is StashNamespace)
+            .Select(b => b.Key)
+            .ToHashSet();
+
+        // Capability-gated namespaces must not be present
+        string[] gated = ["env", "fs", "http", "ssh", "sftp", "process", "args", "pkg"];
+        foreach (var ns in gated)
+        {
+            Assert.False(definedNamespaces.Contains(ns),
+                $"Namespace '{ns}' should not be defined when capabilities are None");
+        }
+
+        // Core namespaces must still be present
+        string[] core = ["arr", "str", "math"];
+        foreach (var ns in core)
+        {
+            Assert.True(definedNamespaces.Contains(ns),
+                $"Core namespace '{ns}' should always be defined regardless of capabilities");
+        }
     }
 }

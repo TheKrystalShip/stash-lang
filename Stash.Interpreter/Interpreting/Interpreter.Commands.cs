@@ -6,7 +6,8 @@ using System.Threading.Tasks;
 using System.Text;
 using Stash.Common;
 using Stash.Parsing.AST;
-using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 
 namespace Stash.Interpreting;
 

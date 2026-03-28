@@ -1,28 +1,12 @@
 namespace Stash.Testing;
 
-using Stash.Common;
-using Stash.Interpreting;
-
 /// <summary>
-/// A runtime error representing a failed assertion. Carries structured data
-/// (expected vs actual) for rich test reporting.
+/// Backwards-compatibility shim — AssertionError now lives in Stash.Runtime.AssertionError.
 /// </summary>
-public class AssertionError : RuntimeError
+public class AssertionError : Stash.Runtime.AssertionError
 {
-    /// <summary>
-    /// The expected value (may be null for assertions like assert.true).
-    /// </summary>
-    public object? Expected { get; }
-
-    /// <summary>
-    /// The actual value encountered.
-    /// </summary>
-    public object? Actual { get; }
-
-    public AssertionError(string message, object? expected, object? actual, SourceSpan? span = null)
-        : base(message, span)
+    public AssertionError(string message, object? expected, object? actual, Stash.Common.SourceSpan? span = null)
+        : base(message, expected, actual, span)
     {
-        Expected = expected;
-        Actual = actual;
     }
 }

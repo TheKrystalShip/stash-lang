@@ -5,12 +5,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using Stash.Interpreting.Exceptions;
 using Stash.Parsing.AST;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// Represents a Stash lambda (arrow function). Captures the lambda expression AST node
 /// and the closure environment at the point of definition.
 /// </summary>
-public class StashLambda : IStashCallable
+public class StashLambda : IStashCallable, IDeepCopyable
 {
     private readonly LambdaExpr _declaration;
     private readonly Environment _closure;
@@ -25,6 +27,8 @@ public class StashLambda : IStashCallable
     /// The source location where this lambda is defined.
     /// </summary>
     public Stash.Common.SourceSpan DefinitionSpan => _declaration.Span;
+
+    Stash.Common.SourceSpan? IStashCallable.DefinitionSpan => _declaration.Span;
 
     public int Arity => _declaration.Parameters.Count;
 
@@ -48,8 +52,9 @@ public class StashLambda : IStashCallable
         }
     }
 
-    public object? Call(Interpreter interpreter, List<object?> arguments)
+    public object? Call(IInterpreterContext context, List<object?> arguments)
     {
+        var interpreter = (Interpreter)context;
         var env = new Environment(_closure);
 
         for (int i = 0; i < _declaration.Parameters.Count; i++)
@@ -127,4 +132,7 @@ public class StashLambda : IStashCallable
         Environment snapshotClosure = Environment.Snapshot(_closure);
         return new StashLambda(_declaration, snapshotClosure);
     }
+
+    /// <inheritdoc/>
+    public object DeepCopy() => DeepCopyWithSnapshot();
 }

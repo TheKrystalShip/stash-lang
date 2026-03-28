@@ -5,12 +5,14 @@ using System.Threading;
 using System.Threading.Tasks;
 using Stash.Interpreting.Exceptions;
 using Stash.Parsing.AST;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// Represents a user-defined Stash function. Captures the declaration AST node
 /// and the closure environment at the point of definition.
 /// </summary>
-public class StashFunction : IStashCallable
+public class StashFunction : IStashCallable, IDeepCopyable
 {
     private readonly FnDeclStmt _declaration;
     private readonly Environment _closure;
@@ -25,6 +27,8 @@ public class StashFunction : IStashCallable
     /// The source location where this function is defined.
     /// </summary>
     public Stash.Common.SourceSpan DefinitionSpan => _declaration.Span;
+
+    Stash.Common.SourceSpan? IStashCallable.DefinitionSpan => _declaration.Span;
 
     public string Name => _declaration.Name.Lexeme;
 
@@ -50,8 +54,9 @@ public class StashFunction : IStashCallable
         }
     }
 
-    public object? Call(Interpreter interpreter, List<object?> arguments)
+    public object? Call(IInterpreterContext context, List<object?> arguments)
     {
+        var interpreter = (Interpreter)context;
         var env = new Environment(_closure);
 
         for (int i = 0; i < _declaration.Parameters.Count; i++)
@@ -116,11 +121,13 @@ public class StashFunction : IStashCallable
     /// Used for struct method dispatch. Creates two scope layers to match
     /// the resolver's topology: { self } → { params, body }.
     /// </summary>
-    public object? CallWithSelf(Interpreter interpreter, StashInstance instance, List<object?> arguments)
+    public object? CallWithSelf(IInterpreterContext context, object instance, List<object?> arguments)
     {
+        var interpreter = (Interpreter)context;
+        var stashInstance = (StashInstance)instance;
         // Outer scope: binds 'self' (matches the resolver's BeginScope/Define("self"))
         var selfEnv = new Environment(_closure);
-        selfEnv.Define("self", instance);
+        selfEnv.Define("self", stashInstance);
 
         // Inner scope: binds parameters (matches ResolveFunction's BeginScope)
         var env = new Environment(selfEnv);
@@ -185,4 +192,7 @@ public class StashFunction : IStashCallable
         Environment snapshotClosure = Environment.Snapshot(_closure);
         return new StashFunction(_declaration, snapshotClosure);
     }
+
+    /// <inheritdoc/>
+    public object DeepCopy() => DeepCopyWithSnapshot();
 }

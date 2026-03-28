@@ -1,11 +1,11 @@
 ---
 description: "Use when: adding, modifying, or debugging built-in namespace functions (arr, dict, str, math, time, json, fs, path, env, sys, http, crypto, io, conv, process, log, term, store, encoding, ini, config, args, tpl, test/assert), working in BuiltIns/ files, or updating the Standard Library Reference docs."
-applyTo: "Stash.Interpreter/Interpreting/BuiltIns/**"
+applyTo: "Stash.Stdlib/BuiltIns/**"
 ---
 
 # Standard Library Guidelines
 
-The Stash standard library comprises 26 namespaces with ~280+ functions, each in its own file under `Stash.Interpreter/Interpreting/BuiltIns/`. See `docs/Stash — Standard Library Reference.md` for the complete API reference.
+The Stash standard library comprises 26 namespaces with ~280+ functions, each in its own file under `Stash.Stdlib/BuiltIns/`. See `docs/Stash — Standard Library Reference.md` for the complete API reference.
 
 ## All 26 Namespaces
 
@@ -39,45 +39,48 @@ The Stash standard library comprises 26 namespaces with ~280+ functions, each in
 
 ## Registration Pattern
 
-Every namespace follows the same static `Register` method pattern:
+Every namespace uses the builder pattern — metadata and implementation are co-located in a single `Define()` method:
 
 ```csharp
 public static class FooBuiltIns
 {
-    public static void Register(Environment globals)
+    public static NamespaceDefinition Define()
     {
-        var foo = new StashNamespace("foo");
+        var b = new NamespaceBuilder("foo");
 
-        foo.Define("bar", new BuiltInFunction("foo.bar", 2, (interp, args) =>
+        b.Function("bar", [Param("input", "string"), Param("count", "int")], (ctx, args) =>
         {
             if (args[0] is not string s)
                 throw new RuntimeError("First argument to 'foo.bar' must be a string.");
             // implementation
             return result;
-        }));
+        }, returnType: "string", documentation: "Returns input repeated count times.");
 
-        globals.Define("foo", foo);
+        return b.Build();
     }
 }
 ```
 
 **Key rules:**
 
-- `BuiltInFunction(qualifiedName, paramCount, handler)` — `paramCount` is exact count, or `-1` for variadic
+- `b.Function(name, params, handler)` — params are `[Param("name", "type")]` arrays
+- `isVariadic: true` for variable-argument functions
+- `returnType:` and `documentation:` are optional named parameters
 - Error messages use format: `"First argument to 'namespace.function' must be a {type}."`
-- All namespaces are registered in `Interpreter.DefineBuiltIns()` and frozen post-registration
+- Add `using static Stash.Stdlib.Registration.P;` for the `Param()` shorthand
+- All definitions are produced by `StdlibDefinitions` (Lazy-cached) and consumed by both the Interpreter and StdlibRegistry
 
 ### Capability-Gated Namespaces
 
-Some namespaces are only registered when their capability is enabled:
+Some namespaces are only registered when their capability is enabled. Use `b.RequiresCapability(StashCapabilities.XXX)` in the builder:
 
-| Gate        | Namespaces                                                                                                        |
-| ----------- | ----------------------------------------------------------------------------------------------------------------- |
-| Always      | io, conv, arr, dict, str, math, time, json, ini, config, path, tpl, store, crypto, encoding, term, sys, log, test |
-| Environment | env                                                                                                               |
-| Process     | process, args                                                                                                     |
-| FileSystem  | fs                                                                                                                |
-| Network     | http                                                                                                              |
+| Gate        | Namespaces                                                                                                                          |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| Always      | io, conv, arr, dict, str, math, time, json, ini, config, path, tpl, store, crypto, encoding, term, sys, log, test, yaml, toml, task |
+| Environment | env                                                                                                                                 |
+| Process     | process, args                                                                                                                       |
+| FileSystem  | fs, pkg                                                                                                                             |
+| Network     | http, ssh, sftp                                                                                                                     |
 
 ## Cross-Platform Requirement
 
@@ -110,17 +113,9 @@ Built-ins interact with these runtime types:
 | `StashRange`                   | Range object (e.g., `1..10`). Properties: `Start`, `End`, `Step`.                                                                      |
 | `IStashCallable`               | Interface for callable values (functions, lambdas, bound methods).                                                                     |
 
-## LSP Integration (StdlibRegistry)
+## LSP Integration (Automatic)
 
-When adding a new function, also register its metadata in `Stash.Stdlib/Registry/StdlibRegistry.cs` for IDE support:
-
-```csharp
-new NamespaceFunction("foo", "bar",
-    new[] { new BuiltInParam("input", "string"), new BuiltInParam("count", "int") },
-    ReturnType: "string",
-    IsVariadic: false,
-    Documentation: "Returns input repeated count times.\n@param input The string to repeat\n@param count Number of repetitions\n@return The repeated string")
-```
+StdlibRegistry automatically derives its metadata from the builder definitions — no separate registration needed. The `returnType:` and `documentation:` parameters on `b.Function()` flow directly into the LSP for hover, completions, and signature help.
 
 Documentation uses `@param name description` and `@return description` tags for structured hover display.
 
@@ -128,10 +123,9 @@ Documentation uses `@param name description` and `@return description` tags for 
 
 Checklist:
 
-1. **Implementation** — Add function in the appropriate `*BuiltIns.cs` file using the registration pattern above
-2. **LSP metadata** — Register in `Stash.Stdlib/Registry/StdlibRegistry.cs` with params, return type, and documentation
-3. **Tests** — Add tests in the matching `Stash.Tests/Interpreting/*BuiltInsTests.cs` file using `{Function}_{Scenario}_{Expected}()` naming
-4. **Documentation** — Update `docs/Stash — Standard Library Reference.md` with function table entry and usage example
+1. **Implementation** — Add `b.Function(...)` call in the appropriate `Stash.Stdlib/BuiltIns/*BuiltIns.cs` file (includes metadata + implementation in one call)
+2. **Tests** — Add tests in `Stash.Tests/Interpreting/*BuiltInsTests.cs` using `{Function}_{Scenario}_{Expected}()` naming
+3. **Documentation** — Update `docs/Stash — Standard Library Reference.md` with function table entry and usage example
 
 ## Test Pattern
 

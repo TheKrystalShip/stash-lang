@@ -11,6 +11,8 @@ using Stash.Common;
 using Stash.Debugging;
 using Stash.Interpreting;
 using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Lexing;
 using Stash.Parsing;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Events;

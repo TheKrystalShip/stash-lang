@@ -7,7 +7,8 @@ using System.IO;
 using System.Threading;
 using Stash.Common;
 using Stash.Debugging;
-using Stash.Interpreting.Types;
+using Stash.Runtime;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// Encapsulates all mutable per-execution state for the interpreter.

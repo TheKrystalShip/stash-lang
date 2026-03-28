@@ -7,13 +7,27 @@ using Stash.Stdlib.Models;
 /// <summary>
 /// Single source of truth for all built-in functions, types, namespaces,
 /// keywords, and type metadata in the Stash language.
-/// Core data (Structs, Enums, Interfaces, Functions, NamespaceFunctions,
-/// NamespaceConstants, NamespaceNames, Keywords, ValidTypes, TypeDescriptions)
-/// is defined in the other partial class files in this directory.
+/// Core data (Structs, Enums, Keywords, ValidTypes, TypeDescriptions)
+/// is defined in StdlibRegistry.Types.cs.
+/// Namespace and global function metadata is derived from StdlibDefinitions.
 /// This file contains derived lookup tables and public query methods.
 /// </summary>
 public static partial class StdlibRegistry
 {
+    // ── Derived from StdlibDefinitions ──
+
+    public static IReadOnlyList<string> NamespaceNames { get; } =
+        StdlibDefinitions.Namespaces.Select(d => d.Name).ToArray();
+
+    public static IReadOnlyList<NamespaceFunction> NamespaceFunctions { get; } =
+        StdlibDefinitions.Namespaces.SelectMany(d => d.Functions).ToArray();
+
+    public static IReadOnlyList<NamespaceConstant> NamespaceConstants { get; } =
+        StdlibDefinitions.Namespaces.SelectMany(d => d.Constants).ToArray();
+
+    public static IReadOnlyList<BuiltInFunction> Functions { get; } =
+        StdlibDefinitions.GetGlobals(Stash.Runtime.StashCapabilities.All).Metadata.ToArray();
+
     // ── Known names (union of all symbol names — suppresses "not defined" warnings) ──
 
     public static readonly HashSet<string> KnownNames;
