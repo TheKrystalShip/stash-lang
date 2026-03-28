@@ -14,6 +14,8 @@ public record NamespaceDefinition(
     StashNamespace Namespace,
     IReadOnlyList<NamespaceFunction> Functions,
     IReadOnlyList<NamespaceConstant> Constants,
+    IReadOnlyList<BuiltInStruct> Structs,
+    IReadOnlyList<BuiltInEnum> Enums,
     StashCapabilities RequiredCapability = StashCapabilities.None);
 
 /// <summary>

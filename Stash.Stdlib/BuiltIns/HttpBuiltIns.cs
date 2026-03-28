@@ -6,6 +6,7 @@ using System.Net.Http;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -241,6 +242,12 @@ public static class HttpBuiltIns
             }
             return null;
         });
+
+        ns.Struct("HttpResponse", [
+            new BuiltInField("status", "int"),
+            new BuiltInField("body", "string"),
+            new BuiltInField("headers", "dict"),
+        ]);
 
         return ns.Build();
     }

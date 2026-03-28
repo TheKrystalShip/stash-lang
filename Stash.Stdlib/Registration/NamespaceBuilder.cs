@@ -2,6 +2,7 @@ namespace Stash.Stdlib.Registration;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Models;
@@ -17,6 +18,8 @@ public class NamespaceBuilder
     private readonly StashNamespace _namespace;
     private readonly List<NamespaceFunction> _functions = [];
     private readonly List<NamespaceConstant> _constants = [];
+    private readonly List<BuiltInStruct> _structs = [];
+    private readonly List<BuiltInEnum> _enums = [];
     private StashCapabilities _requiredCapability = StashCapabilities.None;
 
     public NamespaceBuilder(string name)
@@ -72,11 +75,33 @@ public class NamespaceBuilder
     }
 
     /// <summary>
+    /// Registers metadata for a built-in struct type produced by this namespace.
+    /// </summary>
+    public NamespaceBuilder Struct(string name, BuiltInField[] fields)
+    {
+        if (_structs.Any(s => s.Name == name))
+            throw new ArgumentException($"Struct '{name}' is already registered in namespace '{_name}'.", nameof(name));
+        _structs.Add(new BuiltInStruct(name, fields));
+        return this;
+    }
+
+    /// <summary>
+    /// Registers metadata for a built-in enum type produced by this namespace.
+    /// </summary>
+    public NamespaceBuilder Enum(string name, string[] members)
+    {
+        if (_enums.Any(e => e.Name == name))
+            throw new ArgumentException($"Enum '{name}' is already registered in namespace '{_name}'.", nameof(name));
+        _enums.Add(new BuiltInEnum(name, members, _name));
+        return this;
+    }
+
+    /// <summary>
     /// Builds the namespace definition, freezing the runtime namespace.
     /// </summary>
     public NamespaceDefinition Build()
     {
         _namespace.Freeze();
-        return new NamespaceDefinition(_name, _namespace, _functions, _constants, _requiredCapability);
+        return new NamespaceDefinition(_name, _namespace, _functions, _constants, _structs, _enums, _requiredCapability);
     }
 }

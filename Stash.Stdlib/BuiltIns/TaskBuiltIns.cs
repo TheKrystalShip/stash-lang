@@ -36,6 +36,8 @@ public static class TaskBuiltIns
         ns.Function("resolve", [Param("value")], TaskResolve);
         ns.Function("delay",   [Param("seconds", "number")], Delay);
 
+        ns.Enum("Status", ["Running", "Completed", "Failed", "Cancelled"]);
+
         return ns.Build();
     }
 

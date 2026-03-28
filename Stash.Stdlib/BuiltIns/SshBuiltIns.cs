@@ -7,6 +7,7 @@ using Renci.SshNet;
 using Renci.SshNet.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -302,6 +303,17 @@ public static class SshBuiltIns
 
             return null;
         });
+
+        ns.Struct("SshConnection", [
+            new BuiltInField("host", "string"),
+            new BuiltInField("port", "int"),
+            new BuiltInField("username", "string"),
+        ]);
+        ns.Struct("SshTunnel", [
+            new BuiltInField("localPort", "int"),
+            new BuiltInField("remoteHost", "string"),
+            new BuiltInField("remotePort", "int"),
+        ]);
 
         return ns.Build();
     }

@@ -9,6 +9,7 @@ using Renci.SshNet.Common;
 using Renci.SshNet.Sftp;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -458,6 +459,12 @@ public static class SftpBuiltIns
             SftpClient client = GetClient(args[0], "sftp.isConnected");
             return client.IsConnected;
         });
+
+        ns.Struct("SftpConnection", [
+            new BuiltInField("host", "string"),
+            new BuiltInField("port", "int"),
+            new BuiltInField("username", "string"),
+        ]);
 
         return ns.Build();
     }

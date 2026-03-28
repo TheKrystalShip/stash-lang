@@ -50,6 +50,13 @@ public static partial class StdlibRegistry
 
     static StdlibRegistry()
     {
+        ValidTypes = new HashSet<string>(
+            new[] { "string", "int", "float", "bool", "null", "array", "dict", "function",
+                    "namespace", "range", "Future" }
+                .Concat(Structs.Select(s => s.Name))
+                .Concat(Enums.Select(e => e.Name))
+        );
+
         KnownNames = new HashSet<string>(
             Functions.Select(f => f.Name)
                 .Concat(Structs.Select(s => s.Name))

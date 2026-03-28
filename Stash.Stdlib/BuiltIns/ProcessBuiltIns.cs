@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Stash.Interpreting;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -685,6 +686,16 @@ public static class ProcessBuiltIns
                 System.Environment.CurrentDirectory = previous;
             }
         });
+
+        ns.Struct("CommandResult", [
+            new BuiltInField("stdout", "string"),
+            new BuiltInField("stderr", "string"),
+            new BuiltInField("exitCode", "int"),
+        ]);
+        ns.Struct("Process", [
+            new BuiltInField("pid", "int"),
+            new BuiltInField("command", "string"),
+        ]);
 
         return ns.Build();
     }
