@@ -476,4 +476,73 @@ fn foo() { return 1; }
         Assert.Contains(fnScope.Symbols, s => s.Name == "name" && s.Kind == SymbolKind.Parameter);
         Assert.Contains(fnScope.Symbols, s => s.Name == "greeting" && s.Kind == SymbolKind.Parameter);
     }
+
+    [Fact]
+    public void Interface_RegistersInterfaceSymbol()
+    {
+        var tree = Analyze("interface Printable { toString() }");
+        Assert.Contains(tree.GlobalScope.Symbols, s => s.Name == "Printable" && s.Kind == SymbolKind.Interface);
+    }
+
+    [Fact]
+    public void Interface_RegistersMethodSymbol()
+    {
+        var tree = Analyze("interface Printable { toString() }");
+        Assert.Contains(tree.GlobalScope.Symbols, s => s.Name == "toString" && s.Kind == SymbolKind.Method && s.ParentName == "Printable");
+    }
+
+    [Fact]
+    public void Interface_RegistersFieldSymbol()
+    {
+        var tree = Analyze("interface HasName { name }");
+        Assert.Contains(tree.GlobalScope.Symbols, s => s.Name == "name" && s.Kind == SymbolKind.Field && s.ParentName == "HasName");
+    }
+
+    [Fact]
+    public void Interface_FieldWithTypeHint_SetsTypeHint()
+    {
+        var tree = Analyze("interface HasName { name: string }");
+        var field = tree.GlobalScope.Symbols.First(s => s.Name == "name" && s.Kind == SymbolKind.Field);
+        Assert.Equal("string", field.TypeHint);
+    }
+
+    [Fact]
+    public void Interface_MethodWithParams_SetsParameterInfo()
+    {
+        var tree = Analyze("interface Calc { add(a, b) }");
+        var method = tree.GlobalScope.Symbols.First(s => s.Name == "add" && s.Kind == SymbolKind.Method);
+        Assert.Equal("Calc", method.ParentName);
+        Assert.NotNull(method.ParameterNames);
+        Assert.Equal(new[] { "a", "b" }, method.ParameterNames);
+        Assert.Equal(2, method.RequiredParameterCount);
+    }
+
+    [Fact]
+    public void Interface_MethodWithReturnType_SetsTypeHint()
+    {
+        var tree = Analyze("interface Printable { toString() -> string }");
+        var method = tree.GlobalScope.Symbols.First(s => s.Name == "toString" && s.Kind == SymbolKind.Method);
+        Assert.Equal("string", method.TypeHint);
+    }
+
+    [Fact]
+    public void Interface_DetailIncludesAllMembers()
+    {
+        var tree = Analyze("interface Shape { area() -> float, name: string }");
+        var iface = tree.GlobalScope.Symbols.First(s => s.Name == "Shape" && s.Kind == SymbolKind.Interface);
+        Assert.NotNull(iface.Detail);
+        Assert.Contains("area", iface.Detail);
+        Assert.Contains("name", iface.Detail);
+    }
+
+    [Fact]
+    public void Interface_MethodWithTypedParams_SetsParameterTypes()
+    {
+        var tree = Analyze("interface Calc { add(a: int, b: string) -> float }");
+        var method = tree.GlobalScope.Symbols.First(s => s.Name == "add" && s.Kind == SymbolKind.Method);
+        Assert.NotNull(method.ParameterTypes);
+        Assert.Equal(2, method.ParameterTypes.Length);
+        Assert.Equal("int", method.ParameterTypes[0]);
+        Assert.Equal("string", method.ParameterTypes[1]);
+    }
 }

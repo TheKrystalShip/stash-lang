@@ -620,7 +620,67 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
-        // TODO Phase B: implement formatter for interface declarations
+        EmitToken(); // interface
+        Space();
+        EmitToken(); // name
+        Space();
+        EmitToken(); // {
+        _indent++;
+
+        int totalMembers = stmt.Fields.Count + stmt.Methods.Count;
+        int methodIndex = 0;
+        for (int i = 0; i < totalMembers; i++)
+        {
+            NewLine();
+            EmitToken(); // member name
+
+            if (NextIs(TokenType.LeftParen))
+            {
+                // Method signature
+                var method = stmt.Methods[methodIndex++];
+                EmitToken(); // (
+                for (int p = 0; p < method.Parameters.Count; p++)
+                {
+                    if (p > 0)
+                    {
+                        EmitToken(); // ,
+                        Space();
+                    }
+                    EmitToken(); // param name
+                    if (NextIs(TokenType.Colon))
+                    {
+                        EmitToken(); // :
+                        Space();
+                        EmitToken(); // type
+                    }
+                }
+                EmitToken(); // )
+
+                if (NextIs(TokenType.Arrow))
+                {
+                    Space();
+                    EmitToken(); // ->
+                    Space();
+                    EmitToken(); // return type
+                }
+            }
+            else if (NextIs(TokenType.Colon))
+            {
+                // Field with type hint
+                EmitToken(); // :
+                Space();
+                EmitToken(); // type
+            }
+
+            if (NextIs(TokenType.Comma))
+            {
+                EmitToken(); // ,
+            }
+        }
+
+        _indent--;
+        NewLine();
+        EmitToken(); // }
         return 0;
     }
 

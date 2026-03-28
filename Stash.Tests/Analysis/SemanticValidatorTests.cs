@@ -881,4 +881,32 @@ public class SemanticValidatorTests
             d.Message.Contains("got 'int'") &&
             d.Level == DiagnosticLevel.Warning);
     }
+
+    [Fact]
+    public void Interface_ValidTypeHints_NoDiagnostics()
+    {
+        var diagnostics = Validate("interface Shape { area() -> float, name: string }");
+        Assert.Empty(diagnostics);
+    }
+
+    [Fact]
+    public void Interface_InvalidTypeHint_ReportsDiagnostic()
+    {
+        var diagnostics = Validate("interface Shape { name: NonexistentType }");
+        Assert.Contains(diagnostics, d => d.Message.Contains("NonexistentType"));
+    }
+
+    [Fact]
+    public void Interface_InvalidMethodReturnType_ReportsDiagnostic()
+    {
+        var diagnostics = Validate("interface Shape { area() -> UnknownType }");
+        Assert.Contains(diagnostics, d => d.Message.Contains("UnknownType"));
+    }
+
+    [Fact]
+    public void Interface_InvalidParamType_ReportsDiagnostic()
+    {
+        var diagnostics = Validate("interface Calc { add(a: FakeType, b: int) }");
+        Assert.Contains(diagnostics, d => d.Message.Contains("FakeType"));
+    }
 }

@@ -506,9 +506,24 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt) => null;
 
-    /// <summary>No-op — interface declarations introduce no semantic constraints to validate.</summary>
+    /// <summary>Validates type hints in interface field and method signatures.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
-    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt) => null;
+    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
+    {
+        foreach (var fieldType in stmt.FieldTypes)
+        {
+            ValidateTypeHint(fieldType);
+        }
+        foreach (var method in stmt.Methods)
+        {
+            foreach (var paramType in method.ParameterTypes)
+            {
+                ValidateTypeHint(paramType);
+            }
+            ValidateTypeHint(method.ReturnType);
+        }
+        return null;
+    }
 
     /// <summary>No-op — import statements are validated separately by <see cref="ImportResolver"/>.</summary>
     /// <returns>Always <see langword="null"/>.</returns>

@@ -48,6 +48,11 @@ public static class BuiltInRegistry
         public string Detail => $"enum {Name} {{ {string.Join(", ", Members)} }}";
     }
 
+    public record BuiltInInterface(string Name, BuiltInField[] Fields, string[] Methods)
+    {
+        public string Detail => $"interface {Name} {{ {string.Join(", ", Fields.Select(f => f.Type != null ? $"{f.Name}: {f.Type}" : f.Name).Concat(Methods.Select(m => m + "()")))} }}";
+    }
+
     public record NamespaceFunction(string Namespace, string Name, BuiltInParam[] Parameters, string? ReturnType = null, bool IsVariadic = false, string? Documentation = null)
     {
         public string QualifiedName => $"{Namespace}.{Name}";
@@ -124,6 +129,10 @@ public static class BuiltInRegistry
     {
         new BuiltInEnum("Status", new[] { "Running", "Completed", "Failed", "Cancelled" }, "task"),
     };
+
+    // ── Built-in Interfaces ──
+
+    public static readonly IReadOnlyList<BuiltInInterface> Interfaces = Array.Empty<BuiltInInterface>();
 
     // ── Built-in Global Functions ──
 
@@ -968,7 +977,7 @@ public static class BuiltInRegistry
     /// </summary>
     public static readonly IReadOnlyList<string> Keywords = new[]
     {
-        "let", "const", "fn", "struct", "enum", "if", "else",
+        "let", "const", "fn", "struct", "enum", "interface", "if", "else",
         "for", "in", "is", "while", "do", "return", "break", "continue",
         "true", "false", "null", "try", "import", "from", "as", "switch",
         "and", "or", "args", "async", "await"

@@ -381,4 +381,39 @@ public class FormatterTests
         var result = Format("let arr = [1, 2, 3];");
         Assert.Equal("let arr = [1, 2, 3];\n", result);
     }
+
+    [Fact]
+    public void Format_InterfaceDeclaration_FieldsOnly()
+    {
+        var result = Format("interface HasName{name,age:int}");
+        Assert.Equal("interface HasName {\n  name,\n  age: int\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_InterfaceDeclaration_MethodsOnly()
+    {
+        var result = Format("interface Printable{toString()->string}");
+        Assert.Equal("interface Printable {\n  toString() -> string\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_InterfaceDeclaration_FieldsAndMethods()
+    {
+        var result = Format("interface Shape{name:string,area()->float}");
+        Assert.Equal("interface Shape {\n  name: string,\n  area() -> float\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_InterfaceDeclaration_MethodWithParams()
+    {
+        var result = Format("interface Calc{add(a:int,b:int)->int}");
+        Assert.Equal("interface Calc {\n  add(a: int, b: int) -> int\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_InterfaceDeclaration_InterleavedFieldsAndMethods()
+    {
+        var result = Format("interface Mixed{x:int,toString()->string,y:float}");
+        Assert.Equal("interface Mixed {\n  x: int,\n  toString() -> string,\n  y: float\n}\n", result);
+    }
 }

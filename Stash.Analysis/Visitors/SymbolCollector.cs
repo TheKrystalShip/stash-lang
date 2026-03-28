@@ -110,6 +110,16 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             }
         }
 
+        foreach (var i in BuiltInRegistry.Interfaces)
+        {
+            _currentScope.AddSymbol(new SymbolInfo(i.Name, SymbolKind.Interface, span, span, i.Detail));
+            foreach (var f in i.Fields)
+            {
+                var fieldDetail = f.Type != null ? $"field of {i.Name}: {f.Type}" : $"field of {i.Name}";
+                _currentScope.AddSymbol(new SymbolInfo(f.Name, SymbolKind.Field, span, detail: fieldDetail, parentName: i.Name, typeHint: f.Type));
+            }
+        }
+
         foreach (var fn in BuiltInRegistry.Functions)
         {
             _currentScope.AddSymbol(new SymbolInfo(fn.Name, SymbolKind.Function, span, span, fn.Detail, typeHint: fn.ReturnType, parameterNames: fn.ParamNames));
@@ -390,7 +400,59 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Interface, stmt.Name.Span, stmt.Span, $"interface {stmt.Name.Lexeme}"));
+        var memberParts = new List<string>();
+        for (int i = 0; i < stmt.Fields.Count; i++)
+        {
+            var fieldName = stmt.Fields[i].Lexeme;
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            memberParts.Add(fieldType != null ? $"{fieldName}: {fieldType}" : fieldName);
+        }
+        foreach (var method in stmt.Methods)
+        {
+            var paramParts = new List<string>();
+            for (int i = 0; i < method.Parameters.Count; i++)
+            {
+                var paramName = method.Parameters[i].Lexeme;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
+            }
+            var methodSig = $"{method.Name.Lexeme}({string.Join(", ", paramParts)})";
+            if (method.ReturnType != null) methodSig += $" -> {method.ReturnType.Lexeme}";
+            memberParts.Add(methodSig);
+        }
+
+        var detail = $"interface {stmt.Name.Lexeme} {{ {string.Join(", ", memberParts)} }}";
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Interface, stmt.Name.Span, stmt.Span, detail));
+
+        for (int i = 0; i < stmt.Fields.Count; i++)
+        {
+            var field = stmt.Fields[i];
+            var fieldType = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            var fieldDetail = fieldType != null ? $"field of {stmt.Name.Lexeme}: {fieldType}" : $"field of {stmt.Name.Lexeme}";
+            _currentScope.AddSymbol(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: fieldDetail, parentName: stmt.Name.Lexeme, typeHint: fieldType));
+        }
+
+        foreach (var method in stmt.Methods)
+        {
+            var paramParts = new List<string>();
+            for (int i = 0; i < method.Parameters.Count; i++)
+            {
+                var paramName = method.Parameters[i].Lexeme;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
+            }
+            var methodDetail = $"fn {method.Name.Lexeme}({string.Join(", ", paramParts)})";
+            if (method.ReturnType != null) methodDetail += $" -> {method.ReturnType.Lexeme}";
+
+            var returnTypeStr = method.ReturnType?.Lexeme;
+            var paramNames = method.Parameters.Select(p => p.Lexeme).ToArray();
+            var methodParamTypes = method.ParameterTypes.Select(t => t?.Lexeme).ToArray();
+
+            _currentScope.AddSymbol(new SymbolInfo(method.Name.Lexeme, SymbolKind.Method, method.Name.Span, detail: methodDetail,
+                parentName: stmt.Name.Lexeme, typeHint: returnTypeStr, parameterNames: paramNames,
+                requiredParameterCount: method.Parameters.Count, parameterTypes: methodParamTypes));
+        }
+
         return null;
     }
 

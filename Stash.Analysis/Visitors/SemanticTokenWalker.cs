@@ -358,6 +358,30 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     public int VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
         EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
+        for (int i = 0; i < stmt.Fields.Count; i++)
+        {
+            EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
+            if (i < stmt.FieldTypes.Count && stmt.FieldTypes[i] is Token fieldType)
+            {
+                EmitFromToken(fieldType, TokenTypeType, 0);
+            }
+        }
+        foreach (var method in stmt.Methods)
+        {
+            EmitFromToken(method.Name, TokenTypeFunction, ModifierDeclaration);
+            for (int i = 0; i < method.Parameters.Count; i++)
+            {
+                EmitFromToken(method.Parameters[i], TokenTypeParameter, ModifierDeclaration);
+                if (i < method.ParameterTypes.Count && method.ParameterTypes[i] is Token paramType)
+                {
+                    EmitFromToken(paramType, TokenTypeType, 0);
+                }
+            }
+            if (method.ReturnType is Token returnType)
+            {
+                EmitFromToken(returnType, TokenTypeType, 0);
+            }
+        }
         return 0;
     }
 
