@@ -269,25 +269,25 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// <summary>Process exit callbacks. Used by ProcessBuiltIns.</summary>
     internal Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
 
-    // ── IInterpreterContext explicit interface implementations ─────────────────────────────────
-    object? IInterpreterContext.LastError { get => _ctx.LastError; set => _ctx.LastError = value; }
-    string[]? IInterpreterContext.ScriptArgs => ScriptArgs;
-    List<(StashInstance Handle, System.Diagnostics.Process Process)> IInterpreterContext.TrackedProcesses => _ctx.TrackedProcesses;
-    Dictionary<StashInstance, StashInstance> IInterpreterContext.ProcessWaitCache => _ctx.ProcessWaitCache;
-    Dictionary<StashInstance, List<IStashCallable>> IInterpreterContext.ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
+    // ── Sub-interface explicit interface implementations ───────────────────────────────────────
+    object? IExecutionContext.LastError { get => _ctx.LastError; set => _ctx.LastError = value; }
+    string[]? IExecutionContext.ScriptArgs => ScriptArgs;
     IInterpreterContext IInterpreterContext.Fork(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(_ctx.Environment), cancellationToken);
     IInterpreterContext IInterpreterContext.ForkParallel(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(_ctx.Environment), cancellationToken, attachDebugger: false);
-    object? IInterpreterContext.Debugger => _debugger;
-    object? IInterpreterContext.TestHarness { get => _testHarness; set => _testHarness = value as Stash.Runtime.ITestHarness; }
-    List<List<IStashCallable>> IInterpreterContext.BeforeEachHooks => _ctx.BeforeEachHooks;
-    List<List<IStashCallable>> IInterpreterContext.AfterEachHooks => _ctx.AfterEachHooks;
-    List<List<IStashCallable>> IInterpreterContext.AfterAllHooks => _ctx.AfterAllHooks;
-    string IInterpreterContext.ExpandTilde(string path) => Interpreter.ExpandTilde(path);
-    void IInterpreterContext.NotifyOutput(string category, string text) => _debugger?.OnOutput(category, text);
-    void IInterpreterContext.EmitExit(int code) { CleanupTrackedProcesses(); if (EmbeddedMode) throw new Stash.Interpreting.Exceptions.ExitException(code); System.Environment.Exit(code); }
-    object? IInterpreterContext.CompileAndRenderTemplate(string template, StashDictionary data, string? basePath) { var r = new Stash.Interpreting.Templating.TemplateRenderer(this, basePath); return r.Render(template, data); }
-    object? IInterpreterContext.CompileTemplate(string template) { var l = new Stash.Interpreting.Templating.TemplateLexer(template); var t = l.Scan(); var p = new Stash.Interpreting.Templating.TemplateParser(t); return p.Parse(); }
-    object? IInterpreterContext.RenderCompiledTemplate(object? compiled, StashDictionary data) { if (compiled is not List<Stash.Interpreting.Templating.TemplateNode> nodes) throw new RuntimeError("'tpl.render' expects a string or compiled template as the first argument."); var r = new Stash.Interpreting.Templating.TemplateRenderer(this); return r.Render(nodes, data); }
+    object? IExecutionContext.Debugger => _debugger;
+    string IExecutionContext.ExpandTilde(string path) => Interpreter.ExpandTilde(path);
+    void IExecutionContext.NotifyOutput(string category, string text) => _debugger?.OnOutput(category, text);
+    void IExecutionContext.EmitExit(int code) { CleanupTrackedProcesses(); if (EmbeddedMode) throw new Stash.Interpreting.Exceptions.ExitException(code); System.Environment.Exit(code); }
+    List<(StashInstance Handle, System.Diagnostics.Process Process)> IProcessContext.TrackedProcesses => _ctx.TrackedProcesses;
+    Dictionary<StashInstance, StashInstance> IProcessContext.ProcessWaitCache => _ctx.ProcessWaitCache;
+    Dictionary<StashInstance, List<IStashCallable>> IProcessContext.ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
+    Stash.Runtime.ITestHarness? ITestContext.TestHarness { get => _testHarness; set => _testHarness = value; }
+    List<List<IStashCallable>> ITestContext.BeforeEachHooks => _ctx.BeforeEachHooks;
+    List<List<IStashCallable>> ITestContext.AfterEachHooks => _ctx.AfterEachHooks;
+    List<List<IStashCallable>> ITestContext.AfterAllHooks => _ctx.AfterAllHooks;
+    object? ITemplateContext.CompileAndRenderTemplate(string template, StashDictionary data, string? basePath) { var r = new Stash.Interpreting.Templating.TemplateRenderer(this, basePath); return r.Render(template, data); }
+    object? ITemplateContext.CompileTemplate(string template) { var l = new Stash.Interpreting.Templating.TemplateLexer(template); var t = l.Scan(); var p = new Stash.Interpreting.Templating.TemplateParser(t); return p.Parse(); }
+    object? ITemplateContext.RenderCompiledTemplate(object? compiled, StashDictionary data) { if (compiled is not List<Stash.Interpreting.Templating.TemplateNode> nodes) throw new RuntimeError("'tpl.render' expects a string or compiled template as the first argument."); var r = new Stash.Interpreting.Templating.TemplateRenderer(this); return r.Render(nodes, data); }
 
     /// <summary>
     /// Gets the global environment. Useful for DAP to enumerate global variables.

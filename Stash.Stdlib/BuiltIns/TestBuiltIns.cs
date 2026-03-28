@@ -24,7 +24,7 @@ public static class TestBuiltIns
         {
             var name = Args.String(args, 0, "test.it");
             var body = Args.Callable(args, 1, "test.it");
-            var harness = ctx.TestHarness as ITestHarness;
+            var harness = ctx.TestHarness;
             var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
 
             // Build the fully qualified test name from describe context
@@ -43,7 +43,7 @@ public static class TestBuiltIns
             // Discovery mode — record but don't execute
             if (ctx.DiscoveryMode)
             {
-                (ctx.TestHarness as ITestHarness)?.OnTestDiscovered(fullName, span);
+                ctx.TestHarness?.OnTestDiscovered(fullName, span);
                 return null;
             }
 
@@ -125,11 +125,11 @@ public static class TestBuiltIns
             if (ctx.DiscoveryMode)
             {
                 var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
-                (ctx.TestHarness as ITestHarness)?.OnTestDiscovered(fullName, span);
+                ctx.TestHarness?.OnTestDiscovered(fullName, span);
                 return null;
             }
 
-            (ctx.TestHarness as ITestHarness)?.OnTestSkip(fullName, "skipped");
+            ctx.TestHarness?.OnTestSkip(fullName, "skipped");
             return null;
         });
 
@@ -138,7 +138,7 @@ public static class TestBuiltIns
         {
             var name = Args.String(args, 0, "test.describe");
             var body = Args.Callable(args, 1, "test.describe");
-            var harness = ctx.TestHarness as ITestHarness;
+            var harness = ctx.TestHarness;
 
             // Build the fully qualified suite name from nested describes
             string fullName = ctx.CurrentDescribe is not null
