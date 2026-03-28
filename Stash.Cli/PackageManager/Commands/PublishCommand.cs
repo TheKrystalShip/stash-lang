@@ -41,7 +41,9 @@ public static class PublishCommand
         for (int i = 0; i < args.Length; i++)
         {
             if (args[i] == "--token" && i + 1 < args.Length)
+            {
                 cliToken = args[++i];
+            }
         }
         string registryUrl = UserConfig.ResolveRegistryUrl(RegistryResolver.ParseRegistryFlag(args));
 

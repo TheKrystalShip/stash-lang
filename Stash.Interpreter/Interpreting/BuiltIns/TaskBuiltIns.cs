@@ -68,7 +68,10 @@ public static class TaskBuiltIns
     private static object? Await(Interpreter interpreter, List<object?> args)
     {
         if (args[0] is not StashFuture future)
+        {
             throw new RuntimeError("First argument to 'task.await' must be a Future.");
+        }
+
         return future.GetResult();
     }
 
@@ -83,7 +86,10 @@ public static class TaskBuiltIns
         foreach (object? item in items)
         {
             if (item is not StashFuture future)
+            {
                 throw new RuntimeError("First argument to 'task.awaitAll' must be a Future.");
+            }
+
             futures.Add(future);
         }
 
@@ -134,7 +140,10 @@ public static class TaskBuiltIns
         foreach (object? item in items)
         {
             if (item is not StashFuture future)
+            {
                 throw new RuntimeError("First argument to 'task.awaitAny' must be a Future.");
+            }
+
             futures.Add(future);
         }
 
@@ -157,7 +166,10 @@ public static class TaskBuiltIns
     private static object? Status(Interpreter interpreter, List<object?> args, TaskRegistry registry)
     {
         if (args[0] is not StashFuture future)
+        {
             throw new RuntimeError("First argument to 'task.status' must be a Future.");
+        }
+
         string statusStr = future.Status; // "Running", "Completed", "Failed", "Cancelled"
         return registry.TaskStatusEnum.GetMember(statusStr);
     }
@@ -165,7 +177,10 @@ public static class TaskBuiltIns
     private static object? Cancel(Interpreter interpreter, List<object?> args)
     {
         if (args[0] is not StashFuture future)
+        {
             throw new RuntimeError("First argument to 'task.cancel' must be a Future.");
+        }
+
         future.Cancel();
         return null;
     }

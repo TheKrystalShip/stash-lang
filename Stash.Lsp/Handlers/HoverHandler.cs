@@ -8,6 +8,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
+using Stash.Stdlib;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 
@@ -29,7 +30,7 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// </para>
 /// <para>
 /// Falls back to resolving namespace members (via <see cref="AnalysisResult.ResolveNamespaceMember"/>),
-/// built-in namespace constants and functions (via <see cref="BuiltInRegistry"/>), and
+/// built-in namespace constants and functions (via <see cref="StdlibRegistry"/>), and
 /// global built-in functions. Documentation strings are formatted with <c>@param</c> and
 /// <c>@return</c> tags converted to Markdown.
 /// </para>
@@ -127,7 +128,7 @@ public class HoverHandler : HoverHandlerBase
                 if (dotPrefix != null)
                 {
                     var qualifiedName = $"{dotPrefix}.{word}";
-                    if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out var constant))
+                    if (StdlibRegistry.TryGetNamespaceConstant(qualifiedName, out var constant))
                     {
                         var markdown = $"```stash\n{constant.Detail}\n```\n*constant* — from `{dotPrefix}`";
                         if (constant.Documentation != null)
@@ -144,7 +145,7 @@ public class HoverHandler : HoverHandlerBase
                         });
                     }
 
-                    if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out var nsFunc))
+                    if (StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out var nsFunc))
                     {
                         var markdown = $"```stash\n{nsFunc.Detail}\n```\n*built-in function* — from `{dotPrefix}`";
                         if (nsFunc.Documentation != null)
@@ -164,7 +165,7 @@ public class HoverHandler : HoverHandlerBase
             }
 
             // Try global built-in functions (e.g., typeof, len) — only for standalone identifiers
-            if (!afterDot && BuiltInRegistry.TryGetFunction(word, out var builtInFn))
+            if (!afterDot && StdlibRegistry.TryGetFunction(word, out var builtInFn))
             {
                 var markdown = $"```stash\n{builtInFn.Detail}\n```\n*built-in function*";
                 if (builtInFn.Documentation != null)
@@ -182,7 +183,7 @@ public class HoverHandler : HoverHandlerBase
             }
 
             // Built-in type names (used in `is` expressions and type annotations)
-            if (!afterDot && BuiltInRegistry.TypeDescriptions.TryGetValue(word, out var typeDesc))
+            if (!afterDot && StdlibRegistry.TypeDescriptions.TryGetValue(word, out var typeDesc))
             {
                 var markdown = $"```stash\n{typeDesc.Signature}\n```\n*built-in type*\n\n---\n\n{typeDesc.Description}";
                 return Task.FromResult<Hover?>(new Hover

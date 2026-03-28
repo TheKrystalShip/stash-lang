@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Stash.Common;
 using Stash.Parsing.AST;
+using Stash.Stdlib;
 
 /// <summary>
 /// Performs a best-effort type inference pass over the <see cref="ScopeTree"/>, populating
@@ -18,7 +19,7 @@ using Stash.Parsing.AST;
 ///   <item><description><b>Struct init</b> — <c>let p = Point { … }</c> infers type <c>"Point"</c>.</description></item>
 ///   <item><description><b>Command expression</b> — <c>let r = `cmd`</c> infers type <c>"CommandResult"</c>.</description></item>
 ///   <item><description><b>Simple function call</b> — looks up the callee symbol and copies its <see cref="SymbolInfo.TypeHint"/> (the return type).</description></item>
-///   <item><description><b>Namespace function call</b> — resolves the qualified name (e.g. <c>http.get</c>) via <see cref="BuiltInRegistry"/> and copies the registered return type.</description></item>
+///   <item><description><b>Namespace function call</b> — resolves the qualified name (e.g. <c>http.get</c>) via <see cref="StdlibRegistry"/> and copies the registered return type.</description></item>
 ///   <item><description><b>Identifier assignment</b> — copies the type hint of the referenced symbol.</description></item>
 ///   <item><description><b>Try expression</b> — recursively infers the inner expression type.</description></item>
 ///   <item><description><b>Literals</b> — maps <c>long → "int"</c>, <c>double → "float"</c>, <c>string → "string"</c>, <c>bool → "bool"</c>, <c>null → "null"</c>.</description></item>
@@ -227,7 +228,7 @@ public static class TypeInferenceEngine
     /// Infers the return type of a call expression by applying rules 3 and 4:
     /// <list type="bullet">
     ///   <item><description>Rule 3: simple identifier callee — looks up the function symbol and returns its <see cref="SymbolInfo.TypeHint"/>.</description></item>
-    ///   <item><description>Rule 4: namespace dot-access callee (e.g. <c>http.get</c>) — resolves via <see cref="BuiltInRegistry.TryGetNamespaceFunction"/> and returns the registered return type.</description></item>
+    ///   <item><description>Rule 4: namespace dot-access callee (e.g. <c>http.get</c>) — resolves via <see cref="StdlibRegistry.TryGetNamespaceFunction"/> and returns the registered return type.</description></item>
     /// </list>
     /// </summary>
     /// <param name="scopeTree">The scope tree used for function symbol lookups.</param>
@@ -247,10 +248,10 @@ public static class TypeInferenceEngine
         // Rule 4: Namespace function call — callee is a dot expression (e.g. http.get)
         if (callExpr.Callee is DotExpr dotExpr &&
             dotExpr.Object is IdentifierExpr nsIdent &&
-            BuiltInRegistry.IsBuiltInNamespace(nsIdent.Name.Lexeme))
+            StdlibRegistry.IsBuiltInNamespace(nsIdent.Name.Lexeme))
         {
             var qualified = $"{nsIdent.Name.Lexeme}.{dotExpr.Name.Lexeme}";
-            if (BuiltInRegistry.TryGetNamespaceFunction(qualified, out var nsFunc) && nsFunc.ReturnType != null)
+            if (StdlibRegistry.TryGetNamespaceFunction(qualified, out var nsFunc) && nsFunc.ReturnType != null)
             {
                 return nsFunc.ReturnType;
             }

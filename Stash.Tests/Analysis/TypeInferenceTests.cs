@@ -53,7 +53,7 @@ public class TypeInferenceTests
     [Fact]
     public void InfersType_FromBuiltInNamespaceFunction()
     {
-        // http.get returns HttpResponse according to BuiltInRegistry
+        // http.get returns HttpResponse according to StdlibRegistry
         const string src = "let resp = http.get(\"https://example.com\");";
         var (tree, _) = AnalyzeWithStatements(src);
         var symbol = tree.FindDefinition("resp", 1, 5);
@@ -209,7 +209,7 @@ public class TypeInferenceTests
     [Fact]
     public void InfersType_FromBuiltInFunction()
     {
-        // typeof() returns "string" per BuiltInRegistry
+        // typeof() returns "string" per StdlibRegistry
         const string src = "let t = typeof(42);";
         var (tree, _) = AnalyzeWithStatements(src);
         var symbol = tree.FindDefinition("t", 1, 5);
@@ -220,7 +220,7 @@ public class TypeInferenceTests
     [Fact]
     public void InfersType_FromLenFunction()
     {
-        // len() returns "int" per BuiltInRegistry
+        // len() returns "int" per StdlibRegistry
         const string src = "let n = len(\"hello\");";
         var (tree, _) = AnalyzeWithStatements(src);
         var symbol = tree.FindDefinition("n", 1, 5);

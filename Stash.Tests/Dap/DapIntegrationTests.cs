@@ -30,7 +30,11 @@ public class DapIntegrationTests
     private static object? GetMainThreadState(DebugSession session)
     {
         object? dict = ThreadsField.GetValue(session);
-        if (dict == null) return null;
+        if (dict == null)
+        {
+            return null;
+        }
+
         MethodInfo tryGet = dict.GetType().GetMethod("TryGetValue")!;
         object?[] parameters = new object?[] { 1, null };
         bool found = (bool)tryGet.Invoke(dict, parameters)!;
@@ -40,7 +44,11 @@ public class DapIntegrationTests
     private static bool GetIsPaused(DebugSession session)
     {
         object? ts = GetMainThreadState(session);
-        if (ts == null) return false;
+        if (ts == null)
+        {
+            return false;
+        }
+
         FieldInfo field = ts.GetType().GetField("IsPaused")!;
         return (bool)field.GetValue(ts)!;
     }
@@ -48,7 +56,11 @@ public class DapIntegrationTests
     private static PauseReason GetPauseReason(DebugSession session)
     {
         object? ts = GetMainThreadState(session);
-        if (ts == null) return PauseReason.Step;
+        if (ts == null)
+        {
+            return PauseReason.Step;
+        }
+
         FieldInfo field = ts.GetType().GetField("PauseReason")!;
         return (PauseReason)field.GetValue(ts)!;
     }

@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.JSInterop;
 using Stash.Analysis;
 using Stash.Common;
+using Stash.Stdlib;
+using Stash.Stdlib.Models;
 
 namespace Stash.Playground.Services;
 
@@ -46,10 +48,14 @@ public static class PlaygroundAnalyzer
         var diagnostics = new List<DiagnosticDto>();
 
         foreach (var err in result.StructuredLexErrors)
+        {
             diagnostics.Add(SpanToDiagnostic(err.Span, err.Message, SeverityError));
+        }
 
         foreach (var err in result.StructuredParseErrors)
+        {
             diagnostics.Add(SpanToDiagnostic(err.Span, err.Message, SeverityError));
+        }
 
         foreach (var diag in result.SemanticDiagnostics)
         {
@@ -71,31 +77,41 @@ public static class PlaygroundAnalyzer
         var result = _engine.Analyze(_playgroundUri, code);
         var lines = code.Split('\n');
         if (line < 0 || line >= lines.Length)
+        {
             return [];
+        }
 
         var lineText = lines[line];
         var dotPrefix = TextUtilities.FindDotPrefix(lineText, column);
 
         if (dotPrefix != null)
+        {
             return GetMemberCompletions(result, dotPrefix, line, column);
+        }
 
         if (IsAfterIsKeyword(lineText, column))
         {
-            return BuiltInRegistry.TypeDescriptions
+            return StdlibRegistry.TypeDescriptions
                 .Select(kvp => new CompletionDto(kvp.Key, KindClass, kvp.Value.Signature, kvp.Value.Description))
                 .ToArray();
         }
 
         var completions = new List<CompletionDto>();
 
-        foreach (var kw in BuiltInRegistry.Keywords)
+        foreach (var kw in StdlibRegistry.Keywords)
+        {
             completions.Add(new CompletionDto(kw, KindKeyword, null, null));
+        }
 
-        foreach (var fn in BuiltInRegistry.Functions)
+        foreach (var fn in StdlibRegistry.Functions)
+        {
             completions.Add(new CompletionDto(fn.Name, KindFunction, fn.Detail, FormatDocumentation(fn.Documentation)));
+        }
 
-        foreach (var ns in BuiltInRegistry.NamespaceNames)
+        foreach (var ns in StdlibRegistry.NamespaceNames)
+        {
             completions.Add(new CompletionDto(ns, KindModule, null, null));
+        }
 
         foreach (var sym in result.Symbols.GetVisibleSymbols(line + 1, column + 1))
         {
@@ -121,28 +137,40 @@ public static class PlaygroundAnalyzer
         var result = _engine.Analyze(_playgroundUri, code);
         var context = _engine.GetContextAt(_playgroundUri, code, line, column);
         if (context == null)
+        {
             return null;
+        }
 
         var word = context.Value.Word;
         var lines = code.Split('\n');
         var lineText = line >= 0 && line < lines.Length ? lines[line] : "";
         var dotPrefix = TextUtilities.FindDotPrefix(lineText, column);
 
-        if (dotPrefix != null && BuiltInRegistry.TryGetNamespaceFunction($"{dotPrefix}.{word}", out var nsFn))
+        if (dotPrefix != null && StdlibRegistry.TryGetNamespaceFunction($"{dotPrefix}.{word}", out var nsFn))
+        {
             return BuildHover($"```\n{nsFn.Detail}\n```", nsFn.Documentation);
+        }
 
-        if (dotPrefix != null && BuiltInRegistry.TryGetNamespaceConstant($"{dotPrefix}.{word}", out var nsConst))
+        if (dotPrefix != null && StdlibRegistry.TryGetNamespaceConstant($"{dotPrefix}.{word}", out var nsConst))
+        {
             return BuildHover($"```\n{nsConst.Detail}\n```", nsConst.Documentation);
+        }
 
         var sym = result.Symbols.FindDefinition(word, line + 1, column + 1);
         if (sym != null)
+        {
             return BuildHover($"```\n{sym.Detail ?? sym.Name}\n```", sym.Documentation);
+        }
 
-        if (dotPrefix == null && BuiltInRegistry.TryGetFunction(word, out var builtIn))
+        if (dotPrefix == null && StdlibRegistry.TryGetFunction(word, out var builtIn))
+        {
             return BuildHover($"```\n{builtIn.Detail}\n```", builtIn.Documentation);
+        }
 
-        if (dotPrefix == null && BuiltInRegistry.TypeDescriptions.TryGetValue(word, out var typeDesc))
+        if (dotPrefix == null && StdlibRegistry.TypeDescriptions.TryGetValue(word, out var typeDesc))
+        {
             return BuildHover($"```\n{typeDesc.Signature}\n```", typeDesc.Description);
+        }
 
         return null;
     }
@@ -152,24 +180,26 @@ public static class PlaygroundAnalyzer
     {
         var callContext = FindCallContext(code, line, column);
         if (callContext == null)
+        {
             return null;
+        }
 
         var (funcName, activeParam, dotPrefix) = callContext.Value;
 
-        BuiltInRegistry.BuiltInParam[]? parameters = null;
+        BuiltInParam[]? parameters = null;
         string? detail = null;
         string? documentation = null;
 
         if (dotPrefix != null)
         {
-            if (BuiltInRegistry.TryGetNamespaceFunction($"{dotPrefix}.{funcName}", out var nsFn))
+            if (StdlibRegistry.TryGetNamespaceFunction($"{dotPrefix}.{funcName}", out var nsFn))
             {
                 parameters = nsFn.Parameters;
                 detail = nsFn.Detail;
                 documentation = nsFn.Documentation;
             }
         }
-        else if (BuiltInRegistry.TryGetFunction(funcName, out var builtIn))
+        else if (StdlibRegistry.TryGetFunction(funcName, out var builtIn))
         {
             parameters = builtIn.Parameters;
             detail = builtIn.Detail;
@@ -189,7 +219,9 @@ public static class PlaygroundAnalyzer
         }
 
         if (detail == null)
+        {
             return null;
+        }
 
         var paramDtos = (parameters ?? [])
             .Select(p => new ParameterDto(p.Type != null ? $"{p.Name}: {p.Type}" : p.Name, null))
@@ -219,16 +251,22 @@ public static class PlaygroundAnalyzer
     {
         var completions = new List<CompletionDto>();
 
-        if (BuiltInRegistry.IsBuiltInNamespace(prefix))
+        if (StdlibRegistry.IsBuiltInNamespace(prefix))
         {
-            foreach (var fn in BuiltInRegistry.GetNamespaceMembers(prefix))
+            foreach (var fn in StdlibRegistry.GetNamespaceMembers(prefix))
+            {
                 completions.Add(new CompletionDto(fn.Name, KindFunction, fn.Detail, FormatDocumentation(fn.Documentation)));
+            }
 
-            foreach (var c in BuiltInRegistry.GetNamespaceConstants(prefix))
+            foreach (var c in StdlibRegistry.GetNamespaceConstants(prefix))
+            {
                 completions.Add(new CompletionDto(c.Name, KindConstant, c.Detail, FormatDocumentation(c.Documentation)));
+            }
 
-            foreach (var e in BuiltInRegistry.Enums.Where(e => e.Namespace == prefix))
+            foreach (var e in StdlibRegistry.Enums.Where(e => e.Namespace == prefix))
+            {
                 completions.Add(new CompletionDto(e.Name, KindEnum, e.Detail, null));
+            }
 
             return completions.ToArray();
         }
@@ -240,7 +278,10 @@ public static class PlaygroundAnalyzer
         if (enumDef != null)
         {
             foreach (var sym in allSymbols.Where(s => s.ParentName == prefix && s.Kind == SymbolKind.EnumMember))
+            {
                 completions.Add(new CompletionDto(sym.Name, KindEnumMember, sym.Detail, null));
+            }
+
             return completions.ToArray();
         }
 
@@ -269,7 +310,7 @@ public static class PlaygroundAnalyzer
         }
 
         // Built-in struct fields
-        var builtInStruct = BuiltInRegistry.Structs.FirstOrDefault(s => s.Name == structName);
+        var builtInStruct = StdlibRegistry.Structs.FirstOrDefault(s => s.Name == structName);
         if (builtInStruct != null)
         {
             foreach (var field in builtInStruct.Fields)
@@ -286,14 +327,20 @@ public static class PlaygroundAnalyzer
     {
         int wordStart = Math.Min(column, lineText.Length);
         while (wordStart > 0 && (char.IsLetterOrDigit(lineText[wordStart - 1]) || lineText[wordStart - 1] == '_'))
+        {
             wordStart--;
+        }
 
         int i = wordStart - 1;
         while (i >= 0 && lineText[i] == ' ')
+        {
             i--;
+        }
 
         if (i < 1)
+        {
             return false;
+        }
 
         // Check that text[i-1..i] == "is" and is not part of a longer word
         return lineText[i] == 's' && lineText[i - 1] == 'i' &&
@@ -304,11 +351,16 @@ public static class PlaygroundAnalyzer
     {
         var lines = code.Split('\n');
         if (line < 0 || line >= lines.Length)
+        {
             return null;
+        }
 
         int offset = 0;
         for (int i = 0; i < line; i++)
+        {
             offset += lines[i].Length + 1;
+        }
+
         offset += Math.Min(column, lines[line].Length);
 
         int depth = 0;
@@ -331,14 +383,20 @@ public static class PlaygroundAnalyzer
                 {
                     int nameEnd = i - 1;
                     while (nameEnd >= 0 && code[nameEnd] == ' ')
+                    {
                         nameEnd--;
+                    }
 
                     if (nameEnd < 0 || (!char.IsLetterOrDigit(code[nameEnd]) && code[nameEnd] != '_'))
+                    {
                         return null;
+                    }
 
                     int nameStart = nameEnd;
                     while (nameStart > 0 && (char.IsLetterOrDigit(code[nameStart - 1]) || code[nameStart - 1] == '_'))
+                    {
                         nameStart--;
+                    }
 
                     var funcName = code[nameStart..(nameEnd + 1)];
 
@@ -348,9 +406,14 @@ public static class PlaygroundAnalyzer
                         int prefixEnd = nameStart - 2;
                         int prefixStart = prefixEnd;
                         while (prefixStart > 0 && (char.IsLetterOrDigit(code[prefixStart - 1]) || code[prefixStart - 1] == '_'))
+                        {
                             prefixStart--;
+                        }
+
                         if (prefixStart <= prefixEnd)
+                        {
                             dotPrefix = code[prefixStart..(prefixEnd + 1)];
+                        }
                     }
 
                     return (funcName, commas, dotPrefix);
@@ -373,14 +436,19 @@ public static class PlaygroundAnalyzer
     {
         var parts = new List<string> { codeBlock };
         if (!string.IsNullOrEmpty(documentation))
+        {
             parts.Add(FormatDocumentation(documentation)!);
+        }
+
         return new HoverDto(string.Join("\n\n", parts));
     }
 
     private static string? FormatDocumentation(string? doc)
     {
         if (doc == null)
+        {
             return null;
+        }
 
         var docLines = doc.Split('\n');
         var result = new List<string>();
@@ -392,9 +460,13 @@ public static class PlaygroundAnalyzer
                 var rest = trimmed["@param ".Length..];
                 var spaceIdx = rest.IndexOf(' ');
                 if (spaceIdx >= 0)
+                {
                     result.Add($"**{rest[..spaceIdx]}** — {rest[(spaceIdx + 1)..]}");
+                }
                 else
+                {
                     result.Add($"**{rest}**");
+                }
             }
             else if (trimmed.StartsWith("@return "))
             {

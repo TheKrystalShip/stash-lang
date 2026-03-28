@@ -12,6 +12,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting.Types;
 using Stash.Interpreting.Exceptions;
+using Stash.Stdlib;
 
 /// <summary>
 /// Tree-walk interpreter that evaluates a Stash AST by visiting each expression node
@@ -624,6 +625,114 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>
             {
                 ns.Freeze();
             }
+        }
+
+        ValidateBuiltIns();
+    }
+
+    private void ValidateBuiltIns()
+    {
+        var errors = new List<string>();
+
+        // Separate globals into functions and namespaces.
+        var runtimeFunctions = new Dictionary<string, BuiltInFunction>();
+        var runtimeNamespaces = new Dictionary<string, Types.StashNamespace>();
+
+        foreach (var binding in _globals.GetAllBindings())
+        {
+            if (binding.Value is BuiltInFunction fn)
+            {
+                runtimeFunctions[binding.Key] = fn;
+            }
+            else if (binding.Value is Types.StashNamespace ns)
+            {
+                runtimeNamespaces[binding.Key] = ns;
+            }
+        }
+
+        // Validate global functions: runtime → registry.
+        foreach (var (name, fn) in runtimeFunctions)
+        {
+            if (!StdlibRegistry.TryGetFunction(name, out var registryFn))
+            {
+                errors.Add($"Global function '{name}' exists at runtime but is missing from StdlibRegistry.Functions.");
+                continue;
+            }
+
+            if (fn.Arity >= 0 && fn.Arity != registryFn.Parameters.Length)
+            {
+                errors.Add($"Global function '{name}' arity mismatch: runtime={fn.Arity}, registry={registryFn.Parameters.Length}.");
+            }
+        }
+
+        // Validate global functions: registry → runtime.
+        foreach (var registryFn in StdlibRegistry.Functions)
+        {
+            if (!runtimeFunctions.ContainsKey(registryFn.Name))
+            {
+                // 'exit' requires Process capability — skip if capability is missing.
+                if (registryFn.Name == "exit" && !_capabilities.HasFlag(StashCapabilities.Process))
+                    continue;
+
+                errors.Add($"Global function '{registryFn.Name}' is in StdlibRegistry.Functions but not registered at runtime.");
+            }
+        }
+
+        // Validate namespaces: runtime → registry.
+        foreach (var (nsName, ns) in runtimeNamespaces)
+        {
+            if (!StdlibRegistry.IsBuiltInNamespace(nsName))
+            {
+                errors.Add($"Namespace '{nsName}' exists at runtime but is missing from StdlibRegistry.NamespaceNames.");
+                continue;
+            }
+
+            foreach (var (memberName, memberValue) in ns.GetAllMembers())
+            {
+                if (memberValue is BuiltInFunction memberFn)
+                {
+                    string qualifiedName = $"{nsName}.{memberName}";
+                    if (!StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out var registryNsFn))
+                    {
+                        errors.Add($"Namespace function '{qualifiedName}' exists at runtime but is missing from StdlibRegistry.NamespaceFunctions.");
+                        continue;
+                    }
+
+                    if (memberFn.Arity >= 0 && !registryNsFn.IsVariadic && memberFn.Arity != registryNsFn.Parameters.Length)
+                    {
+                        errors.Add($"Namespace function '{qualifiedName}' arity mismatch: runtime={memberFn.Arity}, registry={registryNsFn.Parameters.Length}.");
+                    }
+                }
+                else if (memberValue is long or double or string or bool)
+                {
+                    string qualifiedName = $"{nsName}.{memberName}";
+                    if (!StdlibRegistry.TryGetNamespaceConstant(qualifiedName, out _))
+                    {
+                        errors.Add($"Namespace constant '{qualifiedName}' exists at runtime but is missing from StdlibRegistry.NamespaceConstants.");
+                    }
+                }
+            }
+        }
+
+        // Validate namespaces: registry → runtime.
+        foreach (var registryNsFn in StdlibRegistry.NamespaceFunctions)
+        {
+            if (!runtimeNamespaces.TryGetValue(registryNsFn.Namespace, out var runtimeNs))
+            {
+                // Namespace may be intentionally absent due to capability restrictions — skip.
+                continue;
+            }
+
+            if (!runtimeNs.HasMember(registryNsFn.Name))
+            {
+                errors.Add($"Namespace function '{registryNsFn.QualifiedName}' is in StdlibRegistry but not registered at runtime.");
+            }
+        }
+
+        if (errors.Count > 0)
+        {
+            throw new InvalidOperationException(
+                $"Built-in registration is out of sync with StdlibRegistry:{System.Environment.NewLine}{string.Join(System.Environment.NewLine, errors)}");
         }
     }
 

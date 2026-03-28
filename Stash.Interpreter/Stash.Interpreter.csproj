@@ -11,6 +11,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Stash.Core\Stash.Core.csproj" />
+    <ProjectReference Include="..\Stash.Stdlib\Stash.Stdlib.csproj" />
   </ItemGroup>
 
   <ItemGroup>

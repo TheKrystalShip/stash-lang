@@ -385,15 +385,51 @@ public static class SftpBuiltIns
 
                 // Format permissions as octal string (e.g., "755")
                 int mode = 0;
-                if (attrs.OwnerCanRead) mode += 400;
-                if (attrs.OwnerCanWrite) mode += 200;
-                if (attrs.OwnerCanExecute) mode += 100;
-                if (attrs.GroupCanRead) mode += 40;
-                if (attrs.GroupCanWrite) mode += 20;
-                if (attrs.GroupCanExecute) mode += 10;
-                if (attrs.OthersCanRead) mode += 4;
-                if (attrs.OthersCanWrite) mode += 2;
-                if (attrs.OthersCanExecute) mode += 1;
+                if (attrs.OwnerCanRead)
+                {
+                    mode += 400;
+                }
+
+                if (attrs.OwnerCanWrite)
+                {
+                    mode += 200;
+                }
+
+                if (attrs.OwnerCanExecute)
+                {
+                    mode += 100;
+                }
+
+                if (attrs.GroupCanRead)
+                {
+                    mode += 40;
+                }
+
+                if (attrs.GroupCanWrite)
+                {
+                    mode += 20;
+                }
+
+                if (attrs.GroupCanExecute)
+                {
+                    mode += 10;
+                }
+
+                if (attrs.OthersCanRead)
+                {
+                    mode += 4;
+                }
+
+                if (attrs.OthersCanWrite)
+                {
+                    mode += 2;
+                }
+
+                if (attrs.OthersCanExecute)
+                {
+                    mode += 1;
+                }
+
                 dict.Set("permissions", mode.ToString());
 
                 return dict;

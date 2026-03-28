@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Stdlib;
 
 /// <summary>
 /// Validates a parsed Stash AST against the <see cref="ScopeTree"/> produced by
@@ -43,10 +44,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private int _functionDepth;
 
     /// <summary>Set of names that are always in scope (built-in functions, namespaces, etc.).</summary>
-    private static readonly HashSet<string> _builtInNames = BuiltInRegistry.KnownNames;
+    private static readonly HashSet<string> _builtInNames = StdlibRegistry.KnownNames;
 
     /// <summary>Set of type names that are always valid (primitives and built-in struct names).</summary>
-    private static readonly HashSet<string> _validBuiltInTypes = BuiltInRegistry.ValidTypes;
+    private static readonly HashSet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
 
     /// <summary>
     /// Initializes a new <see cref="SemanticValidator"/> for the given scope tree.
@@ -579,7 +580,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <summary>
     /// Validates a function call: checks arity (too-few / too-many arguments) and per-argument
     /// type compatibility against the callee's parameter types. For built-in namespace calls
-    /// (e.g. <c>http.get</c>), validates arity against <see cref="BuiltInRegistry"/>.
+    /// (e.g. <c>http.get</c>), validates arity against <see cref="StdlibRegistry"/>.
     /// Recurses into all argument expressions.
     /// </summary>
     /// <param name="expr">The call expression to validate.</param>
@@ -638,10 +639,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             }
         }
         else if (expr.Callee is DotExpr dot && dot.Object is IdentifierExpr nsId &&
-                 BuiltInRegistry.IsBuiltInNamespace(nsId.Name.Lexeme))
+                 StdlibRegistry.IsBuiltInNamespace(nsId.Name.Lexeme))
         {
             var qualifiedName = $"{nsId.Name.Lexeme}.{dot.Name.Lexeme}";
-            if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out var func) &&
+            if (StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out var func) &&
                 !func.IsVariadic &&
                 expr.Arguments.Count != func.Parameters.Length)
             {

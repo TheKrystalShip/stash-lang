@@ -55,7 +55,10 @@ public static class AuthHelper
             return DateTime.UtcNow.AddMinutes(minutes);
         }
         if (int.TryParse(s, out int defaultDays))
+        {
             return DateTime.UtcNow.AddDays(defaultDays);
+        }
+
         throw new FormatException($"Unrecognised token expiry format: '{expiry}'. Use formats like '30d', '12h', or '90m'.");
     }
 }

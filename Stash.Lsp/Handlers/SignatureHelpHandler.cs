@@ -9,6 +9,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
+using Stash.Stdlib;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 
@@ -21,7 +22,7 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// Scans backwards from the cursor offset to locate the nearest enclosing open parenthesis
 /// via <see cref="FindCallContext"/>, extracts the function name, and counts commas to
 /// determine the active parameter index. Built-in functions and namespace functions are
-/// looked up from <see cref="BuiltInRegistry"/>; user-defined functions are resolved via
+/// looked up from <see cref="StdlibRegistry"/>; user-defined functions are resolved via
 /// <see cref="ScopeTree.FindDefinition"/> from the cached <see cref="AnalysisResult"/>.
 /// </para>
 /// <para>
@@ -92,13 +93,13 @@ public class SignatureHelpHandler : SignatureHelpHandlerBase
         }
 
         // Try built-in signatures first
-        if (BuiltInRegistry.TryGetFunction(functionName, out var builtInFn))
+        if (StdlibRegistry.TryGetFunction(functionName, out var builtInFn))
         {
             _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
             return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(builtInFn.Detail, ExtractParamLabels(builtInFn.Detail), activeParam, builtInFn.Documentation));
         }
 
-        if (BuiltInRegistry.TryGetNamespaceFunction(functionName, out var nsFn))
+        if (StdlibRegistry.TryGetNamespaceFunction(functionName, out var nsFn))
         {
             _logger.LogDebug("SignatureHelp: resolved {FuncName} for {Uri}", functionName, request.TextDocument.Uri);
             return Task.FromResult<SignatureHelp?>(BuildSignatureHelp(nsFn.Detail, ExtractParamLabels(nsFn.Detail), activeParam, nsFn.Documentation));

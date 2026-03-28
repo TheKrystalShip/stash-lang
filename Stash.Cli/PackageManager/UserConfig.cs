@@ -143,7 +143,9 @@ public sealed class UserConfig
     {
         string? envToken = Environment.GetEnvironmentVariable("STASH_TOKEN");
         if (!string.IsNullOrEmpty(envToken))
+        {
             return envToken;
+        }
 
         var config = Load();
         return config.GetToken(registryUrl);
@@ -161,15 +163,21 @@ public sealed class UserConfig
     public static string ResolveRegistryUrl(string? providedUrl)
     {
         if (!string.IsNullOrEmpty(providedUrl))
+        {
             return providedUrl;
+        }
 
         string? envUrl = Environment.GetEnvironmentVariable("STASH_REGISTRY_URL");
         if (!string.IsNullOrEmpty(envUrl))
+        {
             return envUrl;
+        }
 
         var config = Load();
         if (!string.IsNullOrEmpty(config.DefaultRegistry))
+        {
             return config.DefaultRegistry;
+        }
 
         return DefaultRegistryUrl;
     }

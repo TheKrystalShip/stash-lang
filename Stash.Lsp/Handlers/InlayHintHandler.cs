@@ -9,6 +9,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Client.Capabilities;
 using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
+using Stash.Stdlib;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 using Stash.Parsing.AST;
@@ -20,7 +21,7 @@ using Stash.Parsing.AST;
 /// <remarks>
 /// <para>
 /// For each call expression in the document's AST the handler looks up the target function's
-/// parameter names — first in <see cref="BuiltInRegistry"/> (built-in and namespace functions),
+/// parameter names — first in <see cref="StdlibRegistry"/> (built-in and namespace functions),
 /// then in the <see cref="AnalysisEngine"/> symbol table for user-defined functions.  A
 /// <see cref="InlayHintKind.Parameter"/> hint labelled <c>&lt;name&gt;:</c> is inserted before
 /// each argument whose name differs from the corresponding parameter name.
@@ -257,11 +258,11 @@ public class InlayHintHandler : InlayHintsHandlerBase
 
         string[]? paramNames = null;
 
-        if (BuiltInRegistry.TryGetFunction(funcName, out var builtInFn))
+        if (StdlibRegistry.TryGetFunction(funcName, out var builtInFn))
         {
             paramNames = builtInFn.ParamNames;
         }
-        else if (BuiltInRegistry.TryGetNamespaceFunction(funcName, out var nsFn))
+        else if (StdlibRegistry.TryGetNamespaceFunction(funcName, out var nsFn))
         {
             paramNames = nsFn.ParamNames;
         }

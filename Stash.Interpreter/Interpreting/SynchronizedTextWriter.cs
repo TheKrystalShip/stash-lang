@@ -24,49 +24,77 @@ internal sealed class SynchronizedTextWriter : TextWriter
 
     public override Encoding Encoding
     {
-        get { lock (_lock) return _inner.Encoding; }
+        get { lock (_lock)
+            {
+                return _inner.Encoding;
+            }
+        }
     }
 
     public override void Write(char value)
     {
-        lock (_lock) _inner.Write(value);
+        lock (_lock)
+        {
+            _inner.Write(value);
+        }
     }
 
     public override void Write(string? value)
     {
-        lock (_lock) _inner.Write(value);
+        lock (_lock)
+        {
+            _inner.Write(value);
+        }
     }
 
     public override void Write(char[] buffer, int index, int count)
     {
-        lock (_lock) _inner.Write(buffer, index, count);
+        lock (_lock)
+        {
+            _inner.Write(buffer, index, count);
+        }
     }
 
     public override void WriteLine()
     {
-        lock (_lock) _inner.WriteLine();
+        lock (_lock)
+        {
+            _inner.WriteLine();
+        }
     }
 
     public override void WriteLine(string? value)
     {
-        lock (_lock) _inner.WriteLine(value);
+        lock (_lock)
+        {
+            _inner.WriteLine(value);
+        }
     }
 
     public override void Flush()
     {
-        lock (_lock) _inner.Flush();
+        lock (_lock)
+        {
+            _inner.Flush();
+        }
     }
 
     public override void Close()
     {
-        lock (_lock) _inner.Close();
+        lock (_lock)
+        {
+            _inner.Close();
+        }
     }
 
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            lock (_lock) _inner.Dispose();
+            lock (_lock)
+            {
+                _inner.Dispose();
+            }
         }
     }
 }

@@ -12,6 +12,7 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
 using Stash.Analysis;
+using Stash.Stdlib;
 using Stash.Lsp.Analysis;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 using LspCompletionItemKind = OmniSharp.Extensions.LanguageServer.Protocol.Models.CompletionItemKind;
@@ -139,7 +140,7 @@ public class CompletionHandler : CompletionHandlerBase
         var items = new List<CompletionItem>();
 
         // Keywords
-        foreach (var kw in BuiltInRegistry.Keywords)
+        foreach (var kw in StdlibRegistry.Keywords)
         {
             items.Add(new CompletionItem
             {
@@ -150,7 +151,7 @@ public class CompletionHandler : CompletionHandlerBase
         }
 
         // Built-in functions
-        foreach (var fn in BuiltInRegistry.Functions)
+        foreach (var fn in StdlibRegistry.Functions)
         {
             items.Add(new CompletionItem
             {
@@ -164,7 +165,7 @@ public class CompletionHandler : CompletionHandlerBase
         }
 
         // Built-in namespaces
-        foreach (var ns in BuiltInRegistry.NamespaceNames)
+        foreach (var ns in StdlibRegistry.NamespaceNames)
         {
             items.Add(new CompletionItem
             {
@@ -271,11 +272,15 @@ public class CompletionHandler : CompletionHandlerBase
         // Walk backwards from cursor to find the start of the current partial word
         int pos = col;
         while (pos > 0 && (char.IsLetterOrDigit(line[pos - 1]) || line[pos - 1] == '_'))
+        {
             pos--;
+        }
 
         // Skip whitespace before the partial word
         while (pos > 0 && char.IsWhiteSpace(line[pos - 1]))
+        {
             pos--;
+        }
 
         // Check if the two characters before are "is" preceded by a non-identifier char (or start of line)
         if (pos >= 2 && line[pos - 1] == 's' && line[pos - 2] == 'i')
@@ -294,7 +299,7 @@ public class CompletionHandler : CompletionHandlerBase
     private static CompletionList BuildTypeCompletionList()
     {
         var items = new List<CompletionItem>();
-        foreach (var (name, desc) in BuiltInRegistry.TypeDescriptions)
+        foreach (var (name, desc) in StdlibRegistry.TypeDescriptions)
         {
             items.Add(new CompletionItem
             {
@@ -354,9 +359,9 @@ public class CompletionHandler : CompletionHandlerBase
         var items = new List<CompletionItem>();
 
         // Check if it's a known built-in namespace
-        if (BuiltInRegistry.IsBuiltInNamespace(prefix))
+        if (StdlibRegistry.IsBuiltInNamespace(prefix))
         {
-            foreach (var fn in BuiltInRegistry.GetNamespaceMembers(prefix))
+            foreach (var fn in StdlibRegistry.GetNamespaceMembers(prefix))
             {
                 items.Add(new CompletionItem
                 {
@@ -368,7 +373,7 @@ public class CompletionHandler : CompletionHandlerBase
                         : null
                 });
             }
-            foreach (var c in BuiltInRegistry.GetNamespaceConstants(prefix))
+            foreach (var c in StdlibRegistry.GetNamespaceConstants(prefix))
             {
                 items.Add(new CompletionItem
                 {
@@ -377,7 +382,7 @@ public class CompletionHandler : CompletionHandlerBase
                     Detail = c.Detail
                 });
             }
-            foreach (var e in BuiltInRegistry.Enums.Where(e => e.Namespace == prefix))
+            foreach (var e in StdlibRegistry.Enums.Where(e => e.Namespace == prefix))
             {
                 items.Add(new CompletionItem
                 {
@@ -442,8 +447,8 @@ public class CompletionHandler : CompletionHandlerBase
                 }
                 else
                 {
-                    // Fallback: check built-in structs from BuiltInRegistry
-                    var builtInStruct = BuiltInRegistry.Structs.FirstOrDefault(s => s.Name == structName);
+                    // Fallback: check built-in structs from StdlibRegistry
+                    var builtInStruct = StdlibRegistry.Structs.FirstOrDefault(s => s.Name == structName);
                     if (builtInStruct != null)
                     {
                         foreach (var field in builtInStruct.Fields)
@@ -495,7 +500,7 @@ public class CompletionHandler : CompletionHandlerBase
                 int dotIndex = prefix.LastIndexOf('.');
                 string nsName = prefix.Substring(0, dotIndex);
                 string enumName = prefix.Substring(dotIndex + 1);
-                if (BuiltInRegistry.IsBuiltInNamespace(nsName))
+                if (StdlibRegistry.IsBuiltInNamespace(nsName))
                 {
                     var nsEnumDef = allForEnum.FirstOrDefault(s => s.Name == enumName && s.Kind == StashSymbolKind.Enum && s.ParentName == nsName);
                     if (nsEnumDef != null)

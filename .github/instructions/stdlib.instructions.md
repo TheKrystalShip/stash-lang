@@ -110,9 +110,9 @@ Built-ins interact with these runtime types:
 | `StashRange`                   | Range object (e.g., `1..10`). Properties: `Start`, `End`, `Step`.                                                                      |
 | `IStashCallable`               | Interface for callable values (functions, lambdas, bound methods).                                                                     |
 
-## LSP Integration (BuiltInRegistry.cs)
+## LSP Integration (StdlibRegistry)
 
-When adding a new function, also register its metadata in `Stash.Lsp/Analysis/BuiltInRegistry.cs` for IDE support:
+When adding a new function, also register its metadata in `Stash.Stdlib/Registry/StdlibRegistry.cs` for IDE support:
 
 ```csharp
 new NamespaceFunction("foo", "bar",
@@ -129,7 +129,7 @@ Documentation uses `@param name description` and `@return description` tags for 
 Checklist:
 
 1. **Implementation** — Add function in the appropriate `*BuiltIns.cs` file using the registration pattern above
-2. **LSP metadata** — Register in `Stash.Lsp/Analysis/BuiltInRegistry.cs` with params, return type, and documentation
+2. **LSP metadata** — Register in `Stash.Stdlib/Registry/StdlibRegistry.cs` with params, return type, and documentation
 3. **Tests** — Add tests in the matching `Stash.Tests/Interpreting/*BuiltInsTests.cs` file using `{Function}_{Scenario}_{Expected}()` naming
 4. **Documentation** — Update `docs/Stash — Standard Library Reference.md` with function table entry and usage example
 

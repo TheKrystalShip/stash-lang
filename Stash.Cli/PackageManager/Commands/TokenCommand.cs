@@ -56,19 +56,39 @@ public static class TokenCommand
             switch (args[i])
             {
                 case "--scope":
-                    if (i + 1 < args.Length) scope = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        scope = args[++i];
+                    }
+
                     break;
                 case "--description":
-                    if (i + 1 < args.Length) description = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        description = args[++i];
+                    }
+
                     break;
                 case "--expires-in":
-                    if (i + 1 < args.Length) expiresIn = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        expiresIn = args[++i];
+                    }
+
                     break;
                 case "--registry":
-                    if (i + 1 < args.Length) registryUrl = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        registryUrl = args[++i];
+                    }
+
                     break;
                 case "--token":
-                    if (i + 1 < args.Length) cliToken = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        cliToken = args[++i];
+                    }
+
                     break;
             }
         }
@@ -78,7 +98,9 @@ public static class TokenCommand
 
         var result = client.CreateToken(scope, description, expiresIn);
         if (result == null)
+        {
             throw new InvalidOperationException("Token creation failed.");
+        }
 
         Console.WriteLine($"Token created successfully.");
         Console.WriteLine($"  Token:       {result.Token}");
@@ -86,7 +108,10 @@ public static class TokenCommand
         Console.WriteLine($"  Scope:       {result.Scope}");
         Console.WriteLine($"  Expires at:  {result.ExpiresAt:u}");
         if (result.Description != null)
+        {
             Console.WriteLine($"  Description: {result.Description}");
+        }
+
         Console.WriteLine();
         Console.WriteLine("Save this token — it will not be shown again.");
     }
@@ -101,10 +126,18 @@ public static class TokenCommand
             switch (args[i])
             {
                 case "--registry":
-                    if (i + 1 < args.Length) registryUrl = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        registryUrl = args[++i];
+                    }
+
                     break;
                 case "--token":
-                    if (i + 1 < args.Length) cliToken = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        cliToken = args[++i];
+                    }
+
                     break;
             }
         }
@@ -139,20 +172,33 @@ public static class TokenCommand
             switch (args[i])
             {
                 case "--registry":
-                    if (i + 1 < args.Length) registryUrl = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        registryUrl = args[++i];
+                    }
+
                     break;
                 case "--token":
-                    if (i + 1 < args.Length) cliToken = args[++i];
+                    if (i + 1 < args.Length)
+                    {
+                        cliToken = args[++i];
+                    }
+
                     break;
                 default:
                     if (!args[i].StartsWith("--") && tokenId == null)
+                    {
                         tokenId = args[i];
+                    }
+
                     break;
             }
         }
 
         if (string.IsNullOrEmpty(tokenId))
+        {
             throw new InvalidOperationException("Token ID is required. Usage: stash pkg token revoke <tokenId>");
+        }
 
         registryUrl = UserConfig.ResolveRegistryUrl(registryUrl);
         var client = ResolveClient(registryUrl, cliToken);
@@ -170,13 +216,17 @@ public static class TokenCommand
             ?? Environment.GetEnvironmentVariable("STASH_TOKEN");
 
         if (!string.IsNullOrEmpty(token))
+        {
             return new RegistryClient(registryUrl, token);
+        }
 
         var config = UserConfig.Load();
         var entry = config.GetEntry(registryUrl);
         if (entry?.Token == null)
+        {
             throw new InvalidOperationException(
                 $"Not logged in to registry '{registryUrl}'. Run 'stash pkg login' first, set the STASH_TOKEN environment variable, or use --token.");
+        }
 
         return new RegistryClient(
             registryUrl,

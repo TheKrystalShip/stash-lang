@@ -92,9 +92,21 @@ public class StashFuture
     {
         get
         {
-            if (_task.IsCanceled) return "Cancelled";
-            if (_task.IsFaulted) return "Failed";
-            if (_task.IsCompleted) return "Completed";
+            if (_task.IsCanceled)
+            {
+                return "Cancelled";
+            }
+
+            if (_task.IsFaulted)
+            {
+                return "Failed";
+            }
+
+            if (_task.IsCompleted)
+            {
+                return "Completed";
+            }
+
             return "Running";
         }
     }

@@ -5,6 +5,7 @@ using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Stdlib;
 
 /// <summary>
 /// Walks the AST to collect symbol definitions (variables, functions, structs, enums,
@@ -24,7 +25,7 @@ using Stash.Parsing.AST;
 /// <see cref="ScopeTree.FindReferences"/> and <see cref="SemanticValidator"/>.
 /// </para>
 /// <para>
-/// Built-in symbols (functions, structs, namespaces from <see cref="BuiltInRegistry"/>)
+/// Built-in symbols (functions, structs, namespaces from <see cref="StdlibRegistry"/>)
 /// are pre-populated into the global scope when <see cref="IncludeBuiltIns"/> is
 /// <see langword="true"/> (the default). They are assigned span line 0 so that
 /// position-based filters exclude them from user-facing declaration lists.
@@ -46,7 +47,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     private (string Name, string TypeHint, BlockStmt Target)? _pendingNarrowing;
 
     /// <summary>
-    /// Gets or sets whether built-in symbols from <see cref="BuiltInRegistry"/> are
+    /// Gets or sets whether built-in symbols from <see cref="StdlibRegistry"/> are
     /// pre-registered into the global scope before traversal begins. Defaults to <see langword="true"/>.
     /// Set to <see langword="false"/> in tests or when built-ins are injected separately.
     /// </summary>
@@ -83,7 +84,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     }
 
     /// <summary>
-    /// Registers all built-in symbols from <see cref="BuiltInRegistry"/> into the current
+    /// Registers all built-in symbols from <see cref="StdlibRegistry"/> into the current
     /// (global) scope at source line 0 so they are always visible but excluded from
     /// user-facing declaration lists.
     /// </summary>
@@ -92,7 +93,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         var span = new SourceSpan(file, 0, 0, 0, 0);
 
-        foreach (var s in BuiltInRegistry.Structs)
+        foreach (var s in StdlibRegistry.Structs)
         {
             _currentScope.AddSymbol(new SymbolInfo(s.Name, SymbolKind.Struct, span, span, s.Detail));
             foreach (var f in s.Fields)
@@ -102,7 +103,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             }
         }
 
-        foreach (var e in BuiltInRegistry.Enums)
+        foreach (var e in StdlibRegistry.Enums)
         {
             _currentScope.AddSymbol(new SymbolInfo(e.Name, SymbolKind.Enum, span, span, e.Detail, parentName: e.Namespace));
             foreach (var member in e.Members)
@@ -111,7 +112,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             }
         }
 
-        foreach (var i in BuiltInRegistry.Interfaces)
+        foreach (var i in StdlibRegistry.Interfaces)
         {
             _currentScope.AddSymbol(new SymbolInfo(i.Name, SymbolKind.Interface, span, span, i.Detail));
             foreach (var f in i.Fields)
@@ -121,12 +122,12 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             }
         }
 
-        foreach (var fn in BuiltInRegistry.Functions)
+        foreach (var fn in StdlibRegistry.Functions)
         {
             _currentScope.AddSymbol(new SymbolInfo(fn.Name, SymbolKind.Function, span, span, fn.Detail, typeHint: fn.ReturnType, parameterNames: fn.ParamNames));
         }
 
-        foreach (var ns in BuiltInRegistry.NamespaceNames)
+        foreach (var ns in StdlibRegistry.NamespaceNames)
         {
             _currentScope.AddSymbol(new SymbolInfo(ns, SymbolKind.Namespace, span, detail: $"namespace {ns}"));
         }
@@ -423,7 +424,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
                 paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
             }
             var methodSig = $"{method.Name.Lexeme}({string.Join(", ", paramParts)})";
-            if (method.ReturnType != null) methodSig += $" -> {method.ReturnType.Lexeme}";
+            if (method.ReturnType != null)
+            {
+                methodSig += $" -> {method.ReturnType.Lexeme}";
+            }
+
             memberParts.Add(methodSig);
         }
 
@@ -448,7 +453,10 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
                 paramParts.Add(paramType != null ? $"{paramName}: {paramType}" : paramName);
             }
             var methodDetail = $"fn {method.Name.Lexeme}({string.Join(", ", paramParts)})";
-            if (method.ReturnType != null) methodDetail += $" -> {method.ReturnType.Lexeme}";
+            if (method.ReturnType != null)
+            {
+                methodDetail += $" -> {method.ReturnType.Lexeme}";
+            }
 
             var returnTypeStr = method.ReturnType?.Lexeme;
             var paramNames = method.Parameters.Select(p => p.Lexeme).ToArray();
@@ -768,7 +776,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         expr.Left.Accept(this);
         if (expr.TypeName != null)
         {
-            if (expr.TypeName.Type == TokenType.Identifier && !BuiltInRegistry.ValidTypes.Contains(expr.TypeName.Lexeme))
+            if (expr.TypeName.Type == TokenType.Identifier && !StdlibRegistry.ValidTypes.Contains(expr.TypeName.Lexeme))
             {
                 RecordReference(expr.TypeName.Lexeme, expr.TypeName.Span, ReferenceKind.TypeUse);
             }

@@ -6,6 +6,7 @@ using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Stdlib;
 using StashSymbolKind = Stash.Analysis.SymbolKind;
 
 public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
@@ -96,13 +97,13 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             return;
         }
 
-        if (BuiltInRegistry.IsBuiltInFunction(token.Lexeme))
+        if (StdlibRegistry.IsBuiltInFunction(token.Lexeme))
         {
             EmitFromToken(token, TokenTypeFunction, ModifierReadonly);
             return;
         }
 
-        if (BuiltInRegistry.IsBuiltInNamespace(token.Lexeme))
+        if (StdlibRegistry.IsBuiltInNamespace(token.Lexeme))
         {
             EmitFromToken(token, TokenTypeNamespace, 0);
         }
@@ -117,23 +118,23 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         {
             string namespaceName = objId.Name.Lexeme;
 
-            if (BuiltInRegistry.IsBuiltInNamespace(namespaceName))
+            if (StdlibRegistry.IsBuiltInNamespace(namespaceName))
             {
                 string qualifiedName = namespaceName + "." + memberName;
 
-                if (BuiltInRegistry.TryGetNamespaceFunction(qualifiedName, out _))
+                if (StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out _))
                 {
                     EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
                     return;
                 }
 
-                if (BuiltInRegistry.TryGetNamespaceConstant(qualifiedName, out _))
+                if (StdlibRegistry.TryGetNamespaceConstant(qualifiedName, out _))
                 {
                     EmitFromToken(memberToken, TokenTypeVariable, ModifierReadonly);
                     return;
                 }
 
-                if (BuiltInRegistry.Enums.Any(e => e.Name == memberName && e.Namespace == namespaceName))
+                if (StdlibRegistry.Enums.Any(e => e.Name == memberName && e.Namespace == namespaceName))
                 {
                     EmitFromToken(memberToken, TokenTypeType, 0);
                     return;
@@ -181,7 +182,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             return;
         }
 
-        if (BuiltInRegistry.IsBuiltInFunction(memberName))
+        if (StdlibRegistry.IsBuiltInFunction(memberName))
         {
             EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
             return;

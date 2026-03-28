@@ -336,9 +336,14 @@ public class AuthController : ControllerBase
         if (!string.IsNullOrEmpty(body?.ExpiresIn))
         {
             if (duration < TimeSpan.FromHours(1))
+            {
                 return BadRequest(new ErrorResponse { Error = "Token expiry must be at least 1 hour" });
+            }
+
             if (duration > TimeSpan.FromDays(365))
+            {
                 return BadRequest(new ErrorResponse { Error = "Token expiry must not exceed 365 days" });
+            }
         }
 
         string tokenId = Guid.NewGuid().ToString();

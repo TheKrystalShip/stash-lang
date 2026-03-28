@@ -26,6 +26,7 @@
     <ProjectReference Include="..\Stash.Interpreter\Stash.Interpreter.csproj" />
     <ProjectReference Include="..\Stash.Lsp\Stash.Lsp.csproj" />
     <ProjectReference Include="..\Stash.Registry\Stash.Registry.csproj" />
+    <ProjectReference Include="..\Stash.Stdlib\Stash.Stdlib.csproj" />
   </ItemGroup>
 
 </Project>

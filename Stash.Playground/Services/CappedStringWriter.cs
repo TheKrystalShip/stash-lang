@@ -22,7 +22,10 @@ public sealed class CappedStringWriter : TextWriter
 
     public override void Write(char value)
     {
-        if (IsTruncated) return;
+        if (IsTruncated)
+        {
+            return;
+        }
 
         if (_sb.Length >= _maxLength)
         {
@@ -35,7 +38,10 @@ public sealed class CappedStringWriter : TextWriter
 
     public override void Write(string? value)
     {
-        if (value is null || IsTruncated) return;
+        if (value is null || IsTruncated)
+        {
+            return;
+        }
 
         long remaining = _maxLength - _sb.Length;
         if (remaining <= 0)
@@ -57,7 +63,10 @@ public sealed class CappedStringWriter : TextWriter
 
     public override void Write(char[] buffer, int index, int count)
     {
-        if (IsTruncated) return;
+        if (IsTruncated)
+        {
+            return;
+        }
 
         long remaining = _maxLength - _sb.Length;
         if (remaining <= 0)

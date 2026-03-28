@@ -6,10 +6,13 @@ Stash is a cross-platform scripting language for system administration. The inte
 
 ```
 Stash.Core          → Lexer (two-pointer scanner), Parser (recursive-descent), 46 AST node types
+Stash.Stdlib        → Built-in metadata registry, model records, single source of truth for all namespaces
 Stash.Interpreter   → Tree-walk interpreter, Environment chain, 26 built-in namespaces
+Stash.Analysis      → Static analysis engine, resolvers, visitors for diagnostics and tooling
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol (OmniSharp — NOT AOT, requires reflection)
 Stash.Dap           → Debug Adapter Protocol (OmniSharp — NOT AOT, requires reflection)
+Stash.Playground    → Browser-based interactive playground (Blazor WASM, Monaco editor)
 Stash.Registry      → Package registry server (ASP.NET Core, EF Core, JWT auth)
 Stash.Tests         → xUnit test suite (~2,000 tests)
 ```

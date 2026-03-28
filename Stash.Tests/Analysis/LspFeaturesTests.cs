@@ -5,6 +5,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Analysis;
 using Stash.Lsp.Analysis;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Analysis;
 
@@ -576,25 +577,25 @@ public class LspFeaturesTests
     public void SemanticTokens_DotAccessMember_IsNotNamespace()
     {
         // "time" is a built-in namespace, but in "e.time" it's a property access
-        Assert.True(BuiltInRegistry.IsBuiltInNamespace("time"));
+        Assert.True(StdlibRegistry.IsBuiltInNamespace("time"));
 
         // In dot-access context (afterDot=true), the semantic token handler
         // skips namespace matches — verify the registry would match standalone
-        Assert.False(BuiltInRegistry.IsBuiltInFunction("time"));
+        Assert.False(StdlibRegistry.IsBuiltInFunction("time"));
     }
 
     [Fact]
     public void SemanticTokens_NamespaceNameInDotAccess_FilteredByRule()
     {
         // Verify that "time" is recognized as a namespace name
-        Assert.True(BuiltInRegistry.IsBuiltInNamespace("time"));
+        Assert.True(StdlibRegistry.IsBuiltInNamespace("time"));
 
         // And that it's NOT a built-in function (standalone function like len, typeof)
-        Assert.False(BuiltInRegistry.IsBuiltInFunction("time"));
+        Assert.False(StdlibRegistry.IsBuiltInFunction("time"));
 
         // Rule 2 states: after dot, never classify as namespace.
-        // This means BuiltInRegistry.IsBuiltInNamespace() should not be consulted
-        // after a dot — only BuiltInRegistry.IsBuiltInFunction() applies.
+        // This means StdlibRegistry.IsBuiltInNamespace() should not be consulted
+        // after a dot — only StdlibRegistry.IsBuiltInFunction() applies.
     }
 
     [Fact]
@@ -602,7 +603,7 @@ public class LspFeaturesTests
     {
         // "true", "false", "null" are keyword tokens but valid member names after dot
         // In "assert.true()", "true" should be classified as function, not keyword
-        Assert.True(BuiltInRegistry.IsBuiltInNamespace("assert"));
+        Assert.True(StdlibRegistry.IsBuiltInNamespace("assert"));
 
         // Verify the lexer tokenizes "true" as TokenType.True (a keyword)
         var lexer = new Lexer("true", "<test>");
@@ -629,22 +630,22 @@ public class LspFeaturesTests
     public void SemanticTokens_BuiltInNamespace_DoesNotMatchFunctions()
     {
         // Namespaces and standalone functions are disjoint sets
-        Assert.True(BuiltInRegistry.IsBuiltInNamespace("io"));
-        Assert.True(BuiltInRegistry.IsBuiltInNamespace("str"));
-        Assert.True(BuiltInRegistry.IsBuiltInNamespace("arr"));
-        Assert.True(BuiltInRegistry.IsBuiltInNamespace("time"));
+        Assert.True(StdlibRegistry.IsBuiltInNamespace("io"));
+        Assert.True(StdlibRegistry.IsBuiltInNamespace("str"));
+        Assert.True(StdlibRegistry.IsBuiltInNamespace("arr"));
+        Assert.True(StdlibRegistry.IsBuiltInNamespace("time"));
 
-        Assert.False(BuiltInRegistry.IsBuiltInFunction("io"));
-        Assert.False(BuiltInRegistry.IsBuiltInFunction("str"));
-        Assert.False(BuiltInRegistry.IsBuiltInFunction("arr"));
-        Assert.False(BuiltInRegistry.IsBuiltInFunction("time"));
+        Assert.False(StdlibRegistry.IsBuiltInFunction("io"));
+        Assert.False(StdlibRegistry.IsBuiltInFunction("str"));
+        Assert.False(StdlibRegistry.IsBuiltInFunction("arr"));
+        Assert.False(StdlibRegistry.IsBuiltInFunction("time"));
 
         // Global functions are NOT namespaces
-        Assert.True(BuiltInRegistry.IsBuiltInFunction("len"));
-        Assert.True(BuiltInRegistry.IsBuiltInFunction("typeof"));
+        Assert.True(StdlibRegistry.IsBuiltInFunction("len"));
+        Assert.True(StdlibRegistry.IsBuiltInFunction("typeof"));
 
-        Assert.False(BuiltInRegistry.IsBuiltInNamespace("len"));
-        Assert.False(BuiltInRegistry.IsBuiltInNamespace("typeof"));
+        Assert.False(StdlibRegistry.IsBuiltInNamespace("len"));
+        Assert.False(StdlibRegistry.IsBuiltInNamespace("typeof"));
     }
 
     [Fact]

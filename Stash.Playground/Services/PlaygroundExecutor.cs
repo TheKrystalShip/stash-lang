@@ -28,7 +28,9 @@ public sealed class PlaygroundExecutor
 
             string outputText = output.ToString();
             if (output.IsTruncated)
+            {
                 outputText += "\n\n... output truncated (512 KB limit) ...";
+            }
 
             if (result.Errors.Count > 0)
             {

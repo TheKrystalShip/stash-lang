@@ -262,7 +262,9 @@ public static class TomlBuiltIns
     private static object ConvertListToToml(List<object?> list)
     {
         if (list.Count == 0)
+        {
             return new TomlArray();
+        }
 
         bool allTables = true;
         foreach (var item in list)

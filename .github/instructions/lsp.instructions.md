@@ -117,7 +117,7 @@ Register new handlers in `StashLanguageServer.cs` via `.WithHandler<NewHandler>(
 | `AnalysisResult.cs`         | Output record: tokens, statements, symbols, diagnostics                       |
 | `ScopeTree.cs`              | Hierarchical scope tracking with `FindDefinition()`                           |
 | `SymbolInfo.cs`             | Symbol metadata (name, kind, type, span, documentation)                       |
-| `BuiltInRegistry.cs`        | Static registry of keywords, namespace functions, constants                   |
+| `StdlibRegistry` (in `Stash.Stdlib`) | Static registry of keywords, namespace functions, structs, enums, and valid types |
 | `TypeInferenceEngine.cs`    | Infers types from assignments, returns, annotations                           |
 | `SemanticValidator.cs`      | Validates names, types, arity, produces diagnostics                           |
 | `ImportResolver.cs`         | Resolves imports, tracks module dependencies                                  |

@@ -421,7 +421,11 @@ public class DebugSession : IDebugger
     {
         Trace($"Continue thread {threadId}");
         var thread = GetThread(threadId);
-        if (thread == null) return;
+        if (thread == null)
+        {
+            return;
+        }
+
         thread.StepMode = StepMode.None;
         Resume(thread);
     }
@@ -430,7 +434,11 @@ public class DebugSession : IDebugger
     public void Next(int threadId = MainThreadId)
     {
         var thread = GetThread(threadId);
-        if (thread == null) return;
+        if (thread == null)
+        {
+            return;
+        }
+
         thread.StepMode = StepMode.StepOver;
         thread.StepDepth = thread.Interpreter?.CallStack.Count ?? 0;
         Resume(thread);
@@ -440,7 +448,11 @@ public class DebugSession : IDebugger
     public void StepIn(int threadId = MainThreadId)
     {
         var thread = GetThread(threadId);
-        if (thread == null) return;
+        if (thread == null)
+        {
+            return;
+        }
+
         thread.StepMode = StepMode.StepIn;
         Resume(thread);
     }
@@ -449,7 +461,11 @@ public class DebugSession : IDebugger
     public void StepOut(int threadId = MainThreadId)
     {
         var thread = GetThread(threadId);
-        if (thread == null) return;
+        if (thread == null)
+        {
+            return;
+        }
+
         int depth = thread.Interpreter?.CallStack.Count ?? 0;
         if (depth == 0)
         {
@@ -482,7 +498,11 @@ public class DebugSession : IDebugger
         }
 
         var interpreter = thread.Interpreter;
-        if (interpreter == null) return frames; // Placeholder thread — not yet launched
+        if (interpreter == null)
+        {
+            return frames; // Placeholder thread — not yet launched
+        }
+
         var callStack = interpreter.CallStack;
         var pausedSpan = thread.PausedAtSpan;
 
@@ -756,7 +776,11 @@ public class DebugSession : IDebugger
         }
 
         interpreter ??= _interpreter;
-        if (interpreter == null) return "No interpreter";
+        if (interpreter == null)
+        {
+            return "No interpreter";
+        }
+
         env ??= interpreter.Globals;
 
         var (value, error) = interpreter.EvaluateString(expression, env);
@@ -812,7 +836,10 @@ public class DebugSession : IDebugger
                     }
                 }
 
-                if (found) break;
+                if (found)
+                {
+                    break;
+                }
             }
         }
 
@@ -977,7 +1004,10 @@ public class DebugSession : IDebugger
         }
 
         var thread = GetThread(threadId);
-        if (thread == null) return; // Unknown thread — skip debugging
+        if (thread == null)
+        {
+            return; // Unknown thread — skip debugging
+        }
 
         thread.PausedAtSpan = span;
         thread.PausedEnvironment = environment;
@@ -1050,7 +1080,10 @@ public class DebugSession : IDebugger
         }
 
         var thread = GetThread(threadId);
-        if (thread == null) return;
+        if (thread == null)
+        {
+            return;
+        }
 
         // Evaluate condition if present — use the thread's own interpreter so
         // conditions can see local variables from worker threads.
@@ -1107,7 +1140,10 @@ public class DebugSession : IDebugger
         if (_breakOnAllExceptions)
         {
             var thread = GetThread(threadId);
-            if (thread == null) return;
+            if (thread == null)
+            {
+                return;
+            }
 
             thread.PausedAtSpan = error.Span;
             thread.IsPaused = true;
@@ -1746,7 +1782,11 @@ public class DebugSession : IDebugger
     /// </summary>
     private bool ShouldStopForStep(ThreadState thread)
     {
-        if (thread.Interpreter == null) return false;
+        if (thread.Interpreter == null)
+        {
+            return false;
+        }
+
         int depth = thread.Interpreter.CallStack.Count;
         switch (thread.StepMode)
         {
