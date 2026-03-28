@@ -2,7 +2,6 @@ using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
-using Stash.Interpreting.Types;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 

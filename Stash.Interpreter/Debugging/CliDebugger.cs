@@ -8,7 +8,6 @@ using StashEnv = Stash.Interpreting.Environment;
 using Stash.Interpreting;
 using Stash.Runtime;
 using Stash.Interpreting.Types;
-using Stash.Runtime;
 using Stash.Runtime.Types;
 
 /// <summary>

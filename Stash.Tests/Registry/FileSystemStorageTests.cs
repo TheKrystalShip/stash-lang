@@ -1,9 +1,5 @@
-using System;
-using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 using Stash.Registry.Storage;
-using Xunit;
 
 namespace Stash.Tests.Registry;
 
@@ -36,7 +32,7 @@ public sealed class FileSystemStorageTests : IDisposable
 
         Assert.NotNull(result);
         using var reader = new StreamReader(result);
-        Assert.Equal("hello tarball", reader.ReadToEnd());
+        Assert.Equal("hello tarball", await reader.ReadToEndAsync());
     }
 
     [Fact]
@@ -106,6 +102,6 @@ public sealed class FileSystemStorageTests : IDisposable
         using Stream? result = await _storage.RetrieveAsync("@scope/my-pkg", "2.0.0");
         Assert.NotNull(result);
         using var reader = new StreamReader(result);
-        Assert.Equal("scoped content", reader.ReadToEnd());
+        Assert.Equal("scoped content", await reader.ReadToEndAsync());
     }
 }

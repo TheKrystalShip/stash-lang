@@ -1,6 +1,5 @@
 namespace Stash.Stdlib.BuiltIns;
 
-using System.Collections.Generic;
 using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;

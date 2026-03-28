@@ -1,17 +1,12 @@
-using System;
-using System.Collections.Generic;
 using System.Formats.Tar;
-using System.IO;
 using Microsoft.EntityFrameworkCore;
 using System.IO.Compression;
 using System.Text;
 using System.Text.Json;
-using System.Threading.Tasks;
 using Stash.Registry.Configuration;
 using Stash.Registry.Database;
 using Stash.Registry.Services;
 using Stash.Registry.Storage;
-using Xunit;
 using Stash.Registry.Database.Models;
 
 namespace Stash.Tests.Registry;

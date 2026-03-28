@@ -1,9 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Interpreting;
-using Stash.Runtime;
-using Stash.Runtime.Types;
-using Stash.Testing;
+using Stash.Tap;
 
 namespace Stash.Tests.Interpreting;
 
@@ -27,7 +25,7 @@ public class TestFilterTests
         interpreter.TestHarness = reporter;
         interpreter.TestFilter = filter;
         interpreter.Interpret(statements);
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
 
@@ -43,7 +41,7 @@ public class TestFilterTests
             ["test.stash > add"],
             "test.stash");
 
-        Assert.Equal(1, reporter.Passed);
+        Assert.Equal(1, reporter.PassedCount);
         Assert.Contains("test.stash > add", output);
         Assert.DoesNotContain("subtract", output);
     }
@@ -60,7 +58,7 @@ public class TestFilterTests
             ["test.stash > math > add"],
             "test.stash");
 
-        Assert.Equal(1, reporter.Passed);
+        Assert.Equal(1, reporter.PassedCount);
         Assert.Contains("math > add", output);
         Assert.DoesNotContain("sub", output);
     }
@@ -82,7 +80,7 @@ public class TestFilterTests
             ["test.stash > math"],
             "test.stash");
 
-        Assert.Equal(2, reporter.Passed);
+        Assert.Equal(2, reporter.PassedCount);
     }
 
     // ── Multiple filters (semicolon-separated -> array) ──────────────────────
@@ -98,7 +96,7 @@ public class TestFilterTests
             ["test.stash > alpha", "test.stash > gamma"],
             "test.stash");
 
-        Assert.Equal(2, reporter.Passed);
+        Assert.Equal(2, reporter.PassedCount);
         Assert.DoesNotContain("beta", output);
     }
 
@@ -113,8 +111,8 @@ public class TestFilterTests
             ["test.stash > nonexistent"],
             "test.stash");
 
-        Assert.Equal(0, reporter.Passed);
-        Assert.Equal(0, reporter.Failed);
+        Assert.Equal(0, reporter.PassedCount);
+        Assert.Equal(0, reporter.FailedCount);
         Assert.Contains("1..0", output); // Plan line should show 0 tests
     }
 
@@ -155,7 +153,7 @@ public class TestFilterTests
             ["test.stash > outer"],
             "test.stash");
 
-        Assert.Equal(2, reporter.Passed);
+        Assert.Equal(2, reporter.PassedCount);
     }
 
     // ── Filter with failing test ─────────────────────────────────────────────
@@ -170,8 +168,8 @@ public class TestFilterTests
             ["test.stash > bad"],
             "test.stash");
 
-        Assert.Equal(0, reporter.Passed);
-        Assert.Equal(1, reporter.Failed);
+        Assert.Equal(0, reporter.PassedCount);
+        Assert.Equal(1, reporter.FailedCount);
     }
 
     // ── Default (no filter) ──────────────────────────────────────────────────
@@ -194,8 +192,8 @@ public class TestFilterTests
         interpreter.TestHarness = reporter;
         // TestFilter is NOT set — should be null by default
         interpreter.Interpret(statements);
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
 
-        Assert.Equal(3, reporter.Passed);
+        Assert.Equal(3, reporter.PassedCount);
     }
 }

@@ -2077,7 +2077,7 @@ public class ParserTests
         var isExpr = Assert.IsType<IsExpr>(result);
         var left = Assert.IsType<IdentifierExpr>(isExpr.Left);
         Assert.Equal("x", left.Name.Lexeme);
-        Assert.Equal("int", isExpr.TypeName.Lexeme);
+        Assert.Equal("int", isExpr.TypeName!.Lexeme);
     }
 
     [Fact]
@@ -2085,7 +2085,7 @@ public class ParserTests
     {
         var result = ParseExpr("x is string");
         var isExpr = Assert.IsType<IsExpr>(result);
-        Assert.Equal("string", isExpr.TypeName.Lexeme);
+        Assert.Equal("string", isExpr.TypeName!.Lexeme);
     }
 
     [Fact]
@@ -2093,7 +2093,7 @@ public class ParserTests
     {
         var result = ParseExpr("x is null");
         var isExpr = Assert.IsType<IsExpr>(result);
-        Assert.Equal("null", isExpr.TypeName.Lexeme);
+        Assert.Equal("null", isExpr.TypeName!.Lexeme);
     }
 
     [Fact]
@@ -2102,7 +2102,7 @@ public class ParserTests
         var result = ParseExpr("(1 + 2) is int");
         var isExpr = Assert.IsType<IsExpr>(result);
         Assert.IsType<GroupingExpr>(isExpr.Left);
-        Assert.Equal("int", isExpr.TypeName.Lexeme);
+        Assert.Equal("int", isExpr.TypeName!.Lexeme);
     }
 
     [Fact]
@@ -2113,7 +2113,7 @@ public class ParserTests
         var equality = Assert.IsType<BinaryExpr>(result);
         Assert.Equal(TokenType.EqualEqual, equality.Operator.Type);
         var isExpr = Assert.IsType<IsExpr>(equality.Left);
-        Assert.Equal("int", isExpr.TypeName.Lexeme);
+        Assert.Equal("int", isExpr.TypeName!.Lexeme);
     }
 
     [Fact]
@@ -2124,9 +2124,9 @@ public class ParserTests
         var andExpr = Assert.IsType<BinaryExpr>(result);
         Assert.Equal(TokenType.AmpersandAmpersand, andExpr.Operator.Type);
         var leftIs = Assert.IsType<IsExpr>(andExpr.Left);
-        Assert.Equal("int", leftIs.TypeName.Lexeme);
+        Assert.Equal("int", leftIs.TypeName!.Lexeme);
         var rightIs = Assert.IsType<IsExpr>(andExpr.Right);
-        Assert.Equal("string", rightIs.TypeName.Lexeme);
+        Assert.Equal("string", rightIs.TypeName!.Lexeme);
     }
 
     [Fact]
@@ -2135,7 +2135,7 @@ public class ParserTests
         // User-defined struct/enum names are now accepted in `is` expressions
         var result = ParseExpr("x is MyStruct");
         var isExpr = Assert.IsType<IsExpr>(result);
-        Assert.Equal("MyStruct", isExpr.TypeName.Lexeme);
+        Assert.Equal("MyStruct", isExpr.TypeName!.Lexeme);
     }
 
     [Fact]
@@ -2146,7 +2146,7 @@ public class ParserTests
         {
             var result = ParseExpr($"x is {type}");
             var isExpr = Assert.IsType<IsExpr>(result);
-            Assert.Equal(type, isExpr.TypeName.Lexeme);
+            Assert.Equal(type, isExpr.TypeName!.Lexeme);
         }
     }
 }

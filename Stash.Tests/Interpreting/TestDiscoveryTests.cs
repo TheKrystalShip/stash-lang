@@ -1,9 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Interpreting;
-using Stash.Runtime;
-using Stash.Runtime.Types;
-using Stash.Testing;
+using Stash.Tap;
 
 namespace Stash.Tests.Interpreting;
 
@@ -27,7 +25,7 @@ public class TestDiscoveryTests
         interpreter.TestHarness = reporter;
         interpreter.DiscoveryMode = true;
         interpreter.Interpret(statements);
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
 
@@ -48,7 +46,7 @@ public class TestDiscoveryTests
         var reporter = new TapReporter(sw);
         interpreter.TestHarness = reporter;
         interpreter.Interpret(statements);
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
 
@@ -145,8 +143,8 @@ public class TestDiscoveryTests
             """, "test.stash");
 
         // No tests should have passed or failed — bodies weren't executed
-        Assert.Equal(0, reporter.Passed);
-        Assert.Equal(0, reporter.Failed);
+        Assert.Equal(0, reporter.PassedCount);
+        Assert.Equal(0, reporter.FailedCount);
     }
 
     [Fact]
@@ -234,7 +232,7 @@ public class TestDiscoveryTests
         interpreter.DiscoveryMode = true;
         interpreter.TestFilter = new[] { "test.stash > alpha" };
         interpreter.Interpret(statements);
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         var output = sw.ToString();
 
         Assert.Contains("# discovered: test.stash > alpha", output);

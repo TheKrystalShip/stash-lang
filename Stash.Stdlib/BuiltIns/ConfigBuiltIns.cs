@@ -1,6 +1,5 @@
 namespace Stash.Stdlib.BuiltIns;
 
-using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -8,7 +7,6 @@ using System.Text;
 using System.Text.Json;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 

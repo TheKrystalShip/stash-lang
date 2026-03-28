@@ -3,7 +3,6 @@ namespace Stash.Analysis;
 using System.Collections.Generic;
 using static Stash.Analysis.SemanticTokenConstants;
 using System.Linq;
-using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 using Stash.Stdlib;

@@ -29,7 +29,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting;
 using Stash.Runtime;
-using Stash.Testing;
+using Stash.Tap;
 
 namespace Stash;
 
@@ -457,10 +457,10 @@ public class Program
         }
 
         // Emit TAP plan and exit with appropriate code
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         Console.WriteLine("Script execution completed.");
 
-        if (reporter.Failed > 0)
+        if (reporter.FailedCount > 0)
         {
             System.Environment.Exit(1);
         }
@@ -545,9 +545,9 @@ public class Program
         }
 
         // Emit TAP plan and exit with appropriate code
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
 
-        if (reporter.Failed > 0)
+        if (reporter.FailedCount > 0)
         {
             System.Environment.Exit(1);
         }

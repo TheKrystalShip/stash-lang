@@ -6,7 +6,6 @@ using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Registration;
-using static Stash.Stdlib.Registration.P;
 
 /// <summary>
 /// Registers the <c>pkg</c> namespace built-in functions for package manifest and dependency introspection.

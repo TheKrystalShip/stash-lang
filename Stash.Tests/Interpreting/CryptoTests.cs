@@ -1,12 +1,9 @@
-using System;
 using System.Security.Cryptography;
 using System.Text;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Interpreting;
-using Stash.Interpreting.Types;
 using Stash.Runtime;
-using Stash.Runtime.Types;
 
 namespace Stash.Tests.Interpreting;
 

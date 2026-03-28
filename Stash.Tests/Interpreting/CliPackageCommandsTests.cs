@@ -1,7 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Stash.Common;
-using Stash.Cli.PackageManager;
 using Stash.Cli.PackageManager.Commands;
 
 namespace Stash.Tests.Interpreting;

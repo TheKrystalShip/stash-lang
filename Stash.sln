@@ -25,6 +25,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Stdlib", "Stash.Stdli
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Tpl", "Stash.Tpl\Stash.Tpl.csproj", "{9F56178F-810D-4C7E-884A-39ECBD7352CA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Tap", "Stash.Tap\Stash.Tap.csproj", "{02323464-5FE0-4286-80CE-210D55FB66AB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -167,6 +169,18 @@ Global
 		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|x64.Build.0 = Release|Any CPU
 		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|x86.ActiveCfg = Release|Any CPU
 		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|x86.Build.0 = Release|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Debug|x64.Build.0 = Debug|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Debug|x86.Build.0 = Debug|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Release|Any CPU.Build.0 = Release|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Release|x64.ActiveCfg = Release|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Release|x64.Build.0 = Release|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Release|x86.ActiveCfg = Release|Any CPU
+		{02323464-5FE0-4286-80CE-210D55FB66AB}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

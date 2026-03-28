@@ -1,9 +1,6 @@
-using System;
 using Microsoft.EntityFrameworkCore;
 using Stash.Registry.Auth;
 using Stash.Registry.Database;
-using System.Threading.Tasks;
-using Xunit;
 
 namespace Stash.Tests.Registry;
 

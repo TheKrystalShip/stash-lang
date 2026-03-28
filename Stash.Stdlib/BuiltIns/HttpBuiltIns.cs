@@ -3,7 +3,6 @@ namespace Stash.Stdlib.BuiltIns;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
-using System.Net.Http.Headers;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;

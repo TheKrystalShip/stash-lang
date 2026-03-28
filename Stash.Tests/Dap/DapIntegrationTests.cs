@@ -4,7 +4,6 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Threading;
 using Stash.Dap;
 using SysThread = System.Threading.Thread;
 using Stash.Debugging;

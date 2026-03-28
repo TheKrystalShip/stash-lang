@@ -1,6 +1,4 @@
-using System.IO;
 using Stash.Analysis;
-using Stash.Lsp.Analysis;
 
 namespace Stash.Tests.Analysis;
 

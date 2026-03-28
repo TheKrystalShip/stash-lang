@@ -1,7 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
 using System.Collections.Generic;
-using Stash.Common;
 using Stash.Runtime;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;

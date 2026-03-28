@@ -1,8 +1,5 @@
-using System;
-using System.IO;
 using System.Text.Json;
 using Stash.Cli.PackageManager;
-using Xunit;
 
 namespace Stash.Tests.Registry;
 

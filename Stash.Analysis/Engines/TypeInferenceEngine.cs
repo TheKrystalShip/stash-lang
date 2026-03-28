@@ -1,7 +1,6 @@
 namespace Stash.Analysis;
 
 using System.Collections.Generic;
-using System.Linq;
 using Stash.Common;
 using Stash.Parsing.AST;
 using Stash.Stdlib;

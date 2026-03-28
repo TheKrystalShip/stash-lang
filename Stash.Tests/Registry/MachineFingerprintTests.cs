@@ -1,5 +1,4 @@
 using Stash.Cli.PackageManager;
-using Xunit;
 
 namespace Stash.Tests.Registry;
 

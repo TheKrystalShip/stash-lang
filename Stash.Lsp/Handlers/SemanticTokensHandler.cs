@@ -12,7 +12,6 @@ using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Lexing;
 using Stash.Analysis;
-using Stash.Lsp.Analysis;
 using static Stash.Analysis.SemanticTokenConstants;
 
 /// <summary>

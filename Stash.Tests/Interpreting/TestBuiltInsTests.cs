@@ -2,9 +2,8 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Interpreting;
 using Stash.Runtime;
-using Stash.Runtime.Types;
-using Stash.Testing;
 using AssertionError = Stash.Runtime.AssertionError;
+using Stash.Tap;
 
 namespace Stash.Tests.Interpreting;
 
@@ -48,7 +47,7 @@ public class TestBuiltInsTests
         var reporter = new TapReporter(sw);
         interpreter.TestHarness = reporter;
         interpreter.Interpret(statements);
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
 
@@ -63,7 +62,7 @@ public class TestBuiltInsTests
         var reporter = new TapReporter(sw);
         interpreter.TestHarness = reporter;
         interpreter.Interpret(statements);
-        reporter.OnRunComplete(reporter.Passed, reporter.Failed, reporter.Skipped);
+        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString(), interpreter);
     }
 
@@ -239,8 +238,8 @@ public class TestBuiltInsTests
             });
             """);
 
-        Assert.Equal(1, reporter.Passed);
-        Assert.Equal(0, reporter.Failed);
+        Assert.Equal(1, reporter.PassedCount);
+        Assert.Equal(0, reporter.FailedCount);
     }
 
     [Fact]
@@ -252,8 +251,8 @@ public class TestBuiltInsTests
             });
             """);
 
-        Assert.Equal(0, reporter.Passed);
-        Assert.Equal(1, reporter.Failed);
+        Assert.Equal(0, reporter.PassedCount);
+        Assert.Equal(1, reporter.FailedCount);
     }
 
     [Fact]
@@ -265,8 +264,8 @@ public class TestBuiltInsTests
             test.it("fails", () => { assert.equal(1, 99); });
             """);
 
-        Assert.Equal(2, reporter.Passed);
-        Assert.Equal(1, reporter.Failed);
+        Assert.Equal(2, reporter.PassedCount);
+        Assert.Equal(1, reporter.FailedCount);
     }
 
     [Fact]
@@ -277,8 +276,8 @@ public class TestBuiltInsTests
             test.it("still runs", () => { assert.true(true); });
             """);
 
-        Assert.Equal(1, reporter.Passed);
-        Assert.Equal(1, reporter.Failed);
+        Assert.Equal(1, reporter.PassedCount);
+        Assert.Equal(1, reporter.FailedCount);
     }
 
     // ── 5. test.describe() grouping ────────────────────────────────────────────────
@@ -319,7 +318,7 @@ public class TestBuiltInsTests
             });
             """);
 
-        Assert.Equal(2, reporter.Passed);
+        Assert.Equal(2, reporter.PassedCount);
         Assert.Contains("strings > concat", output);
         Assert.Contains("strings > length", output);
     }
@@ -556,9 +555,9 @@ public class TestBuiltInsTests
             });
             """);
 
-        Assert.Equal(0, reporter.Passed);
-        Assert.Equal(0, reporter.Failed);
-        Assert.Equal(1, reporter.Skipped);
+        Assert.Equal(0, reporter.PassedCount);
+        Assert.Equal(0, reporter.FailedCount);
+        Assert.Equal(1, reporter.SkippedCount);
     }
 
     [Fact]
@@ -571,8 +570,8 @@ public class TestBuiltInsTests
             });
             """);
 
-        Assert.Equal(0, reporter.Failed);
-        Assert.Equal(1, reporter.Skipped);
+        Assert.Equal(0, reporter.FailedCount);
+        Assert.Equal(1, reporter.SkippedCount);
     }
 
     [Fact]
@@ -608,9 +607,9 @@ public class TestBuiltInsTests
             test.it("also passes", () => { assert.equal(1, 1); });
             """);
 
-        Assert.Equal(2, reporter.Passed);
-        Assert.Equal(0, reporter.Failed);
-        Assert.Equal(1, reporter.Skipped);
+        Assert.Equal(2, reporter.PassedCount);
+        Assert.Equal(0, reporter.FailedCount);
+        Assert.Equal(1, reporter.SkippedCount);
     }
 
     [Fact]
@@ -842,7 +841,7 @@ public class TestBuiltInsTests
             });
             """);
 
-        Assert.Equal(1, reporter.Failed);
+        Assert.Equal(1, reporter.FailedCount);
         var resultLexer = new Lexer("cleaned");
         var resultTokens = resultLexer.ScanTokens();
         var resultParser = new Parser(resultTokens);

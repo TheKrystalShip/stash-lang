@@ -250,7 +250,7 @@ public class DebugSession : IDebugger
         // Configure test mode if requested
         if (testMode)
         {
-            var reporter = new Stash.Testing.TapReporter(_interpreter.Output);
+            var reporter = new Stash.Tap.TapReporter(_interpreter.Output);
             _interpreter.TestHarness = reporter;
 
             if (testFilter is not null)
@@ -302,9 +302,9 @@ public class DebugSession : IDebugger
                 _interpreter.Interpret(stmts);
 
                 // If running in test mode, emit TAP plan
-                if (_interpreter.TestHarness is Stash.Testing.TapReporter tapReporter)
+                if (_interpreter.TestHarness is Stash.Tap.TapReporter tapReporter)
                 {
-                    tapReporter.OnRunComplete(tapReporter.Passed, tapReporter.Failed, tapReporter.Skipped);
+                    tapReporter.OnRunComplete(tapReporter.PassedCount, tapReporter.FailedCount, tapReporter.SkippedCount);
                 }
             }
             catch (RuntimeError ex)

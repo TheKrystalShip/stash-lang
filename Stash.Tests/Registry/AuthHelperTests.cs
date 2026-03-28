@@ -1,6 +1,4 @@
-using System;
 using Stash.Registry.Endpoints;
-using Xunit;
 
 namespace Stash.Tests.Registry;
 

@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Stash.Lsp\Stash.Lsp.csproj" />
     <ProjectReference Include="..\Stash.Registry\Stash.Registry.csproj" />
     <ProjectReference Include="..\Stash.Stdlib\Stash.Stdlib.csproj" />
+    <ProjectReference Include="..\Stash.Tap\Stash.Tap.csproj" />
     <ProjectReference Include="..\Stash.Tpl\Stash.Tpl.csproj" />
   </ItemGroup>
 
