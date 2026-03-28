@@ -1,4 +1,4 @@
-namespace Stash.Interpreting.Templating;
+namespace Stash.Tpl;
 
 using System;
 using System.Collections.Generic;
@@ -7,7 +7,6 @@ using System.Linq;
 using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
-using Environment = Stash.Interpreting.Environment;
 
 /// <summary>
 /// Tree-walk renderer that evaluates a <see cref="TemplateNode"/> AST and produces
@@ -21,20 +20,19 @@ using Environment = Stash.Interpreting.Environment;
 /// </para>
 /// <para>
 /// <strong>Environment setup:</strong> before rendering begins, <c>CreateEnvironment</c>
-/// builds a <see cref="Stash.Interpreting.Environment"/> whose parent is the interpreter's
-/// global scope, so every template variable in the data dictionary shadows globals but
-/// built-in functions and namespaces remain accessible.
+/// builds a child environment whose parent is the evaluator's global scope, so every
+/// template variable in the data dictionary shadows globals but built-in functions and
+/// namespaces remain accessible.
 /// </para>
 /// <para>
 /// <strong>Expression evaluation:</strong> output expressions and conditions are forwarded
-/// to <see cref="Interpreter.EvaluateString"/>, which parses and executes them as full
-/// Stash expressions.  This means the complete Stash language (arithmetic, string
+/// to <see cref="ITemplateEvaluator.EvaluateExpression"/>, which parses and executes them
+/// as full Stash expressions.  This means the complete Stash language (arithmetic, string
 /// operations, method calls, etc.) is available inside templates.
 /// </para>
 /// <para>
-/// <strong>Loop metadata:</strong> inside every <c>{% for %}</c> body a child
-/// <see cref="Stash.Interpreting.Environment"/> is created and a <c>loop</c>
-/// <see cref="Stash.Interpreting.Types.StashInstance"/> is injected with the fields
+/// <strong>Loop metadata:</strong> inside every <c>{% for %}</c> body a child environment
+/// is created and a <c>loop</c> <see cref="StashInstance"/> is injected with the fields
 /// <c>loop.index</c> (1-based), <c>loop.index0</c> (0-based), <c>loop.first</c>,
 /// <c>loop.last</c>, and <c>loop.length</c>.
 /// </para>
@@ -51,17 +49,17 @@ using Environment = Stash.Interpreting.Environment;
 /// </remarks>
 public class TemplateRenderer
 {
-    private readonly Interpreter _interpreter;
+    private readonly ITemplateEvaluator _evaluator;
     private readonly string? _basePath;
 
     /// <summary>
     /// Creates a renderer.
     /// </summary>
-    /// <param name="interpreter">The Stash interpreter to evaluate expressions with.</param>
+    /// <param name="evaluator">The template evaluator to evaluate expressions with.</param>
     /// <param name="basePath">Base directory for resolving include paths. Null disables includes.</param>
-    public TemplateRenderer(Interpreter interpreter, string? basePath = null)
+    public TemplateRenderer(ITemplateEvaluator evaluator, string? basePath = null)
     {
-        _interpreter = interpreter;
+        _evaluator = evaluator;
         _basePath = basePath;
     }
 
@@ -97,9 +95,9 @@ public class TemplateRenderer
     }
 
     /// <summary>
-    /// Iterates over <paramref name="nodes"/>, creating a shared
-    /// <see cref="Stash.Interpreting.Environment"/> populated from <paramref name="data"/>,
-    /// and appends each rendered node to a <see cref="StringBuilder"/>.
+    /// Iterates over <paramref name="nodes"/>, creating a shared environment populated
+    /// from <paramref name="data"/>, and appends each rendered node to a
+    /// <see cref="StringBuilder"/>.
     /// </summary>
     private string RenderNodes(List<TemplateNode> nodes, StashDictionary data)
     {
@@ -122,7 +120,7 @@ public class TemplateRenderer
     /// <param name="env">The current variable environment.</param>
     /// <param name="data">The original data dictionary (passed through to child renderers).</param>
     /// <param name="sb">The output buffer to append to.</param>
-    private void RenderNode(TemplateNode node, Environment env, StashDictionary data, StringBuilder sb)
+    private void RenderNode(TemplateNode node, object env, StashDictionary data, StringBuilder sb)
     {
         switch (node)
         {
@@ -162,9 +160,9 @@ public class TemplateRenderer
     /// passed to the <c>default</c> filter.  Otherwise the error is re-thrown as a
     /// <see cref="TemplateException"/>.
     /// </remarks>
-    private void RenderOutput(OutputNode output, Environment env, StringBuilder sb)
+    private void RenderOutput(OutputNode output, object env, StringBuilder sb)
     {
-        var (value, error) = _interpreter.EvaluateString(output.Expression, env);
+        var (value, error) = _evaluator.EvaluateExpression(output.Expression, env);
         if (error is not null)
         {
             if (output.Filters.Any(f => f.Name == "default"))
@@ -180,7 +178,7 @@ public class TemplateRenderer
         // Apply filters in order
         foreach (var filter in output.Filters)
         {
-            value = TemplateFilters.Apply(filter.Name, value, filter.Arguments, _interpreter);
+            value = TemplateFilters.Apply(filter.Name, value, filter.Arguments, _evaluator);
         }
 
         // Stringify the final value (but don't render "null")
@@ -194,11 +192,11 @@ public class TemplateRenderer
     /// Evaluates each branch condition of <paramref name="ifNode"/> in order and renders
     /// the first truthy branch.  Falls back to the else body if all conditions are falsy.
     /// </summary>
-    private void RenderIf(IfNode ifNode, Environment env, StashDictionary data, StringBuilder sb)
+    private void RenderIf(IfNode ifNode, object env, StashDictionary data, StringBuilder sb)
     {
         foreach (var branch in ifNode.Branches)
         {
-            var (value, error) = _interpreter.EvaluateString(branch.Condition, env);
+            var (value, error) = _evaluator.EvaluateExpression(branch.Condition, env);
             if (error is not null)
             {
                 throw new TemplateException($"Error evaluating condition '{branch.Condition}': {error}");
@@ -229,9 +227,9 @@ public class TemplateRenderer
     /// body once per element with the loop variable and <c>loop</c> metadata bound in a
     /// child environment.
     /// </summary>
-    private void RenderFor(ForNode forNode, Environment env, StashDictionary data, StringBuilder sb)
+    private void RenderFor(ForNode forNode, object env, StashDictionary data, StringBuilder sb)
     {
-        var (iterableValue, error) = _interpreter.EvaluateString(forNode.Iterable, env);
+        var (iterableValue, error) = _evaluator.EvaluateExpression(forNode.Iterable, env);
         if (error is not null)
         {
             throw new TemplateException($"Error evaluating iterable '{forNode.Iterable}': {error}");
@@ -242,8 +240,8 @@ public class TemplateRenderer
 
         for (int i = 0; i < totalCount; i++)
         {
-            var childEnv = new Environment(env);
-            childEnv.Define(forNode.Variable, items[i]);
+            var childEnv = _evaluator.CreateChildEnvironment(env);
+            _evaluator.DefineVariable(childEnv, forNode.Variable, items[i]);
 
             // Define loop metadata as a StashInstance
             var loopFields = new Dictionary<string, object?>
@@ -254,7 +252,7 @@ public class TemplateRenderer
                 { "last", i == totalCount - 1 },
                 { "length", (long)totalCount }
             };
-            childEnv.Define("loop", new StashInstance("LoopInfo", loopFields));
+            _evaluator.DefineVariable(childEnv, "loop", new StashInstance("LoopInfo", loopFields));
 
             foreach (var child in forNode.Body)
             {
@@ -333,7 +331,7 @@ public class TemplateRenderer
         var fullPath = Path.GetFullPath(Path.Combine(_basePath, include.Path));
 
         // Security: ensure the resolved path is within the base path
-        var normalizedBase = Path.GetFullPath(_basePath);
+        var normalizedBase = Path.GetFullPath(_basePath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
         if (!fullPath.StartsWith(normalizedBase, StringComparison.Ordinal))
         {
             throw new TemplateException($"Include path '{include.Path}' resolves outside the base directory.");
@@ -351,18 +349,18 @@ public class TemplateRenderer
 
     /// <summary>
     /// Creates an environment populated with the data dictionary's entries,
-    /// with the interpreter's globals as the enclosing scope so built-in
+    /// with the evaluator's global environment as the enclosing scope so built-in
     /// functions and namespaces are accessible.
     /// </summary>
-    private Environment CreateEnvironment(StashDictionary data)
+    private object CreateEnvironment(StashDictionary data)
     {
-        var env = new Environment(_interpreter.Globals);
+        var env = _evaluator.CreateChildEnvironment(_evaluator.GlobalEnvironment);
 
         foreach (var entry in data.RawEntries())
         {
             if (entry.Key is string key)
             {
-                env.Define(key, entry.Value);
+                _evaluator.DefineVariable(env, key, entry.Value);
             }
         }
 

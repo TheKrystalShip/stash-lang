@@ -1,4 +1,4 @@
-namespace Stash.Interpreting.Templating;
+namespace Stash.Tpl;
 
 using System;
 using System.Collections.Generic;
@@ -37,13 +37,13 @@ public static class TemplateFilters
     /// Zero or more string arguments parsed from the filter's parenthesised argument list.
     /// Surrounding quotes have already been stripped by <see cref="TemplateParser"/>.
     /// </param>
-    /// <param name="interpreter">
-    /// The active Stash interpreter, required by filters that evaluate expressions
+    /// <param name="evaluator">
+    /// The active template evaluator, required by filters that evaluate expressions
     /// (currently only <c>default</c>).
     /// </param>
     /// <returns>The transformed value.</returns>
     /// <exception cref="TemplateException">Thrown for unrecognised filter names.</exception>
-    public static object? Apply(string name, object? value, string[] args, Interpreter interpreter)
+    public static object? Apply(string name, object? value, string[] args, ITemplateEvaluator evaluator)
     {
         return name switch
         {
@@ -55,7 +55,7 @@ public static class TemplateFilters
             "join" => Join(value, args),
             "split" => Split(value, args),
             "replace" => Replace(value, args),
-            "default" => Default(value, args, interpreter),
+            "default" => Default(value, args, evaluator),
             "round" => Round(value),
             "abs" => Abs(value),
             "keys" => Keys(value),
@@ -251,9 +251,9 @@ public static class TemplateFilters
     /// </remarks>
     /// <param name="value">The value to test for nullness.</param>
     /// <param name="args"><c>args[0]</c> is the fallback expression or literal string.</param>
-    /// <param name="interpreter">Used to evaluate the fallback argument as a Stash expression.</param>
+    /// <param name="evaluator">Used to evaluate the fallback argument as a Stash expression.</param>
     /// <exception cref="TemplateException">Thrown when no fallback argument is provided.</exception>
-    private static object? Default(object? value, string[] args, Interpreter interpreter)
+    private static object? Default(object? value, string[] args, ITemplateEvaluator evaluator)
     {
         if (args.Length < 1)
         {
@@ -265,7 +265,7 @@ public static class TemplateFilters
             try
             {
                 // Try to evaluate the argument as a Stash expression to handle strings, numbers, etc.
-                var (result, error) = interpreter.EvaluateString(args[0], interpreter.Globals);
+                var (result, error) = evaluator.EvaluateExpression(args[0], evaluator.GlobalEnvironment);
                 if (error is null)
                 {
                     return result;
@@ -322,7 +322,7 @@ public static class TemplateFilters
     }
 
     /// <summary>
-    /// Returns all keys of a <see cref="Stash.Interpreting.Types.StashDictionary"/> as an array
+    /// Returns all keys of a <see cref="StashDictionary"/> as an array
     /// (e.g. <c>{{ config | keys }}</c>).
     /// </summary>
     /// <exception cref="TemplateException">Thrown when <paramref name="value"/> is not a dictionary.</exception>
@@ -337,7 +337,7 @@ public static class TemplateFilters
     }
 
     /// <summary>
-    /// Returns all values of a <see cref="Stash.Interpreting.Types.StashDictionary"/> as an array
+    /// Returns all values of a <see cref="StashDictionary"/> as an array
     /// (e.g. <c>{{ config | values }}</c>).
     /// </summary>
     /// <exception cref="TemplateException">Thrown when <paramref name="value"/> is not a dictionary.</exception>

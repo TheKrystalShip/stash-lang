@@ -1,4 +1,4 @@
-namespace Stash.Interpreting.Templating;
+namespace Stash.Tpl;
 
 using System;
 

@@ -59,7 +59,7 @@ using Stash.Stdlib;
 /// string. This matches the Stash spec's type coercion rules for the <c>+</c> operator.
 /// </para>
 /// </remarks>
-public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>, IInterpreterContext
+public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>, IInterpreterContext, ITemplateEvaluator
 {
     /// <summary>The global scope environment containing built-in functions and top-level declarations.</summary>
     private readonly Environment _globals;
@@ -285,9 +285,13 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     List<List<IStashCallable>> ITestContext.BeforeEachHooks => _ctx.BeforeEachHooks;
     List<List<IStashCallable>> ITestContext.AfterEachHooks => _ctx.AfterEachHooks;
     List<List<IStashCallable>> ITestContext.AfterAllHooks => _ctx.AfterAllHooks;
-    object? ITemplateContext.CompileAndRenderTemplate(string template, StashDictionary data, string? basePath) { var r = new Stash.Interpreting.Templating.TemplateRenderer(this, basePath); return r.Render(template, data); }
-    object? ITemplateContext.CompileTemplate(string template) { var l = new Stash.Interpreting.Templating.TemplateLexer(template); var t = l.Scan(); var p = new Stash.Interpreting.Templating.TemplateParser(t); return p.Parse(); }
-    object? ITemplateContext.RenderCompiledTemplate(object? compiled, StashDictionary data) { if (compiled is not List<Stash.Interpreting.Templating.TemplateNode> nodes) throw new RuntimeError("'tpl.render' expects a string or compiled template as the first argument."); var r = new Stash.Interpreting.Templating.TemplateRenderer(this); return r.Render(nodes, data); }
+    object? ITemplateContext.CompileAndRenderTemplate(string template, StashDictionary data, string? basePath) { var r = new Stash.Tpl.TemplateRenderer(this, basePath); return r.Render(template, data); }
+    object? ITemplateContext.CompileTemplate(string template) { var l = new Stash.Tpl.TemplateLexer(template); var t = l.Scan(); var p = new Stash.Tpl.TemplateParser(t); return p.Parse(); }
+    object? ITemplateContext.RenderCompiledTemplate(object? compiled, StashDictionary data) { if (compiled is not List<Stash.Tpl.TemplateNode> nodes) throw new RuntimeError("'tpl.render' expects a string or compiled template as the first argument."); var r = new Stash.Tpl.TemplateRenderer(this); return r.Render(nodes, data); }
+    (object? Value, string? Error) ITemplateEvaluator.EvaluateExpression(string expression, object environment) => EvaluateString(expression, (Environment)environment);
+    object ITemplateEvaluator.GlobalEnvironment => Globals;
+    object ITemplateEvaluator.CreateChildEnvironment(object parent) => new Environment((Environment)parent);
+    void ITemplateEvaluator.DefineVariable(object environment, string name, object? value) => ((Environment)environment).Define(name, value);
 
     /// <summary>
     /// Gets the global environment. Useful for DAP to enumerate global variables.

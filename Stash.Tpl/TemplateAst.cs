@@ -1,4 +1,4 @@
-namespace Stash.Interpreting.Templating;
+namespace Stash.Tpl;
 
 /// <summary>
 /// Base class for all template AST nodes.

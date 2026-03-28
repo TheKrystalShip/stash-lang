@@ -23,6 +23,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Analysis", "Stash.Ana
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Stdlib", "Stash.Stdlib\Stash.Stdlib.csproj", "{E4C4211F-9B8A-490D-9F25-090CCB66F375}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Tpl", "Stash.Tpl\Stash.Tpl.csproj", "{9F56178F-810D-4C7E-884A-39ECBD7352CA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -153,6 +155,18 @@ Global
 		{E4C4211F-9B8A-490D-9F25-090CCB66F375}.Release|x64.Build.0 = Release|Any CPU
 		{E4C4211F-9B8A-490D-9F25-090CCB66F375}.Release|x86.ActiveCfg = Release|Any CPU
 		{E4C4211F-9B8A-490D-9F25-090CCB66F375}.Release|x86.Build.0 = Release|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Debug|x64.Build.0 = Debug|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Debug|x86.Build.0 = Debug|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|x64.ActiveCfg = Release|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|x64.Build.0 = Release|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|x86.ActiveCfg = Release|Any CPU
+		{9F56178F-810D-4C7E-884A-39ECBD7352CA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
