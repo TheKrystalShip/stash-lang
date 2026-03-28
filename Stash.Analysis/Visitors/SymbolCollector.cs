@@ -3,6 +3,7 @@ namespace Stash.Analysis;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Common;
+using Stash.Lexing;
 using Stash.Parsing.AST;
 
 /// <summary>
@@ -308,6 +309,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             _currentScope.AddSymbol(new SymbolInfo(field.Lexeme, SymbolKind.Field, field.Span, detail: fieldDetail, parentName: stmt.Name.Lexeme, typeHint: fieldType));
         }
 
+        foreach (var iface in stmt.Interfaces)
+        {
+            RecordReference(iface.Lexeme, iface.Span, ReferenceKind.TypeUse);
+        }
+
         // Emit method symbols
         foreach (var method in stmt.Methods)
         {
@@ -569,7 +575,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// </summary>
     private static (string Name, string TypeHint)? ExtractIsNarrowing(Expr condition)
     {
-        if (condition is IsExpr isExpr && isExpr.Left is IdentifierExpr ident)
+        if (condition is IsExpr isExpr && isExpr.Left is IdentifierExpr ident && isExpr.TypeName != null)
         {
             return (ident.Name.Lexeme, isExpr.TypeName.Lexeme);
         }
@@ -760,6 +766,17 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitIsExpr(IsExpr expr)
     {
         expr.Left.Accept(this);
+        if (expr.TypeName != null)
+        {
+            if (expr.TypeName.Type == TokenType.Identifier && !BuiltInRegistry.ValidTypes.Contains(expr.TypeName.Lexeme))
+            {
+                RecordReference(expr.TypeName.Lexeme, expr.TypeName.Span, ReferenceKind.TypeUse);
+            }
+        }
+        else
+        {
+            expr.TypeExpr!.Accept(this);
+        }
         return null;
     }
 

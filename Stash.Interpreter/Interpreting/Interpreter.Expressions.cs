@@ -324,26 +324,56 @@ public partial class Interpreter
     public object? VisitIsExpr(IsExpr expr)
     {
         object? value = expr.Left.Accept(this);
-        string typeName = expr.TypeName.Lexeme;
 
-        return typeName switch
+        if (expr.TypeName != null)
         {
-            "null" => value is null,
-            "int" => value is long,
-            "float" => value is double,
-            "string" => value is string,
-            "bool" => value is bool,
-            "array" => value is List<object?>,
-            "Error" => value is StashError,
-            "struct" => value is StashInstance or StashStruct,
-            "enum" => value is StashEnumValue or StashEnum,
-            "dict" => value is StashDictionary,
-            "range" => value is StashRange,
-            "namespace" => value is StashNamespace,
-            "function" => value is IStashCallable,
-            "Future" => value is StashFuture,
-            _ => CheckCustomType(value, typeName, expr.TypeName.Span)
-        };
+            string typeName = expr.TypeName.Lexeme;
+            return typeName switch
+            {
+                "null" => value is null,
+                "int" => value is long,
+                "float" => value is double,
+                "string" => value is string,
+                "bool" => value is bool,
+                "array" => value is List<object?>,
+                "Error" => value is StashError,
+                "struct" => value is StashInstance or StashStruct,
+                "enum" => value is StashEnumValue or StashEnum,
+                "dict" => value is StashDictionary,
+                "range" => value is StashRange,
+                "namespace" => value is StashNamespace,
+                "function" => value is IStashCallable,
+                "Future" => value is StashFuture,
+                _ => CheckCustomType(value, typeName, expr.TypeName.Span)
+            };
+        }
+
+        // Expression path: evaluate RHS, check resolved type value
+        object? typeValue = expr.TypeExpr!.Accept(this);
+        return CheckTypeValue(value, typeValue, expr.Span);
+    }
+
+    /// <summary>
+    /// Checks if a value matches a resolved type value from an evaluated expression.
+    /// </summary>
+    private bool CheckTypeValue(object? value, object? typeValue, SourceSpan? span)
+    {
+        if (typeValue is StashInterface iface)
+        {
+            return value is StashInstance inst && (inst.Struct?.Interfaces.Contains(iface) ?? false);
+        }
+
+        if (typeValue is StashStruct structType)
+        {
+            return value is StashInstance inst && inst.Struct == structType;
+        }
+
+        if (typeValue is StashEnum enumType)
+        {
+            return value is StashEnumValue enumVal && enumVal.TypeName == enumType.Name;
+        }
+
+        throw new RuntimeError("Right operand of 'is' must resolve to an interface, struct, or enum type.", span);
     }
 
     /// <summary>
@@ -376,13 +406,39 @@ public partial class Interpreter
                 return instance.Struct?.Interfaces.Contains(iface) ?? false;
             }
 
+            if (resolved is StashStruct resolvedStruct)
+            {
+                return instance.Struct == resolvedStruct;
+            }
+
             return false;
         }
 
         // Direct enum type name match
         if (value is StashEnumValue enumVal)
         {
-            return enumVal.TypeName == typeName;
+            if (enumVal.TypeName == typeName)
+            {
+                return true;
+            }
+
+            // Check if typeName resolves to a StashEnum
+            object? resolved = null;
+            try
+            {
+                resolved = _environment.Get(typeName, span);
+            }
+            catch (RuntimeError)
+            {
+                return false;
+            }
+
+            if (resolved is StashEnum enumType)
+            {
+                return enumVal.TypeName == enumType.Name;
+            }
+
+            return false;
         }
 
         return false;

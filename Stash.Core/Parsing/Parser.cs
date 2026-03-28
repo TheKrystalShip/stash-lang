@@ -1172,27 +1172,37 @@ public class Parser
             expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
         }
 
-        while (Match(TokenType.Is))
+        if (Match(TokenType.Is))
         {
             Token isKeyword = Previous();
-            Token typeName;
-            if (Match(TokenType.Null))
+            if (Match(TokenType.Null) || Match(TokenType.Struct) || Match(TokenType.Enum))
             {
-                typeName = Previous();
+                // Built-in type keywords — bare token path
+                Token typeName = Previous();
+                expr = new IsExpr(expr, isKeyword, typeName, MakeSpan(expr.Span, typeName.Span));
             }
-            else if (Match(TokenType.Struct))
+            else if (Check(TokenType.Identifier))
             {
-                typeName = Previous();
-            }
-            else if (Match(TokenType.Enum))
-            {
-                typeName = Previous();
+                // Peek ahead: if followed by [, (, or . → complex expression
+                if (_current + 1 < _tokens.Count &&
+                    _tokens[_current + 1].Type is TokenType.LeftParen or TokenType.LeftBracket or TokenType.Dot)
+                {
+                    Expr typeExpr = Call();
+                    expr = new IsExpr(expr, isKeyword, typeExpr, MakeSpan(expr.Span, typeExpr.Span));
+                }
+                else
+                {
+                    // Bare identifier: int, Point, Printable
+                    Token typeName = Advance();
+                    expr = new IsExpr(expr, isKeyword, typeName, MakeSpan(expr.Span, typeName.Span));
+                }
             }
             else
             {
-                typeName = Consume(TokenType.Identifier, "Expected type name after 'is'.");
+                // Non-identifier expression start (e.g., parenthesized group)
+                Expr typeExpr = Call();
+                expr = new IsExpr(expr, isKeyword, typeExpr, MakeSpan(expr.Span, typeExpr.Span));
             }
-            expr = new IsExpr(expr, isKeyword, typeName, MakeSpan(expr.Span, typeName.Span));
         }
 
         return expr;

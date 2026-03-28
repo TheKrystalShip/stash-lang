@@ -152,6 +152,8 @@ public static class BuiltInRegistry
             Documentation: "Terminates the program immediately with the specified exit code.\n@param code The exit code to return to the operating system"),
         new BuiltInFunction("hash", new[] { new BuiltInParam("value") }, "int",
             Documentation: "Returns a hash code for the given value.\n@param value The value to hash\n@return An integer hash code"),
+        new BuiltInFunction("nameof", new[] { new BuiltInParam("value") }, "string",
+            Documentation: "Returns the name of a variable, function, or type as a string.\n@param value The symbol to get the name of\n@return The name as a string"),
     };
 
     // ── Built-in Namespace Functions ──

@@ -66,6 +66,20 @@ public class FormatterTests
     }
 
     [Fact]
+    public void Format_StructWithSingleInterface_FormatsCorrectly()
+    {
+        var result = Format("struct  Foo :  IBar   {\n name:  string\n}");
+        Assert.Equal("struct Foo : IBar {\n  name: string\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_StructWithMultipleInterfaces_FormatsCorrectly()
+    {
+        var result = Format("struct  Foo :  IBar ,  IBaz   {\n name:  string\n}");
+        Assert.Equal("struct Foo : IBar, IBaz {\n  name: string\n}\n", result);
+    }
+
+    [Fact]
     public void Format_IfElse()
     {
         var result = Format("if(x>0){return true;}else{return false;}");
@@ -415,5 +429,47 @@ public class FormatterTests
     {
         var result = Format("interface Mixed{x:int,toString()->string,y:float}");
         Assert.Equal("interface Mixed {\n  x: int,\n  toString() -> string,\n  y: float\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_IsExpr_BareIdentifier_FormatsCorrectly()
+    {
+        var result = Format("let result=x is int;");
+        Assert.Equal("let result = x is int;\n", result);
+    }
+
+    [Fact]
+    public void Format_IsExpr_BareStructName_FormatsCorrectly()
+    {
+        var result = Format("let result=p is Point;");
+        Assert.Equal("let result = p is Point;\n", result);
+    }
+
+    [Fact]
+    public void Format_IsExpr_ArrayIndex_FormatsCorrectly()
+    {
+        var result = Format("let result=item is types[0];");
+        Assert.Equal("let result = item is types[0];\n", result);
+    }
+
+    [Fact]
+    public void Format_IsExpr_FunctionCall_FormatsCorrectly()
+    {
+        var result = Format("let result=item is getType();");
+        Assert.Equal("let result = item is getType();\n", result);
+    }
+
+    [Fact]
+    public void Format_IsExpr_DotAccess_FormatsCorrectly()
+    {
+        var result = Format("let result=item is holder.myType;");
+        Assert.Equal("let result = item is holder.myType;\n", result);
+    }
+
+    [Fact]
+    public void Format_IsExpr_InCondition_FormatsCorrectly()
+    {
+        var result = Format("if(item is types[0]){io.println(\"yes\");}");
+        Assert.Equal("if (item is types[0]) {\n  io.println(\"yes\");\n}\n", result);
     }
 }

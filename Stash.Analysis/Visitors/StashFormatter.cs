@@ -566,6 +566,21 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         EmitToken(); // struct
         Space();
         EmitToken(); // name
+        if (stmt.Interfaces.Count > 0)
+        {
+            Space();
+            EmitToken(); // :
+            Space();
+            for (int i = 0; i < stmt.Interfaces.Count; i++)
+            {
+                if (i > 0)
+                {
+                    EmitToken(); // ,
+                    Space();
+                }
+                EmitToken(); // interface name
+            }
+        }
         Space();
         EmitToken(); // {
         _indent++;
@@ -769,7 +784,14 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // is
         Space();
-        EmitToken(); // type name
+        if (expr.TypeName != null)
+        {
+            EmitToken(); // type name
+        }
+        else
+        {
+            expr.TypeExpr!.Accept(this);
+        }
         return 0;
     }
 

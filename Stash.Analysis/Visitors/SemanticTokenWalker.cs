@@ -58,6 +58,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             StashSymbolKind.Parameter => TokenTypeParameter,
             StashSymbolKind.Struct => TokenTypeType,
             StashSymbolKind.Enum => TokenTypeType,
+            StashSymbolKind.Interface => TokenTypeInterface,
             StashSymbolKind.Field => TokenTypeProperty,
             StashSymbolKind.EnumMember => TokenTypeEnumMember,
             StashSymbolKind.LoopVariable => TokenTypeVariable,
@@ -85,7 +86,6 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     {
         if (token.Lexeme == "self")
         {
-            EmitFromToken(token, TokenTypeKeyword, 0);
             return;
         }
 
@@ -342,6 +342,10 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         {
             method.Accept(this);
         }
+        foreach (var iface in stmt.Interfaces)
+        {
+            EmitFromToken(iface, TokenTypeInterface, 0);
+        }
         return 0;
     }
 
@@ -357,7 +361,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
-        EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
+        EmitFromToken(stmt.Name, TokenTypeInterface, ModifierDeclaration);
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
@@ -452,7 +456,23 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     public int VisitIsExpr(IsExpr expr)
     {
         expr.Left.Accept(this);
-        EmitFromToken(expr.TypeName, TokenTypeType, 0);
+        if (expr.TypeName != null)
+        {
+            if (expr.TypeName.Type == TokenType.Identifier &&
+                _resolvedRefs.TryGetValue((expr.TypeName.Span.StartLine, expr.TypeName.Span.StartColumn), out var def))
+            {
+                var (type, modifiers) = MapSymbolKind(def, expr.TypeName);
+                EmitFromToken(expr.TypeName, type, modifiers);
+            }
+            else
+            {
+                EmitFromToken(expr.TypeName, TokenTypeType, 0);
+            }
+        }
+        else
+        {
+            expr.TypeExpr!.Accept(this);
+        }
         return 0;
     }
 

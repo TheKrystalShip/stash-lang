@@ -76,7 +76,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     SemanticTokenType.Number,
                     SemanticTokenType.String,
                     SemanticTokenType.Comment,
-                    SemanticTokenType.Operator
+                    SemanticTokenType.Operator,
+                    SemanticTokenType.Interface
                 ),
                 TokenModifiers = new Container<SemanticTokenModifier>(
                     SemanticTokenModifier.Declaration,
@@ -126,6 +127,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             if (classified.TryGetValue((line, col), out var cls))
             {
                 builder.Push(line, col, length, cls.Type, cls.Modifiers);
+            }
+            else if (token.Lexeme is "and" or "or" or "in")
+            {
+                // Must precede IsOperator — and/or share token types with &&/||
             }
             else if (IsKeyword(token.Type))
             {
@@ -240,6 +245,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                         {
                             builder.Push(key.Item1, key.Item2, subToken.Lexeme.Length, identCls.Type, identCls.Modifiers);
                         }
+                    }
+                    else if (subToken.Lexeme is "and" or "or" or "in")
+                    {
+                        // Must precede IsOperator — and/or share token types with &&/||
                     }
                     else if (IsKeyword(subToken.Type))
                     {
@@ -365,6 +374,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                         {
                             builder.Push(key.Item1, key.Item2, subToken.Lexeme.Length, identCls.Type, identCls.Modifiers);
                         }
+                    }
+                    else if (subToken.Lexeme is "and" or "or" or "in")
+                    {
+                        // Must precede IsOperator — and/or share token types with &&/||
                     }
                     else if (IsKeyword(subToken.Type))
                     {
@@ -711,9 +724,9 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
 
     /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is a Stash keyword token.</summary>
     private static bool IsKeyword(TokenType type) => type is
-        TokenType.Let or TokenType.Const or TokenType.Fn or TokenType.Struct or
+        TokenType.Let or TokenType.Const or
         TokenType.Enum or TokenType.If or TokenType.Else or TokenType.For or
-        TokenType.In or TokenType.While or TokenType.Do or TokenType.Return or TokenType.Break or
+        TokenType.While or TokenType.Do or TokenType.Break or
         TokenType.Continue or
         TokenType.Try or TokenType.Import or TokenType.From or TokenType.As or
         TokenType.Switch;

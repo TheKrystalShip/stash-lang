@@ -13,6 +13,7 @@ public class BuiltInFunction : IStashCallable
     private readonly Func<Interpreter, List<object?>, object?> _body;
 
     public int Arity { get; }
+    public string Name => _name;
 
     public BuiltInFunction(string name, int arity, Func<Interpreter, List<object?>, object?> body)
     {

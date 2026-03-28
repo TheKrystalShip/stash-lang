@@ -15,6 +15,7 @@ public static class SemanticTokenConstants
     public const int TokenTypeString = 9;
     public const int TokenTypeComment = 10;
     public const int TokenTypeOperator = 11;
+    public const int TokenTypeInterface = 12;
 
     // Token modifier bit flags
     public const int ModifierDeclaration = 1 << 0;

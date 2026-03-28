@@ -699,6 +699,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitIsExpr(IsExpr expr)
     {
         expr.Left.Accept(this);
+        if (expr.TypeExpr != null)
+        {
+            expr.TypeExpr.Accept(this);
+        }
         return null;
     }
 

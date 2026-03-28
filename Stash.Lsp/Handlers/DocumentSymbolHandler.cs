@@ -139,6 +139,7 @@ public class DocumentSymbolHandler : DocumentSymbolHandlerBase
         StashSymbolKind.Variable => LspSymbolKind.Variable,
         StashSymbolKind.Constant => LspSymbolKind.Constant,
         StashSymbolKind.Struct => LspSymbolKind.Struct,
+        StashSymbolKind.Interface => LspSymbolKind.Interface,
         StashSymbolKind.Enum => LspSymbolKind.Enum,
         StashSymbolKind.EnumMember => LspSymbolKind.EnumMember,
         StashSymbolKind.Field => LspSymbolKind.Field,

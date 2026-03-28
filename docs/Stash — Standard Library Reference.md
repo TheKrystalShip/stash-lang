@@ -48,17 +48,18 @@
 
 ## Overview
 
-Stash organizes built-in functions into **namespaces** accessed via dot notation (e.g., `fs.readFile(path)`). A small set of fundamental functions remain global (`typeof`, `len`, `lastError`); everything else lives in a namespace.
+Stash organizes built-in functions into **namespaces** accessed via dot notation (e.g., `fs.readFile(path)`). A small set of fundamental functions remain global (`typeof`, `nameof`, `len`, `lastError`); everything else lives in a namespace.
 
 Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assignment to namespace members is not permitted.
 
 ### Global Functions
 
-| Function      | Description                                                                |
-| ------------- | -------------------------------------------------------------------------- |
-| `typeof(val)` | Return the type of a value as string (returns `"Error"` for error values)  |
-| `len(val)`    | Length of a string or array                                                |
-| `lastError()` | Last error value (Error object with `.message`, `.type`, `.stack`) or null |
+| Function      | Description                                                                                   |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `typeof(val)` | Return the type of a value as string (returns `"Error"` for error values)                     |
+| `nameof(val)` | Return the declared name of a value — struct/enum/interface names instead of meta-type string |
+| `len(val)`    | Length of a string or array                                                                   |
+| `lastError()` | Last error value (Error object with `.message`, `.type`, `.stack`) or null                    |
 
 ---
 

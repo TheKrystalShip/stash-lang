@@ -26,6 +26,8 @@ public class StashFunction : IStashCallable
     /// </summary>
     public Stash.Common.SourceSpan DefinitionSpan => _declaration.Span;
 
+    public string Name => _declaration.Name.Lexeme;
+
     public int Arity => _declaration.Parameters.Count;
 
     public int MinArity

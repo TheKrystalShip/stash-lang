@@ -698,9 +698,12 @@ null is null       // true
 
 ```
 expression is typeName
+expression is typeExpression
 ```
 
-`typeName` is a **bare identifier** — a built-in type name or a user-defined struct/enum name. It is not a string literal and not an expression.
+`typeName` is a **bare identifier** — a built-in type name (`int`, `string`, `null`, etc.) or a user-defined struct, enum, or interface name. For built-in type keywords and simple names, the identifier is used directly.
+
+When the RHS identifier is immediately followed by `(`, `[`, or `.`, or when the RHS starts with a non-identifier token (e.g. a parenthesized expression), it is parsed as an **expression** — allowing array subscripts, function calls, and property access. The expression must evaluate to a type value (a `StashInterface`, `StashStruct`, or `StashEnum`). If it evaluates to something else, a runtime error is raised.
 
 ### Valid Type Names
 
@@ -726,7 +729,7 @@ expression is typeName
 
 An unrecognised type name evaluates to `false` (no runtime error).
 
-### Relationship to `typeof()`
+### Relationship to `typeof()` and `nameof()`
 
 For built-in types, `x is T` is equivalent to `typeof(x) == "T"`. For user-defined struct and enum names, `is` performs a specific type-name match (e.g. `p is Point` checks whether `p` is specifically a `Point` instance, not just any struct). The `is` operator is a concise inline alternative to `typeof()`:
 
@@ -735,6 +738,8 @@ For built-in types, `x is T` is equivalent to `typeof(x) == "T"`. For user-defin
 typeof(value) == "string"
 value is string
 ```
+
+The companion `nameof()` function returns the **declared name** rather than the meta-type — `nameof(Printable)` returns `"Printable"` where `typeof(Printable)` returns `"interface"`. See [The `nameof()` Function](#the-nameof-function) below.
 
 ### Precedence
 
@@ -787,6 +792,72 @@ if (!(x is null)) {
     io.println("Not null");
 }
 ```
+
+### Dynamic Type Checking
+
+When the RHS of `is` is a **variable** holding a type value (interface, struct, or enum), the check resolves the variable at runtime:
+
+```stash
+interface Printable { display() }
+struct Foo : Printable {
+    fn display() { return "hi"; }
+}
+
+let f = Foo {};
+let iface = Printable;
+f is iface              // true — resolves variable to interface
+
+let structType = Foo;
+f is structType          // true — resolves variable to struct type
+```
+
+When the RHS is an **expression** (array index, function call, property access), it is evaluated and the result checked:
+
+```stash
+let types = [Printable, Serializable, Identifiable];
+item is types[0]         // true if item conforms to Printable
+
+fn getType() { return Printable; }
+item is getType()        // true if item conforms to Printable
+
+struct TypeHolder { myType }
+let h = TypeHolder { myType: Printable };
+item is h.myType         // true if item conforms to Printable
+```
+
+This enables data-driven type checking — iterate over a collection of types instead of writing repetitive `if` chains:
+
+```stash
+let checks = [Printable, Serializable, Identifiable];
+for (let item in inventory) {
+    let tags = "";
+    for (let iface in checks) {
+        if (item is iface) {
+            tags += $"  {nameof(iface)}";
+        }
+    }
+    io.println($"    [{item.name}]{tags}");
+}
+```
+
+### The `nameof()` Function
+
+`nameof(value)` returns the **declared name** of a value. For user-defined types it returns the specific type or instance name; for primitives it behaves like `typeof()`:
+
+| Value | `typeof()` | `nameof()` |
+| --- | --- | --- |
+| `42` | `"int"` | `"int"` |
+| `"hi"` | `"string"` | `"string"` |
+| `null` | `"null"` | `"null"` |
+| `Printable` (interface) | `"interface"` | `"Printable"` |
+| `Product` (struct def) | `"struct"` | `"Product"` |
+| `Product { ... }` (instance) | `"struct"` | `"Product"` |
+| `Color` (enum def) | `"enum"` | `"Color"` |
+| `Color.Red` (enum value) | `"enum"` | `"Color.Red"` |
+| `myFn` (named function) | `"function"` | `"myFn"` |
+| `typeof` (built-in) | `"function"` | `"typeof"` |
+
+`nameof()` is especially useful with dynamic `is` — when iterating over types, you can print the type name without maintaining a parallel string array.
 
 ---
 

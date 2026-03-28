@@ -38,6 +38,35 @@ public static class GlobalBuiltIns
             };
         }));
 
+        globals.Define("nameof", new BuiltInFunction("nameof", 1, (_, args) =>
+        {
+            object? val = args[0];
+
+            return val switch
+            {
+                null => "null",
+                long => "int",
+                double => "float",
+                string => "string",
+                bool => "bool",
+                List<object?> => "array",
+                StashError => "Error",
+                StashInstance inst => inst.TypeName,
+                StashStruct s => s.Name,
+                StashEnumValue ev => $"{ev.TypeName}.{ev.MemberName}",
+                StashEnum e => e.Name,
+                StashInterface i => i.Name,
+                StashDictionary => "dict",
+                StashRange => "range",
+                StashFuture => "Future",
+                StashNamespace => "namespace",
+                StashFunction f => f.Name,
+                BuiltInFunction b => b.Name,
+                IStashCallable => "function",
+                _ => "unknown"
+            };
+        }));
+
         globals.Define("len", new BuiltInFunction("len", 1, (_, args) =>
         {
             object? val = args[0];

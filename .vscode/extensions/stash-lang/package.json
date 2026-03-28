@@ -136,6 +136,9 @@
           ],
           "operator": [
             "keyword.operator.stash"
+          ],
+          "interface": [
+            "entity.name.type.interface.stash"
           ]
         }
       }

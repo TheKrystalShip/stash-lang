@@ -8343,4 +8343,299 @@ public class InterpreterTests
         ";
         Assert.Equal(false, Run(source));
     }
+
+    // --- Is Expression Tests: Variable-based RHS (Tier 1) ---
+
+    [Fact]
+    public void Is_VariableHoldingInterface_ReturnsTrue()
+    {
+        Assert.Equal(true, Run(@"
+            interface Printable { display() }
+            struct Foo : Printable {
+                fn display() { return ""hi""; }
+            }
+            let f = Foo {};
+            let iface = Printable;
+            let result = f is iface;
+        "));
+    }
+
+    [Fact]
+    public void Is_VariableHoldingInterface_WhenNotConforming_ReturnsFalse()
+    {
+        Assert.Equal(false, Run(@"
+            interface Printable { display() }
+            struct Foo { name }
+            let f = Foo { name: ""x"" };
+            let iface = Printable;
+            let result = f is iface;
+        "));
+    }
+
+    [Fact]
+    public void Is_VariableHoldingStruct_ReturnsTrue()
+    {
+        Assert.Equal(true, Run(@"
+            struct Point { x, y }
+            let p = Point { x: 1, y: 2 };
+            let t = Point;
+            let result = p is t;
+        "));
+    }
+
+    [Fact]
+    public void Is_VariableHoldingStruct_WhenDifferentStruct_ReturnsFalse()
+    {
+        Assert.Equal(false, Run(@"
+            struct Point { x, y }
+            struct Size { w, h }
+            let p = Point { x: 1, y: 2 };
+            let t = Size;
+            let result = p is t;
+        "));
+    }
+
+    [Fact]
+    public void Is_VariableHoldingEnum_ReturnsTrue()
+    {
+        Assert.Equal(true, Run(@"
+            enum Color { Red, Green, Blue }
+            let c = Color.Red;
+            let t = Color;
+            let result = c is t;
+        "));
+    }
+
+    [Fact]
+    public void Is_VariableHoldingEnum_WhenDifferentEnum_ReturnsFalse()
+    {
+        Assert.Equal(false, Run(@"
+            enum Color { Red, Green, Blue }
+            enum Size { Small, Large }
+            let c = Color.Red;
+            let t = Size;
+            let result = c is t;
+        "));
+    }
+
+    // --- Is Expression Tests: Expression-based RHS (Tier 2) ---
+
+    [Fact]
+    public void Is_ArrayIndexExpression_ReturnsTrue()
+    {
+        Assert.Equal(true, Run(@"
+            interface Printable { display() }
+            interface Serializable { serialize() }
+            struct Foo : Printable, Serializable {
+                fn display() { return ""d""; }
+                fn serialize() { return ""s""; }
+            }
+            let f = Foo {};
+            let types = [Printable, Serializable];
+            let result = f is types[0];
+        "));
+    }
+
+    [Fact]
+    public void Is_ArrayIndexExpression_ReturnsFalse()
+    {
+        Assert.Equal(false, Run(@"
+            interface Printable { display() }
+            interface Serializable { serialize() }
+            struct Foo : Printable {
+                fn display() { return ""d""; }
+            }
+            let f = Foo {};
+            let types = [Printable, Serializable];
+            let result = f is types[1];
+        "));
+    }
+
+    [Fact]
+    public void Is_FunctionCallExpression_ReturnsTrue()
+    {
+        Assert.Equal(true, Run(@"
+            interface Printable { display() }
+            struct Foo : Printable {
+                fn display() { return ""d""; }
+            }
+            let f = Foo {};
+            fn getType() { return Printable; }
+            let result = f is getType();
+        "));
+    }
+
+    [Fact]
+    public void Is_StructFromArrayIndex_ReturnsTrue()
+    {
+        Assert.Equal(true, Run(@"
+            struct Point { x, y }
+            let p = Point { x: 1, y: 2 };
+            let types = [Point];
+            let result = p is types[0];
+        "));
+    }
+
+    [Fact]
+    public void Is_LoopOverInterfaces_CollectsTags()
+    {
+        Assert.Equal("Printable,Serializable", Run(@"
+            interface Printable { display() }
+            interface Serializable { serialize() }
+            struct Foo : Printable, Serializable {
+                fn display() { return ""d""; }
+                fn serialize() { return ""s""; }
+            }
+            let f = Foo {};
+            let checks = [Printable, Serializable];
+            let tags = [];
+            for (let iface in checks) {
+                if (f is iface) {
+                    arr.push(tags, nameof(iface));
+                }
+            }
+            let result = arr.join(tags, "","");
+        "));
+    }
+
+    [Fact]
+    public void Is_DotAccessExpression_ReturnsTrue()
+    {
+        Assert.Equal(true, Run(@"
+            interface Printable { display() }
+            struct Foo : Printable {
+                fn display() { return ""d""; }
+            }
+            let f = Foo {};
+            struct TypeHolder { myType }
+            let holder = TypeHolder { myType: Printable };
+            let result = f is holder.myType;
+        "));
+    }
+
+    [Fact]
+    public void Is_ExpressionRHS_NonType_ThrowsRuntimeError()
+    {
+        // Function call forces the expression path; a string return value is not a valid type, so RuntimeError is thrown
+        Assert.Throws<RuntimeError>(() => Run(@"
+            fn notAType() { return ""hello""; }
+            let x = 42;
+            let result = x is notAType();
+        "));
+    }
+
+    // --- Nameof Tests ---
+
+    [Fact]
+    public void Nameof_Interface_ReturnsName()
+    {
+        Assert.Equal("Printable", Run(@"
+            interface Printable { display() }
+            let result = nameof(Printable);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_Struct_ReturnsName()
+    {
+        Assert.Equal("Point", Run(@"
+            struct Point { x, y }
+            let result = nameof(Point);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_StructInstance_ReturnsTypeName()
+    {
+        Assert.Equal("Point", Run(@"
+            struct Point { x, y }
+            let p = Point { x: 1, y: 2 };
+            let result = nameof(p);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_Enum_ReturnsName()
+    {
+        Assert.Equal("Color", Run(@"
+            enum Color { Red, Green, Blue }
+            let result = nameof(Color);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_EnumValue_ReturnsFullName()
+    {
+        Assert.Equal("Color.Red", Run(@"
+            enum Color { Red, Green, Blue }
+            let result = nameof(Color.Red);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_IntValue_ReturnsInt()
+    {
+        Assert.Equal("int", Run(@"
+            let result = nameof(42);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_StringValue_ReturnsString()
+    {
+        Assert.Equal("string", Run(@"
+            let result = nameof(""hello"");
+        "));
+    }
+
+    [Fact]
+    public void Nameof_Null_ReturnsNull()
+    {
+        Assert.Equal("null", Run(@"
+            let result = nameof(null);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_InterfaceVariable_ReturnsInterfaceName()
+    {
+        Assert.Equal("Printable", Run(@"
+            interface Printable { display() }
+            let iface = Printable;
+            let result = nameof(iface);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_Array_ReturnsArray()
+    {
+        Assert.Equal("array", Run(@"
+            let result = nameof([1, 2, 3]);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_Dict_ReturnsDict()
+    {
+        Assert.Equal("dict", Run(@"
+            let d = dict.new();
+            let result = nameof(d);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_Bool_ReturnsBool()
+    {
+        Assert.Equal("bool", Run(@"
+            let result = nameof(true);
+        "));
+    }
+
+    [Fact]
+    public void Nameof_Float_ReturnsFloat()
+    {
+        Assert.Equal("float", Run(@"
+            let result = nameof(3.14);
+        "));
+    }
 }

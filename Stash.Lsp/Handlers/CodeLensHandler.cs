@@ -106,7 +106,7 @@ public class CodeLensHandler : CodeLensHandlerBase
 
         foreach (var sym in result.Symbols.GetTopLevel())
         {
-            if (sym.Kind is not (StashSymbolKind.Function or StashSymbolKind.Struct or StashSymbolKind.Enum or StashSymbolKind.Constant))
+            if (sym.Kind is not (StashSymbolKind.Function or StashSymbolKind.Struct or StashSymbolKind.Enum or StashSymbolKind.Constant or StashSymbolKind.Interface))
             {
                 continue;
             }
