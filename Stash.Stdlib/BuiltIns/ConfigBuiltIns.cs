@@ -29,15 +29,8 @@ public static class ConfigBuiltIns
         // config.read(path, format?) — Reads a config file from disk and parses it. Format is auto-detected from extension if omitted. Supports "json" and "ini".
         ns.Function("read", [Param("path", "string"), Param("format", "string")], (_, args) =>
         {
-            if (args.Count < 1 || args.Count > 2)
-            {
-                throw new RuntimeError("'config.read' expects 1 or 2 arguments.");
-            }
-
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("First argument to 'config.read' must be a string (path).");
-            }
+            Args.Count(args, 1, 2, "config.read");
+            var path = Args.String(args, 0, "config.read");
 
             var format = args.Count == 2
                 ? args[1] as string ?? throw new RuntimeError("Second argument to 'config.read' must be a string (format).")
@@ -62,15 +55,8 @@ public static class ConfigBuiltIns
         // config.write(path, data, format?) — Serializes data and writes it to a config file. Format is auto-detected from extension if omitted. Supports "json" and "ini".
         ns.Function("write", [Param("path", "string"), Param("data", "any"), Param("format", "string")], (_, args) =>
         {
-            if (args.Count < 2 || args.Count > 3)
-            {
-                throw new RuntimeError("'config.write' expects 2 or 3 arguments.");
-            }
-
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("First argument to 'config.write' must be a string (path).");
-            }
+            Args.Count(args, 2, 3, "config.write");
+            var path = Args.String(args, 0, "config.write");
 
             var format = args.Count == 3
                 ? args[2] as string ?? throw new RuntimeError("Third argument to 'config.write' must be a string (format).")
@@ -96,15 +82,8 @@ public static class ConfigBuiltIns
         // config.parse(text, format) — Parses a config string in the given format ("json" or "ini"). Returns a dict.
         ns.Function("parse", [Param("text", "string"), Param("format", "string")], (_, args) =>
         {
-            if (args[0] is not string text)
-            {
-                throw new RuntimeError("First argument to 'config.parse' must be a string.");
-            }
-
-            if (args[1] is not string format)
-            {
-                throw new RuntimeError("Second argument to 'config.parse' must be a string (format).");
-            }
+            var text = Args.String(args, 0, "config.parse");
+            var format = Args.String(args, 1, "config.parse");
 
             return ParseByFormat(text, format, "config.parse");
         },
@@ -114,10 +93,7 @@ public static class ConfigBuiltIns
         // config.stringify(data, format) — Serializes a Stash value to the given config format string ("json" or "ini"). Returns a string.
         ns.Function("stringify", [Param("data", "any"), Param("format", "string")], (_, args) =>
         {
-            if (args[1] is not string format)
-            {
-                throw new RuntimeError("Second argument to 'config.stringify' must be a string (format).");
-            }
+            var format = Args.String(args, 1, "config.stringify");
 
             return StringifyByFormat(args[0], format, "config.stringify");
         },

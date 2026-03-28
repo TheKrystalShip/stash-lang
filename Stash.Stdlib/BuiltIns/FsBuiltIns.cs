@@ -41,10 +41,7 @@ public static class FsBuiltIns
         // fs.readFile(path) — Reads the entire contents of a file as a string. Throws on I/O error.
         ns.Function("readFile", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.readFile' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.readFile");
             path = ctx.ExpandTilde(path);
 
             try { return System.IO.File.ReadAllText(path); }
@@ -54,15 +51,8 @@ public static class FsBuiltIns
         // fs.writeFile(path, content) — Writes a string to a file, creating or overwriting it. Returns null.
         ns.Function("writeFile", [Param("path", "string"), Param("content", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("First argument to 'fs.writeFile' must be a string.");
-            }
-
-            if (args[1] is not string content)
-            {
-                throw new RuntimeError("Second argument to 'fs.writeFile' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.writeFile");
+            var content = Args.String(args, 1, "fs.writeFile");
             path = ctx.ExpandTilde(path);
 
             try { System.IO.File.WriteAllText(path, content); }
@@ -73,10 +63,7 @@ public static class FsBuiltIns
         // fs.exists(path) — Returns true if the given path is an existing file, false otherwise.
         ns.Function("exists", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.exists' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.exists");
             path = ctx.ExpandTilde(path);
 
             return System.IO.File.Exists(path);
@@ -85,10 +72,7 @@ public static class FsBuiltIns
         // fs.dirExists(path) — Returns true if the given path is an existing directory, false otherwise.
         ns.Function("dirExists", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.dirExists' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.dirExists");
             path = ctx.ExpandTilde(path);
 
             return System.IO.Directory.Exists(path);
@@ -97,10 +81,7 @@ public static class FsBuiltIns
         // fs.pathExists(path) — Returns true if the given path exists as either a file or directory, false otherwise.
         ns.Function("pathExists", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.pathExists' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.pathExists");
             path = ctx.ExpandTilde(path);
 
             return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
@@ -109,10 +90,7 @@ public static class FsBuiltIns
         // fs.createDir(path) — Creates a directory (and any missing parent directories). Returns null. No-ops if the directory already exists.
         ns.Function("createDir", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.createDir' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.createDir");
             path = ctx.ExpandTilde(path);
 
             try { System.IO.Directory.CreateDirectory(path); }
@@ -123,10 +101,7 @@ public static class FsBuiltIns
         // fs.delete(path) — Deletes a file or recursively deletes a directory. Throws if the path does not exist.
         ns.Function("delete", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.delete' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.delete");
             path = ctx.ExpandTilde(path);
 
             try
@@ -151,15 +126,8 @@ public static class FsBuiltIns
         // fs.copy(src, dst) — Copies a file from src to dst, overwriting dst if it exists. Returns null.
         ns.Function("copy", [Param("src", "string"), Param("dst", "string")], (ctx, args) =>
         {
-            if (args[0] is not string src)
-            {
-                throw new RuntimeError("First argument to 'fs.copy' must be a string.");
-            }
-
-            if (args[1] is not string dst)
-            {
-                throw new RuntimeError("Second argument to 'fs.copy' must be a string.");
-            }
+            var src = Args.String(args, 0, "fs.copy");
+            var dst = Args.String(args, 1, "fs.copy");
             src = ctx.ExpandTilde(src);
             dst = ctx.ExpandTilde(dst);
 
@@ -171,15 +139,8 @@ public static class FsBuiltIns
         // fs.move(src, dst) — Moves or renames a file from src to dst, overwriting dst if it exists. Returns null.
         ns.Function("move", [Param("src", "string"), Param("dst", "string")], (ctx, args) =>
         {
-            if (args[0] is not string src)
-            {
-                throw new RuntimeError("First argument to 'fs.move' must be a string.");
-            }
-
-            if (args[1] is not string dst)
-            {
-                throw new RuntimeError("Second argument to 'fs.move' must be a string.");
-            }
+            var src = Args.String(args, 0, "fs.move");
+            var dst = Args.String(args, 1, "fs.move");
             src = ctx.ExpandTilde(src);
             dst = ctx.ExpandTilde(dst);
 
@@ -191,10 +152,7 @@ public static class FsBuiltIns
         // fs.size(path) — Returns the size of a file in bytes (integer).
         ns.Function("size", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.size' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.size");
             path = ctx.ExpandTilde(path);
 
             try { return new System.IO.FileInfo(path).Length; }
@@ -204,10 +162,7 @@ public static class FsBuiltIns
         // fs.listDir(path) — Returns an array of all file and directory paths directly inside the given directory.
         ns.Function("listDir", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.listDir' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.listDir");
             path = ctx.ExpandTilde(path);
 
             try
@@ -227,15 +182,8 @@ public static class FsBuiltIns
         // fs.appendFile(path, content) — Appends a string to the end of a file, creating it if it doesn't exist. Returns null.
         ns.Function("appendFile", [Param("path", "string"), Param("content", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("First argument to 'fs.appendFile' must be a string.");
-            }
-
-            if (args[1] is not string content)
-            {
-                throw new RuntimeError("Second argument to 'fs.appendFile' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.appendFile");
+            var content = Args.String(args, 1, "fs.appendFile");
             path = ctx.ExpandTilde(path);
 
             try { System.IO.File.AppendAllText(path, content); }
@@ -246,10 +194,7 @@ public static class FsBuiltIns
         // fs.readLines(path) — Reads all lines of a file and returns them as an array of strings.
         ns.Function("readLines", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.readLines' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.readLines");
             path = ctx.ExpandTilde(path);
 
             try
@@ -263,10 +208,7 @@ public static class FsBuiltIns
         // fs.glob(pattern) — Returns an array of file paths matching a glob pattern (e.g. "src/**/*.cs"). Supports wildcards in filename only.
         ns.Function("glob", [Param("pattern", "string")], (ctx, args) =>
         {
-            if (args[0] is not string pattern)
-            {
-                throw new RuntimeError("Argument to 'fs.glob' must be a string.");
-            }
+            var pattern = Args.String(args, 0, "fs.glob");
             pattern = ctx.ExpandTilde(pattern);
 
             try
@@ -292,10 +234,7 @@ public static class FsBuiltIns
         // fs.isFile(path) — Returns true if the path refers to an existing regular file.
         ns.Function("isFile", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.isFile' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.isFile");
             path = ctx.ExpandTilde(path);
 
             return System.IO.File.Exists(path);
@@ -304,10 +243,7 @@ public static class FsBuiltIns
         // fs.isDir(path) — Returns true if the path refers to an existing directory.
         ns.Function("isDir", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.isDir' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.isDir");
             path = ctx.ExpandTilde(path);
 
             return System.IO.Directory.Exists(path);
@@ -316,10 +252,7 @@ public static class FsBuiltIns
         // fs.isSymlink(path) — Returns true if the path is an existing symbolic link (reparse point).
         ns.Function("isSymlink", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.isSymlink' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.isSymlink");
             path = ctx.ExpandTilde(path);
 
             try
@@ -350,10 +283,7 @@ public static class FsBuiltIns
         // fs.modifiedAt(path) — Returns the last-modified time of a file as a Unix timestamp (float, seconds since epoch).
         ns.Function("modifiedAt", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.modifiedAt' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.modifiedAt");
             path = ctx.ExpandTilde(path);
 
             try
@@ -367,10 +297,7 @@ public static class FsBuiltIns
         // fs.walk(path) — Recursively walks a directory and returns an array of all file paths within it (all depths).
         ns.Function("walk", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.walk' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.walk");
             path = ctx.ExpandTilde(path);
 
             try
@@ -384,10 +311,7 @@ public static class FsBuiltIns
         // fs.readable(path) — Returns true if the path exists and the current process can read it.
         ns.Function("readable", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.readable' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.readable");
             path = ctx.ExpandTilde(path);
 
             try
@@ -407,10 +331,7 @@ public static class FsBuiltIns
         // fs.writable(path) — Returns true if the path exists and the current process can write to it.
         ns.Function("writable", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.writable' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.writable");
             path = ctx.ExpandTilde(path);
 
             try
@@ -438,10 +359,7 @@ public static class FsBuiltIns
         // fs.executable(path) — Returns true if the path is an existing file and appears to be executable (by extension on Windows, by Unix mode bits on Unix).
         ns.Function("executable", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.executable' must be a string.");
-            }
+            var path = Args.String(args, 0, "fs.executable");
             path = ctx.ExpandTilde(path);
 
             try
@@ -473,11 +391,7 @@ public static class FsBuiltIns
         // fs.createFile(path) — Creates an empty file at path, or updates its last-modified time if it already exists (similar to Unix touch). Returns null.
         ns.Function("createFile", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.createFile' must be a string.");
-            }
-
+            var path = Args.String(args, 0, "fs.createFile");
             path = ctx.ExpandTilde(path);
 
             try
@@ -498,16 +412,8 @@ public static class FsBuiltIns
         // fs.symlink(target, linkPath) — Creates a symbolic link at linkPath pointing to target. Returns null.
         ns.Function("symlink", [Param("target", "string"), Param("linkPath", "string")], (ctx, args) =>
         {
-            if (args[0] is not string target)
-            {
-                throw new RuntimeError("First argument to 'fs.symlink' must be a string.");
-            }
-
-            if (args[1] is not string linkPath)
-            {
-                throw new RuntimeError("Second argument to 'fs.symlink' must be a string.");
-            }
-
+            var target = Args.String(args, 0, "fs.symlink");
+            var linkPath = Args.String(args, 1, "fs.symlink");
             target = ctx.ExpandTilde(target);
             linkPath = ctx.ExpandTilde(linkPath);
 
@@ -522,11 +428,7 @@ public static class FsBuiltIns
         // fs.stat(path) — Returns a dict with file metadata: size (int), isFile (bool), isDir (bool), isSymlink (bool), modified (float), created (float), name (string).
         ns.Function("stat", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'fs.stat' must be a string.");
-            }
-
+            var path = Args.String(args, 0, "fs.stat");
             path = ctx.ExpandTilde(path);
 
             try

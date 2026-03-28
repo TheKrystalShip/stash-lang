@@ -17,10 +17,7 @@ public static class EncodingBuiltIns
         // encoding.base64Encode(input) — Encodes the UTF-8 string 'input' to a Base64 string.
         ns.Function("base64Encode", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'encoding.base64Encode' must be a string.");
-            }
+            var s = Args.String(args, 0, "encoding.base64Encode");
 
             return Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s));
         },
@@ -30,10 +27,7 @@ public static class EncodingBuiltIns
         // encoding.base64Decode(input) — Decodes a Base64 string to its original UTF-8 string. Throws on invalid input.
         ns.Function("base64Decode", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'encoding.base64Decode' must be a string.");
-            }
+            var s = Args.String(args, 0, "encoding.base64Decode");
 
             try
             {
@@ -50,10 +44,7 @@ public static class EncodingBuiltIns
         // encoding.urlEncode(input) — Percent-encodes 'input' for safe inclusion in a URL query string or path segment.
         ns.Function("urlEncode", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'encoding.urlEncode' must be a string.");
-            }
+            var s = Args.String(args, 0, "encoding.urlEncode");
 
             return Uri.EscapeDataString(s);
         },
@@ -63,10 +54,7 @@ public static class EncodingBuiltIns
         // encoding.urlDecode(input) — Decodes a percent-encoded URL string back to its original form.
         ns.Function("urlDecode", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'encoding.urlDecode' must be a string.");
-            }
+            var s = Args.String(args, 0, "encoding.urlDecode");
 
             return Uri.UnescapeDataString(s);
         },
@@ -76,10 +64,7 @@ public static class EncodingBuiltIns
         // encoding.hexEncode(input) — Encodes the UTF-8 string 'input' to a lowercase hexadecimal string.
         ns.Function("hexEncode", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'encoding.hexEncode' must be a string.");
-            }
+            var s = Args.String(args, 0, "encoding.hexEncode");
 
             return Convert.ToHexString(System.Text.Encoding.UTF8.GetBytes(s)).ToLowerInvariant();
         },
@@ -89,10 +74,7 @@ public static class EncodingBuiltIns
         // encoding.hexDecode(input) — Decodes a hexadecimal string back to its original UTF-8 string. Throws on invalid input.
         ns.Function("hexDecode", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'encoding.hexDecode' must be a string.");
-            }
+            var s = Args.String(args, 0, "encoding.hexDecode");
 
             try
             {

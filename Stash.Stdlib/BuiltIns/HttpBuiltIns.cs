@@ -47,10 +47,7 @@ public static class HttpBuiltIns
         // http.get(url) — Sends an HTTP GET request. Returns a HttpResponse struct with status, body, and headers.
         ns.Function("get", [Param("url", "string")], (_, args) =>
         {
-            if (args[0] is not string url)
-            {
-                throw new RuntimeError("First argument to 'http.get' must be a string.");
-            }
+            var url = Args.String(args, 0, "http.get");
 
             ValidateUrl(url, "http.get");
 
@@ -72,15 +69,8 @@ public static class HttpBuiltIns
         // http.post(url, body) — Sends an HTTP POST request with a JSON body string. Returns a HttpResponse struct.
         ns.Function("post", [Param("url", "string"), Param("body", "string")], (_, args) =>
         {
-            if (args[0] is not string url)
-            {
-                throw new RuntimeError("First argument to 'http.post' must be a string.");
-            }
-
-            if (args[1] is not string body)
-            {
-                throw new RuntimeError("Second argument to 'http.post' must be a string.");
-            }
+            var url = Args.String(args, 0, "http.post");
+            var body = Args.String(args, 1, "http.post");
 
             ValidateUrl(url, "http.post");
 
@@ -103,15 +93,8 @@ public static class HttpBuiltIns
         // http.put(url, body) — Sends an HTTP PUT request with a JSON body string. Returns a HttpResponse struct.
         ns.Function("put", [Param("url", "string"), Param("body", "string")], (_, args) =>
         {
-            if (args[0] is not string url)
-            {
-                throw new RuntimeError("First argument to 'http.put' must be a string.");
-            }
-
-            if (args[1] is not string body)
-            {
-                throw new RuntimeError("Second argument to 'http.put' must be a string.");
-            }
+            var url = Args.String(args, 0, "http.put");
+            var body = Args.String(args, 1, "http.put");
 
             ValidateUrl(url, "http.put");
 
@@ -134,10 +117,7 @@ public static class HttpBuiltIns
         // http.delete(url) — Sends an HTTP DELETE request. Returns a HttpResponse struct with status, body, and headers.
         ns.Function("delete", [Param("url", "string")], (_, args) =>
         {
-            if (args[0] is not string url)
-            {
-                throw new RuntimeError("First argument to 'http.delete' must be a string.");
-            }
+            var url = Args.String(args, 0, "http.delete");
 
             ValidateUrl(url, "http.delete");
 
@@ -159,10 +139,7 @@ public static class HttpBuiltIns
         // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
         ns.Function("request", [Param("options", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary options)
-            {
-                throw new RuntimeError("First argument to 'http.request' must be a dict.");
-            }
+            var options = Args.Dict(args, 0, "http.request");
 
             var urlVal = options.Get("url");
             if (urlVal is not string url)
@@ -212,15 +189,8 @@ public static class HttpBuiltIns
         // http.patch(url, body) — Sends an HTTP PATCH request with a JSON body string. Returns a HttpResponse struct.
         ns.Function("patch", [Param("url", "string"), Param("body", "string")], (_, args) =>
         {
-            if (args[0] is not string url)
-            {
-                throw new RuntimeError("First argument to 'http.patch' must be a string.");
-            }
-
-            if (args[1] is not string body)
-            {
-                throw new RuntimeError("Second argument to 'http.patch' must be a string.");
-            }
+            var url = Args.String(args, 0, "http.patch");
+            var body = Args.String(args, 1, "http.patch");
 
             ValidateUrl(url, "http.patch");
 
@@ -243,15 +213,8 @@ public static class HttpBuiltIns
         // http.download(url, path) — Downloads the response body of a GET request and writes it to the given file path. Returns null.
         ns.Function("download", [Param("url", "string"), Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string url)
-            {
-                throw new RuntimeError("First argument to 'http.download' must be a string.");
-            }
-
-            if (args[1] is not string path)
-            {
-                throw new RuntimeError("Second argument to 'http.download' must be a string.");
-            }
+            var url = Args.String(args, 0, "http.download");
+            var path = Args.String(args, 1, "http.download");
 
             ValidateUrl(url, "http.download");
             path = ctx.ExpandTilde(path);

@@ -49,10 +49,7 @@ public static class SftpBuiltIns
         // Returns an SftpConnection struct.
         ns.Function("connect", [Param("options", "dict")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary options)
-            {
-                throw new RuntimeError("First argument to 'sftp.connect' must be a dict.");
-            }
+            var options = Args.Dict(args, 0, "sftp.connect");
 
             var host = options.Get("host") as string
                 ?? throw new RuntimeError("sftp.connect: 'host' is required and must be a string.");
@@ -128,16 +125,8 @@ public static class SftpBuiltIns
         ns.Function("upload", [Param("conn", "SftpConnection"), Param("localPath", "string"), Param("remotePath", "string")], (ctx, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.upload");
-
-            if (args[1] is not string localPath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.upload' must be a string.");
-            }
-
-            if (args[2] is not string remotePath)
-            {
-                throw new RuntimeError("Third argument to 'sftp.upload' must be a string.");
-            }
+            var localPath = Args.String(args, 1, "sftp.upload");
+            var remotePath = Args.String(args, 2, "sftp.upload");
 
             localPath = ctx.ExpandTilde(localPath);
 
@@ -162,16 +151,8 @@ public static class SftpBuiltIns
         ns.Function("download", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("localPath", "string")], (ctx, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.download");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.download' must be a string.");
-            }
-
-            if (args[2] is not string localPath)
-            {
-                throw new RuntimeError("Third argument to 'sftp.download' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.download");
+            var localPath = Args.String(args, 2, "sftp.download");
 
             localPath = ctx.ExpandTilde(localPath);
 
@@ -196,11 +177,7 @@ public static class SftpBuiltIns
         ns.Function("readFile", [Param("conn", "SftpConnection"), Param("remotePath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.readFile");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.readFile' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.readFile");
 
             try
             {
@@ -218,16 +195,8 @@ public static class SftpBuiltIns
         ns.Function("writeFile", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("content", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.writeFile");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.writeFile' must be a string.");
-            }
-
-            if (args[2] is not string content)
-            {
-                throw new RuntimeError("Third argument to 'sftp.writeFile' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.writeFile");
+            var content = Args.String(args, 2, "sftp.writeFile");
 
             try
             {
@@ -248,11 +217,7 @@ public static class SftpBuiltIns
         ns.Function("list", [Param("conn", "SftpConnection"), Param("remotePath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.list");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.list' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.list");
 
             try
             {
@@ -286,11 +251,7 @@ public static class SftpBuiltIns
         ns.Function("delete", [Param("conn", "SftpConnection"), Param("remotePath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.delete");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.delete' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.delete");
 
             try
             {
@@ -308,11 +269,7 @@ public static class SftpBuiltIns
         ns.Function("mkdir", [Param("conn", "SftpConnection"), Param("remotePath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.mkdir");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.mkdir' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.mkdir");
 
             try
             {
@@ -330,11 +287,7 @@ public static class SftpBuiltIns
         ns.Function("rmdir", [Param("conn", "SftpConnection"), Param("remotePath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.rmdir");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.rmdir' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.rmdir");
 
             try
             {
@@ -352,11 +305,7 @@ public static class SftpBuiltIns
         ns.Function("exists", [Param("conn", "SftpConnection"), Param("remotePath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.exists");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.exists' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.exists");
 
             try
             {
@@ -373,11 +322,7 @@ public static class SftpBuiltIns
         ns.Function("stat", [Param("conn", "SftpConnection"), Param("remotePath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.stat");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.stat' must be a string.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.stat");
 
             try
             {
@@ -449,16 +394,8 @@ public static class SftpBuiltIns
         ns.Function("chmod", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("mode", "int")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.chmod");
-
-            if (args[1] is not string remotePath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.chmod' must be a string.");
-            }
-
-            if (args[2] is not long modeDecimal)
-            {
-                throw new RuntimeError("Third argument to 'sftp.chmod' must be an integer.");
-            }
+            var remotePath = Args.String(args, 1, "sftp.chmod");
+            var modeDecimal = Args.Long(args, 2, "sftp.chmod");
 
             // Convert decimal representation of octal (e.g., 755) to actual octal value
             short octalMode = ParseOctalMode(modeDecimal, "sftp.chmod");
@@ -479,16 +416,8 @@ public static class SftpBuiltIns
         ns.Function("rename", [Param("conn", "SftpConnection"), Param("oldPath", "string"), Param("newPath", "string")], (_, args) =>
         {
             SftpClient client = GetClient(args[0], "sftp.rename");
-
-            if (args[1] is not string oldPath)
-            {
-                throw new RuntimeError("Second argument to 'sftp.rename' must be a string.");
-            }
-
-            if (args[2] is not string newPath)
-            {
-                throw new RuntimeError("Third argument to 'sftp.rename' must be a string.");
-            }
+            var oldPath = Args.String(args, 1, "sftp.rename");
+            var newPath = Args.String(args, 2, "sftp.rename");
 
             try
             {

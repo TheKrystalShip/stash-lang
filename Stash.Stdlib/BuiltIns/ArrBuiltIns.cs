@@ -31,22 +31,14 @@ public static class ArrBuiltIns
 
         ns.Function("push", [Param("array", "array"), Param("value")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.push' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.push");
             list.Add(args[1]);
             return null;
         });
 
         ns.Function("pop", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.pop' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.pop");
             if (list.Count == 0)
             {
                 throw new RuntimeError("Cannot pop from an empty array.");
@@ -59,11 +51,7 @@ public static class ArrBuiltIns
 
         ns.Function("peek", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.peek' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.peek");
             if (list.Count == 0)
             {
                 throw new RuntimeError("Cannot peek an empty array.");
@@ -74,16 +62,8 @@ public static class ArrBuiltIns
 
         ns.Function("insert", [Param("array", "array"), Param("index", "int"), Param("value")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.insert' must be an array.");
-            }
-
-            if (args[1] is not long idx)
-            {
-                throw new RuntimeError("Second argument to 'arr.insert' must be an integer.");
-            }
-
+            var list = Args.List(args, 0, "arr.insert");
+            var idx = Args.Long(args, 1, "arr.insert");
             if (idx < 0 || idx > list.Count)
             {
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.");
@@ -95,16 +75,8 @@ public static class ArrBuiltIns
 
         ns.Function("removeAt", [Param("array", "array"), Param("index", "int")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.removeAt' must be an array.");
-            }
-
-            if (args[1] is not long idx)
-            {
-                throw new RuntimeError("Second argument to 'arr.removeAt' must be an integer.");
-            }
-
+            var list = Args.List(args, 0, "arr.removeAt");
+            var idx = Args.Long(args, 1, "arr.removeAt");
             if (idx < 0 || idx >= list.Count)
             {
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.removeAt'.");
@@ -117,11 +89,7 @@ public static class ArrBuiltIns
 
         ns.Function("remove", [Param("array", "array"), Param("value")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.remove' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.remove");
             for (int i = 0; i < list.Count; i++)
             {
                 if (RuntimeValues.IsEqual(list[i], args[1]))
@@ -135,22 +103,14 @@ public static class ArrBuiltIns
 
         ns.Function("clear", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.clear' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.clear");
             list.Clear();
             return null;
         });
 
         ns.Function("contains", [Param("array", "array"), Param("value")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.contains' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.contains");
             foreach (var item in list)
             {
                 if (RuntimeValues.IsEqual(item, args[1]))
@@ -163,11 +123,7 @@ public static class ArrBuiltIns
 
         ns.Function("indexOf", [Param("array", "array"), Param("value")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.indexOf' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.indexOf");
             for (int i = 0; i < list.Count; i++)
             {
                 if (RuntimeValues.IsEqual(list[i], args[1]))
@@ -180,21 +136,9 @@ public static class ArrBuiltIns
 
         ns.Function("slice", [Param("array", "array"), Param("start", "int"), Param("end", "int")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.slice' must be an array.");
-            }
-
-            if (args[1] is not long start)
-            {
-                throw new RuntimeError("Second argument to 'arr.slice' must be an integer.");
-            }
-
-            if (args[2] is not long end)
-            {
-                throw new RuntimeError("Third argument to 'arr.slice' must be an integer.");
-            }
-
+            var list = Args.List(args, 0, "arr.slice");
+            var start = Args.Long(args, 1, "arr.slice");
+            var end = Args.Long(args, 2, "arr.slice");
             int s = (int)Math.Max(0, Math.Min(start, list.Count));
             int e = (int)Math.Max(0, Math.Min(end, list.Count));
             if (e < s)
@@ -207,16 +151,8 @@ public static class ArrBuiltIns
 
         ns.Function("concat", [Param("a", "array"), Param("b", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list1)
-            {
-                throw new RuntimeError("First argument to 'arr.concat' must be an array.");
-            }
-
-            if (args[1] is not List<object?> list2)
-            {
-                throw new RuntimeError("Second argument to 'arr.concat' must be an array.");
-            }
-
+            var list1 = Args.List(args, 0, "arr.concat");
+            var list2 = Args.List(args, 1, "arr.concat");
             var result = new List<object?>(list1);
             result.AddRange(list2);
             return result;
@@ -224,16 +160,8 @@ public static class ArrBuiltIns
 
         ns.Function("join", [Param("array", "array"), Param("separator", "string")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.join' must be an array.");
-            }
-
-            if (args[1] is not string sep)
-            {
-                throw new RuntimeError("Second argument to 'arr.join' must be a string.");
-            }
-
+            var list = Args.List(args, 0, "arr.join");
+            var sep = Args.String(args, 1, "arr.join");
             var parts = new string[list.Count];
             for (int i = 0; i < list.Count; i++)
             {
@@ -245,22 +173,14 @@ public static class ArrBuiltIns
 
         ns.Function("reverse", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.reverse' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.reverse");
             list.Reverse();
             return null;
         });
 
         ns.Function("sort", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.sort' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.sort");
             try
             {
                 list.Sort((a, b) =>
@@ -302,16 +222,8 @@ public static class ArrBuiltIns
 
         ns.Function("map", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.map' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.map' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.map");
+            var fn = Args.Callable(args, 1, "arr.map");
             var result = new List<object?>();
             foreach (var item in list)
             {
@@ -323,16 +235,8 @@ public static class ArrBuiltIns
 
         ns.Function("filter", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.filter' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.filter' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.filter");
+            var fn = Args.Callable(args, 1, "arr.filter");
             var result = new List<object?>();
             foreach (var item in list)
             {
@@ -346,16 +250,8 @@ public static class ArrBuiltIns
 
         ns.Function("forEach", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.forEach' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.forEach' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.forEach");
+            var fn = Args.Callable(args, 1, "arr.forEach");
             foreach (var item in list)
             {
                 fn.Call(ctx, new List<object?> { item });
@@ -370,16 +266,8 @@ public static class ArrBuiltIns
 
         ns.Function("find", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.find' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.find' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.find");
+            var fn = Args.Callable(args, 1, "arr.find");
             foreach (var item in list)
             {
                 if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
@@ -392,16 +280,8 @@ public static class ArrBuiltIns
 
         ns.Function("reduce", [Param("array", "array"), Param("fn", "function"), Param("initial")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.reduce' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.reduce' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.reduce");
+            var fn = Args.Callable(args, 1, "arr.reduce");
             var accumulator = args[2];
             foreach (var item in list)
             {
@@ -413,11 +293,7 @@ public static class ArrBuiltIns
 
         ns.Function("unique", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.unique' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.unique");
             var result = new List<object?>();
             foreach (var item in list)
             {
@@ -440,16 +316,8 @@ public static class ArrBuiltIns
 
         ns.Function("any", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.any' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.any' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.any");
+            var fn = Args.Callable(args, 1, "arr.any");
             foreach (var item in list)
             {
                 if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
@@ -462,16 +330,8 @@ public static class ArrBuiltIns
 
         ns.Function("every", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.every' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.every' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.every");
+            var fn = Args.Callable(args, 1, "arr.every");
             foreach (var item in list)
             {
                 if (!RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
@@ -484,11 +344,7 @@ public static class ArrBuiltIns
 
         ns.Function("flat", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.flat' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.flat");
             var result = new List<object?>();
             foreach (var item in list)
             {
@@ -506,16 +362,8 @@ public static class ArrBuiltIns
 
         ns.Function("flatMap", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.flatMap' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.flatMap' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.flatMap");
+            var fn = Args.Callable(args, 1, "arr.flatMap");
             var result = new List<object?>();
             foreach (var item in list)
             {
@@ -534,16 +382,8 @@ public static class ArrBuiltIns
 
         ns.Function("findIndex", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.findIndex' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.findIndex' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.findIndex");
+            var fn = Args.Callable(args, 1, "arr.findIndex");
             for (int i = 0; i < list.Count; i++)
             {
                 if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { list[i] })))
@@ -556,16 +396,8 @@ public static class ArrBuiltIns
 
         ns.Function("count", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.count' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.count' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.count");
+            var fn = Args.Callable(args, 1, "arr.count");
             long count = 0;
             foreach (var item in list)
             {
@@ -579,16 +411,8 @@ public static class ArrBuiltIns
 
         ns.Function("sortBy", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.sortBy' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.sortBy' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.sortBy");
+            var fn = Args.Callable(args, 1, "arr.sortBy");
             var sorted = new List<object?>(list);
             try
             {
@@ -608,16 +432,8 @@ public static class ArrBuiltIns
 
         ns.Function("groupBy", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.groupBy' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.groupBy' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.groupBy");
+            var fn = Args.Callable(args, 1, "arr.groupBy");
             var result = new StashDictionary();
             foreach (var item in list)
             {
@@ -637,11 +453,7 @@ public static class ArrBuiltIns
 
         ns.Function("sum", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.sum' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.sum");
             long longTotal = 0;
             double doubleTotal = 0;
             bool hasFloat = false;
@@ -662,11 +474,7 @@ public static class ArrBuiltIns
 
         ns.Function("min", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.min' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.min");
             if (list.Count == 0)
             {
                 throw new RuntimeError("'arr.min' requires a non-empty array.");
@@ -694,11 +502,7 @@ public static class ArrBuiltIns
 
         ns.Function("max", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.max' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.max");
             if (list.Count == 0)
             {
                 throw new RuntimeError("'arr.max' requires a non-empty array.");
@@ -727,16 +531,8 @@ public static class ArrBuiltIns
         // ── Additional array utilities ───────────────────────────────────
         ns.Function("zip", [Param("a", "array"), Param("b", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> a)
-            {
-                throw new RuntimeError("First argument to 'arr.zip' must be an array.");
-            }
-
-            if (args[1] is not List<object?> list2)
-            {
-                throw new RuntimeError("Second argument to 'arr.zip' must be an array.");
-            }
-
+            var a = Args.List(args, 0, "arr.zip");
+            var list2 = Args.List(args, 1, "arr.zip");
             int len = Math.Min(a.Count, list2.Count);
             var result = new List<object?>(len);
             for (int i = 0; i < len; i++)
@@ -749,16 +545,8 @@ public static class ArrBuiltIns
 
         ns.Function("chunk", [Param("array", "array"), Param("size", "int")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.chunk' must be an array.");
-            }
-
-            if (args[1] is not long size)
-            {
-                throw new RuntimeError("Second argument to 'arr.chunk' must be an integer.");
-            }
-
+            var list = Args.List(args, 0, "arr.chunk");
+            var size = Args.Long(args, 1, "arr.chunk");
             if (size <= 0)
             {
                 throw new RuntimeError("'arr.chunk' size must be > 0.");
@@ -775,11 +563,7 @@ public static class ArrBuiltIns
 
         ns.Function("shuffle", [Param("array", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.shuffle' must be an array.");
-            }
-
+            var list = Args.List(args, 0, "arr.shuffle");
             var rng = new Random();
             for (int i = list.Count - 1; i > 0; i--)
             {
@@ -791,48 +575,24 @@ public static class ArrBuiltIns
 
         ns.Function("take", [Param("array", "array"), Param("n", "int")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.take' must be an array.");
-            }
-
-            if (args[1] is not long n)
-            {
-                throw new RuntimeError("Second argument to 'arr.take' must be an integer.");
-            }
-
+            var list = Args.List(args, 0, "arr.take");
+            var n = Args.Long(args, 1, "arr.take");
             int count = (int)Math.Max(0, Math.Min(n, list.Count));
             return list.GetRange(0, count);
         });
 
         ns.Function("drop", [Param("array", "array"), Param("n", "int")], (_, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.drop' must be an array.");
-            }
-
-            if (args[1] is not long n)
-            {
-                throw new RuntimeError("Second argument to 'arr.drop' must be an integer.");
-            }
-
+            var list = Args.List(args, 0, "arr.drop");
+            var n = Args.Long(args, 1, "arr.drop");
             int skip = (int)Math.Max(0, Math.Min(n, list.Count));
             return list.GetRange(skip, list.Count - skip);
         });
 
         ns.Function("partition", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> list)
-            {
-                throw new RuntimeError("First argument to 'arr.partition' must be an array.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'arr.partition' must be a function.");
-            }
-
+            var list = Args.List(args, 0, "arr.partition");
+            var fn = Args.Callable(args, 1, "arr.partition");
             var matching = new List<object?>();
             var nonMatching = new List<object?>();
             foreach (var item in list)

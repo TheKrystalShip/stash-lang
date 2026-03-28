@@ -43,11 +43,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("upper", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.upper' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.upper");
             return s.ToUpperInvariant();
         },
             returnType: "string",
@@ -58,11 +54,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("lower", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.lower' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.lower");
             return s.ToLowerInvariant();
         },
             returnType: "string",
@@ -72,11 +64,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("trim", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.trim' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.trim");
             return s.Trim();
         },
             returnType: "string",
@@ -86,11 +74,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("trimStart", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.trimStart' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.trimStart");
             return s.TrimStart();
         },
             returnType: "string",
@@ -100,11 +84,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("trimEnd", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.trimEnd' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.trimEnd");
             return s.TrimEnd();
         },
             returnType: "string",
@@ -115,16 +95,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if either argument is not a string.
         ns.Function("contains", [Param("s", "string"), Param("substring", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.contains' must be a string.");
-            }
-
-            if (args[1] is not string sub)
-            {
-                throw new RuntimeError("Second argument to 'str.contains' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.contains");
+            var sub = Args.String(args, 1, "str.contains");
             return s.Contains(sub, StringComparison.Ordinal);
         },
             returnType: "bool",
@@ -135,16 +107,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if either argument is not a string.
         ns.Function("startsWith", [Param("s", "string"), Param("prefix", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.startsWith' must be a string.");
-            }
-
-            if (args[1] is not string prefix)
-            {
-                throw new RuntimeError("Second argument to 'str.startsWith' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.startsWith");
+            var prefix = Args.String(args, 1, "str.startsWith");
             return s.StartsWith(prefix, StringComparison.Ordinal);
         },
             returnType: "bool",
@@ -155,16 +119,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if either argument is not a string.
         ns.Function("endsWith", [Param("s", "string"), Param("suffix", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.endsWith' must be a string.");
-            }
-
-            if (args[1] is not string suffix)
-            {
-                throw new RuntimeError("Second argument to 'str.endsWith' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.endsWith");
+            var suffix = Args.String(args, 1, "str.endsWith");
             return s.EndsWith(suffix, StringComparison.Ordinal);
         },
             returnType: "bool",
@@ -175,16 +131,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if either argument is not a string.
         ns.Function("indexOf", [Param("s", "string"), Param("substring", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.indexOf' must be a string.");
-            }
-
-            if (args[1] is not string sub)
-            {
-                throw new RuntimeError("Second argument to 'str.indexOf' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.indexOf");
+            var sub = Args.String(args, 1, "str.indexOf");
             return (long)s.IndexOf(sub, StringComparison.Ordinal);
         },
             returnType: "int",
@@ -195,16 +143,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if either argument is not a string.
         ns.Function("lastIndexOf", [Param("s", "string"), Param("substring", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.lastIndexOf' must be a string.");
-            }
-
-            if (args[1] is not string sub)
-            {
-                throw new RuntimeError("Second argument to 'str.lastIndexOf' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.lastIndexOf");
+            var sub = Args.String(args, 1, "str.lastIndexOf");
             return (long)s.LastIndexOf(sub, StringComparison.Ordinal);
         },
             returnType: "int",
@@ -220,15 +160,8 @@ public static class StrBuiltIns
                 throw new RuntimeError("'str.substring' requires 2 or 3 arguments.");
             }
 
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.substring' must be a string.");
-            }
-
-            if (args[1] is not long start)
-            {
-                throw new RuntimeError("Second argument to 'str.substring' must be an integer.");
-            }
+            var s = Args.String(args, 0, "str.substring");
+            var start = Args.Long(args, 1, "str.substring");
 
             if (start < 0 || start > s.Length)
             {
@@ -237,10 +170,7 @@ public static class StrBuiltIns
 
             if (args.Count == 3)
             {
-                if (args[2] is not long end)
-                {
-                    throw new RuntimeError("Third argument to 'str.substring' must be an integer.");
-                }
+                var end = Args.Long(args, 2, "str.substring");
 
                 if (end < start || end > s.Length)
                 {
@@ -260,21 +190,9 @@ public static class StrBuiltIns
         // Throws RuntimeError if any argument is not a string.
         ns.Function("replace", [Param("s", "string"), Param("old", "string"), Param("new", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.replace' must be a string.");
-            }
-
-            if (args[1] is not string oldStr)
-            {
-                throw new RuntimeError("Second argument to 'str.replace' must be a string.");
-            }
-
-            if (args[2] is not string newStr)
-            {
-                throw new RuntimeError("Third argument to 'str.replace' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.replace");
+            var oldStr = Args.String(args, 1, "str.replace");
+            var newStr = Args.String(args, 2, "str.replace");
             int idx = s.IndexOf(oldStr, StringComparison.Ordinal);
             if (idx < 0)
             {
@@ -291,21 +209,9 @@ public static class StrBuiltIns
         // Throws RuntimeError if any argument is not a string.
         ns.Function("replaceAll", [Param("s", "string"), Param("old", "string"), Param("new", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.replaceAll' must be a string.");
-            }
-
-            if (args[1] is not string oldStr)
-            {
-                throw new RuntimeError("Second argument to 'str.replaceAll' must be a string.");
-            }
-
-            if (args[2] is not string newStr)
-            {
-                throw new RuntimeError("Third argument to 'str.replaceAll' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.replaceAll");
+            var oldStr = Args.String(args, 1, "str.replaceAll");
+            var newStr = Args.String(args, 2, "str.replaceAll");
             return s.Replace(oldStr, newStr, StringComparison.Ordinal);
         },
             returnType: "string",
@@ -316,16 +222,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if either argument is not a string.
         ns.Function("split", [Param("s", "string"), Param("delimiter", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.split' must be a string.");
-            }
-
-            if (args[1] is not string delimiter)
-            {
-                throw new RuntimeError("Second argument to 'str.split' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.split");
+            var delimiter = Args.String(args, 1, "str.split");
             var parts = s.Split(new[] { delimiter }, StringSplitOptions.None);
             return parts.Select(p => (object?)p).ToList();
         },
@@ -336,15 +234,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if s is not a string, count is not a non-negative integer.
         ns.Function("repeat", [Param("s", "string"), Param("count", "int")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.repeat' must be a string.");
-            }
-
-            if (args[1] is not long count)
-            {
-                throw new RuntimeError("Second argument to 'str.repeat' must be an integer.");
-            }
+            var s = Args.String(args, 0, "str.repeat");
+            var count = Args.Long(args, 1, "str.repeat");
 
             if (count < 0)
             {
@@ -360,11 +251,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("reverse", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.reverse' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.reverse");
             return new string(s.Reverse().ToArray());
         },
             returnType: "string",
@@ -375,11 +262,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("chars", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.chars' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.chars");
             return s.Select(c => (object?)c.ToString()).ToList();
         },
             returnType: "array",
@@ -407,11 +290,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("isDigit", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.isDigit' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.isDigit");
             return s.Length > 0 && s.All(char.IsDigit);
         },
             returnType: "bool",
@@ -421,11 +300,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("isAlpha", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.isAlpha' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.isAlpha");
             return s.Length > 0 && s.All(char.IsLetter);
         },
             returnType: "bool",
@@ -435,11 +310,7 @@ public static class StrBuiltIns
         // or decimal digit. Throws RuntimeError if the argument is not a string.
         ns.Function("isAlphaNum", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.isAlphaNum' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.isAlphaNum");
             return s.Length > 0 && s.All(char.IsLetterOrDigit);
         },
             returnType: "bool",
@@ -449,11 +320,7 @@ public static class StrBuiltIns
         // uppercase. Non-letter characters are ignored. Throws RuntimeError if not a string.
         ns.Function("isUpper", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.isUpper' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.isUpper");
             var letters = s.Where(char.IsLetter).ToList();
             return letters.Count > 0 && letters.All(char.IsUpper);
         },
@@ -464,11 +331,7 @@ public static class StrBuiltIns
         // lowercase. Non-letter characters are ignored. Throws RuntimeError if not a string.
         ns.Function("isLower", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.isLower' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.isLower");
             var letters = s.Where(char.IsLetter).ToList();
             return letters.Count > 0 && letters.All(char.IsLower);
         },
@@ -479,11 +342,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("isEmpty", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.isEmpty' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.isEmpty");
             return string.IsNullOrWhiteSpace(s);
         },
             returnType: "bool",
@@ -495,16 +354,8 @@ public static class StrBuiltIns
         // or the match times out.
         ns.Function("match", [Param("s", "string"), Param("pattern", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.match' must be a string.");
-            }
-
-            if (args[1] is not string pattern)
-            {
-                throw new RuntimeError("Second argument to 'str.match' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.match");
+            var pattern = Args.String(args, 1, "str.match");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -529,16 +380,8 @@ public static class StrBuiltIns
         // or the match times out.
         ns.Function("matchAll", [Param("s", "string"), Param("pattern", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.matchAll' must be a string.");
-            }
-
-            if (args[1] is not string pattern)
-            {
-                throw new RuntimeError("Second argument to 'str.matchAll' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.matchAll");
+            var pattern = Args.String(args, 1, "str.matchAll");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -569,16 +412,8 @@ public static class StrBuiltIns
         // or the match times out.
         ns.Function("isMatch", [Param("s", "string"), Param("pattern", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.isMatch' must be a string.");
-            }
-
-            if (args[1] is not string pattern)
-            {
-                throw new RuntimeError("Second argument to 'str.isMatch' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.isMatch");
+            var pattern = Args.String(args, 1, "str.isMatch");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -602,21 +437,9 @@ public static class StrBuiltIns
         // pattern is invalid, or the match times out.
         ns.Function("replaceRegex", [Param("s", "string"), Param("pattern", "string"), Param("replacement", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.replaceRegex' must be a string.");
-            }
-
-            if (args[1] is not string pattern)
-            {
-                throw new RuntimeError("Second argument to 'str.replaceRegex' must be a string.");
-            }
-
-            if (args[2] is not string replacement)
-            {
-                throw new RuntimeError("Third argument to 'str.replaceRegex' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.replaceRegex");
+            var pattern = Args.String(args, 1, "str.replaceRegex");
+            var replacement = Args.String(args, 2, "str.replaceRegex");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -639,16 +462,8 @@ public static class StrBuiltIns
         // Throws RuntimeError if either argument is not a string or if substring is empty.
         ns.Function("count", [Param("s", "string"), Param("substring", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.count' must be a string.");
-            }
-
-            if (args[1] is not string sub)
-            {
-                throw new RuntimeError("Second argument to 'str.count' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.count");
+            var sub = Args.String(args, 1, "str.count");
             if (sub.Length == 0)
             {
                 throw new RuntimeError("'str.count' substring must not be empty.");
@@ -677,11 +492,7 @@ public static class StrBuiltIns
                 throw new RuntimeError("'str.format' requires at least 1 argument.");
             }
 
-            if (args[0] is not string template)
-            {
-                throw new RuntimeError("First argument to 'str.format' must be a string.");
-            }
-
+            var template = Args.String(args, 0, "str.format");
             try
             {
                 var placeholderRegex = new Regex(@"\{(\d+)\}", RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -720,11 +531,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("capitalize", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.capitalize' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.capitalize");
             if (s.Length == 0)
             {
                 return s;
@@ -740,11 +547,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("title", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.title' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.title");
             if (s.Length == 0)
             {
                 return s;
@@ -777,11 +580,7 @@ public static class StrBuiltIns
         // Empty lines are preserved. Throws RuntimeError if the argument is not a string.
         ns.Function("lines", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.lines' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.lines");
             var lines = s.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
             return lines.Select(l => (object?)l).ToList();
         },
@@ -792,11 +591,7 @@ public static class StrBuiltIns
         // entries. Throws RuntimeError if the argument is not a string.
         ns.Function("words", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.words' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.words");
             var words = s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
             return words.Select(w => (object?)w).ToList();
         },
@@ -814,15 +609,8 @@ public static class StrBuiltIns
                 throw new RuntimeError("'str.truncate' requires 2 or 3 arguments.");
             }
 
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.truncate' must be a string.");
-            }
-
-            if (args[1] is not long maxLen)
-            {
-                throw new RuntimeError("Second argument to 'str.truncate' must be an integer.");
-            }
+            var s = Args.String(args, 0, "str.truncate");
+            var maxLen = Args.Long(args, 1, "str.truncate");
 
             if (maxLen < 0)
             {
@@ -853,11 +641,7 @@ public static class StrBuiltIns
         // Throws RuntimeError if the argument is not a string.
         ns.Function("slug", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.slug' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "str.slug");
             var slug = s.ToLowerInvariant();
             slug = Regex.Replace(slug, @"[^a-z0-9\s-]", "");
             slug = Regex.Replace(slug, @"[\s-]+", "-");
@@ -873,15 +657,8 @@ public static class StrBuiltIns
         // positive integer.
         ns.Function("wrap", [Param("s", "string"), Param("width", "int")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'str.wrap' must be a string.");
-            }
-
-            if (args[1] is not long width)
-            {
-                throw new RuntimeError("Second argument to 'str.wrap' must be an integer.");
-            }
+            var s = Args.String(args, 0, "str.wrap");
+            var width = Args.Long(args, 1, "str.wrap");
 
             if (width <= 0)
             {

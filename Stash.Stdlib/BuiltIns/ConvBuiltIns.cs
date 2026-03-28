@@ -88,11 +88,7 @@ public static class ConvBuiltIns
 
         ns.Function("toHex", [Param("n", "int")], (_, args) =>
         {
-            if (args[0] is not long n)
-            {
-                throw new RuntimeError("Argument to 'conv.toHex' must be an integer.");
-            }
-
+            var n = Args.Long(args, 0, "conv.toHex");
             return n.ToString("x");
         },
             returnType: "string",
@@ -100,11 +96,7 @@ public static class ConvBuiltIns
 
         ns.Function("toOct", [Param("n", "int")], (_, args) =>
         {
-            if (args[0] is not long n)
-            {
-                throw new RuntimeError("Argument to 'conv.toOct' must be an integer.");
-            }
-
+            var n = Args.Long(args, 0, "conv.toOct");
             return System.Convert.ToString(n, 8);
         },
             returnType: "string",
@@ -112,11 +104,7 @@ public static class ConvBuiltIns
 
         ns.Function("toBin", [Param("n", "int")], (_, args) =>
         {
-            if (args[0] is not long n)
-            {
-                throw new RuntimeError("Argument to 'conv.toBin' must be an integer.");
-            }
-
+            var n = Args.Long(args, 0, "conv.toBin");
             return System.Convert.ToString(n, 2);
         },
             returnType: "string",
@@ -124,11 +112,7 @@ public static class ConvBuiltIns
 
         ns.Function("fromHex", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("Argument to 'conv.fromHex' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "conv.fromHex");
             string hex = s.StartsWith("0x", System.StringComparison.OrdinalIgnoreCase) ? s[2..] : s;
             try
             {
@@ -144,11 +128,7 @@ public static class ConvBuiltIns
 
         ns.Function("fromOct", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("Argument to 'conv.fromOct' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "conv.fromOct");
             string oct = s.StartsWith("0o", System.StringComparison.OrdinalIgnoreCase) ? s[2..] : s;
             try
             {
@@ -164,11 +144,7 @@ public static class ConvBuiltIns
 
         ns.Function("fromBin", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("Argument to 'conv.fromBin' must be a string.");
-            }
-
+            var s = Args.String(args, 0, "conv.fromBin");
             string bin = s.StartsWith("0b", System.StringComparison.OrdinalIgnoreCase) ? s[2..] : s;
             try
             {
@@ -184,7 +160,8 @@ public static class ConvBuiltIns
 
         ns.Function("charCode", [Param("s", "string")], (_, args) =>
         {
-            if (args[0] is not string s || s.Length == 0)
+            var s = Args.String(args, 0, "conv.charCode");
+            if (s.Length == 0)
             {
                 throw new RuntimeError("Argument to 'conv.charCode' must be a non-empty string.");
             }
@@ -196,10 +173,7 @@ public static class ConvBuiltIns
 
         ns.Function("fromCharCode", [Param("n", "int")], (_, args) =>
         {
-            if (args[0] is not long n)
-            {
-                throw new RuntimeError("Argument to 'conv.fromCharCode' must be an integer.");
-            }
+            var n = Args.Long(args, 0, "conv.fromCharCode");
 
             if (n < 0 || n > 0x10FFFF)
             {

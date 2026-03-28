@@ -89,8 +89,8 @@ public static class AssertBuiltIns
         // assert.greater(a, b) — a > b
         ns.Function("greater", [Param("a"), Param("b")], (ctx, args) =>
         {
-            double a = ToDouble(args[0], "assert.greater", ctx.CurrentSpan);
-            double b = ToDouble(args[1], "assert.greater", ctx.CurrentSpan);
+            double a = Args.Numeric(args, 0, "assert.greater");
+            double b = Args.Numeric(args, 1, "assert.greater");
             if (!(a > b))
             {
                 string msg = $"assert.greater failed: expected {RuntimeValues.Stringify(args[0])} > {RuntimeValues.Stringify(args[1])}";
@@ -102,8 +102,8 @@ public static class AssertBuiltIns
         // assert.less(a, b) — a < b
         ns.Function("less", [Param("a"), Param("b")], (ctx, args) =>
         {
-            double a = ToDouble(args[0], "assert.less", ctx.CurrentSpan);
-            double b = ToDouble(args[1], "assert.less", ctx.CurrentSpan);
+            double a = Args.Numeric(args, 0, "assert.less");
+            double b = Args.Numeric(args, 1, "assert.less");
             if (!(a < b))
             {
                 string msg = $"assert.less failed: expected {RuntimeValues.Stringify(args[0])} < {RuntimeValues.Stringify(args[1])}";
@@ -115,10 +115,7 @@ public static class AssertBuiltIns
         // assert.throws(fn) — fn() should throw; returns error message
         ns.Function("throws", [Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not IStashCallable callable)
-            {
-                throw new RuntimeError("assert.throws requires a function argument.", ctx.CurrentSpan);
-            }
+            var callable = Args.Callable(args, 0, "assert.throws");
             try
             {
                 callable.Call(ctx, new List<object?>());
@@ -141,24 +138,4 @@ public static class AssertBuiltIns
         return ns.Build();
     }
 
-    /// <summary>
-    /// Converts a Stash runtime value to a <see cref="double"/> for use in numeric
-    /// comparison assertions (<c>assert.greater</c> and <c>assert.less</c>).
-    /// </summary>
-    /// <param name="value">The runtime value to convert. Must be a <see cref="long"/> or <see cref="double"/>.</param>
-    /// <param name="funcName">The name of the calling assert function, used in the error message.</param>
-    /// <param name="span">The source location to attach to the <see cref="RuntimeError"/> if conversion fails.</param>
-    /// <returns>The numeric value as a <see cref="double"/>.</returns>
-    /// <exception cref="RuntimeError">
-    /// Thrown when <paramref name="value"/> is neither a <see cref="long"/> nor a <see cref="double"/>.
-    /// </exception>
-    private static double ToDouble(object? value, string funcName, SourceSpan? span)
-    {
-        return value switch
-        {
-            long l => l,
-            double d => d,
-            _ => throw new RuntimeError($"{funcName} requires numeric arguments.", span)
-        };
-    }
 }

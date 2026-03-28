@@ -50,8 +50,8 @@ public static class FooBuiltIns
 
         b.Function("bar", [Param("input", "string"), Param("count", "int")], (ctx, args) =>
         {
-            if (args[0] is not string s)
-                throw new RuntimeError("First argument to 'foo.bar' must be a string.");
+            var s = Args.String(args, 0, "foo.bar");
+            var count = Args.Long(args, 1, "foo.bar");
             // implementation
             return result;
         }, returnType: "string", documentation: "Returns input repeated count times.");
@@ -66,7 +66,7 @@ public static class FooBuiltIns
 - `b.Function(name, params, handler)` — params are `[Param("name", "type")]` arrays
 - `isVariadic: true` for variable-argument functions
 - `returnType:` and `documentation:` are optional named parameters
-- Error messages use format: `"First argument to 'namespace.function' must be a {type}."`
+- **Always use `Args.*` helpers** for argument validation (see Argument Validation below)
 - Add `using static Stash.Stdlib.Registration.P;` for the `Param()` shorthand
 - All definitions are produced by `StdlibDefinitions` (Lazy-cached) and consumed by both the Interpreter and StdlibRegistry
 
@@ -81,6 +81,29 @@ Some namespaces are only registered when their capability is enabled. Use `b.Req
 | Process     | process, args                                                                                                                       |
 | FileSystem  | fs, pkg                                                                                                                             |
 | Network     | http, ssh, sftp                                                                                                                     |
+
+## Argument Validation (`Args` helpers)
+
+All argument type-checking and extraction uses the shared `Args` class (`Stash.Stdlib/Args.cs`). **Never write manual `is not Type` throwing patterns** — use Args helpers instead.
+
+| Helper                                           | Purpose                                         |
+| ------------------------------------------------ | ----------------------------------------------- |
+| `Args.String(args, index, funcName)`             | Extract string argument or throw                |
+| `Args.List(args, index, funcName)`               | Extract `List<object?>` argument                |
+| `Args.Dict(args, index, funcName)`               | Extract `StashDictionary` argument              |
+| `Args.Callable(args, index, funcName)`           | Extract `IStashCallable` argument               |
+| `Args.Long(args, index, funcName)`               | Extract `long` argument                         |
+| `Args.Double(args, index, funcName)`             | Extract `double` argument                       |
+| `Args.Bool(args, index, funcName)`               | Extract `bool` argument                         |
+| `Args.Numeric(args, index, funcName)`            | Extract long or double → returns `double`       |
+| `Args.Instance(args, index, funcName)`           | Extract `StashInstance` argument                |
+| `Args.Instance(args, index, typeName, funcName)` | Extract typed `StashInstance` (e.g., "Process") |
+| `Args.Future(args, index, funcName)`             | Extract `StashFuture` argument                  |
+| `Args.NotNull(args, index, funcName)`            | Extract non-null value                          |
+| `Args.Count(args, min, max, funcName)`           | Validate argument count range                   |
+| `Args.CountMin(args, min, funcName)`             | Validate minimum argument count                 |
+
+Error messages follow the format: `"First argument to 'func' must be a type."` with proper ordinals.
 
 ## Cross-Platform Requirement
 

@@ -91,10 +91,7 @@ public static class TimeBuiltIns
                 throw new RuntimeError("First argument to 'time.format' must be a number.");
             }
 
-            if (args[1] is not string fmt)
-            {
-                throw new RuntimeError("Second argument to 'time.format' must be a string.");
-            }
+            var fmt = Args.String(args, 1, "time.format");
 
             var dto = DateTimeOffset.FromUnixTimeMilliseconds((long)(seconds * 1000));
             return dto.ToString(fmt, CultureInfo.InvariantCulture);
@@ -105,15 +102,8 @@ public static class TimeBuiltIns
         // time.parse(string, format) — Parses a date/time string using a .NET format string. Returns a Unix timestamp (float).
         ns.Function("parse", [Param("str", "string"), Param("format", "string")], (_, args) =>
         {
-            if (args[0] is not string str)
-            {
-                throw new RuntimeError("First argument to 'time.parse' must be a string.");
-            }
-
-            if (args[1] is not string fmt)
-            {
-                throw new RuntimeError("Second argument to 'time.parse' must be a string.");
-            }
+            var str = Args.String(args, 0, "time.parse");
+            var fmt = Args.String(args, 1, "time.parse");
 
             try
             {

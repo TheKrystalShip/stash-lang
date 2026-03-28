@@ -48,10 +48,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
         ns.Function("get", [Param("dict", "dict"), Param("key", "any")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.get' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.get");
 
             var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
             return d.Get(key);
@@ -64,10 +61,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
         ns.Function("set", [Param("dict", "dict"), Param("key", "any"), Param("value", "any")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.set' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.set");
 
             var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
             d.Set(key, args[2]);
@@ -80,10 +74,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
         ns.Function("has", [Param("dict", "dict"), Param("key", "any")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.has' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.has");
 
             var key = (args[1] ?? throw new RuntimeError("Dictionary key cannot be null.")) ?? throw new RuntimeError("Dictionary key cannot be null.");
             return d.Has(key);
@@ -96,10 +87,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
         ns.Function("remove", [Param("dict", "dict"), Param("key", "any")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.remove' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.remove");
 
             var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
             return d.Remove(key);
@@ -111,10 +99,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary.
         ns.Function("clear", [Param("dict", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.clear' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.clear");
 
             d.Clear();
             return null;
@@ -126,10 +111,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary.
         ns.Function("keys", [Param("dict", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.keys' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.keys");
 
             return d.Keys();
         },
@@ -140,10 +122,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary.
         ns.Function("values", [Param("dict", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.values' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.values");
 
             return d.Values();
         },
@@ -154,10 +133,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary.
         ns.Function("size", [Param("dict", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.size' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.size");
 
             return (long)d.Count;
         },
@@ -169,10 +145,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary.
         ns.Function("pairs", [Param("dict", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.pairs' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.pairs");
 
             return d.Pairs();
         },
@@ -184,15 +157,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
         ns.Function("forEach", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.forEach' must be a dictionary.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'dict.forEach' must be a function.");
-            }
+            var d = Args.Dict(args, 0, "dict.forEach");
+            var fn = Args.Callable(args, 1, "dict.forEach");
 
             foreach (var entry in d.RawEntries())
             {
@@ -209,15 +175,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if either argument is not a dictionary.
         ns.Function("merge", [Param("dict1", "dict"), Param("dict2", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d1)
-            {
-                throw new RuntimeError("First argument to 'dict.merge' must be a dictionary.");
-            }
-
-            if (args[1] is not StashDictionary d2)
-            {
-                throw new RuntimeError("Second argument to 'dict.merge' must be a dictionary.");
-            }
+            var d1 = Args.Dict(args, 0, "dict.merge");
+            var d2 = Args.Dict(args, 1, "dict.merge");
 
             var result = new StashDictionary();
             foreach (var entry in d1.RawEntries())
@@ -238,15 +197,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
         ns.Function("map", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.map' must be a dictionary.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'dict.map' must be a function.");
-            }
+            var d = Args.Dict(args, 0, "dict.map");
+            var fn = Args.Callable(args, 1, "dict.map");
 
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
@@ -263,15 +215,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
         ns.Function("filter", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.filter' must be a dictionary.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'dict.filter' must be a function.");
-            }
+            var d = Args.Dict(args, 0, "dict.filter");
+            var fn = Args.Callable(args, 1, "dict.filter");
 
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
@@ -294,10 +239,7 @@ public static class DictBuiltIns
         // Throws RuntimeError if the argument is not an array, or any element is not a valid pair.
         ns.Function("fromPairs", [Param("pairs", "array")], (_, args) =>
         {
-            if (args[0] is not List<object?> pairs)
-            {
-                throw new RuntimeError("First argument to 'dict.fromPairs' must be an array.");
-            }
+            var pairs = Args.List(args, 0, "dict.fromPairs");
 
             var result = new StashDictionary();
             foreach (var pair in pairs)
@@ -320,15 +262,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not an array.
         ns.Function("pick", [Param("dict", "dict"), Param("keys", "array")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.pick' must be a dictionary.");
-            }
-
-            if (args[1] is not List<object?> keys)
-            {
-                throw new RuntimeError("Second argument to 'dict.pick' must be an array.");
-            }
+            var d = Args.Dict(args, 0, "dict.pick");
+            var keys = Args.List(args, 1, "dict.pick");
 
             var result = new StashDictionary();
             foreach (var key in keys)
@@ -348,15 +283,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not an array.
         ns.Function("omit", [Param("dict", "dict"), Param("keys", "array")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.omit' must be a dictionary.");
-            }
-
-            if (args[1] is not List<object?> keysToOmit)
-            {
-                throw new RuntimeError("Second argument to 'dict.omit' must be an array.");
-            }
+            var d = Args.Dict(args, 0, "dict.omit");
+            var keysToOmit = Args.List(args, 1, "dict.omit");
 
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
@@ -386,15 +314,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if either argument is not a dictionary.
         ns.Function("defaults", [Param("dict", "dict"), Param("defaults", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.defaults' must be a dictionary.");
-            }
-
-            if (args[1] is not StashDictionary defaults)
-            {
-                throw new RuntimeError("Second argument to 'dict.defaults' must be a dictionary.");
-            }
+            var d = Args.Dict(args, 0, "dict.defaults");
+            var defaults = Args.Dict(args, 1, "dict.defaults");
 
             var result = new StashDictionary();
             foreach (var entry in defaults.RawEntries())
@@ -417,15 +338,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
         ns.Function("any", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.any' must be a dictionary.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'dict.any' must be a function.");
-            }
+            var d = Args.Dict(args, 0, "dict.any");
+            var fn = Args.Callable(args, 1, "dict.any");
 
             foreach (var entry in d.RawEntries())
             {
@@ -444,15 +358,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
         ns.Function("every", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.every' must be a dictionary.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'dict.every' must be a function.");
-            }
+            var d = Args.Dict(args, 0, "dict.every");
+            var fn = Args.Callable(args, 1, "dict.every");
 
             foreach (var entry in d.RawEntries())
             {
@@ -471,15 +378,8 @@ public static class DictBuiltIns
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
         ns.Function("find", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary d)
-            {
-                throw new RuntimeError("First argument to 'dict.find' must be a dictionary.");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'dict.find' must be a function.");
-            }
+            var d = Args.Dict(args, 0, "dict.find");
+            var fn = Args.Callable(args, 1, "dict.find");
 
             foreach (var entry in d.RawEntries())
             {

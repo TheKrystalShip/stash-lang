@@ -22,10 +22,7 @@ public static class IniBuiltIns
         // ini.parse(string) — Parses an INI-format string into a dict. Section headers become nested dicts.
         ns.Function("parse", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'ini.parse' must be a string.");
-            }
+            var s = Args.String(args, 0, "ini.parse");
 
             try
             {
@@ -42,10 +39,7 @@ public static class IniBuiltIns
         // ini.stringify(dict) — Serializes a dict to an INI-format string. Nested dicts become section headers.
         ns.Function("stringify", [Param("data", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary dict)
-            {
-                throw new RuntimeError("First argument to 'ini.stringify' must be a dict.");
-            }
+            var dict = Args.Dict(args, 0, "ini.stringify");
 
             return StringifyIni(dict);
         },

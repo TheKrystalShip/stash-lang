@@ -41,10 +41,7 @@ public static class TomlBuiltIns
         // toml.parse(string) — Parses a TOML string into a Stash dict.
         ns.Function("parse", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'toml.parse' must be a string.");
-            }
+            var s = Args.String(args, 0, "toml.parse");
 
             try
             {
@@ -67,10 +64,7 @@ public static class TomlBuiltIns
         // toml.stringify(dict) — Serializes a Stash dict to a TOML string.
         ns.Function("stringify", [Param("data", "dict")], (_, args) =>
         {
-            if (args[0] is not StashDictionary dict)
-            {
-                throw new RuntimeError("First argument to 'toml.stringify' must be a dict.");
-            }
+            var dict = Args.Dict(args, 0, "toml.stringify");
 
             try
             {
@@ -88,10 +82,7 @@ public static class TomlBuiltIns
         // toml.valid(string) — Returns true if the string is valid TOML, false otherwise.
         ns.Function("valid", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'toml.valid' must be a string.");
-            }
+            var s = Args.String(args, 0, "toml.valid");
 
             try
             {

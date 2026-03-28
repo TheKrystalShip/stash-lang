@@ -51,16 +51,8 @@ public static class TermBuiltIns
         //   'color' must be one of the term color constants (e.g. term.RED) or their string equivalents.
         ns.Function("color", [Param("text", "string"), Param("color", "string")], (_, args) =>
         {
-            if (args[0] is not string text)
-            {
-                throw new RuntimeError("First argument to 'term.color' must be a string.");
-            }
-
-            if (args[1] is not string color)
-            {
-                throw new RuntimeError("Second argument to 'term.color' must be a string.");
-            }
-
+            var text = Args.String(args, 0, "term.color");
+            var color = Args.String(args, 1, "term.color");
             string code = color.ToLowerInvariant() switch
             {
                 "black" => "30",
@@ -80,33 +72,21 @@ public static class TermBuiltIns
         // term.bold(text) — Wraps 'text' in ANSI bold escape codes. Returns the styled string.
         ns.Function("bold", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string text)
-            {
-                throw new RuntimeError("Argument to 'term.bold' must be a string.");
-            }
-
+            var text = Args.String(args, 0, "term.bold");
             return $"\x1b[1m{text}\x1b[0m";
         }, returnType: "string");
 
         // term.dim(text) — Wraps 'text' in ANSI dim (faint) escape codes. Returns the styled string.
         ns.Function("dim", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string text)
-            {
-                throw new RuntimeError("Argument to 'term.dim' must be a string.");
-            }
-
+            var text = Args.String(args, 0, "term.dim");
             return $"\x1b[2m{text}\x1b[0m";
         }, returnType: "string");
 
         // term.underline(text) — Wraps 'text' in ANSI underline escape codes. Returns the styled string.
         ns.Function("underline", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string text)
-            {
-                throw new RuntimeError("Argument to 'term.underline' must be a string.");
-            }
-
+            var text = Args.String(args, 0, "term.underline");
             return $"\x1b[4m{text}\x1b[0m";
         }, returnType: "string");
 
@@ -115,16 +95,8 @@ public static class TermBuiltIns
         //   Returns the ANSI-styled string, or 'text' unchanged if no options are set.
         ns.Function("style", [Param("text", "string"), Param("opts", "dict")], (_, args) =>
         {
-            if (args[0] is not string text)
-            {
-                throw new RuntimeError("First argument to 'term.style' must be a string.");
-            }
-
-            if (args[1] is not StashDictionary opts)
-            {
-                throw new RuntimeError("Second argument to 'term.style' must be a dict.");
-            }
-
+            var text = Args.String(args, 0, "term.style");
+            var opts = Args.Dict(args, 1, "term.style");
             var codes = new List<string>();
 
             var boldVal = opts.Get("bold");
@@ -175,11 +147,7 @@ public static class TermBuiltIns
         // term.strip(text) — Removes all ANSI escape sequences from 'text'. Returns the plain string.
         ns.Function("strip", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string text)
-            {
-                throw new RuntimeError("Argument to 'term.strip' must be a string.");
-            }
-
+            var text = Args.String(args, 0, "term.strip");
             return Regex.Replace(text, @"\x1b\[[0-9;]*m", "");
         }, returnType: "string");
 
@@ -208,16 +176,8 @@ public static class TermBuiltIns
         //   Optional 'headers' array is rendered as a separate header row with a divider line.
         ns.Function("table", [Param("rows", "array"), Param("headers", "array")], (_, args) =>
         {
-            if (args.Count < 1 || args.Count > 2)
-            {
-                throw new RuntimeError("'term.table' expects 1 or 2 arguments.");
-            }
-
-            if (args[0] is not List<object?> rows)
-            {
-                throw new RuntimeError("First argument to 'term.table' must be an array of arrays.");
-            }
-
+            Args.Count(args, 1, 2, "term.table");
+            var rows = Args.List(args, 0, "term.table");
             List<object?>? headers = null;
             if (args.Count == 2 && args[1] is List<object?> h)
             {

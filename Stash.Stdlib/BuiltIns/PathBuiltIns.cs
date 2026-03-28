@@ -18,10 +18,7 @@ public static class PathBuiltIns
 
         ns.Function("abs", [Param("p", "string")], (_, args) =>
         {
-            if (args[0] is not string p)
-            {
-                throw new RuntimeError("Argument to 'path.abs' must be a string.");
-            }
+            var p = Args.String(args, 0, "path.abs");
 
             return System.IO.Path.GetFullPath(p);
         },
@@ -30,10 +27,7 @@ public static class PathBuiltIns
 
         ns.Function("dir", [Param("p", "string")], (_, args) =>
         {
-            if (args[0] is not string p)
-            {
-                throw new RuntimeError("Argument to 'path.dir' must be a string.");
-            }
+            var p = Args.String(args, 0, "path.dir");
 
             return System.IO.Path.GetDirectoryName(p) ?? "";
         },
@@ -42,10 +36,7 @@ public static class PathBuiltIns
 
         ns.Function("base", [Param("p", "string")], (_, args) =>
         {
-            if (args[0] is not string p)
-            {
-                throw new RuntimeError("Argument to 'path.base' must be a string.");
-            }
+            var p = Args.String(args, 0, "path.base");
 
             return System.IO.Path.GetFileName(p);
         },
@@ -54,10 +45,7 @@ public static class PathBuiltIns
 
         ns.Function("ext", [Param("p", "string")], (_, args) =>
         {
-            if (args[0] is not string p)
-            {
-                throw new RuntimeError("Argument to 'path.ext' must be a string.");
-            }
+            var p = Args.String(args, 0, "path.ext");
 
             return System.IO.Path.GetExtension(p);
         },
@@ -66,15 +54,8 @@ public static class PathBuiltIns
 
         ns.Function("join", [Param("a", "string"), Param("b", "string")], (_, args) =>
         {
-            if (args[0] is not string a)
-            {
-                throw new RuntimeError("First argument to 'path.join' must be a string.");
-            }
-
-            if (args[1] is not string b)
-            {
-                throw new RuntimeError("Second argument to 'path.join' must be a string.");
-            }
+            var a = Args.String(args, 0, "path.join");
+            var b = Args.String(args, 1, "path.join");
 
             return System.IO.Path.Combine(a, b);
         },
@@ -83,10 +64,7 @@ public static class PathBuiltIns
 
         ns.Function("name", [Param("p", "string")], (_, args) =>
         {
-            if (args[0] is not string p)
-            {
-                throw new RuntimeError("Argument to 'path.name' must be a string.");
-            }
+            var p = Args.String(args, 0, "path.name");
 
             return System.IO.Path.GetFileNameWithoutExtension(p);
         },
@@ -97,10 +75,7 @@ public static class PathBuiltIns
 
         ns.Function("normalize", [Param("p", "string")], (_, args) =>
         {
-            if (args[0] is not string p)
-            {
-                throw new RuntimeError("Argument to 'path.normalize' must be a string.");
-            }
+            var p = Args.String(args, 0, "path.normalize");
 
             return System.IO.Path.GetFullPath(p);
         },
@@ -109,10 +84,7 @@ public static class PathBuiltIns
 
         ns.Function("isAbsolute", [Param("p", "string")], (_, args) =>
         {
-            if (args[0] is not string p)
-            {
-                throw new RuntimeError("Argument to 'path.isAbsolute' must be a string.");
-            }
+            var p = Args.String(args, 0, "path.isAbsolute");
 
             return System.IO.Path.IsPathRooted(p);
         },
@@ -121,15 +93,8 @@ public static class PathBuiltIns
 
         ns.Function("relative", [Param("from", "string"), Param("to", "string")], (_, args) =>
         {
-            if (args[0] is not string from)
-            {
-                throw new RuntimeError("First argument to 'path.relative' must be a string.");
-            }
-
-            if (args[1] is not string to)
-            {
-                throw new RuntimeError("Second argument to 'path.relative' must be a string.");
-            }
+            var from = Args.String(args, 0, "path.relative");
+            var to = Args.String(args, 1, "path.relative");
 
             var fromUri = new System.Uri(System.IO.Path.GetFullPath(from + System.IO.Path.DirectorySeparatorChar));
             var toUri = new System.Uri(System.IO.Path.GetFullPath(to));

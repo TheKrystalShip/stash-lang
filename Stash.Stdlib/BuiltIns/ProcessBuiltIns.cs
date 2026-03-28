@@ -55,10 +55,7 @@ public static class ProcessBuiltIns
         // process.exit(code) — Exits the process with the given integer exit code. Runs cleanup for tracked processes first.
         ns.Function("exit", [Param("code", "int")], (ctx, args) =>
         {
-            if (args[0] is not long code)
-            {
-                throw new RuntimeError("Argument to 'process.exit' must be an integer.");
-            }
+            var code = Args.Long(args, 0, "process.exit");
 
             ctx.CleanupTrackedProcesses();
             ctx.EmitExit((int)code);
@@ -73,10 +70,7 @@ public static class ProcessBuiltIns
                 throw new RuntimeError("'process.exec' is not available in embedded mode.");
             }
 
-            if (args[0] is not string command)
-            {
-                throw new RuntimeError("Argument to 'process.exec' must be a string.");
-            }
+            var command = Args.String(args, 0, "process.exec");
 
             var (program, arguments) = CommandParser.Parse(command);
 
@@ -128,10 +122,7 @@ public static class ProcessBuiltIns
         // process.spawn(command) — Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output.
         ns.Function("spawn", [Param("command", "string")], (ctx, args) =>
         {
-            if (args[0] is not string command)
-            {
-                throw new RuntimeError("Argument to 'process.spawn' must be a string.");
-            }
+            var command = Args.String(args, 0, "process.spawn");
 
             var (program, arguments) = CommandParser.Parse(command);
             var psi = new ProcessStartInfo
@@ -162,10 +153,7 @@ public static class ProcessBuiltIns
         // process.wait(handle) — Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.
         ns.Function("wait", [Param("handle", "Process")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("Argument to 'process.wait' must be a Process handle.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.wait");
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
             if (entry.Process is null)
@@ -205,15 +193,8 @@ public static class ProcessBuiltIns
         // process.waitTimeout(handle, ms) — Waits up to the given milliseconds for a process to exit. Returns a CommandResult or null if timed out.
         ns.Function("waitTimeout", [Param("handle", "Process"), Param("ms", "int")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("First argument to 'process.waitTimeout' must be a Process handle.");
-            }
-
-            if (args[1] is not long ms)
-            {
-                throw new RuntimeError("Second argument to 'process.waitTimeout' must be an integer (milliseconds).");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.waitTimeout");
+            var ms = Args.Long(args, 1, "process.waitTimeout");
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
             if (entry.Process is null)
@@ -250,10 +231,7 @@ public static class ProcessBuiltIns
         // process.kill(handle) — Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success.
         ns.Function("kill", [Param("handle", "Process")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("Argument to 'process.kill' must be a Process handle.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.kill");
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
             if (entry.Process is null || entry.Process.HasExited)
@@ -275,10 +253,7 @@ public static class ProcessBuiltIns
         // process.isAlive(handle) — Returns true if the process is still running, false if it has exited.
         ns.Function("isAlive", [Param("handle", "Process")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("Argument to 'process.isAlive' must be a Process handle.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.isAlive");
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
             if (entry.Process is null)
@@ -293,10 +268,7 @@ public static class ProcessBuiltIns
         // process.pid(handle) — Returns the OS process ID (integer) for a spawned Process handle.
         ns.Function("pid", [Param("handle", "Process")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("Argument to 'process.pid' must be a Process handle.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.pid");
 
             return handle.GetField("pid", null);
         });
@@ -304,15 +276,8 @@ public static class ProcessBuiltIns
         // process.signal(handle, signum) — Sends a POSIX signal (integer) to a running process. Use process.SIGTERM etc. as constants. Returns true on success.
         ns.Function("signal", [Param("handle", "Process"), Param("signum", "int")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("First argument to 'process.signal' must be a Process handle.");
-            }
-
-            if (args[1] is not long sig)
-            {
-                throw new RuntimeError("Second argument to 'process.signal' must be an integer (signal number).");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.signal");
+            var sig = Args.Long(args, 1, "process.signal");
 
             if (sig < 1 || sig > 64)
             {
@@ -356,10 +321,7 @@ public static class ProcessBuiltIns
         // process.detach(handle) — Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit.
         ns.Function("detach", [Param("handle", "Process")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("Argument to 'process.detach' must be a Process handle.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.detach");
 
             int idx = ctx.TrackedProcesses.FindIndex(e => ReferenceEquals(e.Handle, handle));
             if (idx >= 0)
@@ -386,10 +348,7 @@ public static class ProcessBuiltIns
         // process.read(handle) — Non-blocking read from a process's stdout. Returns a string chunk or null if no data is available.
         ns.Function("read", [Param("handle", "Process")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("Argument to 'process.read' must be a Process handle.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.read");
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
             if (entry.Process is null)
@@ -418,15 +377,8 @@ public static class ProcessBuiltIns
         // process.write(handle, data) — Writes a string to a process's stdin. Returns true on success, false if the process has exited.
         ns.Function("write", [Param("handle", "Process"), Param("data", "string")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("First argument to 'process.write' must be a Process handle.");
-            }
-
-            if (args[1] is not string data)
-            {
-                throw new RuntimeError("Second argument to 'process.write' must be a string.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.write");
+            var data = Args.String(args, 1, "process.write");
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
             if (entry.Process is null || entry.Process.HasExited)
@@ -451,15 +403,8 @@ public static class ProcessBuiltIns
         // process.onExit(handle, callback) — Registers a callback function to be called when the process exits. Callback receives a CommandResult.
         ns.Function("onExit", [Param("handle", "Process"), Param("callback", "function")], (ctx, args) =>
         {
-            if (args[0] is not StashInstance handle || handle.TypeName != "Process")
-            {
-                throw new RuntimeError("First argument to 'process.onExit' must be a Process handle.");
-            }
-
-            if (args[1] is not IStashCallable callback)
-            {
-                throw new RuntimeError("Second argument to 'process.onExit' must be a function.");
-            }
+            var handle = Args.Instance(args, 0, "Process", "process.onExit");
+            var callback = Args.Callable(args, 1, "process.onExit");
 
             if (callback.MinArity > 1)
             {
@@ -485,10 +430,7 @@ public static class ProcessBuiltIns
         // process.daemonize(command) — Starts a process fully detached from the script (no stdio redirection). Returns a Process handle; the process is NOT tracked and survives script exit.
         ns.Function("daemonize", [Param("command", "string")], (ctx, args) =>
         {
-            if (args[0] is not string command)
-            {
-                throw new RuntimeError("Argument to 'process.daemonize' must be a string.");
-            }
+            var command = Args.String(args, 0, "process.daemonize");
 
             var (program, arguments) = CommandParser.Parse(command);
             var psi = new ProcessStartInfo
@@ -521,10 +463,7 @@ public static class ProcessBuiltIns
         // process.find(name) — Returns an array of Process handles for all OS processes matching the given name.
         ns.Function("find", [Param("name", "string")], (ctx, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("Argument to 'process.find' must be a string.");
-            }
+            var name = Args.String(args, 0, "process.find");
 
             var result = new List<object?>();
             try
@@ -554,10 +493,7 @@ public static class ProcessBuiltIns
         // process.exists(pid) — Returns true if a process with the given OS PID is currently running.
         ns.Function("exists", [Param("pid", "int")], (ctx, args) =>
         {
-            if (args[0] is not long pid)
-            {
-                throw new RuntimeError("Argument to 'process.exists' must be an integer (PID).");
-            }
+            var pid = Args.Long(args, 0, "process.exists");
 
             try
             {
@@ -575,10 +511,7 @@ public static class ProcessBuiltIns
         // process.waitAll(handles) — Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order.
         ns.Function("waitAll", [Param("handles", "array")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> procs)
-            {
-                throw new RuntimeError("Argument to 'process.waitAll' must be an array of Process handles.");
-            }
+            var procs = Args.List(args, 0, "process.waitAll");
 
             var results = new List<object?>();
             foreach (var item in procs)
@@ -629,10 +562,7 @@ public static class ProcessBuiltIns
         // process.waitAny(handles) — Waits until any process in the array exits. Returns the CommandResult of the first process to finish.
         ns.Function("waitAny", [Param("handles", "array")], (ctx, args) =>
         {
-            if (args[0] is not List<object?> procs)
-            {
-                throw new RuntimeError("Argument to 'process.waitAny' must be an array of Process handles.");
-            }
+            var procs = Args.List(args, 0, "process.waitAny");
 
             if (procs.Count == 0)
             {
@@ -720,10 +650,7 @@ public static class ProcessBuiltIns
         // process.chdir(path) — Changes the current working directory of the script process to the given path.
         ns.Function("chdir", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'process.chdir' must be a string.");
-            }
+            var path = Args.String(args, 0, "process.chdir");
 
             string resolved = System.IO.Path.GetFullPath(path);
             if (!System.IO.Directory.Exists(resolved))
@@ -738,15 +665,8 @@ public static class ProcessBuiltIns
         // process.withDir(path, fn) — Temporarily changes the working directory to path, calls fn(), then restores the original directory. Returns fn's return value.
         ns.Function("withDir", [Param("path", "string"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("First argument to 'process.withDir' must be a string (directory path).");
-            }
-
-            if (args[1] is not IStashCallable fn)
-            {
-                throw new RuntimeError("Second argument to 'process.withDir' must be a function.");
-            }
+            var path = Args.String(args, 0, "process.withDir");
+            var fn = Args.Callable(args, 1, "process.withDir");
 
             string resolved = System.IO.Path.GetFullPath(path);
             if (!System.IO.Directory.Exists(resolved))

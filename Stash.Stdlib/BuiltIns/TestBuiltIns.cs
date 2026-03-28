@@ -22,15 +22,8 @@ public static class TestBuiltIns
         // test.it(name, fn) — register and execute a test case
         ns.Function("it", [Param("name", "string"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("test.it() requires a string name as first argument.", ctx.CurrentSpan);
-            }
-            if (args[1] is not IStashCallable body)
-            {
-                throw new RuntimeError("test.it() requires a function as second argument.", ctx.CurrentSpan);
-            }
-
+            var name = Args.String(args, 0, "test.it");
+            var body = Args.Callable(args, 1, "test.it");
             var harness = ctx.TestHarness as ITestHarness;
             var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
 
@@ -114,15 +107,8 @@ public static class TestBuiltIns
         // test.skip(name, fn) — register a skipped test; body is never executed
         ns.Function("skip", [Param("name", "string"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("test.skip() requires a string name as first argument.", ctx.CurrentSpan);
-            }
-            if (args[1] is not IStashCallable)
-            {
-                throw new RuntimeError("test.skip() requires a function as second argument.", ctx.CurrentSpan);
-            }
-
+            var name = Args.String(args, 0, "test.skip");
+            Args.Callable(args, 1, "test.skip");
             string fullName = BuildFullName(ctx, ctx.CurrentDescribe, name);
 
             // Check test filter
@@ -150,15 +136,8 @@ public static class TestBuiltIns
         // test.describe(name, fn) — group tests
         ns.Function("describe", [Param("name", "string"), Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("test.describe() requires a string name as first argument.", ctx.CurrentSpan);
-            }
-            if (args[1] is not IStashCallable body)
-            {
-                throw new RuntimeError("test.describe() requires a function as second argument.", ctx.CurrentSpan);
-            }
-
+            var name = Args.String(args, 0, "test.describe");
+            var body = Args.Callable(args, 1, "test.describe");
             var harness = ctx.TestHarness as ITestHarness;
 
             // Build the fully qualified suite name from nested describes
@@ -221,10 +200,7 @@ public static class TestBuiltIns
         // test.beforeAll(fn) — execute fn() immediately inside a describe block (runs before any tests below it)
         ns.Function("beforeAll", [Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not IStashCallable callable)
-            {
-                throw new RuntimeError("test.beforeAll() requires a function argument.", ctx.CurrentSpan);
-            }
+            var callable = Args.Callable(args, 0, "test.beforeAll");
             if (ctx.BeforeEachHooks.Count == 0)
             {
                 throw new RuntimeError("test.beforeAll() must be used inside a test.describe() block.", ctx.CurrentSpan);
@@ -236,10 +212,7 @@ public static class TestBuiltIns
         // test.afterAll(fn) — register fn() to run when the current describe block ends
         ns.Function("afterAll", [Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not IStashCallable callable)
-            {
-                throw new RuntimeError("test.afterAll() requires a function argument.", ctx.CurrentSpan);
-            }
+            var callable = Args.Callable(args, 0, "test.afterAll");
             if (ctx.AfterAllHooks.Count == 0)
             {
                 throw new RuntimeError("test.afterAll() must be used inside a test.describe() block.", ctx.CurrentSpan);
@@ -251,10 +224,7 @@ public static class TestBuiltIns
         // test.beforeEach(fn) — register fn() to run before each test in the current describe scope
         ns.Function("beforeEach", [Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not IStashCallable callable)
-            {
-                throw new RuntimeError("test.beforeEach() requires a function argument.", ctx.CurrentSpan);
-            }
+            var callable = Args.Callable(args, 0, "test.beforeEach");
             if (ctx.BeforeEachHooks.Count == 0)
             {
                 throw new RuntimeError("test.beforeEach() must be used inside a test.describe() block.", ctx.CurrentSpan);
@@ -266,10 +236,7 @@ public static class TestBuiltIns
         // test.afterEach(fn) — register fn() to run after each test in the current describe scope
         ns.Function("afterEach", [Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not IStashCallable callable)
-            {
-                throw new RuntimeError("test.afterEach() requires a function argument.", ctx.CurrentSpan);
-            }
+            var callable = Args.Callable(args, 0, "test.afterEach");
             if (ctx.AfterEachHooks.Count == 0)
             {
                 throw new RuntimeError("test.afterEach() must be used inside a test.describe() block.", ctx.CurrentSpan);
@@ -281,11 +248,7 @@ public static class TestBuiltIns
         // test.captureOutput(fn) — execute fn() with output redirected to a string, returns captured output
         ns.Function("captureOutput", [Param("fn", "function")], (ctx, args) =>
         {
-            if (args[0] is not IStashCallable callable)
-            {
-                throw new RuntimeError("test.captureOutput() requires a function argument.", ctx.CurrentSpan);
-            }
-
+            var callable = Args.Callable(args, 0, "test.captureOutput");
             var previousOutput = ctx.Output;
             var sw = new StringWriter();
             ctx.Output = sw;

@@ -37,7 +37,7 @@ public static class MathBuiltIns
                 return Math.Abs(d);
             }
 
-            throw new RuntimeError("Argument to 'math.abs' must be a number.");
+            throw new RuntimeError("First argument to 'math.abs' must be a number.");
         },
             returnType: "number",
             documentation: "Returns the absolute value of a number.\n@param n The number\n@return The absolute value");
@@ -50,7 +50,7 @@ public static class MathBuiltIns
                 return l;
             }
 
-            double d = ToDouble(args[0], "math.ceil");
+            double d = Args.Numeric(args, 0, "math.ceil");
             return Math.Ceiling(d);
         },
             returnType: "number",
@@ -64,7 +64,7 @@ public static class MathBuiltIns
                 return l;
             }
 
-            double d = ToDouble(args[0], "math.floor");
+            double d = Args.Numeric(args, 0, "math.floor");
             return Math.Floor(d);
         },
             returnType: "number",
@@ -78,7 +78,7 @@ public static class MathBuiltIns
                 return l;
             }
 
-            double d = ToDouble(args[0], "math.round");
+            double d = Args.Numeric(args, 0, "math.round");
             return Math.Round(d, MidpointRounding.AwayFromZero);
         },
             returnType: "number",
@@ -87,8 +87,8 @@ public static class MathBuiltIns
         // math.min(a, b) — Returns the smaller of a and b.
         ns.Function("min", [Param("a", "number"), Param("b", "number")], (interp, args) =>
         {
-            double a = ToDouble(args[0], "math.min");
-            double b = ToDouble(args[1], "math.min");
+            double a = Args.Numeric(args, 0, "math.min");
+            double b = Args.Numeric(args, 1, "math.min");
             double result = Math.Min(a, b);
             if (args[0] is long && args[1] is long)
             {
@@ -103,8 +103,8 @@ public static class MathBuiltIns
         // math.max(a, b) — Returns the larger of a and b.
         ns.Function("max", [Param("a", "number"), Param("b", "number")], (interp, args) =>
         {
-            double a = ToDouble(args[0], "math.max");
-            double b = ToDouble(args[1], "math.max");
+            double a = Args.Numeric(args, 0, "math.max");
+            double b = Args.Numeric(args, 1, "math.max");
             double result = Math.Max(a, b);
             if (args[0] is long && args[1] is long)
             {
@@ -119,8 +119,8 @@ public static class MathBuiltIns
         // math.pow(base, exponent) — Returns base raised to the power of exponent as a double.
         ns.Function("pow", [Param("base", "number"), Param("exp", "number")], (interp, args) =>
         {
-            double b = ToDouble(args[0], "math.pow");
-            double e = ToDouble(args[1], "math.pow");
+            double b = Args.Numeric(args, 0, "math.pow");
+            double e = Args.Numeric(args, 1, "math.pow");
             return Math.Pow(b, e);
         },
             returnType: "float",
@@ -129,7 +129,7 @@ public static class MathBuiltIns
         // math.sqrt(n) — Returns the square root of n as a double.
         ns.Function("sqrt", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.sqrt");
+            double d = Args.Numeric(args, 0, "math.sqrt");
             return Math.Sqrt(d);
         },
             returnType: "float",
@@ -138,7 +138,7 @@ public static class MathBuiltIns
         // math.log(n) — Returns the natural logarithm (base e) of n as a double.
         ns.Function("log", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.log");
+            double d = Args.Numeric(args, 0, "math.log");
             return Math.Log(d);
         },
             returnType: "float",
@@ -155,15 +155,8 @@ public static class MathBuiltIns
         // math.randomInt(min, max) — Returns a random integer in the inclusive range [min, max].
         ns.Function("randomInt", [Param("min", "int"), Param("max", "int")], (interp, args) =>
         {
-            if (args[0] is not long min)
-            {
-                throw new RuntimeError("First argument to 'math.randomInt' must be an integer.");
-            }
-
-            if (args[1] is not long max)
-            {
-                throw new RuntimeError("Second argument to 'math.randomInt' must be an integer.");
-            }
+            var min = Args.Long(args, 0, "math.randomInt");
+            var max = Args.Long(args, 1, "math.randomInt");
 
             return (long)Random.Shared.NextInt64(min, max + 1);
         },
@@ -173,9 +166,9 @@ public static class MathBuiltIns
         // math.clamp(n, min, max) — Returns n clamped to the range [min, max].
         ns.Function("clamp", [Param("n", "number"), Param("min", "number"), Param("max", "number")], (interp, args) =>
         {
-            double n = ToDouble(args[0], "math.clamp");
-            double min = ToDouble(args[1], "math.clamp");
-            double max = ToDouble(args[2], "math.clamp");
+            double n = Args.Numeric(args, 0, "math.clamp");
+            double min = Args.Numeric(args, 1, "math.clamp");
+            double max = Args.Numeric(args, 2, "math.clamp");
             double result = Math.Clamp(n, min, max);
             if (args[0] is long && args[1] is long && args[2] is long)
             {
@@ -190,7 +183,7 @@ public static class MathBuiltIns
         // math.sin(n) — Returns the sine of angle n (in radians) as a double.
         ns.Function("sin", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.sin");
+            double d = Args.Numeric(args, 0, "math.sin");
             return Math.Sin(d);
         },
             returnType: "float",
@@ -199,7 +192,7 @@ public static class MathBuiltIns
         // math.cos(n) — Returns the cosine of angle n (in radians) as a double.
         ns.Function("cos", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.cos");
+            double d = Args.Numeric(args, 0, "math.cos");
             return Math.Cos(d);
         },
             returnType: "float",
@@ -208,7 +201,7 @@ public static class MathBuiltIns
         // math.tan(n) — Returns the tangent of angle n (in radians) as a double.
         ns.Function("tan", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.tan");
+            double d = Args.Numeric(args, 0, "math.tan");
             return Math.Tan(d);
         },
             returnType: "float",
@@ -217,7 +210,7 @@ public static class MathBuiltIns
         // math.asin(n) — Returns the arcsine of n in radians as a double. Input must be in [-1, 1].
         ns.Function("asin", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.asin");
+            double d = Args.Numeric(args, 0, "math.asin");
             return Math.Asin(d);
         },
             returnType: "float",
@@ -226,7 +219,7 @@ public static class MathBuiltIns
         // math.acos(n) — Returns the arccosine of n in radians as a double. Input must be in [-1, 1].
         ns.Function("acos", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.acos");
+            double d = Args.Numeric(args, 0, "math.acos");
             return Math.Acos(d);
         },
             returnType: "float",
@@ -235,7 +228,7 @@ public static class MathBuiltIns
         // math.atan(n) — Returns the arctangent of n in radians as a double.
         ns.Function("atan", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.atan");
+            double d = Args.Numeric(args, 0, "math.atan");
             return Math.Atan(d);
         },
             returnType: "float",
@@ -244,8 +237,8 @@ public static class MathBuiltIns
         // math.atan2(y, x) — Returns the angle in radians between the positive x-axis and the point (x, y).
         ns.Function("atan2", [Param("y", "number"), Param("x", "number")], (interp, args) =>
         {
-            double y = ToDouble(args[0], "math.atan2");
-            double x = ToDouble(args[1], "math.atan2");
+            double y = Args.Numeric(args, 0, "math.atan2");
+            double x = Args.Numeric(args, 1, "math.atan2");
             return Math.Atan2(y, x);
         },
             returnType: "float",
@@ -264,7 +257,7 @@ public static class MathBuiltIns
                 return (long)Math.Sign(d);
             }
 
-            throw new RuntimeError("Argument to 'math.sign' must be a number.");
+            throw new RuntimeError("First argument to 'math.sign' must be a number.");
         },
             returnType: "int",
             documentation: "Returns the sign of a number: -1 for negative, 0 for zero, 1 for positive.\n@param n The number\n@return -1, 0, or 1");
@@ -272,7 +265,7 @@ public static class MathBuiltIns
         // math.exp(n) — Returns e raised to the power of n as a double (i.e. eⁿ).
         ns.Function("exp", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.exp");
+            double d = Args.Numeric(args, 0, "math.exp");
             return Math.Exp(d);
         },
             returnType: "float",
@@ -281,7 +274,7 @@ public static class MathBuiltIns
         // math.log10(n) — Returns the base-10 logarithm of n as a double.
         ns.Function("log10", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.log10");
+            double d = Args.Numeric(args, 0, "math.log10");
             return Math.Log10(d);
         },
             returnType: "float",
@@ -290,7 +283,7 @@ public static class MathBuiltIns
         // math.log2(n) — Returns the base-2 logarithm of n as a double.
         ns.Function("log2", [Param("n", "number")], (interp, args) =>
         {
-            double d = ToDouble(args[0], "math.log2");
+            double d = Args.Numeric(args, 0, "math.log2");
             return Math.Log2(d);
         },
             returnType: "float",
@@ -299,22 +292,4 @@ public static class MathBuiltIns
         return ns.Build();
     }
 
-    /// <summary>Converts a numeric value to <see cref="double"/>, throwing if the value is not a number.</summary>
-    /// <param name="val">The value to convert.</param>
-    /// <param name="funcName">The calling function name, used in error messages.</param>
-    /// <returns>The numeric value as a <see cref="double"/>.</returns>
-    private static double ToDouble(object? val, string funcName)
-    {
-        if (val is long l)
-        {
-            return (double)l;
-        }
-
-        if (val is double d)
-        {
-            return d;
-        }
-
-        throw new RuntimeError($"Argument to '{funcName}' must be a number.");
-    }
 }

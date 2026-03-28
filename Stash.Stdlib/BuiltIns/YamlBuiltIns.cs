@@ -35,10 +35,7 @@ public static class YamlBuiltIns
         // yaml.parse(string) — Parses a YAML string into a Stash value (dict, array, string, number, bool, or null).
         ns.Function("parse", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'yaml.parse' must be a string.");
-            }
+            var s = Args.String(args, 0, "yaml.parse");
 
             try
             {
@@ -74,10 +71,7 @@ public static class YamlBuiltIns
         // yaml.valid(string) — Returns true if the given string is valid YAML, false otherwise.
         ns.Function("valid", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'yaml.valid' must be a string.");
-            }
+            var s = Args.String(args, 0, "yaml.valid");
 
             try
             {

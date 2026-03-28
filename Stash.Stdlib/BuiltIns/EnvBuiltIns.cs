@@ -19,25 +19,15 @@ public static class EnvBuiltIns
 
         ns.Function("get", [Param("name", "string")], (_, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("Argument to 'env.get' must be a string.");
-            }
+            var name = Args.String(args, 0, "env.get");
 
             return System.Environment.GetEnvironmentVariable(name);
         });
 
         ns.Function("set", [Param("name", "string"), Param("value", "string")], (_, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("First argument to 'env.set' must be a string.");
-            }
-
-            if (args[1] is not string value)
-            {
-                throw new RuntimeError("Second argument to 'env.set' must be a string.");
-            }
+            var name = Args.String(args, 0, "env.set");
+            var value = Args.String(args, 1, "env.set");
 
             System.Environment.SetEnvironmentVariable(name, value);
             return null;
@@ -45,10 +35,7 @@ public static class EnvBuiltIns
 
         ns.Function("has", [Param("name", "string")], (_, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("Argument to 'env.has' must be a string.");
-            }
+            var name = Args.String(args, 0, "env.has");
 
             return (bool)(System.Environment.GetEnvironmentVariable(name) != null);
         });
@@ -65,10 +52,7 @@ public static class EnvBuiltIns
 
         ns.Function("withPrefix", [Param("prefix", "string")], (_, args) =>
         {
-            if (args[0] is not string prefix)
-            {
-                throw new RuntimeError("Argument to 'env.withPrefix' must be a string.");
-            }
+            var prefix = Args.String(args, 0, "env.withPrefix");
 
             var dict = new StashDictionary();
             foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
@@ -84,10 +68,7 @@ public static class EnvBuiltIns
 
         ns.Function("remove", [Param("name", "string")], (_, args) =>
         {
-            if (args[0] is not string name)
-            {
-                throw new RuntimeError("Argument to 'env.remove' must be a string.");
-            }
+            var name = Args.String(args, 0, "env.remove");
 
             System.Environment.SetEnvironmentVariable(name, null);
             return null;
@@ -140,24 +121,12 @@ public static class EnvBuiltIns
 
         ns.Function("loadFile", [Param("path", "string"), Param("prefix", "string?")], (ctx, args) =>
         {
-            if (args.Count < 1 || args.Count > 2)
-            {
-                throw new RuntimeError("'env.loadFile' expects 1 or 2 arguments.");
-            }
-
-            if (args[0] is not string filePath)
-            {
-                throw new RuntimeError("Argument to 'env.loadFile' must be a string.");
-            }
-
+            Args.Count(args, 1, 2, "env.loadFile");
+            var filePath = Args.String(args, 0, "env.loadFile");
             var prefix = "";
             if (args.Count == 2)
             {
-                if (args[1] is not string prefixArg)
-                {
-                    throw new RuntimeError("Second argument to 'env.loadFile' must be a string.");
-                }
-                prefix = prefixArg;
+                prefix = Args.String(args, 1, "env.loadFile");
             }
 
             filePath = ctx.ExpandTilde(filePath);
@@ -214,10 +183,7 @@ public static class EnvBuiltIns
 
         ns.Function("saveFile", [Param("path", "string")], (ctx, args) =>
         {
-            if (args[0] is not string filePath)
-            {
-                throw new RuntimeError("Argument to 'env.saveFile' must be a string.");
-            }
+            var filePath = Args.String(args, 0, "env.saveFile");
 
             filePath = ctx.ExpandTilde(filePath);
 

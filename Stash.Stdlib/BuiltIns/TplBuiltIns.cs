@@ -47,10 +47,7 @@ public static class TplBuiltIns
         // tpl.render(compiled, data) — render a pre-compiled template with data dictionary
         ns.Function("render", [Param("template"), Param("data", "dict")], (ctx, args) =>
         {
-            if (args[1] is not StashDictionary data)
-            {
-                throw new RuntimeError("'tpl.render' expects a dictionary as the second argument.");
-            }
+            var data = Args.Dict(args, 1, "tpl.render");
 
             // If first arg is a string, render it as a template
             if (args[0] is string template)
@@ -65,15 +62,8 @@ public static class TplBuiltIns
         // tpl.renderFile(path, data) — render a template file with data dictionary
         ns.Function("renderFile", [Param("path", "string"), Param("data", "dict")], (ctx, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("'tpl.renderFile' expects a file path string as the first argument.");
-            }
-            if (args[1] is not StashDictionary data)
-            {
-                throw new RuntimeError("'tpl.renderFile' expects a dictionary as the second argument.");
-            }
-
+            var path = Args.String(args, 0, "tpl.renderFile");
+            var data = Args.Dict(args, 1, "tpl.renderFile");
             string expandedPath = ExpandTilde(path);
 
             if (!File.Exists(expandedPath))
@@ -97,11 +87,7 @@ public static class TplBuiltIns
         // tpl.compile(template) — pre-compile a template string for repeated rendering
         ns.Function("compile", [Param("template", "string")], (ctx, args) =>
         {
-            if (args[0] is not string template)
-            {
-                throw new RuntimeError("'tpl.compile' expects a template string.");
-            }
-
+            var template = Args.String(args, 0, "tpl.compile");
             return ctx.CompileTemplate(template);
         });
 

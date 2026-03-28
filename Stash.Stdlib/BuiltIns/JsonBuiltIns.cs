@@ -21,10 +21,7 @@ public static class JsonBuiltIns
         // json.parse(string) — Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).
         ns.Function("parse", [Param("str", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'json.parse' must be a string.");
-            }
+            var s = Args.String(args, 0, "json.parse");
 
             try
             {
@@ -57,10 +54,7 @@ public static class JsonBuiltIns
         // json.valid(string) — Returns true if the given string is valid JSON, false otherwise.
         ns.Function("valid", [Param("text", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'json.valid' must be a string.");
-            }
+            var s = Args.String(args, 0, "json.valid");
 
             try
             {

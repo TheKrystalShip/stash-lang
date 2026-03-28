@@ -158,11 +158,7 @@ public static class LogBuiltIns
         // log.setLevel(level) — Sets the minimum log level. Messages below this level are silently discarded.
         ns.Function("setLevel", [Param("level", "string")], (_, args) =>
         {
-            if (args[0] is not string level)
-            {
-                throw new RuntimeError("Argument to 'log.setLevel' must be a string.");
-            }
-
+            var level = Args.String(args, 0, "log.setLevel");
             string normalized = level.ToLowerInvariant();
             if (Array.IndexOf(_levelOrder, normalized) < 0)
             {
@@ -180,11 +176,7 @@ public static class LogBuiltIns
         // log.setFormat(template) — Sets the log message format template.
         ns.Function("setFormat", [Param("template", "string")], (_, args) =>
         {
-            if (args[0] is not string fmt)
-            {
-                throw new RuntimeError("Argument to 'log.setFormat' must be a string.");
-            }
-
+            var fmt = Args.String(args, 0, "log.setFormat");
             lock (_lock)
             {
                 _format = fmt;
@@ -196,11 +188,7 @@ public static class LogBuiltIns
         // log.toFile(path) — Redirects all subsequent log output to an append-mode file at 'path'.
         ns.Function("toFile", [Param("path", "string")], (_, args) =>
         {
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("Argument to 'log.toFile' must be a string.");
-            }
-
+            var path = Args.String(args, 0, "log.toFile");
             lock (_lock)
             {
                 _fileWriter?.Dispose();

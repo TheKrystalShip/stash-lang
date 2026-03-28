@@ -33,10 +33,7 @@ public static class StoreBuiltIns
         // store.set(key, value) — Stores 'value' under 'key' in the global in-memory store. Returns null.
         ns.Function("set", [Param("key", "string"), Param("value", "any")], (_, args) =>
         {
-            if (args[0] is not string key)
-            {
-                throw new RuntimeError("Argument to 'store.set' must be a string.");
-            }
+            var key = Args.String(args, 0, "store.set");
 
             lock (_store)
             {
@@ -51,10 +48,7 @@ public static class StoreBuiltIns
         // store.get(key) — Returns the value associated with 'key', or null if the key does not exist.
         ns.Function("get", [Param("key", "string")], (_, args) =>
         {
-            if (args[0] is not string key)
-            {
-                throw new RuntimeError("Argument to 'store.get' must be a string.");
-            }
+            var key = Args.String(args, 0, "store.get");
 
             lock (_store)
             {
@@ -67,10 +61,7 @@ public static class StoreBuiltIns
         // store.has(key) — Returns true if 'key' exists in the store, false otherwise.
         ns.Function("has", [Param("key", "string")], (_, args) =>
         {
-            if (args[0] is not string key)
-            {
-                throw new RuntimeError("Argument to 'store.has' must be a string.");
-            }
+            var key = Args.String(args, 0, "store.has");
 
             lock (_store)
             {
@@ -83,10 +74,7 @@ public static class StoreBuiltIns
         // store.remove(key) — Removes 'key' from the store. Returns true if it was present, false otherwise.
         ns.Function("remove", [Param("key", "string")], (_, args) =>
         {
-            if (args[0] is not string key)
-            {
-                throw new RuntimeError("Argument to 'store.remove' must be a string.");
-            }
+            var key = Args.String(args, 0, "store.remove");
 
             lock (_store)
             {
@@ -162,10 +150,7 @@ public static class StoreBuiltIns
         // store.scope(prefix) — Returns a dictionary of all entries whose keys start with 'prefix'.
         ns.Function("scope", [Param("prefix", "string")], (_, args) =>
         {
-            if (args[0] is not string prefix)
-            {
-                throw new RuntimeError("Argument to 'store.scope' must be a string.");
-            }
+            var prefix = Args.String(args, 0, "store.scope");
 
             var dict = new StashDictionary();
             lock (_store)

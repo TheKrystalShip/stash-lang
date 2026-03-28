@@ -20,10 +20,7 @@ public static class CryptoBuiltIns
 
         ns.Function("md5", [Param("data", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'crypto.md5' must be a string.");
-            }
+            var s = Args.String(args, 0, "crypto.md5");
 
             return HashToHex(MD5.HashData(Encoding.UTF8.GetBytes(s)));
         },
@@ -32,24 +29,19 @@ public static class CryptoBuiltIns
 
         // crypto.sha1(input) — Returns the SHA-1 hash of the input string as a lowercase hex string.
         ns.Function("sha1", [Param("data", "string")], (_, args) =>
-        {
-            if (args[0] is not string s)
             {
-                throw new RuntimeError("First argument to 'crypto.sha1' must be a string.");
-            }
+                var s = Args.String(args, 0, "crypto.sha1");
 
-            return HashToHex(SHA1.HashData(Encoding.UTF8.GetBytes(s)));
-        },
+                return HashToHex(SHA1.HashData(Encoding.UTF8.GetBytes(s)));
+            },
             returnType: "string",
-            documentation: "Computes the SHA-1 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string");
+            documentation: "Computes the SHA-1 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string"
+        );
 
         // crypto.sha256(input) — Returns the SHA-256 hash of the input string as a lowercase hex string.
         ns.Function("sha256", [Param("data", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'crypto.sha256' must be a string.");
-            }
+            var s = Args.String(args, 0, "crypto.sha256");
 
             return HashToHex(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
         },
@@ -59,10 +51,7 @@ public static class CryptoBuiltIns
         // crypto.sha512(input) — Returns the SHA-512 hash of the input string as a lowercase hex string.
         ns.Function("sha512", [Param("data", "string")], (_, args) =>
         {
-            if (args[0] is not string s)
-            {
-                throw new RuntimeError("First argument to 'crypto.sha512' must be a string.");
-            }
+            var s = Args.String(args, 0, "crypto.sha512");
 
             return HashToHex(SHA512.HashData(Encoding.UTF8.GetBytes(s)));
         },
@@ -73,20 +62,9 @@ public static class CryptoBuiltIns
         //   'algo' must be one of: "md5", "sha1", "sha256", "sha512". Returns a lowercase hex string.
         ns.Function("hmac", [Param("algo", "string"), Param("key", "string"), Param("data", "string")], (_, args) =>
         {
-            if (args[0] is not string algo)
-            {
-                throw new RuntimeError("First argument to 'crypto.hmac' must be a string (algorithm).");
-            }
-
-            if (args[1] is not string key)
-            {
-                throw new RuntimeError("Second argument to 'crypto.hmac' must be a string (key).");
-            }
-
-            if (args[2] is not string data)
-            {
-                throw new RuntimeError("Third argument to 'crypto.hmac' must be a string (data).");
-            }
+            var algo = Args.String(args, 0, "crypto.hmac");
+            var key = Args.String(args, 1, "crypto.hmac");
+            var data = Args.String(args, 2, "crypto.hmac");
 
             var keyBytes = Encoding.UTF8.GetBytes(key);
             var dataBytes = Encoding.UTF8.GetBytes(data);
@@ -110,25 +88,13 @@ public static class CryptoBuiltIns
         //   Returns the hash as a lowercase hex string.
         ns.Function("hashFile", [Param("path", "string"), Param("algo", "string")], (_, args) =>
         {
-            if (args.Count < 1 || args.Count > 2)
-            {
-                throw new RuntimeError("'crypto.hashFile' expects 1 or 2 arguments: path [, algo].");
-            }
-
-            if (args[0] is not string path)
-            {
-                throw new RuntimeError("First argument to 'crypto.hashFile' must be a string (file path).");
-            }
+            Args.Count(args, 1, 2, "crypto.hashFile");
+            var path = Args.String(args, 0, "crypto.hashFile");
 
             var algo = "sha256";
             if (args.Count == 2)
             {
-                if (args[1] is not string a)
-                {
-                    throw new RuntimeError("Second argument to 'crypto.hashFile' must be a string (algorithm).");
-                }
-
-                algo = a;
+                algo = Args.String(args, 1, "crypto.hashFile");
             }
 
             byte[] fileBytes;
@@ -162,10 +128,7 @@ public static class CryptoBuiltIns
         // crypto.randomBytes(n) — Generates 'n' cryptographically secure random bytes and returns them as a lowercase hex string.
         ns.Function("randomBytes", [Param("n", "int")], (_, args) =>
         {
-            if (args[0] is not long n)
-            {
-                throw new RuntimeError("First argument to 'crypto.randomBytes' must be an integer.");
-            }
+            var n = Args.Long(args, 0, "crypto.randomBytes");
 
             if (n <= 0)
             {

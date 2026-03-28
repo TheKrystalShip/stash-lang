@@ -98,52 +98,24 @@ public static class GlobalBuiltIns
 
         gb.Function("range", [Param("start_or_end", "int"), Param("end", "int"), Param("step", "int")], (_, args) =>
         {
-            if (args.Count < 1 || args.Count > 3)
-            {
-                throw new RuntimeError("'range' expects 1 to 3 arguments.");
-            }
-
+            Args.Count(args, 1, 3, "range");
             long start, end, step;
             if (args.Count == 1)
             {
-                if (args[0] is not long e)
-                {
-                    throw new RuntimeError("Arguments to 'range' must be integers.");
-                }
-
+                var e = Args.Long(args, 0, "range");
                 start = 0; end = e; step = 1;
             }
             else if (args.Count == 2)
             {
-                if (args[0] is not long s)
-                {
-                    throw new RuntimeError("Arguments to 'range' must be integers.");
-                }
-
-                if (args[1] is not long e)
-                {
-                    throw new RuntimeError("Arguments to 'range' must be integers.");
-                }
-
+                var s = Args.Long(args, 0, "range");
+                var e = Args.Long(args, 1, "range");
                 start = s; end = e; step = 1;
             }
             else
             {
-                if (args[0] is not long s)
-                {
-                    throw new RuntimeError("Arguments to 'range' must be integers.");
-                }
-
-                if (args[1] is not long e)
-                {
-                    throw new RuntimeError("Arguments to 'range' must be integers.");
-                }
-
-                if (args[2] is not long st)
-                {
-                    throw new RuntimeError("Arguments to 'range' must be integers.");
-                }
-
+                var s = Args.Long(args, 0, "range");
+                var e = Args.Long(args, 1, "range");
+                var st = Args.Long(args, 2, "range");
                 if (st == 0)
                 {
                     throw new RuntimeError("'range' step cannot be zero.");
@@ -174,11 +146,7 @@ public static class GlobalBuiltIns
         {
             gb.Function("exit", [Param("code", "int")], (ctx, args) =>
             {
-                if (args[0] is not long code)
-                {
-                    throw new RuntimeError("Argument to 'exit' must be an integer.");
-                }
-
+                var code = Args.Long(args, 0, "exit");
                 ctx.EmitExit((int)code);
                 return null;
             });

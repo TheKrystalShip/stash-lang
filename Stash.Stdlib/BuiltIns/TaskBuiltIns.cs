@@ -41,10 +41,7 @@ public static class TaskBuiltIns
 
     private static object? Run(IInterpreterContext ctx, List<object?> args)
     {
-        if (args.Count < 1 || args[0] is not IStashCallable callable)
-        {
-            throw new RuntimeError("task.run() expects a function argument.");
-        }
+        var callable = Args.Callable(args, 0, "task.run");
 
         var cts = new CancellationTokenSource();
 
@@ -66,20 +63,14 @@ public static class TaskBuiltIns
 
     private static object? Await(IInterpreterContext ctx, List<object?> args)
     {
-        if (args[0] is not StashFuture future)
-        {
-            throw new RuntimeError("First argument to 'task.await' must be a Future.");
-        }
+        var future = Args.Future(args, 0, "task.await");
 
         return future.GetResult();
     }
 
     private static object? AwaitAll(IInterpreterContext ctx, List<object?> args)
     {
-        if (args.Count < 1 || args[0] is not List<object?> items)
-        {
-            throw new RuntimeError("task.awaitAll() expects a list of Futures.");
-        }
+        var items = Args.List(args, 0, "task.awaitAll");
 
         var futures = new List<StashFuture>(items.Count);
         foreach (object? item in items)
@@ -125,10 +116,7 @@ public static class TaskBuiltIns
 
     private static object? AwaitAny(IInterpreterContext ctx, List<object?> args)
     {
-        if (args.Count < 1 || args[0] is not List<object?> items)
-        {
-            throw new RuntimeError("task.awaitAny() expects a list of Futures.");
-        }
+        var items = Args.List(args, 0, "task.awaitAny");
 
         if (items.Count == 0)
         {
@@ -164,10 +152,7 @@ public static class TaskBuiltIns
 
     private static object? Status(IInterpreterContext ctx, List<object?> args, StashEnum taskStatusEnum)
     {
-        if (args[0] is not StashFuture future)
-        {
-            throw new RuntimeError("First argument to 'task.status' must be a Future.");
-        }
+        var future = Args.Future(args, 0, "task.status");
 
         string statusStr = future.Status; // "Running", "Completed", "Failed", "Cancelled"
         return taskStatusEnum.GetMember(statusStr);
@@ -175,10 +160,7 @@ public static class TaskBuiltIns
 
     private static object? Cancel(IInterpreterContext ctx, List<object?> args)
     {
-        if (args[0] is not StashFuture future)
-        {
-            throw new RuntimeError("First argument to 'task.cancel' must be a Future.");
-        }
+        var future = Args.Future(args, 0, "task.cancel");
 
         future.Cancel();
         return null;
@@ -186,10 +168,7 @@ public static class TaskBuiltIns
 
     private static object? All(IInterpreterContext ctx, List<object?> args)
     {
-        if (args.Count < 1 || args[0] is not List<object?> items)
-        {
-            throw new RuntimeError("task.all() expects an array of Futures.");
-        }
+        var items = Args.List(args, 0, "task.all");
 
         if (items.Count == 0)
         {
@@ -228,10 +207,7 @@ public static class TaskBuiltIns
 
     private static object? Race(IInterpreterContext ctx, List<object?> args)
     {
-        if (args.Count < 1 || args[0] is not List<object?> items)
-        {
-            throw new RuntimeError("task.race() expects an array of Futures.");
-        }
+        var items = Args.List(args, 0, "task.race");
 
         if (items.Count == 0)
         {
@@ -268,17 +244,7 @@ public static class TaskBuiltIns
 
     private static object? Delay(IInterpreterContext ctx, List<object?> args)
     {
-        if (args.Count < 1)
-        {
-            throw new RuntimeError("task.delay() expects a number (seconds).");
-        }
-
-        double seconds = args[0] switch
-        {
-            long l => l,
-            double d => d,
-            _ => throw new RuntimeError("task.delay() expects a number (seconds).")
-        };
+        var seconds = Args.Numeric(args, 0, "task.delay");
 
         int ms = (int)(seconds * 1000);
         var cts = new CancellationTokenSource();

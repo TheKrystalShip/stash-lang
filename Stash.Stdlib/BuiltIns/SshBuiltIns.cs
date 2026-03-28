@@ -52,10 +52,7 @@ public static class SshBuiltIns
         // Returns an SshConnection struct.
         ns.Function("connect", [Param("options", "dict")], (ctx, args) =>
         {
-            if (args[0] is not StashDictionary options)
-            {
-                throw new RuntimeError("First argument to 'ssh.connect' must be a dict.");
-            }
+            var options = Args.Dict(args, 0, "ssh.connect");
 
             var host = options.Get("host") as string
                 ?? throw new RuntimeError("ssh.connect: 'host' is required and must be a string.");
@@ -132,11 +129,7 @@ public static class SshBuiltIns
         ns.Function("exec", [Param("conn", "SshConnection"), Param("command", "string")], (_, args) =>
         {
             SshClient client = GetClient(args[0], "ssh.exec");
-
-            if (args[1] is not string command)
-            {
-                throw new RuntimeError("Second argument to 'ssh.exec' must be a string.");
-            }
+            var command = Args.String(args, 1, "ssh.exec");
 
             try
             {
@@ -154,11 +147,7 @@ public static class SshBuiltIns
         ns.Function("execAll", [Param("conn", "SshConnection"), Param("commands", "array")], (_, args) =>
         {
             SshClient client = GetClient(args[0], "ssh.execAll");
-
-            if (args[1] is not List<object?> commands)
-            {
-                throw new RuntimeError("Second argument to 'ssh.execAll' must be an array.");
-            }
+            var commands = Args.List(args, 1, "ssh.execAll");
 
             try
             {
@@ -187,11 +176,7 @@ public static class SshBuiltIns
         ns.Function("shell", [Param("conn", "SshConnection"), Param("commands", "array")], (_, args) =>
         {
             SshClient client = GetClient(args[0], "ssh.shell");
-
-            if (args[1] is not List<object?> commands)
-            {
-                throw new RuntimeError("Second argument to 'ssh.shell' must be an array.");
-            }
+            var commands = Args.List(args, 1, "ssh.shell");
 
             try
             {
@@ -251,11 +236,7 @@ public static class SshBuiltIns
         ns.Function("tunnel", [Param("conn", "SshConnection"), Param("options", "dict")], (_, args) =>
         {
             SshClient client = GetClient(args[0], "ssh.tunnel");
-
-            if (args[1] is not StashDictionary options)
-            {
-                throw new RuntimeError("Second argument to 'ssh.tunnel' must be a dict.");
-            }
+            var options = Args.Dict(args, 1, "ssh.tunnel");
 
             var remoteHost = options.Get("remoteHost") as string
                 ?? throw new RuntimeError("ssh.tunnel: 'remoteHost' is required and must be a string.");
@@ -298,10 +279,7 @@ public static class SshBuiltIns
         // ssh.closeTunnel(tunnel) — Closes an SSH tunnel (port forward).
         ns.Function("closeTunnel", [Param("tunnel", "SshTunnel")], (_, args) =>
         {
-            if (args[0] is not StashInstance inst || inst.TypeName != "SshTunnel")
-            {
-                throw new RuntimeError("First argument to 'ssh.closeTunnel' must be an SshTunnel.");
-            }
+            var inst = Args.Instance(args, 0, "SshTunnel", "ssh.closeTunnel");
 
             if (!_tunnels.TryGetValue(inst, out ForwardedPortLocal? forward))
             {
