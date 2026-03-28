@@ -210,11 +210,11 @@ public class ImportResolver
 
             resolution.ResolvedSymbols.Add(resolvedSymbol);
 
-            // Also add child symbols (struct fields, enum members) for dot-completion
-            if (exportedSymbol.Kind == SymbolKind.Struct || exportedSymbol.Kind == SymbolKind.Enum)
+            // Also add child symbols (struct fields, enum members, interface members) for dot-completion
+            if (exportedSymbol.Kind == SymbolKind.Struct || exportedSymbol.Kind == SymbolKind.Enum || exportedSymbol.Kind == SymbolKind.Interface)
             {
                 var allChildren = moduleInfo.Symbols.All
-                    .Where(s => s.ParentName == nameToken.Lexeme && (s.Kind == SymbolKind.Field || s.Kind == SymbolKind.EnumMember));
+                    .Where(s => s.ParentName == nameToken.Lexeme && (s.Kind == SymbolKind.Field || s.Kind == SymbolKind.EnumMember || s.Kind == SymbolKind.Method));
 
                 foreach (var child in allChildren)
                 {

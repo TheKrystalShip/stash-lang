@@ -221,6 +221,78 @@
             io.println($"\nPixel at ({px.pos.x}, {px.pos.y}) = {px.color}");
             """),
 
+        new("Interfaces", """
+            // Interfaces — lightweight contracts for structs
+
+            interface Measurable {
+                area(),
+                perimeter()
+            }
+
+            interface Printable {
+                display()
+            }
+
+            // Structs declare which interfaces they implement
+            struct Circle : Measurable, Printable {
+                radius
+
+                fn area() {
+                    return math.round(3.14159 * self.radius * self.radius, 2);
+                }
+
+                fn perimeter() {
+                    return math.round(2 * 3.14159 * self.radius, 2);
+                }
+
+                fn display() {
+                    return $"Circle(r={self.radius})";
+                }
+            }
+
+            struct Rectangle : Measurable, Printable {
+                width, height
+
+                fn area() {
+                    return self.width * self.height;
+                }
+
+                fn perimeter() {
+                    return 2 * (self.width + self.height);
+                }
+
+                fn display() {
+                    return $"Rect({self.width}x{self.height})";
+                }
+            }
+
+            // Polymorphic function — works with any Measurable
+            fn describeShape(shape) {
+                io.println($"  {shape.display()}");
+                io.println($"    Area:      {shape.area()}");
+                io.println($"    Perimeter: {shape.perimeter()}");
+            }
+
+            let shapes = [
+                Circle { radius: 5 },
+                Rectangle { width: 4, height: 6 },
+                Circle { radius: 3 },
+                Rectangle { width: 10, height: 2 }
+            ];
+
+            io.println("=== Shape Report ===");
+            for (let shape in shapes) {
+                describeShape(shape);
+            }
+
+            // Type checking with `is`
+            io.println("\nType checks:");
+            let c = Circle { radius: 7 };
+            io.println($"  c is Measurable? {c is Measurable}");
+            io.println($"  c is Printable?  {c is Printable}");
+            io.println($"  c is Circle?     {c is Circle}");
+            """),
+
         new("Arrays & Functional", """
             // Arrays & Functional Programming
 

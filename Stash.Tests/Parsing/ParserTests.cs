@@ -1024,6 +1024,14 @@ public class ParserTests
         Assert.Empty(structDecl.Interfaces);
     }
 
+    [Fact]
+    public void Parse_InterfaceDecl_EmptyBody_ReportsError()
+    {
+        var parser = ParseProgramWithParser("interface Empty { }");
+        Assert.NotEmpty(parser.Errors);
+        Assert.Contains(parser.Errors, e => e.Contains("at least one member"));
+    }
+
     // ── String interpolation ─────────────────────────────────────
 
     [Fact]

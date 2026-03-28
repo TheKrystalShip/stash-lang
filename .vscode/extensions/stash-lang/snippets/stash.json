@@ -38,6 +38,25 @@
     ],
     "description": "Declare an enum"
   },
+  "Interface Declaration": {
+    "prefix": "interface",
+    "body": [
+      "interface ${1:Name} {",
+      "\t${2:method}(${3})",
+      "}"
+    ],
+    "description": "Declare an interface"
+  },
+  "Typed Interface Declaration": {
+    "prefix": "interfacet",
+    "body": [
+      "interface ${1:Name} {",
+      "\t${2:field}: ${3:Type},",
+      "\t${4:method}(${5:param}: ${6:Type}) -> ${7:ReturnType}",
+      "}"
+    ],
+    "description": "Declare an interface with typed fields and methods"
+  },
   "If Statement": {
     "prefix": "if",
     "body": [

@@ -1,0 +1,330 @@
+#!/usr/bin/env stash
+
+// Interfaces Showcase
+// Declaration · Field requirements · Struct implementation · `is` operator · Polymorphism
+
+// ─── 1. Basic Interface Declaration ─────────────────────────────
+
+io.println("=== 1. Basic Interface Declaration ===");
+
+// An interface defines a contract — a named set of method signatures
+// that any implementing struct must provide.
+
+interface Printable {
+    display()
+}
+
+interface Serializable {
+    serialize()
+}
+
+// Interface objects are first-class values; typeof() reports "interface"
+io.println($"  typeof(Printable)     ->  {typeof(Printable)}");
+io.println($"  typeof(Serializable)  ->  {typeof(Serializable)}");
+io.println();
+
+// ─── 2. Interface with Field Requirements ────────────────────────
+
+io.println("=== 2. Interface with Field Requirements ===");
+
+// Interfaces can require specific fields in addition to methods.
+// Every struct that claims this interface must have id, name, and describe().
+
+interface Identifiable {
+    id,
+    name,
+    describe()
+}
+
+io.println("  Identifiable requires fields:  id, name");
+io.println("  Identifiable requires methods: describe()");
+io.println();
+
+// ─── 3. Struct Implementing a Single Interface ───────────────────
+
+io.println("=== 3. Single Interface Implementation ===");
+
+// The `: InterfaceName` syntax declares conformance.
+// The interpreter validates all required methods and fields are present
+// at struct definition time — not at call time.
+
+struct Circle : Printable {
+    radius
+
+    fn display() {
+        return $"Circle(r={self.radius})";
+    }
+}
+
+let c = Circle { radius: 7 };
+io.println($"  c.display()           ->  {c.display()}");
+io.println($"  c is Circle           ->  {c is Circle}");
+io.println($"  c is Printable        ->  {c is Printable}");
+io.println($"  c is Serializable     ->  {c is Serializable}");
+io.println();
+
+// ─── 4. Multiple Interface Implementation ────────────────────────
+
+io.println("=== 4. Multiple Interface Implementation ===");
+
+// A struct can satisfy several interfaces at once — list them
+// after the colon, comma-separated.
+
+struct Product : Printable, Serializable, Identifiable {
+    id, name, price
+
+    fn display() {
+        return $"[{self.id}] {self.name} ({self.price})";
+    }
+
+    fn serialize() {
+        return $"id={self.id},name={self.name},price={self.price}";
+    }
+
+    fn describe() {
+        return $"Product {self.id}: {self.name}";
+    }
+}
+
+let widget = Product { id: 101, name: "Widget", price: 9.99 };
+io.println($"  display()             ->  {widget.display()}");
+io.println($"  serialize()           ->  {widget.serialize()}");
+io.println($"  describe()            ->  {widget.describe()}");
+io.println();
+io.println($"  is Printable          ->  {widget is Printable}");
+io.println($"  is Serializable       ->  {widget is Serializable}");
+io.println($"  is Identifiable       ->  {widget is Identifiable}");
+io.println($"  is Product            ->  {widget is Product}");
+io.println();
+
+// ─── 5. The `is` Operator ────────────────────────────────────────
+
+io.println("=== 5. The 'is' Operator ===");
+
+// `is` checks interface conformance at runtime — use it to branch
+// on optional capabilities without knowing the concrete type.
+
+struct Note : Identifiable {
+    id, name, content
+
+    fn describe() {
+        return $"Note {self.id}: {self.name}";
+    }
+}
+
+let inventory = [
+    Product { id: 1, name: "Gadget",    price: 24.95 },
+    Note    { id: 2, name: "Todo List", content: "Buy groceries" },
+    Product { id: 3, name: "Doohickey", price: 4.50  },
+    Note    { id: 4, name: "Ideas",     content: "Ship faster" }
+];
+
+io.println("  Scanning inventory for interface tags:");
+for (let item in inventory) {
+    let tags = "";
+    if (item is Printable)    { tags += "  Printable"; }
+    if (item is Serializable) { tags += "  Serializable"; }
+    if (item is Identifiable) { tags += "  Identifiable"; }
+    io.println($"    [{item.name}]{tags}");
+}
+io.println();
+
+// ─── 6. Polymorphic Functions ─────────────────────────────────────
+
+io.println("=== 6. Polymorphic Functions ===");
+
+// A function that accepts any struct satisfying an interface
+// works for all current and future implementing types.
+
+fn printItem(item) {
+    if (item is Printable) {
+        io.println($"    {item.display()}");
+    } else {
+        io.println("    (not Printable - no display())");
+    }
+}
+
+fn exportJson(item) {
+    if (item is Serializable) {
+        return item.serialize();
+    }
+    return null;
+}
+
+fn identify(item) {
+    if (item is Identifiable) {
+        return item.describe();
+    }
+    return "(unidentifiable)";
+}
+
+let catalog = [
+    Product { id: 10, name: "Sprocket", price: 3.75 },
+    Product { id: 11, name: "Bolt",     price: 0.50 },
+    Note    { id: 20, name: "Meeting Notes", content: "Discuss roadmap" }
+];
+
+io.println("  printItem() on each:");
+for (let item in catalog) { printItem(item); }
+
+io.println();
+io.println("  exportJson() on each:");
+for (let item in catalog) {
+    let json = exportJson(item);
+    if (json != null) {
+        io.println($"    {json}");
+    } else {
+        io.println($"    [{item.name}] - not Serializable");
+    }
+}
+
+io.println();
+io.println("  identify() on each:");
+for (let item in catalog) {
+    io.println($"    {identify(item)}");
+}
+io.println();
+
+// ─── 7. Polymorphic Array — Shape Geometry ───────────────────────
+
+io.println("=== 7. Polymorphic Array - Shape Geometry ===");
+
+// A Measurable interface requiring two calculation methods.
+// Different shapes implement it independently.
+
+interface Measurable {
+    area(),
+    perimeter()
+}
+
+struct Rectangle : Measurable, Printable {
+    width, height
+
+    fn area() {
+        return self.width * self.height;
+    }
+
+    fn perimeter() {
+        return 2 * (self.width + self.height);
+    }
+
+    fn display() {
+        return $"Rectangle({self.width}x{self.height})";
+    }
+}
+
+struct Triangle : Measurable, Printable {
+    base, height, sideA, sideB
+
+    fn area() {
+        return 0.5 * self.base * self.height;
+    }
+
+    fn perimeter() {
+        return self.base + self.sideA + self.sideB;
+    }
+
+    fn display() {
+        return $"Triangle(b={self.base}, h={self.height})";
+    }
+}
+
+// Circle (from section 3) implements Printable but NOT Measurable —
+// it will be skipped when we filter to Measurable shapes only.
+let shapes = [
+    Rectangle { width: 5,  height: 8 },
+    Rectangle { width: 3,  height: 3 },
+    Triangle  { base: 6,   height: 4, sideA: 5, sideB: 5 },
+    Circle    { radius: 4 }
+];
+
+fn measurementLine(shape) {
+    return $"area={shape.area()}  perimeter={shape.perimeter()}";
+}
+
+io.println("  Shapes (Measurable only):");
+let totalArea = 0.0;
+for (let shape in shapes) {
+    let label = shape is Printable ? shape.display() : "(unnamed)";
+    if (shape is Measurable) {
+        io.println($"    {label}  ->  {measurementLine(shape)}");
+        totalArea += shape.area();
+    } else {
+        io.println($"    {label}  ->  skipped (not Measurable)");
+    }
+}
+io.println($"  Total measured area: {totalArea}");
+io.println();
+
+// ─── 8. Putting It All Together — Plugin Registry ────────────────
+
+io.println("=== 8. Putting It All Together - Plugin Registry ===");
+
+// A minimal plugin system: every plugin must satisfy Plugin,
+// but only some are Configurable — the registry handles both cases.
+
+interface Plugin {
+    name,
+    version,
+    run()
+}
+
+interface Configurable {
+    configure(opts)
+}
+
+struct LoggerPlugin : Plugin, Configurable {
+    name, version, level
+
+    fn run() {
+        return $"Logger active  (level={self.level})";
+    }
+
+    fn configure(opts) {
+        return $"Logger reconfigured: level={opts}";
+    }
+}
+
+struct MetricsPlugin : Plugin {
+    name, version, endpoint
+
+    fn run() {
+        return $"Metrics pushing to {self.endpoint}";
+    }
+}
+
+struct AuthPlugin : Plugin, Configurable {
+    name, version, provider
+
+    fn run() {
+        return $"Auth active  (provider={self.provider})";
+    }
+
+    fn configure(opts) {
+        return $"Auth reconfigured: provider={opts}";
+    }
+}
+
+let plugins = [
+    LoggerPlugin  { name: "logger",  version: "1.2.0", level: "info" },
+    MetricsPlugin { name: "metrics", version: "0.9.1", endpoint: "http://localhost:9091" },
+    AuthPlugin    { name: "auth",    version: "2.0.3", provider: "oauth2" }
+];
+
+io.println("  Starting all plugins:");
+for (let p in plugins) {
+    if (p is Plugin) {
+        io.println($"    [{p.name} v{p.version}]  {p.run()}");
+    }
+}
+
+io.println();
+io.println("  Reconfiguring Configurable plugins:");
+for (let p in plugins) {
+    if (p is Configurable) {
+        io.println($"    [{p.name}]  {p.configure("debug")}");
+    } else {
+        io.println($"    [{p.name}]  - not Configurable, skipped");
+    }
+}
+io.println();

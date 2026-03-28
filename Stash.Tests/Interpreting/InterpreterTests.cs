@@ -1596,6 +1596,19 @@ public class InterpreterTests
         "));
     }
 
+    [Fact]
+    public void StructImplements_MethodWithDefaultParams_MatchesArity()
+    {
+        Assert.Equal("Hello, world", Run(@"
+            interface Greetable { greet(name) }
+            struct Bot : Greetable {
+                fn greet(name = ""world"") { return ""Hello, "" + name; }
+            }
+            let b = Bot {};
+            let result = b.greet();
+        "));
+    }
+
     // ===== Struct Methods =====
 
     [Fact]

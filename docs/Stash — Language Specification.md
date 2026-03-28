@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -48,7 +48,7 @@
 
 - Static typing
 - Compilation to native code or bytecode (tree-walk interpreter first)
-- Class-based OOP with inheritance
+- Class-based OOP with inheritance (lightweight interfaces **are** supported — see [Section 5f](#5f-interfaces))
 - Concurrency primitives
 
 ---
@@ -250,20 +250,21 @@ $(cat /tmp/listing.txt) | $(grep app) >> "/tmp/matches.txt";
 
 Dynamically typed. Values carry their type at runtime. The following built-in types exist:
 
-| Type     | Examples                       | Notes                                  |
-| -------- | ------------------------------ | -------------------------------------- |
-| `int`    | `42`, `-7`, `0`                | Integer numbers                        |
-| `float`  | `3.14`, `-0.5`                 | Floating-point numbers                 |
-| `string` | `"hello"`, `""`                | Immutable strings                      |
-| `bool`   | `true`, `false`                |                                        |
-| `null`   | `null`                         | Absence of value                       |
-| `array`  | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size      |
-| `struct` | `Server { host: "...", ... }`  | Named structured data (see Section 5)  |
-| `enum`   | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)       |
-| `dict`   | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)         |
-| `range`  | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d) |
-| `Error`  | `try failingFn()`              | Error value (see Section 7b)           |
-| `Future` | `async fn() { return 42; }`    | Async computation (see Section 8c)     |
+| Type        | Examples                       | Notes                                        |
+| ----------- | ------------------------------ | -------------------------------------------- |
+| `int`       | `42`, `-7`, `0`                | Integer numbers                              |
+| `float`     | `3.14`, `-0.5`                 | Floating-point numbers                       |
+| `string`    | `"hello"`, `""`                | Immutable strings                            |
+| `bool`      | `true`, `false`                |                                              |
+| `null`      | `null`                         | Absence of value                             |
+| `array`     | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size            |
+| `struct`    | `Server { host: "...", ... }`  | Named structured data (see Section 5)        |
+| `enum`      | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)             |
+| `dict`      | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)               |
+| `interface` | `interface Printable { ... }`  | Structural contract for structs (see §5f)    |
+| `range`     | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d)       |
+| `Error`     | `try failingFn()`              | Error value (see Section 7b)                 |
+| `Future`    | `async fn() { return 42; }`   | Async computation (see Section 8c)           |
 
 ### Type Coercion & Truthiness
 
@@ -703,24 +704,25 @@ expression is typeName
 
 ### Valid Type Names
 
-| Type name    | Matches                                      |
-| ------------ | -------------------------------------------- |
-| `int`        | Integer values                               |
-| `float`      | Floating-point values                        |
-| `string`     | String values                                |
-| `bool`       | Boolean values (`true` / `false`)            |
-| `null`       | The `null` value                             |
-| `array`      | Array values                                 |
-| `dict`       | Dictionary values                            |
-| `struct`     | Struct instances (any struct type)           |
-| `enum`       | Enum values (any enum type)                  |
-| `function`   | Functions and lambdas                        |
-| `range`      | Range values (`1..10`)                       |
-| `namespace`  | Namespace values (e.g. `io`, `fs`)           |
-| `Error`      | Error values returned by `try`               |
-| `Future`     | Future values returned by async functions    |
-| _StructName_ | Instances of the named struct (e.g. `Point`) |
-| _EnumName_   | Values of the named enum (e.g. `Color`)      |
+| Type name       | Matches                                                   |
+| --------------- | --------------------------------------------------------- |
+| `int`           | Integer values                                            |
+| `float`         | Floating-point values                                     |
+| `string`        | String values                                             |
+| `bool`          | Boolean values (`true` / `false`)                         |
+| `null`          | The `null` value                                          |
+| `array`         | Array values                                              |
+| `dict`          | Dictionary values                                         |
+| `struct`        | Struct instances (any struct type)                        |
+| `enum`          | Enum values (any enum type)                               |
+| `function`      | Functions and lambdas                                     |
+| `range`         | Range values (`1..10`)                                    |
+| `namespace`     | Namespace values (e.g. `io`, `fs`)                        |
+| `Error`         | Error values returned by `try`                            |
+| `Future`        | Future values returned by async functions                 |
+| _StructName_    | Instances of the named struct (e.g. `Point`)              |
+| _EnumName_      | Values of the named enum (e.g. `Color`)                   |
+| _InterfaceName_ | Struct instances that conform to the interface (e.g. `Printable`) |
 
 An unrecognised type name evaluates to `false` (no runtime error).
 
@@ -759,6 +761,16 @@ enum Color { Red, Green, Blue }
 let c = Color.Red;
 c is Color         // true
 c is enum          // true  (matches any enum)
+
+// Interface conformance check
+interface Printable { toString() }
+struct Label : Printable {
+    text
+    fn toString() { return self.text; }
+}
+let lbl = Label { text: "hello" };
+lbl is Printable   // true
+lbl is Label       // true  (struct type check still works)
 
 // Use in conditions
 if (value is string) {
@@ -1064,6 +1076,119 @@ let h2 = empty?.host;         // null (no error)
 ### Implementation
 
 The `?.` operator is implemented as a `QuestionDot` token type. `DotExpr` has an `IsOptional` boolean flag (default `false`). When the parser encounters `?.`, it creates a `DotExpr` with `IsOptional = true`. At runtime, the interpreter checks this flag: if the object evaluates to `null` and `IsOptional` is `true`, it returns `null` immediately instead of throwing.
+
+---
+
+## 5f. Interfaces
+
+Interfaces define lightweight contracts — a set of required fields and methods that a struct must provide. They enable type-safe polymorphism without inheritance.
+
+### Declaration
+
+```stash
+interface Printable {
+    toString(),
+    toJson()
+}
+```
+
+With fields:
+
+```stash
+interface Identifiable {
+    id,
+    name,
+    getDisplayName()
+}
+```
+
+Methods list name and parameters (excluding `self`) — no bodies. Fields are bare identifiers. Members are comma-separated. Empty interfaces are not allowed.
+
+### Struct Implementation
+
+A struct declares conformance with `: InterfaceName` after its name. Multiple interfaces are comma-separated:
+
+```stash
+struct User : Printable, Identifiable {
+    id,
+    name,
+    email
+
+    fn toString() {
+        return $"{self.name} <{self.email}>";
+    }
+
+    fn toJson() {
+        return json.stringify({
+            id: self.id,
+            name: self.name,
+            email: self.email
+        });
+    }
+
+    fn getDisplayName() {
+        return self.name;
+    }
+}
+```
+
+Conformance is checked at struct definition time. If a required field or method is missing, or a method has the wrong parameter count, a runtime error is raised immediately.
+
+### Type Checking with `is`
+
+```stash
+let user = User { id: 1, name: "Alice", email: "alice@example.com" };
+user is Printable      // true
+user is Identifiable   // true
+user is User           // true  (struct type check still works)
+```
+
+### Multiple Interface Implementation
+
+A struct can implement any number of interfaces and must satisfy all of their contracts:
+
+```stash
+struct Document : Printable, Identifiable, Serializable {
+    // must satisfy all three contracts
+}
+```
+
+### The `typeof()` Function
+
+```stash
+typeof(Printable)    // "interface"
+```
+
+### Conformance Rules
+
+- All fields listed in the interface must exist as fields in the struct.
+- All methods listed in the interface must exist as methods in the struct.
+- Method parameter count must match (excluding `self`).
+- Methods with default parameters satisfy interfaces requiring fewer parameters — a method `fn format(style, indent)` with a default on `indent` satisfies an interface requiring `format(style)`.
+
+### Import/Export
+
+Interfaces participate in the module system like structs and enums:
+
+```stash
+// shapes.stash
+interface Drawable {
+    draw(),
+    getBounds()
+}
+
+// main.stash
+import { Drawable } from "shapes.stash";
+```
+
+### Internal Representation
+
+An interface is stored as a named contract: a list of required field names and a list of required method signatures (name + parameter count). Interfaces carry no runtime data and add no overhead to struct instances.
+
+### Future Extensions (Not in v1)
+
+- **Interface composition:** `interface Foo : Bar, Baz { ... }` — extending other interfaces.
+- **Default implementations:** Methods with bodies that structs inherit if not overridden.
 
 ---
 

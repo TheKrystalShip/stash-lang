@@ -165,7 +165,8 @@ public class ScopeTree
     {
         return GlobalScope.Symbols.Where(s =>
             s.Kind is SymbolKind.Function or SymbolKind.Struct
-                or SymbolKind.Enum or SymbolKind.Variable or SymbolKind.Constant);
+                or SymbolKind.Enum or SymbolKind.Interface
+                or SymbolKind.Variable or SymbolKind.Constant);
     }
 
     /// <summary>
@@ -198,13 +199,13 @@ public class ScopeTree
     {
         foreach (var sym in GlobalScope.Symbols)
         {
-            if (sym.Kind is SymbolKind.Function or SymbolKind.Struct or SymbolKind.Enum
+            if (sym.Kind is SymbolKind.Function or SymbolKind.Struct or SymbolKind.Enum or SymbolKind.Interface
                 or SymbolKind.Variable or SymbolKind.Constant)
             {
                 // Find the child scope that corresponds to this symbol (if any)
                 var childSymbols = new List<SymbolInfo>();
 
-                if (sym.Kind is SymbolKind.Struct or SymbolKind.Enum)
+                if (sym.Kind is SymbolKind.Struct or SymbolKind.Enum or SymbolKind.Interface)
                 {
                     var childrenIndex = GetChildrenByParent();
                     if (childrenIndex.TryGetValue(sym.Name, out var children))

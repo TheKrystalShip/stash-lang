@@ -397,6 +397,30 @@ public class ImportResolverTests
     }
 
     [Fact]
+    public void SelectiveImport_InterfaceWithMembers_ResolvesAllSymbols()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "interface Printable { name: string, toString() -> string }",
+            mainSource: "import { Printable } from \"module.stash\";");
+
+        try
+        {
+            var resolver = new ImportResolver();
+            var (stmts, _) = ParseSource("import { Printable } from \"module.stash\";", mainUri.LocalPath);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
+
+            Assert.Empty(resolution.Diagnostics);
+            Assert.Contains(resolution.ResolvedSymbols, s => s.Name == "Printable" && s.Kind == SymbolKind.Interface);
+            Assert.Contains(resolution.ResolvedSymbols, s => s.Name == "name" && s.Kind == SymbolKind.Field);
+            Assert.Contains(resolution.ResolvedSymbols, s => s.Name == "toString" && s.Kind == SymbolKind.Method);
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    [Fact]
     public void Analyze_ImportedFunction_FoundByFindDefinition()
     {
         var (tempDir, moduleUri, mainUri) = SetupImportTest(
