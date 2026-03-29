@@ -1,0 +1,60 @@
+/// @stash/ufw/lib/config — Firewall lifecycle and configuration management for UFW.
+///
+/// Provides functions to enable, disable, reload, and reset the firewall,
+/// set default policies for traffic directions, and configure logging levels.
+///
+/// Usage:
+///   import "lib/config.stash" as config;
+///   config.enable();
+///   config.set_default("deny", "incoming");
+///   config.set_logging("low");
+
+import "common.stash" as common;
+
+/// Enables the UFW firewall.
+/// Uses --force to skip the interactive confirmation prompt.
+///
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn enable() {
+    return common.exec("--force enable");
+}
+
+/// Disables the UFW firewall.
+///
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn disable() {
+    return common.exec("disable");
+}
+
+/// Reloads the UFW firewall rules.
+/// Useful after manually editing rule files or application profiles.
+///
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn reload() {
+    return common.exec("reload");
+}
+
+/// Resets UFW to installation defaults.
+/// Removes all rules and disables the firewall. Uses --force to skip confirmation.
+///
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn reset() {
+    return common.exec("--force reset");
+}
+
+/// Sets the default policy for a traffic direction.
+///
+/// @param policy string — one of: "allow", "deny", "reject"
+/// @param direction string — one of: "incoming", "outgoing", "routed" (default: "incoming")
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn set_default(policy, direction = "incoming") {
+    return common.exec($"default {policy} {direction}");
+}
+
+/// Sets the UFW logging level.
+///
+/// @param level string — one of: "off", "on", "low", "medium", "high", "full"
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn set_logging(level) {
+    return common.exec($"logging {level}");
+}

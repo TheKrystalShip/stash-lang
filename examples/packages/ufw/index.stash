@@ -1,0 +1,20 @@
+/// @stash/ufw — A comprehensive UFW (Uncomplicated Firewall) wrapper for Stash.
+///
+/// Import the whole package:
+///   import "@stash/ufw" as ufw;
+///   ufw.status.show();
+///   ufw.rules.allow("22/tcp");
+///
+/// Or import individual modules:
+///   import "lib/rules.stash" as rules;
+///   import "lib/status.stash" as status;
+///
+/// Types are defined in lib/types.stash:
+///   import { UfwRule } from "@stash/ufw/lib/types.stash";
+
+import "lib/types.stash" as types;
+import "lib/common.stash" as common;
+import "lib/rules.stash" as rules;
+import "lib/status.stash" as status;
+import "lib/app.stash" as app;
+import "lib/config.stash" as config;

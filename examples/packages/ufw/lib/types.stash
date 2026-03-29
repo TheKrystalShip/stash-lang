@@ -1,0 +1,107 @@
+/// @stash/ufw/lib/types — Type definitions for the UFW package.
+///
+/// Defines all structs used across the package for rule specifications,
+/// command results, parsed status output, and application profiles.
+
+/// Describes a UFW firewall rule specification.
+///
+/// Used with rules.allow(), rules.deny(), rules.reject(), rules.limit(),
+/// rules.insert(), rules.prepend(), rules.route(), and rules.delete_route().
+///
+/// Fields set to null are omitted from the generated command.
+///
+/// Examples:
+///   UfwRule { port: 22, proto: "tcp", from: null, to: null, port_from: null, port_to: null, direction: null, on: null, comment: null }
+///   UfwRule { port: [80, 443], proto: "tcp", from: "192.168.1.0/24", to: null, port_from: null, port_to: null, direction: "in", on: "eth0", comment: "Web traffic" }
+struct UfwRule {
+    port,
+    proto,
+    from,
+    to,
+    port_from,
+    port_to,
+    direction,
+    on,
+    comment
+}
+
+/// Result of a UFW command execution.
+///
+/// Returned by all command-executing functions in the package.
+struct UfwResult {
+    ok,
+    stdout,
+    stderr,
+    exitCode
+}
+
+/// Result containing parsed lines from command output.
+struct UfwLinesResult {
+    ok,
+    lines,
+    stderr,
+    exitCode
+}
+
+/// A single parsed firewall rule from `ufw status numbered`.
+struct UfwRuleEntry {
+    number,
+    to,
+    action,
+    from
+}
+
+/// Result containing parsed firewall rules.
+struct UfwRuleList {
+    ok,
+    rules,
+    stderr,
+    exitCode
+}
+
+/// Parsed default firewall policies from `ufw status verbose`.
+struct UfwDefaults {
+    incoming,
+    outgoing,
+    routed
+}
+
+/// Result containing parsed default policies.
+struct UfwDefaultsResult {
+    ok,
+    data,
+    stderr,
+    exitCode
+}
+
+/// Result containing the current logging level.
+struct UfwLoggingResult {
+    ok,
+    level,
+    stderr,
+    exitCode
+}
+
+/// Information about a UFW application profile.
+struct UfwAppInfo {
+    profile,
+    title,
+    description,
+    ports
+}
+
+/// Result containing parsed application profile information.
+struct UfwAppInfoResult {
+    ok,
+    data,
+    stderr,
+    exitCode
+}
+
+/// Result containing a list of available application profile names.
+struct UfwAppListResult {
+    ok,
+    apps,
+    stderr,
+    exitCode
+}

@@ -1,0 +1,24 @@
+{
+  "name": "@stash/ufw",
+  "version": "1.0.0",
+  "description": "Comprehensive UFW (Uncomplicated Firewall) wrapper for Stash — manage firewall rules, application profiles, default policies, and logging",
+  "author": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "index.stash",
+  "repository": "https://github.com/TheKrystalShip/stash-lang",
+  "keywords": [
+    "ufw",
+    "firewall",
+    "security",
+    "networking",
+    "linux",
+    "sysadmin",
+    "iptables"
+  ],
+  "stash": ">=1.0.0",
+  "files": ["lib/", "index.stash", "README.md", "LICENSE"],
+  "private": false,
+  "dependencies": {
+    "@stash/cli": "^1.0.0"
+  }
+}

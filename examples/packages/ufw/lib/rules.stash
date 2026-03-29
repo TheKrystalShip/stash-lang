@@ -1,0 +1,142 @@
+/// @stash/ufw/lib/rules — Rule management for UFW (Uncomplicated Firewall).
+///
+/// Provides functions to add, insert, prepend, delete, and route firewall rules.
+/// Rule parameters may be either a string (raw rule, passed through as-is)
+/// or a UfwRule struct (structured rule, built via common.build_rule()).
+///
+/// Usage:
+///   import "lib/rules.stash" as rules;
+///   import { UfwRule } from "lib/types.stash";
+///
+///   rules.allow("22/tcp");
+///   rules.allow(UfwRule { port: 80, proto: "tcp", from: null, to: null, port_from: null, port_to: null, direction: null, on: null, comment: null });
+///   rules.deny("telnet");
+///   rules.delete(3);
+
+import "common.stash" as common;
+import { UfwRule } from "types.stash";
+
+// Internal: resolves a rule parameter to a string suitable for a ufw command.
+// Strings are returned as-is. UfwRule structs are expanded via common.build_rule().
+// All other values (e.g. numbers) are converted via conv.toStr().
+fn _resolve_rule(rule) {
+    if (rule is string) {
+        return rule;
+    }
+    if (rule is UfwRule) {
+        return common.build_rule(rule);
+    }
+    return conv.toStr(rule);
+}
+
+// Internal: builds and executes a ufw command for allow/deny/reject/limit.
+// When number is non-null, inserts the rule at that position.
+fn _make_action(action, rule, number = null) {
+    let rule_str = _resolve_rule(rule);
+    if (!(number is null)) {
+        return common.exec($"insert {number} {action} {rule_str}");
+    }
+    return common.exec($"{action} {rule_str}");
+}
+
+/// Adds an allow rule to the firewall.
+///
+/// @param rule string | UfwRule — raw rule string (e.g. "22/tcp", "ssh") or UfwRule struct
+/// @param number int — when set, inserts the rule at the given position (default: null)
+/// @return UfwResult with ok, stdout, stderr, exitCode
+///
+/// Examples:
+///   allow("22/tcp");
+///   allow("ssh");
+///   allow(UfwRule { port: 80, proto: "tcp", from: null, to: null, port_from: null, port_to: null, direction: null, on: null, comment: null });
+fn allow(rule, number = null) {
+    return _make_action("allow", rule, number);
+}
+
+/// Adds a deny rule to the firewall.
+/// Silently drops matching packets (returns no response to the sender).
+///
+/// @param rule string | UfwRule — raw rule string or UfwRule struct
+/// @param number int — when set, inserts the rule at the given position (default: null)
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn deny(rule, number = null) {
+    return _make_action("deny", rule, number);
+}
+
+/// Adds a reject rule to the firewall.
+/// Actively refuses matching packets (sends an ICMP unreachable response to the sender).
+///
+/// @param rule string | UfwRule — raw rule string or UfwRule struct
+/// @param number int — when set, inserts the rule at the given position (default: null)
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn reject(rule, number = null) {
+    return _make_action("reject", rule, number);
+}
+
+/// Adds a rate-limiting rule to the firewall.
+/// Blocks connections from an IP that attempts more than 6 connections within 30 seconds.
+/// Commonly used to defend SSH and other services from brute-force attacks.
+///
+/// @param rule string | UfwRule — raw rule string or UfwRule struct
+/// @param number int — when set, inserts the rule at the given position (default: null)
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn limit(rule, number = null) {
+    return _make_action("limit", rule, number);
+}
+
+/// Deletes an existing firewall rule.
+///
+/// Two deletion modes are supported:
+///   - By rule number (int): obtained from status.numbered() — e.g. delete(3)
+///   - By full rule specification (string): includes the action — e.g. delete("allow 22/tcp")
+///
+/// @param rule int | string — rule number or full rule specification string
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn delete(rule) {
+    if (rule is int) {
+        return common.exec("delete " + conv.toStr(rule));
+    }
+    return common.exec("delete " + rule);
+}
+
+/// Inserts a rule at a specific position in the rule set.
+///
+/// @param number int — 1-based position at which to insert the rule
+/// @param action string — one of: "allow", "deny", "reject", "limit"
+/// @param rule string | UfwRule — raw rule string or UfwRule struct
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn insert(number, action, rule) {
+    let rule_str = _resolve_rule(rule);
+    return common.exec($"insert {number} {action} {rule_str}");
+}
+
+/// Prepends a rule at the top of the rule set (position 1).
+///
+/// @param action string — one of: "allow", "deny", "reject", "limit"
+/// @param rule string | UfwRule — raw rule string or UfwRule struct
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn prepend(action, rule) {
+    let rule_str = _resolve_rule(rule);
+    return common.exec($"prepend {action} {rule_str}");
+}
+
+/// Adds a routed (forwarding) rule to the firewall.
+/// Route rules apply to traffic passing through the host, not terminating on it.
+///
+/// @param action string — one of: "allow", "deny", "reject"
+/// @param rule string | UfwRule — raw rule string or UfwRule struct
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn route(action, rule) {
+    let rule_str = _resolve_rule(rule);
+    return common.exec($"route {action} {rule_str}");
+}
+
+/// Deletes an existing routed (forwarding) rule from the firewall.
+///
+/// @param action string — one of: "allow", "deny", "reject"
+/// @param rule string | UfwRule — raw rule string or UfwRule struct
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn delete_route(action, rule) {
+    let rule_str = _resolve_rule(rule);
+    return common.exec($"route delete {action} {rule_str}");
+}

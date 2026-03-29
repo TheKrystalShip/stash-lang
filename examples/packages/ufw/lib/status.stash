@@ -1,0 +1,168 @@
+/// @stash/ufw/lib/status — Status queries and parsed output for UFW.
+///
+/// Provides functions to check firewall status, parse active rules,
+/// extract default policies, and read the current logging level.
+///
+/// Usage:
+///   import "lib/status.stash" as status;
+///   status.show();
+///   status.list_rules();
+
+import "common.stash" as common;
+import { UfwRuleEntry, UfwRuleList, UfwDefaults, UfwDefaultsResult, UfwLoggingResult } from "types.stash";
+
+// Internal: parses a single rule line into a UfwRuleEntry.
+// Searches for action keywords (ALLOW, DENY, REJECT, LIMIT with optional IN/OUT/FWD suffix)
+// and splits the line around the match. The number field is set to 0 (caller provides it).
+fn _parse_rule_line(line) {
+    let actions = [
+        "ALLOW IN", "ALLOW OUT", "ALLOW FWD", "ALLOW",
+        "DENY IN", "DENY OUT", "DENY FWD", "DENY",
+        "REJECT IN", "REJECT OUT", "REJECT FWD", "REJECT",
+        "LIMIT IN", "LIMIT OUT", "LIMIT FWD", "LIMIT"
+    ];
+    for (let action in actions) {
+        let idx = str.indexOf(line, action);
+        if (idx != -1) {
+            let to = str.trim(str.substring(line, 0, idx));
+            let from = str.trim(str.substring(line, idx + len(action), len(line)));
+            return UfwRuleEntry { number: 0, to: to, action: action, from: from };
+        }
+    }
+    return UfwRuleEntry { number: 0, to: line, action: "", from: "" };
+}
+
+// Internal: extracts a policy word for a given direction from the Default line value.
+// The Default line looks like: "deny (incoming), allow (outgoing), disabled (routed)"
+fn _extract_policy(value, direction) {
+    let marker = "(" + direction + ")";
+    let marker_idx = str.indexOf(value, marker);
+    if (marker_idx == -1) {
+        return "unknown";
+    }
+    let before = str.trim(str.substring(value, 0, marker_idx));
+    let comma_idx = str.lastIndexOf(before, ",");
+    if (comma_idx != -1) {
+        return str.trim(str.substring(before, comma_idx + 1, len(before)));
+    }
+    return before;
+}
+
+/// Shows the current UFW firewall status.
+///
+/// @param verbose bool — if true, shows default policies and logging info (default: false)
+/// @param numbered bool — if true, shows rules with position numbers (default: false)
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn show(verbose = false, numbered = false) {
+    let cmd = "status";
+    if (verbose) {
+        cmd = "status verbose";
+    } else if (numbered) {
+        cmd = "status numbered";
+    }
+    return common.exec(cmd);
+}
+
+/// Shows verbose firewall status including default policies and logging.
+/// Shorthand for show(verbose: true).
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn verbose() {
+    return show(true, false);
+}
+
+/// Shows numbered firewall status with rule positions.
+/// Shorthand for show(numbered: true).
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn numbered() {
+    return show(false, true);
+}
+
+/// Checks whether the UFW firewall is currently active.
+/// @return true if the firewall is active, false otherwise
+fn is_active() {
+    let r = common.exec("status");
+    if (!r.ok) {
+        return false;
+    }
+    return str.contains(r.stdout, "Status: active");
+}
+
+/// Parses the numbered status output into a list of UfwRuleEntry structs.
+///
+/// Each entry contains: number (position), to (destination), action, from (source).
+/// Rule numbers can change after insertions or deletions — re-query after modifications.
+///
+/// @return UfwRuleList with ok, rules (array of UfwRuleEntry), stderr, exitCode
+fn list_rules() {
+    let r = common.exec("status numbered");
+    if (!r.ok) {
+        return UfwRuleList { ok: false, rules: [], stderr: r.stderr, exitCode: r.exitCode };
+    }
+    let lines = str.split(str.trim(r.stdout), "\n");
+    let rules = [];
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (trimmed == "" || str.startsWith(trimmed, "Status:") || str.startsWith(trimmed, "To") || str.startsWith(trimmed, "--")) {
+            continue;
+        }
+        if (!str.startsWith(trimmed, "[")) {
+            continue;
+        }
+        let bracket_end = str.indexOf(trimmed, "]");
+        if (bracket_end == -1) {
+            continue;
+        }
+        let num_str = str.trim(str.substring(trimmed, 1, bracket_end));
+        let num = try conv.toInt(num_str);
+        if (num is Error) {
+            continue;
+        }
+        let rest = str.trim(str.substring(trimmed, bracket_end + 1, len(trimmed)));
+        let entry = _parse_rule_line(rest);
+        entry.number = num;
+        arr.push(rules, entry);
+    }
+    return UfwRuleList { ok: true, rules: rules, stderr: r.stderr, exitCode: r.exitCode };
+}
+
+/// Parses the verbose status output to extract default firewall policies.
+///
+/// @return UfwDefaultsResult with ok, data (UfwDefaults with incoming, outgoing, routed), stderr, exitCode
+fn defaults() {
+    let r = common.exec("status verbose");
+    if (!r.ok) {
+        return UfwDefaultsResult { ok: false, data: null, stderr: r.stderr, exitCode: r.exitCode };
+    }
+    let lines = str.split(str.trim(r.stdout), "\n");
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (str.startsWith(trimmed, "Default:")) {
+            let value = str.trim(str.substring(trimmed, 8, len(trimmed)));
+            let incoming = _extract_policy(value, "incoming");
+            let outgoing = _extract_policy(value, "outgoing");
+            let routed = _extract_policy(value, "routed");
+            let data = UfwDefaults { incoming: incoming, outgoing: outgoing, routed: routed };
+            return UfwDefaultsResult { ok: true, data: data, stderr: r.stderr, exitCode: r.exitCode };
+        }
+    }
+    return UfwDefaultsResult { ok: false, data: null, stderr: r.stderr, exitCode: r.exitCode };
+}
+
+/// Parses the verbose status output to extract the current logging level.
+///
+/// @return UfwLoggingResult with ok, level (string, e.g. "on (low)", "off"), stderr, exitCode
+fn logging_level() {
+    let r = common.exec("status verbose");
+    if (!r.ok) {
+        return UfwLoggingResult { ok: false, level: null, stderr: r.stderr, exitCode: r.exitCode };
+    }
+    let lines = str.split(str.trim(r.stdout), "\n");
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (str.startsWith(trimmed, "Logging:")) {
+            let level = str.trim(str.substring(trimmed, 8, len(trimmed)));
+            return UfwLoggingResult { ok: true, level: level, stderr: r.stderr, exitCode: r.exitCode };
+        }
+    }
+    return UfwLoggingResult { ok: false, level: null, stderr: r.stderr, exitCode: r.exitCode };
+}

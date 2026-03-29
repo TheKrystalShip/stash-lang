@@ -1,0 +1,166 @@
+/// @stash/ufw — Shared helpers for ufw (Uncomplicated Firewall) CLI commands.
+/// Delegates to @stash/cli toolkit for exec, parsing, and tool detection.
+///
+/// UFW requires root or sudo privileges for nearly all commands.
+/// Use set_sudo(false) only in environments where the process already runs as root
+/// (e.g. inside a container or a CI pipeline running as root).
+
+import "@stash/cli/lib/exec.stash" as cli_exec;
+import "@stash/cli/lib/flags.stash" as cli_flags;
+import "@stash/cli/lib/parse.stash" as cli_parse;
+import "@stash/cli/lib/tools.stash" as cli_tools;
+import { UfwRule, UfwResult, UfwLinesResult } from "types.stash";
+
+/// Module-level sudo flag. Defaults to true because ufw commands require root.
+let _sudo = true;
+
+/// Enables or disables the sudo prefix for all ufw command invocations.
+/// Set to false only when the process already runs as root.
+/// @param enabled bool — true to prepend "sudo" to every ufw call
+fn set_sudo(enabled) {
+    _sudo = enabled;
+}
+
+/// Returns the current sudo flag value.
+/// @return true if ufw commands will be prefixed with "sudo", false otherwise
+fn get_sudo() {
+    return _sudo;
+}
+
+// Internal: returns "sudo ufw" or "ufw" based on the current sudo flag.
+fn _cmd_prefix() {
+    if (_sudo) {
+        return "sudo ufw";
+    }
+    return "ufw";
+}
+
+// Internal: formats a port value as a string.
+// Accepts int, string, or array (joined with commas for multi-port rules).
+fn _format_port(port) {
+    if (port is array) {
+        let strs = arr.map(port, (p) => conv.toStr(p));
+        return arr.join(strs, ",");
+    }
+    return conv.toStr(port);
+}
+
+/// Runs a ufw command with the given arguments.
+/// Prepends "sudo" when the sudo flag is enabled (default).
+/// @param args Arguments string to pass to ufw (e.g. "status verbose")
+/// @return UfwResult with ok, stdout, stderr, exitCode
+fn exec(args) {
+    let r = cli_exec.exec(_cmd_prefix(), args);
+    return UfwResult { ok: r.ok, stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode };
+}
+
+/// Runs a ufw command and returns its stdout split into trimmed non-empty lines.
+/// @param args Arguments string to pass to ufw
+/// @return UfwLinesResult with ok, lines, stderr, exitCode
+fn exec_lines(args) {
+    let r = exec(args);
+    if (!r.ok) {
+        return UfwLinesResult { ok: false, lines: [], stderr: r.stderr, exitCode: r.exitCode };
+    }
+    return UfwLinesResult {
+        ok: true,
+        lines: cli_parse.parse_lines(r.stdout),
+        stderr: r.stderr,
+        exitCode: r.exitCode
+    };
+}
+
+/// Checks whether ufw is installed and available on the system.
+/// @return true if the ufw binary is found, false otherwise
+fn check_ufw() {
+    return cli_tools.check_tool("ufw");
+}
+
+/// Builds a full ufw argument string from a base subcommand, options dict, and flag spec.
+/// @param base Base subcommand string (e.g. "allow", "deny")
+/// @param opts Dict of options to convert to CLI flags
+/// @param spec Flag spec dict mapping option keys to flag descriptors (optional)
+/// @return Full argument string with base and all mapped flags
+fn build_args(base, opts, spec = {}) {
+    return cli_flags.build_args(base, opts, spec);
+}
+
+/// Builds a UFW rule string from a UfwRule struct or a plain string.
+///
+/// When given a UfwRule struct, assembles the extended rule form:
+///   [direction] [on <iface>] [from <addr> [port <port>]] [to <addr> [port <port>]] [proto <proto>] [comment '<text>']
+///
+/// Fields set to null are omitted. If a plain string is passed, it is returned
+/// as-is to support raw rule syntax like "22/tcp" or "ssh".
+///
+/// @param rule UfwRule struct or raw rule string
+/// @return UFW rule string suitable for use after allow/deny/reject/limit
+fn build_rule(rule) {
+    if (rule is string) {
+        return rule;
+    }
+    if (!(rule is UfwRule)) {
+        return conv.toStr(rule);
+    }
+
+    let parts = [];
+
+    // [direction]
+    if (!(rule.direction is null) && rule.direction != "") {
+        arr.push(parts, rule.direction);
+    }
+
+    // [on <interface>]
+    if (!(rule.on is null) && rule.on != "") {
+        arr.push(parts, "on " + rule.on);
+    }
+
+    // [from <addr> [port <port>]]
+    let from_addr = "any";
+    if (!(rule.from is null) && rule.from != "") {
+        from_addr = rule.from;
+    }
+    let from_part = "from " + from_addr;
+    if (!(rule.port_from is null)) {
+        from_part = from_part + " port " + _format_port(rule.port_from);
+    }
+    arr.push(parts, from_part);
+
+    // [to <addr> [port <port>]]
+    let to_addr = "any";
+    if (!(rule.to is null) && rule.to != "") {
+        to_addr = rule.to;
+    }
+    let to_part = "to " + to_addr;
+
+    // destination port: port_to takes precedence over port
+    let dest_port = null;
+    if (!(rule.port_to is null)) {
+        dest_port = rule.port_to;
+    } else if (!(rule.port is null)) {
+        dest_port = rule.port;
+    }
+    if (!(dest_port is null)) {
+        to_part = to_part + " port " + _format_port(dest_port);
+    }
+    arr.push(parts, to_part);
+
+    // [proto <proto>]
+    if (!(rule.proto is null) && rule.proto != "" && rule.proto != "any") {
+        arr.push(parts, "proto " + rule.proto);
+    }
+
+    // [comment '<text>']
+    if (!(rule.comment is null) && rule.comment != "") {
+        arr.push(parts, "comment '" + rule.comment + "'");
+    }
+
+    return arr.join(parts, " ");
+}
+
+/// Splits ufw command stdout into an array of trimmed non-empty lines.
+/// @param stdout Raw stdout string from a ufw command
+/// @return Array of non-empty trimmed line strings
+fn parse_lines(stdout) {
+    return cli_parse.parse_lines(stdout);
+}
