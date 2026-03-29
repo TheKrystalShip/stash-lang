@@ -234,7 +234,7 @@ public enum TokenType
     /// <summary>The <c>import</c> keyword. Imports bindings from another module.</summary>
     Import,
 
-    /// <summary>The <c>from</c> keyword. Specifies the module path in an import statement.</summary>
+    /// <summary>Contextual keyword <c>from</c>. The lexer no longer emits this token type; <c>from</c> is tokenized as <see cref="Identifier"/>.</summary>
     From,
 
     /// <summary>The <c>as</c> keyword. Aliases an import to a namespace name.</summary>

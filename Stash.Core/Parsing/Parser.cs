@@ -571,7 +571,7 @@ public class Parser
             Error(Previous(), "Expected at least one name to import.");
         }
 
-        Consume(TokenType.From, "Expected 'from' after import names.");
+        ConsumeIdentifier("from", "Expected 'from' after import names.");
         Token fromPath = Consume(TokenType.StringLiteral, "Expected module path string after 'from'.");
         Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
 
@@ -2137,6 +2137,21 @@ public class Parser
             return true;
         }
         return false;
+    }
+
+    /// <summary>
+    /// Consumes the current token if it is an identifier matching <paramref name="name"/>,
+    /// otherwise throws a parse error with <paramref name="message"/>.
+    /// Used for contextual keywords like <c>from</c> in import statements.
+    /// </summary>
+    private Token ConsumeIdentifier(string name, string message)
+    {
+        if (CheckIdentifier(name))
+        {
+            return Advance();
+        }
+
+        throw Error(Peek(), message);
     }
 
     /// <summary>

@@ -1533,11 +1533,31 @@ public class ParserTests
     // --- From keyword as identifier ---
 
     [Fact]
-    public void Parse_FromAsVariableName()
+    public void Parse_FromAsVariableName_Succeeds()
     {
-        // 'from' is a hard reserved keyword; using it as a variable name is a parse error
         var parser = ParseProgramWithParser("let from = 42;");
-        Assert.NotEmpty(parser.Errors);
+        Assert.Empty(parser.Errors);
+    }
+
+    [Fact]
+    public void Parse_FromAsDictKey_Succeeds()
+    {
+        var parser = ParseProgramWithParser("let d = { from: 42 };");
+        Assert.Empty(parser.Errors);
+    }
+
+    [Fact]
+    public void Parse_FromInImport_StillWorks()
+    {
+        var parser = ParseProgramWithParser("import { foo } from \"bar.stash\";");
+        Assert.Empty(parser.Errors);
+    }
+
+    [Fact]
+    public void Parse_ImportFromAsName_Succeeds()
+    {
+        var parser = ParseProgramWithParser("import { from } from \"bar.stash\";");
+        Assert.Empty(parser.Errors);
     }
 
     // ===== Namespace: import-as =====

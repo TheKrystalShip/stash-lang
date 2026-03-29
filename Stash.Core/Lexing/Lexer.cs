@@ -99,7 +99,6 @@ public class Lexer
             ["try"] = TokenType.Try,
             ["throw"] = TokenType.Throw,
             ["import"] = TokenType.Import,
-            ["from"] = TokenType.From,
             ["as"] = TokenType.As,
             ["switch"] = TokenType.Switch,
             ["is"] = TokenType.Is,

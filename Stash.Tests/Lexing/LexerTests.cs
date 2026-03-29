@@ -262,7 +262,7 @@ public class LexerTests
     [InlineData("null", TokenType.Null)]
     [InlineData("try", TokenType.Try)]
     [InlineData("import", TokenType.Import)]
-    [InlineData("from", TokenType.From)]
+    [InlineData("from", TokenType.Identifier)]
     [InlineData("and", TokenType.AmpersandAmpersand)]
     [InlineData("or", TokenType.PipePipe)]
     public void ScanTokens_Keyword_ProducesCorrectType(string source, TokenType expected)

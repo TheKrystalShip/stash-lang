@@ -727,7 +727,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.Enum or TokenType.If or TokenType.Else or TokenType.For or
         TokenType.While or TokenType.Do or TokenType.Break or
         TokenType.Continue or
-        TokenType.Try or TokenType.Import or TokenType.From or TokenType.As or
+        TokenType.Try or TokenType.Import or TokenType.As or
         TokenType.Switch;
 
     /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is a punctuation token.</summary>
