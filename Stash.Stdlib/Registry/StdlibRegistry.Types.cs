@@ -1,6 +1,7 @@
 namespace Stash.Stdlib;
 
 using System;
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Stdlib.Models;
@@ -44,11 +45,11 @@ public static partial class StdlibRegistry
 
     // ── Valid built-in type names (for type hint validation) ──
 
-    public static readonly HashSet<string> ValidTypes;
+    public static readonly FrozenSet<string> ValidTypes;
 
     // ── Type descriptions (for hover and completion) ──
 
-    public static readonly Dictionary<string, TypeDescription> TypeDescriptions = new()
+    public static readonly FrozenDictionary<string, TypeDescription> TypeDescriptions = new Dictionary<string, TypeDescription>
     {
         ["int"] = new("int", "Integer type. Whole numbers like `42`, `-7`, `0`."),
         ["float"] = new("float", "Floating-point type. Decimal numbers like `3.14`, `-0.5`."),
@@ -64,5 +65,5 @@ public static partial class StdlibRegistry
         ["namespace"] = new("namespace", "Namespace type. Built-in module namespaces like `io`, `fs`."),
         ["Error"] = new("Error", "Error type. Returned by `try` on failure. Has `.message`, `.type`, and `.stack` fields."),
         ["Future"] = new("Future", "Represents an asynchronous computation that may not have completed yet. Returned by async functions. Use `await` to get the resolved value."),
-    };
+    }.ToFrozenDictionary();
 }

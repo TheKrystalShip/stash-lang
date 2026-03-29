@@ -43,10 +43,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private int _functionDepth;
 
     /// <summary>Set of names that are always in scope (built-in functions, namespaces, etc.).</summary>
-    private static readonly HashSet<string> _builtInNames = StdlibRegistry.KnownNames;
+    private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
 
     /// <summary>Set of type names that are always valid (primitives and built-in struct names).</summary>
-    private static readonly HashSet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
+    private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
 
     /// <summary>
     /// Initializes a new <see cref="SemanticValidator"/> for the given scope tree.

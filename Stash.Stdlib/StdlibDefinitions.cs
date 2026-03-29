@@ -1,6 +1,7 @@
 namespace Stash.Stdlib;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Runtime;
@@ -18,6 +19,9 @@ public static class StdlibDefinitions
     private static readonly Lazy<IReadOnlyList<BuiltInEnum>> _enums =
         new(() => Namespaces.SelectMany(d => d.Enums).ToArray());
 
+    // GetOrAdd may invoke the factory more than once under contention; Define() is pure so this is safe.
+    private static readonly ConcurrentDictionary<StashCapabilities, GlobalDefinition> _globalsCache = new();
+
     public static IReadOnlyList<NamespaceDefinition> Namespaces => _namespaces.Value;
 
     public static IReadOnlyList<BuiltInStruct> Structs => _structs.Value;
@@ -25,7 +29,7 @@ public static class StdlibDefinitions
     public static IReadOnlyList<BuiltInEnum> Enums => _enums.Value;
 
     public static GlobalDefinition GetGlobals(StashCapabilities capabilities)
-        => GlobalBuiltIns.Define(capabilities);
+        => _globalsCache.GetOrAdd(capabilities, static caps => GlobalBuiltIns.Define(caps));
 
     private static IReadOnlyList<NamespaceDefinition> BuildNamespaces()
     {

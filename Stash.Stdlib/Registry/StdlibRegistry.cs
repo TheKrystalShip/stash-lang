@@ -1,5 +1,6 @@
 namespace Stash.Stdlib;
 
+using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Stdlib.Models;
@@ -30,58 +31,56 @@ public static partial class StdlibRegistry
 
     // ── Known names (union of all symbol names — suppresses "not defined" warnings) ──
 
-    public static readonly HashSet<string> KnownNames;
+    public static readonly FrozenSet<string> KnownNames;
 
     // ── Precomputed lookup tables ──
 
-    private static readonly Dictionary<string, BuiltInFunction> _functionsByName;
+    private static readonly FrozenDictionary<string, BuiltInFunction> _functionsByName;
 
-    private static readonly Dictionary<string, NamespaceFunction> _namespaceFunctionsByQualifiedName;
+    private static readonly FrozenDictionary<string, NamespaceFunction> _namespaceFunctionsByQualifiedName;
 
-    private static readonly Dictionary<string, NamespaceConstant> _namespaceConstantsByQualifiedName;
+    private static readonly FrozenDictionary<string, NamespaceConstant> _namespaceConstantsByQualifiedName;
 
-    private static readonly HashSet<string> _builtInFunctionNames;
+    private static readonly FrozenSet<string> _builtInFunctionNames;
 
-    private static readonly HashSet<string> _namespaceNameSet;
+    private static readonly FrozenSet<string> _namespaceNameSet;
 
-    private static readonly Dictionary<string, IReadOnlyList<NamespaceFunction>> _namespaceMembersByNamespace;
+    private static readonly FrozenDictionary<string, IReadOnlyList<NamespaceFunction>> _namespaceMembersByNamespace;
 
-    private static readonly Dictionary<string, IReadOnlyList<NamespaceConstant>> _namespaceConstantsByNamespace;
+    private static readonly FrozenDictionary<string, IReadOnlyList<NamespaceConstant>> _namespaceConstantsByNamespace;
 
     static StdlibRegistry()
     {
-        ValidTypes = new HashSet<string>(
-            new[] { "string", "int", "float", "bool", "null", "array", "dict", "function",
+        ValidTypes = new[] { "string", "int", "float", "bool", "null", "array", "dict", "function",
                     "namespace", "range", "Future" }
                 .Concat(Structs.Select(s => s.Name))
                 .Concat(Enums.Select(e => e.Name))
-        );
+                .ToFrozenSet();
 
-        KnownNames = new HashSet<string>(
-            Functions.Select(f => f.Name)
-                .Concat(Structs.Select(s => s.Name))
-                .Concat(Enums.Where(e => e.Namespace == null).Select(e => e.Name))
-                .Concat(NamespaceNames)
-                .Concat(new[] { "args", "true", "false", "null", "println", "print", "readLine" })
-        );
+        KnownNames = Functions.Select(f => f.Name)
+            .Concat(Structs.Select(s => s.Name))
+            .Concat(Enums.Where(e => e.Namespace == null).Select(e => e.Name))
+            .Concat(NamespaceNames)
+            .Concat(new[] { "args", "true", "false", "null", "println", "print", "readLine" })
+            .ToFrozenSet();
 
-        _functionsByName = Functions.ToDictionary(f => f.Name);
+        _functionsByName = Functions.ToFrozenDictionary(f => f.Name);
 
-        _namespaceFunctionsByQualifiedName = NamespaceFunctions.ToDictionary(f => f.QualifiedName);
+        _namespaceFunctionsByQualifiedName = NamespaceFunctions.ToFrozenDictionary(f => f.QualifiedName);
 
-        _namespaceConstantsByQualifiedName = NamespaceConstants.ToDictionary(c => c.QualifiedName);
+        _namespaceConstantsByQualifiedName = NamespaceConstants.ToFrozenDictionary(c => c.QualifiedName);
 
-        _builtInFunctionNames = new HashSet<string>(
-            Functions.Select(f => f.Name).Concat(new[] { "println", "print", "readLine" })
-        );
+        _builtInFunctionNames = Functions.Select(f => f.Name)
+            .Concat(new[] { "println", "print", "readLine" })
+            .ToFrozenSet();
 
-        _namespaceNameSet = new HashSet<string>(NamespaceNames);
+        _namespaceNameSet = NamespaceNames.ToFrozenSet();
 
         _namespaceMembersByNamespace = NamespaceFunctions.GroupBy(f => f.Namespace)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<NamespaceFunction>)g.ToList());
+            .ToFrozenDictionary(g => g.Key, g => (IReadOnlyList<NamespaceFunction>)g.ToList());
 
         _namespaceConstantsByNamespace = NamespaceConstants.GroupBy(c => c.Namespace)
-            .ToDictionary(g => g.Key, g => (IReadOnlyList<NamespaceConstant>)g.ToList());
+            .ToFrozenDictionary(g => g.Key, g => (IReadOnlyList<NamespaceConstant>)g.ToList());
     }
 
     // ── Public query methods ──

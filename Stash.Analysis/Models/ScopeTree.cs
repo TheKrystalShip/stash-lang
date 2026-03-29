@@ -267,7 +267,7 @@ public class ScopeTree
     /// Gets all unresolved references (identifiers used but not declared).
     /// Excludes known built-in names.
     /// </summary>
-    public IReadOnlyList<ReferenceInfo> GetUnresolvedReferences(HashSet<string>? knownNames = null)
+    public IReadOnlyList<ReferenceInfo> GetUnresolvedReferences(IReadOnlySet<string>? knownNames = null)
     {
         var result = new List<ReferenceInfo>();
         foreach (var reference in References)
