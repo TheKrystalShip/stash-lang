@@ -141,7 +141,7 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
                 {
                     resolvedPath = fullPath;
                 }
-                else if (!Path.HasExtension(importPath))
+                else if (!Path.HasExtension(importPath) || importPath.StartsWith('@'))
                 {
                     resolvedPath = ModuleResolver.ResolvePackageImport(importPath, documentDir);
                 }

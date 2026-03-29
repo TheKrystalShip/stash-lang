@@ -42,10 +42,10 @@ public class ReferenceInfo
     public SourceSpan Span { get; }
 
     /// <summary>
-    /// Gets the <see cref="SymbolInfo"/> that this reference resolves to, or
+    /// Gets or sets the <see cref="SymbolInfo"/> that this reference resolves to, or
     /// <see langword="null"/> if no declaration was found in scope at the usage site.
     /// </summary>
-    public SymbolInfo? ResolvedSymbol { get; }
+    public SymbolInfo? ResolvedSymbol { get; internal set; }
 
     /// <summary>Gets the usage kind (read, write, call, or type-use) at this reference site.</summary>
     public ReferenceKind Kind { get; }

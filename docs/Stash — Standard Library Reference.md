@@ -1699,6 +1699,115 @@ COMMAND 'deploy':
       --timeout <int>  Timeout in seconds (default: 30)
 ```
 
+### Building CLI Arguments
+
+The `args.build()` function is the **reverse of `args.parse()`** — it takes a spec and a values dict, producing an array of CLI argument strings. This enables a single spec format to work in both directions: parsing arguments your script receives AND building arguments for external tools.
+
+```stash
+let spec = {
+    flags: {
+        verbose: { short: "v", description: "Verbose output" }
+    },
+    options: {
+        port: { short: "p", type: "int", description: "Port number" },
+        env:  { short: "e", type: "map", description: "Environment variables" },
+        tags: { type: "csv", description: "Comma-separated tags" }
+    },
+    positionals: [
+        { name: "target", type: "string", description: "Target host" }
+    ]
+};
+
+let tokens = args.build(spec, {
+    verbose: true,
+    port: 8080,
+    env: { NODE_ENV: "production", DEBUG: "false" },
+    tags: ["web", "api", "v2"],
+    target: "deploy.example.com"
+});
+// tokens → ["-v", "-p", "8080", "-e", "NODE_ENV=production", "-e", "DEBUG=false", "--tags", "web,api,v2", "deploy.example.com"]
+// Note: flag/option order follows spec declaration order; map entry order may vary
+```
+
+#### Return Value
+
+`args.build()` returns an **array of strings** — individual CLI tokens, not a joined command string. Use `arr.join(tokens, " ")` to produce a command string for `$()`.
+
+#### Option Types for Building
+
+In addition to the standard types used by `args.parse()` (`string`, `int`, `float`, `bool`), `args.build()` supports compound types for output serialization:
+
+| Type     | Value Type | Output Format                                            | Example                        |
+| -------- | ---------- | -------------------------------------------------------- | ------------------------------ |
+| `string` | string     | `--flag value`                                           | `["--name", "alice"]`          |
+| `int`    | int        | `--flag value`                                           | `["--port", "8080"]`           |
+| `float`  | float      | `--flag value`                                           | `["--ratio", "3.14"]`          |
+| `bool`   | bool       | `--flag value`                                           | `["--enabled", "true"]`        |
+| `list`   | array      | Repeated `--flag item` per element                       | `["-p", "8080", "-p", "9090"]` |
+| `map`    | dict       | Repeated `--flag key=value` per entry                    | `["-e", "A=1", "-e", "B=2"]`   |
+| `csv`    | array      | Single `--flag item1,item2,...` with comma-joined values | `["--tags", "web,api,v2"]`     |
+
+#### Flag and Option Behavior
+
+- **Flags** with value `true` are emitted; `false`, `null`, or missing values are skipped
+- **Options** with `null` or missing values are skipped
+- **Explicit flag string** via `flag` property overrides the default flag name (e.g., `{ flag: "-e", type: "map" }` emits `-e` instead of `--env`)
+- **Short form** is used when `short` is specified (e.g., `{ short: "p" }` emits `-p` instead of `--port`)
+- **Priority**: `flag` property > `short` property > `--{keyname}` default
+- **Positionals** are emitted in spec declaration order, after flags and options
+- **Commands** are emitted between top-level flags/options and subcommand args
+
+#### Subcommand Support
+
+When `values.command` is set and the spec has a matching `commands` entry, `args.build()` emits the command name followed by the subcommand's flags, options, and positionals:
+
+```stash
+let spec = {
+    flags: { verbose: { short: "v" } },
+    options: { config: { short: "c" } },
+    commands: {
+        start: {
+            flags: { detach: { short: "d" } },
+            options: { port: { short: "p", type: "int" } },
+            positionals: [{ name: "service" }]
+        }
+    }
+};
+
+let tokens = args.build(spec, {
+    verbose: true,
+    config: "/etc/app.conf",
+    command: "start",
+    start: { detach: true, port: 3000, service: "web" }
+});
+// tokens → ["-v", "-c", "/etc/app.conf", "start", "-d", "-p", "3000", "web"]
+// Note: flag/option order follows spec declaration order
+```
+
+#### Roundtrip Compatibility
+
+A spec can be used with both `args.parse()` and `args.build()`:
+
+```stash
+// Parse incoming arguments
+let parsed = args.parse(spec);
+
+// Later, rebuild the argument tokens
+let rebuilt = args.build(spec, parsed);
+
+// Use with $() to invoke an external tool
+let cmd = "mytool " + arr.join(rebuilt, " ");
+$(cmd);
+```
+
+#### Error Handling
+
+`args.build()` raises runtime errors for type mismatches:
+
+- `"Option '--name' has type 'list' but value is not an array."`
+- `"Option '--name' has type 'map' but value is not a dictionary."`
+- `"Option '--name' has type 'csv' but value is not an array."`
+
 ---
 
 ## `log` — Logging

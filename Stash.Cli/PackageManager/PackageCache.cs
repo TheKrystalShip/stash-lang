@@ -51,7 +51,8 @@ public static class PackageCache
         }
 
         string cacheDir = GetCacheDir();
-        return Path.Combine(cacheDir, packageName, $"{version}.tar.gz");
+        string sanitizedName = packageName.TrimStart('@').Replace('/', '-');
+        return Path.Combine(cacheDir, sanitizedName, $"{version}.tar.gz");
     }
 
     /// <summary>

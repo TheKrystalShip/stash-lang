@@ -88,8 +88,18 @@ public class AnalysisEngine
                     {
                         break;
                     }
+                    var oldSymbol = globalSymbols[i];
                     symbols.GlobalScope.ReplaceSymbol(i, resolvedSym);
                     replaced = true;
+
+                    // Update references that still point to the old placeholder
+                    foreach (var reference in symbols.References)
+                    {
+                        if (reference.ResolvedSymbol == oldSymbol)
+                        {
+                            reference.ResolvedSymbol = resolvedSym;
+                        }
+                    }
                     break;
                 }
             }
@@ -106,10 +116,21 @@ public class AnalysisEngine
             {
                 if (globalSymbols[i].Name == alias && globalSymbols[i].Kind == SymbolKind.Namespace)
                 {
-                    symbols.GlobalScope.ReplaceSymbol(i, new SymbolInfo(
-                        alias, SymbolKind.Namespace, globalSymbols[i].Span,
-                        detail: globalSymbols[i].Detail,
-                        sourceUri: moduleInfo.Uri));
+                    var oldSymbol = globalSymbols[i];
+                    var newSymbol = new SymbolInfo(
+                        alias, SymbolKind.Namespace, oldSymbol.Span,
+                        detail: oldSymbol.Detail,
+                        sourceUri: moduleInfo.Uri);
+                    symbols.GlobalScope.ReplaceSymbol(i, newSymbol);
+
+                    // Patch references that still point to the old placeholder
+                    foreach (var reference in symbols.References)
+                    {
+                        if (reference.ResolvedSymbol == oldSymbol)
+                        {
+                            reference.ResolvedSymbol = newSymbol;
+                        }
+                    }
                     break;
                 }
             }

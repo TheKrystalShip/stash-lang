@@ -269,7 +269,7 @@ public class ImportResolver
                 return relativePath;
             }
 
-            if (Path.HasExtension(importPath))
+            if (Path.HasExtension(importPath) && !importPath.StartsWith('@'))
             {
                 // Has file extension — treat as missing file, not missing package
                 resolution.Diagnostics.Add(new SemanticDiagnostic(

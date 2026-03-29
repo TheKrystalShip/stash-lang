@@ -441,4 +441,52 @@ public class ImportResolverTests
             CleanupTempDir(tempDir);
         }
     }
+
+    [Fact]
+    public void Analyze_SelectiveImportWithUsedSymbol_NoUnusedDiagnostic()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "fn greet() { }",
+            mainSource: "import { greet } from \"module.stash\";\ngreet();");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
+
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Message.Contains("greet") && d.Message.Contains("declared but never used"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ScopedPackageSpecifierWithExtension_ProducesPackageNotFoundWarning()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "stash_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var mainPath = Path.Combine(tempDir, "main.stash");
+        File.WriteAllText(mainPath, "import { flags } from \"@stash/cli/lib/flags.stash\";");
+        var mainUri = new Uri($"file://{mainPath}");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainPath));
+
+            // Scoped package path with extension should attempt package resolution,
+            // producing a Warning — not a "Cannot find module" Error.
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Level == DiagnosticLevel.Error && d.Message.Contains("Cannot find module"));
+            Assert.Contains(result.SemanticDiagnostics,
+                d => d.Level == DiagnosticLevel.Warning && d.Message.Contains("not found"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
 }

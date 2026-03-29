@@ -99,7 +99,8 @@ public static class PublishCommand
         // Pack the tarball
         string tempDir = Path.Combine(Path.GetTempPath(), $"stash-publish-{Guid.NewGuid():N}");
         Directory.CreateDirectory(tempDir);
-        string tarballPath = Path.Combine(tempDir, $"{manifest.Name}-{manifest.Version}.tar.gz");
+        string sanitizedName = (manifest.Name ?? "package").TrimStart('@').Replace('/', '-');
+        string tarballPath = Path.Combine(tempDir, $"{sanitizedName}-{manifest.Version}.tar.gz");
 
         try
         {

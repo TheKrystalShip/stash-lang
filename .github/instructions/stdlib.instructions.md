@@ -27,7 +27,7 @@ The Stash standard library comprises 26 namespaces with ~280+ functions, each in
 | **fs**          | `FsBuiltIns.cs`       | 27 functions — `readFile`, `writeFile`, `glob`, `walk`, `stat`, `readable`, `writable`, etc.                             |
 | **path**        | `PathBuiltIns.cs`     | `abs`, `dir`, `base`, `ext`, `join`, `normalize`, `isAbsolute`, etc.                                                     |
 | **env**         | `EnvBuiltIns.cs`      | `get`, `set`, `all`, `cwd`, `home`, `hostname`, `loadFile`, `saveFile`, etc.                                             |
-| **args**        | `ArgsBuiltIns.cs`     | `list`, `count`, `parse`                                                                                                 |
+| **args**        | `ArgsBuiltIns.cs`     | `list`, `count`, `parse`, `build`                                                                                        |
 | **crypto**      | `CryptoBuiltIns.cs`   | `md5`, `sha256`, `hmac`, `uuid`, `randomBytes`, etc.                                                                     |
 | **encoding**    | `EncodingBuiltIns.cs` | `base64Encode`, `base64Decode`, `urlEncode`, `urlDecode`, `hexEncode`, `hexDecode`                                       |
 | **term**        | `TermBuiltIns.cs`     | `color`, `bold`, `style`, `strip`, `table`, `clear`, etc. + color constants                                              |
