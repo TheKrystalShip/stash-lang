@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Text;
+using Stash.Common;
 using Stash.Parsing.AST;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -92,6 +93,109 @@ public partial class Interpreter
     }
 
     /// <summary>
+    /// Runs a process in passthrough mode — the child inherits the terminal's stdin, stdout,
+    /// and stderr directly, allowing interactive programs and credential prompts to work.
+    /// </summary>
+    /// <param name="program">The executable to run.</param>
+    /// <param name="arguments">The argument list.</param>
+    /// <param name="span">Source span for error reporting.</param>
+    /// <returns>A tuple of (stdout, stderr, exitCode). Stdout and stderr are always empty strings
+    /// in passthrough mode since the streams are not captured.</returns>
+    internal (string Stdout, string Stderr, int ExitCode) RunPassthrough(
+        string program, List<string> arguments, SourceSpan span)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = program,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                RedirectStandardInput = false,
+                UseShellExecute = false,
+                CreateNoWindow = false
+            };
+
+            foreach (string arg in arguments)
+            {
+                psi.ArgumentList.Add(arg);
+            }
+
+            using var process = Process.Start(psi)
+                ?? throw new RuntimeError("Failed to start process.", span);
+            process.WaitForExit();
+
+            return ("", "", process.ExitCode);
+        }
+        catch (RuntimeError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Command execution failed: {ex.Message}", span);
+        }
+    }
+
+    /// <summary>
+    /// Runs a process in captured mode — stdout and stderr are redirected and read.
+    /// Optionally provides data on stdin before closing the input stream.
+    /// </summary>
+    /// <param name="program">The executable to run.</param>
+    /// <param name="arguments">The argument list.</param>
+    /// <param name="stdin">Optional string to write to the process's stdin. Null means no stdin redirection.</param>
+    /// <param name="span">Source span for error reporting.</param>
+    /// <returns>A tuple of (stdout, stderr, exitCode) with the captured output.</returns>
+    internal (string Stdout, string Stderr, int ExitCode) RunCaptured(
+        string program, List<string> arguments, string? stdin, SourceSpan span)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = program,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = stdin is not null,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            foreach (string arg in arguments)
+            {
+                psi.ArgumentList.Add(arg);
+            }
+
+            using var process = Process.Start(psi)
+                ?? throw new RuntimeError("Failed to start process.", span);
+
+            if (stdin is not null)
+            {
+                process.StandardInput.Write(stdin);
+                process.StandardInput.Close();
+            }
+
+            // Read stdout and stderr concurrently to avoid deadlock
+            // when either stream's buffer fills.
+            var stdoutTask = Task.Run(() => process.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => process.StandardError.ReadToEnd());
+            Task.WaitAll(stdoutTask, stderrTask);
+
+            process.WaitForExit();
+
+            return (stdoutTask.Result, stderrTask.Result, process.ExitCode);
+        }
+        catch (RuntimeError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Command execution failed: {ex.Message}", span);
+        }
+    }
+
+    /// <summary>
     /// Evaluates a <see cref="CommandExpr"/> by building the command string from its parts,
     /// executing it via the system shell, and returning a <see cref="StashInstance"/> with
     /// <c>stdout</c>, <c>stderr</c>, and <c>exitCode</c> fields.
@@ -132,102 +236,58 @@ public partial class Interpreter
                     expr.Span);
             }
 
-            try
-            {
-                var (program, arguments) = CommandParser.Parse(command);
-                var psi = new ProcessStartInfo
-                {
-                    FileName = program,
-                    RedirectStandardOutput = false,
-                    RedirectStandardError = false,
-                    RedirectStandardInput = false,
-                    UseShellExecute = false,
-                    CreateNoWindow = false
-                };
-
-                foreach (var arg in arguments)
-                {
-                    psi.ArgumentList.Add(arg);
-                }
-
-                using var process = Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", expr.Span);
-                process.WaitForExit();
-
-                return new StashInstance("CommandResult", new Dictionary<string, object?>
-                {
-                    ["stdout"] = "",
-                    ["stderr"] = "",
-                    ["exitCode"] = (long)process.ExitCode
-                });
-            }
-            catch (RuntimeError)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new RuntimeError($"Command execution failed: {ex.Message}", expr.Span);
-            }
-        }
-
-        string stdout;
-        string stderr;
-        int exitCode;
-
-        try
-        {
             var (program, arguments) = CommandParser.Parse(command);
-            var psi = new ProcessStartInfo
+            (program, arguments) = ApplyElevationPrefix(program, arguments);
+            var (_, _, exitCode) = RunPassthrough(program, arguments, expr.Span);
+
+            return new StashInstance("CommandResult", new Dictionary<string, object?>
             {
-                FileName = program,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                RedirectStandardInput = _pendingStdin is not null,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            foreach (var arg in arguments)
-            {
-                psi.ArgumentList.Add(arg);
-            }
-
-            using var process = Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", expr.Span);
-            if (_pendingStdin is not null)
-            {
-                process.StandardInput.Write(_pendingStdin);
-                process.StandardInput.Close();
-                _pendingStdin = null;
-            }
-
-            // Read stdout and stderr concurrently to avoid deadlock
-            // when either stream's buffer fills.
-            var stdoutTask = Task.Run(() => process.StandardOutput.ReadToEnd());
-            var stderrTask = Task.Run(() => process.StandardError.ReadToEnd());
-            Task.WaitAll(stdoutTask, stderrTask);
-            stdout = stdoutTask.Result;
-            stderr = stderrTask.Result;
-
-            process.WaitForExit();
-            exitCode = process.ExitCode;
+                ["stdout"] = "",
+                ["stderr"] = "",
+                ["exitCode"] = (long)exitCode
+            });
         }
-        catch (RuntimeError)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            throw new RuntimeError($"Command execution failed: {ex.Message}", expr.Span);
-        }
+
+        var (capProgram, capArguments) = CommandParser.Parse(command);
+        (capProgram, capArguments) = ApplyElevationPrefix(capProgram, capArguments);
+        var (stdout, stderr, capExitCode) = RunCaptured(capProgram, capArguments, _pendingStdin, expr.Span);
+        // Clear pending stdin after successful capture. In the pipe context, VisitPipeExpr's
+        // finally block is the true cleanup owner. Any future caller that sets _pendingStdin
+        // before calling RunCaptured must ensure cleanup in its own finally block.
+        _pendingStdin = null;
 
         var fields = new Dictionary<string, object?>
         {
             ["stdout"] = stdout,
             ["stderr"] = stderr,
-            ["exitCode"] = (long)exitCode
+            ["exitCode"] = (long)capExitCode
         };
 
         return new StashInstance("CommandResult", fields);
+    }
+
+    /// <summary>
+    /// Applies elevation prefix to a command if the elevation context is active
+    /// and the program is not already an elevation command.
+    /// </summary>
+    private (string Program, List<string> Arguments) ApplyElevationPrefix(
+        string program, List<string> arguments)
+    {
+        if (!_ctx.ElevationActive || _ctx.ElevationCommand is null)
+            return (program, arguments);
+
+        // Don't double-prefix commands that are already elevation commands
+        string lowerProgram = program.ToLowerInvariant();
+        if (lowerProgram is "sudo" or "doas" or "gsudo" or "runas" ||
+            string.Equals(program, _ctx.ElevationCommand, StringComparison.OrdinalIgnoreCase))
+        {
+            return (program, arguments);
+        }
+
+        // Prefix: sudo ufw enable → FileName="sudo", Args=["ufw", "enable"]
+        var prefixedArgs = new List<string>(arguments.Count + 1) { program };
+        prefixedArgs.AddRange(arguments);
+        return (_ctx.ElevationCommand, prefixedArgs);
     }
 
     /// <summary>

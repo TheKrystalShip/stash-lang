@@ -83,6 +83,12 @@ public class ExecutionContext
     /// <summary>Stack of afterAll hook lists, one per nested describe block.</summary>
     public List<List<IStashCallable>> AfterAllHooks { get; }
 
+    /// <summary>Whether commands should be auto-prefixed with the elevation program.</summary>
+    public bool ElevationActive { get; set; }
+
+    /// <summary>The elevation program to prefix (e.g., "sudo", "doas", "gsudo"). Null when not elevated.</summary>
+    public string? ElevationCommand { get; set; }
+
     /// <summary>Creates a new execution context with default state.</summary>
     /// <param name="environment">The initial environment (typically the global scope).</param>
     public ExecutionContext(Environment environment)

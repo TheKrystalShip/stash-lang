@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -250,21 +250,21 @@ $(cat /tmp/listing.txt) | $(grep app) >> "/tmp/matches.txt";
 
 Dynamically typed. Values carry their type at runtime. The following built-in types exist:
 
-| Type        | Examples                       | Notes                                        |
-| ----------- | ------------------------------ | -------------------------------------------- |
-| `int`       | `42`, `-7`, `0`                | Integer numbers                              |
-| `float`     | `3.14`, `-0.5`                 | Floating-point numbers                       |
-| `string`    | `"hello"`, `""`                | Immutable strings                            |
-| `bool`      | `true`, `false`                |                                              |
-| `null`      | `null`                         | Absence of value                             |
-| `array`     | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size            |
-| `struct`    | `Server { host: "...", ... }`  | Named structured data (see Section 5)        |
-| `enum`      | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)             |
-| `dict`      | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)               |
-| `interface` | `interface Printable { ... }`  | Structural contract for structs (see §5f)    |
-| `range`     | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d)       |
-| `Error`     | `try failingFn()`              | Error value (see Section 7b)                 |
-| `Future`    | `async fn() { return 42; }`   | Async computation (see Section 8c)           |
+| Type        | Examples                       | Notes                                     |
+| ----------- | ------------------------------ | ----------------------------------------- |
+| `int`       | `42`, `-7`, `0`                | Integer numbers                           |
+| `float`     | `3.14`, `-0.5`                 | Floating-point numbers                    |
+| `string`    | `"hello"`, `""`                | Immutable strings                         |
+| `bool`      | `true`, `false`                |                                           |
+| `null`      | `null`                         | Absence of value                          |
+| `array`     | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size         |
+| `struct`    | `Server { host: "...", ... }`  | Named structured data (see Section 5)     |
+| `enum`      | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)          |
+| `dict`      | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)            |
+| `interface` | `interface Printable { ... }`  | Structural contract for structs (see §5f) |
+| `range`     | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d)    |
+| `Error`     | `try failingFn()`              | Error value (see Section 7b)              |
+| `Future`    | `async fn() { return 42; }`    | Async computation (see Section 8c)        |
 
 ### Type Coercion & Truthiness
 
@@ -707,24 +707,24 @@ When the RHS identifier is immediately followed by `(`, `[`, or `.`, or when the
 
 ### Valid Type Names
 
-| Type name       | Matches                                                   |
-| --------------- | --------------------------------------------------------- |
-| `int`           | Integer values                                            |
-| `float`         | Floating-point values                                     |
-| `string`        | String values                                             |
-| `bool`          | Boolean values (`true` / `false`)                         |
-| `null`          | The `null` value                                          |
-| `array`         | Array values                                              |
-| `dict`          | Dictionary values                                         |
-| `struct`        | Struct instances (any struct type)                        |
-| `enum`          | Enum values (any enum type)                               |
-| `function`      | Functions and lambdas                                     |
-| `range`         | Range values (`1..10`)                                    |
-| `namespace`     | Namespace values (e.g. `io`, `fs`)                        |
-| `Error`         | Error values returned by `try`                            |
-| `Future`        | Future values returned by async functions                 |
-| _StructName_    | Instances of the named struct (e.g. `Point`)              |
-| _EnumName_      | Values of the named enum (e.g. `Color`)                   |
+| Type name       | Matches                                                           |
+| --------------- | ----------------------------------------------------------------- |
+| `int`           | Integer values                                                    |
+| `float`         | Floating-point values                                             |
+| `string`        | String values                                                     |
+| `bool`          | Boolean values (`true` / `false`)                                 |
+| `null`          | The `null` value                                                  |
+| `array`         | Array values                                                      |
+| `dict`          | Dictionary values                                                 |
+| `struct`        | Struct instances (any struct type)                                |
+| `enum`          | Enum values (any enum type)                                       |
+| `function`      | Functions and lambdas                                             |
+| `range`         | Range values (`1..10`)                                            |
+| `namespace`     | Namespace values (e.g. `io`, `fs`)                                |
+| `Error`         | Error values returned by `try`                                    |
+| `Future`        | Future values returned by async functions                         |
+| _StructName_    | Instances of the named struct (e.g. `Point`)                      |
+| _EnumName_      | Values of the named enum (e.g. `Color`)                           |
 | _InterfaceName_ | Struct instances that conform to the interface (e.g. `Printable`) |
 
 An unrecognised type name evaluates to `false` (no runtime error).
@@ -844,18 +844,18 @@ for (let item in inventory) {
 
 `nameof(value)` returns the **declared name** of a value. For user-defined types it returns the specific type or instance name; for primitives it behaves like `typeof()`:
 
-| Value | `typeof()` | `nameof()` |
-| --- | --- | --- |
-| `42` | `"int"` | `"int"` |
-| `"hi"` | `"string"` | `"string"` |
-| `null` | `"null"` | `"null"` |
-| `Printable` (interface) | `"interface"` | `"Printable"` |
-| `Product` (struct def) | `"struct"` | `"Product"` |
-| `Product { ... }` (instance) | `"struct"` | `"Product"` |
-| `Color` (enum def) | `"enum"` | `"Color"` |
-| `Color.Red` (enum value) | `"enum"` | `"Color.Red"` |
-| `myFn` (named function) | `"function"` | `"myFn"` |
-| `typeof` (built-in) | `"function"` | `"typeof"` |
+| Value                        | `typeof()`    | `nameof()`    |
+| ---------------------------- | ------------- | ------------- |
+| `42`                         | `"int"`       | `"int"`       |
+| `"hi"`                       | `"string"`    | `"string"`    |
+| `null`                       | `"null"`      | `"null"`      |
+| `Printable` (interface)      | `"interface"` | `"Printable"` |
+| `Product` (struct def)       | `"struct"`    | `"Product"`   |
+| `Product { ... }` (instance) | `"struct"`    | `"Product"`   |
+| `Color` (enum def)           | `"enum"`      | `"Color"`     |
+| `Color.Red` (enum value)     | `"enum"`      | `"Color.Red"` |
+| `myFn` (named function)      | `"function"`  | `"myFn"`      |
+| `typeof` (built-in)          | `"function"`  | `"typeof"`    |
 
 `nameof()` is especially useful with dynamic `is` — when iterating over types, you can print the type name without maintaining a parallel string array.
 
@@ -1570,6 +1570,157 @@ RedirectExpr:
 ```
 
 At runtime, the interpreter executes the inner command and writes the selected stream(s) to the target file. The `CommandResult` is returned with empty strings for redirected streams.
+
+---
+
+## 6d. Privilege Elevation (`elevate`)
+
+The `elevate` block provides scoped privilege elevation for command execution. Commands inside the block are automatically prefixed with the platform's elevation program (`sudo` on Linux/macOS, `gsudo` on Windows), with credentials acquired once at block entry. No passwords or credentials ever pass through Stash data structures — authentication is handled entirely by the OS.
+
+### Syntax
+
+```stash
+// Platform default elevator (sudo on Unix, gsudo on Windows)
+elevate {
+    $(apt update);
+    $(apt upgrade -y);
+}
+
+// Named elevator — for doas, pkexec, or other tools
+elevate("doas") {
+    $(pkg install nginx);
+}
+```
+
+`elevate` is a **statement**, like `while` or `if`. The optional parenthesized argument specifies the elevation program; omitting it uses the platform default. The block body is a standard block — any statements are valid inside it.
+
+### What Gets Elevated
+
+Only `$()` and `$>()` command expressions are affected by elevation. Low-level process functions are explicitly excluded:
+
+| Expression                    | Elevated? | Reason                                         |
+| ----------------------------- | --------- | ---------------------------------------------- |
+| `$(ufw enable)`               | ✅ Yes    | Auto-prefixed with elevator                    |
+| `$>(systemctl restart nginx)` | ✅ Yes    | Auto-prefixed with elevator                    |
+| `$(sudo ufw enable)`          | ✅ No-op  | Already prefixed — no double-prefix            |
+| `process.spawn("ufw", [...])` | ❌ No     | Low-level escape hatch — user has full control |
+| `process.exec("ufw enable")`  | ❌ No     | Low-level escape hatch — user has full control |
+
+Commands that already start with an elevation program (`sudo`, `doas`, `gsudo`, `runas`) are left unchanged to prevent double-prefixing like `sudo sudo ufw enable`.
+
+### Dynamic Scope
+
+The elevation context is **dynamic**, not lexical. It propagates through function calls and into imported modules:
+
+```stash
+fn restart_service(name) {
+    $(systemctl restart {name});   // elevated if called inside elevate { }
+}
+
+elevate {
+    restart_service("nginx");       // the $(systemctl ...) inside is elevated
+}
+
+restart_service("nginx");           // NOT elevated — outside the block
+```
+
+This is the critical property that makes `elevate` useful for libraries. A package like `@stash/ufw` can call `$(ufw enable)` internally — the consumer wraps the call in `elevate { }` and the elevation propagates automatically.
+
+### Nesting
+
+`elevate` inside `elevate` is a **no-op**. The inner block executes normally under the outer elevation context. Credentials are acquired only once, when the outermost block is entered. The semantic analyzer emits a **warning** for nested `elevate` blocks:
+
+```stash
+elevate {
+    elevate {           // Warning: nested elevate has no effect
+        $(ufw enable);  // elevated — outer context applies
+    }
+}
+```
+
+### Already-Elevated Process
+
+If the interpreter is already running as a privileged user (root on Unix, Administrator on Windows), the `elevate` block is completely transparent — no credential prompts appear, no command prefixing occurs. The block executes exactly as if the `elevate` keyword were not present.
+
+### Credential Acquisition
+
+When entering an `elevate` block, the interpreter performs the following steps:
+
+1. **Privilege check** — If the process is already privileged, skip all remaining steps and execute the body directly.
+2. **Elevator resolution** — Determine the elevation program from the optional argument or the platform default.
+3. **Elevator discovery** — Verify the program exists on the system PATH. On Unix, if `sudo` is not found, `doas` is attempted as a fallback.
+4. **Interactive authentication** — Run the credential validation command in passthrough mode so the user can interact with the OS prompt:
+   - Unix (`sudo`): `$>(sudo -v)` — validates cached credentials or prompts for password
+   - Unix (`doas`): `$>(doas true)` — runs a no-op command as root, prompting if needed
+   - Windows (`gsudo`): `$>(gsudo cache on -d -1)` — activates credential caching and triggers the UAC consent dialog
+5. **Block execution** — Commands inside the block are auto-prefixed with the elevator.
+6. **Cleanup** — On block exit (including exceptions), the elevation context is cleared.
+
+If credential acquisition fails (user cancels the prompt, wrong password, UAC denied), a `RuntimeError` is thrown.
+
+### Cross-Platform Behavior
+
+| Platform | Default Elevator | Credential Command     | Fallback                    |
+| -------- | ---------------- | ---------------------- | --------------------------- |
+| Linux    | `sudo`           | `sudo -v`              | `doas` if `sudo` not found  |
+| macOS    | `sudo`           | `sudo -v`              | None                        |
+| Windows  | `gsudo`          | `gsudo cache on -d -1` | None (install instructions) |
+
+On Windows, `gsudo` is an open-source elevation tool available via `winget install gerardog.gsudo` or `scoop install gsudo`. If `gsudo` is not found, the error message includes install instructions.
+
+### Checking Results Inside the Block
+
+Commands inside `elevate` return `CommandResult` normally. Assign results and check exit codes as usual:
+
+```stash
+elevate {
+    let update = $(apt update);
+    let upgrade = $(apt upgrade -y);
+    if (upgrade.exitCode != 0) {
+        io.println("Upgrade failed: " + str.trim(upgrade.stderr));
+    }
+}
+```
+
+### Library Usage Pattern
+
+The primary motivation for `elevate` is clean library consumption. Libraries that wrap privileged commands don't need to handle sudo logic — the consumer provides the elevation context:
+
+```stash
+import "@stash/ufw" as ufw;
+import "@stash/systemd" as systemd;
+
+elevate {
+    ufw.config.enable();
+    ufw.rules.allow("22/tcp");
+    ufw.rules.allow("443/tcp");
+    systemd.service.restart("nginx");
+}
+```
+
+A single credential prompt occurs at block entry. All library calls inside are automatically elevated.
+
+### Embedded Mode
+
+`elevate` throws a `RuntimeError` in embedded mode (Playground, WASM), matching the existing `$>()` guard pattern:
+
+```
+RuntimeError: Privilege elevation is not available in embedded mode.
+```
+
+### Implementation
+
+`elevate` is an `ElevateStmt` AST node with two children:
+
+```
+ElevateStmt:
+  elevator: Expr?     // optional elevator program expression (null for platform default)
+  body: BlockStmt      // the block of statements to execute with elevation
+```
+
+The elevation state is stored on `ExecutionContext` as two properties: `ElevationActive` (bool) and `ElevationCommand` (string). This context propagates into function calls and forked interpreters automatically. At the `ProcessStartInfo` level, the command's program name is replaced with the elevator and the original program is prepended to the argument list.
+
+> **Design spec:** See [Elevate — Scoped Privilege Elevation](specs/Elevate%20—%20Scoped%20Privilege%20Elevation.md) for the full design document covering edge cases, security analysis, and implementation roadmap.
 
 ---
 

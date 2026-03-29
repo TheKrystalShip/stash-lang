@@ -309,6 +309,15 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitElevateStmt(ElevateStmt stmt)
+    {
+        if (stmt.Elevator is not null)
+            Resolve(stmt.Elevator);
+        Resolve(stmt.Body);
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
         foreach (var name in stmt.Names)

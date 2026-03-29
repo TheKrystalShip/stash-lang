@@ -255,6 +255,14 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    /// <inheritdoc />
+    public int VisitElevateStmt(ElevateStmt stmt)
+    {
+        stmt.Elevator?.Accept(this);
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
     public int VisitDoWhileStmt(DoWhileStmt stmt)
     {
         stmt.Body.Accept(this);

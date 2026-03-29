@@ -609,6 +609,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc />
+    public object? VisitElevateStmt(ElevateStmt stmt)
+    {
+        stmt.Elevator?.Accept(this);
+        stmt.Body.Accept(this);
+        return null;
+    }
+
     /// <summary>
     /// Opens a <see cref="ScopeKind.Loop"/> scope for the body, visits all body statements,
     /// closes the scope, then recurses into the post-body condition expression.

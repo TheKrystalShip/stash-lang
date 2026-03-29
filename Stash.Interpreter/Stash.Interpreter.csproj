@@ -15,4 +15,8 @@
     <ProjectReference Include="..\Stash.Tpl\Stash.Tpl.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="Stash.Tests" />
+  </ItemGroup>
+
 </Project>

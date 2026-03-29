@@ -474,6 +474,21 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    /// <inheritdoc />
+    public int VisitElevateStmt(ElevateStmt stmt)
+    {
+        EmitToken(); // elevate
+        if (stmt.Elevator != null)
+        {
+            EmitToken(); // (
+            stmt.Elevator.Accept(this);
+            EmitToken(); // )
+        }
+        Space();
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
     public int VisitDoWhileStmt(DoWhileStmt stmt)
     {
         EmitToken(); // do

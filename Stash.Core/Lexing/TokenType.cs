@@ -252,6 +252,9 @@ public enum TokenType
     /// <summary>The <c>await</c> keyword. Suspends execution until a Future resolves.</summary>
     Await,
 
+    /// <summary>The <c>elevate</c> keyword. Begins a scoped privilege elevation block.</summary>
+    Elevate,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

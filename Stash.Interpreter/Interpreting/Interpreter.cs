@@ -364,6 +364,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
             Input = _ctx.Input,
             CurrentFile = _ctx.CurrentFile,
             CancellationToken = cancellationToken,
+            ElevationActive = _ctx.ElevationActive,
+            ElevationCommand = _ctx.ElevationCommand,
         };
         var child = new Interpreter(this, forkedCtx);
         if (!attachDebugger)

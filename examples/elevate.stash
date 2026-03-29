@@ -1,0 +1,213 @@
+#!/usr/bin/env stash
+
+// ============================================================================
+// Privilege Elevation: elevate { }
+//
+// The elevate block provides scoped privilege elevation for command execution.
+// Commands inside the block are auto-prefixed with the platform's elevation
+// program (sudo on Linux/macOS, gsudo on Windows). Credentials are acquired
+// once at block entry — no passwords ever pass through Stash data structures.
+//
+// This example demonstrates common patterns for system administration tasks
+// using the elevate block.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// 1. Basic elevation — platform default
+//    On Linux/macOS: commands are prefixed with sudo
+//    On Windows: commands are prefixed with gsudo
+// ---------------------------------------------------------------------------
+
+io.println("=== Basic Privilege Elevation ===\n");
+
+elevate {
+  let whoami = $(whoami);
+  io.println($"Running as: {str.trim(whoami.stdout)}");
+  let id = $(id);
+  io.println($"Identity: {str.trim(id.stdout)}");
+}
+
+io.println("Elevation context ended — back to normal privileges.\n");
+
+// ---------------------------------------------------------------------------
+// 2. Package management — the primary use case
+//    Updating and installing packages requires root on most systems.
+// ---------------------------------------------------------------------------
+
+io.println("=== Package Management ===\n");
+
+fn install_packages(packages: array) {
+  io.println("Updating package lists...");
+  let update = $(apt update -qq);
+  if (update.exitCode != 0) {
+    io.println($"Warning: apt update failed — {str.trim(update.stderr)}");
+  }
+  for (let pkg: string in packages) {
+    io.println($"Installing {pkg}...");
+    let result = $(apt install -y -qq {pkg});
+    if (result.exitCode == 0) {
+      io.println($"  ✓ {pkg} installed");
+    } else {
+      io.println($"  ✗ {pkg} failed: {str.trim(result.stderr)}");
+    }
+  }
+}
+
+// One credential prompt covers all package operations
+
+elevate {
+  install_packages(["curl", "jq", "htop"]);
+}
+
+// ---------------------------------------------------------------------------
+// 3. Service management — elevation propagates into functions
+//    Functions called inside elevate { } inherit the elevation context.
+//    The function itself has no sudo logic — it just runs commands.
+// ---------------------------------------------------------------------------
+
+io.println("\n=== Service Management ===\n");
+
+fn service_action(name: string, action: string) {
+  let result = $(systemctl {action} {name});
+  if (result.exitCode == 0) {
+    io.println($"  ✓ {name}: {action}");
+  } else {
+    io.println($"  ✗ {name}: {action} failed");
+  }
+}
+
+fn get_service_status(name: string) -> string {
+  let result = $(systemctl is-active {name});
+  return str.trim(result.stdout);
+}
+
+elevate {
+  let services: array = ["nginx", "postgresql", "redis-server"];
+  for (let svc: string in services) {
+    let status: string = get_service_status(svc);
+    io.println($"{svc}: {status}");
+    if (status != "active") {
+      service_action(svc, "start");
+    } else {
+      service_action(svc, "reload");
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 4. Firewall configuration — checking results inside the block
+//    CommandResult is returned normally inside elevate blocks.
+// ---------------------------------------------------------------------------
+
+io.println("\n=== Firewall Configuration ===\n");
+
+elevate {
+  // Enable the firewall
+  let enable: CommandResult = $(ufw --force enable);
+  io.println($"Firewall: {str.trim(enable.stdout)}");
+  // Configure rules
+  let rules: array = [
+    "22/tcp", // SSH
+    "80/tcp", // HTTP
+    "443/tcp" // HTTPS
+  ];
+  for (let rule: string in rules) {
+    let result: CommandResult = CommandResult { exitCode: 0 }; // $(ufw allow {rule});
+    if (result.exitCode == 0) {
+      io.println($"  ✓ Allowed {rule}");
+    } else {
+      io.println($"  ✗ Failed to allow {rule}");
+    }
+  }
+  // Show final status
+  let status: CommandResult = $(ufw status numbered);
+  io.println($"\n{status.stdout}");
+}
+
+// ---------------------------------------------------------------------------
+// 5. Named elevator — using doas instead of sudo
+//    BSD systems or Alpine Linux use doas as the elevation tool.
+// ---------------------------------------------------------------------------
+
+io.println("\n=== Named Elevator (doas) ===\n");
+
+// elevate("doas") {
+//     $(pkg install nginx);
+//     $(rcctl enable nginx);
+//     $(rcctl start nginx);
+// }
+
+io.println("(doas example — uncomment on doas-based systems)");
+
+// ---------------------------------------------------------------------------
+// 6. Passthrough commands inside elevate
+//    $>() passthrough mode works with elevation for interactive commands.
+// ---------------------------------------------------------------------------
+
+io.println("\n=== Passthrough with Elevation ===\n");
+
+// elevate {
+//   // Passthrough lets interactive output stream to the terminal
+//   $>(apt list --upgradable);
+// }
+
+// ---------------------------------------------------------------------------
+// 7. Mixing elevated and non-elevated work
+//    Keep the elevation scope as narrow as possible.
+// ---------------------------------------------------------------------------
+
+io.println("\n=== Scoped Elevation ===\n");
+
+// Non-elevated: read config file (doesn't need root)
+
+let config_content = $(cat /etc/hostname);
+
+let hostname = str.trim(config_content.stdout);
+
+io.println($"Current hostname: {hostname}");
+
+// Non-elevated: prepare the new value
+
+let new_hostname = "stash-server";
+
+// Elevated: only the actual system modification needs privileges
+
+// elevate {
+//   $(hostnamectl set-hostname {new_hostname});
+//   io.println($"Hostname changed to: {new_hostname}");
+// }
+
+// Non-elevated: verify the change
+
+let verify = $(cat /etc/hostname);
+
+io.println($"Verified hostname: {str.trim(verify.stdout)}");
+
+// ---------------------------------------------------------------------------
+// 8. Error handling inside elevate blocks
+//    Exceptions propagate normally — the elevation context is always cleaned
+//    up in a finally block, even if an error occurs.
+// ---------------------------------------------------------------------------
+
+io.println("\n=== Error Handling ===\n");
+
+fn safe_elevate_task() {
+  elevate {
+    let result: CommandResult = $(systemctl restart nonexistent-service);
+    if (result.exitCode != 0) {
+      throw Error {
+        type: "ServiceError",
+        message: $"Failed to restart service: {str.trim(result.stderr)}"
+      };
+    }
+  }
+}
+
+let outcome = try safe_elevate_task();
+
+if (outcome is Error) {
+  io.println($"Caught error: {outcome.message}");
+  io.println("Elevation context was cleaned up despite the error.");
+}
+
+io.println("\nDone.");

@@ -624,6 +624,11 @@ public class Parser
             return ContinueStatement();
         }
 
+        if (Match(TokenType.Elevate))
+        {
+            return ElevateStatement();
+        }
+
         if (Check(TokenType.LeftBrace))
         {
             return ParseBlock();
@@ -694,6 +699,26 @@ public class Parser
         Consume(TokenType.RightParen, "Expected ')' after while condition.");
         BlockStmt body = ParseBlock();
         return new WhileStmt(condition, body, MakeSpan(whileToken.Span, body.Span));
+    }
+
+    /// <summary>
+    /// Parses an elevate statement: <c>elevate { ... }</c> or <c>elevate("expr") { ... }</c>.
+    /// The <c>elevate</c> token has already been consumed.
+    /// </summary>
+    /// <returns>An <see cref="ElevateStmt"/>.</returns>
+    private Stmt ElevateStatement()
+    {
+        Token elevateToken = Previous();
+        Expr? elevator = null;
+
+        if (Match(TokenType.LeftParen))
+        {
+            elevator = Expression();
+            Consume(TokenType.RightParen, "Expected ')' after elevator expression.");
+        }
+
+        BlockStmt body = ParseBlock();
+        return new ElevateStmt(elevator, body, MakeSpan(elevateToken.Span, body.Span));
     }
 
     /// <summary>

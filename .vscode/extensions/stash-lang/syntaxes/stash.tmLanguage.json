@@ -265,7 +265,7 @@
       "patterns": [
         {
           "name": "keyword.control.stash",
-          "match": "\\b(if|else|while|do|for|break|continue|try|throw|switch|as)\\b"
+          "match": "\\b(if|else|while|do|for|break|continue|try|throw|switch|as|elevate)\\b"
         }
       ]
     },

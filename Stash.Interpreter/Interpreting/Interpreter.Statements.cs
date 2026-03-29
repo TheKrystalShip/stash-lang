@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using Stash.Common;
 using Stash.Parsing.AST;
@@ -429,6 +431,159 @@ public partial class Interpreter
 
         var interfaceDef = new StashInterface(stmt.Name.Lexeme, requiredFields, requiredMethods);
         _environment.Define(stmt.Name.Lexeme, interfaceDef);
+        return null;
+    }
+
+    /// <summary>
+    /// Resolves the elevation program from the optional elevator expression or returns the platform default.
+    /// </summary>
+    private string ResolveElevator(ElevateStmt stmt)
+    {
+        if (stmt.Elevator is not null)
+        {
+            object? val = stmt.Elevator.Accept(this);
+            if (val is not string elevatorStr)
+                throw new RuntimeError("Elevator expression must evaluate to a string.", stmt.Span);
+            return elevatorStr;
+        }
+
+        if (OperatingSystem.IsWindows())
+            return "gsudo";
+
+        return "sudo";
+    }
+
+    /// <summary>
+    /// Checks whether a binary is available on the system PATH.
+    /// </summary>
+    private static bool TryFindBinary(string name)
+    {
+        string finder = OperatingSystem.IsWindows() ? "where" : "which";
+        var psi = new ProcessStartInfo(finder)
+        {
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+        psi.ArgumentList.Add(name);
+        using var process = Process.Start(psi);
+        process?.WaitForExit();
+        return process is not null && process.ExitCode == 0;
+    }
+
+    /// <summary>
+    /// Verifies the elevation program is available on the system PATH.
+    /// </summary>
+    private static void EnsureElevatorExists(string elevator, SourceSpan span)
+    {
+        if (TryFindBinary(elevator))
+            return;
+
+        if (elevator == "sudo" && !OperatingSystem.IsWindows())
+            throw new RuntimeError(
+                "Cannot find elevation program 'sudo'. Install sudo or use elevate(\"doas\") if doas is available.",
+                span);
+
+        if (OperatingSystem.IsWindows())
+            throw new RuntimeError(
+                $"Cannot find elevation program '{elevator}'. Install it: winget install gerardog.gsudo",
+                span);
+
+        throw new RuntimeError(
+            $"Cannot find elevation program '{elevator}'. Ensure it is installed and on your PATH.",
+            span);
+    }
+
+    /// <summary>
+    /// Runs the interactive credential validation command for the elevation program.
+    /// </summary>
+    private void AcquireCredentials(string elevator, SourceSpan span)
+    {
+        List<string> credentialArgs;
+        bool skipValidation = false;
+
+        switch (elevator)
+        {
+            case "sudo":
+                credentialArgs = ["-v"];
+                break;
+            case "doas":
+                credentialArgs = ["true"];
+                break;
+            case "gsudo":
+                credentialArgs = ["cache", "on", "-d", "-1"];
+                break;
+            default:
+                skipValidation = true;
+                credentialArgs = [];
+                break;
+        }
+
+        if (skipValidation)
+            return;
+
+        var (_, _, exitCode) = RunPassthrough(elevator, credentialArgs, span);
+        if (exitCode != 0)
+            throw new RuntimeError(
+                "Credential acquisition failed. User cancelled or authentication error.",
+                span);
+    }
+
+    /// <inheritdoc />
+    public object? VisitElevateStmt(ElevateStmt stmt)
+    {
+        if (EmbeddedMode)
+            throw new RuntimeError("Privilege elevation is not available in embedded mode.", stmt.Span);
+
+        bool wasAlreadyActive = _ctx.ElevationActive;
+
+        if (!wasAlreadyActive && System.Environment.IsPrivilegedProcess)
+        {
+            Execute(stmt.Body);
+            return null;
+        }
+
+        if (!wasAlreadyActive)
+        {
+            string elevator = ResolveElevator(stmt);
+
+            // On Unix, if sudo not found and no custom elevator was specified, try doas.
+            if (elevator == "sudo" && !OperatingSystem.IsWindows())
+            {
+                if (!TryFindBinary("sudo"))
+                {
+                    if (!TryFindBinary("doas"))
+                        throw new RuntimeError(
+                            "Cannot find elevation program 'sudo' or 'doas'. Install one of them to use the elevate block.",
+                            stmt.Span);
+                    elevator = "doas";
+                }
+            }
+            else
+            {
+                EnsureElevatorExists(elevator, stmt.Span);
+            }
+
+            AcquireCredentials(elevator, stmt.Span);
+
+            _ctx.ElevationActive = true;
+            _ctx.ElevationCommand = elevator;
+        }
+
+        try
+        {
+            Execute(stmt.Body);
+        }
+        finally
+        {
+            if (!wasAlreadyActive)
+            {
+                _ctx.ElevationActive = false;
+                _ctx.ElevationCommand = null;
+            }
+        }
+
         return null;
     }
 }

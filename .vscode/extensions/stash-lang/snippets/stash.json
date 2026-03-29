@@ -273,5 +273,23 @@
     "prefix": "atrue",
     "body": "assert.true(${1:value});$0",
     "description": "Assert value is truthy"
+  },
+  "Elevate Block": {
+    "prefix": "elevate",
+    "body": [
+      "elevate {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Scoped privilege elevation block"
+  },
+  "Elevate Block with Elevator": {
+    "prefix": "elevatewith",
+    "body": [
+      "elevate(\"${1:sudo}\") {",
+      "\t$0",
+      "}"
+    ],
+    "description": "Scoped privilege elevation block with custom elevator"
   }
 }

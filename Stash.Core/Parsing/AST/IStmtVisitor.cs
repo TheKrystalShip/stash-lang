@@ -107,4 +107,9 @@ public interface IStmtVisitor<T>
     /// Visits a <see cref="DestructureStmt"/> node (<c>let [a, b] = expr;</c> or <c>let { x, y } = expr;</c>).
     /// </summary>
     T VisitDestructureStmt(DestructureStmt stmt);
+
+    /// <summary>
+    /// Visits an <see cref="ElevateStmt"/> node (<c>elevate { ... }</c> or <c>elevate("doas") { ... }</c>).
+    /// </summary>
+    T VisitElevateStmt(ElevateStmt stmt);
 }

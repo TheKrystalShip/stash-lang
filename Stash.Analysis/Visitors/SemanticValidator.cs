@@ -42,6 +42,9 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <summary>Tracks nesting depth of function bodies to validate <c>return</c> usage.</summary>
     private int _functionDepth;
 
+    /// <summary>Tracks nesting depth of elevate blocks to detect nested elevation.</summary>
+    private int _elevateDepth;
+
     /// <summary>Set of names that are always in scope (built-in functions, namespaces, etc.).</summary>
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
 
@@ -69,6 +72,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         _diagnostics.Clear();
         _loopDepth = 0;
         _functionDepth = 0;
+        _elevateDepth = 0;
 
         CheckUnreachableStatements(statements);
 
@@ -152,6 +156,24 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         _loopDepth++;
         stmt.Body.Accept(this);
         _loopDepth--;
+        return null;
+    }
+
+    /// <inheritdoc />
+    public object? VisitElevateStmt(ElevateStmt stmt)
+    {
+        if (_elevateDepth > 0)
+        {
+            _diagnostics.Add(new SemanticDiagnostic(
+                "Nested 'elevate' has no effect. The outer elevation context already applies.",
+                DiagnosticLevel.Warning,
+                stmt.Span));
+        }
+
+        stmt.Elevator?.Accept(this);
+        _elevateDepth++;
+        stmt.Body.Accept(this);
+        _elevateDepth--;
         return null;
     }
 
