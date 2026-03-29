@@ -1,0 +1,22 @@
+{
+  "name": "@stash/cli",
+  "version": "1.0.0",
+  "description": "Shared CLI wrapper toolkit for Stash — declarative flag specs, exec helpers, output parsers, and tool detection",
+  "author": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "index.stash",
+  "repository": "https://github.com/TheKrystalShip/stash-lang",
+  "keywords": [
+    "cli",
+    "wrapper",
+    "toolkit",
+    "flags",
+    "exec",
+    "parser",
+    "devops",
+    "sysadmin"
+  ],
+  "stash": ">=1.0.0",
+  "files": ["lib/", "index.stash", "README.md", "LICENSE"],
+  "private": false
+}

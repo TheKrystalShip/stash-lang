@@ -1,0 +1,32 @@
+/// @stash/docker — Network operations.
+/// Delegates to @stash/oci for shared OCI network operations.
+
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/oci/lib/networks.stash" as oci_networks;
+
+let _m = oci_networks.create_module({
+    exec: exec,
+    exec_json: exec_json,
+    exec_json_lines: exec_json_lines
+});
+
+/// Creates a Docker network.
+let create = _m.create;
+
+/// Removes one or more Docker networks.
+let rm = _m.rm;
+
+/// Lists Docker networks as structured JSON.
+let ls = _m.ls;
+
+/// Inspects one or more Docker networks and returns parsed JSON.
+let inspect = _m.inspect;
+
+/// Connects a container to a network.
+let connect = _m.connect;
+
+/// Disconnects a container from a network.
+let disconnect = _m.disconnect;
+
+/// Removes all unused Docker networks.
+let prune = _m.prune;

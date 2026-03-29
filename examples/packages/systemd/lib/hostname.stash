@@ -1,0 +1,71 @@
+import { exec, parse_properties } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let set_hostname_spec = {
+    static: { flag: "--static", type: "bool" },
+    transient: { flag: "--transient", type: "bool" },
+    pretty: { flag: "--pretty", type: "bool" }
+};
+
+/// Returns the current hostname status from hostnamectl.
+/// Runs `hostnamectl status --no-pager` and returns the raw text output.
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn status() {
+    return exec("hostnamectl status --no-pager");
+}
+
+/// Returns hostnamectl properties as a parsed dict by querying JSON output.
+/// Attempts `hostnamectl --json=short` first; falls back to raw text status on failure.
+/// @return Dict with ok (bool), data (parsed JSON dict or null on fallback), stderr, exitCode
+fn show() {
+    let result = exec("hostnamectl --json=short");
+    if (result.ok) {
+        let data = try json.parse(result.stdout);
+        if (!(data is Error)) {
+            return {
+                ok: true,
+                data: data,
+                stderr: result.stderr,
+                exitCode: result.exitCode
+            };
+        }
+    }
+    return exec("hostnamectl status --no-pager");
+}
+
+/// Sets the system hostname.
+/// Runs `hostnamectl set-hostname <name>` with optional type flags.
+/// @param name The hostname string to set
+/// @param opts Dict of options: static (bool), transient (bool), pretty (bool)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_hostname(name, opts = {}) {
+    return exec(cli_flags.build_args($"hostnamectl set-hostname {name}", opts, set_hostname_spec));
+}
+
+/// Sets the system icon name used by desktop environments.
+/// Runs `hostnamectl set-icon-name <name>`.
+/// @param name Icon name string, e.g. "computer-laptop"
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_icon_name(name) {
+    let cmd = $"hostnamectl set-icon-name {name}";
+    return exec(cmd);
+}
+
+/// Sets the machine chassis type.
+/// Runs `hostnamectl set-chassis <type_name>`.
+/// Valid types: desktop, laptop, convertible, server, tablet, handset, vm, container
+/// @param type_name Chassis type string
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_chassis(type_name) {
+    let cmd = $"hostnamectl set-chassis {type_name}";
+    return exec(cmd);
+}
+
+/// Sets the deployment environment label for the machine.
+/// Runs `hostnamectl set-deployment <env>`.
+/// @param env Deployment environment string, e.g. "production", "staging"
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_deployment(env) {
+    let cmd = $"hostnamectl set-deployment {env}";
+    return exec(cmd);
+}

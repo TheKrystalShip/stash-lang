@@ -1,0 +1,163 @@
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let logs_spec = {
+    unit: { flag: "--unit" },
+    since: { flag: "--since" },
+    until: { flag: "--until" },
+    boot: { flag: "--boot" },
+    lines: { flag: "--lines" },
+    output: { flag: "--output" },
+    priority: { flag: "--priority" },
+    grep: { flag: "--grep" },
+    reverse: { flag: "--reverse", type: "bool" },
+    no_pager: { flag: "--no-pager", type: "bool" }
+};
+
+let logs_json_spec = {
+    unit: { flag: "--unit" },
+    since: { flag: "--since" },
+    until: { flag: "--until" },
+    boot: { flag: "--boot" },
+    lines: { flag: "--lines" },
+    priority: { flag: "--priority" },
+    grep: { flag: "--grep" },
+    reverse: { flag: "--reverse", type: "bool" },
+    no_pager: { flag: "--no-pager", type: "bool" }
+};
+
+let follow_spec = {
+    unit: { flag: "--unit" },
+    lines: { flag: "--lines" },
+    output: { flag: "--output" },
+    priority: { flag: "--priority" }
+};
+
+/// Queries systemd journal logs and returns raw text output.
+/// @param opts Options dict: unit (string), since (string), until (string), priority (string/int 0-7),
+///             boot (string/int), lines (int), reverse (bool), grep (string), output (string),
+///             user (bool), no_pager (bool, default true), identifier (string)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn logs(opts = {}) {
+    let defaults = { no_pager: true };
+    let merged = cli_flags.with_defaults(defaults, opts);
+    return exec(cli_flags.build_args("journalctl", merged, logs_spec));
+}
+
+/// Queries systemd journal logs and returns parsed JSON entries.
+/// Same options as logs(), but forces output format to JSON.
+/// @param opts Options dict: unit, since, until, priority, boot, lines, reverse, grep, user, identifier
+/// @return Result dict with ok, data (array of entry dicts), stderr, exitCode
+fn logs_json(opts = {}) {
+    let defaults = { no_pager: true };
+    let merged = cli_flags.with_defaults(defaults, opts);
+    return exec_json_lines(cli_flags.build_args("journalctl --output json", merged, logs_json_spec));
+}
+
+/// Follows the journal log stream (journalctl -f). Blocks until the process ends.
+/// @param unit Optional unit name to filter by (string or null)
+/// @param opts Options dict: lines (int, number of initial lines to show)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn follow(opts = {}) {
+    return exec(cli_flags.build_args("journalctl -f", opts, follow_spec));
+}
+
+/// Shows logs from a specific boot session.
+/// @param id Boot ID: 0 for current boot, -1 for previous, null defaults to current boot
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn boot(id = null) {
+    let boot_id = "0";
+    if (!(id is null)) {
+        boot_id = conv.toStr(id);
+    }
+    return exec("journalctl --no-pager -b " + boot_id);
+}
+
+/// Reports the disk usage of the journal.
+/// @return Result dict with ok, stdout (containing usage info), stderr, exitCode
+fn disk_usage() {
+    let cmd = "journalctl --disk-usage";
+    return exec(cmd);
+}
+
+/// Removes archived journal files until the total disk usage falls below the given size.
+/// @param size Size threshold string, e.g. "500M", "1G"
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn vacuum_size(size) {
+    let cmd = $"journalctl --vacuum-size={size}";
+    return exec(cmd);
+}
+
+/// Removes archived journal files older than the specified time period.
+/// @param time_str Time period string, e.g. "2weeks", "1month", "1year"
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn vacuum_time(time_str) {
+    let cmd = $"journalctl --vacuum-time={time_str}";
+    return exec(cmd);
+}
+
+/// Requests rotation of active journal files.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn rotate() {
+    let cmd = "journalctl --rotate";
+    return exec(cmd);
+}
+
+/// Flushes all journal data from /run/log/journal to /var/log/journal for persistent storage.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn flush() {
+    let cmd = "journalctl --flush";
+    return exec(cmd);
+}
+
+/// Verifies the consistency and integrity of all journal files.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn verify() {
+    let cmd = "journalctl --verify";
+    return exec(cmd);
+}
+
+/// Lists all recorded boots with their boot IDs, offsets, and timestamps.
+/// @return Result dict with ok, stdout (raw boot list text), stderr, exitCode
+fn list_boots() {
+    let cmd = "journalctl --list-boots --no-pager";
+    return exec(cmd);
+}
+
+/// Returns an array of unique values for a given journal field.
+/// @param field Journal field name, e.g. "_COMM", "_SYSTEMD_UNIT", "PRIORITY"
+/// @return Result dict with ok, data (array of value strings), stderr, exitCode
+fn field_values(field) {
+    let cmd = $"journalctl -F {field} --no-pager";
+    let result = exec(cmd);
+    if (!result.ok) {
+        return result;
+    }
+    let lines = str.split(str.trim(result.stdout), "\n");
+    let values = [];
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (trimmed != "") {
+            arr.push(values, trimmed);
+        }
+    }
+    return {
+        ok: true,
+        data: values,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Browses the message catalog. Lists all entries, or shows details for a specific message ID.
+/// @param identifier Optional message catalog ID (string or null). If null, lists all catalog entries.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn catalog(identifier = null) {
+    let cmd = "";
+    if (identifier is null) {
+        cmd = "journalctl --list-catalog";
+    } else {
+        cmd = $"journalctl --catalog={identifier}";
+    }
+    return exec(cmd);
+}

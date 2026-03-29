@@ -1,0 +1,83 @@
+import { exec, exec_json } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let list_spec = {
+    since: { flag: "--since" },
+    until: { flag: "--until" },
+    pid: { flag: "--pid" }
+};
+
+/// Lists captured core dumps recorded by systemd-coredump.
+/// Runs `coredumpctl list --no-pager` with optional filters.
+/// @param opts Options dict:
+///   since (string) — show entries not older than this timestamp (e.g. "yesterday"),
+///   until (string) — show entries not newer than this timestamp,
+///   pid (int) — filter by process ID,
+///   comm (string) — filter by executable name (appended as positional argument)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn list(opts = {}) {
+    let flags = cli_flags.map_flags(opts, list_spec);
+    let parts = ["coredumpctl", "list", "--no-pager"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    if (dict.has(opts, "comm")) {
+        arr.push(parts, opts.comm);
+    }
+    return exec(arr.join(parts, " "));
+}
+
+/// Shows detailed information about a core dump entry.
+/// If id is null, shows the most recent core dump.
+/// Runs `coredumpctl info [id] --no-pager`.
+/// @param id Optional core dump identifier (PID, binary name, or journal cursor)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn info(id = null) {
+    if (id is null) {
+        return exec("coredumpctl info --no-pager");
+    }
+    return exec($"coredumpctl info {conv.toStr(id)} --no-pager");
+}
+
+/// Extracts the core dump binary to stdout or a file.
+/// If id is null, dumps the most recent core. If output is given, writes to that path.
+/// Runs `coredumpctl dump [id] [--output=<file>]`.
+/// @param id Optional core dump identifier (PID, binary name, or journal cursor)
+/// @param output Optional file path to write the core dump to instead of stdout
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn dump(id = null, output = null) {
+    let cmd = "coredumpctl dump";
+    if (!(id is null)) {
+        cmd = cmd + " " + conv.toStr(id);
+    }
+    if (!(output is null)) {
+        cmd = cmd + " --output=" + output;
+    }
+    return exec(cmd);
+}
+
+/// Opens a core dump in the system debugger (e.g. gdb or lldb).
+/// This is an interactive operation; the result reflects whether the command was invoked.
+/// If id is null, debugs the most recent core dump.
+/// Runs `coredumpctl debug [id]`.
+/// @param id Optional core dump identifier (PID, binary name, or journal cursor)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn debug(id = null) {
+    if (id is null) {
+        return exec("coredumpctl debug");
+    }
+    return exec($"coredumpctl debug {conv.toStr(id)}");
+}
+
+/// Alias for debug(). Opens a core dump in gdb.
+/// Uses the legacy `coredumpctl gdb` subcommand for compatibility with older systemd versions.
+/// If id is null, debugs the most recent core dump.
+/// Runs `coredumpctl gdb [id]`.
+/// @param id Optional core dump identifier (PID, binary name, or journal cursor)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn gdb(id = null) {
+    if (id is null) {
+        return exec("coredumpctl gdb");
+    }
+    return exec($"coredumpctl gdb {conv.toStr(id)}");
+}

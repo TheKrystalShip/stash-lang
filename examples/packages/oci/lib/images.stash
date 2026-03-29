@@ -1,0 +1,223 @@
+/// @stash/oci — Shared image operations for OCI-compatible runtimes.
+/// Provides a create_module(helpers) factory that returns image management functions
+/// bound to a specific tool's exec helpers.
+
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let build_spec = {
+    tag:       { flag: "-t", type: "list" },
+    file:      { flag: "--file" },
+    build_arg: { flag: "--build-arg", type: "map" },
+    target:    { flag: "--target" },
+    no_cache:  { flag: "--no-cache", type: "bool" },
+    pull:      { flag: "--pull", type: "bool" },
+    quiet:     { flag: "--quiet", type: "bool" },
+    platform:  { flag: "--platform", type: "list" },
+    label:     { flag: "--label", type: "map" },
+    network:   { flag: "--network" },
+    squash:    { flag: "--squash", type: "bool" },
+    layers:    { flag: "--layers", type: "bool" }
+};
+
+let ls_spec = {
+    all:     { flag: "--all", type: "bool" },
+    quiet:   { flag: "--quiet", type: "bool" },
+    digests: { flag: "--digests", type: "bool" },
+    filter:  { flag: "--filter", type: "map" }
+};
+
+let pull_spec = {
+    platform:   { flag: "--platform" },
+    all_tags:   { flag: "--all-tags", type: "bool" },
+    quiet:      { flag: "--quiet", type: "bool" },
+    tls_verify: { flag: "--tls-verify", type: "bool" }
+};
+
+let push_spec = {
+    all_tags:   { flag: "--all-tags", type: "bool" },
+    quiet:      { flag: "--quiet", type: "bool" },
+    tls_verify: { flag: "--tls-verify", type: "bool" }
+};
+
+let rmi_spec = {
+    force:    { flag: "--force", type: "bool" },
+    no_prune: { flag: "--no-prune", type: "bool" }
+};
+
+let history_spec = {
+    no_trunc: { flag: "--no-trunc", type: "bool" },
+    quiet:    { flag: "--quiet", type: "bool" }
+};
+
+let load_spec = {
+    quiet: { flag: "--quiet", type: "bool" }
+};
+
+let import_spec = {
+    message: { flag: "--message" },
+    change:  { flag: "--change", type: "list" }
+};
+
+let prune_spec = {
+    all:    { flag: "--all", type: "bool" },
+    force:  { flag: "--force", type: "bool" },
+    filter: { flag: "--filter", type: "map" }
+};
+
+let search_spec = {
+    limit:    { flag: "--limit" },
+    no_trunc: { flag: "--no-trunc", type: "bool" },
+    filter:   { flag: "--filter", type: "map" }
+};
+
+/// Converts a filter dict to "--filter key=value" flags string.
+fn build_filter_args(filter) {
+    let parts = [];
+    for (let k, v in filter) {
+        arr.push(parts, $"--filter {k}={conv.toStr(v)}");
+    }
+    return arr.join(parts, " ");
+}
+
+/// Creates image operations bound to the given tool helpers.
+/// @param helpers Dict with exec, exec_json, exec_json_lines functions
+/// @return Dict of image operation functions
+fn create_module(helpers) {
+    let _exec = helpers.exec;
+    let _exec_json = helpers.exec_json;
+    let _exec_json_lines = helpers.exec_json_lines;
+
+    /// Lists images. Returns JSON objects unless quiet is true.
+    fn _ls(opts = {}) {
+        let quiet = dict.has(opts, "quiet") && opts.quiet;
+        let flags = cli_flags.map_flags(opts, ls_spec);
+        let parts = ["images"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        if (quiet) {
+            return _exec(arr.join(parts, " "));
+        }
+        arr.push(parts, "--format '{{json .}}'");
+        return _exec_json_lines(arr.join(parts, " "));
+    }
+
+    /// Pulls an image from a registry.
+    fn _pull(image, opts = {}) {
+        return _exec(cli_flags.build_args($"pull {image}", opts, pull_spec));
+    }
+
+    /// Pushes an image to a registry.
+    fn _push(image, opts = {}) {
+        return _exec(cli_flags.build_args($"push {image}", opts, push_spec));
+    }
+
+    /// Builds an image from a Dockerfile/Containerfile.
+    /// Normalizes tag and platform to arrays for multi-value support.
+    fn _build(path, opts = {}) {
+        let build_opts = dict.new();
+        for (let k, v in opts) {
+            if (k == "tag" || k == "platform") {
+                if (v is array) {
+                    dict.set(build_opts, k, v);
+                } else {
+                    dict.set(build_opts, k, [v]);
+                }
+            } else {
+                dict.set(build_opts, k, v);
+            }
+        }
+        let flags = cli_flags.map_flags(build_opts, build_spec);
+        let parts = ["build"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        arr.push(parts, path);
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Tags a source image with a new target name.
+    fn _tag(source, target) {
+        return _exec($"tag {source} {target}");
+    }
+
+    /// Removes one or more images.
+    fn _rmi(image, opts = {}) {
+        return _exec(cli_flags.build_args($"rmi {image}", opts, rmi_spec));
+    }
+
+    /// Returns detailed information about an image as parsed JSON.
+    fn _inspect(image) {
+        return _exec_json($"image inspect {image}");
+    }
+
+    /// Shows the history of an image. Returns JSON unless quiet is true.
+    fn _history(image, opts = {}) {
+        let quiet = dict.has(opts, "quiet") && opts.quiet;
+        if (quiet) {
+            return _exec(cli_flags.build_args($"history {image}", opts, history_spec));
+        }
+        let cmd = cli_flags.build_args($"history {image}", opts, history_spec);
+        cmd = cmd + " --format '{{json .}}'";
+        return _exec_json_lines(cmd);
+    }
+
+    /// Saves one or more images to a tar archive.
+    fn _save(images, output_path) {
+        let img_str = "";
+        if (images is array) {
+            img_str = arr.join(images, " ");
+        } else {
+            img_str = images;
+        }
+        return _exec($"save -o {output_path} {img_str}");
+    }
+
+    /// Loads images from a tar archive.
+    fn _load(input_path, opts = {}) {
+        return _exec(cli_flags.build_args($"load -i {input_path}", opts, load_spec));
+    }
+
+    /// Imports a tarball as a new image.
+    fn _import_image(source, repository = null, opts = {}) {
+        let flags = cli_flags.map_flags(opts, import_spec);
+        let parts = ["import"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        arr.push(parts, source);
+        if (repository != null) {
+            arr.push(parts, repository);
+        }
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Removes unused images. Defaults force to true.
+    fn _prune(opts = {}) {
+        let effective = cli_flags.with_defaults({ force: true }, opts);
+        return _exec(cli_flags.build_args("image prune", effective, prune_spec));
+    }
+
+    /// Searches registries for images matching a term.
+    fn _search(term, opts = {}) {
+        let cmd = cli_flags.build_args($"search {term}", opts, search_spec);
+        cmd = cmd + " --format '{{json .}}'";
+        return _exec_json_lines(cmd);
+    }
+
+    return {
+        ls: _ls,
+        pull: _pull,
+        push: _push,
+        build: _build,
+        tag: _tag,
+        rmi: _rmi,
+        inspect: _inspect,
+        history: _history,
+        save: _save,
+        load: _load,
+        import_image: _import_image,
+        prune: _prune,
+        search: _search
+    };
+}

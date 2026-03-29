@@ -1,0 +1,107 @@
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let context_create_spec = {
+    description: { flag: "--description" },
+    docker:      { flag: "--docker" }
+};
+
+let context_rm_spec = {
+    force: { flag: "--force", type: "bool" }
+};
+
+let ls_spec = {
+    quiet: { flag: "--quiet", type: "bool" }
+};
+
+let context_update_spec = {
+    description: { flag: "--description" },
+    docker:      { flag: "--docker" }
+};
+
+/// Create a new Docker context.
+/// @param name Context name
+/// @param opts Options: description (string), docker (string — endpoint URL)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn create(name, opts = {}) {
+    let cmd = cli_flags.build_args("context create", opts, context_create_spec);
+    cmd = cmd + " " + name;
+    return exec(cmd);
+}
+
+/// Remove one or more Docker contexts.
+/// @param name Context name (string) or array of names
+/// @param opts Options: force (bool)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn rm(name, opts = {}) {
+    let names = "";
+    if (name is array) {
+        names = arr.join(name, " ");
+    } else {
+        names = name;
+    }
+    let cmd = cli_flags.build_args("context rm", opts, context_rm_spec);
+    return exec($"{cmd} {names}");
+}
+
+/// List Docker contexts.
+/// @param opts Options: quiet (bool)
+/// @return Result dict with ok, data (array), stderr, exitCode
+fn ls(opts = {}) {
+    let flags = cli_flags.map_flags(opts, ls_spec);
+    let parts = ["context ls"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    arr.push(parts, "--format '{{json .}}'");
+    return exec_json_lines(arr.join(parts, " "));
+}
+
+/// Inspect one or more Docker contexts.
+/// @param name Context name (string) or array of names
+/// @return Result dict with ok, data (parsed JSON), stderr, exitCode
+fn inspect(name) {
+    let names = "";
+    if (name is array) {
+        names = arr.join(name, " ");
+    } else {
+        names = name;
+    }
+    return exec_json($"context inspect {names}");
+}
+
+/// Switch the active Docker context.
+/// @param name Context name to switch to
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn use(name) {
+    return exec($"context use {name}");
+}
+
+/// Export a Docker context to a file.
+/// @param name Context name
+/// @param path Optional destination file path
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn export_context(name, path = null) {
+    if (!(path is null)) {
+        return exec($"context export {name} {path}");
+    }
+    return exec($"context export {name}");
+}
+
+/// Import a Docker context from a file.
+/// @param name Name to assign to the imported context
+/// @param path Path to the context archive file
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn import_context(name, path) {
+    return exec($"context import {name} {path}");
+}
+
+/// Update an existing Docker context.
+/// @param name Context name
+/// @param opts Options: description (string), docker (string — endpoint URL)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn update(name, opts = {}) {
+    let cmd = cli_flags.build_args("context update", opts, context_update_spec);
+    cmd = cmd + " " + name;
+    return exec(cmd);
+}

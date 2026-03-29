@@ -1,0 +1,62 @@
+/// @stash/systemd — Shared helpers for systemd CLI commands.
+/// Delegates to @stash/cli toolkit for exec, parsing, and tool detection.
+
+import "@stash/cli/lib/exec.stash" as cli_exec;
+import "@stash/cli/lib/flags.stash" as cli_flags;
+import "@stash/cli/lib/parse.stash" as cli_parse;
+import "@stash/cli/lib/tools.stash" as cli_tools;
+
+/// Runs an arbitrary shell command and returns a result dict.
+/// Unlike the docker/podman helpers, this takes a full command string since
+/// the systemd package wraps multiple tools (systemctl, journalctl, etc.).
+/// @param cmd Full shell command string to execute
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn exec(cmd) {
+    return cli_exec.exec(cmd);
+}
+
+/// Runs a command and parses stdout as JSON.
+/// Returns {ok, data, stderr, exitCode}. If parsing fails, data is null and ok is false.
+fn exec_json(cmd) {
+    return cli_exec.exec_json(cmd);
+}
+
+/// Runs a command where each line of stdout is a separate JSON object.
+/// Returns {ok, data, stderr, exitCode} where data is an array of parsed objects.
+fn exec_json_lines(cmd) {
+    return cli_exec.exec_json_lines(cmd);
+}
+
+/// Builds a full command string from a base command and an options dict.
+fn build_args(base, opts) {
+    return cli_flags.build_args(base, opts);
+}
+
+/// Parses KEY=VALUE property output from commands like `systemctl show`.
+fn parse_properties(stdout) {
+    return cli_parse.parse_properties(stdout);
+}
+
+/// Checks if systemd is available on the system.
+fn check_systemd() {
+    return cli_tools.check_tool("systemctl");
+}
+
+/// Returns the scope flag for commands that support --user / --system mode.
+fn scope_flag(user_mode) {
+    if (user_mode) {
+        return "--user";
+    }
+    return "";
+}
+
+/// Parses table-formatted output where the first line contains column headers.
+fn parse_table(stdout) {
+    return cli_parse.parse_table(stdout);
+}
+
+/// Converts a dict of filter key-value pairs to a space-separated string
+/// of KEY=VALUE arguments.
+fn format_filters(filter_dict) {
+    return cli_parse.join_pairs(filter_dict);
+}

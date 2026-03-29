@@ -1,0 +1,20 @@
+/// @stash/oci — Shared OCI container runtime operations.
+///
+/// This package provides the common foundation for OCI-compatible container tools.
+/// It is not used directly — instead, use @stash/docker or @stash/podman which
+/// build on this package.
+///
+/// Each module exports a `create_module(helpers)` factory that returns a dict of
+/// operations bound to a specific OCI tool (docker, podman, etc.).
+///
+/// Helpers are created via:
+///   import "@stash/oci/lib/common.stash" as oci_common;
+///   let helpers = oci_common.create_helpers("docker");
+
+import "lib/common.stash" as common;
+import "lib/containers.stash" as containers;
+import "lib/images.stash" as images;
+import "lib/volumes.stash" as volumes;
+import "lib/networks.stash" as networks;
+import "lib/registry.stash" as registry;
+import "lib/system.stash" as system;

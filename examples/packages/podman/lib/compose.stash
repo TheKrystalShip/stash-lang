@@ -1,0 +1,570 @@
+import { exec, exec_json, exec_json_lines, build_args } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let project_spec = {
+    file:              { flag: "-f", type: "list" },
+    project_name:      { flag: "-p" },
+    project_directory: { flag: "--project-directory" },
+    env_file:          { flag: "--env-file" },
+    profile:           { flag: "--profile", type: "list" }
+};
+
+let filter_spec = {
+    filter: { flag: "--filter", type: "map" }
+};
+
+let env_spec = {
+    env: { flag: "-e", type: "map" }
+};
+
+let build_arg_spec = {
+    build_arg: { flag: "--build-arg", type: "map" }
+};
+
+/// Extracts project-level compose options from an opts dict.
+/// Returns a new dict containing only the keys: file, project_name, project_directory,
+/// env_file, and profile — if they are present and non-null in the source dict.
+/// @param opts Source options dict
+/// @return New dict containing only project-level keys that are present and non-null
+fn extract_project_opts(opts) {
+    let result = dict.new();
+    let project_keys = ["file", "project_name", "project_directory", "env_file", "profile"];
+    for (let key in project_keys) {
+        if (!(opts[key] is null)) {
+            dict.set(result, key, opts[key]);
+        }
+    }
+    return result;
+}
+
+/// Returns a copy of opts stripped of project-level keys and the service key.
+/// Removes: file, project_name, project_directory, env_file, profile, service.
+/// Used to isolate subcommand-specific flags before passing to compose_cmd.
+/// @param opts Source options dict
+/// @return New dict without project-level and service keys
+fn clean_compose_opts(opts) {
+    let result = dict.new();
+    for (let k, v in opts) {
+        if (k != "file" && k != "project_name" && k != "project_directory" && k != "env_file" && k != "profile" && k != "service") {
+            dict.set(result, k, v);
+        }
+    }
+    return result;
+}
+
+/// Builds a full podman compose command string from its constituent parts.
+/// Emits project-level flags before the subcommand, converts cmd_opts keys from
+/// snake_case to kebab-case (e.g. force_recreate → --force-recreate), and appends
+/// service names at the end. Boolean true → bare flag, bool false/null → omitted,
+/// array → flag repeated per element.
+/// @param subcommand String subcommand (e.g. "up", "down", "ps")
+/// @param project_opts Dict of project-level options (file, project_name, etc.)
+/// @param cmd_opts Dict of subcommand-specific options with snake_case keys
+/// @param services String or array of service names, or empty string for none
+/// @return Full command string suitable for passing to exec()
+fn compose_cmd(subcommand, project_opts, cmd_opts, services) {
+    let parts = ["compose"];
+
+    // Project-level flags come before the subcommand
+    let project_flags = cli_flags.map_flags(project_opts, project_spec);
+    for (let f in project_flags) {
+        arr.push(parts, f);
+    }
+
+    // Subcommand
+    arr.push(parts, subcommand);
+
+    // Convert cmd_opts keys to flags: snake_case → kebab-case
+    let opt_keys = dict.keys(cmd_opts);
+    for (let key in opt_keys) {
+        let val = cmd_opts[key];
+        if (val is null) { continue; }
+        if (val is bool && !val) { continue; }
+
+        let normalized = str.replaceAll(key, "_", "-");
+        let flag = "";
+        if (len(normalized) == 1) {
+            flag = $"-{normalized}";
+        } else {
+            flag = $"--{normalized}";
+        }
+
+        if (val is bool && val) {
+            arr.push(parts, flag);
+        } else if (val is array) {
+            for (let item in val) {
+                arr.push(parts, $"{flag} {conv.toStr(item)}");
+            }
+        } else {
+            arr.push(parts, $"{flag} {conv.toStr(val)}");
+        }
+    }
+
+    // Service names are appended after all flags
+    if (!(services is null) && services != "") {
+        if (services is array) {
+            for (let svc in services) {
+                arr.push(parts, svc);
+            }
+        } else {
+            arr.push(parts, services);
+        }
+    }
+
+    return arr.join(parts, " ");
+}
+
+/// Starts services defined in the compose file, creating containers as needed.
+/// Defaults to detached mode (detach=true). Supports build-on-start, force recreation,
+/// dependency control, graceful timeout, readiness waiting, pull policy, and orphan cleanup.
+/// @param opts Dict with: detach (bool, default true), build (bool), force_recreate (bool),
+///   no_deps (bool), timeout (int, seconds), wait (bool), pull (string, "always"|"missing"|"never"),
+///   remove_orphans (bool), service (string|array), file (string|array),
+///   project_name (string), project_directory (string), env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn up(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    if (clean.detach is null) {
+        dict.set(clean, "detach", true);
+    }
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("up", project, clean, services));
+}
+
+/// Stops and removes containers and networks created by `up`.
+/// Optionally also removes named volumes and images.
+/// @param opts Dict with: volumes (bool), rmi (string, "all"|"local"),
+///   timeout (int, seconds to wait before killing), remove_orphans (bool),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn down(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    return exec(compose_cmd("down", project, clean, ""));
+}
+
+/// Builds or rebuilds service images defined in the compose file.
+/// Named build_services to avoid collision with image build functions.
+/// Build arguments are passed as a dict and expanded to --build-arg K=V flags.
+/// @param opts Dict with: no_cache (bool), pull (bool), quiet (bool),
+///   build_arg (dict of build-time variable key/value pairs),
+///   service (string|array), file (string|array), project_name (string),
+///   project_directory (string), env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn build_services(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+
+    // Remove build_arg from clean since we expand it manually as --build-arg K=V
+    let build_arg_dict = clean.build_arg;
+    if (!(build_arg_dict is null)) {
+        let without = dict.new();
+        for (let k, v in clean) {
+            if (k != "build_arg") {
+                dict.set(without, k, v);
+            }
+        }
+        clean = without;
+    }
+
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+
+    let cmd = compose_cmd("build", project, clean, services);
+
+    let build_arg_flags = cli_flags.map_flags({ build_arg: build_arg_dict }, build_arg_spec);
+    for (let f in build_arg_flags) {
+        cmd = cmd + " " + f;
+    }
+
+    return exec(cmd);
+}
+
+/// Lists containers for compose project services.
+/// Returns a JSON array of container objects by default; returns raw exec output when quiet=true.
+/// Filter criteria are specified as a dict of key/value pairs and expanded to --filter flags.
+/// @param opts Dict with: all (bool), quiet (bool), services (bool),
+///   filter (dict of filter criteria, e.g. {status: "running"}),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return JSON array of container objects, or exec result dict {ok, stdout, stderr, exitCode} if quiet=true
+fn ps(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+
+    // Extract filter dict — handled manually as --filter key=value pairs
+    let filter = clean.filter;
+    if (!(filter is null)) {
+        let without_filter = dict.new();
+        for (let k, v in clean) {
+            if (k != "filter") {
+                dict.set(without_filter, k, v);
+            }
+        }
+        clean = without_filter;
+    }
+
+    let cmd = compose_cmd("ps", project, clean, "");
+
+    let filter_flags = cli_flags.map_flags({ filter: filter }, filter_spec);
+    for (let f in filter_flags) {
+        cmd = cmd + " " + f;
+    }
+
+    if (opts.quiet) {
+        return exec(cmd);
+    }
+
+    cmd = cmd + " --format '{{json .}}'";
+    return exec_json_lines(cmd);
+}
+
+/// Streams or retrieves log output from one or more compose service containers.
+/// Use follow=true to tail logs in real time. Use tail to limit the number of lines shown.
+/// @param opts Dict with: follow (bool), tail (string|int, number of lines or "all"),
+///   timestamps (bool), no_color (bool), since (string, timestamp or duration),
+///   until (string, timestamp or duration), service (string|array),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn logs(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("logs", project, clean, services));
+}
+
+/// Executes a command inside a running compose service container.
+/// Named compose_exec to avoid collision with the exec() execution helper.
+/// Environment variables are passed as a dict and expanded to -e KEY=VALUE flags.
+/// @param service String name of the compose service to exec into
+/// @param command String command (and arguments) to execute in the container
+/// @param opts Dict with: detach (bool), user (string), workdir (string),
+///   env (dict of KEY=VALUE environment variable overrides),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn compose_exec(service, command, opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+
+    // Extract env dict — expanded manually as -e KEY=VALUE flags
+    let env_dict = clean.env;
+    if (!(env_dict is null)) {
+        let without_env = dict.new();
+        for (let k, v in clean) {
+            if (k != "env") {
+                dict.set(without_env, k, v);
+            }
+        }
+        clean = without_env;
+    }
+
+    let cmd = compose_cmd("exec", project, clean, "");
+
+    let env_flags = cli_flags.map_flags({ env: env_dict }, env_spec);
+    for (let f in env_flags) {
+        cmd = cmd + " " + f;
+    }
+
+    cmd = cmd + " " + service;
+    if (command != "") {
+        cmd = cmd + " " + command;
+    }
+
+    return exec(cmd);
+}
+
+/// Runs a one-off command in a new container for a compose service.
+/// The container is created fresh and optionally removed after exit (rm=true).
+/// Environment variables are passed as a dict and expanded to -e KEY=VALUE flags.
+/// @param service String name of the compose service to run the command against
+/// @param command String command to run (uses service default entrypoint if empty)
+/// @param opts Dict with: detach (bool), rm (bool), user (string), workdir (string),
+///   env (dict of KEY=VALUE environment variable overrides), no_deps (bool),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn run(service, command = "", opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+
+    // Extract env dict — expanded manually as -e KEY=VALUE flags
+    let env_dict = clean.env;
+    if (!(env_dict is null)) {
+        let without_env = dict.new();
+        for (let k, v in clean) {
+            if (k != "env") {
+                dict.set(without_env, k, v);
+            }
+        }
+        clean = without_env;
+    }
+
+    let cmd = compose_cmd("run", project, clean, "");
+
+    let env_flags = cli_flags.map_flags({ env: env_dict }, env_spec);
+    for (let f in env_flags) {
+        cmd = cmd + " " + f;
+    }
+
+    cmd = cmd + " " + service;
+    if (command != "") {
+        cmd = cmd + " " + command;
+    }
+
+    return exec(cmd);
+}
+
+/// Restarts one or more running compose service containers.
+/// Uses the timeout option to control how long to wait before forcibly killing.
+/// @param opts Dict with: timeout (int, seconds to wait before killing),
+///   service (string|array), file (string|array), project_name (string),
+///   project_directory (string), env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn restart(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("restart", project, clean, services));
+}
+
+/// Stops running compose service containers without removing them.
+/// Containers can later be restarted with start(). Uses timeout to control kill grace period.
+/// @param opts Dict with: timeout (int, seconds to wait before killing),
+///   service (string|array), file (string|array), project_name (string),
+///   project_directory (string), env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn stop(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("stop", project, clean, services));
+}
+
+/// Starts existing stopped compose service containers.
+/// Does not create new containers; use up() to create and start in one step.
+/// @param opts Dict with: service (string|array), file (string|array),
+///   project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn start(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("start", project, clean, services));
+}
+
+/// Pulls service images from their registries without starting containers.
+/// Useful for pre-fetching images before deployment or updating to newer tags.
+/// @param opts Dict with: quiet (bool), ignore_pull_failures (bool), include_deps (bool),
+///   service (string|array), file (string|array), project_name (string),
+///   project_directory (string), env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn pull(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("pull", project, clean, services));
+}
+
+/// Pushes built service images to their configured registries.
+/// Requires images to have been built beforehand via build_services().
+/// @param opts Dict with: ignore_push_failures (bool), service (string|array),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn push(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("push", project, clean, services));
+}
+
+/// Sends a signal to running compose service containers.
+/// Defaults to SIGKILL if no signal is specified. Use signal="SIGTERM" for graceful stops.
+/// @param opts Dict with: signal (string, e.g. "SIGTERM", "SIGKILL", "SIGHUP"),
+///   service (string|array), file (string|array), project_name (string),
+///   project_directory (string), env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn kill(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("kill", project, clean, services));
+}
+
+/// Removes stopped compose service containers.
+/// Defaults to force=true to bypass interactive confirmation prompts.
+/// Use stop=true to stop running containers before removal.
+/// @param opts Dict with: force (bool, default true), stop (bool),
+///   volumes (bool, remove anonymous volumes), service (string|array),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn rm(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    if (clean.force is null) {
+        dict.set(clean, "force", true);
+    }
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("rm", project, clean, services));
+}
+
+/// Validates and displays the resolved compose configuration after variable substitution.
+/// Useful for debugging compose files and verifying that all variables are correctly expanded.
+/// @param opts Dict with: quiet (bool), services (bool), volumes (bool), images (bool),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn config(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    return exec(compose_cmd("config", project, clean, ""));
+}
+
+/// Displays the running processes of compose service containers (like `ps aux` per container).
+/// Output format mirrors the `top` command showing PID, user, CPU, and command columns.
+/// @param opts Dict with: service (string|array), file (string|array),
+///   project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn top(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("top", project, clean, services));
+}
+
+/// Lists the images used by compose service containers.
+/// Shows image name, tag, image ID, and size for each service.
+/// @param opts Dict with: quiet (bool, print only image IDs), service (string|array),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn images(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("images", project, clean, services));
+}
+
+/// Prints the public-facing host port bound to a service container's private port.
+/// Useful for discovering dynamically assigned ports when using port ranges or no explicit mapping.
+/// @param service String name of the compose service
+/// @param private_port Int or string private container port number to resolve
+/// @param opts Dict with: protocol (string, "tcp" or "udp", default "tcp"),
+///   index (int, container index for scaled services, default 1),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn port(service, private_port, opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = compose_cmd("port", project, clean, "");
+    cmd = cmd + " " + service + " " + conv.toStr(private_port);
+    return exec(cmd);
+}
+
+/// Pauses all processes in running compose service containers.
+/// Containers remain in memory but all execution is suspended. Use unpause() to resume.
+/// @param opts Dict with: service (string|array), file (string|array),
+///   project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn pause(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("pause", project, clean, services));
+}
+
+/// Resumes paused compose service containers.
+/// Restores normal execution of all processes that were suspended by pause().
+/// @param opts Dict with: service (string|array), file (string|array),
+///   project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn unpause(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("unpause", project, clean, services));
+}
+
+/// Creates service containers without starting them.
+/// Useful for pre-creating containers before starting in a controlled sequence.
+/// @param opts Dict with: build (bool, build images before creating), force_recreate (bool),
+///   no_recreate (bool), service (string|array), file (string|array),
+///   project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn create(opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let services = "";
+    if (!(opts.service is null)) {
+        services = opts.service;
+    }
+    return exec(compose_cmd("create", project, clean, services));
+}
+
+/// Copies files or directories between a compose service container and the host filesystem.
+/// Use SERVICE:PATH notation for container-side paths (e.g. "web:/app/config.json").
+/// @param src String source path; prefix with SERVICE: for container source
+/// @param dst String destination path; prefix with SERVICE: for container destination
+/// @param opts Dict with: archive (bool, preserve uid/gid/permissions), follow_link (bool),
+///   file (string|array), project_name (string), project_directory (string),
+///   env_file (string), profile (string|array)
+/// @return exec result dict {ok, stdout, stderr, exitCode}
+fn cp(src, dst, opts = {}) {
+    let project = extract_project_opts(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = compose_cmd("cp", project, clean, "");
+    cmd = cmd + " " + src + " " + dst;
+    return exec(cmd);
+}

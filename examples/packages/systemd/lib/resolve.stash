@@ -1,0 +1,81 @@
+import { exec, exec_json } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let query_spec = {
+    type: { flag: "--type" },
+    protocol: { flag: "--protocol" }
+};
+
+/// Resolves a hostname or address using systemd-resolved.
+/// @param hostname The hostname or IP address to resolve
+/// @param opts Options: type (string, e.g. "A", "AAAA", "MX", "SRV") to query a specific record type
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn query(hostname, opts = {}) {
+    let base = cli_flags.build_args("resolvectl query", opts, query_spec);
+    return exec(base + " " + hostname);
+}
+
+/// Shows the DNS resolver status for an interface or all interfaces.
+/// @param iface Interface name (optional; shows all interfaces if null)
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn status(iface = null) {
+    if (iface is null) {
+        return exec("resolvectl status --no-pager");
+    }
+    return exec($"resolvectl status {iface} --no-pager");
+}
+
+/// Shows DNS cache statistics including hits, misses, and cache size.
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn statistics() {
+    return exec("resolvectl statistics");
+}
+
+/// Resets DNS cache statistics counters to zero.
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn reset_statistics() {
+    return exec("resolvectl reset-statistics");
+}
+
+/// Flushes all local DNS caches maintained by systemd-resolved.
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn flush_caches() {
+    return exec("resolvectl flush-caches");
+}
+
+/// Sets the DNS servers to use for a specific network interface.
+/// @param iface Interface name
+/// @param servers DNS server address(es) — a single string or an array of strings
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn dns(iface, servers) {
+    let server_str = "";
+    if (servers is array) {
+        server_str = arr.join(servers, " ");
+    } else {
+        server_str = conv.toStr(servers);
+    }
+    let cmd = $"resolvectl dns {iface} {server_str}";
+    return exec(cmd);
+}
+
+/// Sets the DNS search domains for a specific network interface.
+/// @param iface Interface name
+/// @param domains Search domain(s) — a single string or an array of strings
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn domain(iface, domains) {
+    let domain_str = "";
+    if (domains is array) {
+        domain_str = arr.join(domains, " ");
+    } else {
+        domain_str = conv.toStr(domains);
+    }
+    let cmd = $"resolvectl domain {iface} {domain_str}";
+    return exec(cmd);
+}
+
+/// Reverts all per-interface DNS settings to their defaults for the given interface.
+/// @param iface Interface name
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn revert(iface) {
+    return exec($"resolvectl revert {iface}");
+}

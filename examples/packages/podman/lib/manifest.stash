@@ -1,0 +1,139 @@
+import { exec, exec_json } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let add_spec = {
+    arch: { flag: "--arch" },
+    os: { flag: "--os" },
+    os_version: { flag: "--os-version" },
+    variant: { flag: "--variant" },
+    all: { flag: "--all", type: "bool" }
+};
+
+let push_spec = {
+    all: { flag: "--all", type: "bool" },
+    purge: { flag: "--purge", type: "bool" }
+};
+
+let annotate_spec = {
+    arch: { flag: "--arch" },
+    os: { flag: "--os" },
+    os_version: { flag: "--os-version" },
+    variant: { flag: "--variant" }
+};
+
+/// Creates a new manifest list.
+/// @param name Manifest list name (e.g. "localhost/myimage:latest")
+/// @param images Optional array of image references to add initially
+/// @return Result dict
+fn create(name, images = []) {
+    let parts = ["manifest create", name];
+    for (let img in images) {
+        arr.push(parts, img);
+    }
+    return exec(arr.join(parts, " "));
+}
+
+/// Adds an image to a manifest list.
+/// @param list Manifest list name
+/// @param image Image reference to add
+/// @param opts Options: arch (string), os (string), os_version (string), variant (string),
+///   all (bool — add all images from a list), tls_verify (bool)
+/// @return Result dict
+fn add(list, image, opts = {}) {
+    let clean = dict.new();
+    for (let k, v in opts) {
+        if (k != "tls_verify") {
+            dict.set(clean, k, v);
+        }
+    }
+    let flags = cli_flags.map_flags(clean, add_spec);
+    let parts = ["manifest add"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    if (dict.has(opts, "tls_verify") && !opts.tls_verify) {
+        arr.push(parts, "--tls-verify=false");
+    }
+    arr.push(parts, list);
+    arr.push(parts, image);
+    return exec(arr.join(parts, " "));
+}
+
+/// Removes an image from a manifest list.
+/// @param list Manifest list name
+/// @param digest Image digest to remove
+/// @return Result dict
+fn remove(list, digest) {
+    return exec($"manifest remove {list} {digest}");
+}
+
+/// Inspects a manifest list and returns parsed JSON.
+/// @param list Manifest list name
+/// @return Result dict with parsed JSON data
+fn inspect(list) {
+    return exec_json($"manifest inspect {list}");
+}
+
+/// Pushes a manifest list to a registry.
+/// @param list Manifest list name
+/// @param destination Optional destination reference
+/// @param opts Options: all (bool), tls_verify (bool), purge (bool — remove local list after push)
+/// @return Result dict
+fn push(list, destination = "", opts = {}) {
+    let clean = dict.new();
+    for (let k, v in opts) {
+        if (k != "tls_verify") {
+            dict.set(clean, k, v);
+        }
+    }
+    let flags = cli_flags.map_flags(clean, push_spec);
+    let parts = ["manifest push"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    if (dict.has(opts, "tls_verify") && !opts.tls_verify) {
+        arr.push(parts, "--tls-verify=false");
+    }
+    arr.push(parts, list);
+    if (destination != "") {
+        arr.push(parts, destination);
+    }
+    return exec(arr.join(parts, " "));
+}
+
+/// Removes a manifest list from local storage.
+/// @param list Manifest list name (string) or array of names
+/// @return Result dict
+fn rm(list) {
+    let names = "";
+    if (list is array) {
+        names = arr.join(list, " ");
+    } else {
+        names = list;
+    }
+    return exec($"manifest rm {names}");
+}
+
+/// Annotates an image within a manifest list with platform info.
+/// @param list Manifest list name
+/// @param image Image reference within the list
+/// @param opts Options: arch (string), os (string), os_version (string), variant (string)
+/// @return Result dict
+fn annotate(list, image, opts = {}) {
+    let flags = cli_flags.map_flags(opts, annotate_spec);
+    let parts = ["manifest annotate"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    arr.push(parts, list);
+    arr.push(parts, image);
+    return exec(arr.join(parts, " "));
+}
+
+/// Checks if a manifest list exists locally.
+/// @param list Manifest list name
+/// @return true if exists, false otherwise
+fn exists(list) {
+    let result = exec($"manifest exists {list}");
+    return result.ok;
+}

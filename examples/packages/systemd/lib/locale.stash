@@ -1,0 +1,74 @@
+import { exec } from "common.stash";
+
+/// Returns the current locale and keyboard configuration from localectl.
+/// Runs `localectl status --no-pager` and returns the raw text output.
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn status() {
+    return exec("localectl status --no-pager");
+}
+
+/// Sets the system locale environment variable(s).
+/// Runs `localectl set-locale <locale>`.
+/// @param locale Locale assignment string, e.g. "LANG=en_US.UTF-8"
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_locale(locale) {
+    let cmd = $"localectl set-locale {locale}";
+    return exec(cmd);
+}
+
+/// Lists all available locales on the system.
+/// Runs `localectl list-locales --no-pager` and parses output into an array.
+/// @return Dict with ok (bool), data (array of locale strings), stderr, exitCode
+fn list_locales() {
+    let result = exec("localectl list-locales --no-pager");
+    if (!result.ok) {
+        return result;
+    }
+    let lines = str.split(str.trim(result.stdout), "\n");
+    let locales = [];
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (trimmed != "") {
+            arr.push(locales, trimmed);
+        }
+    }
+    return {
+        ok: true,
+        data: locales,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Sets the console keyboard keymap.
+/// Runs `localectl set-keymap <keymap>`.
+/// @param keymap Keymap name string, e.g. "us", "de", "fr"
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_keymap(keymap) {
+    let cmd = $"localectl set-keymap {keymap}";
+    return exec(cmd);
+}
+
+/// Lists all available console keymaps on the system.
+/// Runs `localectl list-keymaps --no-pager` and parses output into an array.
+/// @return Dict with ok (bool), data (array of keymap strings), stderr, exitCode
+fn list_keymaps() {
+    let result = exec("localectl list-keymaps --no-pager");
+    if (!result.ok) {
+        return result;
+    }
+    let lines = str.split(str.trim(result.stdout), "\n");
+    let keymaps = [];
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (trimmed != "") {
+            arr.push(keymaps, trimmed);
+        }
+    }
+    return {
+        ok: true,
+        data: keymaps,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}

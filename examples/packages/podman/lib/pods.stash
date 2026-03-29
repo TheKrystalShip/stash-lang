@@ -1,0 +1,242 @@
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let create_spec = {
+    name: { flag: "--name" },
+    hostname: { flag: "--hostname" },
+    infra_image: { flag: "--infra-image" },
+    publish: { flag: "-p", type: "list" },
+    network: { flag: "--network", type: "list" },
+    label: { flag: "--label", type: "map" },
+    dns: { flag: "--dns", type: "list" },
+    dns_search: { flag: "--dns-search", type: "list" },
+    share: { flag: "--share" },
+    userns: { flag: "--userns" },
+    pid: { flag: "--pid" },
+    cpus: { flag: "--cpus" },
+    memory: { flag: "--memory" }
+};
+
+let stop_spec = {
+    time: { flag: "--time" }
+};
+
+let kill_spec = {
+    signal: { flag: "--signal" }
+};
+
+let rm_spec = {
+    force: { flag: "--force", type: "bool" }
+};
+
+let ls_spec = {
+    no_trunc: { flag: "--no-trunc", type: "bool" },
+    sort: { flag: "--sort" }
+};
+
+let stats_spec = {
+    no_stream: { flag: "--no-stream", type: "bool" }
+};
+
+let prune_spec = {
+    force: { flag: "--force", type: "bool" }
+};
+
+let clone_spec = {
+    name: { flag: "--name" }
+};
+
+/// Create a new Podman pod.
+/// Pods group one or more containers that share namespaces (network, IPC, UTS, etc.),
+/// similar to Kubernetes pods. An infra container is created by default to hold the
+/// shared namespaces.
+/// @param opts Options:
+///             name (string — assign a name to the pod),
+///             hostname (string — set the pod's hostname),
+///             infra (bool — create an infra container, default true; set false to disable),
+///             infra_image (string — custom image to use for the infra container),
+///             publish (array — port mappings to publish, e.g. ["8080:80", "443:443"]),
+///             network (string|array — network(s) to attach the pod to),
+///             label (dict — metadata labels as key/value pairs),
+///             dns (string|array — custom DNS server(s)),
+///             dns_search (string|array — DNS search domain(s)),
+///             share (string — comma-separated list of namespaces to share, e.g. "ipc,net,uts"),
+///             userns (string — user namespace mode, e.g. "keep-id"),
+///             pid (string — PID namespace to use),
+///             cpus (string — number of CPUs to allocate),
+///             memory (string — memory limit, e.g. "512m")
+/// @return Result dict with ok, stdout (pod ID), stderr, exitCode
+fn create(opts = {}) {
+    let parts = ["pod create"];
+    if (dict.has(opts, "infra") && !opts.infra) {
+        arr.push(parts, "--infra=false");
+    }
+    let clean = dict.new();
+    for (let k, v in opts) {
+        if (k != "infra") {
+            dict.set(clean, k, v);
+        }
+    }
+    let flags = cli_flags.map_flags(clean, create_spec);
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    return exec(arr.join(parts, " "));
+}
+
+/// Start an existing pod and all of its containers.
+/// @param pod The name or ID of the pod to start
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn start(pod) {
+    return exec($"pod start {pod}");
+}
+
+/// Stop a running pod and all of its containers.
+/// @param pod The name or ID of the pod to stop
+/// @param opts Options:
+///             time (int — seconds to wait for containers to stop before killing them)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn stop(pod, opts = {}) {
+    return exec(cli_flags.build_args($"pod stop {pod}", opts, stop_spec));
+}
+
+/// Restart a pod and all of its containers.
+/// Stops all containers in the pod, then starts them again.
+/// @param pod The name or ID of the pod to restart
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn restart(pod) {
+    return exec($"pod restart {pod}");
+}
+
+/// Pause all running containers in a pod.
+/// Sends SIGSTOP to all processes in each container.
+/// @param pod The name or ID of the pod to pause
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn pause(pod) {
+    return exec($"pod pause {pod}");
+}
+
+/// Unpause all paused containers in a pod.
+/// Resumes processes that were previously paused with SIGSTOP.
+/// @param pod The name or ID of the pod to unpause
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn unpause(pod) {
+    return exec($"pod unpause {pod}");
+}
+
+/// Send a signal to all containers in a pod.
+/// Defaults to SIGKILL if no signal is specified.
+/// @param pod The name or ID of the pod
+/// @param opts Options:
+///             signal (string — signal to send, e.g. "SIGTERM", "SIGHUP"; defaults to SIGKILL)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn kill(pod, opts = {}) {
+    return exec(cli_flags.build_args($"pod kill {pod}", opts, kill_spec));
+}
+
+/// Remove one or more pods.
+/// By default, pods must be stopped before removal. Use force to remove running pods.
+/// @param pod The name or ID of the pod to remove, or an array of names/IDs
+/// @param opts Options:
+///             force (bool — force removal of a running pod and its containers)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn rm(pod, opts = {}) {
+    let names = "";
+    if (pod is array) {
+        names = arr.join(pod, " ");
+    } else {
+        names = pod;
+    }
+    return exec(cli_flags.build_args($"pod rm {names}", opts, rm_spec));
+}
+
+/// List pods, returning structured JSON data.
+/// @param opts Options:
+///             filter (dict — filter pods by criteria, e.g. {status: "running", name: "web"}),
+///             no_trunc (bool — do not truncate output),
+///             sort (string — sort field, e.g. "created", "id", "name", "status")
+/// @return Result dict with ok, data (array of pod objects), stderr, exitCode
+fn ls(opts = {}) {
+    let clean = dict.new();
+    for (let k, v in opts) {
+        if (k != "filter") {
+            dict.set(clean, k, v);
+        }
+    }
+    let cmd = cli_flags.build_args("pod ls", clean, ls_spec);
+    if (dict.has(opts, "filter") && !(opts.filter is null)) {
+        for (let k, v in opts.filter) {
+            cmd = cmd + $" --filter {k}={conv.toStr(v)}";
+        }
+    }
+    cmd = cmd + " --format '{{json .}}'";
+    return exec_json_lines(cmd);
+}
+
+/// Inspect a pod and return detailed configuration and state as structured JSON.
+/// @param pod The name or ID of the pod to inspect
+/// @return Result dict with ok, data (pod inspect object), stderr, exitCode
+fn inspect(pod) {
+    return exec_json($"pod inspect {pod}");
+}
+
+/// Display the running processes of containers inside a pod.
+/// Outputs a table of process information similar to `ps`.
+/// @param pod The name or ID of the pod
+/// @return Result dict with ok, stdout (process table), stderr, exitCode
+fn top(pod) {
+    return exec($"pod top {pod}");
+}
+
+/// Display live resource usage statistics for containers in one or more pods.
+/// By default, returns a single snapshot (no_stream=true) rather than a live stream.
+/// @param pods A single pod name/ID (string), a list of pod names/IDs (array),
+///             or null to show stats for all pods
+/// @param opts Options:
+///             no_stream (bool — disable streaming and return one snapshot, default true)
+/// @return Result dict with ok, data (array of stats objects), stderr, exitCode
+fn stats(pods = null, opts = {}) {
+    let effective = cli_flags.with_defaults({ no_stream: true }, opts);
+    let flags = cli_flags.map_flags(effective, stats_spec);
+    let parts = ["pod stats"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    arr.push(parts, "--format '{{json .}}'");
+    if (!(pods is null)) {
+        if (pods is array) {
+            arr.push(parts, arr.join(pods, " "));
+        } else {
+            arr.push(parts, pods);
+        }
+    }
+    return exec_json_lines(arr.join(parts, " "));
+}
+
+/// Remove all stopped pods.
+/// Use force to also remove running pods.
+/// @param opts Options:
+///             force (bool — force removal of running pods and their containers, default true)
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn prune(opts = {}) {
+    let effective = cli_flags.with_defaults({ force: true }, opts);
+    return exec(cli_flags.build_args("pod prune", effective, prune_spec));
+}
+
+/// Check whether a pod exists by name or ID.
+/// Does not print output; uses the exit code to determine existence.
+/// @param pod The name or ID of the pod to check
+/// @return true if the pod exists, false otherwise
+fn exists(pod) {
+    let result = exec($"pod exists {pod}");
+    return result.ok;
+}
+
+/// Clone an existing pod, creating a new pod with the same configuration.
+/// @param pod The name or ID of the source pod to clone
+/// @param opts Options:
+///             name (string — assign a name to the new cloned pod)
+/// @return Result dict with ok, stdout (new pod ID), stderr, exitCode
+fn clone(pod, opts = {}) {
+    return exec(cli_flags.build_args($"pod clone {pod}", opts, clone_spec));
+}

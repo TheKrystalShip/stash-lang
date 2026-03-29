@@ -1,0 +1,525 @@
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let up_spec = {
+    detach:         { flag: "-d", type: "bool" },
+    build:          { flag: "--build", type: "bool" },
+    force_recreate: { flag: "--force-recreate", type: "bool" },
+    no_deps:        { flag: "--no-deps", type: "bool" },
+    timeout:        { flag: "--timeout" },
+    wait:           { flag: "--wait", type: "bool" },
+    pull:           { flag: "--pull" },
+    remove_orphans: { flag: "--remove-orphans", type: "bool" }
+};
+
+let down_spec = {
+    volumes:        { flag: "--volumes", type: "bool" },
+    rmi:            { flag: "--rmi" },
+    timeout:        { flag: "--timeout" },
+    remove_orphans: { flag: "--remove-orphans", type: "bool" }
+};
+
+let build_services_spec = {
+    no_cache: { flag: "--no-cache", type: "bool" },
+    pull:     { flag: "--pull", type: "bool" },
+    quiet:    { flag: "--quiet", type: "bool" }
+};
+
+let ps_spec = {
+    all:      { flag: "--all", type: "bool" },
+    quiet:    { flag: "--quiet", type: "bool" },
+    services: { flag: "--services", type: "bool" },
+    filter:   { flag: "--filter", type: "map" }
+};
+
+let logs_spec = {
+    follow:     { flag: "--follow", type: "bool" },
+    tail:       { flag: "--tail" },
+    timestamps: { flag: "--timestamps", type: "bool" },
+    no_color:   { flag: "--no-color", type: "bool" },
+    since:      { flag: "--since" },
+    until:      { flag: "--until" }
+};
+
+let exec_service_spec = {
+    detach:  { flag: "--detach", type: "bool" },
+    user:    { flag: "--user" },
+    workdir: { flag: "--workdir" },
+    env:     { flag: "-e", type: "map" }
+};
+
+let run_service_spec = {
+    detach:  { flag: "--detach", type: "bool" },
+    rm:      { flag: "--rm", type: "bool" },
+    user:    { flag: "--user" },
+    workdir: { flag: "--workdir" },
+    env:     { flag: "-e", type: "map" },
+    no_deps: { flag: "--no-deps", type: "bool" }
+};
+
+let restart_spec = {
+    timeout: { flag: "--timeout" }
+};
+
+let stop_spec = {
+    timeout: { flag: "--timeout" }
+};
+
+let pull_services_spec = {
+    quiet:                { flag: "--quiet", type: "bool" },
+    ignore_pull_failures: { flag: "--ignore-pull-failures", type: "bool" },
+    include_deps:         { flag: "--include-deps", type: "bool" }
+};
+
+let config_spec = {
+    quiet:    { flag: "--quiet", type: "bool" },
+    services: { flag: "--services", type: "bool" },
+    volumes:  { flag: "--volumes", type: "bool" },
+    images:   { flag: "--images", type: "bool" }
+};
+
+let compose_create_spec = {
+    build:          { flag: "--build", type: "bool" },
+    force_recreate: { flag: "--force-recreate", type: "bool" },
+    no_recreate:    { flag: "--no-recreate", type: "bool" }
+};
+
+let rm_services_spec = {
+    force:   { flag: "--force", type: "bool" },
+    stop:    { flag: "--stop", type: "bool" },
+    volumes: { flag: "--volumes", type: "bool" }
+};
+
+let kill_spec = {
+    signal: { flag: "--signal" }
+};
+
+let images_spec = {
+    quiet: { flag: "--quiet", type: "bool" }
+};
+
+let port_spec = {
+    protocol: { flag: "--protocol" },
+    index:    { flag: "--index" }
+};
+
+/// Builds the `compose [-f FILE...] [-p PROJECT]` prefix string from opts.
+/// Extracts file and project_name from the opts dict and returns a string
+/// starting with "compose" followed by any -f and -p flags.
+/// @param opts Options dict that may contain file (string or array) and project_name (string)
+/// @return String like "compose -f docker-compose.yml -p myproject"
+fn build_compose_prefix(opts) {
+    let parts = ["compose"];
+    if (dict.has(opts, "file")) {
+        let f = opts.file;
+        if (f is array) {
+            for (let file in f) {
+                arr.push(parts, $"-f {file}");
+            }
+        } else {
+            arr.push(parts, $"-f {f}");
+        }
+    }
+    if (dict.has(opts, "project_name") && !(opts.project_name is null)) {
+        arr.push(parts, $"-p {opts.project_name}");
+    }
+    return arr.join(parts, " ");
+}
+
+/// Returns a copy of opts with file, project_name, and service keys removed.
+/// Use this to prepare opts for passing to build_args() -- those keys are
+/// handled separately by build_compose_prefix() and append_services().
+/// @param opts The original options dict
+/// @return New dict without file, project_name, or service keys
+fn clean_compose_opts(opts) {
+    let clean = dict.new();
+    for (let k, v in opts) {
+        if (k != "file" && k != "project_name" && k != "service") {
+            dict.set(clean, k, v);
+        }
+    }
+    return clean;
+}
+
+/// Appends service name(s) from opts.service to the end of a command string.
+/// If opts.service is an array, all services are joined with spaces.
+/// If opts.service is a string, it is appended directly.
+/// If opts.service is absent or null, cmd is returned unchanged.
+/// @param cmd The command string built so far
+/// @param opts Options dict that may contain a service key
+/// @return Updated command string
+fn append_services(cmd, opts) {
+    if (dict.has(opts, "service")) {
+        let svc = opts.service;
+        if (svc is array) {
+            cmd = cmd + " " + arr.join(svc, " ");
+        } else {
+            cmd = cmd + " " + svc;
+        }
+    }
+    return cmd;
+}
+
+/// Start services defined in the compose file.
+/// Defaults to detached mode (-d). Pass detach: false to run in the foreground.
+/// The scale option accepts a dict mapping service names to replica counts.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to bring up
+///   detach (bool, default true) -- run in background
+///   build (bool) -- build images before starting
+///   force_recreate (bool) -- recreate containers even if config/image unchanged
+///   no_deps (bool) -- don't start linked services
+///   scale (dict) -- e.g. {web: 3} to scale services
+///   timeout (int) -- shutdown timeout in seconds
+///   wait (bool) -- wait until containers are healthy
+///   pull (string) -- image pull policy: "always", "missing", or "never"
+///   remove_orphans (bool) -- remove containers for services not in compose file
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn up(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    if (!dict.has(clean, "detach")) {
+        dict.set(clean, "detach", true);
+    }
+
+    let scale_dict = null;
+    if (dict.has(clean, "scale")) {
+        scale_dict = clean.scale;
+        dict.delete(clean, "scale");
+    }
+
+    let cmd = cli_flags.build_args($"{prefix} up", clean, up_spec);
+
+    if (!(scale_dict is null)) {
+        let scale_keys = dict.keys(scale_dict);
+        for (let k in scale_keys) {
+            cmd = cmd + $" --scale {k}={scale_dict[k]}";
+        }
+    }
+
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Stop and remove containers, networks, and optionally volumes created by `up`.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   volumes (bool) -- remove named volumes declared in compose file and anonymous volumes
+///   rmi (string) -- remove images: "all" or "local"
+///   timeout (int) -- shutdown timeout in seconds
+///   remove_orphans (bool) -- remove containers for services not defined in compose file
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn down(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    return exec(cli_flags.build_args($"{prefix} down", clean, down_spec));
+}
+
+/// Build or rebuild service images defined in the compose file.
+/// Named build_services to avoid collision with images.build in other modules.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to build
+///   no_cache (bool) -- do not use cache when building
+///   pull (bool) -- always attempt to pull a newer version of the image
+///   quiet (bool) -- don't print anything to stdout
+///   build_arg (dict) -- build-time variables e.g. {VERSION: "1.0"}
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn build_services(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+
+    let build_arg_dict = null;
+    if (dict.has(clean, "build_arg")) {
+        build_arg_dict = clean.build_arg;
+        dict.delete(clean, "build_arg");
+    }
+
+    let cmd = cli_flags.build_args($"{prefix} build", clean, build_services_spec);
+
+    if (!(build_arg_dict is null)) {
+        let arg_keys = dict.keys(build_arg_dict);
+        for (let k in arg_keys) {
+            cmd = cmd + $" --build-arg {k}={build_arg_dict[k]}";
+        }
+    }
+
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// List containers for the compose project.
+/// Returns JSON lines (array of container objects) unless quiet is true.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   all (bool) -- show all stopped containers (default shows just running)
+///   quiet (bool) -- only display container IDs
+///   services (bool) -- display service names
+///   filter (dict) -- filter services by a property e.g. {status: "running"}
+/// @return If quiet is false: result dict with ok, data (array), stderr, exitCode.
+///         If quiet is true: result dict with ok, stdout, stderr, exitCode.
+fn ps(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let quiet = dict.has(opts, "quiet") && opts.quiet;
+    let clean = clean_compose_opts(opts);
+
+    if (quiet) {
+        return exec(cli_flags.build_args($"{prefix} ps", clean, ps_spec));
+    }
+
+    let cmd = cli_flags.build_args($"{prefix} ps", clean, ps_spec);
+    cmd = cmd + " --format '{{json .}}'";
+    return exec_json_lines(cmd);
+}
+
+/// Fetch log output from service containers.
+/// Pass follow: true to stream logs (note: this will block until interrupted).
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to fetch logs for
+///   follow (bool) -- follow log output
+///   tail (string|int) -- number of lines to show from end of logs
+///   timestamps (bool) -- show timestamps
+///   no_color (bool) -- produce monochrome output
+///   since (string) -- show logs since timestamp or relative duration (e.g. "5m")
+///   until (string) -- show logs before timestamp or relative duration
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn logs(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} logs", clean, logs_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Execute a command in a running service container.
+/// Named exec_service to avoid collision with the exec() helper function.
+/// @param service The service name to execute the command in
+/// @param command The command to run inside the container (string)
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   detach (bool) -- run command in the background
+///   user (string) -- run as this user
+///   workdir (string) -- working directory inside the container
+///   env (dict) -- set environment variables e.g. {DEBUG: "1"}
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn exec_service(service, command, opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} exec", clean, exec_service_spec);
+    cmd = cmd + $" {service} {command}";
+    return exec(cmd);
+}
+
+/// Run a one-off command in a new container for a service.
+/// Named run_service to avoid collision with reserved keywords.
+/// @param service The service name to run the command against
+/// @param command The command to run (string, default "")
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   detach (bool) -- run container in the background
+///   rm (bool) -- remove container after run
+///   user (string) -- run as this user
+///   workdir (string) -- working directory inside the container
+///   env (dict) -- set environment variables e.g. {KEY: "val"}
+///   no_deps (bool) -- don't start linked services
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn run_service(service, command = "", opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} run", clean, run_service_spec);
+    cmd = cmd + $" {service}";
+    if (!(command is null) && command != "") {
+        cmd = cmd + $" {command}";
+    }
+    return exec(cmd);
+}
+
+/// Restart one or more running services.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to restart
+///   timeout (int) -- seconds to wait before killing containers
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn restart(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} restart", clean, restart_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Stop running service containers without removing them.
+/// Stopped containers can be restarted with start().
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to stop
+///   timeout (int) -- seconds to wait before killing containers
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn stop(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} stop", clean, stop_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Start existing stopped service containers.
+/// Does not create containers -- use up() to create and start.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to start
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn start(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} start", clean, {});
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Pull service images from their respective registries.
+/// Named pull_services to avoid collision with other pull functions in the package.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to pull
+///   quiet (bool) -- pull without printing progress information
+///   ignore_pull_failures (bool) -- pull what it can and ignore images with pull failures
+///   include_deps (bool) -- also pull services declared as dependencies
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn pull_services(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} pull", clean, pull_services_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Validate and view the resolved compose configuration.
+/// Useful for debugging compose files and checking variable substitution.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   quiet (bool) -- only validate, don't print the config
+///   services (bool) -- print service names one per line
+///   volumes (bool) -- print volume names one per line
+///   images (bool) -- print image names one per line
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn config(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    return exec(cli_flags.build_args($"{prefix} config", clean, config_spec));
+}
+
+/// Create containers for services without starting them.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to create
+///   build (bool) -- build images before creating containers
+///   force_recreate (bool) -- recreate containers even if config/image unchanged
+///   no_recreate (bool) -- don't recreate if container already exists
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn create(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} create", clean, compose_create_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Remove stopped service containers.
+/// Named rm_services to avoid collision with other rm functions in the package.
+/// Defaults to force: true to skip confirmation prompt.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to remove
+///   force (bool, default true) -- don't ask to confirm removal
+///   stop (bool) -- stop the containers if required before removing
+///   volumes (bool) -- remove any anonymous volumes attached to containers
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn rm_services(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    if (!dict.has(clean, "force")) {
+        dict.set(clean, "force", true);
+    }
+    let cmd = cli_flags.build_args($"{prefix} rm", clean, rm_services_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Send a signal to service containers.
+/// Useful for sending SIGHUP to reload configs without restarting.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to signal
+///   signal (string) -- signal to send (default SIGKILL), e.g. "SIGTERM", "SIGHUP"
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn kill(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} kill", clean, kill_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Display the running processes inside service containers.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to inspect
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn top(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} top", clean, {});
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// List images used by the created containers in the project.
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   service (string|array) -- specific services to list images for
+///   quiet (bool) -- only display image IDs
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn images(opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} images", clean, images_spec);
+    cmd = append_services(cmd, opts);
+    return exec(cmd);
+}
+
+/// Print the public port for a port binding of a service container.
+/// @param service The service name to query
+/// @param private_port The private (container) port number or port/protocol e.g. "80" or "80/tcp"
+/// @param opts Options dict. Supported keys:
+///   file (string|array) -- one or more -f compose files
+///   project_name (string) -- -p project name
+///   protocol (string) -- tcp or udp (default tcp)
+///   index (int) -- index of the container if service has multiple replicas (default 1)
+/// @return Result dict with ok (bool), stdout (the host:port binding), stderr, exitCode
+fn port(service, private_port, opts = {}) {
+    let prefix = build_compose_prefix(opts);
+    let clean = clean_compose_opts(opts);
+    let cmd = cli_flags.build_args($"{prefix} port", clean, port_spec);
+    cmd = cmd + $" {service} {private_port}";
+    return exec(cmd);
+}

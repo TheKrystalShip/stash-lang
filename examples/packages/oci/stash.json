@@ -1,0 +1,24 @@
+{
+  "name": "@stash/oci",
+  "version": "1.0.0",
+  "description": "Shared OCI container runtime operations for Stash — provides common container, image, volume, network, registry, and system operations used by @stash/docker, @stash/podman, and other OCI-compatible tools",
+  "author": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "index.stash",
+  "repository": "https://github.com/TheKrystalShip/stash-lang",
+  "keywords": [
+    "oci",
+    "containers",
+    "images",
+    "volumes",
+    "networks",
+    "devops",
+    "cli"
+  ],
+  "stash": ">=1.0.0",
+  "files": ["lib/", "index.stash", "README.md", "LICENSE"],
+  "private": false,
+  "dependencies": {
+    "@stash/cli": "^1.0.0"
+  }
+}

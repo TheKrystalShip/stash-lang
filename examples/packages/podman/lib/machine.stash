@@ -1,0 +1,230 @@
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let init_spec = {
+    cpus: { flag: "--cpus" },
+    memory: { flag: "--memory" },
+    disk_size: { flag: "--disk-size" },
+    image: { flag: "--image" },
+    rootful: { flag: "--rootful", type: "bool" },
+    now: { flag: "--now", type: "bool" },
+    volume: { flag: "--volume", type: "list" },
+    username: { flag: "--username" }
+};
+
+let rm_spec = {
+    force: { flag: "--force", type: "bool" }
+};
+
+let ls_spec = {
+    quiet: { flag: "--quiet", type: "bool" },
+    no_heading: { flag: "--no-heading", type: "bool" }
+};
+
+let set_spec = {
+    cpus: { flag: "--cpus" },
+    memory: { flag: "--memory" },
+    disk_size: { flag: "--disk-size" },
+    rootful: { flag: "--rootful", type: "bool" }
+};
+
+let os_apply_spec = {
+    restart: { flag: "--restart", type: "bool" }
+};
+
+/// Initialize a new Podman machine (lightweight VM for running containers on macOS/Windows).
+///
+/// Creates and optionally starts a new Podman machine with the given configuration.
+///
+/// Parameters:
+///   opts (dict) — Optional configuration:
+///     - cpus (int)        : Number of virtual CPUs to allocate to the machine.
+///     - memory (int)      : Amount of RAM in MB to allocate to the machine.
+///     - disk_size (int)   : Size of the VM disk in GB.
+///     - image (string)    : Custom VM image to use instead of the default.
+///     - rootful (bool)    : If true, start the machine in rootful mode (containers run as root).
+///     - now (bool)        : If true, start the machine immediately after initialization.
+///     - volume (string|array) : Host-to-VM mount path(s) in "host:vm" format.
+///     - username (string) : Username for the SSH connection inside the VM.
+///     - name (string)     : Name for the new machine. Uses default if not provided.
+///
+/// Returns:
+///   string — Output from the podman machine init command.
+fn init(opts = {}) {
+    let clean = dict.new();
+    for (let k, v in opts) {
+        if (k != "name") {
+            dict.set(clean, k, v);
+        }
+    }
+    let flags = cli_flags.map_flags(clean, init_spec);
+    let parts = ["machine init"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    if (dict.has(opts, "name") && !(opts.name is null)) {
+        arr.push(parts, opts.name);
+    }
+    return exec(arr.join(parts, " "));
+}
+
+/// Start a Podman machine.
+///
+/// Starts the specified Podman machine VM. If no name is provided, starts the
+/// default machine (typically named "podman-machine-default").
+///
+/// Parameters:
+///   name (string) — Name of the machine to start. Defaults to "" (start default machine).
+///
+/// Returns:
+///   string — Output from the podman machine start command.
+fn start(name = "") {
+    if (name != "") {
+        return exec($"machine start {name}");
+    }
+    return exec("machine start");
+}
+
+/// Stop a running Podman machine.
+///
+/// Gracefully shuts down the specified Podman machine VM. If no name is provided,
+/// stops the default machine.
+///
+/// Parameters:
+///   name (string) — Name of the machine to stop. Defaults to "" (stop default machine).
+///
+/// Returns:
+///   string — Output from the podman machine stop command.
+fn stop(name = "") {
+    if (name != "") {
+        return exec($"machine stop {name}");
+    }
+    return exec("machine stop");
+}
+
+/// Remove a Podman machine.
+///
+/// Permanently deletes a Podman machine and its associated disk image. The machine
+/// must be stopped before removal unless the force option is used.
+///
+/// Parameters:
+///   name (string)  — Name of the machine to remove. Required.
+///   opts (dict)    — Optional flags:
+///     - force (bool) : If true, remove the machine even if it is currently running.
+///
+/// Returns:
+///   string — Output from the podman machine rm command.
+fn rm(name, opts = {}) {
+    return exec(cli_flags.build_args($"machine rm {name}", opts, rm_spec));
+}
+
+/// List all Podman machines.
+///
+/// Returns a list of all configured Podman machines and their current status,
+/// parsed from JSON output.
+///
+/// Parameters:
+///   opts (dict) — Optional flags:
+///     - quiet (bool)      : If true, only print machine names.
+///     - no_heading (bool) : If true, omit the column heading row.
+///
+/// Returns:
+///   array — Array of machine info dicts parsed from JSON lines output.
+fn ls(opts = {}) {
+    let cmd = cli_flags.build_args("machine ls", opts, ls_spec);
+    cmd = cmd + " --format '{{json .}}'";
+    return exec_json_lines(cmd);
+}
+
+/// Inspect a Podman machine.
+///
+/// Returns detailed configuration and runtime information about a Podman machine
+/// in JSON format.
+///
+/// Parameters:
+///   name (string) — Name of the machine to inspect. Defaults to "" (inspect default machine).
+///
+/// Returns:
+///   dict — Parsed JSON object containing full machine details.
+fn inspect(name = "") {
+    if (name != "") {
+        return exec_json($"machine inspect {name}");
+    }
+    return exec_json("machine inspect");
+}
+
+/// SSH into a Podman machine or run a command inside it.
+///
+/// Opens an interactive SSH session to the specified machine, or executes a
+/// single command inside the VM and returns its output.
+///
+/// Parameters:
+///   name (string)    — Name of the machine to SSH into. Defaults to "" (use default machine).
+///   command (string) — Shell command to run inside the VM. Defaults to "" (interactive session).
+///
+/// Returns:
+///   string — Output of the SSH session or command execution.
+fn ssh(name = "", command = "") {
+    let parts = ["machine ssh"];
+    if (name != "") {
+        arr.push(parts, name);
+    }
+    if (command != "") {
+        arr.push(parts, command);
+    }
+    return exec(arr.join(parts, " "));
+}
+
+/// Configure a Podman machine's resource settings.
+///
+/// Updates the CPU, memory, disk, or privilege configuration of an existing machine.
+///
+/// Parameters:
+///   name (string) — Name of the machine to configure. Required.
+///   opts (dict)   — Configuration options:
+///     - cpus (int)      : New number of virtual CPUs to allocate.
+///     - memory (int)    : New amount of RAM in MB.
+///     - disk_size (int) : New disk size in GB (can only be increased, not decreased).
+///     - rootful (bool)  : If true, switch the machine to rootful mode.
+///
+/// Returns:
+///   string — Output from the podman machine set command.
+fn set(name, opts = {}) {
+    return exec(cli_flags.build_args($"machine set {name}", opts, set_spec));
+}
+
+/// Reset all Podman machines.
+///
+/// Forcefully removes all Podman machines, their disk images, and associated
+/// configuration. This is a destructive operation that cannot be undone.
+///
+/// Returns:
+///   string — Output from the podman machine reset command.
+fn reset() {
+    return exec("machine reset --force");
+}
+
+/// Get Podman machine host information.
+///
+/// Returns metadata about the host environment that Podman machines run on.
+///
+/// Returns:
+///   dict — Parsed JSON object with host and machine provider details.
+fn info() {
+    return exec_json("machine info --format '{{json .}}'");
+}
+
+/// Apply OS updates to a Podman machine.
+///
+/// Applies the latest OS-level updates to the specified machine's disk image.
+///
+/// Parameters:
+///   name (string) — Name of the machine to update. Required.
+///   opts (dict)   — Optional flags:
+///     - restart (bool) : If true, restart the machine after applying the OS update.
+///
+/// Returns:
+///   string — Output from the podman machine os apply command.
+fn os_apply(name, opts = {}) {
+    return exec(cli_flags.build_args($"machine os apply {name}", opts, os_apply_spec));
+}

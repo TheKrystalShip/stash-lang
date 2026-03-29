@@ -1,0 +1,25 @@
+{
+  "name": "@stash/docker",
+  "version": "1.0.0",
+  "description": "Comprehensive Docker CLI wrapper for Stash - manage containers, images, volumes, networks, compose, and more",
+  "author": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "index.stash",
+  "repository": "https://github.com/TheKrystalShip/stash-lang",
+  "keywords": [
+    "docker",
+    "containers",
+    "devops",
+    "orchestration",
+    "compose",
+    "images",
+    "cli"
+  ],
+  "stash": ">=1.0.0",
+  "files": ["lib/", "index.stash", "README.md", "LICENSE"],
+  "private": false,
+  "dependencies": {
+    "@stash/cli": "^1.0.0",
+    "@stash/oci": "^1.0.0"
+  }
+}

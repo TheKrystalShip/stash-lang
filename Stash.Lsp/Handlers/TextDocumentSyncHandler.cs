@@ -151,7 +151,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         }
 
         var result = _analysis.Analyze(uri, text);
-        var diagnostics = BuildDiagnostics(result);
+        var diagnostics = DiagnosticBuilder.Build(result);
 
         _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
         {
@@ -177,7 +177,7 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
 
                 _analysis.InvalidateModule(depUri.IsFile ? depUri.LocalPath : depUri.ToString());
                 var depResult = _analysis.Analyze(depUri, depText);
-                var depDiagnostics = BuildDiagnostics(depResult);
+                var depDiagnostics = DiagnosticBuilder.Build(depResult);
 
                 _server.TextDocument.PublishDiagnostics(new PublishDiagnosticsParams
                 {
@@ -191,52 +191,4 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
         _server.Workspace.SendSemanticTokensRefresh(new SemanticTokensRefreshParams());
     }
 
-    private static System.Collections.Generic.List<Diagnostic> BuildDiagnostics(AnalysisResult result)
-    {
-        var diagnostics = new System.Collections.Generic.List<Diagnostic>();
-
-        foreach (var error in result.StructuredLexErrors)
-        {
-            diagnostics.Add(new Diagnostic
-            {
-                Range = error.Span.ToLspRange(),
-                Severity = DiagnosticSeverity.Error,
-                Source = "stash",
-                Message = error.Message
-            });
-        }
-
-        foreach (var error in result.StructuredParseErrors)
-        {
-            diagnostics.Add(new Diagnostic
-            {
-                Range = error.Span.ToLspRange(),
-                Severity = DiagnosticSeverity.Error,
-                Source = "stash",
-                Message = error.Message
-            });
-        }
-
-        foreach (var semantic in result.SemanticDiagnostics)
-        {
-            diagnostics.Add(new Diagnostic
-            {
-                Range = semantic.Span.ToLspRange(),
-                Severity = semantic.Level switch
-                {
-                    Stash.Analysis.DiagnosticLevel.Error => DiagnosticSeverity.Error,
-                    Stash.Analysis.DiagnosticLevel.Warning => DiagnosticSeverity.Warning,
-                    Stash.Analysis.DiagnosticLevel.Information => DiagnosticSeverity.Information,
-                    _ => DiagnosticSeverity.Warning
-                },
-                Source = "stash",
-                Message = semantic.Message,
-                Tags = semantic.IsUnnecessary
-                    ? new Container<DiagnosticTag>(DiagnosticTag.Unnecessary)
-                    : null
-            });
-        }
-
-        return diagnostics;
-    }
 }

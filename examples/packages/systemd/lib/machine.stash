@@ -1,0 +1,147 @@
+import { exec, exec_json, build_args, parse_properties, parse_table } from "common.stash";
+
+/// Lists all running machines (containers and VMs) managed by systemd-machined.
+/// Runs `machinectl list --no-pager --no-legend` and parses the column output.
+/// @return Dict with ok (bool), data (array of machine row dicts), stderr, exitCode
+fn list() {
+    let result = exec("machinectl list --no-pager --no-legend");
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Shows the status of a machine in human-readable form.
+/// Runs `machinectl status <name> --no-pager` and returns the raw text output.
+/// @param name Machine name
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn status(name) {
+    return exec($"machinectl status {name} --no-pager");
+}
+
+/// Shows machine properties as a parsed dict.
+/// Runs `machinectl show <name> --no-pager` and parses KEY=VALUE output.
+/// @param name Machine name
+/// @return Dict with ok (bool), data (dict of properties), stderr, exitCode
+fn show(name) {
+    let cmd = $"machinectl show {name} --no-pager";
+    let result = exec(cmd);
+    if (!result.ok) {
+        return result;
+    }
+    let props = parse_properties(result.stdout);
+    return {
+        ok: true,
+        data: props,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Starts a container image as a machine.
+/// Runs `machinectl start <name>`.
+/// @param name Machine name to start
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn start(name) {
+    return exec($"machinectl start {name}");
+}
+
+/// Stops a running machine.
+/// Runs `machinectl stop <name>`.
+/// @param name Machine name to stop
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn stop(name) {
+    return exec($"machinectl stop {name}");
+}
+
+/// Opens an interactive login session to a running machine.
+/// Note: this is an interactive operation; the result reflects whether the command was invoked.
+/// Runs `machinectl login <name>`.
+/// @param name Machine name to log into
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn login(name) {
+    return exec($"machinectl login {name}");
+}
+
+/// Opens a shell inside a running machine, optionally running a command non-interactively.
+/// Runs `machinectl shell <name>` or `machinectl shell <name> <cmd_str>` if cmd_str is given.
+/// @param name Machine name
+/// @param cmd_str Optional command string to execute non-interactively
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn shell(name, cmd_str = null) {
+    if (cmd_str is null) {
+        return exec($"machinectl shell {name}");
+    }
+    return exec($"machinectl shell {name} {cmd_str}");
+}
+
+/// Enables a machine to start automatically at boot.
+/// Runs `machinectl enable <name>`.
+/// @param name Machine name to enable
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn enable(name) {
+    return exec($"machinectl enable {name}");
+}
+
+/// Disables a machine from starting automatically at boot.
+/// Runs `machinectl disable <name>`.
+/// @param name Machine name to disable
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn disable(name) {
+    return exec($"machinectl disable {name}");
+}
+
+/// Removes a machine image from the local store.
+/// Runs `machinectl remove <name>`.
+/// @param name Machine image name to remove
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn remove(name) {
+    return exec($"machinectl remove {name}");
+}
+
+/// Lists all available machine images in the local image store.
+/// Runs `machinectl list-images --no-pager --no-legend` and parses the column output.
+/// @return Dict with ok (bool), data (array of image row dicts), stderr, exitCode
+fn image_list() {
+    let result = exec("machinectl list-images --no-pager --no-legend");
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Downloads a tar container image from a URL into the local image store.
+/// Runs `machinectl pull-tar <url> [name]`.
+/// @param url URL of the tar image to download
+/// @param name Optional local name to store the image under
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn pull_tar(url, name = null) {
+    if (name is null) {
+        return exec($"machinectl pull-tar {url}");
+    }
+    return exec($"machinectl pull-tar {url} {name}");
+}
+
+/// Downloads a raw disk image from a URL into the local image store.
+/// Runs `machinectl pull-raw <url> [name]`.
+/// @param url URL of the raw image to download
+/// @param name Optional local name to store the image under
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn pull_raw(url, name = null) {
+    if (name is null) {
+        return exec($"machinectl pull-raw {url}");
+    }
+    return exec($"machinectl pull-raw {url} {name}");
+}

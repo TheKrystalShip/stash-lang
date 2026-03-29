@@ -9,6 +9,10 @@ obj/
 packages/
 *.nupkg
 
+# But not the example stash packages
+!examples/packages
+examples/packages/**/stashes/
+
 # Visual Studio
 .vs/
 *.user

@@ -1,0 +1,192 @@
+/// @stash/cli — Command execution helpers.
+///
+/// Generic tool-agnostic functions for running CLI commands and parsing output.
+/// Replaces the per-package exec/exec_json/exec_json_lines boilerplate.
+
+/// Runs a CLI command and returns a structured result.
+///
+/// @param tool The CLI tool name (e.g. "docker", "kubectl", "systemctl")
+/// @param args The arguments string to pass to the tool
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn exec(tool, args = "") {
+    let cmd = tool;
+    if (args != "") {
+        cmd = tool + " " + args;
+    }
+    let result = $({cmd});
+    return {
+        ok: result.exitCode == 0,
+        stdout: result.stdout,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Runs a CLI command and parses stdout as a single JSON value.
+///
+/// @param tool The CLI tool name
+/// @param args The arguments string
+/// @return Dict with ok (bool), data (parsed JSON or null), stderr, exitCode
+fn exec_json(tool, args = "") {
+    let r = exec(tool, args);
+    if (!r.ok) {
+        return {
+            ok: false,
+            data: null,
+            stderr: r.stderr,
+            exitCode: r.exitCode
+        };
+    }
+    let trimmed = str.trim(r.stdout);
+    if (trimmed == "") {
+        return {
+            ok: true,
+            data: null,
+            stderr: r.stderr,
+            exitCode: r.exitCode
+        };
+    }
+    let data = try json.parse(trimmed);
+    if (data is Error) {
+        return {
+            ok: false,
+            data: null,
+            stderr: r.stderr,
+            exitCode: r.exitCode
+        };
+    }
+    return {
+        ok: true,
+        data: data,
+        stderr: r.stderr,
+        exitCode: r.exitCode
+    };
+}
+
+/// Runs a CLI command where each line of stdout is a separate JSON object (NDJSON).
+///
+/// Empty lines and lines that fail to parse are silently skipped.
+///
+/// @param tool The CLI tool name
+/// @param args The arguments string
+/// @return Dict with ok (bool), data (array of parsed objects), stderr, exitCode
+fn exec_json_lines(tool, args = "") {
+    let r = exec(tool, args);
+    if (!r.ok) {
+        return {
+            ok: false,
+            data: null,
+            stderr: r.stderr,
+            exitCode: r.exitCode
+        };
+    }
+    let lines = str.split(str.trim(r.stdout), "\n");
+    let data = [];
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (trimmed == "") {
+            continue;
+        }
+        let parsed = try json.parse(trimmed);
+        if (!(parsed is Error)) {
+            arr.push(data, parsed);
+        }
+    }
+    return {
+        ok: true,
+        data: data,
+        stderr: r.stderr,
+        exitCode: r.exitCode
+    };
+}
+
+/// Runs a CLI command and splits stdout into an array of trimmed non-empty lines.
+///
+/// @param tool The CLI tool name
+/// @param args The arguments string
+/// @return Dict with ok (bool), lines (array of strings), stderr, exitCode
+fn exec_lines(tool, args = "") {
+    let r = exec(tool, args);
+    if (!r.ok) {
+        return {
+            ok: false,
+            lines: [],
+            stderr: r.stderr,
+            exitCode: r.exitCode
+        };
+    }
+    let raw_lines = str.split(str.trim(r.stdout), "\n");
+    let result = [];
+    for (let line in raw_lines) {
+        let trimmed = str.trim(line);
+        if (trimmed != "") {
+            arr.push(result, trimmed);
+        }
+    }
+    return {
+        ok: true,
+        lines: result,
+        stderr: r.stderr,
+        exitCode: r.exitCode
+    };
+}
+
+/// Runs a CLI command and parses column-formatted output (header + data rows).
+///
+/// The first line is treated as column headers (lowercased).
+/// Subsequent lines are split by whitespace into values.
+///
+/// @param tool The CLI tool name
+/// @param args The arguments string
+/// @return Dict with ok (bool), rows (array of dicts), stderr, exitCode
+fn exec_table(tool, args = "") {
+    let r = exec(tool, args);
+    if (!r.ok) {
+        return {
+            ok: false,
+            rows: [],
+            stderr: r.stderr,
+            exitCode: r.exitCode
+        };
+    }
+    let lines = str.split(str.trim(r.stdout), "\n");
+    if (len(lines) == 0) {
+        return {
+            ok: true,
+            rows: [],
+            stderr: r.stderr,
+            exitCode: r.exitCode
+        };
+    }
+    let header_line = lines[0];
+    let headers = str.words(header_line);
+    headers = arr.map(headers, (h) => str.lower(h));
+    let rows = [];
+    let idx = 1;
+    while (idx < len(lines)) {
+        let line = lines[idx];
+        if (str.trim(line) == "") {
+            idx = idx + 1;
+            continue;
+        }
+        let cells = str.words(line);
+        let row = dict.new();
+        let col = 0;
+        while (col < len(headers)) {
+            if (col < len(cells)) {
+                dict.set(row, headers[col], cells[col]);
+            } else {
+                dict.set(row, headers[col], "");
+            }
+            col = col + 1;
+        }
+        arr.push(rows, row);
+        idx = idx + 1;
+    }
+    return {
+        ok: true,
+        rows: rows,
+        stderr: r.stderr,
+        exitCode: r.exitCode
+    };
+}

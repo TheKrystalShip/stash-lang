@@ -1,0 +1,110 @@
+/// @stash/oci — Shared volume operations for OCI-compatible runtimes.
+/// Provides a create_module(helpers) factory that returns volume management functions
+/// bound to a specific tool's exec helpers.
+
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let create_spec = {
+    driver: { flag: "--driver" },
+    label:  { flag: "--label", type: "map" },
+    opt:    { flag: "--opt", type: "map" }
+};
+
+let rm_spec = {
+    force: { flag: "--force", type: "bool" }
+};
+
+let ls_spec = {
+    quiet:  { flag: "--quiet", type: "bool" },
+    filter: { flag: "--filter", type: "map" }
+};
+
+let prune_spec = {
+    force:  { flag: "--force", type: "bool" },
+    filter: { flag: "--filter", type: "map" }
+};
+
+/// Creates volume operations bound to the given tool helpers.
+/// @param helpers Dict with exec, exec_json, exec_json_lines functions
+/// @return Dict of volume operation functions
+fn create_module(helpers) {
+    let _exec = helpers.exec;
+    let _exec_json = helpers.exec_json;
+    let _exec_json_lines = helpers.exec_json_lines;
+
+    /// Creates a volume.
+    /// @param name Volume name (optional, auto-generated if null)
+    /// @param opts Options: driver (string), label (dict), opt (dict)
+    fn _create(name = null, opts = {}) {
+        let flags = cli_flags.map_flags(opts, create_spec);
+        let parts = ["volume create"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        if (!(name is null)) {
+            arr.push(parts, name);
+        }
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Removes one or more volumes.
+    /// @param volume Volume name (string) or array of names
+    /// @param opts Options: force (bool)
+    fn _rm(volume, opts = {}) {
+        let names = "";
+        if (volume is array) {
+            names = arr.join(volume, " ");
+        } else {
+            names = volume;
+        }
+        return _exec(cli_flags.build_args($"volume rm {names}", opts, rm_spec));
+    }
+
+    /// Lists volumes as structured JSON.
+    /// @param opts Options: filter (dict), quiet (bool)
+    fn _ls(opts = {}) {
+        let quiet = dict.has(opts, "quiet") && opts.quiet;
+        let cmd = cli_flags.build_args("volume ls", opts, ls_spec);
+        if (quiet) {
+            return _exec(cmd);
+        }
+        cmd = cmd + " --format '{{json .}}'";
+        return _exec_json_lines(cmd);
+    }
+
+    /// Returns detailed information about a volume as parsed JSON.
+    /// @param volume Volume name (string) or array of names
+    fn _inspect(volume) {
+        let names = "";
+        if (volume is array) {
+            names = arr.join(volume, " ");
+        } else {
+            names = volume;
+        }
+        return _exec_json($"volume inspect {names}");
+    }
+
+    /// Removes all unused volumes. Defaults force to true.
+    /// @param opts Options: force (bool, default true), filter (dict)
+    fn _prune(opts = {}) {
+        let effective = cli_flags.with_defaults({ force: true }, opts);
+        return _exec(cli_flags.build_args("volume prune", effective, prune_spec));
+    }
+
+    /// Checks if a volume exists (Podman-only — not available in Docker).
+    /// @param name Volume name
+    /// @return true if the volume exists, false otherwise
+    fn _exists(name) {
+        let result = _exec($"volume exists {name}");
+        return result.ok;
+    }
+
+    return {
+        create: _create,
+        rm: _rm,
+        ls: _ls,
+        inspect: _inspect,
+        prune: _prune,
+        exists: _exists
+    };
+}

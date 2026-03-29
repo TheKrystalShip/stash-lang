@@ -1,0 +1,87 @@
+import { exec, exec_json, parse_table } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let list_spec = {
+    all: { flag: "--all", type: "bool" }
+};
+
+/// Lists network interfaces managed by systemd-networkd.
+/// @param opts Options: all (bool) to show all interfaces including unmanaged ones
+/// @return Result dict with ok (bool), data (array of parsed rows), stderr, exitCode
+fn list(opts = {}) {
+    let result = exec(cli_flags.build_args("networkctl list --no-pager --no-legend", opts, list_spec));
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Shows the status of a network interface or all interfaces.
+/// @param iface Interface name (optional; shows all interfaces if null)
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn status(iface = null) {
+    if (iface is null) {
+        return exec("networkctl status --no-pager");
+    }
+    return exec($"networkctl status {iface} --no-pager");
+}
+
+/// Brings a network interface up (activates it).
+/// @param iface Interface name
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn up(iface) {
+    return exec($"networkctl up {iface}");
+}
+
+/// Brings a network interface down (deactivates it).
+/// @param iface Interface name
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn down(iface) {
+    return exec($"networkctl down {iface}");
+}
+
+/// Reloads network configuration files from disk.
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn reload() {
+    return exec("networkctl reload");
+}
+
+/// Reconfigures a network interface, re-applying its configuration.
+/// @param iface Interface name
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn reconfigure(iface) {
+    return exec($"networkctl reconfigure {iface}");
+}
+
+/// Shows LLDP (Link Layer Discovery Protocol) neighbor information.
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn lldp() {
+    return exec("networkctl lldp --no-pager");
+}
+
+/// Deletes a virtual network interface.
+/// @param iface Interface name
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn delete(iface) {
+    return exec($"networkctl delete {iface}");
+}
+
+/// Renews dynamic configuration (e.g. DHCP lease) for an interface.
+/// @param iface Interface name
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn renew(iface) {
+    return exec($"networkctl renew {iface}");
+}
+
+/// Forces the DHCP server to renew addresses assigned to an interface.
+/// @param iface Interface name
+/// @return Result dict with ok (bool), stdout, stderr, exitCode
+fn forcerenew(iface) {
+    return exec($"networkctl forcerenew {iface}");
+}

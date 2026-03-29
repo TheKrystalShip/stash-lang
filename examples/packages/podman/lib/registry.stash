@@ -1,0 +1,19 @@
+/// @stash/podman — Registry operations.
+/// Delegates to @stash/oci for shared OCI registry operations.
+
+import { exec, exec_json_lines } from "common.stash";
+import "@stash/oci/lib/registry.stash" as oci_registry;
+
+let _m = oci_registry.create_module({
+    exec: exec,
+    exec_json_lines: exec_json_lines
+});
+
+/// Log in to a container registry.
+let login = _m.login;
+
+/// Log out from a container registry.
+let logout = _m.logout;
+
+/// Search registries for images matching a term.
+let search = _m.search;

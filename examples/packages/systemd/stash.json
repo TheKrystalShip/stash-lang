@@ -1,0 +1,25 @@
+{
+  "name": "@stash/systemd",
+  "version": "1.0.0",
+  "description": "Comprehensive systemd CLI wrapper for Stash - manage services, journals, timers, network, sessions, hostname, locale, and more via systemctl, journalctl, and friends",
+  "author": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "index.stash",
+  "repository": "https://github.com/TheKrystalShip/stash-lang",
+  "keywords": [
+    "systemd",
+    "systemctl",
+    "journalctl",
+    "linux",
+    "services",
+    "sysadmin",
+    "init",
+    "logging"
+  ],
+  "stash": ">=1.0.0",
+  "files": ["lib/", "index.stash", "README.md", "LICENSE"],
+  "private": false,
+  "dependencies": {
+    "@stash/cli": "^1.0.0"
+  }
+}

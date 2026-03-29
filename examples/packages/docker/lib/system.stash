@@ -1,0 +1,32 @@
+/// @stash/docker — System operations.
+/// Delegates to @stash/oci for shared OCI system operations.
+
+import { exec, exec_json, check_docker } from "common.stash";
+import "@stash/oci/lib/system.stash" as oci_system;
+
+let _m = oci_system.create_module({
+    exec: exec,
+    exec_json: exec_json,
+    check_tool: check_docker
+});
+
+/// Returns Docker system-wide information as parsed JSON.
+let info = _m.info;
+
+/// Returns Docker version information as parsed JSON.
+let version = _m.version;
+
+/// Shows Docker disk usage as parsed JSON.
+let df = _m.df;
+
+/// Checks if the Docker daemon is responsive.
+let ping = _m.ping;
+
+/// Streams or retrieves Docker events.
+let events = _m.events;
+
+/// Removes all unused Docker data.
+let prune = _m.prune;
+
+/// Checks whether Docker is available on the system.
+let available = _m.available;

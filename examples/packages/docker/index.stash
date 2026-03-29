@@ -1,0 +1,18 @@
+/// @stash/docker — A comprehensive Docker CLI wrapper for Stash.
+///
+/// Import the whole package:
+///   import "@stash/docker" as docker;
+///   docker.containers.ls();
+///
+/// Or import individual modules:
+///   import "lib/containers.stash" as containers;
+///   import "lib/images.stash" as images;
+
+import "lib/containers.stash" as containers;
+import "lib/images.stash" as images;
+import "lib/volumes.stash" as volumes;
+import "lib/networks.stash" as networks;
+import "lib/compose.stash" as compose;
+import "lib/system.stash" as system;
+import "lib/registry.stash" as registry;
+import "lib/context.stash" as context;

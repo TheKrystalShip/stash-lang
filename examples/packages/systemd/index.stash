@@ -1,0 +1,22 @@
+/// @stash/systemd — A comprehensive systemd CLI wrapper for Stash.
+///
+/// Import the whole package:
+///   import "@stash/systemd" as systemd;
+///   systemd.services.status("nginx.service");
+///
+/// Or import individual modules:
+///   import "lib/services.stash" as services;
+///   import "lib/journal.stash" as journal;
+
+import "lib/services.stash" as services;
+import "lib/journal.stash" as journal;
+import "lib/analyze.stash" as analyze;
+import "lib/time.stash" as time;
+import "lib/hostname.stash" as hostname;
+import "lib/locale.stash" as locale;
+import "lib/network.stash" as network;
+import "lib/resolve.stash" as resolve;
+import "lib/sessions.stash" as sessions;
+import "lib/machine.stash" as machine;
+import "lib/run.stash" as run;
+import "lib/coredump.stash" as coredump;

@@ -1,0 +1,72 @@
+/// @stash/oci — Shared registry operations for OCI-compatible runtimes.
+/// Provides a create_module(helpers) factory that returns registry management functions
+/// bound to a specific tool's exec helpers.
+
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let login_spec = {
+    username:       { flag: "--username" },
+    password:       { flag: "--password" },
+    password_stdin: { flag: "--password-stdin", type: "bool" },
+    tls_verify:     { flag: "--tls-verify", type: "bool" }
+};
+
+let search_spec = {
+    limit:     { flag: "--limit" },
+    no_trunc:  { flag: "--no-trunc", type: "bool" },
+    list_tags: { flag: "--list-tags", type: "bool" },
+    filter:    { flag: "--filter", type: "map" }
+};
+
+/// Creates registry operations bound to the given tool helpers.
+/// @param helpers Dict with exec, exec_json_lines functions
+/// @return Dict of registry operation functions
+fn create_module(helpers) {
+    let _exec = helpers.exec;
+    let _exec_json_lines = helpers.exec_json_lines;
+
+    /// Log in to a container registry.
+    /// @param server Optional registry server address
+    /// @param opts Options: username (string), password (string),
+    ///   password_stdin (bool), tls_verify (bool)
+    fn _login(server = "", opts = {}) {
+        let flags = cli_flags.map_flags(opts, login_spec);
+        let parts = ["login"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        if (server != "") {
+            arr.push(parts, server);
+        }
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Log out from a container registry.
+    /// @param server Optional registry server address
+    fn _logout(server = "") {
+        if (server != "") {
+            return _exec("logout " + server);
+        }
+        return _exec("logout");
+    }
+
+    /// Search registries for images matching a term.
+    /// @param term Search term
+    /// @param opts Options: limit (int), filter (dict), no_trunc (bool), list_tags (bool)
+    fn _search(term, opts = {}) {
+        let flags = cli_flags.map_flags(opts, search_spec);
+        let parts = ["search"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        arr.push(parts, "--format '{{json .}}'");
+        arr.push(parts, term);
+        return _exec_json_lines(arr.join(parts, " "));
+    }
+
+    return {
+        login: _login,
+        logout: _logout,
+        search: _search
+    };
+}

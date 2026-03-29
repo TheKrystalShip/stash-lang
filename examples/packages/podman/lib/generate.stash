@@ -1,0 +1,262 @@
+import { exec, exec_json } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+/// Flag spec for generate kube options.
+let kube_spec = {
+    service:  { flag: "--service", type: "bool" },
+    filename: { flag: "--filename" },
+    type:     { flag: "--type" },
+    replicas: { flag: "--replicas" }
+};
+
+/// Flag spec for generate systemd options.
+let systemd_spec = {
+    name:             { flag: "--name" },
+    files:            { flag: "--files", type: "bool" },
+    restart_policy:   { flag: "--restart-policy" },
+    time:             { flag: "--time" },
+    new:              { flag: "--new", type: "bool" },
+    no_header:        { flag: "--no-header", type: "bool" },
+    container_prefix: { flag: "--container-prefix" },
+    pod_prefix:       { flag: "--pod-prefix" },
+    separator:        { flag: "--separator" }
+};
+
+/// Flag spec for play kube options.
+let play_kube_spec = {
+    network:    { flag: "--network", type: "list" },
+    quiet:      { flag: "--quiet", type: "bool" },
+    configmap:  { flag: "--configmap", type: "list" },
+    replace:    { flag: "--replace", type: "bool" },
+    publish:    { flag: "--publish", type: "list" },
+    userns:     { flag: "--userns" }
+};
+
+/// Generates Kubernetes YAML from a container, pod, or volume.
+///
+/// # Parameters
+/// - `resource`: The name or ID of the container, pod, or volume to generate YAML from.
+/// - `opts`: Optional configuration dictionary.
+///   - `service` (bool): If true, generates a Kubernetes Service object alongside the workload.
+///   - `filename` (string): Write the generated YAML to this file path instead of stdout.
+///   - `type` (string): The kind of Kubernetes workload to generate — "deployment" or "pod".
+///   - `replicas` (int): Number of replicas to set in the generated workload spec.
+///
+/// # Returns
+/// The generated Kubernetes YAML as a string, or writes it to `filename` if specified.
+///
+/// # Example
+/// ```stash
+/// let yaml = kube("my-container", { service: true, type: "deployment", replicas: 3 });
+/// ```
+fn kube(resource, opts = {}) {
+    let flags = cli_flags.map_flags(opts, kube_spec);
+    let parts = ["generate kube"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    arr.push(parts, resource);
+    return exec(arr.join(parts, " "));
+}
+
+/// Generates systemd unit files from a container or pod.
+///
+/// Produces a systemd service unit that manages the lifecycle of the given container or pod.
+/// By default the output is printed to stdout; use the `files` option to write unit files
+/// into the current working directory instead.
+///
+/// # Parameters
+/// - `resource`: The name or ID of the container or pod to generate units for.
+/// - `opts`: Optional configuration dictionary.
+///   - `name` (string): Override the unit name used in the generated file.
+///   - `files` (bool): If true, write the unit files to the current working directory.
+///   - `restart_policy` (string): Systemd restart policy — "always", "on-failure", or "no".
+///   - `time` (int): Timeout in seconds to wait when stopping the container before killing it.
+///   - `new` (bool): If true, the unit will create a brand-new container on each start.
+///   - `no_header` (bool): If true, omit the auto-generated comment header from the unit file.
+///   - `container_prefix` (string): Prefix to use for container unit names.
+///   - `pod_prefix` (string): Prefix to use for pod unit names.
+///   - `separator` (string): Separator character between prefix and name in unit filenames.
+///
+/// # Returns
+/// The generated systemd unit content as a string, or writes files if `files` is true.
+///
+/// # Example
+/// ```stash
+/// let unit = systemd("my-container", { restart_policy: "on-failure", time: 30, new: true });
+/// ```
+fn systemd(resource, opts = {}) {
+    let flags = cli_flags.map_flags(opts, systemd_spec);
+    let parts = ["generate systemd"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    arr.push(parts, resource);
+    return exec(arr.join(parts, " "));
+}
+
+/// Generates a JSON OCI runtime spec from an existing container.
+///
+/// Produces the container's full OCI spec as a parsed JSON object. Useful for inspecting
+/// the low-level configuration that Podman uses when running the container.
+///
+/// # Parameters
+/// - `resource`: The name or ID of the container to generate a spec for.
+///
+/// # Returns
+/// A parsed JSON dictionary representing the OCI runtime spec.
+///
+/// # Example
+/// ```stash
+/// let spec_json = spec("my-container");
+/// ```
+fn spec(resource, opts = {}) {
+    let spec_flag_spec = { filename: { flag: "--filename" } };
+    return exec_json(cli_flags.build_args($"generate spec {resource}", opts, spec_flag_spec));
+}
+
+/// Creates and starts containers and pods from a Kubernetes YAML file.
+///
+/// Reads the provided Kubernetes YAML manifest and instantiates the described workloads
+/// using the local Podman runtime. Supports Deployment, Pod, and Service manifests.
+///
+/// # Parameters
+/// - `yaml_path`: Path to the Kubernetes YAML file to play.
+/// - `opts`: Optional configuration dictionary.
+///   - `network` (string|array): Network(s) to attach the pods to. Accepts a single name
+///     or an array of names; each value results in a separate `--network` flag.
+///   - `quiet` (bool): If true, suppress informational output.
+///   - `start` (bool): If false, create the containers but do not start them (default: true).
+///   - `tls_verify` (bool): If false, disable TLS verification when pulling images.
+///   - `configmap` (string|array): Path(s) to Kubernetes ConfigMap YAML files to apply.
+///     Accepts a single path or an array of paths.
+///   - `replace` (bool): If true, tear down and recreate existing pods from this manifest.
+///   - `publish` (array): List of port mapping strings (e.g. "8080:80") to publish.
+///   - `userns` (string): User namespace mode to use (e.g. "keep-id", "host").
+///
+/// # Returns
+/// Output from the `podman play kube` command as a string.
+///
+/// # Example
+/// ```stash
+/// let result = play_kube("./deploy.yaml", {
+///     network: "my-net",
+///     configmap: ["./config.yaml", "./secrets.yaml"],
+///     replace: true
+/// });
+/// ```
+fn play_kube(yaml_path, opts = {}) {
+    // Strip start and tls_verify — they need inverted-bool handling outside map_flags
+    let clean = dict.new();
+    for (let k, v in opts) {
+        if (k != "start" && k != "tls_verify") {
+            dict.set(clean, k, v);
+        }
+    }
+    let flags = cli_flags.map_flags(clean, play_kube_spec);
+    let parts = ["play kube"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    // start=false needs explicit --start=false (not just absence of flag)
+    if (dict.has(opts, "start") && !opts.start) {
+        arr.push(parts, "--start=false");
+    }
+    // tls_verify=false needs explicit --tls-verify=false
+    if (dict.has(opts, "tls_verify") && !opts.tls_verify) {
+        arr.push(parts, "--tls-verify=false");
+    }
+    arr.push(parts, yaml_path);
+    return exec(arr.join(parts, " "));
+}
+
+/// Tears down pods and containers that were created from a Kubernetes YAML file.
+///
+/// Removes all pods and containers that were previously created by `play_kube` using the
+/// same YAML manifest. The YAML file is used to identify which resources to remove.
+///
+/// # Parameters
+/// - `yaml_path`: Path to the Kubernetes YAML file that was originally played.
+/// - `opts`: Optional configuration dictionary.
+///   - `force` (bool): If true, forcibly remove pods even if they are still running.
+///
+/// # Returns
+/// Output from the `podman play kube --down` command as a string.
+///
+/// # Example
+/// ```stash
+/// play_kube_down("./deploy.yaml", { force: true });
+/// ```
+fn play_kube_down(yaml_path, opts = {}) {
+    let play_down_spec = { force: { flag: "--force", type: "bool" } };
+    let flags = cli_flags.map_flags(opts, play_down_spec);
+    let parts = ["play kube --down"];
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    arr.push(parts, yaml_path);
+    return exec(arr.join(parts, " "));
+}
+
+/// Generates Quadlet unit files from container and pod definitions.
+///
+/// Quadlet is the modern replacement for `podman generate systemd`. It reads `.container`,
+/// `.pod`, `.volume`, and `.network` files from a directory and produces systemd unit files
+/// suitable for use with `systemd --user` or the system-level systemd.
+///
+/// # Parameters
+/// - `opts`: Optional configuration dictionary.
+///   - `dir` (string): Path to the directory containing Quadlet definition files. If omitted,
+///     Podman uses its default search paths (e.g. `~/.config/containers/systemd/`).
+///
+/// # Returns
+/// Output from the `podman generate quadlet` command as a string.
+///
+/// # Example
+/// ```stash
+/// quadlet({ dir: "/etc/containers/systemd" });
+/// ```
+fn quadlet(opts = {}) {
+    let quadlet_spec = { dir: { flag: "--dir" } };
+    return exec(cli_flags.build_args("generate quadlet", opts, quadlet_spec));
+}
+
+/// Convenience wrapper: generates Kubernetes YAML specifically from a named pod.
+///
+/// Delegates directly to `kube()` with the same options. Use this when you want to make
+/// it explicit in your code that the resource being exported is a pod.
+///
+/// # Parameters
+/// - `pod`: The name or ID of the pod to generate Kubernetes YAML from.
+/// - `opts`: Optional configuration dictionary — see `kube()` for all supported options.
+///
+/// # Returns
+/// The generated Kubernetes YAML as a string, or writes it to `filename` if specified.
+///
+/// # Example
+/// ```stash
+/// let yaml = kube_from_pod("my-pod", { service: true, type: "deployment" });
+/// ```
+fn kube_from_pod(pod, opts = {}) {
+    return kube(pod, opts);
+}
+
+/// Convenience wrapper: generates a systemd unit specifically from a named container.
+///
+/// Delegates directly to `systemd()` with the same options. Use this when you want to make
+/// it explicit in your code that the resource being exported is a container (not a pod).
+///
+/// # Parameters
+/// - `container`: The name or ID of the container to generate a systemd unit for.
+/// - `opts`: Optional configuration dictionary — see `systemd()` for all supported options.
+///
+/// # Returns
+/// The generated systemd unit content as a string, or writes files if `files` is true.
+///
+/// # Example
+/// ```stash
+/// systemd_from_container("my-container", { restart_policy: "always", new: true });
+/// ```
+fn systemd_from_container(container, opts = {}) {
+    return systemd(container, opts);
+}

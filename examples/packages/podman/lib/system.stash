@@ -1,0 +1,63 @@
+/// @stash/podman — System operations.
+/// Delegates to @stash/oci for shared OCI system operations,
+/// with Podman-specific additions (reset, migrate, renumber, connection_list).
+
+import { exec, exec_json, check_podman } from "common.stash";
+import "@stash/oci/lib/system.stash" as oci_system;
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let _m = oci_system.create_module({
+    exec: exec,
+    exec_json: exec_json,
+    check_tool: check_podman
+});
+
+/// Returns Podman system-wide information as parsed JSON.
+let info = _m.info;
+
+/// Returns Podman version information as parsed JSON.
+let version = _m.version;
+
+/// Shows Podman disk usage as parsed JSON.
+let df = _m.df;
+
+/// Checks if the Podman service is responsive.
+let ping = _m.ping;
+
+/// Retrieves Podman events.
+let events = _m.events;
+
+/// Removes all unused Podman data.
+let prune = _m.prune;
+
+/// Checks whether Podman is available on the system.
+let available = _m.available;
+
+// --- Podman-specific operations ---
+
+let reset_spec = {
+    force: { flag: "--force", type: "bool" }
+};
+
+/// Resets Podman storage, removing all pods, containers, images, and volumes.
+/// WARNING: This is destructive and cannot be undone.
+/// @param opts Options: force (bool, default true)
+fn reset(opts = {}) {
+    let effective = cli_flags.with_defaults({ force: true }, opts);
+    return exec(cli_flags.build_args("system reset", effective, reset_spec));
+}
+
+/// Migrates existing containers to the latest version of Podman.
+fn migrate() {
+    return exec("system migrate");
+}
+
+/// Renumbers container lock IDs.
+fn renumber() {
+    return exec("system renumber");
+}
+
+/// Displays Podman connection information for the current user.
+fn connection_list() {
+    return exec_json("system connection list --format '{{json .}}'");
+}

@@ -1,0 +1,39 @@
+/// @stash/podman — Shared helpers for podman CLI commands.
+/// Delegates to @stash/oci for tool-bound execution helpers.
+
+import "@stash/oci/lib/common.stash" as oci_common;
+import "@stash/cli/lib/flags.stash" as cli_flags;
+import "@stash/cli/lib/parse.stash" as cli_parse;
+
+let _helpers = oci_common.create_helpers("podman");
+
+/// Runs a podman command and returns a result dict with {ok, stdout, stderr, exitCode}.
+fn exec(cmd_args) {
+    return _helpers.exec(cmd_args);
+}
+
+/// Runs a podman command and parses stdout as JSON.
+fn exec_json(cmd_args) {
+    return _helpers.exec_json(cmd_args);
+}
+
+/// Runs a podman command where each line of stdout is a separate JSON object.
+fn exec_json_lines(cmd_args) {
+    return _helpers.exec_json_lines(cmd_args);
+}
+
+/// Builds a full podman command string from a base command and an options dict.
+fn build_args(base, opts, spec = {}) {
+    return cli_flags.build_args(base, opts, spec);
+}
+
+/// Checks if podman is available on the system.
+fn check_podman() {
+    return _helpers.check_tool();
+}
+
+/// Parses Podman's column-formatted output.
+fn parse_columns(stdout) {
+    return _helpers.parse_columns(stdout);
+}
+

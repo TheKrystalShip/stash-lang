@@ -1,0 +1,380 @@
+/// @stash/oci — Shared container operations for OCI-compatible runtimes.
+/// Provides a create_module(helpers) factory that returns container management functions
+/// bound to a specific tool's exec helpers.
+
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+/// Flag spec for run/create operations (union of Docker and Podman flags).
+let run_create_spec = {
+    name:         { flag: "--name" },
+    detach:       { flag: "-d", type: "bool" },
+    rm:           { flag: "--rm", type: "bool" },
+    interactive:  { flag: "-i", type: "bool" },
+    tty:          { flag: "-t", type: "bool" },
+    network:      { flag: "--network" },
+    restart:      { flag: "--restart" },
+    workdir:      { flag: "--workdir" },
+    user:         { flag: "--user" },
+    hostname:     { flag: "--hostname" },
+    entrypoint:   { flag: "--entrypoint" },
+    memory:       { flag: "--memory" },
+    cpus:         { flag: "--cpus" },
+    platform:     { flag: "--platform" },
+    pull:         { flag: "--pull" },
+    pid:          { flag: "--pid" },
+    privileged:   { flag: "--privileged", type: "bool" },
+    read_only:    { flag: "--read-only", type: "bool" },
+    pod:          { flag: "--pod" },
+    userns:       { flag: "--userns" },
+    security_opt: { flag: "--security-opt", type: "list" },
+    cap_add:      { flag: "--cap-add", type: "list" },
+    cap_drop:     { flag: "--cap-drop", type: "list" },
+    env:          { flag: "-e", type: "map" },
+    ports:        { flag: "-p", type: "list" },
+    volumes:      { flag: "-v", type: "list" },
+    labels:       { flag: "--label", type: "map" }
+};
+
+let start_spec = {
+    attach:      { flag: "--attach", type: "bool" },
+    interactive: { flag: "-i", type: "bool" }
+};
+
+let stop_spec = {
+    time: { flag: "--time" }
+};
+
+let restart_spec = {
+    time: { flag: "--time" }
+};
+
+let kill_spec = {
+    signal: { flag: "--signal" }
+};
+
+let rm_spec = {
+    force:   { flag: "--force", type: "bool" },
+    volumes: { flag: "--volumes", type: "bool" }
+};
+
+let ls_spec = {
+    all:    { flag: "-a", type: "bool" },
+    last:   { flag: "--last" },
+    quiet:  { flag: "-q", type: "bool" },
+    size:   { flag: "-s", type: "bool" },
+    filter: { flag: "--filter", type: "map" }
+};
+
+let logs_spec = {
+    follow:     { flag: "--follow", type: "bool" },
+    tail:       { flag: "--tail" },
+    since:      { flag: "--since" },
+    until:      { flag: "--until" },
+    timestamps: { flag: "--timestamps", type: "bool" }
+};
+
+let exec_spec = {
+    detach:      { flag: "-d", type: "bool" },
+    interactive: { flag: "-i", type: "bool" },
+    tty:         { flag: "-t", type: "bool" },
+    user:        { flag: "--user" },
+    workdir:     { flag: "--workdir" },
+    env:         { flag: "-e", type: "map" }
+};
+
+let commit_spec = {
+    message: { flag: "--message" },
+    author:  { flag: "--author" },
+    change:  { flag: "--change", type: "list" }
+};
+
+let update_spec = {
+    memory:  { flag: "--memory" },
+    cpus:    { flag: "--cpus" },
+    restart: { flag: "--restart" }
+};
+
+let stats_spec = {
+    no_stream: { flag: "--no-stream", type: "bool" },
+    format:    { flag: "--format" }
+};
+
+let prune_spec = {
+    force:  { flag: "--force", type: "bool" },
+    filter: { flag: "--filter", type: "map" }
+};
+
+/// Creates container operations bound to the given tool helpers.
+/// @param helpers Dict with exec, exec_json, exec_json_lines functions
+/// @return Dict of container operation functions
+fn create_module(helpers) {
+    let _exec = helpers.exec;
+    let _exec_json = helpers.exec_json;
+    let _exec_json_lines = helpers.exec_json_lines;
+
+    /// Strips command/cmd from opts, returns { clean, trailing }.
+    fn _split_command(opts) {
+        let clean = dict.new();
+        let trailing = null;
+        for (let k, v in opts) {
+            if (k == "command" || k == "cmd") {
+                trailing = v;
+            } else {
+                dict.set(clean, k, v);
+            }
+        }
+        return { clean: clean, trailing: trailing };
+    }
+
+    /// Run a new container from an image.
+    /// @param image The image name or tag to run
+    /// @param opts Options: name, detach, rm, interactive, tty, env (dict), ports (array),
+    ///   volumes (array), labels (dict), network, restart, workdir, user, hostname,
+    ///   entrypoint, memory, cpus, platform, pull, pid, privileged, read_only, pod,
+    ///   userns, security_opt, cap_add, cap_drop, command (string|array)
+    /// @return Result dict with ok, stdout, stderr, exitCode
+    fn _run(image, opts = {}) {
+        let split = _split_command(opts);
+        let flags = cli_flags.map_flags(split.clean, run_create_spec);
+        let parts = ["run"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        arr.push(parts, image);
+        if (!(split.trailing is null)) {
+            if (split.trailing is array) {
+                arr.push(parts, arr.join(split.trailing, " "));
+            } else {
+                arr.push(parts, split.trailing);
+            }
+        }
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Create a container without starting it.
+    /// @param image The image name or tag
+    /// @param opts Same options as run (except detach is not meaningful)
+    /// @return Result dict with ok, stdout (container ID), stderr, exitCode
+    fn _create(image, opts = {}) {
+        let split = _split_command(opts);
+        let flags = cli_flags.map_flags(split.clean, run_create_spec);
+        let parts = ["create"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        arr.push(parts, image);
+        if (!(split.trailing is null)) {
+            if (split.trailing is array) {
+                arr.push(parts, arr.join(split.trailing, " "));
+            } else {
+                arr.push(parts, split.trailing);
+            }
+        }
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Start one or more stopped containers.
+    fn _start(container, opts = {}) {
+        return _exec(cli_flags.build_args($"start {container}", opts, start_spec));
+    }
+
+    /// Stop a running container gracefully.
+    fn _stop(container, opts = {}) {
+        return _exec(cli_flags.build_args($"stop {container}", opts, stop_spec));
+    }
+
+    /// Restart a container.
+    fn _restart(container, opts = {}) {
+        return _exec(cli_flags.build_args($"restart {container}", opts, restart_spec));
+    }
+
+    /// Kill a running container by sending a signal.
+    fn _kill(container, opts = {}) {
+        return _exec(cli_flags.build_args($"kill {container}", opts, kill_spec));
+    }
+
+    /// Remove one or more containers.
+    fn _rm(container, opts = {}) {
+        let names = "";
+        if (container is array) {
+            names = arr.join(container, " ");
+        } else {
+            names = container;
+        }
+        return _exec(cli_flags.build_args($"rm {names}", opts, rm_spec));
+    }
+
+    /// Pause all processes within a container.
+    fn _pause(container) {
+        return _exec($"pause {container}");
+    }
+
+    /// Unpause all processes within a paused container.
+    fn _unpause(container) {
+        return _exec($"unpause {container}");
+    }
+
+    /// Rename a container.
+    fn _rename(container, new_name) {
+        return _exec($"rename {container} {new_name}");
+    }
+
+    /// Block until a container stops and return its exit code.
+    fn _wait(container) {
+        return _exec($"wait {container}");
+    }
+
+    /// List containers with JSON output.
+    fn _ls(opts = {}) {
+        let quiet = dict.has(opts, "quiet") && opts.quiet;
+        let cmd = cli_flags.build_args("ps", opts, ls_spec);
+        if (quiet) {
+            return _exec(cmd);
+        }
+        cmd = cmd + " --format '{{json .}}'";
+        return _exec_json_lines(cmd);
+    }
+
+    /// Inspect a container and return parsed JSON.
+    fn _inspect(container) {
+        return _exec_json($"inspect {container}");
+    }
+
+    /// Fetch logs from a container.
+    fn _logs(container, opts = {}) {
+        return _exec(cli_flags.build_args($"logs {container}", opts, logs_spec));
+    }
+
+    /// List processes running inside a container.
+    fn _top(container) {
+        return _exec($"top {container}");
+    }
+
+    /// Get live resource usage statistics for one or more containers.
+    fn _stats(containers = null, opts = {}) {
+        let effective = cli_flags.with_defaults({ no_stream: true }, opts);
+        let custom_format = dict.has(opts, "format");
+        let flags = cli_flags.map_flags(effective, stats_spec);
+        let parts = ["stats"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        if (!custom_format) {
+            arr.push(parts, "--format '{{json .}}'");
+        }
+        if (!(containers is null)) {
+            if (containers is array) {
+                for (let c in containers) {
+                    arr.push(parts, c);
+                }
+            } else {
+                arr.push(parts, containers);
+            }
+        }
+        let cmd = arr.join(parts, " ");
+        if (custom_format) {
+            return _exec(cmd);
+        }
+        return _exec_json_lines(cmd);
+    }
+
+    /// Show changes to files on a container's filesystem.
+    fn _diff(container) {
+        return _exec($"diff {container}");
+    }
+
+    /// List port mappings for a container.
+    fn _port(container, private_port = null) {
+        if (!(private_port is null)) {
+            return _exec($"port {container} {private_port}");
+        }
+        return _exec($"port {container}");
+    }
+
+    /// Execute a command in a running container.
+    fn _container_exec(container, command, opts = {}) {
+        let flags = cli_flags.map_flags(opts, exec_spec);
+        let parts = ["exec"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        arr.push(parts, container);
+        if (command is array) {
+            arr.push(parts, arr.join(command, " "));
+        } else {
+            arr.push(parts, command);
+        }
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Copy files between a container and the local filesystem.
+    fn _cp(src, dst) {
+        return _exec($"cp {src} {dst}");
+    }
+
+    /// Create a new image from a container's changes.
+    fn _commit(container, repository, opts = {}) {
+        let flags = cli_flags.map_flags(opts, commit_spec);
+        let parts = ["commit"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        if (dict.has(opts, "pause") && !(opts.pause is null)) {
+            if (opts.pause) {
+                arr.push(parts, "--pause=true");
+            } else {
+                arr.push(parts, "--pause=false");
+            }
+        }
+        arr.push(parts, container);
+        if (dict.has(opts, "tag") && !(opts.tag is null)) {
+            arr.push(parts, $"{repository}:{opts.tag}");
+        } else {
+            arr.push(parts, repository);
+        }
+        return _exec(arr.join(parts, " "));
+    }
+
+    /// Export a container's filesystem as a tar archive.
+    fn _export_container(container, output_path) {
+        return _exec($"export -o {output_path} {container}");
+    }
+
+    /// Update resource configuration of a container.
+    fn _update(container, opts = {}) {
+        return _exec(cli_flags.build_args($"update {container}", opts, update_spec));
+    }
+
+    /// Remove all stopped containers.
+    fn _prune(opts = {}) {
+        let effective = cli_flags.with_defaults({ force: true }, opts);
+        return _exec(cli_flags.build_args("container prune", effective, prune_spec));
+    }
+
+    return {
+        run: _run,
+        create: _create,
+        start: _start,
+        stop: _stop,
+        restart: _restart,
+        kill: _kill,
+        rm: _rm,
+        pause: _pause,
+        unpause: _unpause,
+        rename: _rename,
+        wait: _wait,
+        ls: _ls,
+        inspect: _inspect,
+        logs: _logs,
+        top: _top,
+        stats: _stats,
+        diff: _diff,
+        port: _port,
+        container_exec: _container_exec,
+        cp: _cp,
+        commit: _commit,
+        export_container: _export_container,
+        update: _update,
+        prune: _prune
+    };
+}

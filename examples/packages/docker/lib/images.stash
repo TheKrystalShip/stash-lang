@@ -1,0 +1,50 @@
+/// @stash/docker — Image operations.
+/// Delegates to @stash/oci for shared OCI image operations.
+
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/oci/lib/images.stash" as oci_images;
+
+let _m = oci_images.create_module({
+    exec: exec,
+    exec_json: exec_json,
+    exec_json_lines: exec_json_lines
+});
+
+/// Lists Docker images available on the local host.
+let ls = _m.ls;
+
+/// Pulls an image or a repository from a registry.
+let pull = _m.pull;
+
+/// Pushes an image or a repository to a registry.
+let push = _m.push;
+
+/// Builds an image from a Dockerfile at the given path.
+let build = _m.build;
+
+/// Creates a tag that refers to source image.
+let tag = _m.tag;
+
+/// Removes one or more images from the local host.
+let rmi = _m.rmi;
+
+/// Returns detailed low-level information about an image as parsed JSON.
+let inspect = _m.inspect;
+
+/// Shows the history of an image.
+let history = _m.history;
+
+/// Saves one or more images to a tar archive.
+let save = _m.save;
+
+/// Loads images from a tar archive.
+let load = _m.load;
+
+/// Imports a tarball as a new image.
+let import_image = _m.import_image;
+
+/// Removes unused images. Defaults force to true.
+let prune = _m.prune;
+
+/// Searches Docker Hub for images matching a term.
+let search = _m.search;

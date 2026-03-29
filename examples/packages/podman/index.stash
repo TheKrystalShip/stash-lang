@@ -1,0 +1,22 @@
+/// @stash/podman — A comprehensive Podman CLI wrapper for Stash.
+///
+/// Import the whole package:
+///   import "@stash/podman" as podman;
+///   podman.containers.ls();
+///
+/// Or import individual modules:
+///   import "lib/containers.stash" as containers;
+///   import "lib/pods.stash" as pods;
+
+import "lib/containers.stash" as containers;
+import "lib/images.stash" as images;
+import "lib/volumes.stash" as volumes;
+import "lib/networks.stash" as networks;
+import "lib/pods.stash" as pods;
+import "lib/compose.stash" as compose;
+import "lib/system.stash" as system;
+import "lib/registry.stash" as registry;
+import "lib/machine.stash" as machine;
+import "lib/generate.stash" as generate;
+import "lib/manifest.stash" as manifest;
+import "lib/secret.stash" as secret;

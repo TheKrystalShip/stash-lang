@@ -1,0 +1,204 @@
+/// @stash/cli — Declarative flag specification engine.
+///
+/// The core innovation: replace repetitive dict.has/dict.set boilerplate with
+/// declarative flag specs. A spec dict maps option keys to flag descriptors:
+///
+///   let spec = {
+///       name:   { flag: "--name" },
+///       detach: { flag: "-d", type: "bool" },
+///       env:    { flag: "-e", type: "map" },
+///       ports:  { flag: "-p", type: "list" }
+///   };
+///
+/// Spec types:
+///   "value" (default) — --flag value
+///   "bool"            — flag present if truthy, absent if falsy
+///   "list"            — repeated --flag item for each array element
+///   "map"             — repeated --flag key=value for each dict entry
+///   "csv"             — --flag item1,item2,item3 from array
+///
+/// Options without spec entries are auto-detected from key name and value type.
+///
+/// Internally, map_flags() now delegates spec-matched options to the built-in
+/// args.build(), which handles all typed flag serialisation. The from_spec()
+/// function also calls args.build() directly for args.parse()-format specs.
+
+/// Builds a complete CLI argument string from a base command, options dict, and flag spec.
+///
+/// @param base Base command or subcommand string (e.g. "run", "ps -a")
+/// @param opts Dict of options to convert to CLI flags
+/// @param spec Flag spec dict mapping option keys to flag descriptors (optional)
+/// @return Full argument string with base command and all mapped flags
+fn build_args(base, opts, spec = { }) {
+    let parts = [base];
+    let flags = map_flags(opts, spec);
+    for (let f in flags) {
+        arr.push(parts, f);
+    }
+    return arr.join(parts, " ");
+}
+
+/// Maps options to an array of CLI flag strings using a flag spec.
+///
+/// Lower-level than build_args — returns an array instead of a joined string.
+/// Useful when you need to insert positional args between flag groups.
+///
+/// @param opts Dict of options
+/// @param spec Flag spec dict (optional)
+/// @return Array of flag strings
+fn map_flags(opts, spec = { }) {
+    if (len(dict.keys(spec)) == 0) {
+        // No spec — use auto_flag for everything
+        let parts = [];
+        let keys = dict.keys(opts);
+        for (let key in keys) {
+            let val = opts[key];
+            if (val is null) { continue; }
+            if (val is bool && !val) { continue; }
+            let auto = auto_flag(key, val);
+            for (let a in auto) { arr.push(parts, a); }
+        }
+        return parts;
+    }
+
+    let converted = _to_args_spec(spec, opts);
+    // Use args.build() for spec-matched opts
+    let tokens = args.build(converted.spec, converted.matched);
+
+    // Add auto_flag results for unmatched opts
+    let unmatched_keys = dict.keys(converted.unmatched);
+    for (let key in unmatched_keys) {
+        let val = converted.unmatched[key];
+        if (val is null) { continue; }
+        if (val is bool && !val) { continue; }
+        let auto = auto_flag(key, val);
+        for (let a in auto) { arr.push(tokens, a); }
+    }
+
+    return tokens;
+}
+
+/// Converts a @stash/cli flat spec to an args.build()-format spec and splits opts
+/// into spec-matched and unmatched values.
+///
+/// @param spec @stash/cli flag spec dict
+/// @param opts Dict of option values
+/// @return Dict with keys: spec (args.build-format), matched, unmatched
+fn _to_args_spec(spec, opts) {
+    let flags_section = {};
+    let options_section = {};
+    let matched_values = {};
+    let unmatched = {};
+
+    let opt_keys = dict.keys(opts);
+    for (let key in opt_keys) {
+        if (dict.has(spec, key)) {
+            dict.set(matched_values, key, opts[key]);
+        } else {
+            dict.set(unmatched, key, opts[key]);
+        }
+    }
+
+    let spec_keys = dict.keys(spec);
+    for (let key in spec_keys) {
+        let entry = spec[key];
+        let type_str = "value";
+        if (dict.has(entry, "type")) {
+            type_str = entry.type;
+        }
+        if (type_str == "bool") {
+            dict.set(flags_section, key, { flag: entry.flag });
+        } else {
+            let opt_entry = { flag: entry.flag };
+            if (type_str != "value") {
+                dict.set(opt_entry, "type", type_str);
+            }
+            dict.set(options_section, key, opt_entry);
+        }
+    }
+
+    let args_spec = {};
+    if (len(dict.keys(flags_section)) > 0) {
+        dict.set(args_spec, "flags", flags_section);
+    }
+    if (len(dict.keys(options_section)) > 0) {
+        dict.set(args_spec, "options", options_section);
+    }
+
+    return { spec: args_spec, matched: matched_values, unmatched: unmatched };
+}
+
+/// Auto-detects flag format from key name and value type.
+/// Used for options that don't have spec entries.
+///
+/// Rules:
+///   - Underscores in key names are converted to hyphens
+///   - Single-char keys → short flag (-k), multi-char → long flag (--key)
+///   - Bool true → flag only, Bool false → skipped (handled by caller)
+///   - Array → repeated --flag item for each element
+///   - Other → --flag value
+///
+/// @param key The option key name
+/// @param val The option value
+/// @return Array of flag strings
+fn auto_flag(key, val) {
+    let parts = [];
+    let normalized = str.replaceAll(key, "_", "-");
+    let flag = "";
+    if (len(normalized) == 1) {
+        flag = "-" + normalized;
+    } else {
+        flag = "--" + normalized;
+    }
+    if (val is bool && val) {
+        arr.push(parts, flag);
+    } else if (val is array) {
+        for (let item in val) {
+            arr.push(parts, flag + " " + conv.toStr(item));
+        }
+    } else {
+        arr.push(parts, flag + " " + conv.toStr(val));
+    }
+    return parts;
+}
+
+/// Builds a CLI argument string using the native args.parse() spec format.
+///
+/// Delegates to the built-in args.build() for argument construction, then
+/// prepends the base command. Use this when you have an args.parse()-format
+/// spec and want a ready-to-execute command string.
+///
+/// @param base Base command string (e.g. "docker run", "systemctl start")
+/// @param values Dict of values to serialize (same shape as args.parse() result)
+/// @param spec args.parse()-format spec dict with flags/options/positionals/commands
+/// @return Full command string ready for $() execution
+/// @note Values containing spaces are not shell-quoted — prefer passing args.build()
+///       tokens directly or use shell quoting for values with spaces.
+fn from_spec(base, values, spec) {
+    let tokens = args.build(spec, values);
+    let parts = [base];
+    for (let t in tokens) {
+        arr.push(parts, t);
+    }
+    return arr.join(parts, " ");
+}
+
+/// Merges a defaults spec dict with user-provided opts.
+/// Keys present in opts override defaults. Keys only in defaults are kept.
+/// Useful for setting default flag values in wrapper functions.
+///
+/// @param defaults Dict of default option values
+/// @param opts Dict of user-provided options
+/// @return Merged dict with user opts taking priority
+fn with_defaults(defaults, opts) {
+    let result = dict.new();
+    let dk = dict.keys(defaults);
+    for (let key in dk) {
+        dict.set(result, key, defaults[key]);
+    }
+    let ok = dict.keys(opts);
+    for (let key in ok) {
+        dict.set(result, key, opts[key]);
+    }
+    return result;
+}

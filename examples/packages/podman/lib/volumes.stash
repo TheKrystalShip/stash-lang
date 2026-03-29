@@ -1,0 +1,29 @@
+/// @stash/podman — Volume operations.
+/// Delegates to @stash/oci for shared OCI volume operations.
+
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/oci/lib/volumes.stash" as oci_volumes;
+
+let _m = oci_volumes.create_module({
+    exec: exec,
+    exec_json: exec_json,
+    exec_json_lines: exec_json_lines
+});
+
+/// Creates a Podman volume.
+let create = _m.create;
+
+/// Removes one or more volumes.
+let rm = _m.rm;
+
+/// Lists Podman volumes as structured JSON.
+let ls = _m.ls;
+
+/// Returns detailed information about a volume as parsed JSON.
+let inspect = _m.inspect;
+
+/// Removes all unused volumes.
+let prune = _m.prune;
+
+/// Checks if a volume exists.
+let exists = _m.exists;

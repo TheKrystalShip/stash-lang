@@ -1,0 +1,355 @@
+import { exec, exec_json, parse_properties, scope_flag, parse_table } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let unit_action_spec = {
+    no_block: { flag: "--no-block", type: "bool" }
+};
+
+let enable_disable_spec = {
+    no_block: { flag: "--no-block", type: "bool" },
+    now: { flag: "--now", type: "bool" },
+    runtime: { flag: "--runtime", type: "bool" }
+};
+
+let show_spec = {
+    property: { flag: "--property" }
+};
+
+let list_units_spec = {
+    type: { flag: "--type" },
+    state: { flag: "--state" },
+    all: { flag: "--all", type: "bool" },
+    plain: { flag: "--plain", type: "bool" },
+    full: { flag: "--full", type: "bool" },
+    no_legend: { flag: "--no-legend", type: "bool" },
+    no_pager: { flag: "--no-pager", type: "bool" }
+};
+
+let list_unit_files_spec = {
+    type: { flag: "--type" },
+    state: { flag: "--state" },
+    no_legend: { flag: "--no-legend", type: "bool" },
+    no_pager: { flag: "--no-pager", type: "bool" }
+};
+
+let list_dependencies_spec = {
+    reverse: { flag: "--reverse", type: "bool" },
+    all: { flag: "--all", type: "bool" }
+};
+
+let kill_unit_spec = {
+    signal: { flag: "--signal" },
+    kill_who: { flag: "--kill-who" }
+};
+
+/// Starts a systemd unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn start(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} start {unit}"), opts, unit_action_spec));
+}
+
+/// Stops a systemd unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn stop(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} stop {unit}"), opts, unit_action_spec));
+}
+
+/// Restarts a systemd unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn restart(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} restart {unit}"), opts, unit_action_spec));
+}
+
+/// Reloads a systemd unit's configuration without restarting the service.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn reload(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} reload {unit}"), opts, unit_action_spec));
+}
+
+/// Reloads a unit if it supports reloading, otherwise restarts it.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn reload_or_restart(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} reload-or-restart {unit}"), opts, unit_action_spec));
+}
+
+/// Restarts a unit only if it is currently running.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn try_restart(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} try-restart {unit}"), opts, unit_action_spec));
+}
+
+/// Enables a systemd unit to start at boot.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: now (bool) to also start immediately, user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn enable(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} enable {unit}"), opts, enable_disable_spec));
+}
+
+/// Disables a systemd unit from starting at boot.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: now (bool) to also stop immediately, user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn disable(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} disable {unit}"), opts, enable_disable_spec));
+}
+
+/// Disables then re-enables a unit, refreshing its symlinks.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn reenable(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} reenable {unit}"), opts, enable_disable_spec));
+}
+
+/// Masks a unit, making it impossible to start (manually or automatically).
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn mask(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} mask {unit}"), opts, unit_action_spec));
+}
+
+/// Unmasks a previously masked unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn unmask(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} unmask {unit}"), opts, unit_action_spec));
+}
+
+/// Returns the full status output for a unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn status(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(str.trim($"systemctl {scope} status {unit}"));
+}
+
+/// Checks whether a unit is currently active (running).
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return true if the unit is active, false otherwise
+fn is_active(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let result = exec(str.trim($"systemctl {scope} is-active {unit}"));
+    return result.ok;
+}
+
+/// Checks whether a unit is enabled to start at boot.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return true if the unit is enabled, false otherwise
+fn is_enabled(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let result = exec(str.trim($"systemctl {scope} is-enabled {unit}"));
+    return result.ok;
+}
+
+/// Checks whether a unit is in a failed state.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return true if the unit has failed, false otherwise
+fn is_failed(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let result = exec(str.trim($"systemctl {scope} is-failed {unit}"));
+    return result.ok;
+}
+
+/// Shows low-level properties of a unit, parsed into a dict.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope, property (string or array) for specific properties
+/// @return Result dict with ok, data (parsed KEY=VALUE dict), stderr, exitCode
+fn show(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let base = str.trim($"systemctl {scope} show {unit}");
+    let result = exec(cli_flags.build_args(base, opts, show_spec));
+    if (!result.ok) {
+        return result;
+    }
+    let props = parse_properties(result.stdout);
+    return {
+        ok: true,
+        data: props,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Lists loaded systemd units, optionally filtered by type or state.
+/// @param opts Options: type (string), state (string), all (bool), user (bool) for --user scope
+/// @return Result dict with ok, data (array of unit rows), stderr, exitCode
+fn list_units(opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let defaults = { no_pager: true, no_legend: true };
+    let merged = cli_flags.with_defaults(defaults, opts);
+    let result = exec(cli_flags.build_args(str.trim($"systemctl {scope} list-units"), merged, list_units_spec));
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Lists installed unit files and their enablement state.
+/// @param opts Options: type (string), state (string), user (bool) for --user scope
+/// @return Result dict with ok, data (array of unit file rows), stderr, exitCode
+fn list_unit_files(opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let defaults = { no_pager: true, no_legend: true };
+    let merged = cli_flags.with_defaults(defaults, opts);
+    let result = exec(cli_flags.build_args(str.trim($"systemctl {scope} list-unit-files"), merged, list_unit_files_spec));
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Lists the dependencies of a unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout (raw dependency tree text), stderr, exitCode
+fn list_dependencies(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} list-dependencies {unit} --no-pager"), opts, list_dependencies_spec));
+}
+
+/// Lists socket units and the services they activate.
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, data (array of socket rows), stderr, exitCode
+fn list_sockets(opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let result = exec(str.trim($"systemctl {scope} list-sockets --no-pager --no-legend"));
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Lists timer units and their next/last activation times.
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, data (array of timer rows), stderr, exitCode
+fn list_timers(opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    let result = exec(str.trim($"systemctl {scope} list-timers --no-pager --no-legend"));
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Reloads the systemd manager configuration (re-reads unit files).
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn daemon_reload(opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(str.trim($"systemctl {scope} daemon-reload"));
+}
+
+/// Re-executes the systemd manager process.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn daemon_reexec() {
+    return exec("systemctl daemon-reexec");
+}
+
+/// Returns the default boot target (e.g., "multi-user.target").
+/// @return The default target name as a trimmed string, or null on failure
+fn get_default() {
+    let result = exec("systemctl get-default");
+    if (!result.ok) {
+        return null;
+    }
+    return str.trim(result.stdout);
+}
+
+/// Sets the default boot target.
+/// @param target The target name (e.g., "graphical.target")
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn set_default(target) {
+    let cmd = $"systemctl set-default {target}";
+    return exec(cmd);
+}
+
+/// Resets the failed state of one or all units.
+/// @param unit The unit name to reset, or null to reset all failed units
+/// @param opts Options: user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn reset_failed(unit = null, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    if (unit is null) {
+        return exec(str.trim($"systemctl {scope} reset-failed"));
+    }
+    return exec(str.trim($"systemctl {scope} reset-failed {unit}"));
+}
+
+/// Isolates a target, stopping all units not required by it and starting those that are.
+/// @param target The target name (e.g., "rescue.target")
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn isolate(target, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} isolate {target}"), opts, unit_action_spec));
+}
+
+/// Sends a signal to the processes of a unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @param opts Options: signal (string, e.g. "SIGTERM"), who (string, e.g. "all"), user (bool) for --user scope
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn kill_unit(unit, opts = {}, user_mode = false) {
+    let scope = scope_flag(user_mode);
+    return exec(cli_flags.build_args(str.trim($"systemctl {scope} kill {unit}"), opts, kill_unit_spec));
+}
+
+/// Outputs the unit file contents for a given unit.
+/// @param unit The unit name (e.g., "nginx.service")
+/// @return Result dict with ok, stdout (unit file text), stderr, exitCode
+fn cat(unit) {
+    let cmd = $"systemctl cat {unit}";
+    return exec(cmd);
+}

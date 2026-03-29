@@ -1,0 +1,112 @@
+import { exec } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+/// Returns boot timing summary from systemd-analyze.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn time() {
+    return exec("systemd-analyze time");
+}
+
+/// Lists units ordered by startup time.
+/// @param opts Options: lines (int) to limit number of results shown
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn blame(opts = {}) {
+    let cmd = "systemd-analyze blame --no-pager";
+    if (dict.has(opts, "lines")) {
+        cmd = cmd + $" | head -n {conv.toStr(opts.lines)}";
+    }
+    return exec(cmd);
+}
+
+/// Shows critical boot chain for a unit or the full boot if no unit is given.
+/// @param unit Optional unit name to inspect
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn critical_chain(unit = null) {
+    if (unit is null) {
+        return exec("systemd-analyze critical-chain --no-pager");
+    }
+    return exec($"systemd-analyze critical-chain {unit} --no-pager");
+}
+
+/// Returns a security assessment for a unit or all units if none is given.
+/// @param unit Optional unit name to assess
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn security(unit = null) {
+    if (unit is null) {
+        return exec("systemd-analyze security --no-pager");
+    }
+    return exec($"systemd-analyze security {unit} --no-pager");
+}
+
+/// Checks a unit file for errors and warnings.
+/// @param unit Unit name or path to verify
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn verify(unit) {
+    return exec($"systemd-analyze verify {unit}");
+}
+
+/// Parses a systemd calendar expression and shows next elapse times.
+/// @param expression Calendar expression (e.g., "weekly", "Mon *-*-* 00:00:00")
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn calendar(expression) {
+    let cmd = $"systemd-analyze calendar {expression}";
+    return exec(cmd);
+}
+
+/// Parses and normalises a timestamp string.
+/// @param ts Timestamp string to parse (e.g., "now", "2024-01-01 12:00:00")
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn timestamp(ts) {
+    let cmd = $"systemd-analyze timestamp {ts}";
+    return exec(cmd);
+}
+
+/// Parses and normalises a timespan string.
+/// @param ts Timespan string to parse (e.g., "2h 30min", "1d")
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn timespan(ts) {
+    let cmd = $"systemd-analyze timespan {ts}";
+    return exec(cmd);
+}
+
+/// Generates an SVG boot timing plot from systemd-analyze.
+/// If output_file is given, the plot is written to that path.
+/// @param output_file Optional file path to write SVG output to
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn plot(output_file = null) {
+    if (output_file is null) {
+        return exec("systemd-analyze plot");
+    }
+    let cmd = $"systemd-analyze plot > {output_file}";
+    return exec(cmd);
+}
+
+/// Generates a DOT graph of unit dependencies from systemd-analyze.
+/// If output_file is given, the graph is written to that path.
+/// @param output_file Optional file path to write DOT output to
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn dot(output_file = null) {
+    if (output_file is null) {
+        return exec("systemd-analyze dot");
+    }
+    let cmd = $"systemd-analyze dot > {output_file}";
+    return exec(cmd);
+}
+
+/// Returns the full serialised manager state dump.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn dump() {
+    return exec("systemd-analyze dump --no-pager");
+}
+
+/// Lists all unit file search paths used by systemd.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn unit_paths() {
+    return exec("systemd-analyze unit-paths");
+}
+
+/// Lists known exit status codes and their names.
+/// @return Result dict with ok, stdout, stderr, exitCode
+fn exit_status() {
+    return exec("systemd-analyze exit-status");
+}

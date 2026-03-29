@@ -1,0 +1,39 @@
+/// @stash/docker — Shared helpers for docker CLI commands.
+/// Delegates to @stash/oci for tool-bound execution helpers.
+
+import "@stash/oci/lib/common.stash" as oci_common;
+import "@stash/cli/lib/flags.stash" as cli_flags;
+import "@stash/cli/lib/parse.stash" as cli_parse;
+
+let _helpers = oci_common.create_helpers("docker");
+
+/// Runs a docker command and returns a result dict with {ok, stdout, stderr, exitCode}.
+fn exec(cmd_args) {
+    return _helpers.exec(cmd_args);
+}
+
+/// Runs a docker command and parses stdout as JSON.
+fn exec_json(cmd_args) {
+    return _helpers.exec_json(cmd_args);
+}
+
+/// Runs a docker command where each line of stdout is a separate JSON object.
+fn exec_json_lines(cmd_args) {
+    return _helpers.exec_json_lines(cmd_args);
+}
+
+/// Builds a full docker command string from a base command and an options dict.
+fn build_args(base, opts, spec = {}) {
+    return cli_flags.build_args(base, opts, spec);
+}
+
+/// Checks if docker is available on the system.
+fn check_docker() {
+    return _helpers.check_tool();
+}
+
+/// Parses Docker's column-formatted output.
+fn parse_columns(stdout) {
+    return _helpers.parse_columns(stdout);
+}
+

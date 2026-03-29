@@ -1,0 +1,86 @@
+/// @stash/cli — Tool availability detection and version checking.
+///
+/// Provides functions to check if CLI tools are installed,
+/// retrieve version information, and guard execution.
+
+/// Checks if a CLI tool is available on the system.
+///
+/// Uses `which` on Unix-like systems to locate the tool binary.
+///
+/// @param name The tool name (e.g. "docker", "kubectl", "systemctl")
+/// @return true if the tool is found, false otherwise
+fn check_tool(name) {
+    let cmd = "which " + name;
+    let result = $({cmd});
+    return result.exitCode == 0;
+}
+
+/// Gets the version string from a CLI tool.
+///
+/// Runs `<tool> <flag>` (default: --version) and returns trimmed stdout.
+/// Returns null if the command fails.
+///
+/// @param name The tool name
+/// @param version_flag The flag to get version info (default "--version")
+/// @return Version string or null if unavailable
+fn tool_version(name, version_flag = "--version") {
+    let cmd = name + " " + version_flag;
+    let result = $({cmd});
+    if (result.exitCode != 0) {
+        return null;
+    }
+    return str.trim(result.stdout);
+}
+
+/// Checks if a tool is available and returns a result dict.
+///
+/// Unlike check_tool which returns a bool, this returns a structured result
+/// with an error message on failure — useful for guard clauses at the top
+/// of wrapper modules.
+///
+/// @param name The tool name
+/// @return Dict with ok (bool) and error (string or null)
+fn require_tool(name) {
+    if (!check_tool(name)) {
+        return {
+            ok: false,
+            error: "'" + name + "' is not installed or not in PATH"
+        };
+    }
+    return { ok: true, error: null };
+}
+
+/// Checks multiple tools and returns a result for each.
+///
+/// @param names Array of tool names
+/// @return Dict mapping each tool name to true (available) or false
+fn check_tools(names) {
+    let result = dict.new();
+    for (let name in names) {
+        dict.set(result, name, check_tool(name));
+    }
+    return result;
+}
+
+/// Gets version info for a tool and parses out the first version-like string.
+///
+/// Many tools output verbose version strings like "Docker version 24.0.7, build afdd53b".
+/// This function extracts just the version number (e.g. "24.0.7").
+///
+/// @param name The tool name
+/// @param version_flag The flag to get version info (default "--version")
+/// @return Version number string or null if unavailable
+fn tool_version_number(name, version_flag = "--version") {
+    let full = tool_version(name, version_flag);
+    if (full is null) {
+        return null;
+    }
+    let matched = str.match(full, "[0-9]+\\.[0-9]+[0-9.]*");
+    if (matched is null) {
+        return null;
+    }
+    if (len(matched) == 0) {
+        return null;
+    }
+    return matched[0];
+}

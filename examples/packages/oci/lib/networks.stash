@@ -1,0 +1,150 @@
+/// @stash/oci — Shared network operations for OCI-compatible runtimes.
+/// Provides a create_module(helpers) factory that returns network management functions
+/// bound to a specific tool's exec helpers.
+
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let create_spec = {
+    driver:      { flag: "--driver" },
+    subnet:      { flag: "--subnet" },
+    gateway:     { flag: "--gateway" },
+    ip_range:    { flag: "--ip-range" },
+    internal:    { flag: "--internal", type: "bool" },
+    attachable:  { flag: "--attachable", type: "bool" },
+    ipv6:        { flag: "--ipv6", type: "bool" },
+    label:       { flag: "--label", type: "map" },
+    opt:         { flag: "--opt", type: "map" },
+    disable_dns: { flag: "--disable-dns", type: "bool" }
+};
+
+let ls_spec = {
+    filter:   { flag: "--filter", type: "map" },
+    quiet:    { flag: "--quiet", type: "bool" },
+    no_trunc: { flag: "--no-trunc", type: "bool" }
+};
+
+let connect_spec = {
+    ip:    { flag: "--ip" },
+    alias: { flag: "--alias", type: "list" },
+    link:  { flag: "--link", type: "list" }
+};
+
+let disconnect_spec = {
+    force: { flag: "--force", type: "bool" }
+};
+
+let prune_spec = {
+    force:  { flag: "--force", type: "bool" },
+    filter: { flag: "--filter", type: "map" }
+};
+
+/// Creates network operations bound to the given tool helpers.
+/// @param helpers Dict with exec, exec_json, exec_json_lines functions
+/// @return Dict of network operation functions
+fn create_module(helpers) {
+    let _exec = helpers.exec;
+    let _exec_json = helpers.exec_json;
+    let _exec_json_lines = helpers.exec_json_lines;
+
+    /// Creates a network.
+    /// @param name Network name
+    /// @param opts Options: driver, subnet, gateway, ip_range, internal, attachable,
+    ///   ipv6, label (dict), opt (dict), disable_dns
+    fn _create(name, opts = {}) {
+        return _exec(cli_flags.build_args($"network create {name}", opts, create_spec));
+    }
+
+    /// Removes one or more networks.
+    /// @param network Network name (string) or array of names
+    fn _rm(network) {
+        let targets = "";
+        if (network is array) {
+            targets = arr.join(network, " ");
+        } else {
+            targets = network;
+        }
+        return _exec($"network rm {targets}");
+    }
+
+    /// Lists networks as structured JSON.
+    /// @param opts Options: filter (dict), quiet (bool), no_trunc (bool)
+    fn _ls(opts = {}) {
+        let quiet = dict.has(opts, "quiet") && opts.quiet;
+        let flags = cli_flags.map_flags(opts, ls_spec);
+        let parts = ["network ls"];
+        for (let f in flags) {
+            arr.push(parts, f);
+        }
+        if (quiet) {
+            return _exec(arr.join(parts, " "));
+        }
+        arr.push(parts, "--format '{{json .}}'");
+        return _exec_json_lines(arr.join(parts, " "));
+    }
+
+    /// Returns detailed information about a network as parsed JSON.
+    /// @param network Network name (string) or array of names
+    fn _inspect(network) {
+        let targets = "";
+        if (network is array) {
+            targets = arr.join(network, " ");
+        } else {
+            targets = network;
+        }
+        return _exec_json($"network inspect {targets}");
+    }
+
+    /// Connects a container to a network.
+    /// @param network Network name
+    /// @param container Container name or ID
+    /// @param opts Options: ip (string), alias (string|array), link (string|array)
+    fn _connect(network, container, opts = {}) {
+        let clean_opts = dict.new();
+        for (let k, v in opts) {
+            if (k == "alias" || k == "link") {
+                if (v is array) {
+                    dict.set(clean_opts, k, v);
+                } else {
+                    dict.set(clean_opts, k, [v]);
+                }
+            } else {
+                dict.set(clean_opts, k, v);
+            }
+        }
+        return _exec(cli_flags.build_args($"network connect {network} {container}", clean_opts, connect_spec));
+    }
+
+    /// Disconnects a container from a network.
+    /// @param network Network name
+    /// @param container Container name or ID
+    /// @param opts Options: force (bool)
+    fn _disconnect(network, container, opts = {}) {
+        return _exec(cli_flags.build_args($"network disconnect {network} {container}", opts, disconnect_spec));
+    }
+
+    /// Removes all unused networks. Defaults force to true.
+    /// @param opts Options: force (bool, default true), filter (dict)
+    fn _prune(opts = {}) {
+        let effective = cli_flags.with_defaults({ force: true }, opts);
+        return _exec(cli_flags.build_args("network prune", effective, prune_spec));
+    }
+
+    /// Checks if a network exists (Podman-only — not available in Docker).
+    /// @param name Network name
+    /// @return true if the network exists, false otherwise
+    fn _exists(name) {
+        let result = _exec($"network exists {name}");
+        return result.ok;
+    }
+
+    return {
+        create: _create,
+        rm: _rm,
+        ls: _ls,
+        inspect: _inspect,
+        connect: _connect,
+        disconnect: _disconnect,
+        prune: _prune,
+        exists: _exists
+    };
+}

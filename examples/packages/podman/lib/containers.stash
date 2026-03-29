@@ -1,0 +1,84 @@
+/// @stash/podman — Container operations.
+/// Delegates to @stash/oci for shared OCI container operations.
+
+import { exec, exec_json, exec_json_lines } from "common.stash";
+import "@stash/oci/lib/containers.stash" as oci_containers;
+
+let _m = oci_containers.create_module({
+    exec: exec,
+    exec_json: exec_json,
+    exec_json_lines: exec_json_lines
+});
+
+/// Run a new container from an image.
+/// Podman-specific options: pod, userns, security_opt, cap_add, cap_drop, privileged, read_only
+let run = _m.run;
+
+/// Create a container without starting it.
+let create = _m.create;
+
+/// Start one or more stopped containers.
+let start = _m.start;
+
+/// Stop a running container gracefully.
+let stop = _m.stop;
+
+/// Restart a container.
+let restart = _m.restart;
+
+/// Kill a running container by sending a signal.
+let kill = _m.kill;
+
+/// Remove one or more containers.
+let rm = _m.rm;
+
+/// Pause all processes within a container.
+let pause = _m.pause;
+
+/// Unpause all processes within a paused container.
+let unpause = _m.unpause;
+
+/// Rename a container.
+let rename = _m.rename;
+
+/// Block until a container stops and return its exit code.
+let wait = _m.wait;
+
+/// List containers with JSON output.
+let ls = _m.ls;
+
+/// Inspect a container and return parsed JSON.
+let inspect = _m.inspect;
+
+/// Fetch logs from a container.
+let logs = _m.logs;
+
+/// List processes running inside a container.
+let top = _m.top;
+
+/// Get live resource usage statistics.
+let stats = _m.stats;
+
+/// Show changes to files on a container's filesystem.
+let diff = _m.diff;
+
+/// List port mappings for a container.
+let port = _m.port;
+
+/// Execute a command in a running container.
+let container_exec = _m.container_exec;
+
+/// Copy files between a container and the local filesystem.
+let cp = _m.cp;
+
+/// Create a new image from a container's changes.
+let commit = _m.commit;
+
+/// Export a container's filesystem as a tar archive.
+let export_container = _m.export_container;
+
+/// Update resource configuration of a container.
+let update = _m.update;
+
+/// Remove all stopped containers.
+let prune = _m.prune;

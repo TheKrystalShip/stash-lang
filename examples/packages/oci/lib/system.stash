@@ -1,0 +1,100 @@
+/// @stash/oci — Shared system operations for OCI-compatible runtimes.
+/// Provides a create_module(helpers) factory that returns system management functions
+/// bound to a specific tool's exec helpers.
+
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let info_spec = {
+    format: { flag: "--format" }
+};
+
+let version_spec = {
+    format: { flag: "--format" }
+};
+
+let df_spec = {
+    verbose: { flag: "--verbose", type: "bool" }
+};
+
+let events_spec = {
+    since:  { flag: "--since" },
+    until:  { flag: "--until" },
+    filter: { flag: "--filter", type: "map" }
+};
+
+let prune_spec = {
+    all:     { flag: "--all", type: "bool" },
+    force:   { flag: "--force", type: "bool" },
+    volumes: { flag: "--volumes", type: "bool" },
+    filter:  { flag: "--filter", type: "map" }
+};
+
+/// Creates system operations bound to the given tool helpers.
+/// @param helpers Dict with exec, exec_json, check_tool functions
+/// @return Dict of system operation functions
+fn create_module(helpers) {
+    let _exec = helpers.exec;
+    let _exec_json = helpers.exec_json;
+    let _check_tool = helpers.check_tool;
+
+    /// Returns system-wide information as parsed JSON.
+    /// @param opts Options: format (string)
+    fn _info(opts = {}) {
+        if (dict.has(opts, "format")) {
+            return _exec_json(cli_flags.build_args("info", opts, info_spec));
+        }
+        return _exec_json("info --format '{{json .}}'");
+    }
+
+    /// Returns client and server version information as parsed JSON.
+    /// @param opts Options: format (string)
+    fn _version(opts = {}) {
+        if (dict.has(opts, "format")) {
+            return _exec_json(cli_flags.build_args("version", opts, version_spec));
+        }
+        return _exec_json("version --format '{{json .}}'");
+    }
+
+    /// Shows disk usage as parsed JSON.
+    /// @param opts Options: verbose (bool)
+    fn _df(opts = {}) {
+        let base = cli_flags.build_args("system df", opts, df_spec);
+        return _exec_json(base + " --format '{{json .}}'");
+    }
+
+    /// Checks if the container runtime is responsive.
+    /// @return true if info succeeds, false otherwise
+    fn _ping() {
+        let result = _exec("info");
+        return result.ok;
+    }
+
+    /// Retrieves container runtime events.
+    /// @param opts Options: since (string), until (string), filter (dict)
+    fn _events(opts = {}) {
+        return _exec(cli_flags.build_args("events", opts, events_spec));
+    }
+
+    /// Removes all unused data. Defaults force to true.
+    /// @param opts Options: all (bool), force (bool, default true), volumes (bool), filter (dict)
+    fn _prune(opts = {}) {
+        let effective = cli_flags.with_defaults({ force: true }, opts);
+        return _exec(cli_flags.build_args("system prune", effective, prune_spec));
+    }
+
+    /// Checks whether the tool is available on the system.
+    /// @return true if the tool exists on PATH, false otherwise
+    fn _available() {
+        return _check_tool();
+    }
+
+    return {
+        info: _info,
+        version: _version,
+        df: _df,
+        ping: _ping,
+        events: _events,
+        prune: _prune,
+        available: _available
+    };
+}

@@ -1,0 +1,20 @@
+/// @stash/cli — Shared CLI wrapper toolkit for Stash.
+///
+/// Provides declarative flag specs, exec helpers, output parsers,
+/// and tool detection — eliminating boilerplate in CLI wrapper packages.
+///
+/// Import the whole package:
+///   import "@stash/cli" as cli;
+///   cli.exec.exec("docker", "ps -a");
+///   cli.flags.build_args("run", opts, spec);
+///
+/// Or import individual modules:
+///   import { exec, exec_json } from "@stash/cli/lib/exec.stash";
+///   import { build_args, map_flags } from "@stash/cli/lib/flags.stash";
+///   import { parse_table } from "@stash/cli/lib/parse.stash";
+///   import { check_tool } from "@stash/cli/lib/tools.stash";
+
+import "lib/exec.stash" as exec;
+import "lib/flags.stash" as flags;
+import "lib/parse.stash" as parse;
+import "lib/tools.stash" as tools;

@@ -1,0 +1,130 @@
+/// @stash/cli — Output parsing helpers.
+///
+/// Generic parsers for common CLI output formats: tables, KEY=VALUE properties,
+/// line-based output, and pair formatting.
+
+/// Parses column-formatted output where the first line contains headers.
+///
+/// Headers are lowercased. Subsequent lines are split by whitespace into values.
+/// Empty lines are skipped. If a row has fewer cells than headers, missing cells
+/// are set to empty string.
+///
+/// @param stdout Raw stdout string from a table-formatted command
+/// @return Array of dicts, one per data row
+fn parse_table(stdout) {
+    let trimmed = str.trim(stdout);
+    if (trimmed == "") {
+        return [];
+    }
+    let lines = str.split(trimmed, "\n");
+    if (len(lines) == 0) {
+        return [];
+    }
+    let header_line = lines[0];
+    let headers = str.words(header_line);
+    headers = arr.map(headers, (h) => str.lower(h));
+    let rows = [];
+    let idx = 1;
+    while (idx < len(lines)) {
+        let line = lines[idx];
+        if (str.trim(line) == "") {
+            idx = idx + 1;
+            continue;
+        }
+        let cells = str.words(line);
+        let row = dict.new();
+        let col = 0;
+        while (col < len(headers)) {
+            if (col < len(cells)) {
+                dict.set(row, headers[col], cells[col]);
+            } else {
+                dict.set(row, headers[col], "");
+            }
+            col = col + 1;
+        }
+        arr.push(rows, row);
+        idx = idx + 1;
+    }
+    return rows;
+}
+
+/// Parses KEY=VALUE property output (e.g. from `systemctl show`).
+///
+/// Lines without the delimiter are treated as continuations of the previous value.
+/// Keys are lowercased. The delimiter defaults to "=".
+///
+/// @param stdout Raw stdout string containing KEY=VALUE lines
+/// @param delimiter The key-value separator (default "=")
+/// @return Dict mapping lowercased keys to their string values
+fn parse_properties(stdout, delimiter = "=") {
+    let trimmed = str.trim(stdout);
+    if (trimmed == "") {
+        return dict.new();
+    }
+    let lines = str.split(trimmed, "\n");
+    let result = dict.new();
+    let last_key = null;
+    for (let line in lines) {
+        let sep_idx = str.indexOf(line, delimiter);
+        if (sep_idx == -1) {
+            if (!(last_key is null)) {
+                let prev = result[last_key];
+                dict.set(result, last_key, prev + "\n" + line);
+            }
+        } else {
+            let key = str.lower(str.trim(str.substring(line, 0, sep_idx)));
+            let val = str.substring(line, sep_idx + len(delimiter), len(line));
+            dict.set(result, key, val);
+            last_key = key;
+        }
+    }
+    return result;
+}
+
+/// Splits output into an array of trimmed non-empty lines.
+///
+/// @param stdout Raw stdout string
+/// @return Array of non-empty trimmed line strings
+fn parse_lines(stdout) {
+    let trimmed = str.trim(stdout);
+    if (trimmed == "") {
+        return [];
+    }
+    let raw = str.split(trimmed, "\n");
+    let result = [];
+    for (let line in raw) {
+        let t = str.trim(line);
+        if (t != "") {
+            arr.push(result, t);
+        }
+    }
+    return result;
+}
+
+/// Formats a dict as an array of KEY=VALUE strings.
+///
+/// Useful for CLI tools that accept positional KEY=VALUE match expressions
+/// (e.g. journalctl field matches, environment variables).
+///
+/// @param d Dict to format
+/// @param separator The key-value separator (default "=")
+/// @return Array of "KEY=VALUE" strings
+fn format_pairs(d, separator = "=") {
+    let result = [];
+    let keys = dict.keys(d);
+    for (let key in keys) {
+        let val = conv.toStr(d[key]);
+        arr.push(result, key + separator + val);
+    }
+    return result;
+}
+
+/// Joins a dict as a space-separated string of KEY=VALUE pairs.
+///
+/// @param d Dict to format
+/// @param separator The key-value separator (default "=")
+/// @return Space-separated string of KEY=VALUE pairs
+fn join_pairs(d, separator = "=") {
+    let pairs = format_pairs(d, separator);
+    return arr.join(pairs, " ");
+}

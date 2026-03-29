@@ -1,0 +1,163 @@
+import { exec, exec_json, build_args, parse_properties, parse_table } from "common.stash";
+
+/// Lists all active login sessions.
+/// Runs `loginctl list-sessions --no-pager --no-legend` and parses the column output.
+/// @return Dict with ok (bool), data (array of session row dicts), stderr, exitCode
+fn list_sessions() {
+    let result = exec("loginctl list-sessions --no-pager --no-legend");
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Shows properties of a specific login session.
+/// Runs `loginctl show-session <id> --no-pager` and parses KEY=VALUE output into a dict.
+/// @param id Session ID (string or int)
+/// @return Dict with ok (bool), data (dict of properties), stderr, exitCode
+fn show_session(id) {
+    let cmd = $"loginctl show-session {conv.toStr(id)} --no-pager";
+    let result = exec(cmd);
+    if (!result.ok) {
+        return result;
+    }
+    let props = parse_properties(result.stdout);
+    return {
+        ok: true,
+        data: props,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Terminates a specific login session.
+/// Runs `loginctl terminate-session <id>`.
+/// @param id Session ID (string or int)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn terminate_session(id) {
+    let cmd = $"loginctl terminate-session {conv.toStr(id)}";
+    return exec(cmd);
+}
+
+/// Locks a specific login session.
+/// Runs `loginctl lock-session <id>`.
+/// @param id Session ID (string or int)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn lock_session(id) {
+    let cmd = $"loginctl lock-session {conv.toStr(id)}";
+    return exec(cmd);
+}
+
+/// Unlocks a specific login session.
+/// Runs `loginctl unlock-session <id>`.
+/// @param id Session ID (string or int)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn unlock_session(id) {
+    let cmd = $"loginctl unlock-session {conv.toStr(id)}";
+    return exec(cmd);
+}
+
+/// Lists all logged-in users.
+/// Runs `loginctl list-users --no-pager --no-legend` and parses the column output.
+/// @return Dict with ok (bool), data (array of user row dicts), stderr, exitCode
+fn list_users() {
+    let result = exec("loginctl list-users --no-pager --no-legend");
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Shows properties of a specific user.
+/// Runs `loginctl show-user <uid> --no-pager` and parses KEY=VALUE output into a dict.
+/// @param uid User ID (string or int)
+/// @return Dict with ok (bool), data (dict of properties), stderr, exitCode
+fn show_user(uid) {
+    let cmd = $"loginctl show-user {conv.toStr(uid)} --no-pager";
+    let result = exec(cmd);
+    if (!result.ok) {
+        return result;
+    }
+    let props = parse_properties(result.stdout);
+    return {
+        ok: true,
+        data: props,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Terminates all sessions of a specific user.
+/// Runs `loginctl terminate-user <uid>`.
+/// @param uid User ID or name (string or int)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn terminate_user(uid) {
+    let cmd = $"loginctl terminate-user {conv.toStr(uid)}";
+    return exec(cmd);
+}
+
+/// Enables lingering for a user, allowing their systemd user instance to persist after logout.
+/// Runs `loginctl enable-linger <user>`.
+/// @param user Username or UID (string or int)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn enable_linger(user) {
+    let cmd = $"loginctl enable-linger {conv.toStr(user)}";
+    return exec(cmd);
+}
+
+/// Disables lingering for a user, stopping their systemd user instance on logout.
+/// Runs `loginctl disable-linger <user>`.
+/// @param user Username or UID (string or int)
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn disable_linger(user) {
+    let cmd = $"loginctl disable-linger {conv.toStr(user)}";
+    return exec(cmd);
+}
+
+/// Lists all available seats.
+/// Runs `loginctl list-seats --no-pager --no-legend` and parses the column output.
+/// @return Dict with ok (bool), data (array of seat row dicts), stderr, exitCode
+fn list_seats() {
+    let result = exec("loginctl list-seats --no-pager --no-legend");
+    if (!result.ok) {
+        return result;
+    }
+    let data = parse_table(result.stdout);
+    return {
+        ok: true,
+        data: data,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Shows properties of a specific seat.
+/// Runs `loginctl show-seat <seat> --no-pager` and parses KEY=VALUE output into a dict.
+/// @param seat Seat name (e.g. "seat0")
+/// @return Dict with ok (bool), data (dict of properties), stderr, exitCode
+fn show_seat(seat) {
+    let cmd = $"loginctl show-seat {seat} --no-pager";
+    let result = exec(cmd);
+    if (!result.ok) {
+        return result;
+    }
+    let props = parse_properties(result.stdout);
+    return {
+        ok: true,
+        data: props,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}

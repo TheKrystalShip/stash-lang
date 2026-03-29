@@ -1,0 +1,87 @@
+import { exec, parse_properties } from "common.stash";
+
+/// Returns the current time and date status from timedatectl.
+/// Runs `timedatectl status --no-pager` and returns the raw text output.
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn status() {
+    return exec("timedatectl status --no-pager");
+}
+
+/// Returns timedatectl machine-readable properties as a parsed dict.
+/// Runs `timedatectl show --no-pager` and parses KEY=VALUE output.
+/// @return Dict with ok (bool), data (dict of properties), stderr, exitCode
+fn show() {
+    let result = exec("timedatectl show --no-pager");
+    if (!result.ok) {
+        return result;
+    }
+    let props = parse_properties(result.stdout);
+    return {
+        ok: true,
+        data: props,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Sets the system clock to the given date/time string.
+/// Runs `timedatectl set-time '<time_str>'`.
+/// @param time_str String date/time value, e.g. "2024-01-15 10:30:00"
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_time(time_str) {
+    let cmd = $"timedatectl set-time '{time_str}'";
+    return exec(cmd);
+}
+
+/// Sets the system timezone.
+/// Runs `timedatectl set-timezone <tz>`.
+/// @param tz Timezone name, e.g. "America/New_York"
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_timezone(tz) {
+    let cmd = $"timedatectl set-timezone {tz}";
+    return exec(cmd);
+}
+
+/// Lists all available timezones.
+/// Runs `timedatectl list-timezones --no-pager` and parses output into an array.
+/// @return Dict with ok (bool), data (array of timezone strings), stderr, exitCode
+fn list_timezones() {
+    let result = exec("timedatectl list-timezones --no-pager");
+    if (!result.ok) {
+        return result;
+    }
+    let lines = str.split(str.trim(result.stdout), "\n");
+    let zones = [];
+    for (let line in lines) {
+        let trimmed = str.trim(line);
+        if (trimmed != "") {
+            arr.push(zones, trimmed);
+        }
+    }
+    return {
+        ok: true,
+        data: zones,
+        stderr: result.stderr,
+        exitCode: result.exitCode
+    };
+}
+
+/// Enables or disables NTP (network time protocol) synchronisation.
+/// Runs `timedatectl set-ntp yes` or `timedatectl set-ntp no`.
+/// @param enabled Bool — true to enable NTP, false to disable
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn set_ntp(enabled) {
+    let val = "no";
+    if (enabled) {
+        val = "yes";
+    }
+    let cmd = $"timedatectl set-ntp {val}";
+    return exec(cmd);
+}
+
+/// Returns the current systemd-timesyncd status.
+/// Runs `timedatectl timesync-status --no-pager` and returns raw text output.
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn timesync_status() {
+    return exec("timedatectl timesync-status --no-pager");
+}

@@ -1,0 +1,122 @@
+import { exec } from "common.stash";
+import "@stash/cli/lib/flags.stash" as cli_flags;
+
+let run_service_spec = {
+    unit: { flag: "--unit" },
+    description: { flag: "--description" },
+    remain_after_exit: { flag: "--remain-after-exit", type: "bool" },
+    service_type: { flag: "--service-type" },
+    user: { flag: "--uid" },
+    slice: { flag: "--slice" },
+    working_directory: { flag: "--working-directory" },
+    env: { flag: "--setenv", type: "map" },
+    property: { flag: "--property", type: "list" }
+};
+
+let run_scope_spec = {
+    unit: { flag: "--unit" },
+    description: { flag: "--description" },
+    user: { flag: "--uid" },
+    slice: { flag: "--slice" }
+};
+
+let run_timer_spec = {
+    unit: { flag: "--unit" },
+    description: { flag: "--description" },
+    on_calendar: { flag: "--on-calendar" },
+    on_boot_sec: { flag: "--on-boot-sec" },
+    on_unit_active_sec: { flag: "--on-unit-active-sec" },
+    timer_property: { flag: "--timer-property", type: "list" }
+};
+
+let run_oneshot_spec = {
+    unit: { flag: "--unit" },
+    description: { flag: "--description" },
+    remain_after_exit: { flag: "--remain-after-exit", type: "bool" },
+    service_type: { flag: "--service-type" },
+    user: { flag: "--uid" },
+    slice: { flag: "--slice" },
+    working_directory: { flag: "--working-directory" },
+    env: { flag: "--setenv", type: "map" },
+    property: { flag: "--property", type: "list" },
+    pipe: { flag: "--pipe", type: "bool" },
+    wait: { flag: "--wait", type: "bool" }
+};
+
+let run_shell_spec = {
+    user: { flag: "--uid" },
+    pty: { flag: "--pty", type: "bool" }
+};
+
+/// Runs a command as a transient systemd service unit.
+/// The service is registered with systemd and appears in `systemctl list-units`.
+/// @param command The command string to execute
+/// @param opts Options dict:
+///   unit (string) — transient unit name (e.g. "mytask.service"),
+///   description (string) — unit Description= value,
+///   property (array of "KEY=VALUE" strings) — additional unit properties,
+///   user (bool) — run in user session instead of system,
+///   remain_after_exit (bool) — keep unit alive after command exits,
+///   collect (bool) — unload unit after it stops
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn run_service(command, opts = {}) {
+    let base = cli_flags.build_args("systemd-run", opts, run_service_spec);
+    return exec(base + " " + command);
+}
+
+/// Runs a command in a transient systemd scope unit.
+/// Scope units wrap externally-started processes and appear in the unit hierarchy.
+/// @param command The command string to execute
+/// @param opts Options dict:
+///   unit (string) — transient unit name,
+///   description (string) — unit Description= value,
+///   user (bool) — run in user session instead of system,
+///   slice (string) — place scope in the given slice (e.g. "user.slice")
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn run_scope(command, opts = {}) {
+    let base = cli_flags.build_args("systemd-run --scope", opts, run_scope_spec);
+    return exec(base + " " + command);
+}
+
+/// Creates and starts a transient timer unit that runs the given command on a schedule.
+/// At least one of on_calendar, on_boot_sec, or on_unit_active_sec must be provided.
+/// @param command The command string to execute when the timer fires
+/// @param opts Options dict:
+///   on_calendar (string) — calendar expression (e.g. "daily", "Mon *-*-* 00:00:00"),
+///   on_boot_sec (string) — run this long after boot (e.g. "5min"),
+///   on_unit_active_sec (string) — run this long after last activation (e.g. "1h"),
+///   unit (string) — transient unit name,
+///   description (string) — unit Description= value,
+///   user (bool) — run in user session instead of system,
+///   timer_property (array of "KEY=VALUE" strings) — additional timer properties
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn run_timer(command, opts = {}) {
+    let base = cli_flags.build_args("systemd-run", opts, run_timer_spec);
+    return exec(base + " " + command);
+}
+
+/// Runs a command as a one-shot transient service unit (Type=oneshot).
+/// Useful for short-lived tasks that should run and exit cleanly.
+/// @param command The command string to execute
+/// @param opts Options dict:
+///   unit (string) — transient unit name,
+///   pipe (bool) — pass --pipe to connect stdin/stdout/stderr,
+///   wait (bool) — pass --wait to block until the service completes
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn run_oneshot(command, opts = {}) {
+    let base = cli_flags.build_args("systemd-run --property Type=oneshot", opts, run_oneshot_spec);
+    return exec(base + " " + command);
+}
+
+/// Runs a command inside a transient shell via systemd-run --shell.
+/// This opens a shell session managed by systemd, inheriting the caller's environment.
+/// @param command The command string to pass to the shell
+/// @param opts Options dict:
+///   unit (string) — transient unit name,
+///   user (bool) — run in user session instead of system,
+///   description (string) — unit Description= value
+/// @return Dict with ok (bool), stdout, stderr, exitCode
+fn run_shell(command, opts = {}) {
+    let base = cli_flags.build_args("systemd-run --shell", opts, run_shell_spec);
+    return exec(base + " " + command);
+}
