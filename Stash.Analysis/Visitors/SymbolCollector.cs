@@ -717,6 +717,35 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Walks the try, catch, and finally bodies. Declares the catch variable in a new block scope.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitTryCatchStmt(TryCatchStmt stmt)
+    {
+        PushScope(ScopeKind.Block, stmt.TryBody.Span);
+        foreach (var s in stmt.TryBody.Statements)
+            s.Accept(this);
+        PopScope();
+
+        if (stmt.CatchBody is not null)
+        {
+            PushScope(ScopeKind.Block, stmt.CatchBody.Span);
+            _currentScope.AddSymbol(new SymbolInfo(stmt.CatchVariable!.Lexeme, SymbolKind.Variable, stmt.CatchVariable.Span, detail: "caught error"));
+            foreach (var s in stmt.CatchBody.Statements)
+                s.Accept(this);
+            PopScope();
+        }
+
+        if (stmt.FinallyBody is not null)
+        {
+            PushScope(ScopeKind.Block, stmt.FinallyBody.Span);
+            foreach (var s in stmt.FinallyBody.Statements)
+                s.Accept(this);
+            PopScope();
+        }
+
+        return null;
+    }
+
     /// <summary>No-op — <c>break</c> introduces no symbols.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitBreakStmt(BreakStmt stmt) => null;

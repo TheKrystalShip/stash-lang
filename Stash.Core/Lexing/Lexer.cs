@@ -98,6 +98,8 @@ public class Lexer
             ["null"] = TokenType.Null,
             ["try"] = TokenType.Try,
             ["throw"] = TokenType.Throw,
+            ["catch"] = TokenType.Catch,
+            ["finally"] = TokenType.Finally,
             ["import"] = TokenType.Import,
             ["as"] = TokenType.As,
             ["switch"] = TokenType.Switch,

@@ -231,6 +231,12 @@ public enum TokenType
     /// <summary>The <c>throw</c> keyword. Throws an error value, unwinding the call stack to the nearest enclosing <c>try</c> expression.</summary>
     Throw,
 
+    /// <summary>The <c>catch</c> keyword. Begins the error-handling clause of a try/catch statement, optionally binding the caught error to a variable.</summary>
+    Catch,
+
+    /// <summary>The <c>finally</c> keyword. Begins the cleanup clause of a try/catch statement. The finally block always executes.</summary>
+    Finally,
+
     /// <summary>The <c>import</c> keyword. Imports bindings from another module.</summary>
     Import,
 

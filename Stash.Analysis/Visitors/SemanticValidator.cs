@@ -562,6 +562,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <inheritdoc />
+    public object? VisitTryCatchStmt(TryCatchStmt stmt)
+    {
+        stmt.TryBody.Accept(this);
+        stmt.CatchBody?.Accept(this);
+        stmt.FinallyBody?.Accept(this);
+        return null;
+    }
+
     // Expression visitors
 
     /// <summary>

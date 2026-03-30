@@ -112,4 +112,9 @@ public interface IStmtVisitor<T>
     /// Visits an <see cref="ElevateStmt"/> node (<c>elevate { ... }</c> or <c>elevate("doas") { ... }</c>).
     /// </summary>
     T VisitElevateStmt(ElevateStmt stmt);
+
+    /// <summary>
+    /// Visits a <see cref="TryCatchStmt"/> node (<c>try { ... } catch(e) { ... } finally { ... }</c>).
+    /// </summary>
+    T VisitTryCatchStmt(TryCatchStmt stmt);
 }

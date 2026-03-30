@@ -179,6 +179,15 @@ public class FoldingRangeHandler : FoldingRangeHandlerBase
                 CollectFoldingRanges(forInStmt.Body, ranges);
                 break;
 
+            case TryCatchStmt tryCatch:
+                AddRegion(ranges, tryCatch.Span, FoldingRangeKind.Region);
+                CollectFoldingRanges(tryCatch.TryBody, ranges);
+                if (tryCatch.CatchBody is not null)
+                    CollectFoldingRanges(tryCatch.CatchBody, ranges);
+                if (tryCatch.FinallyBody is not null)
+                    CollectFoldingRanges(tryCatch.FinallyBody, ranges);
+                break;
+
             case BlockStmt block:
                 AddRegion(ranges, block.Span, FoldingRangeKind.Region);
                 foreach (var s in block.Statements)

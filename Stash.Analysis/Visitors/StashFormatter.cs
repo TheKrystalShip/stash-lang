@@ -555,6 +555,32 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitTryCatchStmt(TryCatchStmt stmt)
+    {
+        EmitToken(); // try
+        Space();
+        stmt.TryBody.Accept(this);
+        if (stmt.CatchBody is not null)
+        {
+            Space();
+            EmitToken(); // catch
+            Space();
+            EmitToken(); // (
+            EmitToken(); // variable
+            EmitToken(); // )
+            Space();
+            stmt.CatchBody.Accept(this);
+        }
+        if (stmt.FinallyBody is not null)
+        {
+            Space();
+            EmitToken(); // finally
+            Space();
+            stmt.FinallyBody.Accept(this);
+        }
+        return 0;
+    }
+
     public int VisitBreakStmt(BreakStmt stmt)
     {
         EmitToken(); // break

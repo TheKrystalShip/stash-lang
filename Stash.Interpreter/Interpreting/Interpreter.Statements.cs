@@ -586,4 +586,33 @@ public partial class Interpreter
 
         return null;
     }
+
+    /// <inheritdoc />
+    public object? VisitTryCatchStmt(TryCatchStmt stmt)
+    {
+        bool hasCatch = stmt.CatchBody is not null;
+        bool hasFinally = stmt.FinallyBody is not null;
+
+        try
+        {
+            Execute(stmt.TryBody);
+        }
+        catch (RuntimeError e) when (hasCatch || !hasFinally)
+        {
+            var error = StashError.FromRuntimeError(e, _ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
+            LastError = error;
+            if (hasCatch)
+            {
+                var catchEnv = new Environment(_environment);
+                catchEnv.Define(stmt.CatchVariable!.Lexeme, error);
+                ExecuteBlock(stmt.CatchBody!.Statements, catchEnv);
+            }
+        }
+        finally
+        {
+            if (hasFinally)
+                Execute(stmt.FinallyBody!);
+        }
+        return null;
+    }
 }

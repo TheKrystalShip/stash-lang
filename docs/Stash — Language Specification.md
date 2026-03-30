@@ -1317,12 +1317,12 @@ This feels natural — commands read like commands, not like strings, but you st
 
 #### Comparison With Alternatives
 
-| Syntax        | Example          | Verdict                                                                     |
-| ------------- | ---------------- | --------------------------------------------------------------------------- |
-| `exec("cmd")` | `exec("ls -la")` | Rejected — commands look like strings, not commands                         |
-| `` `cmd` ``   | `` `ls -la` ``   | Viable but conflicts with potential future use of backticks                 |
+| Syntax        | Example          | Verdict                                                                      |
+| ------------- | ---------------- | ---------------------------------------------------------------------------- |
+| `exec("cmd")` | `exec("ls -la")` | Rejected — commands look like strings, not commands                          |
+| `` `cmd` ``   | `` `ls -la` ``   | Viable but conflicts with potential future use of backticks                  |
 | `$(cmd)`      | `$(ls -la)`      | **Chosen** — familiar from Bash, always raw mode, `${...}` for interpolation |
-| `$>(cmd)`     | `$>(ls -la)`     | Passthrough variant — inherited I/O for interactive commands                |
+| `$>(cmd)`     | `$>(ls -la)`     | Passthrough variant — inherited I/O for interactive commands                 |
 
 Implementation: backed by `System.Diagnostics.Process` in C#.
 
@@ -2064,17 +2064,121 @@ if (config is Error) {
 }
 ```
 
+### The `try`/`catch`/`finally` Statement
+
+For situations that need **scoped error handling** or **guaranteed cleanup**, Stash provides `try`/`catch`/`finally` blocks. These coexist with `try expr` — use whichever fits the situation:
+
+```stash
+try {
+    let handle = fs.open("/tmp/data.lock");
+    doWork(handle);
+} catch (e) {
+    log.error("Work failed: " + e.message);
+} finally {
+    fs.delete("/tmp/data.lock");  // ALWAYS runs
+}
+```
+
+#### Syntax
+
+```stash
+try { ... }                              // bare try — error suppression
+try { ... } catch (variable) { ... }     // catch errors
+try { ... } finally { ... }              // guaranteed cleanup
+try { ... } catch (e) { ... } finally { ... }  // both
+```
+
+The `catch` clause declares a variable that receives the Error value (same fields as `try expr` errors: `.message`, `.type`, `.stack`). The `finally` clause runs unconditionally — after the try body on success, after the catch body on error.
+
+#### Four Forms
+
+| Form                                | Behavior                                              |
+| ----------------------------------- | ----------------------------------------------------- |
+| `try { } catch (e) { }`             | Catches errors; `e` is the Error value                |
+| `try { } finally { }`               | No catch — errors propagate after `finally` runs      |
+| `try { } catch (e) { } finally { }` | Catches errors, then `finally` always runs            |
+| `try { }`                           | Bare try — silently suppresses errors (use sparingly) |
+
+#### Catch Variable Scoping
+
+The catch variable is scoped to the catch block — it does not leak into the surrounding scope:
+
+```stash
+try {
+    throw "boom";
+} catch (e) {
+    io.println(e.message);  // "boom"
+}
+// e is not accessible here
+```
+
+#### Finally Guarantees
+
+`finally` executes even when control flow leaves the try/catch via `return`, `break`, or `continue`:
+
+```stash
+fn loadData() {
+    try {
+        return fs.readFile("/tmp/data");
+    } finally {
+        io.println("Cleanup runs even after return");
+    }
+}
+```
+
+If the `catch` block itself throws, `finally` still runs before the new error propagates.
+
+#### Rethrow in Catch
+
+Rethrow a caught error to add context or re-signal it:
+
+```stash
+try {
+    riskyOperation();
+} catch (e) {
+    log.error("Failed: " + e.message);
+    throw e;  // re-throws the original error
+}
+```
+
+#### Nesting
+
+`try`/`catch`/`finally` blocks can be nested. Inner catches handle errors first; uncaught errors propagate to outer handlers:
+
+```stash
+try {
+    try {
+        throw "inner";
+    } catch (e) {
+        io.println("Caught inner: " + e.message);
+        throw "re-thrown";
+    }
+} catch (e) {
+    io.println("Caught outer: " + e.message);  // "re-thrown"
+}
+```
+
+#### When to Use Which
+
+| Pattern                             | Use case                                              |
+| ----------------------------------- | ----------------------------------------------------- |
+| `try expr ?? default`               | Quick fallback for a single fallible expression       |
+| `try expr` + `is Error`             | Inspect error details for a single expression         |
+| `try { } catch (e) { }`             | Handle errors across multiple statements              |
+| `try { } finally { }`               | Guaranteed resource cleanup (files, locks, temp dirs) |
+| `try { } catch (e) { } finally { }` | Both error handling and cleanup                       |
+
+Both patterns are first-class — `try expr` is lightweight and composable; `try/catch/finally` is structured and scoped. Choose based on complexity.
+
 ### Implementation
 
-`try` is a single AST node (`TryExpr`) wrapping another expression. On failure, the interpreter catches the internal `RuntimeError`, converts it to a `StashError` value (with message, type, and stack trace), stores it for `lastError()`, and returns it. `throw` is a statement node (`ThrowStmt`) that raises a `RuntimeError` from user code. Error values are falsy, making them compatible with `??` for default-value patterns.
+**`try expr`:** A single AST node (`TryExpr`) wrapping another expression. On failure, the interpreter catches the internal `RuntimeError`, converts it to a `StashError` value (with message, type, and stack trace), stores it for `lastError()`, and returns it. Error values are falsy, making them compatible with `??` for default-value patterns.
 
-### Comparison With Alternatives
+**`try/catch/finally`:** A statement AST node (`TryCatchStmt`) with try body, optional catch clause (keyword + variable + body), and optional finally clause (keyword + body). The parser disambiguates at the `try` keyword: if the next token is `{`, it parses a `TryCatchStmt`; otherwise, it parses a `try expr` (`TryExpr`). `throw` is a statement node (`ThrowStmt`) that raises a `RuntimeError` from user code.
 
-| Approach         | Verdict                                                                                       |
-| ---------------- | --------------------------------------------------------------------------------------------- |
-| Try/catch blocks | Rejected — requires exception machinery; overkill for a scripting language                    |
-| Go-style results | Rejected — too verbose; error check after every operation                                     |
-| `try` expression | **Chosen** — lightweight, opt-in, composes with `??`, first-class error values for inspection |
+### Design History
+
+The original design used only `try expr` — lightweight, no exception machinery, no Go-style verbosity. After a gap analysis revealed that the absence of structured error handling blocked reliable deploy scripts and resource cleanup patterns, `try/catch/finally` was added as a **complement** (not a replacement). The `try expr` pattern remains the recommended choice for simple fallible expressions.
 
 ---
 

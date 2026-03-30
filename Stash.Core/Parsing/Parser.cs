@@ -629,6 +629,12 @@ public class Parser
             return ElevateStatement();
         }
 
+        if (Check(TokenType.Try) && _tokens[_current + 1].Type == TokenType.LeftBrace)
+        {
+            Advance();
+            return TryCatchStatement();
+        }
+
         if (Check(TokenType.LeftBrace))
         {
             return ParseBlock();
@@ -823,6 +829,43 @@ public class Parser
         Token keyword = Previous();
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after 'continue'.");
         return new ContinueStmt(MakeSpan(keyword.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a try/catch/finally statement: <c>try { ... } catch (e) { ... } finally { ... }</c>.
+    /// The <c>try</c> token has already been consumed.
+    /// A bare <c>try { ... }</c> block (no catch, no finally) is also valid and suppresses errors silently.
+    /// </summary>
+    /// <returns>A <see cref="TryCatchStmt"/>.</returns>
+    private Stmt TryCatchStatement()
+    {
+        Token tryKeyword = Previous();
+        BlockStmt tryBody = ParseBlock();
+
+        Token? catchKeyword = null;
+        Token? catchVariable = null;
+        BlockStmt? catchBody = null;
+        Token? finallyKeyword = null;
+        BlockStmt? finallyBody = null;
+
+        if (Match(TokenType.Catch))
+        {
+            catchKeyword = Previous();
+            Consume(TokenType.LeftParen, "Expected '(' after 'catch'.");
+            catchVariable = Consume(TokenType.Identifier, "Expected variable name in 'catch'.");
+            Consume(TokenType.RightParen, "Expected ')' after catch variable.");
+            catchBody = ParseBlock();
+        }
+
+        if (Match(TokenType.Finally))
+        {
+            finallyKeyword = Previous();
+            finallyBody = ParseBlock();
+        }
+
+        SourceSpan endSpan = (finallyBody ?? catchBody ?? tryBody).Span;
+        return new TryCatchStmt(tryKeyword, tryBody, catchKeyword, catchVariable, catchBody, finallyKeyword, finallyBody,
+            MakeSpan(tryKeyword.Span, endSpan));
     }
 
     /// <summary>

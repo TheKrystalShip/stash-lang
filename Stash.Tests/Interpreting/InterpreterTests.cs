@@ -3189,6 +3189,412 @@ public class InterpreterTests
         Assert.Equal(42L, Run("let result = try conv.toInt(\"42\") ?? 0;"));
     }
 
+    // --- Try/Catch/Finally Statement Tests ---
+
+    [Fact]
+    public void TryCatch_CatchesError_BindsVariable()
+    {
+        var source = @"
+            let result = null;
+            try {
+                throw ""something broke"";
+            } catch (e) {
+                result = e.message;
+            }
+        ";
+        Assert.Equal("something broke", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_NoError_SkipsCatchBlock()
+    {
+        var source = @"
+            let result = ""no error"";
+            try {
+                let x = 1 + 2;
+            } catch (e) {
+                result = ""caught"";
+            }
+        ";
+        Assert.Equal("no error", Run(source));
+    }
+
+    [Fact]
+    public void TryFinally_FinallyAlwaysRuns()
+    {
+        var source = @"
+            let result = ""before"";
+            try {
+                let x = 1;
+            } finally {
+                result = ""finally ran"";
+            }
+        ";
+        Assert.Equal("finally ran", Run(source));
+    }
+
+    [Fact]
+    public void TryFinally_FinallyRunsAfterError()
+    {
+        var source = @"
+            let result = ""before"";
+            try {
+                try {
+                    throw ""oops"";
+                } finally {
+                    result = ""finally ran"";
+                }
+            } catch (e) {
+                // outer catch absorbs the propagated error
+            }
+        ";
+        Assert.Equal("finally ran", Run(source));
+    }
+
+    [Fact]
+    public void TryCatchFinally_AllThreeExecute()
+    {
+        var source = @"
+            let log = """";
+            try {
+                log = log + ""try "";
+                throw ""fail"";
+            } catch (e) {
+                log = log + ""catch "";
+            } finally {
+                log = log + ""finally"";
+            }
+            let result = log;
+        ";
+        Assert.Equal("try catch finally", Run(source));
+    }
+
+    [Fact]
+    public void TryCatchFinally_NoError_SkipsCatch()
+    {
+        var source = @"
+            let log = """";
+            try {
+                log = log + ""try "";
+            } catch (e) {
+                log = log + ""catch "";
+            } finally {
+                log = log + ""finally"";
+            }
+            let result = log;
+        ";
+        Assert.Equal("try finally", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_ErrorType_Preserved()
+    {
+        var source = @"
+            let result = null;
+            try {
+                throw { type: ""DeployError"", message: ""rollback"" };
+            } catch (e) {
+                result = e.type;
+            }
+        ";
+        Assert.Equal("DeployError", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_CatchVariable_ScopedToBlock()
+    {
+        // 'e' should not be accessible outside the catch block
+        RunExpectingError(@"
+            try {
+                throw ""oops"";
+            } catch (e) {
+                let x = e.message;
+            }
+            let result = e;
+        ");
+    }
+
+    [Fact]
+    public void TryCatch_NestedTry_InnerCatches()
+    {
+        var source = @"
+            let result = null;
+            try {
+                try {
+                    throw ""inner error"";
+                } catch (e) {
+                    result = ""inner: "" + e.message;
+                }
+            } catch (e) {
+                result = ""outer: "" + e.message;
+            }
+        ";
+        Assert.Equal("inner: inner error", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_NestedTry_OuterCatchesUncaught()
+    {
+        var source = @"
+            let result = null;
+            try {
+                try {
+                    throw ""inner error"";
+                } finally {
+                    // no catch, error propagates
+                }
+            } catch (e) {
+                result = e.message;
+            }
+        ";
+        Assert.Equal("inner error", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_FunctionThrow_CaughtByCaller()
+    {
+        var source = @"
+            fn risky() {
+                throw ""function failed"";
+            }
+            let result = null;
+            try {
+                risky();
+            } catch (e) {
+                result = e.message;
+            }
+        ";
+        Assert.Equal("function failed", Run(source));
+    }
+
+    [Fact]
+    public void TryFinally_ErrorPropagatesAfterFinally()
+    {
+        // try/finally without catch should run finally but still propagate the error
+        RunExpectingError(@"
+            let x = ""before"";
+            try {
+                throw ""must propagate"";
+            } finally {
+                x = ""finally ran"";
+            }
+        ");
+    }
+
+    [Fact]
+    public void TryCatchFinally_FinallyRunsEvenOnCatchError()
+    {
+        // If catch itself throws, finally still runs
+        RunExpectingError(@"
+            let marker = ""before"";
+            try {
+                throw ""first"";
+            } catch (e) {
+                throw ""second"";
+            } finally {
+                marker = ""finally ran"";
+            }
+        ");
+    }
+
+    [Fact]
+    public void TryBlock_NoErrorNoCatchNoFinally_Works()
+    {
+        // try { } alone (error suppression, backward compat)
+        var source = @"
+            let result = ""ok"";
+            try {
+                throw ""swallowed"";
+            }
+            // execution continues
+        ";
+        Assert.Equal("ok", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_LastErrorUpdated()
+    {
+        var source = @"
+            try {
+                throw ""tracked error"";
+            } catch (e) {
+                // caught
+            }
+            let result = lastError().message;
+        ";
+        Assert.Equal("tracked error", Run(source));
+    }
+
+    [Fact]
+    public void TryExpr_StillWorks_AlongsideTryCatch()
+    {
+        // Verify try-expression still parses when not followed by {
+        var source = @"
+            let x = try conv.toInt(""abc"");
+            let result = x is Error;
+        ";
+        Assert.Equal(true, Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_ReturnFromTryBlock()
+    {
+        var source = @"
+            fn test() {
+                try {
+                    return ""from try"";
+                } catch (e) {
+                    return ""from catch"";
+                }
+                return ""after"";
+            }
+            let result = test();
+        ";
+        Assert.Equal("from try", Run(source));
+    }
+
+    [Fact]
+    public void TryCatchFinally_FinallyRunsOnReturn()
+    {
+        var source = @"
+            let log = """";
+            fn test() {
+                try {
+                    return ""value"";
+                } finally {
+                    log = ""finally ran"";
+                }
+            }
+            let r = test();
+            let result = log;
+        ";
+        Assert.Equal("finally ran", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_BreakInLoop_FinallyRuns()
+    {
+        var source = @"
+            let log = """";
+            for (let i in range(5)) {
+                try {
+                    log = log + conv.toStr(i);
+                    if (i == 2) { break; }
+                } finally {
+                    log = log + ""f"";
+                }
+            }
+            let result = log;
+        ";
+        Assert.Equal("0f1f2f", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_ContinueInLoop_FinallyRuns()
+    {
+        var source = @"
+            let log = """";
+            for (let i in range(4)) {
+                try {
+                    log = log + conv.toStr(i);
+                    if (i == 1) { continue; }
+                } finally {
+                    log = log + ""f"";
+                }
+            }
+            let result = log;
+        ";
+        Assert.Equal("0f1f2f3f", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_ErrorStack_Available()
+    {
+        var source = @"
+            let result = null;
+            fn inner() { throw ""deep error""; }
+            fn outer() { inner(); }
+            try {
+                outer();
+            } catch (e) {
+                result = e.message;
+            }
+        ";
+        Assert.Equal("deep error", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_RethrowCaughtError()
+    {
+        var source = @"
+            let result = null;
+            try {
+                try {
+                    throw ""original"";
+                } catch (e) {
+                    throw e;
+                }
+            } catch (e2) {
+                result = e2.message;
+            }
+        ";
+        Assert.Equal("original", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_CatchVariable_ShadowsOuter()
+    {
+        var source = @"
+            let e = ""outer"";
+            try {
+                throw ""inner error"";
+            } catch (e) {
+                // e is shadowed inside catch
+            }
+            let result = e;
+        ";
+        Assert.Equal("outer", Run(source));
+    }
+
+    [Fact]
+    public void TryCatch_BreakPropagatesThroughCatch()
+    {
+        // break is not a RuntimeError, so catch should not intercept it
+        var source = @"
+            let result = 0;
+            for (let i in range(5)) {
+                try {
+                    if (i == 3) { break; }
+                    result = i;
+                } catch (e) {
+                    result = -1;
+                }
+            }
+        ";
+        Assert.Equal(2L, Run(source));
+    }
+
+    [Fact]
+    public void TryCatchFinally_FinallyRuns_WhenCatchThrows()
+    {
+        var source = @"
+            let marker = ""before"";
+            try {
+                try {
+                    throw ""first"";
+                } catch (e) {
+                    throw ""second"";
+                } finally {
+                    marker = ""finally ran"";
+                }
+            } catch (outer) {
+                // absorb the second error
+            }
+            let result = marker;
+        ";
+        Assert.Equal("finally ran", Run(source));
+    }
+
     // --- Increment/Decrement (++/--) Tests ---
 
     [Fact]

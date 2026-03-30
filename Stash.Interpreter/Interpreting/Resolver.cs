@@ -318,6 +318,23 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitTryCatchStmt(TryCatchStmt stmt)
+    {
+        Resolve(stmt.TryBody);
+        if (stmt.CatchBody is not null)
+        {
+            BeginScope();
+            Declare(stmt.CatchVariable!.Lexeme);
+            Define(stmt.CatchVariable.Lexeme);
+            Resolve(stmt.CatchBody.Statements);
+            EndScope();
+        }
+        if (stmt.FinallyBody is not null)
+            Resolve(stmt.FinallyBody);
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
         foreach (var name in stmt.Names)

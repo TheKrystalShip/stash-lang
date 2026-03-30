@@ -335,6 +335,24 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitTryCatchStmt(TryCatchStmt stmt)
+    {
+        EmitFromToken(stmt.TryKeyword, TokenTypeKeyword, 0);
+        stmt.TryBody.Accept(this);
+        if (stmt.CatchBody is not null)
+        {
+            if (stmt.CatchKeyword is not null)
+                EmitFromToken(stmt.CatchKeyword, TokenTypeKeyword, 0);
+            if (stmt.CatchVariable is not null)
+                EmitFromToken(stmt.CatchVariable, TokenTypeVariable, ModifierDeclaration);
+            stmt.CatchBody.Accept(this);
+        }
+        if (stmt.FinallyKeyword is not null)
+            EmitFromToken(stmt.FinallyKeyword, TokenTypeKeyword, 0);
+        stmt.FinallyBody?.Accept(this);
+        return 0;
+    }
+
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
         EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
