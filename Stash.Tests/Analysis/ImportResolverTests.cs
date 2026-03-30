@@ -489,4 +489,130 @@ public class ImportResolverTests
             CleanupTempDir(tempDir);
         }
     }
+
+    [Fact]
+    public void Analyze_ImportedTypeUsedAsReturnType_NoUnusedDiagnostic()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "struct MyType { value: string }",
+            mainSource: "import { MyType } from \"module.stash\";\nfn create() -> MyType { return null; }");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
+
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Message.Contains("MyType") && d.Message.Contains("declared but never used"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ImportedTypeUsedAsParameterType_NoUnusedDiagnostic()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "struct Config { name: string }",
+            mainSource: "import { Config } from \"module.stash\";\nfn process(c: Config) { }");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
+
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Message.Contains("Config") && d.Message.Contains("declared but never used"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ImportedTypeUsedAsVariableTypeHint_NoUnusedDiagnostic()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "struct Item { id: int }",
+            mainSource: "import { Item } from \"module.stash\";\nlet x: Item = null;");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
+
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Message.Contains("Item") && d.Message.Contains("declared but never used"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ImportedTypeUsedAsConstantTypeHint_NoUnusedDiagnostic()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "struct Settings { debug: bool }",
+            mainSource: "import { Settings } from \"module.stash\";\nconst s: Settings = null;");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
+
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Message.Contains("Settings") && d.Message.Contains("declared but never used"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ImportedTypeUsedAsStructFieldType_NoUnusedDiagnostic()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "struct Inner { x: int }",
+            mainSource: "import { Inner } from \"module.stash\";\nstruct Outer { field: Inner }");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
+
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Message.Contains("Inner") && d.Message.Contains("declared but never used"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
+
+    [Fact]
+    public void Analyze_ImportedTypeUsedAsLambdaParameterType_NoUnusedDiagnostic()
+    {
+        var (tempDir, _, mainUri) = SetupImportTest(
+            moduleSource: "struct Event { data: string }",
+            mainSource: "import { Event } from \"module.stash\";\nlet handler = (e: Event) => { };");
+
+        try
+        {
+            var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
+            var result = engine.Analyze(mainUri, File.ReadAllText(mainUri.LocalPath));
+
+            Assert.DoesNotContain(result.SemanticDiagnostics,
+                d => d.Message.Contains("Event") && d.Message.Contains("declared but never used"));
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
 }

@@ -28,10 +28,9 @@ using StashSymbolKind = Stash.Analysis.SymbolKind;
 /// in the imported module, it falls back to the beginning of the imported file.
 /// </para>
 /// <para>
-/// Dot-access context (detected via <see cref="TextUtilities.FindDotPrefix"/>) suppresses
-/// namespace-symbol matches to prevent false navigation (e.g., <c>e.time</c> must not
-/// jump to the <c>time</c> namespace declaration). Namespace member access is resolved
-/// via <see cref="AnalysisResult.ResolveNamespaceMember"/>.
+/// Dot-access context (detected via <see cref="TextUtilities.FindDotPrefix"/>) bypasses
+/// local scope resolution entirely, delegating to <see cref="AnalysisResult.ResolveNamespaceMember"/>
+/// to resolve the member from the imported module.
 /// </para>
 /// </remarks>
 public class DefinitionHandler : DefinitionHandlerBase
@@ -88,18 +87,13 @@ public class DefinitionHandler : DefinitionHandlerBase
             return Task.FromResult<LocationOrLocationLinks?>(null);
         }
 
-        // Dot-access context: ignore global-scope namespace matches (e.g., "time" in "e.time")
+        // Dot-access context: this word follows a dot (e.g., "build_args" in "cli_utils.build_args").
+        // Skip local scope resolution entirely — the member must be resolved from the namespace/module.
         var textLines = text!.Split('\n');
         var dotPrefix = TextUtilities.FindDotPrefix(textLines[request.Position.Line], request.Position.Character);
         bool afterDot = dotPrefix != null;
 
-        var symbol = result.Symbols.FindDefinition(word, line, col);
-
-        // After dot: suppress namespace symbol matches — this is a member access, not a namespace reference
-        if (afterDot && symbol != null && symbol.Kind is StashSymbolKind.Namespace)
-        {
-            symbol = null;
-        }
+        var symbol = afterDot ? null : result.Symbols.FindDefinition(word, line, col);
 
         if (symbol == null)
         {

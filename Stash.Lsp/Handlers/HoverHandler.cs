@@ -92,19 +92,12 @@ public class HoverHandler : HoverHandlerBase
 
         // ── Dot-access context check ──────────────────────────────────────────
         // Detect whether this word follows a dot (e.g., "time" in "e.time").
-        // If so, do NOT resolve it as a standalone global symbol.
+        // Skip local scope resolution entirely — the member must be resolved from the namespace/module.
         var textLines = text!.Split('\n');
         var dotPrefix = TextUtilities.FindDotPrefix(textLines[(int)request.Position.Line], (int)request.Position.Character);
         bool afterDot = dotPrefix != null;
 
-        var symbol = result.Symbols.FindDefinition(word, line, col);
-
-        // After dot: a namespace symbol match is a false positive — e.g., hovering
-        // "time" in "e.time" must not resolve to the "time" namespace.
-        if (afterDot && symbol != null && symbol.Kind is StashSymbolKind.Namespace)
-        {
-            symbol = null;
-        }
+        var symbol = afterDot ? null : result.Symbols.FindDefinition(word, line, col);
 
         // If not found directly, try namespace member access
         if (symbol == null)

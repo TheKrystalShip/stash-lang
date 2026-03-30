@@ -79,7 +79,12 @@ public class TypeDefinitionHandler : TypeDefinitionHandlerBase
         var line = request.Position.Line + 1;
         var col = request.Position.Character + 1;
 
-        var symbol = result.Symbols.FindDefinition(word, line, col);
+        // Dot-access context: skip local scope resolution — resolve from the namespace/module instead.
+        var textLines = text!.Split('\n');
+        var dotPrefix = TextUtilities.FindDotPrefix(textLines[(int)request.Position.Line], (int)request.Position.Character);
+        bool afterDot = dotPrefix != null;
+
+        var symbol = afterDot ? null : result.Symbols.FindDefinition(word, line, col);
 
         // If cursor is on a namespace member (e.g., alias.member), resolve it
         if (symbol == null)
