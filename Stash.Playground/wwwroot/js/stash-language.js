@@ -67,9 +67,12 @@ function registerStashLanguage() {
                 // Regular strings: "..."
                 [/"/, 'string', '@string'],
 
-                // Numbers (float before int)
-                [/\b\d+\.\d+\b/, 'number.float'],
-                [/\b\d+\b/, 'number'],
+                // Numbers (hex, octal, binary before float before int)
+                [/\b0[xX][0-9a-fA-F][0-9a-fA-F_]*\b/, 'number.hex'],
+                [/\b0[oO][0-7][0-7_]*\b/, 'number.octal'],
+                [/\b0[bB][01][01_]*\b/, 'number.binary'],
+                [/\b\d[\d_]*\.\d[\d_]*\b/, 'number.float'],
+                [/\b\d[\d_]*\b/, 'number'],
 
                 // self keyword
                 [/\bself\b/, 'variable.language'],

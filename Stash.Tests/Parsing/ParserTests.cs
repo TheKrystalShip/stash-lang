@@ -32,6 +32,18 @@ public class ParserTests
         Assert.Equal(3.14, literal.Value);
     }
 
+    [Theory]
+    [InlineData("0xFF", 255L)]
+    [InlineData("0o755", 493L)]
+    [InlineData("0b1010", 10L)]
+    [InlineData("1_000", 1000L)]
+    public void Parse_AlternativeBaseNumberLiteral_ReturnsLiteralExpr(string source, long expected)
+    {
+        var result = ParseExpr(source);
+        var literal = Assert.IsType<LiteralExpr>(result);
+        Assert.Equal(expected, literal.Value);
+    }
+
     [Fact]
     public void Parse_StringLiteral_ReturnsLiteralExprWithStringValue()
     {

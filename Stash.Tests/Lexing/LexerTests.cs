@@ -160,6 +160,235 @@ public class LexerTests
         Assert.Equal(source, tokens[0].Lexeme);
     }
 
+    // ── 4a. Hex literals ────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("0xFF", 255L)]
+    [InlineData("0x00", 0L)]
+    [InlineData("0XFF", 255L)]
+    [InlineData("0x1A2B", 6699L)]
+    [InlineData("0xDEAD", 57005L)]
+    [InlineData("0xff", 255L)]
+    [InlineData("0xaBcDeF", 11259375L)]
+    public void ScanTokens_HexLiteral_ProducesLongValue(string source, long expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    // ── 4b. Octal literals ──────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("0o755", 493L)]
+    [InlineData("0o644", 420L)]
+    [InlineData("0O777", 511L)]
+    [InlineData("0o0", 0L)]
+    [InlineData("0o10", 8L)]
+    public void ScanTokens_OctalLiteral_ProducesLongValue(string source, long expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    // ── 4c. Binary literals ─────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("0b1010", 10L)]
+    [InlineData("0B1010", 10L)]
+    [InlineData("0b0", 0L)]
+    [InlineData("0b1", 1L)]
+    [InlineData("0b11110000", 240L)]
+    [InlineData("0b10000000", 128L)]
+    public void ScanTokens_BinaryLiteral_ProducesLongValue(string source, long expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    // ── 4d. Underscore separators ───────────────────────────────────────
+
+    [Theory]
+    [InlineData("1_000", 1000L)]
+    [InlineData("1_000_000", 1000000L)]
+    [InlineData("1_2_3", 123L)]
+    public void ScanTokens_IntegerWithUnderscores_ProducesLongValue(string source, long expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    [Theory]
+    [InlineData("1_000.50", 1000.50)]
+    [InlineData("3.141_592", 3.141592)]
+    [InlineData("1_000.000_001", 1000.000001)]
+    public void ScanTokens_FloatWithUnderscores_ProducesDoubleValue(string source, double expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.FloatLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    [Theory]
+    [InlineData("0xFF_FF", 65535L)]
+    [InlineData("0x00_FF_00_FF", 16711935L)]
+    public void ScanTokens_HexWithUnderscores_ProducesLongValue(string source, long expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    [Theory]
+    [InlineData("0o7_5_5", 493L)]
+    [InlineData("0o6_4_4", 420L)]
+    public void ScanTokens_OctalWithUnderscores_ProducesLongValue(string source, long expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    [Theory]
+    [InlineData("0b1111_0000", 240L)]
+    [InlineData("0b1010_1010", 170L)]
+    public void ScanTokens_BinaryWithUnderscores_ProducesLongValue(string source, long expected)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);
+        Assert.Equal(expected, tokens[0].Literal);
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    // ── 4e. Lexeme preservation ─────────────────────────────────────────
+
+    [Theory]
+    [InlineData("0xFF")]
+    [InlineData("0o755")]
+    [InlineData("0b1010")]
+    [InlineData("1_000")]
+    [InlineData("0xFF_FF")]
+    public void ScanTokens_NumberLiteral_PreservesLexeme(string source)
+    {
+        var tokens = Scan(source);
+
+        Assert.Equal(source, tokens[0].Lexeme);
+    }
+
+    // ── 4f. Error cases ─────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("0x")]
+    [InlineData("0o")]
+    [InlineData("0b")]
+    public void ScanTokens_PrefixWithNoDigits_ProducesError(string source)
+    {
+        var lexer = CreateLexer(source);
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Theory]
+    [InlineData("0x_FF")]
+    [InlineData("0o_7")]
+    [InlineData("0b_1")]
+    public void ScanTokens_UnderscoreAfterPrefix_ProducesError(string source)
+    {
+        var lexer = CreateLexer(source);
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Theory]
+    [InlineData("0xFFFFFFFFFFFFFFFF")]
+    [InlineData("0x8000000000000000")]
+    [InlineData("0o1777777777777777777777")]
+    [InlineData("0b1000000000000000000000000000000000000000000000000000000000000000")]
+    public void ScanTokens_OverflowLiteral_ProducesError(string source)
+    {
+        var lexer = CreateLexer(source);
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Theory]
+    [InlineData("0xG")]
+    [InlineData("0o8")]
+    [InlineData("0b2")]
+    public void ScanTokens_InvalidDigitAfterPrefix_ProducesError(string source)
+    {
+        var lexer = CreateLexer(source);
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Theory]
+    [InlineData("1__000")]
+    [InlineData("0xFF__FF")]
+    [InlineData("0o7__5")]
+    [InlineData("0b10__10")]
+    public void ScanTokens_ConsecutiveUnderscores_ProducesError(string source)
+    {
+        var lexer = CreateLexer(source);
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Theory]
+    [InlineData("1_")]
+    [InlineData("0xFF_")]
+    [InlineData("0o7_")]
+    [InlineData("0b1_")]
+    public void ScanTokens_TrailingUnderscore_ProducesError(string source)
+    {
+        var lexer = CreateLexer(source);
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
+    [Theory]
+    [InlineData("1_.5")]
+    [InlineData("1._5")]
+    public void ScanTokens_UnderscoreAdjacentToDecimalPoint_ProducesError(string source)
+    {
+        var lexer = CreateLexer(source);
+        lexer.ScanTokens();
+
+        Assert.NotEmpty(lexer.Errors);
+    }
+
     // ── 5. String literals ──────────────────────────────────────────────
 
     [Fact]

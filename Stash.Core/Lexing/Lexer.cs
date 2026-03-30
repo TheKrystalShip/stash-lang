@@ -1375,7 +1375,7 @@ public class Lexer
                     parts.Add(textSegment.ToString());
                     textSegment.Clear();
                 }
-                _current += 2; // consume '${'  
+                _current += 2; // consume '${'
                 _column += 2;
                 ScanInterpolatedExpression(parts);
             }
@@ -1564,43 +1564,355 @@ public class Lexer
     /// </remarks>
     private void ScanNumber()
     {
-        while (!IsAtEnd && IsDigit(_source[_current]))
+        char firstDigit = _source[_start];
+
+        if (firstDigit == '0' && !IsAtEnd)
         {
-            _current++;
-            _column++;
+            char next = _source[_current];
+            if (next == 'x' || next == 'X') { ScanHexLiteral(); return; }
+            if (next == 'o' || next == 'O') { ScanOctalLiteral(); return; }
+            if (next == 'b' || next == 'B') { ScanBinaryLiteral(); return; }
         }
 
-        if (!IsAtEnd && _source[_current] == '.' && _current + 1 < _source.Length && IsDigit(_source[_current + 1]))
+        ScanDecimalNumber();
+    }
+
+    private void ScanHexLiteral()
+    {
+        // Consume 'x' or 'X'
+        _current++;
+        _column++;
+
+        if (!IsAtEnd && _source[_current] == '_')
         {
-            // Consume the '.'
-            _current++;
-            _column++;
-            while (!IsAtEnd && IsDigit(_source[_current]))
+            ReportNumberError("Invalid digit '_' in hexadecimal literal.");
+            return;
+        }
+
+        if (IsAtEnd || !IsHexDigit(_source[_current]))
+        {
+            string prefix = _source[_start.._current];
+            ReportNumberError($"Hexadecimal literal '{prefix}' has no digits.");
+            return;
+        }
+
+        bool lastWasUnderscore = false;
+        while (!IsAtEnd)
+        {
+            char c = _source[_current];
+            if (IsHexDigit(c))
             {
+                lastWasUnderscore = false;
                 _current++;
                 _column++;
             }
-
-            ReadOnlySpan<char> span = _source.AsSpan(_start, _current - _start);
-            double value = double.Parse(span, provider: System.Globalization.CultureInfo.InvariantCulture);
-            AddToken(TokenType.FloatLiteral, value, _source[_start.._current]);
-        }
-        else
-        {
-            ReadOnlySpan<char> span = _source.AsSpan(_start, _current - _start);
-            if (long.TryParse(span, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
+            else if (c == '_')
             {
-                AddToken(TokenType.IntegerLiteral, value, _source[_start.._current]);
+                if (lastWasUnderscore)
+                {
+                    ReportNumberError("Consecutive underscores in number literal.");
+                    return;
+                }
+                lastWasUnderscore = true;
+                _current++;
+                _column++;
             }
             else
             {
-                string lexeme = _source[_start.._current];
-                _errors.Add($"[{_file} {_startLine}:{_startColumn}] Integer literal '{lexeme}' is too large.");
-                _structuredErrors.Add(new DiagnosticError(
-                    new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
-                    $"Integer literal '{lexeme}' is too large."));
+                break;
             }
         }
+
+        if (lastWasUnderscore)
+        {
+            ReportNumberError("Trailing underscore in number literal.");
+            return;
+        }
+
+        string lexeme = _source[_start.._current];
+        string digits = lexeme[2..].Replace("_", "");
+        try
+        {
+            ulong unsigned = Convert.ToUInt64(digits, 16);
+            if (unsigned > (ulong)long.MaxValue)
+            {
+                ReportNumberError($"Integer literal '{lexeme}' is too large.");
+                return;
+            }
+            long value = (long)unsigned;
+            AddToken(TokenType.IntegerLiteral, value, lexeme);
+        }
+        catch (OverflowException)
+        {
+            ReportNumberError($"Integer literal '{lexeme}' is too large.");
+        }
+    }
+
+    private void ScanOctalLiteral()
+    {
+        // Consume 'o' or 'O'
+        _current++;
+        _column++;
+
+        if (!IsAtEnd && _source[_current] == '_')
+        {
+            ReportNumberError("Invalid digit '_' in octal literal.");
+            return;
+        }
+
+        if (IsAtEnd || !IsOctalDigit(_source[_current]))
+        {
+            string prefix = _source[_start.._current];
+            ReportNumberError($"Octal literal '{prefix}' has no digits.");
+            return;
+        }
+
+        bool lastWasUnderscore = false;
+        while (!IsAtEnd)
+        {
+            char c = _source[_current];
+            if (IsOctalDigit(c))
+            {
+                lastWasUnderscore = false;
+                _current++;
+                _column++;
+            }
+            else if (c == '_')
+            {
+                if (lastWasUnderscore)
+                {
+                    ReportNumberError("Consecutive underscores in number literal.");
+                    return;
+                }
+                lastWasUnderscore = true;
+                _current++;
+                _column++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (lastWasUnderscore)
+        {
+            ReportNumberError("Trailing underscore in number literal.");
+            return;
+        }
+
+        string lexeme = _source[_start.._current];
+        string digits = lexeme[2..].Replace("_", "");
+        try
+        {
+            ulong unsigned = Convert.ToUInt64(digits, 8);
+            if (unsigned > (ulong)long.MaxValue)
+            {
+                ReportNumberError($"Integer literal '{lexeme}' is too large.");
+                return;
+            }
+            long value = (long)unsigned;
+            AddToken(TokenType.IntegerLiteral, value, lexeme);
+        }
+        catch (OverflowException)
+        {
+            ReportNumberError($"Integer literal '{lexeme}' is too large.");
+        }
+    }
+
+    private void ScanBinaryLiteral()
+    {
+        // Consume 'b' or 'B'
+        _current++;
+        _column++;
+
+        if (!IsAtEnd && _source[_current] == '_')
+        {
+            ReportNumberError("Invalid digit '_' in binary literal.");
+            return;
+        }
+
+        if (IsAtEnd || !IsBinaryDigit(_source[_current]))
+        {
+            string prefix = _source[_start.._current];
+            ReportNumberError($"Binary literal '{prefix}' has no digits.");
+            return;
+        }
+
+        bool lastWasUnderscore = false;
+        while (!IsAtEnd)
+        {
+            char c = _source[_current];
+            if (IsBinaryDigit(c))
+            {
+                lastWasUnderscore = false;
+                _current++;
+                _column++;
+            }
+            else if (c == '_')
+            {
+                if (lastWasUnderscore)
+                {
+                    ReportNumberError("Consecutive underscores in number literal.");
+                    return;
+                }
+                lastWasUnderscore = true;
+                _current++;
+                _column++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (lastWasUnderscore)
+        {
+            ReportNumberError("Trailing underscore in number literal.");
+            return;
+        }
+
+        string lexeme = _source[_start.._current];
+        string digits = lexeme[2..].Replace("_", "");
+        try
+        {
+            ulong unsigned = Convert.ToUInt64(digits, 2);
+            if (unsigned > (ulong)long.MaxValue)
+            {
+                ReportNumberError($"Integer literal '{lexeme}' is too large.");
+                return;
+            }
+            long value = (long)unsigned;
+            AddToken(TokenType.IntegerLiteral, value, lexeme);
+        }
+        catch (OverflowException)
+        {
+            ReportNumberError($"Integer literal '{lexeme}' is too large.");
+        }
+    }
+
+    private void ScanDecimalNumber()
+    {
+        bool lastWasUnderscore = false;
+        while (!IsAtEnd)
+        {
+            char c = _source[_current];
+            if (IsDigit(c))
+            {
+                lastWasUnderscore = false;
+                _current++;
+                _column++;
+            }
+            else if (c == '_')
+            {
+                if (lastWasUnderscore)
+                {
+                    ReportNumberError("Consecutive underscores in number literal.");
+                    return;
+                }
+                lastWasUnderscore = true;
+                _current++;
+                _column++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        if (lastWasUnderscore)
+        {
+            if (!IsAtEnd && _source[_current] == '.')
+            {
+                ReportNumberError("Underscore cannot appear adjacent to decimal point.");
+            }
+            else
+            {
+                ReportNumberError("Trailing underscore in number literal.");
+            }
+            return;
+        }
+
+        if (!IsAtEnd && _source[_current] == '.' && _current + 1 < _source.Length)
+        {
+            char afterDot = _source[_current + 1];
+
+            if (afterDot == '_')
+            {
+                ReportNumberError("Underscore cannot appear adjacent to decimal point.");
+                return;
+            }
+
+            if (IsDigit(afterDot))
+            {
+                // Consume '.'
+                _current++;
+                _column++;
+
+                lastWasUnderscore = false;
+                while (!IsAtEnd)
+                {
+                    char c = _source[_current];
+                    if (IsDigit(c))
+                    {
+                        lastWasUnderscore = false;
+                        _current++;
+                        _column++;
+                    }
+                    else if (c == '_')
+                    {
+                        if (lastWasUnderscore)
+                        {
+                            ReportNumberError("Consecutive underscores in number literal.");
+                            return;
+                        }
+                        lastWasUnderscore = true;
+                        _current++;
+                        _column++;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                if (lastWasUnderscore)
+                {
+                    ReportNumberError("Trailing underscore in number literal.");
+                    return;
+                }
+
+                string floatLexeme = _source[_start.._current];
+                string floatStr = floatLexeme.Replace("_", "");
+                if (double.TryParse(floatStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double floatValue))
+                {
+                    AddToken(TokenType.FloatLiteral, floatValue, floatLexeme);
+                }
+                else
+                {
+                    ReportNumberError($"Float literal '{floatLexeme}' is out of range.");
+                }
+                return;
+            }
+        }
+
+        string lexeme = _source[_start.._current];
+        string intStr = lexeme.Replace("_", "");
+        if (long.TryParse(intStr, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
+        {
+            AddToken(TokenType.IntegerLiteral, value, lexeme);
+        }
+        else
+        {
+            ReportNumberError($"Integer literal '{lexeme}' is too large.");
+        }
+    }
+
+    private void ReportNumberError(string message)
+    {
+        _errors.Add($"[{_file} {_startLine}:{_startColumn}] {message}");
+        _structuredErrors.Add(new DiagnosticError(
+            new SourceSpan(_file, _startLine, _startColumn, _line, _column),
+            message));
     }
 
     /// <summary>
@@ -1718,6 +2030,13 @@ public class Lexer
     /// <param name="c">The character to test.</param>
     /// <returns><see langword="true"/> if <paramref name="c"/> is a digit.</returns>
     private static bool IsDigit(char c) => c >= '0' && c <= '9';
+
+    private static bool IsHexDigit(char c) =>
+        (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+
+    private static bool IsOctalDigit(char c) => c >= '0' && c <= '7';
+
+    private static bool IsBinaryDigit(char c) => c == '0' || c == '1';
 
     /// <summary>
     /// Determines whether <paramref name="c"/> is an ASCII letter or underscore, which are

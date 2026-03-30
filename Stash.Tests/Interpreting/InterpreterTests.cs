@@ -31,6 +31,49 @@ public class InterpreterTests
         Assert.Equal(0L, Eval("0"));
     }
 
+    // 1a. Alternative base number literals
+    [Theory]
+    [InlineData("0xFF", 255L)]
+    [InlineData("0o755", 493L)]
+    [InlineData("0b1010", 10L)]
+    [InlineData("1_000", 1000L)]
+    [InlineData("0xFF_FF", 65535L)]
+    [InlineData("0b1111_0000", 240L)]
+    public void NumberLiteral_AlternativeBases_ReturnsLong(string source, long expected)
+    {
+        Assert.Equal(expected, Eval(source));
+    }
+
+    [Fact]
+    public void HexLiteral_InArithmetic_Works()
+    {
+        Assert.Equal(256L, Eval("0xFF + 1"));
+    }
+
+    [Fact]
+    public void OctalLiteral_InArithmetic_Works()
+    {
+        Assert.Equal(500L, Eval("0o755 + 7"));
+    }
+
+    [Fact]
+    public void BinaryLiteral_InArithmetic_Works()
+    {
+        Assert.Equal(11L, Eval("0b1010 + 1"));
+    }
+
+    [Fact]
+    public void UnderscoreLiteral_InArithmetic_Works()
+    {
+        Assert.Equal(1001L, Eval("1_000 + 1"));
+    }
+
+    [Fact]
+    public void HexAndDecimal_Equality_Works()
+    {
+        Assert.Equal(true, Eval("0xFF == 255"));
+    }
+
     // 2. Float literals
     [Fact]
     public void FloatLiteral_ReturnsDouble()

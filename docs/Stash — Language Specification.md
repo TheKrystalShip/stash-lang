@@ -252,7 +252,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 
 | Type        | Examples                       | Notes                                     |
 | ----------- | ------------------------------ | ----------------------------------------- |
-| `int`       | `42`, `-7`, `0`                | Integer numbers                           |
+| `int`       | `42`, `-7`, `0`, `0xFF`, `0o755`, `0b1010` | Integer numbers (decimal, hex, octal, binary) |
 | `float`     | `3.14`, `-0.5`                 | Floating-point numbers                    |
 | `string`    | `"hello"`, `""`                | Immutable strings                         |
 | `bool`      | `true`, `false`                |                                           |
@@ -265,6 +265,31 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `range`     | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d)    |
 | `Error`     | `try failingFn()`              | Error value (see Section 7b)              |
 | `Future`    | `async fn() { return 42; }`    | Async computation (see Section 8c)        |
+
+### Number Literals
+
+Stash supports integer literals in four bases and optional underscore digit separators for readability.
+
+| Format        | Prefix      | Digits          | Example             |
+| ------------- | ----------- | --------------- | ------------------- |
+| Decimal       | _(none)_    | `0-9`           | `42`, `1_000_000`   |
+| Hexadecimal   | `0x` / `0X` | `0-9`, `a-f`, `A-F` | `0xFF`, `0x00FF_00FF` |
+| Octal         | `0o` / `0O` | `0-7`           | `0o755`, `0o7_5_5`  |
+| Binary        | `0b` / `0B` | `0`, `1`        | `0b1010`, `0b1111_0000` |
+| Floating-point | _(none)_   | `0-9`, `.`      | `3.14`, `1_000.50`  |
+
+**Underscore separators (`_`):** An underscore may appear between any two digits for readability. Underscores are not allowed at the start or end of a literal, may not appear consecutively, may not appear adjacent to a decimal point, and may not appear immediately after a base prefix.
+
+```stash
+let permissions = 0o755;           // octal: 493
+let color = 0xFF00FF;              // hex: 16711935
+let flags = 0b1010;                // binary: 10
+let million = 1_000_000;           // underscore separator: 1000000
+let mask = 0xFF_FF_00_00;          // hex with separators
+let bits = 0b1111_0000_1010_0101;  // binary with separators
+```
+
+All hex, octal, and binary literals produce integer (`long`) values. Floating-point hex/octal/binary is not supported.
 
 ### Type Coercion & Truthiness
 
