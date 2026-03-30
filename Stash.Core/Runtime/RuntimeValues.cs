@@ -239,7 +239,7 @@ public static class RuntimeValues
             ["stdout"] = stdout,
             ["stderr"] = stderr,
             ["exitCode"] = exitCode
-        });
+        }) { StringifyField = "stdout" };
     }
 
     /// <summary>

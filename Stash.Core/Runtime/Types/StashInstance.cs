@@ -14,6 +14,11 @@ public class StashInstance
     public StashStruct? Struct { get; }
     private readonly Dictionary<string, object?> _fields;
 
+    /// <summary>
+    /// When set, ToString() returns the stringified value of this field instead of the full struct representation.
+    /// </summary>
+    public string? StringifyField { get; init; }
+
     public StashInstance(string typeName, Dictionary<string, object?> fields)
     {
         TypeName = typeName;
@@ -81,6 +86,11 @@ public class StashInstance
 
         try
         {
+            if (StringifyField is not null && _fields.TryGetValue(StringifyField, out object? sfValue))
+            {
+                return RuntimeValues.Stringify(sfValue);
+            }
+
             var sb = new StringBuilder(TypeName);
             sb.Append(" { ");
             bool first = true;

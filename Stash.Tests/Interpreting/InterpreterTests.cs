@@ -2185,6 +2185,44 @@ public class InterpreterTests
     }
 
     [Fact]
+    public void Command_Stringify_ReturnsStdout()
+    {
+        var result = Run("let r = $(echo hello); let result = conv.toStr(r);");
+        Assert.IsType<string>(result);
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Command_Stringify_InInterpolation()
+    {
+        var result = Run("let r = $(echo hello); let result = \"output: ${r}\";");
+        Assert.IsType<string>(result);
+        Assert.Contains("output: hello", (string)result!);
+    }
+
+    [Fact]
+    public void Command_Stringify_FieldsStillAccessible()
+    {
+        var result = Run("""
+            let r = $(echo hello);
+            let stdout = r.stdout;
+            let stderr = r.stderr;
+            let code = r.exitCode;
+            let result = stdout;
+        """);
+        Assert.IsType<string>(result);
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Command_Stringify_DoesNotIncludeStructFormat()
+    {
+        var result = Run("let r = $(echo hi); let result = conv.toStr(r);");
+        Assert.IsType<string>(result);
+        Assert.DoesNotContain("CommandResult {", (string)result!);
+    }
+
+    [Fact]
     public void Command_ExitCodeFieldAccess()
     {
         Assert.Equal(0L, Run("let result = $(true).exitCode;"));
@@ -2250,10 +2288,12 @@ public class InterpreterTests
     }
 
     [Fact]
-    public void Pipe_ShortCircuitOnFailure()
+    public void Pipe_ExitCodeFromLastCommand()
     {
-        var result = Run("let r = $(false) | $(echo should not run); let result = r.exitCode;");
-        Assert.NotEqual(0L, result);
+        // Pipeline exit code comes from the last command (POSIX semantics).
+        // $(false) has exit code 1, but $(echo ...) succeeds — pipeline exit code is 0.
+        var result = Run("let r = $(false) | $(echo ran); let result = r.exitCode;");
+        Assert.Equal(0L, result);
     }
 
     [Fact]
@@ -2275,6 +2315,72 @@ public class InterpreterTests
     public void Pipe_LeftSideNotCommand_ThrowsError()
     {
         RunExpectingError("let x = 42; let r = x | $(cat);");
+    }
+
+    [Fact]
+    public void Pipe_StreamingHeadTerminatesProducer()
+    {
+        // yes outputs infinite "y" lines; head -5 reads 5 then closes stdin.
+        // With streaming pipes, this completes — the broken pipe from yes is handled gracefully.
+        var result = Run("let r = $(yes) | $(head -5); let result = r.stdout;");
+        string stdout = (string)result!;
+        string[] lines = stdout.Split('\n', System.StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(5, lines.Length);
+        Assert.All(lines, line => Assert.Equal("y", line));
+    }
+
+    [Fact]
+    public void Pipe_LargeDataStreams()
+    {
+        // Generate a large output and pipe through wc -l to verify streaming works
+        // without buffering the entire output in memory.
+        var result = Run("let r = $(seq 1 10000) | $(wc -l); let result = r.stdout;");
+        string stdout = ((string)result!).Trim();
+        Assert.Equal("10000", stdout);
+    }
+
+    [Fact]
+    public void Pipe_GrepNonMatchExitCode()
+    {
+        // grep returns exit code 1 when no matches found.
+        // Pipeline exit code should reflect the last command's status.
+        var result = Run("let r = $(echo hello) | $(grep nomatch); let result = r.exitCode;");
+        Assert.NotEqual(0L, result);
+    }
+
+    [Fact]
+    public void Pipe_AllStagesMustBeCommands()
+    {
+        RunExpectingError("let r = $(echo hi) | 42;");
+    }
+
+    [Fact]
+    public void Pipe_PassthroughInPipelineThrowsError()
+    {
+        RunExpectingError("let r = $>(echo hi) | $(cat);");
+    }
+
+    [Fact]
+    public void Pipe_StderrFromLastCommand()
+    {
+        // Only the last command's stderr is captured.
+        var result = Run("let r = $(echo hello) | $(cat /dev/null/nonexistent); let result = r.stderr;");
+        Assert.IsType<string>(result);
+        Assert.True(((string)result!).Length > 0, "Expected stderr from last pipeline stage");
+    }
+
+    [Fact]
+    public void Pipe_FourCommandChain()
+    {
+        var result = Run(@"let r = $(printf ""3\n1\n2"") | $(sort) | $(head -2) | $(tail -1); let result = r.stdout;");
+        Assert.Contains("2", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_WithInterpolation()
+    {
+        var result = Run(@"let pattern = ""hello""; let r = $(echo hello world) | $(grep {pattern}); let result = r.stdout;");
+        Assert.Contains("hello", (string)result!);
     }
 
     // ===== Phase 4: readFile / writeFile Built-ins =====

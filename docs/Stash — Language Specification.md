@@ -1273,6 +1273,7 @@ Commands are executed via **command literals** — a dedicated syntax that makes
 
 ```stash
 let result = $(ls -la);
+io.println(result);             // stringifies to stdout contents
 io.println(result.stdout);      // captured standard output
 io.println(result.stderr);      // captured standard error
 io.println(result.exitCode);    // process exit code
@@ -1332,7 +1333,8 @@ While `$(...)` captures stdout and stderr into a `CommandResult`, some commands 
 ```stash
 // Captured mode — output is buffered, not visible during execution
 let result = $(dotnet build);
-io.println(result.stdout);        // print captured output after command finishes
+io.println(result);               // stringifies to stdout contents
+io.println(result.stdout);        // explicit field access also works
 
 // Passthrough mode — output streams directly to terminal, user can respond to prompts
 let result = $>(dotnet build);
@@ -1347,7 +1349,20 @@ let result = $>(dotnet build);
 - **TTY detection works** — programs that check `isatty()` see a real terminal and behave accordingly (colors, formatting)
 - **No output is captured** — `result.stdout` and `result.stderr` are always empty strings
 
-The returned `CommandResult` still provides `exitCode` for error checking:
+The returned `CommandResult` still provides `exitCode` for error checking.
+
+When stringified (e.g., in `io.println()`, string interpolation, or `conv.toStr()`), a `CommandResult` returns its `stdout` field. This eliminates the need for explicit `.stdout` access in the common case:
+
+```stash
+let r = $(echo hello);
+io.println(r);                    // prints "hello\n" — implicitly uses stdout
+io.println($"output: ${r}");     // "output: hello\n" — works in interpolation
+let text = conv.toStr(r);        // "hello\n" — works with conv.toStr
+// Fields are still directly accessible:
+io.println(r.stdout);            // "hello\n"
+io.println(r.stderr);            // ""
+io.println(r.exitCode);          // 0
+```
 
 ```stash
 let result = $>(make install);
@@ -1383,18 +1398,26 @@ let lines = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
 
 The `|` operator is **exclusive to command chaining** — it pipes stdout of the left process to stdin of the right. It is not a general-purpose operator and cannot be used between non-command expressions. For logical OR, use `||`.
 
-#### Short-Circuit on Failure
+#### Execution Semantics
 
-Pipe chains **short-circuit on failure**. If any command in the chain exits with a non-zero exit code, the remaining commands are not executed. The result of the entire pipe expression is the `CommandResult` of the **failed command** (or the last command if all succeed).
+Pipe chains use **streaming concurrent execution**. All stages in the chain launch simultaneously as OS-level processes, connected by OS-level pipes — stdout of each stage flows directly into stdin of the next with no buffering in between.
 
 ```stash
 let result = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
-// If 'cat' fails (exitCode != 0), 'grep' and 'wc' are never started.
-// result.exitCode reflects the failed command's exit code.
-// result.stderr contains the failed command's error output.
+// All three processes start concurrently.
+// result.exitCode is the exit code of 'wc -l' (the last command).
+// result.stdout and result.stderr are captured from 'wc -l'.
 ```
 
-This mirrors Bash's `set -o pipefail` behavior and prevents silent failures in command chains.
+Because data streams directly between processes, infinite producers work correctly:
+
+```stash
+let first5 = $(yes) | $(head -5);
+// 'yes' runs concurrently with 'head -5'.
+// 'head -5' reads 5 lines then exits, causing 'yes' to terminate naturally.
+```
+
+The exit code of the entire pipe expression is the exit code of the **last command** in the chain (standard POSIX behavior). All stages run to completion regardless of earlier stages' exit codes — there is no short-circuit on failure.
 
 #### Output Redirection
 

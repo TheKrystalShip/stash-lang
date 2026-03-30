@@ -196,13 +196,10 @@ public partial class Interpreter
     }
 
     /// <summary>
-    /// Evaluates a <see cref="CommandExpr"/> by building the command string from its parts,
-    /// executing it via the system shell, and returning a <see cref="StashInstance"/> with
-    /// <c>stdout</c>, <c>stderr</c>, and <c>exitCode</c> fields.
+    /// Builds the command string from a <see cref="CommandExpr"/> by evaluating its parts,
+    /// concatenating them, and expanding tildes.
     /// </summary>
-    /// <param name="expr">The command expression to evaluate.</param>
-    /// <returns>A <see cref="StashInstance"/> representing the command result.</returns>
-    public object? VisitCommandExpr(CommandExpr expr)
+    private string BuildCommandString(CommandExpr expr)
     {
         var commandBuilder = new StringBuilder();
         foreach (Expr part in expr.Parts)
@@ -212,14 +209,26 @@ public partial class Interpreter
         }
 
         string command = commandBuilder.ToString().Trim();
-
-        // Expand tilde (~) to home directory in command arguments
         command = ExpandTildeInCommand(command);
 
         if (string.IsNullOrEmpty(command))
         {
             throw new RuntimeError("Command cannot be empty.", expr.Span);
         }
+
+        return command;
+    }
+
+    /// <summary>
+    /// Evaluates a <see cref="CommandExpr"/> by building the command string from its parts,
+    /// executing it via the system shell, and returning a <see cref="StashInstance"/> with
+    /// <c>stdout</c>, <c>stderr</c>, and <c>exitCode</c> fields.
+    /// </summary>
+    /// <param name="expr">The command expression to evaluate.</param>
+    /// <returns>A <see cref="StashInstance"/> representing the command result.</returns>
+    public object? VisitCommandExpr(CommandExpr expr)
+    {
+        string command = BuildCommandString(expr);
 
         // Passthrough mode ($>): inherit terminal stdin/stdout/stderr directly.
         if (expr.IsPassthrough)
@@ -245,7 +254,7 @@ public partial class Interpreter
                 ["stdout"] = "",
                 ["stderr"] = "",
                 ["exitCode"] = (long)exitCode
-            });
+            }) { StringifyField = "stdout" };
         }
 
         var (capProgram, capArguments) = CommandParser.Parse(command);
@@ -263,7 +272,7 @@ public partial class Interpreter
             ["exitCode"] = (long)capExitCode
         };
 
-        return new StashInstance("CommandResult", fields);
+        return new StashInstance("CommandResult", fields) { StringifyField = "stdout" };
     }
 
     /// <summary>
@@ -291,55 +300,228 @@ public partial class Interpreter
     }
 
     /// <summary>
-    /// Evaluates a pipe expression by chaining stdout of the left command to stdin of the right.
-    /// Short-circuits on non-zero exit code.
+    /// Flattens a left-associative <see cref="PipeExpr"/> tree into an ordered list of
+    /// command expressions. For example, <c>$(a) | $(b) | $(c)</c> which parses as
+    /// <c>PipeExpr(PipeExpr(a, b), c)</c> becomes <c>[a, b, c]</c>.
     /// </summary>
-    /// <param name="expr">The pipe expression node containing the left and right command sub-expressions.</param>
-    /// <returns>
-    /// The <see cref="StashInstance"/> (<c>CommandResult</c>) produced by the right-hand command
-    /// on success, or the left-hand result unchanged if its exit code is non-zero.
-    /// </returns>
-    /// <remarks>
-    /// The left command must evaluate to a <c>CommandResult</c> instance. Its <c>stdout</c>
-    /// field is passed as <c>stdin</c> to the right command. If the left command's exit code
-    /// is non-zero the right command is not executed and the left result is returned as-is,
-    /// allowing callers to inspect the failure.
-    /// </remarks>
-    public object? VisitPipeExpr(PipeExpr expr)
+    private static List<Expr> FlattenPipeChain(PipeExpr expr)
     {
-        object? leftResult = expr.Left.Accept(this);
+        var commands = new List<Expr>();
 
-        if (leftResult is not StashInstance leftCmd || leftCmd.TypeName != "CommandResult")
+        void Collect(Expr node)
         {
-            throw new RuntimeError("Left side of pipe must be a command expression.", expr.Span);
+            if (node is PipeExpr pipe)
+            {
+                Collect(pipe.Left);
+                Collect(pipe.Right);
+            }
+            else
+            {
+                commands.Add(node);
+            }
         }
 
-        object? exitCodeVal = leftCmd.GetField("exitCode", expr.Span);
-        if (exitCodeVal is long exitCode && exitCode != 0)
+        Collect(expr);
+        return commands;
+    }
+
+    /// <summary>
+    /// Executes a pipeline of commands with streaming OS-level pipes connecting each
+    /// process's stdout to the next process's stdin. All processes run concurrently.
+    /// Returns the <c>CommandResult</c> from the last command in the pipeline.
+    /// </summary>
+    /// <param name="stages">The parsed (program, arguments) pairs for each stage.</param>
+    /// <param name="stdin">Optional initial stdin for the first process (from an outer pipe).</param>
+    /// <param name="span">Source span for error reporting.</param>
+    /// <returns>A <see cref="StashInstance"/> with the last command's stdout, stderr, and exitCode.</returns>
+    private StashInstance RunPipeline(
+        List<(string Program, List<string> Arguments)> stages, string? stdin, SourceSpan span)
+    {
+        if (stages.Count == 0)
         {
-            return leftResult;
+            throw new RuntimeError("Pipeline cannot be empty.", span);
         }
 
-        object? stdoutVal = leftCmd.GetField("stdout", expr.Span);
-        string stdinForRight = stdoutVal as string ?? "";
-
-        _pendingStdin = stdinForRight;
+        var processes = new List<Process>(stages.Count);
+        var copyTasks = new List<Task>();
 
         try
         {
-            object? rightResult = expr.Right.Accept(this);
-
-            if (rightResult is not StashInstance rightCmd || rightCmd.TypeName != "CommandResult")
+            // Start all processes with appropriate stream redirections.
+            for (int i = 0; i < stages.Count; i++)
             {
-                throw new RuntimeError("Right side of pipe must be a command expression.", expr.Span);
+                bool isFirst = i == 0;
+                bool isLast = i == stages.Count - 1;
+                var (program, arguments) = stages[i];
+
+                var psi = new ProcessStartInfo
+                {
+                    FileName = program,
+                    RedirectStandardInput = !isFirst || stdin is not null,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = isLast,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                foreach (string arg in arguments)
+                {
+                    psi.ArgumentList.Add(arg);
+                }
+
+                var process = Process.Start(psi)
+                    ?? throw new RuntimeError($"Failed to start process: {program}", span);
+                processes.Add(process);
             }
 
-            return rightResult;
+            // Wire up stdin for the first process if there's pending input from an outer pipe.
+            if (stdin is not null && processes.Count > 0)
+            {
+                var firstProcess = processes[0];
+                copyTasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        firstProcess.StandardInput.Write(stdin);
+                    }
+                    catch (IOException)
+                    {
+                        // First process may exit before we finish writing stdin.
+                    }
+                    finally
+                    {
+                        try { firstProcess.StandardInput.Close(); } catch (IOException) { }
+                    }
+                }));
+            }
+
+            // Connect each process's stdout to the next process's stdin via async stream copy.
+            for (int i = 0; i < processes.Count - 1; i++)
+            {
+                var source = processes[i];
+                var target = processes[i + 1];
+
+                copyTasks.Add(Task.Run(() =>
+                {
+                    try
+                    {
+                        source.StandardOutput.BaseStream.CopyTo(target.StandardInput.BaseStream);
+                    }
+                    catch (IOException)
+                    {
+                        // Broken pipe — the downstream process exited before the upstream
+                        // finished writing. This is normal for pipelines like yes | head -5.
+                        // Close the upstream's stdout so the upstream process gets SIGPIPE
+                        // and terminates instead of blocking on a full pipe buffer.
+                        try { source.StandardOutput.Close(); } catch { }
+                    }
+                    finally
+                    {
+                        try { target.StandardInput.Close(); } catch (IOException) { }
+                    }
+                }));
+            }
+
+            // Read the last process's stdout and stderr concurrently.
+            var lastProcess = processes[^1];
+            var stdoutTask = Task.Run(() => lastProcess.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => lastProcess.StandardError.ReadToEnd());
+
+            // Wait for all stream copies and reads to complete.
+            var allTasks = new List<Task>(copyTasks) { stdoutTask, stderrTask };
+            Task.WaitAll(allTasks.ToArray());
+
+            // Wait for all processes to exit.
+            foreach (var process in processes)
+            {
+                process.WaitForExit();
+            }
+
+            // Pipeline exit code is the last command's exit code (POSIX default).
+            int exitCode = processes[^1].ExitCode;
+
+            return new StashInstance("CommandResult", new Dictionary<string, object?>
+            {
+                ["stdout"] = stdoutTask.Result,
+                ["stderr"] = stderrTask.Result,
+                ["exitCode"] = (long)exitCode
+            }) { StringifyField = "stdout" };
+        }
+        catch (RuntimeError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Pipeline execution failed: {ex.Message}", span);
         }
         finally
         {
-            _pendingStdin = null;
+            // Ensure all processes are cleaned up.
+            foreach (var process in processes)
+            {
+                try
+                {
+                    if (!process.HasExited)
+                    {
+                        process.Kill(entireProcessTree: true);
+                    }
+                    process.Dispose();
+                }
+                catch
+                {
+                    // Best-effort cleanup.
+                }
+            }
         }
+    }
+
+    /// <summary>
+    /// Evaluates a pipe expression by launching all commands in the pipeline concurrently
+    /// with streaming OS-level pipes connecting each process's stdout to the next's stdin.
+    /// </summary>
+    /// <param name="expr">The pipe expression node containing the left and right command sub-expressions.</param>
+    /// <returns>
+    /// A <see cref="StashInstance"/> (<c>CommandResult</c>) with the last command's stdout,
+    /// stderr, and exit code. All commands run concurrently — there is no short-circuit on
+    /// non-zero exit codes, matching POSIX pipeline semantics.
+    /// </returns>
+    public object? VisitPipeExpr(PipeExpr expr)
+    {
+        var commandExprs = FlattenPipeChain(expr);
+
+        // Validate that all stages are capture command expressions.
+        foreach (Expr stage in commandExprs)
+        {
+            if (stage is not CommandExpr)
+            {
+                throw new RuntimeError(
+                    "All stages in a pipe must be command expressions.", stage.Span);
+            }
+
+            if (stage is CommandExpr { IsPassthrough: true })
+            {
+                throw new RuntimeError(
+                    "Passthrough commands cannot be used in a pipeline. Use capture commands $(...) instead.",
+                    stage.Span);
+            }
+        }
+
+        // Build command strings and parse into (program, arguments) pairs.
+        var stages = new List<(string Program, List<string> Arguments)>();
+        foreach (Expr stage in commandExprs)
+        {
+            string command = BuildCommandString((CommandExpr)stage);
+            var (program, arguments) = CommandParser.Parse(command);
+            (program, arguments) = ApplyElevationPrefix(program, arguments);
+            stages.Add((program, arguments));
+        }
+
+        // Use any pending stdin from an outer pipe as input to the first stage.
+        string? initialStdin = _pendingStdin;
+        _pendingStdin = null;
+
+        return RunPipeline(stages, initialStdin, expr.Span);
     }
 
     /// <summary>
@@ -415,7 +597,7 @@ public partial class Interpreter
                 ["exitCode"] = cmdResult.GetField("exitCode", expr.Span)
             };
 
-            return new StashInstance("CommandResult", newFields);
+            return new StashInstance("CommandResult", newFields) { StringifyField = "stdout" };
         }
         catch (RuntimeError)
         {
