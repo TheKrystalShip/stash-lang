@@ -715,7 +715,7 @@ if (!systemd.services.is_active("postgresql.service")) {
   - `systemd-run` — for the `run` module
   - `coredumpctl` — for the `coredump` module (requires `systemd-coredump`)
 - **Stash** >= 1.0.0
-- Root or `sudo` privileges may be required for system-scope operations; user-scope operations pass `--user` automatically when `opts.user` is `true`
+- System-scope operations require root privileges — use the `elevate` block to run them with elevation; user-scope operations pass `--user` automatically when `opts.user` is `true`
 
 ## License
 

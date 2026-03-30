@@ -61,29 +61,6 @@ if (result.ok) {
 }
 ```
 
-## Elevated Permissions
-
-Nearly all UFW operations require root privileges. By default, all commands are prefixed with `sudo`. You can configure this behavior:
-
-```stash
-import "@stash/ufw" as ufw;
-
-// Check current sudo setting (default: true)
-io.println(ufw.common.get_sudo());  // true
-
-// Disable sudo prefix (e.g., when running as root)
-ufw.common.set_sudo(false);
-
-// Re-enable sudo prefix
-ufw.common.set_sudo(true);
-```
-
-If your script runs as root (e.g., via `sudo stash script.stash`), disable the sudo prefix to avoid double-sudo:
-
-```stash
-ufw.common.set_sudo(false);
-```
-
 ## Types
 
 All structured data uses explicit structs defined in `lib/types.stash`:
@@ -137,8 +114,6 @@ struct UfwAppInfo { profile, title, description, ports }
 
 | Function                       | Description                                             |
 | ------------------------------ | ------------------------------------------------------- |
-| `set_sudo(enabled)`            | Enable or disable sudo prefix for all commands          |
-| `get_sudo()`                   | Return the current sudo setting (bool)                  |
 | `check_ufw()`                  | Check if ufw is installed and available in PATH         |
 | `exec(args)`                   | Run a ufw command, returns UfwResult                    |
 | `exec_lines(args)`             | Run a command, returns UfwLinesResult with parsed lines |
@@ -413,8 +388,7 @@ for (let rule in allowed_ports) {
 ## Notes
 
 - UFW must be installed on the system (`apt install ufw` on Debian/Ubuntu)
-- Root or sudo privileges are required for nearly all operations
-- The `sudo` prefix is enabled by default; disable with `common.set_sudo(false)` when running as root
+- Use the `elevate` block when running commands that require root privileges
 - `config.enable()` and `config.reset()` use `--force` to skip interactive confirmation prompts
 - Rule numbers (from `status.list_rules()`) can change after insertions or deletions — re-query after modifications
 - All structured data uses explicit structs — import from `lib/types.stash`

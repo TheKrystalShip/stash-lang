@@ -1,39 +1,11 @@
 /// @stash/ufw — Shared helpers for ufw (Uncomplicated Firewall) CLI commands.
 /// Delegates to @stash/cli toolkit for exec, parsing, and tool detection.
-///
-/// UFW requires root or sudo privileges for nearly all commands.
-/// Use set_sudo(false) only in environments where the process already runs as root
-/// (e.g. inside a container or a CI pipeline running as root).
 
 import "@stash/cli/lib/exec.stash" as cli_exec;
 import "@stash/cli/lib/flags.stash" as cli_flags;
 import "@stash/cli/lib/parse.stash" as cli_parse;
 import "@stash/cli/lib/tools.stash" as cli_tools;
 import { UfwRule, UfwResult, UfwLinesResult } from "types.stash";
-
-/// Module-level sudo flag. Defaults to true because ufw commands require root.
-let _sudo = true;
-
-/// Enables or disables the sudo prefix for all ufw command invocations.
-/// Set to false only when the process already runs as root.
-/// @param enabled bool — true to prepend "sudo" to every ufw call
-fn set_sudo(enabled) {
-    _sudo = enabled;
-}
-
-/// Returns the current sudo flag value.
-/// @return true if ufw commands will be prefixed with "sudo", false otherwise
-fn get_sudo() {
-    return _sudo;
-}
-
-// Internal: returns "sudo ufw" or "ufw" based on the current sudo flag.
-fn _cmd_prefix() {
-    if (_sudo) {
-        return "sudo ufw";
-    }
-    return "ufw";
-}
 
 // Internal: formats a port value as a string.
 // Accepts int, string, or array (joined with commas for multi-port rules).
@@ -46,11 +18,10 @@ fn _format_port(port) {
 }
 
 /// Runs a ufw command with the given arguments.
-/// Prepends "sudo" when the sudo flag is enabled (default).
 /// @param args Arguments string to pass to ufw (e.g. "status verbose")
 /// @return UfwResult with ok, stdout, stderr, exitCode
 fn exec(args) {
-    let r = cli_exec.exec(_cmd_prefix(), args);
+    let r = cli_exec.exec("ufw", args);
     return UfwResult { ok: r.ok, stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode };
 }
 
