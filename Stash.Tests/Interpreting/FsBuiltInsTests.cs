@@ -273,4 +273,346 @@ public class FsBuiltInsTests : IDisposable
         var name = Run($"let result = dict.get(fs.stat(\"{filePath}\"), \"name\");");
         Assert.Equal("myspecialfile.txt", name);
     }
+
+    // ── fs.getPermissions ────────────────────────────────────────────────
+
+    [Fact]
+    public void GetPermissions_ReturnsFilePermissionsStruct()
+    {
+        var filePath = Path.Combine(_testDir, "perm_struct.txt");
+        File.WriteAllText(filePath, "data");
+
+        var result = Run($"let result = fs.getPermissions(\"{filePath}\");");
+        Assert.IsType<StashInstance>(result);
+    }
+
+    [Fact]
+    public void GetPermissions_OwnerReadWriteExecute()
+    {
+        var filePath = Path.Combine(_testDir, "perm_755.txt");
+        File.WriteAllText(filePath, "data");
+        System.IO.File.SetUnixFileMode(filePath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+            System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute |
+            System.IO.UnixFileMode.OtherRead | System.IO.UnixFileMode.OtherExecute);
+
+        var read    = Run($"let result = fs.getPermissions(\"{filePath}\").owner.read;");
+        var write   = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
+        var execute = Run($"let result = fs.getPermissions(\"{filePath}\").owner.execute;");
+
+        Assert.Equal(true, read);
+        Assert.Equal(true, write);
+        Assert.Equal(true, execute);
+    }
+
+    [Fact]
+    public void GetPermissions_GroupPermissions()
+    {
+        var filePath = Path.Combine(_testDir, "perm_750.txt");
+        File.WriteAllText(filePath, "data");
+        System.IO.File.SetUnixFileMode(filePath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+            System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute);
+
+        var read    = Run($"let result = fs.getPermissions(\"{filePath}\").group.read;");
+        var write   = Run($"let result = fs.getPermissions(\"{filePath}\").group.write;");
+        var execute = Run($"let result = fs.getPermissions(\"{filePath}\").group.execute;");
+
+        Assert.Equal(true, read);
+        Assert.Equal(false, write);
+        Assert.Equal(true, execute);
+    }
+
+    [Fact]
+    public void GetPermissions_OthersPermissions()
+    {
+        var filePath = Path.Combine(_testDir, "perm_754.txt");
+        File.WriteAllText(filePath, "data");
+        System.IO.File.SetUnixFileMode(filePath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+            System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupWrite | System.IO.UnixFileMode.GroupExecute |
+            System.IO.UnixFileMode.OtherRead);
+
+        var read    = Run($"let result = fs.getPermissions(\"{filePath}\").others.read;");
+        var write   = Run($"let result = fs.getPermissions(\"{filePath}\").others.write;");
+        var execute = Run($"let result = fs.getPermissions(\"{filePath}\").others.execute;");
+
+        Assert.Equal(true, read);
+        Assert.Equal(false, write);
+        Assert.Equal(false, execute);
+    }
+
+    [Fact]
+    public void GetPermissions_ReadOnlyFile()
+    {
+        var filePath = Path.Combine(_testDir, "perm_444.txt");
+        File.WriteAllText(filePath, "data");
+        System.IO.File.SetUnixFileMode(filePath,
+            System.IO.UnixFileMode.UserRead |
+            System.IO.UnixFileMode.GroupRead |
+            System.IO.UnixFileMode.OtherRead);
+
+        var write = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
+        Assert.Equal(false, write);
+    }
+
+    [Fact]
+    public void GetPermissions_NonexistentPathThrows()
+    {
+        var missing = Path.Combine(_testDir, "no_such_file.txt");
+        RunExpectingError($"fs.getPermissions(\"{missing}\");");
+    }
+
+    [Fact]
+    public void GetPermissions_NonStringThrows()
+    {
+        RunExpectingError("fs.getPermissions(42);");
+    }
+
+    [Fact]
+    public void GetPermissions_DirectoryPermissions()
+    {
+        var dirPath = Path.Combine(_testDir, "perm_dir");
+        Directory.CreateDirectory(dirPath);
+        System.IO.File.SetUnixFileMode(dirPath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+            System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute |
+            System.IO.UnixFileMode.OtherRead | System.IO.UnixFileMode.OtherExecute);
+
+        var result = Run($"let result = fs.getPermissions(\"{dirPath}\");");
+        Assert.IsType<StashInstance>(result);
+
+        var ownerRead = Run($"let result = fs.getPermissions(\"{dirPath}\").owner.read;");
+        Assert.Equal(true, ownerRead);
+    }
+
+    // ── fs.setPermissions ────────────────────────────────────────────────
+
+    [Fact]
+    public void SetPermissions_SetsOwnerReadWriteExecute()
+    {
+        // Source file has 755 — get the struct and apply it to the target.
+        var srcPath = Path.Combine(_testDir, "setperm_src_all.txt");
+        var dstPath = Path.Combine(_testDir, "setperm_dst_all.txt");
+        File.WriteAllText(srcPath, "data");
+        File.WriteAllText(dstPath, "data");
+        System.IO.File.SetUnixFileMode(srcPath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+            System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute |
+            System.IO.UnixFileMode.OtherRead | System.IO.UnixFileMode.OtherExecute);
+        // Start dst with no execute so we can verify it changes.
+        System.IO.File.SetUnixFileMode(dstPath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite);
+
+        Execute($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
+
+        var read    = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.read;");
+        var write   = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.write;");
+        var execute = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.execute;");
+
+        Assert.Equal(true, read);
+        Assert.Equal(true, write);
+        Assert.Equal(true, execute);
+    }
+
+    [Fact]
+    public void SetPermissions_RemovesWritePermission()
+    {
+        // Source file has 444 (no write). Apply its permissions to a writable target.
+        var srcPath = Path.Combine(_testDir, "setperm_src_nowrite.txt");
+        var dstPath = Path.Combine(_testDir, "setperm_dst_nowrite.txt");
+        File.WriteAllText(srcPath, "data");
+        File.WriteAllText(dstPath, "data");
+        System.IO.File.SetUnixFileMode(srcPath,
+            System.IO.UnixFileMode.UserRead |
+            System.IO.UnixFileMode.GroupRead |
+            System.IO.UnixFileMode.OtherRead);
+
+        Execute($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
+
+        var write = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.write;");
+        Assert.Equal(false, write);
+    }
+
+    [Fact]
+    public void SetPermissions_ReturnsNull()
+    {
+        var srcPath = Path.Combine(_testDir, "setperm_src_null.txt");
+        var dstPath = Path.Combine(_testDir, "setperm_dst_null.txt");
+        File.WriteAllText(srcPath, "data");
+        File.WriteAllText(dstPath, "data");
+
+        var result = Run($"let result = fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void SetPermissions_NonexistentPathThrows()
+    {
+        var srcPath = Path.Combine(_testDir, "setperm_src_missing.txt");
+        var missing = Path.Combine(_testDir, "setperm_dst_missing.txt");
+        File.WriteAllText(srcPath, "data");
+
+        RunExpectingError($"fs.setPermissions(\"{missing}\", fs.getPermissions(\"{srcPath}\"));");
+    }
+
+    [Fact]
+    public void SetPermissions_NonStringPathThrows()
+    {
+        var srcPath = Path.Combine(_testDir, "setperm_nonstringpath.txt");
+        File.WriteAllText(srcPath, "data");
+
+        RunExpectingError($"fs.setPermissions(42, fs.getPermissions(\"{srcPath}\"));");
+    }
+
+    [Fact]
+    public void SetPermissions_NonStructThrows()
+    {
+        var filePath = Path.Combine(_testDir, "setperm_badtype.txt");
+        File.WriteAllText(filePath, "data");
+        RunExpectingError($"fs.setPermissions(\"{filePath}\", \"not-a-struct\");");
+    }
+
+    [Fact]
+    public void SetPermissions_RoundTrip()
+    {
+        // Set known permissions on src via SetUnixFileMode, copy to dst, verify dst matches.
+        var srcPath = Path.Combine(_testDir, "setperm_src_rt.txt");
+        var dstPath = Path.Combine(_testDir, "setperm_dst_rt.txt");
+        File.WriteAllText(srcPath, "data");
+        File.WriteAllText(dstPath, "data");
+        System.IO.File.SetUnixFileMode(srcPath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+            System.IO.UnixFileMode.GroupRead);
+
+        Execute($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
+
+        var ownerRead    = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.read;");
+        var ownerWrite   = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.write;");
+        var ownerExecute = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.execute;");
+        var groupWrite   = Run($"let result = fs.getPermissions(\"{dstPath}\").group.write;");
+        var othersRead   = Run($"let result = fs.getPermissions(\"{dstPath}\").others.read;");
+
+        Assert.Equal(true, ownerRead);
+        Assert.Equal(true, ownerWrite);
+        Assert.Equal(true, ownerExecute);
+        Assert.Equal(false, groupWrite);
+        Assert.Equal(false, othersRead);
+    }
+
+    // ── fs.setReadOnly ───────────────────────────────────────────────────
+
+    [Fact]
+    public void SetReadOnly_MakesFileReadOnly()
+    {
+        var filePath = Path.Combine(_testDir, "setro_true.txt");
+        File.WriteAllText(filePath, "data");
+
+        Execute($"fs.setReadOnly(\"{filePath}\", true);");
+
+        var write = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
+        Assert.Equal(false, write);
+    }
+
+    [Fact]
+    public void SetReadOnly_MakesFileWritable()
+    {
+        var filePath = Path.Combine(_testDir, "setro_false.txt");
+        File.WriteAllText(filePath, "data");
+        System.IO.File.SetUnixFileMode(filePath,
+            System.IO.UnixFileMode.UserRead |
+            System.IO.UnixFileMode.GroupRead |
+            System.IO.UnixFileMode.OtherRead);
+
+        Execute($"fs.setReadOnly(\"{filePath}\", false);");
+
+        var write = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
+        Assert.Equal(true, write);
+    }
+
+    [Fact]
+    public void SetReadOnly_ReturnsNull()
+    {
+        var filePath = Path.Combine(_testDir, "setro_null.txt");
+        File.WriteAllText(filePath, "data");
+
+        var result = Run($"let result = fs.setReadOnly(\"{filePath}\", true);");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void SetReadOnly_NonexistentPathThrows()
+    {
+        var missing = Path.Combine(_testDir, "setro_missing.txt");
+        RunExpectingError($"fs.setReadOnly(\"{missing}\", true);");
+    }
+
+    [Fact]
+    public void SetReadOnly_RoundTrip()
+    {
+        var filePath = Path.Combine(_testDir, "setro_roundtrip.txt");
+        File.WriteAllText(filePath, "data");
+
+        Execute($"fs.setReadOnly(\"{filePath}\", true);");
+        var writeAfterRO = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
+        Assert.Equal(false, writeAfterRO);
+
+        Execute($"fs.setReadOnly(\"{filePath}\", false);");
+        var writeAfterRW = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
+        Assert.Equal(true, writeAfterRW);
+    }
+
+    // ── fs.setExecutable ─────────────────────────────────────────────────
+
+    [Fact]
+    public void SetExecutable_AddsExecuteBit()
+    {
+        var filePath = Path.Combine(_testDir, "setexec_true.txt");
+        File.WriteAllText(filePath, "data");
+        System.IO.File.SetUnixFileMode(filePath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite);
+
+        Execute($"fs.setExecutable(\"{filePath}\", true);");
+
+        var execute = Run($"let result = fs.getPermissions(\"{filePath}\").owner.execute;");
+        Assert.Equal(true, execute);
+    }
+
+    [Fact]
+    public void SetExecutable_RemovesExecuteBit()
+    {
+        var filePath = Path.Combine(_testDir, "setexec_false.txt");
+        File.WriteAllText(filePath, "data");
+        System.IO.File.SetUnixFileMode(filePath,
+            System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
+            System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute |
+            System.IO.UnixFileMode.OtherRead | System.IO.UnixFileMode.OtherExecute);
+
+        Execute($"fs.setExecutable(\"{filePath}\", false);");
+
+        var ownerExec = Run($"let result = fs.getPermissions(\"{filePath}\").owner.execute;");
+        var groupExec = Run($"let result = fs.getPermissions(\"{filePath}\").group.execute;");
+        var otherExec = Run($"let result = fs.getPermissions(\"{filePath}\").others.execute;");
+
+        Assert.Equal(false, ownerExec);
+        Assert.Equal(false, groupExec);
+        Assert.Equal(false, otherExec);
+    }
+
+    [Fact]
+    public void SetExecutable_ReturnsNull()
+    {
+        var filePath = Path.Combine(_testDir, "setexec_null.txt");
+        File.WriteAllText(filePath, "data");
+
+        var result = Run($"let result = fs.setExecutable(\"{filePath}\", true);");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void SetExecutable_NonexistentPathThrows()
+    {
+        var missing = Path.Combine(_testDir, "setexec_missing.txt");
+        RunExpectingError($"fs.setExecutable(\"{missing}\", true);");
+    }
 }

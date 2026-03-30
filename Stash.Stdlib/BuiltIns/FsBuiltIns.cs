@@ -3,6 +3,7 @@ namespace Stash.Stdlib.BuiltIns;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -11,14 +12,15 @@ using static Stash.Stdlib.Registration.P;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Provides 27 functions for reading, writing, and inspecting the filesystem:
+/// Provides 31 functions for reading, writing, and inspecting the filesystem:
 /// <c>fs.readFile</c>, <c>fs.writeFile</c>, <c>fs.appendFile</c>, <c>fs.readLines</c>,
 /// <c>fs.createFile</c>, <c>fs.exists</c>, <c>fs.dirExists</c>, <c>fs.pathExists</c>,
 /// <c>fs.createDir</c>, <c>fs.listDir</c>, <c>fs.delete</c>, <c>fs.copy</c>, <c>fs.move</c>,
 /// <c>fs.size</c>, <c>fs.stat</c>, <c>fs.glob</c>, <c>fs.walk</c>, <c>fs.isFile</c>,
 /// <c>fs.isDir</c>, <c>fs.isSymlink</c>, <c>fs.symlink</c>, <c>fs.modifiedAt</c>,
 /// <c>fs.readable</c>, <c>fs.writable</c>, <c>fs.executable</c>, <c>fs.tempFile</c>,
-/// and <c>fs.tempDir</c>.
+/// <c>fs.tempDir</c>, <c>fs.getPermissions</c>, <c>fs.setPermissions</c>,
+/// <c>fs.setReadOnly</c>, and <c>fs.setExecutable</c>.
 /// </para>
 /// <para>
 /// This namespace is only registered when the <see cref="StashCapabilities.FileSystem"/>
@@ -455,6 +457,260 @@ public static class FsBuiltIns
             catch (RuntimeError) { throw; }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot stat '{path}': {e.Message}"); }
         });
+
+        // fs.getPermissions(path) — Returns a FilePermissions struct describing the file's permission bits.
+        ns.Function("getPermissions", [Param("path", "string")], (ctx, args) =>
+        {
+            var path = Args.String(args, 0, "fs.getPermissions");
+            path = ctx.ExpandTilde(path);
+
+            try
+            {
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                    throw new RuntimeError($"Path does not exist: '{path}'.");
+
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    bool isReadOnly;
+                    bool isExe;
+
+                    if (System.IO.File.Exists(path))
+                    {
+                        var info = new System.IO.FileInfo(path);
+                        isReadOnly = info.IsReadOnly;
+                        var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                        isExe = ext is ".exe" or ".cmd" or ".bat" or ".com" or ".ps1";
+                    }
+                    else
+                    {
+                        // Directory
+                        var attrs = System.IO.File.GetAttributes(path);
+                        isReadOnly = (attrs & System.IO.FileAttributes.ReadOnly) != 0;
+                        isExe = false;
+                    }
+
+                    return new StashInstance("FilePermissions", new Dictionary<string, object?>
+                    {
+                        ["owner"] = new StashInstance("FilePermission", new Dictionary<string, object?>
+                        {
+                            ["read"] = true,
+                            ["write"] = !isReadOnly,
+                            ["execute"] = isExe,
+                        }),
+                        ["group"] = new StashInstance("FilePermission", new Dictionary<string, object?>
+                        {
+                            ["read"] = true,
+                            ["write"] = !isReadOnly,
+                            ["execute"] = isExe,
+                        }),
+                        ["others"] = new StashInstance("FilePermission", new Dictionary<string, object?>
+                        {
+                            ["read"] = true,
+                            ["write"] = !isReadOnly,
+                            ["execute"] = isExe,
+                        }),
+                    });
+                }
+                else
+                {
+                    var mode = System.IO.File.GetUnixFileMode(path);
+
+                    var owner = new StashInstance("FilePermission", new Dictionary<string, object?>
+                    {
+                        ["read"] = (mode & System.IO.UnixFileMode.UserRead) != 0,
+                        ["write"] = (mode & System.IO.UnixFileMode.UserWrite) != 0,
+                        ["execute"] = (mode & System.IO.UnixFileMode.UserExecute) != 0,
+                    });
+
+                    var group = new StashInstance("FilePermission", new Dictionary<string, object?>
+                    {
+                        ["read"] = (mode & System.IO.UnixFileMode.GroupRead) != 0,
+                        ["write"] = (mode & System.IO.UnixFileMode.GroupWrite) != 0,
+                        ["execute"] = (mode & System.IO.UnixFileMode.GroupExecute) != 0,
+                    });
+
+                    var others = new StashInstance("FilePermission", new Dictionary<string, object?>
+                    {
+                        ["read"] = (mode & System.IO.UnixFileMode.OtherRead) != 0,
+                        ["write"] = (mode & System.IO.UnixFileMode.OtherWrite) != 0,
+                        ["execute"] = (mode & System.IO.UnixFileMode.OtherExecute) != 0,
+                    });
+
+                    return new StashInstance("FilePermissions", new Dictionary<string, object?>
+                    {
+                        ["owner"] = owner,
+                        ["group"] = group,
+                        ["others"] = others,
+                    });
+                }
+            }
+            catch (RuntimeError) { throw; }
+            catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot get permissions for '{path}': {e.Message}"); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get permissions for '{path}': {e.Message}"); }
+        }, returnType: "FilePermissions", documentation: "Returns a FilePermissions struct describing the read/write/execute permissions for owner, group, and others.\n@param path The path to inspect.\n@return A FilePermissions struct with owner, group, and others fields (each a FilePermission with read, write, execute bools).");
+
+        // fs.setPermissions(path, permissions) — Sets file permissions from a FilePermissions struct.
+        ns.Function("setPermissions", [Param("path", "string"), Param("permissions", "FilePermissions")], (ctx, args) =>
+        {
+            var path = Args.String(args, 0, "fs.setPermissions");
+            var perms = Args.Instance(args, 1, "FilePermissions", "fs.setPermissions");
+            path = ctx.ExpandTilde(path);
+
+            try
+            {
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                    throw new RuntimeError($"Path does not exist: '{path}'.");
+
+                var ownerInst = perms.GetField("owner", null) as StashInstance
+                    ?? throw new RuntimeError("'owner' field must be a FilePermission struct.");
+                var groupInst = perms.GetField("group", null) as StashInstance
+                    ?? throw new RuntimeError("'group' field must be a FilePermission struct.");
+                var othersInst = perms.GetField("others", null) as StashInstance
+                    ?? throw new RuntimeError("'others' field must be a FilePermission struct.");
+
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    // Windows: only write permission (ReadOnly attribute) can be controlled
+                    bool ownerWrite = ownerInst.GetField("write", null) as bool? ?? false;
+                    if (System.IO.File.Exists(path))
+                    {
+                        new System.IO.FileInfo(path).IsReadOnly = !ownerWrite;
+                    }
+                    else
+                    {
+                        // Directory
+                        var attrs = System.IO.File.GetAttributes(path);
+                        if (!ownerWrite)
+                            System.IO.File.SetAttributes(path, attrs | System.IO.FileAttributes.ReadOnly);
+                        else
+                            System.IO.File.SetAttributes(path, attrs & ~System.IO.FileAttributes.ReadOnly);
+                    }
+                }
+                else
+                {
+                    var mode = System.IO.UnixFileMode.None;
+
+                    if (ownerInst.GetField("read", null) as bool? ?? false) mode |= System.IO.UnixFileMode.UserRead;
+                    if (ownerInst.GetField("write", null) as bool? ?? false) mode |= System.IO.UnixFileMode.UserWrite;
+                    if (ownerInst.GetField("execute", null) as bool? ?? false) mode |= System.IO.UnixFileMode.UserExecute;
+
+                    if (groupInst.GetField("read", null) as bool? ?? false) mode |= System.IO.UnixFileMode.GroupRead;
+                    if (groupInst.GetField("write", null) as bool? ?? false) mode |= System.IO.UnixFileMode.GroupWrite;
+                    if (groupInst.GetField("execute", null) as bool? ?? false) mode |= System.IO.UnixFileMode.GroupExecute;
+
+                    if (othersInst.GetField("read", null) as bool? ?? false) mode |= System.IO.UnixFileMode.OtherRead;
+                    if (othersInst.GetField("write", null) as bool? ?? false) mode |= System.IO.UnixFileMode.OtherWrite;
+                    if (othersInst.GetField("execute", null) as bool? ?? false) mode |= System.IO.UnixFileMode.OtherExecute;
+
+                    System.IO.File.SetUnixFileMode(path, mode);
+                }
+            }
+            catch (RuntimeError) { throw; }
+            catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}"); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}"); }
+            return null;
+        }, returnType: "null", documentation: "Sets file permissions from a FilePermissions struct. On Unix, sets full rwx bits for owner/group/others. On Windows, controls the read-only attribute based on owner write permission.\n@param path The file path to modify.\n@param permissions A FilePermissions struct with owner, group, and others fields.");
+
+        // fs.setReadOnly(path, readOnly) — Cross-platform convenience for toggling the read-only state.
+        ns.Function("setReadOnly", [Param("path", "string"), Param("readOnly", "bool")], (ctx, args) =>
+        {
+            var path = Args.String(args, 0, "fs.setReadOnly");
+            var readOnly = Args.Bool(args, 1, "fs.setReadOnly");
+            path = ctx.ExpandTilde(path);
+
+            try
+            {
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                    throw new RuntimeError($"Path does not exist: '{path}'.");
+
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    if (System.IO.File.Exists(path))
+                    {
+                        new System.IO.FileInfo(path).IsReadOnly = readOnly;
+                    }
+                    else
+                    {
+                        var attrs = System.IO.File.GetAttributes(path);
+                        if (readOnly)
+                            System.IO.File.SetAttributes(path, attrs | System.IO.FileAttributes.ReadOnly);
+                        else
+                            System.IO.File.SetAttributes(path, attrs & ~System.IO.FileAttributes.ReadOnly);
+                    }
+                }
+                else
+                {
+                    var mode = System.IO.File.GetUnixFileMode(path);
+                    if (readOnly)
+                    {
+                        mode &= ~(System.IO.UnixFileMode.UserWrite |
+                                   System.IO.UnixFileMode.GroupWrite |
+                                   System.IO.UnixFileMode.OtherWrite);
+                    }
+                    else
+                    {
+                        mode |= System.IO.UnixFileMode.UserWrite;
+                    }
+                    System.IO.File.SetUnixFileMode(path, mode);
+                }
+            }
+            catch (RuntimeError) { throw; }
+            catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}"); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}"); }
+            return null;
+        }, returnType: "null", documentation: "Sets or clears the read-only state of a file. On Unix, toggles write bits. On Windows, sets the ReadOnly file attribute.\n@param path The file path to modify.\n@param readOnly True to make the file read-only, false to make it writable.");
+
+        // fs.setExecutable(path, executable) — Sets or clears the executable bit (Unix) or is a no-op on Windows.
+        ns.Function("setExecutable", [Param("path", "string"), Param("executable", "bool")], (ctx, args) =>
+        {
+            var path = Args.String(args, 0, "fs.setExecutable");
+            var executable = Args.Bool(args, 1, "fs.setExecutable");
+            path = ctx.ExpandTilde(path);
+
+            try
+            {
+                if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                    throw new RuntimeError($"Path does not exist: '{path}'.");
+
+                if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    var mode = System.IO.File.GetUnixFileMode(path);
+                    if (executable)
+                    {
+                        mode |= System.IO.UnixFileMode.UserExecute;
+                    }
+                    else
+                    {
+                        mode &= ~(System.IO.UnixFileMode.UserExecute |
+                                   System.IO.UnixFileMode.GroupExecute |
+                                   System.IO.UnixFileMode.OtherExecute);
+                    }
+                    System.IO.File.SetUnixFileMode(path, mode);
+                }
+                // On Windows, executable status is determined by file extension — no action needed.
+            }
+            catch (RuntimeError) { throw; }
+            catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}"); }
+            catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}"); }
+            return null;
+        }, returnType: "null", documentation: "Sets or clears the executable permission on a file. On Unix, toggles the user execute bit (adds on true, clears all execute bits on false). On Windows, this is a no-op since executability is determined by file extension.\n@param path The file path to modify.\n@param executable True to make executable, false to remove execute permission.");
+
+        // ── Built-in structs for file permissions ─────────────────────────────
+        ns.Struct("FilePermission", [
+            new BuiltInField("read", "bool"),
+            new BuiltInField("write", "bool"),
+            new BuiltInField("execute", "bool"),
+        ]);
+
+        ns.Struct("FilePermissions", [
+            new BuiltInField("owner", "FilePermission"),
+            new BuiltInField("group", "FilePermission"),
+            new BuiltInField("others", "FilePermission"),
+        ]);
 
         return ns.Build();
     }

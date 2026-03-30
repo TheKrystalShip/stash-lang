@@ -183,7 +183,57 @@ let config = env.withPrefix("MYAPP_");
 | `fs.modifiedAt(path)`          | Get last modified time as Unix timestamp                                          |
 | `fs.createFile(path)`          | Create an empty file or update modified time                                      |
 | `fs.symlink(target, path)`     | Create a symbolic link                                                            |
-| `fs.stat(path)`                | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name) |
+| `fs.stat(path)`                       | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name) |
+| `fs.readable(path)`                   | Check if current process can read the path (returns boolean)                      |
+| `fs.writable(path)`                   | Check if current process can write to the path (returns boolean)                  |
+| `fs.executable(path)`                 | Check if a file is executable (Unix: mode bits, Windows: file extension)          |
+| `fs.getPermissions(path)`             | Get file permission details (returns `FilePermissions` struct)                    |
+| `fs.setPermissions(path, permissions)`| Set file permissions from a `FilePermissions` struct                              |
+| `fs.setReadOnly(path, readOnly)`      | Set or clear the read-only state of a file or directory                           |
+| `fs.setExecutable(path, executable)`  | Set or clear the executable bit (Unix) — no-op on Windows                         |
+
+### Permission Types
+
+```stash
+struct FilePermission {
+    read: bool,
+    write: bool,
+    execute: bool
+}
+
+struct FilePermissions {
+    owner: FilePermission,
+    group: FilePermission,
+    others: FilePermission
+}
+```
+
+`fs.getPermissions(path)` returns a `FilePermissions` struct describing the read, write, and execute permissions for the file's owner, group, and others. On Unix, this maps directly to file mode bits. On Windows, it approximates using the read-only attribute and file extension.
+
+```stash
+let perms = fs.getPermissions("/opt/app/run.sh");
+if (perms.owner.execute) {
+    io.println("Script is executable");
+}
+```
+
+`fs.setPermissions(path, permissions)` applies a `FilePermissions` struct to set the full permission bits. On Unix, this sets the full `rwx` mode for owner/group/others. On Windows, it controls the read-only attribute based on the owner's write permission.
+
+```stash
+// Get current permissions, modify, and apply
+let perms = fs.getPermissions("config.toml");
+perms.owner.write = false;
+perms.group.write = false;
+perms.others.write = false;
+fs.setPermissions("config.toml", perms);
+```
+
+`fs.setReadOnly(path, readOnly)` and `fs.setExecutable(path, executable)` are convenience functions for the most common permission operations:
+
+```stash
+fs.setReadOnly("config.toml", true);     // Make read-only
+fs.setExecutable("deploy.sh", true);     // Make executable (Unix)
+```
 
 ---
 
