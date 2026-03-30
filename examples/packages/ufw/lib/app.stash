@@ -10,14 +10,14 @@
 ///   let info = app.info("Nginx Full");
 
 import "common.stash" as common;
-import { UfwAppInfo, UfwAppInfoResult, UfwAppListResult } from "types.stash";
+import { UfwAppInfo, UfwAppInfoResult, UfwAppListResult, UfwResult } from "types.stash";
 
 /// Lists all available UFW application profiles.
 ///
 /// Parses the output of `ufw app list` into an array of profile name strings.
 ///
 /// @return UfwAppListResult with ok, apps (array of strings), stderr, exitCode
-fn list() {
+fn list() -> UfwAppListResult {
     let r = common.exec("app list");
     if (!r.ok) {
         return UfwAppListResult { ok: false, apps: [], stderr: r.stderr, exitCode: r.exitCode };
@@ -40,7 +40,7 @@ fn list() {
 ///
 /// @param name string — the application profile name (e.g. "Nginx Full", "OpenSSH")
 /// @return UfwAppInfoResult with ok, data (UfwAppInfo or null), stderr, exitCode
-fn info(name) {
+fn info(name: string) -> UfwAppInfoResult {
     let r = common.exec($"app info '{name}'");
     if (!r.ok) {
         return UfwAppInfoResult { ok: false, data: null, stderr: r.stderr, exitCode: r.exitCode };
@@ -83,7 +83,7 @@ fn info(name) {
 ///
 /// @param policy string — one of: "allow", "deny", "reject", "skip"
 /// @return UfwResult with ok, stdout, stderr, exitCode
-fn default_policy(policy) {
+fn default_policy(policy: string) -> UfwResult {
     return common.exec($"app default {policy}");
 }
 
@@ -91,6 +91,6 @@ fn default_policy(policy) {
 ///
 /// @param name string — the application profile name
 /// @return UfwResult with ok, stdout, stderr, exitCode
-fn update(name) {
+fn update(name: string) -> UfwResult {
     return common.exec($"app update '{name}'");
 }

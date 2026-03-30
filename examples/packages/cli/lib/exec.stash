@@ -13,7 +13,7 @@ fn exec(tool, args = "") {
     if (args != "") {
         cmd = tool + " " + args;
     }
-    let result = $({cmd});
+    let result = $(${cmd});
     return {
         ok: result.exitCode == 0,
         stdout: result.stdout,

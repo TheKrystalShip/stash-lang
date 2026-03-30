@@ -2160,14 +2160,14 @@ public class InterpreterTests
     [Fact]
     public void Command_WithInterpolation_VariableSubstituted()
     {
-        var result = Run("let x = \"world\"; let r = $(echo {x}); let result = r.stdout;");
+        var result = Run("let x = \"world\"; let r = $(echo ${x}); let result = r.stdout;");
         Assert.Contains("world", (string)result!);
     }
 
     [Fact]
     public void Command_WithExpressionInterpolation()
     {
-        var result = Run("let a = 2; let b = 3; let r = $(echo {a + b}); let result = r.stdout;");
+        var result = Run("let a = 2; let b = 3; let r = $(echo ${a + b}); let result = r.stdout;");
         Assert.Contains("5", (string)result!);
     }
 
@@ -2261,7 +2261,7 @@ public class InterpreterTests
     [Fact]
     public void PassthroughCommand_WithInterpolation()
     {
-        var result = Run("let x = \"world\"; let r = $>(echo {x}); let result = r.exitCode;");
+        var result = Run("let x = \"world\"; let r = $>(echo ${x}); let result = r.exitCode;");
         Assert.Equal(0L, result);
     }
 
@@ -2379,8 +2379,59 @@ public class InterpreterTests
     [Fact]
     public void Pipe_WithInterpolation()
     {
-        var result = Run(@"let pattern = ""hello""; let r = $(echo hello world) | $(grep {pattern}); let result = r.stdout;");
+        var result = Run(@"let pattern = ""hello""; let r = $(echo hello world) | $(grep ${pattern}); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_InlineBasicChain()
+    {
+        var result = Run("let r = $(echo hello | cat); let result = r.stdout;");
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_InlineThreeStages()
+    {
+        var result = Run(@"let r = $(printf ""3\n1\n2"" | sort | head -2); let result = r.stdout;");
+        string stdout = ((string)result!).Trim();
+        Assert.Contains("1", stdout);
+        Assert.Contains("2", stdout);
+        Assert.DoesNotContain("3", stdout);
+    }
+
+    [Fact]
+    public void Pipe_InlineMixedWithExternal()
+    {
+        // Inline pipe + external pipe
+        var result = Run("let r = $(echo hello | cat) | $(cat); let result = r.stdout;");
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_InlineWithInterpolation()
+    {
+        var result = Run(@"let pattern = ""hello""; let r = $(echo hello world | grep ${pattern}); let result = r.stdout;");
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Pipe_InlineLargeData()
+    {
+        var result = Run("let r = $(seq 1 10000 | wc -l); let result = r.stdout;");
+        string stdout = ((string)result!).Trim();
+        Assert.Equal("10000", stdout);
+    }
+
+    [Fact]
+    public void Pipe_InlineStreamingHead()
+    {
+        // yes outputs infinite lines; head -5 reads 5 then terminates the pipe
+        var result = Run("let r = $(yes | head -5); let result = r.stdout;");
+        string stdout = (string)result!;
+        string[] lines = stdout.Split('\n', System.StringSplitOptions.RemoveEmptyEntries);
+        Assert.Equal(5, lines.Length);
+        Assert.All(lines, line => Assert.Equal("y", line));
     }
 
     // ===== Phase 4: readFile / writeFile Built-ins =====

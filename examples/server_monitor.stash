@@ -28,7 +28,7 @@ struct Server {
 
     fn check() {
         let start = time.millis();
-        let result = try $(ping -c 1 -W 2 {self.host});
+        let result = try $(ping -c 1 -W 2 ${self.host});
         let elapsed = time.millis() - start;
 
         if (result == null) {

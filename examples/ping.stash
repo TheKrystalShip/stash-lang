@@ -41,7 +41,7 @@ const CHECK_PORT    = "80";
 // ─── Ping ─────────────────────────────────────────────────────
 
 fn ping_host(host: Host) -> PingResult {
-    let result = $(ping -c 1 -W 2 {host.address});
+    let result = $(ping -c 1 -W 2 ${host.address});
 
     if (result.exitCode != 0) {
         return PingResult {
@@ -68,7 +68,7 @@ fn ping_host(host: Host) -> PingResult {
 // ─── DNS Lookup ───────────────────────────────────────────────
 
 fn dns_lookup(address) {
-    let result = try $(nslookup {address});
+    let result = try $(nslookup ${address});
     if (result == null || result.exitCode != 0) { return "n/a"; }
 
     let lines = str.split(result.stdout, "\n");
@@ -84,7 +84,7 @@ fn dns_lookup(address) {
 // ─── Port Check ───────────────────────────────────────────────
 
 fn check_port(address, port) {
-    let result = $(bash -c "echo '' > /dev/tcp/{address}/{port}" 2>&1);
+    let result = $(bash -c "echo '' > /dev/tcp/${address}/${port}" 2>&1);
     return result.exitCode == 0;
 }
 

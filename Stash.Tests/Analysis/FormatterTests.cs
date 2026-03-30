@@ -283,8 +283,8 @@ public class FormatterTests
     [Fact]
     public void Format_CommandLiteral()
     {
-        var result = Format("let result=$(ping -c 1 {host});");
-        Assert.Equal("let result = $(ping -c 1 {host});\n", result);
+        var result = Format("let result=$(ping -c 1 ${host});");
+        Assert.Equal("let result = $(ping -c 1 ${host});\n", result);
     }
 
     [Fact]

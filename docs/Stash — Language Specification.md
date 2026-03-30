@@ -203,14 +203,14 @@ let serverAddress = try fs.readFile("/path/to/addressFile") ?? DEFAULT_ADDRESS;
 let srv = Server { host: serverAddress, port: 22, status: Status.Unknown };
 
 // Command execution
-let result = $(ping -c 1 {srv.host});
+let result = $(ping -c 1 ${srv.host});
 
 // Property assignment
 srv.status = result.exitCode == 0 ? Status.Active : Status.Inactive;
 
 // Function definition
 fn deploy(server, package) {
-  let r = $(scp {package} {server.host}:/opt/);
+  let r = $(scp ${package} ${server.host}:/opt/);
   return r.exitCode == 0;
 }
 
@@ -1281,7 +1281,7 @@ io.println(result.exitCode);    // process exit code
 
 `$(...)` is **always raw mode**. When the lexer encounters `$(`, it enters "command mode" and collects everything as raw text until the matching `)`. The content is not parsed as a Stash expression — it is treated as a command string that is split into a program name and arguments. Programs are invoked directly, not through a system shell.
 
-To inject dynamic values into a command, use interpolation with `{...}`:
+To inject dynamic values into a command, use interpolation with `${...}`:
 
 ```stash
 // Raw mode — command text is written directly
@@ -1289,28 +1289,28 @@ let r1 = $(ls -la);
 
 // Dynamic values via interpolation
 let flags = buildFlags();
-let r2 = $(ls {flags});
+let r2 = $(ls ${flags});
 
 // Full dynamic command — interpolate the entire string
 let cmd = "echo hello";
-let r3 = $({cmd});
+let r3 = $(${cmd});
 ```
 
-This makes `$(...)` the **single, unified way** to execute commands. The `{...}` interpolation syntax within commands is consistent with how interpolation works elsewhere in the language.
+This makes `$(...)` the **single, unified way** to execute commands. The `${...}` interpolation syntax within commands is consistent with how interpolation works elsewhere in the language.
 
 `$(...)` returns a struct-like object with `stdout`, `stderr`, and `exitCode` fields.
 
 #### Interpolation in Commands
 
-Variables and expressions can be embedded using `{...}`:
+Variables and expressions can be embedded using `${...}`:
 
 ```stash
 let host = "192.168.1.10";
-let result = $(ping -c 1 {host});
+let result = $(ping -c 1 ${host});
 
 let file = "/var/log/syslog";
 let pattern = "error";
-let matches = $(grep {pattern} {file});
+let matches = $(grep ${pattern} ${file});
 ```
 
 This feels natural — commands read like commands, not like strings, but you still get dynamic values where needed.
@@ -1321,7 +1321,7 @@ This feels natural — commands read like commands, not like strings, but you st
 | ------------- | ---------------- | --------------------------------------------------------------------------- |
 | `exec("cmd")` | `exec("ls -la")` | Rejected — commands look like strings, not commands                         |
 | `` `cmd` ``   | `` `ls -la` ``   | Viable but conflicts with potential future use of backticks                 |
-| `$(cmd)`      | `$(ls -la)`      | **Chosen** — familiar from Bash, always raw mode, `{...}` for interpolation |
+| `$(cmd)`      | `$(ls -la)`      | **Chosen** — familiar from Bash, always raw mode, `${...}` for interpolation |
 | `$>(cmd)`     | `$>(ls -la)`     | Passthrough variant — inherited I/O for interactive commands                |
 
 Implementation: backed by `System.Diagnostics.Process` in C#.
@@ -1376,7 +1376,7 @@ Interpolation works identically to `$(...)`:
 
 ```stash
 let target = "release";
-$>(cargo build --profile {target});
+$>(cargo build --profile ${target});
 ```
 
 **When to use which:**
@@ -1390,20 +1390,36 @@ $>(cargo build --profile {target});
 
 ### Pipes
 
-Chain process outputs using `|` between command literals:
+Pipelines can be written in two equivalent forms:
 
 ```stash
+// Inline pipe syntax (recommended)
+let lines = $(cat /var/log/syslog | grep error | wc -l);
+
+// External pipe syntax (alternative)
 let lines = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
 ```
 
-The `|` operator is **exclusive to command chaining** — it pipes stdout of the left process to stdin of the right. It is not a general-purpose operator and cannot be used between non-command expressions. For logical OR, use `||`.
+Both produce the same AST and execute identically. The two syntaxes can also be mixed:
+
+```stash
+let result = $(cmd1 | cmd2) | $(cmd3);
+```
+
+**Inline pipes:** The lexer splits `$(...)` on unquoted `|` characters at the source level. Each segment becomes a separate pipeline stage. The following characters do **not** trigger splitting:
+
+- `||` — treated as a token boundary, not a pipe (use `||` for logical OR outside `$(...)`)
+- `|` inside quotes — `$(grep "a|b")` passes the literal string to `grep`
+- `|` inside `$>(...)` — passthrough commands do not split on pipes; the character is passed as-is to the shell
+
+The `|` operator is **exclusive to command chaining** — it cannot be used between non-command expressions. For logical OR, use `||`.
 
 #### Execution Semantics
 
 Pipe chains use **streaming concurrent execution**. All stages in the chain launch simultaneously as OS-level processes, connected by OS-level pipes — stdout of each stage flows directly into stdin of the next with no buffering in between.
 
 ```stash
-let result = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
+let result = $(cat /var/log/syslog | grep error | wc -l);
 // All three processes start concurrently.
 // result.exitCode is the exit code of 'wc -l' (the last command).
 // result.stdout and result.stderr are captured from 'wc -l'.
@@ -1412,7 +1428,7 @@ let result = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
 Because data streams directly between processes, infinite producers work correctly:
 
 ```stash
-let first5 = $(yes) | $(head -5);
+let first5 = $(yes | head -5);
 // 'yes' runs concurrently with 'head -5'.
 // 'head -5' reads 5 lines then exits, causing 'yes' to terminate naturally.
 ```
@@ -1637,7 +1653,7 @@ The elevation context is **dynamic**, not lexical. It propagates through functio
 
 ```stash
 fn restart_service(name) {
-    $(systemctl restart {name});   // elevated if called inside elevate { }
+    $(systemctl restart ${name});   // elevated if called inside elevate { }
 }
 
 elevate {
@@ -2011,7 +2027,7 @@ io.println(err2.type);     // "RangeError"
 Shell command results already carry structured error information via `exitCode` and `stderr` — they never crash the script:
 
 ```stash
-let result = $(ping -c 1 {host});
+let result = $(ping -c 1 ${host});
 if (result.exitCode != 0) {
     io.println("Host unreachable: " + result.stderr);
 }
@@ -2640,7 +2656,7 @@ Identifiers: user-defined names
 - `PipeExpr` — `$(cmd1) | $(cmd2)`
 - `RedirectExpr` — `$(cmd) > "file"`, `$(cmd) >> "file"`, `$(cmd) 2> "file"`, `$(cmd) &> "file"`
 - `StructInitExpr` — `Server { host: "..." }`
-- `CommandExpr` — `$(ls -la)`, `$(grep {pattern} {file})`
+- `CommandExpr` — `$(ls -la)`, `$(grep ${pattern} ${file})`
 - `InterpolatedStringExpr` — `$"Hello {name}"`, `"Hello ${name}"`
 - `TryExpr` — `try expr`
 - `AwaitExpr` — `await expr`
@@ -2895,7 +2911,7 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 - [x] ~~File extension~~ → `.stash` (default), `.sth` (short form, tentative)
 - [x] ~~String interpolation syntax~~ → Both `"Hello ${name}"` and `$"Hello {name}"` supported
 - [x] ~~Enums~~ → Included in v1 (see Section 5b)
-- [x] ~~Command syntax~~ → `$(command)` literals — always raw mode, `{expr}` for interpolation
+- [x] ~~Command syntax~~ → `$(command)` literals — always raw mode, `${expr}` for interpolation
 - [x] ~~C-style `for(;;)` loop~~ → No. Only `for-in` in v1. May revisit later.
 - [x] ~~Error handling model~~ → `try` expression + `??` null-coalescing (see Section 7b)
 - [x] ~~Null handling~~ → `??` null-coalescing operator included (see Section 7)

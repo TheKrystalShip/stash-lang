@@ -101,7 +101,7 @@ io.println($"  After detach  — tracked: {len(process.list())}");
 io.println($"  PID still known: {bg.pid}");
 
 // Clean up
-$(kill {bg.pid} 2>/dev/null);
+$(kill ${bg.pid} 2>/dev/null);
 io.println();
 
 // ─── 5. Signal Constants ────────────────────────────────────

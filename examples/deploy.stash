@@ -77,7 +77,7 @@ let targets = [
 // ─── Deployment Functions ────────────────────────────────────
 
 fn check_host(host: string) {
-  let result = try $(ping -c 1 -W 2 {host});
+  let result = try $(ping -c 1 -W 2 ${host});
   return result != null && result.exitCode == 0;
 }
 
@@ -98,7 +98,7 @@ fn deploy_to(target: Target, package: string) {
   while (attempt <= MAX_RETRIES) {
     utils.log(utils.LogLevel.Info, $"  Attempt {attempt}/{MAX_RETRIES}...");
     // Simulate deployment command
-    let result = $(echo "scp {package} {target.user}@{target.host}:/opt/");
+    let result = $(echo "scp ${package} ${target.user}@${target.host}:/opt/");
     if (result.exitCode == 0) {
       utils.log(utils.LogLevel.Info, $"  Deployed successfully on attempt {attempt}");
       return DeployStatus {

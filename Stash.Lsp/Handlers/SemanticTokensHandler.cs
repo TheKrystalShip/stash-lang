@@ -185,7 +185,19 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
 
         // Highlight the command name (first word of the first text segment)
         bool commandNameFound = false;
-        int textOffset = 2; // skip past "$("
+
+        // The lexeme always includes a synthetic "$(" or "$>(" prefix, but for piped
+        // command segments the SourceSpan starts at the command text (after pipe + whitespace),
+        // not at the prefix. Detect this by comparing span width to lexeme length.
+        int prefixLen = token.Lexeme.StartsWith("$>(") ? 3 :
+                        token.Lexeme.StartsWith("$(") ? 2 : 0;
+        int textOffset = prefixLen;
+        if (prefixLen > 0 && token.Span.StartLine == token.Span.EndLine)
+        {
+            int spanWidth = token.Span.EndColumn - token.Span.StartColumn + 1;
+            if (spanWidth < token.Lexeme.Length)
+                textOffset = 0;
+        }
 
         for (int i = 0; i < parts.Count; i++)
         {

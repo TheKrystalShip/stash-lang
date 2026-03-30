@@ -78,7 +78,7 @@ fn verbose(msg: string) {
 }
 
 fn probe_service(name: string) {
-    let result = try $(pgrep -x {name});
+    let result = try $(pgrep -x ${name});
     if (result != null && result.exitCode == 0) {
         return ServiceInfo {
             name: name,
@@ -119,7 +119,7 @@ fn cmd_start() {
     }
 
     // Simulate start
-    let result = $(echo "start {svc} --port {port} --env {env_name}");
+    let result = $(echo "start ${svc} --port ${port} --env ${env_name}");
     if (result.exitCode == 0) {
         let mode = detach ? "background" : "foreground";
         io.println($"  '{svc}' launched in {mode} mode");
@@ -145,7 +145,7 @@ fn cmd_stop() {
     let signal = force ? "SIGKILL" : "SIGTERM";
     verbose($"Sending {signal} to pid {info.pid}");
 
-    let result = $(echo "kill -{signal} {info.pid}");
+    let result = $(echo "kill -${signal} ${info.pid}");
     if (result.exitCode == 0) {
         io.println($"  '{svc}' stopped");
     } else {

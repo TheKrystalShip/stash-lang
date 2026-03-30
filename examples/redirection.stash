@@ -4,7 +4,7 @@
 // Demonstrates all redirection operators for managing command output
 
 let tmp = "/tmp/stash-redirect-demo";
-$(mkdir -p {tmp});
+$(mkdir -p ${tmp});
 
 io.println("=" * 50);
 io.println("  Output Redirection Demo");

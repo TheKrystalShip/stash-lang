@@ -28,3 +28,7 @@ let dictionary: dict = dict.new();
 dict.map(dictionary, (key, value) => {
   io.println($"Key: {key}, Value: {value}");
 });
+
+let text: string = "test";
+let result = $(echo ${text} | grep -n "t" | awk -F: '{print $1}');
+io.println($"Command output: {result}");

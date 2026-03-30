@@ -39,12 +39,7 @@ fn cleanBuildStash() {
   }
   io.println("Clean complete. Starting build...");
 
-  result = $(dotnet publish -c Release -r {RUNTIME} --self-contained);
-  if (result.exitCode != 0) {
-    io.println($"Build failed:\n{result.stderr}");
-    process.exit(1);
-  }
-
+  $>(dotnet publish -c Release -r ${RUNTIME} --self-contained);
   io.println("Build complete.");
 }
 
@@ -70,7 +65,7 @@ fn buildExtension() {
   // Build the VSCode extension
   io.println("Building VSCode extension...");
   let result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
-    return $({path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});
+    return $(${path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});
   });
   if (result.exitCode != 0) {
     io.println($"VSCode extension build failed:\n{result.stderr}");

@@ -789,7 +789,7 @@ public class LexerTests
     [Fact]
     public void ScanTokens_CommandLiteral_WithInterpolation()
     {
-        var tokens = Scan("$(echo {name})");
+        var tokens = Scan("$(echo ${name})");
 
         Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
         var parts = Assert.IsType<List<object>>(tokens[0].Literal);
@@ -803,7 +803,7 @@ public class LexerTests
     [Fact]
     public void ScanTokens_CommandLiteral_MultipleInterpolations()
     {
-        var tokens = Scan("$(grep {pattern} {file})");
+        var tokens = Scan("$(grep ${pattern} ${file})");
 
         Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
         var parts = Assert.IsType<List<object>>(tokens[0].Literal);
@@ -845,7 +845,7 @@ public class LexerTests
     [Fact]
     public void ScanTokens_CommandLiteral_WithExpressionInterpolation()
     {
-        var tokens = Scan("$(echo {a + b})");
+        var tokens = Scan("$(echo ${a + b})");
 
         Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
         var parts = Assert.IsType<List<object>>(tokens[0].Literal);
@@ -937,7 +937,7 @@ public class LexerTests
     [Fact]
     public void ScanTokens_PassthroughCommand_WithInterpolation()
     {
-        var tokens = Scan("$>(echo {name})");
+        var tokens = Scan("$>(echo ${name})");
 
         Assert.Equal(TokenType.PassthroughCommandLiteral, tokens[0].Type);
         var parts = Assert.IsType<List<object>>(tokens[0].Literal);
@@ -946,6 +946,133 @@ public class LexerTests
         var exprTokens = Assert.IsType<List<Token>>(parts[1]);
         Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
         Assert.Equal("name", exprTokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_InlinePipe_TwoCommands()
+    {
+        var tokens = Scan("$(echo hello | cat)");
+
+        // Should produce: CommandLiteral, Pipe, CommandLiteral, Eof
+        Assert.Equal(4, tokens.Count);
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Pipe, tokens[1].Type);
+        Assert.Equal(TokenType.CommandLiteral, tokens[2].Type);
+        Assert.Equal(TokenType.Eof, tokens[3].Type);
+
+        var parts1 = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts1);
+        Assert.Equal("echo hello", parts1[0]);
+
+        var parts2 = Assert.IsType<List<object>>(tokens[2].Literal);
+        Assert.Single(parts2);
+        Assert.Equal("cat", parts2[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_InlinePipe_ThreeCommands()
+    {
+        var tokens = Scan("$(cmd1 | cmd2 | cmd3)");
+
+        // CommandLiteral, Pipe, CommandLiteral, Pipe, CommandLiteral, Eof
+        Assert.Equal(6, tokens.Count);
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Pipe, tokens[1].Type);
+        Assert.Equal(TokenType.CommandLiteral, tokens[2].Type);
+        Assert.Equal(TokenType.Pipe, tokens[3].Type);
+        Assert.Equal(TokenType.CommandLiteral, tokens[4].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_InlinePipe_QuotedPipeNotSplit()
+    {
+        var tokens = Scan("$(echo \"hello | world\" | cat)");
+
+        // Quoted | is not split, only the unquoted one is
+        Assert.Equal(4, tokens.Count);
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Pipe, tokens[1].Type);
+        Assert.Equal(TokenType.CommandLiteral, tokens[2].Type);
+
+        var parts1 = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts1);
+        Assert.Equal("echo \"hello | world\"", parts1[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_InlinePipe_DoublePipeNotSplit()
+    {
+        var tokens = Scan("$(echo hello || exit 1)");
+
+        // || should NOT be split — treated as literal text
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Eof, tokens[1].Type);
+
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo hello || exit 1", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_InlinePipe_WithInterpolation()
+    {
+        var tokens = Scan("$(grep ${pattern} | sort)");
+
+        Assert.Equal(4, tokens.Count);
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Pipe, tokens[1].Type);
+        Assert.Equal(TokenType.CommandLiteral, tokens[2].Type);
+
+        var parts1 = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(2, parts1.Count);
+        Assert.Equal("grep ", parts1[0]);
+        var exprTokens = Assert.IsType<List<Token>>(parts1[1]);
+        Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
+        Assert.Equal("pattern", exprTokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_InlinePipe_PassthroughNotSplit()
+    {
+        var tokens = Scan("$>(cmd1 | cmd2)");
+
+        // Passthrough should NOT split on pipes
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.PassthroughCommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Eof, tokens[1].Type);
+
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("cmd1 | cmd2", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_InlinePipe_SingleQuotedPipeNotSplit()
+    {
+        var tokens = Scan("$(awk -F'|' NR | sort)");
+
+        // | inside single quotes should not split
+        Assert.Equal(4, tokens.Count);
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Pipe, tokens[1].Type);
+        Assert.Equal(TokenType.CommandLiteral, tokens[2].Type);
+
+        var parts1 = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts1);
+        Assert.Equal("awk -F'|' NR", parts1[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_CommandLiteral_BracesAreLiteralText()
+    {
+        var tokens = Scan("$(echo {hello})");
+
+        Assert.Equal(TokenType.CommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        // Bare {} without $ prefix is literal text, not interpolation
+        Assert.Single(parts);
+        Assert.Equal("echo {hello}", parts[0]);
     }
 
     [Fact]

@@ -1135,7 +1135,7 @@ public class ParserTests
     [Fact]
     public void Parse_CommandLiteral_WithInterpolation_ProducesCommandExprWithParts()
     {
-        var result = ParseExpr("$(echo {name})");
+        var result = ParseExpr("$(echo ${name})");
         var cmd = Assert.IsType<CommandExpr>(result);
         Assert.True(cmd.Parts.Count >= 2);
         // First part is "echo "
@@ -1167,7 +1167,7 @@ public class ParserTests
     [Fact]
     public void Parse_PassthroughCommand_WithInterpolation()
     {
-        var result = ParseExpr("$>(echo {name})");
+        var result = ParseExpr("$>(echo ${name})");
         var cmd = Assert.IsType<CommandExpr>(result);
         Assert.True(cmd.IsPassthrough);
         Assert.True(cmd.Parts.Count >= 2);
@@ -1218,6 +1218,45 @@ public class ParserTests
         // let's just verify the AST structure
         var result = ParseExpr("$(cmd1) | $(cmd2)");
         Assert.IsType<PipeExpr>(result);
+    }
+
+    [Fact]
+    public void Parse_PipeExpr_InlineTwoCommands()
+    {
+        var result = ParseExpr("$(echo hello | cat)");
+        var pipe = Assert.IsType<PipeExpr>(result);
+
+        Assert.IsType<CommandExpr>(pipe.Left);
+        Assert.IsType<CommandExpr>(pipe.Right);
+    }
+
+    [Fact]
+    public void Parse_PipeExpr_InlineThreeCommands_LeftAssociative()
+    {
+        var result = ParseExpr("$(cmd1 | cmd2 | cmd3)");
+        // Left-associative: ((cmd1 | cmd2) | cmd3)
+        var outerPipe = Assert.IsType<PipeExpr>(result);
+
+        var innerPipe = Assert.IsType<PipeExpr>(outerPipe.Left);
+        Assert.IsType<CommandExpr>(innerPipe.Left);
+        Assert.IsType<CommandExpr>(innerPipe.Right);
+
+        Assert.IsType<CommandExpr>(outerPipe.Right);
+    }
+
+    [Fact]
+    public void Parse_PipeExpr_MixedInlineAndExternal()
+    {
+        // Inline pipe inside $() combined with external pipe between $()s
+        var result = ParseExpr("$(cmd1 | cmd2) | $(cmd3)");
+        // Should produce: ((cmd1 | cmd2) | cmd3) — three-stage pipeline
+        var outerPipe = Assert.IsType<PipeExpr>(result);
+
+        var innerPipe = Assert.IsType<PipeExpr>(outerPipe.Left);
+        Assert.IsType<CommandExpr>(innerPipe.Left);
+        Assert.IsType<CommandExpr>(innerPipe.Right);
+
+        Assert.IsType<CommandExpr>(outerPipe.Right);
     }
 
     // ===== Phase 5: Try Expression =====

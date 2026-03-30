@@ -20,7 +20,7 @@ fn _format_port(port) {
 /// Runs a ufw command with the given arguments.
 /// @param args Arguments string to pass to ufw (e.g. "status verbose")
 /// @return UfwResult with ok, stdout, stderr, exitCode
-fn exec(args) {
+fn exec(args) -> UfwResult {
     let r = cli_exec.exec("ufw", args);
     return UfwResult { ok: r.ok, stdout: r.stdout, stderr: r.stderr, exitCode: r.exitCode };
 }
@@ -28,7 +28,7 @@ fn exec(args) {
 /// Runs a ufw command and returns its stdout split into trimmed non-empty lines.
 /// @param args Arguments string to pass to ufw
 /// @return UfwLinesResult with ok, lines, stderr, exitCode
-fn exec_lines(args) {
+fn exec_lines(args) -> UfwLinesResult {
     let r = exec(args);
     if (!r.ok) {
         return UfwLinesResult { ok: false, lines: [], stderr: r.stderr, exitCode: r.exitCode };
@@ -43,7 +43,7 @@ fn exec_lines(args) {
 
 /// Checks whether ufw is installed and available on the system.
 /// @return true if the ufw binary is found, false otherwise
-fn check_ufw() {
+fn check_ufw() -> bool {
     return cli_tools.check_tool("ufw");
 }
 
@@ -52,7 +52,7 @@ fn check_ufw() {
 /// @param opts Dict of options to convert to CLI flags
 /// @param spec Flag spec dict mapping option keys to flag descriptors (optional)
 /// @return Full argument string with base and all mapped flags
-fn build_args(base, opts, spec = {}) {
+fn build_args(base, opts, spec = {}) -> string {
     return cli_flags.build_args(base, opts, spec);
 }
 
@@ -66,7 +66,7 @@ fn build_args(base, opts, spec = {}) {
 ///
 /// @param rule UfwRule struct or raw rule string
 /// @return UFW rule string suitable for use after allow/deny/reject/limit
-fn build_rule(rule) {
+fn build_rule(rule) -> string {
     if (rule is string) {
         return rule;
     }

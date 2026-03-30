@@ -44,7 +44,7 @@ fn install_packages(packages: array) {
   }
   for (let pkg: string in packages) {
     io.println($"Installing {pkg}...");
-    let result = $(apt install -y -qq {pkg});
+    let result = $(apt install -y -qq ${pkg});
     if (result.exitCode == 0) {
       io.println($"  ✓ {pkg} installed");
     } else {
@@ -68,7 +68,7 @@ elevate {
 io.println("\n=== Service Management ===\n");
 
 fn service_action(name: string, action: string) {
-  let result = $(systemctl {action} {name});
+  let result = $(systemctl ${action} ${name});
   if (result.exitCode == 0) {
     io.println($"  ✓ {name}: {action}");
   } else {
@@ -77,7 +77,7 @@ fn service_action(name: string, action: string) {
 }
 
 fn get_service_status(name: string) -> string {
-  let result = $(systemctl is-active {name});
+  let result = $(systemctl is-active ${name});
   return str.trim(result.stdout);
 }
 
@@ -112,7 +112,7 @@ elevate {
     "443/tcp" // HTTPS
   ];
   for (let rule: string in rules) {
-    let result: CommandResult = CommandResult { exitCode: 0 }; // $(ufw allow {rule});
+    let result: CommandResult = CommandResult { exitCode: 0 }; // $(ufw allow ${rule});
     if (result.exitCode == 0) {
       io.println($"  ✓ Allowed {rule}");
     } else {
@@ -173,7 +173,7 @@ let new_hostname = "stash-server";
 // Elevated: only the actual system modification needs privileges
 
 // elevate {
-//   $(hostnamectl set-hostname {new_hostname});
+//   $(hostnamectl set-hostname ${new_hostname});
 //   io.println($"Hostname changed to: {new_hostname}");
 // }
 

@@ -153,9 +153,13 @@ function registerStashLanguage() {
 
             command: [
                 [/\)/, 'metatag', '@pop'],
-                [/\{/, 'delimiter.bracket', '@interpolationExpr'],
+                [/\$\{/, 'delimiter.bracket', '@interpolationExpr'],
+                [/\|\|/, 'metatag'],
+                [/'[^']*'/, 'string'],
+                [/\|/, 'operator'],
                 [/"/, 'string', '@string'],
-                [/[^){"\\]+/, 'metatag'],
+                [/[^)$"'\\|]+/, 'metatag'],
+                [/\$(?!\{)/, 'metatag'],
                 [/\\./, 'metatag']
             ]
         }

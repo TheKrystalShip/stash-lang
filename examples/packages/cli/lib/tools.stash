@@ -11,7 +11,7 @@
 /// @return true if the tool is found, false otherwise
 fn check_tool(name) {
     let cmd = "which " + name;
-    let result = $({cmd});
+    let result = $(${cmd});
     return result.exitCode == 0;
 }
 
@@ -25,7 +25,7 @@ fn check_tool(name) {
 /// @return Version string or null if unavailable
 fn tool_version(name, version_flag = "--version") {
     let cmd = name + " " + version_flag;
-    let result = $({cmd});
+    let result = $(${cmd});
     if (result.exitCode != 0) {
         return null;
     }

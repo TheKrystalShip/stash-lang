@@ -1244,6 +1244,11 @@ public class Lexer
         var textSegment = new StringBuilder();
         int depth = 1;
 
+        bool hasInlinePipes = false;
+        int segmentSourceStart = _current;
+        int segmentStartLine = _startLine;
+        int segmentStartColumn = _startColumn;
+
         while (!IsAtEnd && depth > 0)
         {
             char c = _source[_current];
@@ -1266,6 +1271,52 @@ public class Lexer
                 _current++;
                 _column++;
             }
+            else if (c == '|' && depth == 1 && !passthrough)
+            {
+                if (_current + 1 < _source.Length && _source[_current + 1] == '|')
+                {
+                    textSegment.Append('|');
+                    textSegment.Append('|');
+                    _current += 2;
+                    _column += 2;
+                }
+                else
+                {
+                    hasInlinePipes = true;
+
+                    string trimmedSeg = textSegment.ToString().TrimEnd();
+                    if (trimmedSeg.Length > 0)
+                        parts.Add(trimmedSeg);
+                    textSegment.Clear();
+
+                    _tokens.Add(new Token(
+                        TokenType.CommandLiteral,
+                        "$(" + _source[segmentSourceStart.._current].Trim() + ")",
+                        new List<object>(parts),
+                        new SourceSpan(_file, segmentStartLine, segmentStartColumn, _line, _column)
+                    ));
+                    parts = new List<object>();
+
+                    int pipeLine = _line;
+                    int pipeCol = _column;
+                    _current++;
+                    _column++;
+                    _tokens.Add(new Token(
+                        TokenType.Pipe, "|", null,
+                        new SourceSpan(_file, pipeLine, pipeCol, _line, _column - 1)
+                    ));
+
+                    while (!IsAtEnd && (_source[_current] == ' ' || _source[_current] == '\t'))
+                    {
+                        _current++;
+                        _column++;
+                    }
+
+                    segmentSourceStart = _current;
+                    segmentStartLine = _line;
+                    segmentStartColumn = _column;
+                }
+            }
             else if (c == '"' || c == '\'')
             {
                 // Skip over quoted strings so parentheses inside them
@@ -1283,7 +1334,7 @@ public class Lexer
                         _current += 2;
                         _column += 2;
                     }
-                    else if (_source[_current] == '{')
+                    else if (_source[_current] == '$' && _current + 1 < _source.Length && _source[_current + 1] == '{')
                     {
                         // Interpolation inside quoted string within command literal
                         if (textSegment.Length > 0)
@@ -1291,8 +1342,8 @@ public class Lexer
                             parts.Add(textSegment.ToString());
                             textSegment.Clear();
                         }
-                        _current++;
-                        _column++;
+                        _current += 2;
+                        _column += 2;
                         ScanInterpolatedExpression(parts);
                     }
                     else
@@ -1314,7 +1365,7 @@ public class Lexer
                     _column++;
                 }
             }
-            else if (c == '{')
+            else if (c == '$' && _current + 1 < _source.Length && _source[_current + 1] == '{')
             {
                 // Start interpolation: flush accumulated text
                 if (textSegment.Length > 0)
@@ -1322,8 +1373,8 @@ public class Lexer
                     parts.Add(textSegment.ToString());
                     textSegment.Clear();
                 }
-                _current++; // consume '{'
-                _column++;
+                _current += 2; // consume '${'  
+                _column += 2;
                 ScanInterpolatedExpression(parts);
             }
             else if (c == '\n')
@@ -1347,6 +1398,24 @@ public class Lexer
             _structuredErrors.Add(new DiagnosticError(
                 new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
                 "Unterminated command literal."));
+            return;
+        }
+
+        if (hasInlinePipes)
+        {
+            string trimmedFinal = textSegment.ToString().TrimEnd();
+            if (trimmedFinal.Length > 0)
+                parts.Add(trimmedFinal);
+
+            _tokens.Add(new Token(
+                TokenType.CommandLiteral,
+                "$(" + _source[segmentSourceStart.._current].Trim() + ")",
+                new List<object>(parts),
+                new SourceSpan(_file, segmentStartLine, segmentStartColumn, _line, _column)
+            ));
+
+            _current++;
+            _column++;
             return;
         }
 

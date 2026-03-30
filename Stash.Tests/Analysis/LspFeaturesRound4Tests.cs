@@ -216,7 +216,7 @@ public class LspFeaturesRound4Tests
     public void CommandExpr_EmbeddedIdentifier_NotFlaggedAsUndefined()
     {
         // Verifies that using a variable inside a command expression doesn't produce a false "not defined" warning
-        var result = FullAnalyze("let target = \"main\";\nlet r = $(git checkout {target});");
+        var result = FullAnalyze("let target = \"main\";\nlet r = $(git checkout ${target});");
         Assert.DoesNotContain(result.SemanticDiagnostics, d => d.Message.Contains("target") && d.Message.Contains("not defined"));
     }
 
@@ -245,7 +245,7 @@ public class LspFeaturesRound4Tests
     {
         // This mirrors the actual deploy.stash pattern that triggered the bug:
         // const defined at top level, used inside a function in a command expression
-        var source = "const DEST = \"/usr/bin/app\";\nfn deploy() {\n  let r = $(rm -f {DEST});\n}";
+        var source = "const DEST = \"/usr/bin/app\";\nfn deploy() {\n  let r = $(rm -f ${DEST});\n}";
         var result = FullAnalyze(source);
         Assert.DoesNotContain(result.SemanticDiagnostics, d => d.Message.Contains("DEST") && d.Message.Contains("not defined"));
     }
