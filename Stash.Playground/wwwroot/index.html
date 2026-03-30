@@ -65,6 +65,9 @@
             });
         }
     </script>
-    <script src="_framework/blazor.webassembly.js"></script>
+    <script src="_framework/blazor.webassembly#[.{fingerprint}].js" autostart="false"></script>
+    <script>
+        Blazor.start();
+    </script>
 </body>
 </html>

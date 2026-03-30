@@ -7,6 +7,7 @@
     <InvariantGlobalization>true</InvariantGlobalization>
     <SuppressTrimAnalysisWarnings>true</SuppressTrimAnalysisWarnings>
     <OverrideHtmlAssetPlaceholders>true</OverrideHtmlAssetPlaceholders>
+    <WasmFingerprintDotnetJs>false</WasmFingerprintDotnetJs>
   </PropertyGroup>
 
   <ItemGroup>
