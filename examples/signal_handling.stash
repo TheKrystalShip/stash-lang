@@ -1,0 +1,116 @@
+#!/usr/bin/env stash
+// signal_handling.stash — Demonstrates signal trapping for graceful lifecycle management
+//
+// Signals allow scripts to respond to external events (Ctrl+C, termination requests,
+// config reloads) instead of being abruptly killed. This is essential for:
+//   - Graceful shutdown (cleanup temp files, close connections)
+//   - Config reloading without restart (SIGHUP convention)
+//   - Custom inter-process communication (SIGUSR1/SIGUSR2)
+
+// ── Tool Availability Check ────────────────────────────────────────────
+
+// sys.which() searches PATH for an executable, returning its full path or null.
+// This is the cross-platform way to check if a tool is installed.
+
+let git = sys.which("git");
+if (git != null) {
+    io.println("Git found at: " + git);
+} else {
+    io.println("Git not found in PATH");
+}
+
+// Check multiple tools at once
+let required = ["sh", "cat", "echo"];
+for (let tool in required) {
+    let path = sys.which(tool);
+    if (path == null) {
+        io.println("Warning: " + tool + " not found");
+    } else {
+        io.println($"  ✓ {tool} → {path}");
+    }
+}
+
+// ── Signal Enum ────────────────────────────────────────────────────────
+
+// sys.Signal is a built-in enum with trappable POSIX signals.
+// The LSP provides autocompletion for all members.
+
+io.println("\nAvailable signals:");
+io.println("  " + sys.Signal.SIGHUP);    // Config reload
+io.println("  " + sys.Signal.SIGINT);    // Ctrl+C
+io.println("  " + sys.Signal.SIGQUIT);   // Quit
+io.println("  " + sys.Signal.SIGTERM);   // Graceful termination
+io.println("  " + sys.Signal.SIGUSR1);   // User-defined 1
+io.println("  " + sys.Signal.SIGUSR2);   // User-defined 2
+
+// ── Graceful Shutdown Pattern ──────────────────────────────────────────
+
+// Register SIGTERM handler for graceful shutdown.
+// Container orchestrators (Docker, Kubernetes) send SIGTERM before SIGKILL.
+
+let tempFile = fs.tempFile();
+fs.writeFile(tempFile, "locked");
+io.println($"\nCreated lock file: {tempFile}");
+
+sys.onSignal(sys.Signal.SIGTERM, () => {
+    io.println("[SIGTERM] Graceful shutdown initiated...");
+    if (fs.exists(tempFile)) {
+        fs.delete(tempFile);
+        io.println("[SIGTERM] Lock file cleaned up.");
+    }
+    io.println("[SIGTERM] Shutdown complete.");
+});
+
+// ── Ctrl+C Handling ────────────────────────────────────────────────────
+
+sys.onSignal(sys.Signal.SIGINT, () => {
+    io.println("\n[SIGINT] Caught Ctrl+C — cleaning up...");
+    if (fs.exists(tempFile)) {
+        fs.delete(tempFile);
+    }
+    io.println("[SIGINT] Bye!");
+});
+
+// ── SIGHUP for Config Reload ──────────────────────────────────────────
+
+// Convention: SIGHUP = "reload configuration without restarting"
+
+sys.onSignal(sys.Signal.SIGHUP, () => {
+    io.println("[SIGHUP] Reloading configuration...");
+    // In a real script, this would re-read config files:
+    // config = config.read("/etc/myapp/config.toml");
+    io.println("[SIGHUP] Configuration reloaded.");
+});
+
+// ── User-Defined Signals ───────────────────────────────────────────────
+
+// SIGUSR1/SIGUSR2 are custom signals — use them for anything.
+// Note: These only work on Linux and macOS. On Windows they are no-ops.
+
+sys.onSignal(sys.Signal.SIGUSR1, () => {
+    io.println("[SIGUSR1] Status report requested");
+    io.println("  PID: " + sys.pid());
+    io.println("  Uptime: " + sys.uptime() + "s");
+    io.println("  Free memory: " + sys.freeMemory() + " bytes");
+});
+
+// ── Demo: Self-signaling ───────────────────────────────────────────────
+
+io.println("\nSending SIGUSR1 to self for status report...");
+let pid = sys.pid();
+let _ = try $(kill -USR1 ${pid});
+let _ = try $(sleep 0.2);  // Brief wait for async handler
+
+// ── Cleanup ────────────────────────────────────────────────────────────
+
+// Unregister handlers when no longer needed
+sys.offSignal(sys.Signal.SIGUSR1);
+sys.offSignal(sys.Signal.SIGUSR2);
+io.println("\nUSR1/USR2 handlers removed.");
+
+// Clean up temp file
+if (fs.exists(tempFile)) {
+    fs.delete(tempFile);
+}
+
+io.println("Signal handling demo complete.");

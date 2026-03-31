@@ -1,3 +1,4 @@
+using System.IO;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Interpreting;
@@ -301,5 +302,267 @@ let result = typeof(first[""name""]) == ""string"" and typeof(first[""addresses"
             var dict = Assert.IsType<StashDictionary>(entry);
             Assert.IsType<List<object?>>(dict.Get("addresses"));
         }
+    }
+
+    // ── sys.which ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Which_KnownCommand_ReturnsPath()
+    {
+        string cmd = OperatingSystem.IsWindows() ? "cmd" : "sh";
+        var result = Run($"let result = sys.which(\"{cmd}\");");
+        string path = Assert.IsType<string>(result);
+        Assert.False(string.IsNullOrEmpty(path));
+        Assert.True(File.Exists(path));
+    }
+
+    [Fact]
+    public void Which_NonexistentCommand_ReturnsNull()
+    {
+        var result = Run("let result = sys.which(\"nonexistent_command_xyz_12345\");");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Which_EmptyString_ReturnsNull()
+    {
+        var result = Run("let result = sys.which(\"\");");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Which_NonStringArgThrows()
+    {
+        RunExpectingError("sys.which(123);");
+    }
+
+    [Fact]
+    public void Which_ReturnsAbsolutePath()
+    {
+        string cmd = OperatingSystem.IsWindows() ? "cmd" : "sh";
+        var result = Run($"let result = sys.which(\"{cmd}\");");
+        string path = Assert.IsType<string>(result);
+        Assert.True(Path.IsPathRooted(path));
+    }
+
+    [Fact]
+    public void Which_NullCheck_Works()
+    {
+        var result = Run(@"
+let path = sys.which(""nonexistent_impossible_command_xyz"");
+let result = path == null;
+");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Which_ConditionalPattern()
+    {
+        string cmd = OperatingSystem.IsWindows() ? "cmd" : "sh";
+        var result = Run($@"
+let found = sys.which(""{cmd}"");
+let result = found != null;
+");
+        Assert.Equal(true, result);
+    }
+
+    // ── sys.Signal enum ────────────────────────────────────────────────────
+
+    [Fact]
+    public void Signal_IsEnum()
+    {
+        var result = Run("let result = typeof(sys.Signal);");
+        Assert.Equal("enum", result);
+    }
+
+    [Fact]
+    public void Signal_SIGTERM_Exists()
+    {
+        var result = Run("let result = sys.Signal.SIGTERM;");
+        var ev = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Signal", ev.TypeName);
+        Assert.Equal("SIGTERM", ev.MemberName);
+    }
+
+    [Fact]
+    public void Signal_SIGINT_Exists()
+    {
+        var result = Run("let result = sys.Signal.SIGINT;");
+        var ev = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Signal", ev.TypeName);
+        Assert.Equal("SIGINT", ev.MemberName);
+    }
+
+    [Fact]
+    public void Signal_SIGHUP_Exists()
+    {
+        var result = Run("let result = sys.Signal.SIGHUP;");
+        var ev = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Signal", ev.TypeName);
+        Assert.Equal("SIGHUP", ev.MemberName);
+    }
+
+    [Fact]
+    public void Signal_SIGQUIT_Exists()
+    {
+        var result = Run("let result = sys.Signal.SIGQUIT;");
+        var ev = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Signal", ev.TypeName);
+        Assert.Equal("SIGQUIT", ev.MemberName);
+    }
+
+    [Fact]
+    public void Signal_SIGUSR1_Exists()
+    {
+        var result = Run("let result = sys.Signal.SIGUSR1;");
+        var ev = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Signal", ev.TypeName);
+        Assert.Equal("SIGUSR1", ev.MemberName);
+    }
+
+    [Fact]
+    public void Signal_SIGUSR2_Exists()
+    {
+        var result = Run("let result = sys.Signal.SIGUSR2;");
+        var ev = Assert.IsType<StashEnumValue>(result);
+        Assert.Equal("Signal", ev.TypeName);
+        Assert.Equal("SIGUSR2", ev.MemberName);
+    }
+
+    [Fact]
+    public void Signal_Equality()
+    {
+        var result = Run("let result = sys.Signal.SIGTERM == sys.Signal.SIGTERM;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Signal_Inequality()
+    {
+        var result = Run("let result = sys.Signal.SIGTERM != sys.Signal.SIGINT;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Signal_ToString()
+    {
+        var result = Run("let result = str.contains(\"\" + sys.Signal.SIGTERM, \"SIGTERM\");");
+        Assert.Equal(true, result);
+    }
+
+    // ── sys.onSignal / sys.offSignal ──────────────────────────────────────
+
+    [Fact]
+    public void OnSignal_RegistersWithoutError()
+    {
+        var result = Run(@"
+sys.onSignal(sys.Signal.SIGUSR1, () => {
+    // handler body
+});
+sys.offSignal(sys.Signal.SIGUSR1);
+let result = true;
+");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void OnSignal_ReplaceHandler_DoesNotThrow()
+    {
+        var result = Run(@"
+sys.onSignal(sys.Signal.SIGUSR1, () => { });
+sys.onSignal(sys.Signal.SIGUSR1, () => { });
+sys.offSignal(sys.Signal.SIGUSR1);
+let result = true;
+");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void OffSignal_RemovesHandler_DoesNotThrow()
+    {
+        var result = Run(@"
+sys.onSignal(sys.Signal.SIGUSR1, () => { });
+sys.offSignal(sys.Signal.SIGUSR1);
+let result = true;
+");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void OffSignal_NoExistingHandler_DoesNotThrow()
+    {
+        var result = Run(@"
+sys.offSignal(sys.Signal.SIGUSR2);
+let result = true;
+");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void OnSignal_InvalidFirstArg_Throws()
+    {
+        RunExpectingError("sys.onSignal(\"SIGTERM\", () => { });");
+    }
+
+    [Fact]
+    public void OnSignal_InvalidSecondArg_Throws()
+    {
+        RunExpectingError("sys.onSignal(sys.Signal.SIGTERM, \"not a function\");");
+    }
+
+    [Fact]
+    public void OffSignal_InvalidArg_Throws()
+    {
+        RunExpectingError("sys.offSignal(\"SIGTERM\");");
+    }
+
+    [Fact]
+    public void OnSignal_SIGUSR1_HandlerInvoked()
+    {
+        if (OperatingSystem.IsWindows()) return;
+
+        string marker = Path.Combine(Path.GetTempPath(), $"stash_signal_test_{Guid.NewGuid():N}");
+        try
+        {
+            var result = Run($@"
+sys.onSignal(sys.Signal.SIGUSR1, () => {{
+    fs.writeFile(""{marker.Replace("\\", "\\\\")}"", ""handled"");
+}});
+let pid = sys.pid();
+$(kill -USR1 ${{pid}});
+let _ = try $(sleep 0.3);
+sys.offSignal(sys.Signal.SIGUSR1);
+let result = true;
+");
+            Assert.Equal(true, result);
+            Assert.True(File.Exists(marker), "Signal handler should have created the marker file");
+            Assert.Equal("handled", File.ReadAllText(marker));
+        }
+        finally
+        {
+            if (File.Exists(marker))
+                File.Delete(marker);
+        }
+    }
+
+    [Fact]
+    public void OnSignal_AllSignalEnumMembers_CanRegister()
+    {
+        var result = Run(@"
+sys.onSignal(sys.Signal.SIGHUP, () => { });
+sys.onSignal(sys.Signal.SIGINT, () => { });
+sys.onSignal(sys.Signal.SIGQUIT, () => { });
+sys.onSignal(sys.Signal.SIGTERM, () => { });
+sys.onSignal(sys.Signal.SIGUSR1, () => { });
+sys.onSignal(sys.Signal.SIGUSR2, () => { });
+sys.offSignal(sys.Signal.SIGHUP);
+sys.offSignal(sys.Signal.SIGINT);
+sys.offSignal(sys.Signal.SIGQUIT);
+sys.offSignal(sys.Signal.SIGTERM);
+sys.offSignal(sys.Signal.SIGUSR1);
+sys.offSignal(sys.Signal.SIGUSR2);
+let result = true;
+");
+        Assert.Equal(true, result);
     }
 }

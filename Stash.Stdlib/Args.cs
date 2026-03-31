@@ -154,6 +154,16 @@ public static class Args
         return args[index] ?? throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must not be null.");
     }
 
+    public static StashEnumValue EnumValue(List<object?> args, int index, string typeName, string func)
+    {
+        if (index >= args.Count || args[index] is not StashEnumValue value || value.TypeName != typeName)
+        {
+            string ordinal = Ordinal(index);
+            throw new RuntimeError($"{ordinal} argument to '{func}' must be a {typeName} enum value.");
+        }
+        return value;
+    }
+
     // --- Ordinal helper ---
 
     private static string Ordinal(int index)

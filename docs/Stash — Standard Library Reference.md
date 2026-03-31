@@ -158,39 +158,39 @@ let config = env.withPrefix("MYAPP_");
 
 ## `fs` — File System Operations
 
-| Function                       | Description                                                                       |
-| ------------------------------ | --------------------------------------------------------------------------------- |
-| `fs.readFile(path)`            | Read file contents as string                                                      |
-| `fs.writeFile(path, content)`  | Write string to file (creates or overwrites)                                      |
-| `fs.appendFile(path, content)` | Append string to file                                                             |
-| `fs.readLines(path)`           | Read file as array of lines                                                       |
-| `fs.exists(path)`              | Check if a file exists (returns boolean)                                          |
-| `fs.dirExists(path)`           | Check if a directory exists (returns boolean)                                     |
-| `fs.pathExists(path)`          | Check if a file or directory exists                                               |
-| `fs.isFile(path)`              | Check if path is a file (returns boolean)                                         |
-| `fs.isDir(path)`               | Check if path is a directory (returns boolean)                                    |
-| `fs.isSymlink(path)`           | Check if path is a symbolic link                                                  |
-| `fs.createDir(path)`           | Create a directory (including parents)                                            |
-| `fs.delete(path)`              | Delete a file or directory (recursive)                                            |
-| `fs.copy(src, dst)`            | Copy a file (overwrites destination)                                              |
-| `fs.move(src, dst)`            | Move/rename a file (overwrites destination)                                       |
-| `fs.size(path)`                | Get file size in bytes                                                            |
-| `fs.listDir(path)`             | List entries in a directory (returns array)                                       |
-| `fs.glob(pattern)`             | Find files matching a glob pattern                                                |
-| `fs.walk(path)`                | Recursively list all files under a directory                                      |
-| `fs.tempFile()`                | Create a temporary file, returns its path                                         |
-| `fs.tempDir()`                 | Create a temporary directory, returns its path                                    |
-| `fs.modifiedAt(path)`          | Get last modified time as Unix timestamp                                          |
-| `fs.createFile(path)`          | Create an empty file or update modified time                                      |
-| `fs.symlink(target, path)`     | Create a symbolic link                                                            |
-| `fs.stat(path)`                       | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name) |
-| `fs.readable(path)`                   | Check if current process can read the path (returns boolean)                      |
-| `fs.writable(path)`                   | Check if current process can write to the path (returns boolean)                  |
-| `fs.executable(path)`                 | Check if a file is executable (Unix: mode bits, Windows: file extension)          |
-| `fs.getPermissions(path)`             | Get file permission details (returns `FilePermissions` struct)                    |
-| `fs.setPermissions(path, permissions)`| Set file permissions from a `FilePermissions` struct                              |
-| `fs.setReadOnly(path, readOnly)`      | Set or clear the read-only state of a file or directory                           |
-| `fs.setExecutable(path, executable)`  | Set or clear the executable bit (Unix) — no-op on Windows                         |
+| Function                               | Description                                                                       |
+| -------------------------------------- | --------------------------------------------------------------------------------- |
+| `fs.readFile(path)`                    | Read file contents as string                                                      |
+| `fs.writeFile(path, content)`          | Write string to file (creates or overwrites)                                      |
+| `fs.appendFile(path, content)`         | Append string to file                                                             |
+| `fs.readLines(path)`                   | Read file as array of lines                                                       |
+| `fs.exists(path)`                      | Check if a file exists (returns boolean)                                          |
+| `fs.dirExists(path)`                   | Check if a directory exists (returns boolean)                                     |
+| `fs.pathExists(path)`                  | Check if a file or directory exists                                               |
+| `fs.isFile(path)`                      | Check if path is a file (returns boolean)                                         |
+| `fs.isDir(path)`                       | Check if path is a directory (returns boolean)                                    |
+| `fs.isSymlink(path)`                   | Check if path is a symbolic link                                                  |
+| `fs.createDir(path)`                   | Create a directory (including parents)                                            |
+| `fs.delete(path)`                      | Delete a file or directory (recursive)                                            |
+| `fs.copy(src, dst)`                    | Copy a file (overwrites destination)                                              |
+| `fs.move(src, dst)`                    | Move/rename a file (overwrites destination)                                       |
+| `fs.size(path)`                        | Get file size in bytes                                                            |
+| `fs.listDir(path)`                     | List entries in a directory (returns array)                                       |
+| `fs.glob(pattern)`                     | Find files matching a glob pattern                                                |
+| `fs.walk(path)`                        | Recursively list all files under a directory                                      |
+| `fs.tempFile()`                        | Create a temporary file, returns its path                                         |
+| `fs.tempDir()`                         | Create a temporary directory, returns its path                                    |
+| `fs.modifiedAt(path)`                  | Get last modified time as Unix timestamp                                          |
+| `fs.createFile(path)`                  | Create an empty file or update modified time                                      |
+| `fs.symlink(target, path)`             | Create a symbolic link                                                            |
+| `fs.stat(path)`                        | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name) |
+| `fs.readable(path)`                    | Check if current process can read the path (returns boolean)                      |
+| `fs.writable(path)`                    | Check if current process can write to the path (returns boolean)                  |
+| `fs.executable(path)`                  | Check if a file is executable (Unix: mode bits, Windows: file extension)          |
+| `fs.getPermissions(path)`              | Get file permission details (returns `FilePermissions` struct)                    |
+| `fs.setPermissions(path, permissions)` | Set file permissions from a `FilePermissions` struct                              |
+| `fs.setReadOnly(path, readOnly)`       | Set or clear the read-only state of a file or directory                           |
+| `fs.setExecutable(path, executable)`   | Set or clear the executable bit (Unix) — no-op on Windows                         |
 
 ### Permission Types
 
@@ -2142,17 +2142,20 @@ io.println(term.table(data, ["ID", "Name", "Score"]));
 
 The `sys` namespace provides functions for querying system-level information: CPU, memory, disk, network interfaces, and process metadata. These are read-only introspection functions useful for server monitoring, health checks, and capacity planning scripts.
 
-| Function                  | Description                                                  |
-| ------------------------- | ------------------------------------------------------------ |
-| `sys.cpuCount()`          | Number of logical CPU cores                                  |
-| `sys.totalMemory()`       | Total physical RAM in bytes                                  |
-| `sys.freeMemory()`        | Available free RAM in bytes                                  |
-| `sys.uptime()`            | System uptime in seconds                                     |
-| `sys.loadAvg()`           | CPU load averages as array `[1min, 5min, 15min]`             |
-| `sys.diskUsage(path?)`    | Disk usage dict with `total`, `used`, `free` keys (in bytes) |
-| `sys.pid()`               | Current process ID                                           |
-| `sys.tempDir()`           | OS temporary directory path                                  |
-| `sys.networkInterfaces()` | Array of network interface dicts                             |
+| Function                        | Description                                                  |
+| ------------------------------- | ------------------------------------------------------------ |
+| `sys.cpuCount()`                | Number of logical CPU cores                                  |
+| `sys.totalMemory()`             | Total physical RAM in bytes                                  |
+| `sys.freeMemory()`              | Available free RAM in bytes                                  |
+| `sys.uptime()`                  | System uptime in seconds                                     |
+| `sys.loadAvg()`                 | CPU load averages as array `[1min, 5min, 15min]`             |
+| `sys.diskUsage(path?)`          | Disk usage dict with `total`, `used`, `free` keys (in bytes) |
+| `sys.pid()`                     | Current process ID                                           |
+| `sys.tempDir()`                 | OS temporary directory path                                  |
+| `sys.networkInterfaces()`       | Array of network interface dicts                             |
+| `sys.which(name)`               | Find an executable in PATH; returns full path or `null`      |
+| `sys.onSignal(signal, handler)` | Register a callback for a POSIX signal                       |
+| `sys.offSignal(signal)`         | Remove a previously registered signal handler                |
 
 ### CPU & Memory
 
@@ -2217,6 +2220,91 @@ Each network interface dict contains:
 | `type`      | string | Interface type (e.g., `"Ethernet"`, `"Loopback"`) |
 | `status`    | string | Operational status (e.g., `"Up"`, `"Down"`)       |
 | `addresses` | array  | Array of IP address strings                       |
+
+### Command Path Resolution
+
+#### `sys.which(name)`
+
+Searches the system `PATH` for an executable with the given name. Returns the full absolute path to the first match, or `null` if not found.
+
+- On **Linux/macOS**: searches each `PATH` directory for a file with execute permission
+- On **Windows**: additionally tries `PATHEXT` extensions (`.exe`, `.cmd`, `.bat`, `.com`, etc.)
+
+```stash
+let docker = sys.which("docker");
+if (docker != null) {
+    io.println("Docker found at: " + docker);
+    $(docker compose up -d);
+} else {
+    io.println("Docker is not installed");
+}
+
+// Check multiple tools before starting
+let tools = ["git", "node", "npm"];
+for (let tool in tools) {
+    if (sys.which(tool) == null) {
+        throw "Required tool not found: " + tool;
+    }
+}
+io.println("All tools available!");
+```
+
+### Signal Handling
+
+Stash supports trapping POSIX signals for graceful shutdown, config reloading, and custom signal handling. Signal handlers are registered per-signal and run in an isolated execution context when the signal is delivered.
+
+#### `sys.Signal` Enum
+
+`sys.Signal` is a **built-in enum** listing the trappable POSIX signals.
+
+| Member               | Signal    | Typical Use                        | Windows Support |
+| -------------------- | --------- | ---------------------------------- | --------------- |
+| `sys.Signal.SIGHUP`  | HUP (1)   | Config reload, terminal disconnect | ✅              |
+| `sys.Signal.SIGINT`  | INT (2)   | Interrupt (Ctrl+C)                 | ✅              |
+| `sys.Signal.SIGQUIT` | QUIT (3)  | Quit with core dump                | ✅              |
+| `sys.Signal.SIGTERM` | TERM (15) | Graceful termination               | ✅              |
+| `sys.Signal.SIGUSR1` | USR1 (10) | User-defined signal 1              | No-op           |
+| `sys.Signal.SIGUSR2` | USR2 (12) | User-defined signal 2              | No-op           |
+
+> **Note:** `SIGUSR1` and `SIGUSR2` are only supported on Linux and macOS. On Windows, registering handlers for these signals is a no-op — the handler is stored but never invoked.
+
+#### `sys.onSignal(signal, handler)`
+
+Registers a callback function to be invoked when the specified signal is received by the current process. If a handler was already registered for that signal, it is replaced.
+
+The handler function takes no arguments and runs in an isolated forked context — it cannot modify variables in the main script scope.
+
+```stash
+// Graceful shutdown on SIGTERM
+sys.onSignal(sys.Signal.SIGTERM, () => {
+    log.info("Received SIGTERM — shutting down gracefully...");
+    cleanup();
+});
+
+// Reload configuration on SIGHUP
+sys.onSignal(sys.Signal.SIGHUP, () => {
+    log.info("Received SIGHUP — reloading configuration...");
+    config = config.read("/etc/myapp/config.toml");
+});
+```
+
+#### `sys.offSignal(signal)`
+
+Removes a previously registered signal handler, restoring the default OS behavior for that signal. If no handler was registered, this is a no-op.
+
+```stash
+sys.offSignal(sys.Signal.SIGTERM);  // Restore default SIGTERM behavior
+```
+
+#### Cross-Platform Behavior
+
+| Platform | SIGHUP | SIGINT | SIGQUIT | SIGTERM | SIGUSR1 | SIGUSR2 |
+| -------- | ------ | ------ | ------- | ------- | ------- | ------- |
+| Linux    | ✅     | ✅     | ✅      | ✅      | ✅      | ✅      |
+| macOS    | ✅     | ✅     | ✅      | ✅      | ✅      | ✅      |
+| Windows  | ✅     | ✅     | ✅      | ✅      | No-op   | No-op   |
+
+On Windows, all signals except SIGUSR1/SIGUSR2 are supported via .NET's `PosixSignalRegistration`. SIGINT corresponds to Ctrl+C, and SIGTERM maps to process termination requests. SIGUSR1 and SIGUSR2 have no Windows equivalent — handlers are silently stored but never triggered.
 
 ---
 
