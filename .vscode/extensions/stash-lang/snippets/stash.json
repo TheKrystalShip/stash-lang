@@ -86,6 +86,15 @@
     ],
     "description": "While loop"
   },
+  "For Loop": {
+    "prefix": "fori",
+    "body": [
+      "for (let ${1:i} = ${2:0}; ${1:i} < ${3:10}; ${1:i}++) {",
+      "\t$0",
+      "}"
+    ],
+    "description": "C-style for loop"
+  },
   "For-In Loop": {
     "prefix": "for",
     "body": [

@@ -6,7 +6,7 @@ using Stash.Common;
 /// A continue statement: <c>continue;</c>
 /// </summary>
 /// <remarks>
-/// Valid only inside loop bodies (<see cref="WhileStmt"/>, <see cref="DoWhileStmt"/>, <see cref="ForInStmt"/>).
+/// Valid only inside loop bodies (<see cref="WhileStmt"/>, <see cref="DoWhileStmt"/>, <see cref="ForInStmt"/>, <see cref="ForStmt"/>).
 /// At runtime, implemented by throwing a <c>ContinueException</c> that is caught by the enclosing loop.
 /// </remarks>
 public class ContinueStmt : Stmt

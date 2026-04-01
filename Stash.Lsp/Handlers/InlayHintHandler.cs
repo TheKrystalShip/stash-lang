@@ -130,6 +130,12 @@ public class InlayHintHandler : InlayHintsHandlerBase
                 CollectFromExpr(whileStmt.Condition, hints, result);
                 CollectFromStmt(whileStmt.Body, hints, result);
                 break;
+            case ForStmt forStmt:
+                if (forStmt.Initializer is not null) CollectFromStmt(forStmt.Initializer, hints, result);
+                if (forStmt.Condition is not null) CollectFromExpr(forStmt.Condition, hints, result);
+                if (forStmt.Increment is not null) CollectFromExpr(forStmt.Increment, hints, result);
+                CollectFromStmt(forStmt.Body, hints, result);
+                break;
             case ForInStmt forIn:
                 CollectFromExpr(forIn.Iterable, hints, result);
                 CollectFromStmt(forIn.Body, hints, result);

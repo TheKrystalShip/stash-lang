@@ -818,6 +818,102 @@ public class InterpreterTests
         Assert.Equal(3L, Run("let result = 0; let i = 0; do { i = i + 1; let j = 0; do { j = j + 1; if (j == 2) { break; } result = result + 1; } while (j < 3); } while (i < 3);"));
     }
 
+    // ─── C-Style For ───────────────────────────────
+
+    [Fact]
+    public void CStyleFor_BasicLoop()
+    {
+        Assert.Equal(10L, Run("let result = 0; for (let i = 0; i < 10; i++) { result = result + 1; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_SumValues()
+    {
+        Assert.Equal(55L, Run("let result = 0; for (let i = 1; i <= 10; i++) { result = result + i; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_EmptyInit()
+    {
+        Assert.Equal(5L, Run("let result = 0; let i = 0; for (; i < 5; i++) { result = result + 1; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_EmptyCondition_InfiniteLoopWithBreak()
+    {
+        Assert.Equal(3L, Run("let result = 0; for (let i = 0; ; i++) { result = result + 1; if (result == 3) { break; } }"));
+    }
+
+    [Fact]
+    public void CStyleFor_EmptyIncrement()
+    {
+        Assert.Equal(5L, Run("let result = 0; for (let i = 0; i < 5;) { result = result + 1; i = i + 1; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_AllEmpty_InfiniteLoopWithBreak()
+    {
+        Assert.Equal(5L, Run("let result = 0; for (;;) { result = result + 1; if (result == 5) { break; } }"));
+    }
+
+    [Fact]
+    public void CStyleFor_Break()
+    {
+        Assert.Equal(3L, Run("let result = 0; for (let i = 0; i < 10; i++) { if (i == 3) { break; } result = result + 1; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_Continue()
+    {
+        // Skip iteration where i == 2, so count 0,1,3,4 = 4 iterations counted
+        Assert.Equal(4L, Run("let result = 0; for (let i = 0; i < 5; i++) { if (i == 2) { continue; } result = result + 1; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_ContinueStillIncrements()
+    {
+        // Verify that continue still executes the increment expression
+        // Without proper increment on continue, this would infinite loop
+        Assert.Equal(8L, Run("let result = 0; for (let i = 0; i < 5; i++) { if (i == 2) { continue; } result = result + i; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_NestedLoops()
+    {
+        Assert.Equal(9L, Run("let result = 0; for (let i = 0; i < 3; i++) { for (let j = 0; j < 3; j++) { result = result + 1; } }"));
+    }
+
+    [Fact]
+    public void CStyleFor_InitializerScoping()
+    {
+        // Loop variable 'i' should not be accessible after the loop
+        RunExpectingError("for (let i = 0; i < 5; i++) { } let result = i;");
+    }
+
+    [Fact]
+    public void CStyleFor_ExpressionInit()
+    {
+        Assert.Equal(15L, Run("let result = 0; let i = 0; for (i = 5; i < 10; i++) { result = result + 1; } result = result + i;"));
+    }
+
+    [Fact]
+    public void CStyleFor_Decrement()
+    {
+        Assert.Equal("543210", Run("let result = \"\"; for (let i = 5; i >= 0; i--) { result = result + conv.toStr(i); }"));
+    }
+
+    [Fact]
+    public void CStyleFor_ZeroIterations()
+    {
+        Assert.Equal(0L, Run("let result = 0; for (let i = 0; i < 0; i++) { result = result + 1; }"));
+    }
+
+    [Fact]
+    public void CStyleFor_BreakInNestedLoop_BreaksInnerOnly()
+    {
+        Assert.Equal(3L, Run("let result = 0; for (let i = 0; i < 3; i++) { for (let j = 0; j < 10; j++) { if (j == 1) { break; } result = result + 1; } }"));
+    }
+
     // ===== Category 6: For-In Loop =====
 
     [Fact]

@@ -238,6 +238,11 @@ while (index < 10) {
   index++;
 }
 
+// C-style for loop
+for (let i = 0; i < len(servers); i++) {
+  io.println("Server " + conv.toStr(i));
+}
+
 // Output redirection — write command output to files
 $(ls -la /opt) > "/tmp/listing.txt";
 $(make build) 2> "/tmp/errors.log";
@@ -1824,13 +1829,51 @@ Standard `break` and `continue` are supported inside `do-while` loops. The semic
 
 ### For Loop
 
+Stash supports two forms of `for` loop: the **for-in** loop for collection iteration, and the **C-style for** loop for counted/general iteration.
+
+#### C-Style For
+
+```stash
+for (let i = 0; i < 10; i++) {
+    io.println(conv.toStr(i));
+}
+```
+
+The three clauses inside the parentheses are:
+
+1. **Initializer** — executed once before the loop begins. May be a `let` declaration, an expression, or empty.
+2. **Condition** — evaluated before each iteration. If falsy, the loop exits. If omitted, the loop runs forever (use `break` to exit).
+3. **Increment** — executed after each iteration (including after `continue`).
+
+All three clauses are optional. An infinite loop: `for (;;) { ... }`.
+
+The initializer creates a new scope — variables declared with `let` in the initializer are scoped to the loop and not accessible afterward:
+
+```stash
+for (let i = 0; i < 5; i++) {
+    io.println(conv.toStr(i));  // i is accessible here
+}
+// i is NOT accessible here
+```
+
+`break` exits the loop. `continue` skips the rest of the body but **still executes the increment** before re-checking the condition:
+
+```stash
+let sum = 0;
+for (let i = 0; i < 10; i++) {
+    if (i % 2 == 0) { continue; }  // i++ still runs
+    sum = sum + i;
+}
+// sum = 25 (1 + 3 + 5 + 7 + 9)
+```
+
+#### For-In
+
 ```stash
 for (let item in collection) {
     // ...
 }
 ```
-
-Only the `for-in` form is supported. C-style `for (init; condition; increment)` is intentionally excluded — it adds complexity without significant benefit for a scripting language. May be reconsidered in a future version.
 
 #### For-in with Index
 
@@ -2802,6 +2845,7 @@ Identifiers: user-defined names
 - `IfStmt` — `if (...) { ... } else { ... }`
 - `WhileStmt` — `while (...) { ... }`
 - `ForInStmt` — `for (let x in y) { ... }`
+- `ForStmt` — `for (init; condition; increment) { ... }`
 - `FnDeclStmt` — `fn name(params) { ... }`
 - `ReturnStmt` — `return expr;`
 - `BreakStmt` — `break;`
@@ -3041,7 +3085,7 @@ If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM*
 - [x] ~~String interpolation syntax~~ → Both `"Hello ${name}"` and `$"Hello {name}"` supported
 - [x] ~~Enums~~ → Included in v1 (see Section 5b)
 - [x] ~~Command syntax~~ → `$(command)` literals — always raw mode, `${expr}` for interpolation
-- [x] ~~C-style `for(;;)` loop~~ → No. Only `for-in` in v1. May revisit later.
+- [x] C-style `for(;;)` loop — Implemented. Supports `for (init; cond; update) { ... }` alongside `for-in`.
 - [x] ~~Error handling model~~ → `try` expression + `??` null-coalescing (see Section 7b)
 - [x] ~~Null handling~~ → `??` null-coalescing operator included (see Section 7)
 - [x] ~~Shebang support~~ → Yes. Lexer skips `#!` lines (see Section 6b)
@@ -3069,7 +3113,9 @@ statement      → exprStmt | ifStmt | whileStmt | forStmt | returnStmt | breakS
 exprStmt       → expression ";" ;
 ifStmt         → "if" "(" expression ")" block ( "else" (ifStmt | block) )? ;
 whileStmt      → "while" "(" expression ")" block ;
-forStmt        → "for" "(" "let" IDENTIFIER "in" expression ")" block ;
+forStmt        → forInStmt | forCStyleStmt ;
+forInStmt      → "for" "(" "let" IDENTIFIER ( "," IDENTIFIER )? ( ":" IDENTIFIER )? "in" expression ")" block ;
+forCStyleStmt  → "for" "(" ( varDecl | exprStmt | ";" ) expression? ";" expression? ")" block ;
 returnStmt     → "return" expression? ";" ;
 breakStmt      → "break" ";" ;
 continueStmt   → "continue" ";" ;

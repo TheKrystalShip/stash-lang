@@ -7,8 +7,8 @@ using Stash.Lexing;
 /// A for-in loop: <c>for (let x in collection) { ... }</c>
 /// </summary>
 /// <remarks>
-/// Stash only supports <c>for-in</c> loops (no C-style <c>for(;;)</c>). The iterable can be an array,
-/// string, dictionary, or range. When iterating with an index, the syntax is
+/// Iterates over arrays, strings, dictionaries, and ranges. See <see cref="ForStmt"/> for the C-style <c>for(;;)</c> loop.
+/// When iterating with an index, the syntax is
 /// <c>for (let i, x in collection) { ... }</c>. An optional type hint may be provided on the loop variable.
 /// </remarks>
 public class ForInStmt : Stmt

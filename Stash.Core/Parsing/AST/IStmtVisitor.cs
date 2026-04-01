@@ -54,6 +54,11 @@ public interface IStmtVisitor<T>
     T VisitForInStmt(ForInStmt stmt);
 
     /// <summary>
+    /// Visits a <see cref="ForStmt"/> node (<c>for (init; condition; update) { ... }</c>).
+    /// </summary>
+    T VisitForStmt(ForStmt stmt);
+
+    /// <summary>
     /// Visits a <see cref="BreakStmt"/> node (<c>break;</c>).
     /// </summary>
     T VisitBreakStmt(BreakStmt stmt);

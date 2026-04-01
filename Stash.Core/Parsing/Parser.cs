@@ -601,7 +601,7 @@ public class Parser
 
         if (Match(TokenType.For))
         {
-            return ForInStatement();
+            return ForStatement();
         }
 
         if (Match(TokenType.Return))
@@ -745,14 +745,67 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses a for-in statement: <c>for (let name in iterable) { ... }</c>.
+    /// Dispatches a <c>for</c> statement to either a for-in or C-style for parser.
     /// The <c>for</c> token has already been consumed.
     /// </summary>
-    /// <returns>A <see cref="ForInStmt"/>.</returns>
-    private Stmt ForInStatement()
+    private Stmt ForStatement()
     {
         Token forToken = Previous();
         Consume(TokenType.LeftParen, "Expected '(' after 'for'.");
+
+        // Disambiguate: if we see 'let' followed by identifier(s) and 'in', it's a for-in loop
+        if (Check(TokenType.Let) && IsForInLoop())
+        {
+            return ParseForIn(forToken);
+        }
+
+        return ParseForCStyle(forToken);
+    }
+
+    /// <summary>
+    /// Lookahead check to determine whether the current token stream matches a for-in pattern.
+    /// Assumes the opening <c>(</c> has been consumed and the current token is <c>let</c>.
+    /// </summary>
+    private bool IsForInLoop()
+    {
+        int saved = _current;
+        try
+        {
+            Advance(); // skip 'let'
+            if (!Check(TokenType.Identifier)) return false;
+            Advance(); // skip first identifier
+
+            // Optional: comma + second identifier (indexed for-in)
+            if (Check(TokenType.Comma))
+            {
+                Advance(); // skip ','
+                if (!Check(TokenType.Identifier)) return false;
+                Advance(); // skip second identifier
+            }
+
+            // Optional: colon + type hint
+            if (Check(TokenType.Colon))
+            {
+                Advance(); // skip ':'
+                if (!Check(TokenType.Identifier)) return false;
+                Advance(); // skip type
+            }
+
+            return Check(TokenType.In);
+        }
+        finally
+        {
+            _current = saved;
+        }
+    }
+
+    /// <summary>
+    /// Parses a for-in statement: <c>for (let name in iterable) { ... }</c>.
+    /// The <c>for</c> token and opening <c>(</c> have already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="ForInStmt"/>.</returns>
+    private Stmt ParseForIn(Token forToken)
+    {
         Consume(TokenType.Let, "Expected 'let' after '(' in for-in loop.");
         Token varName = Consume(TokenType.Identifier, "Expected variable name in for-in loop.");
         Token? indexName = null;
@@ -774,6 +827,50 @@ public class Parser
         Consume(TokenType.RightParen, "Expected ')' after for-in clause.");
         BlockStmt body = ParseBlock();
         return new ForInStmt(indexName, varName, typeHint, iterable, body, MakeSpan(forToken.Span, body.Span));
+    }
+
+    /// <summary>
+    /// Parses a C-style for statement: <c>for (init; condition; update) { ... }</c>.
+    /// The <c>for</c> token and opening <c>(</c> have already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="ForStmt"/>.</returns>
+    private Stmt ParseForCStyle(Token forToken)
+    {
+        // Parse initializer: let declaration, expression statement, or empty
+        Stmt? initializer;
+        if (Match(TokenType.Semicolon))
+        {
+            initializer = null;
+        }
+        else if (Match(TokenType.Let))
+        {
+            initializer = VarDeclaration(); // consumes trailing ';' (the first for-clause separator)
+        }
+        else
+        {
+            Expr expr = Expression();
+            Consume(TokenType.Semicolon, "Expected ';' after for loop initializer.");
+            initializer = new ExprStmt(expr, expr.Span);
+        }
+
+        // Parse condition (or empty)
+        Expr? condition = null;
+        if (!Check(TokenType.Semicolon))
+        {
+            condition = Expression();
+        }
+        Consume(TokenType.Semicolon, "Expected ';' after for loop condition.");
+
+        // Parse increment (or empty)
+        Expr? increment = null;
+        if (!Check(TokenType.RightParen))
+        {
+            increment = Expression();
+        }
+        Consume(TokenType.RightParen, "Expected ')' after for clauses.");
+
+        BlockStmt body = ParseBlock();
+        return new ForStmt(initializer, condition, increment, body, MakeSpan(forToken.Span, body.Span));
     }
 
     /// <summary>

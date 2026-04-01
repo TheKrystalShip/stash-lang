@@ -108,6 +108,17 @@ public static class TypeInferenceEngine
                 }
 
                 break;
+            case ForStmt forStmt:
+                if (forStmt.Initializer is not null)
+                {
+                    InferFromStatement(scopeTree, forStmt.Initializer);
+                }
+                foreach (var s in forStmt.Body.Statements)
+                {
+                    InferFromStatement(scopeTree, s);
+                }
+
+                break;
             case ForInStmt forInStmt:
                 foreach (var s in forInStmt.Body.Statements)
                 {

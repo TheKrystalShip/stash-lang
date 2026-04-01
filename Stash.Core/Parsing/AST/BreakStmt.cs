@@ -6,7 +6,7 @@ using Stash.Common;
 /// A break statement: <c>break;</c>
 /// </summary>
 /// <remarks>
-/// Valid only inside loop bodies (<see cref="WhileStmt"/>, <see cref="DoWhileStmt"/>, <see cref="ForInStmt"/>).
+/// Valid only inside loop bodies (<see cref="WhileStmt"/>, <see cref="DoWhileStmt"/>, <see cref="ForInStmt"/>, <see cref="ForStmt"/>).
 /// At runtime, implemented by throwing a <c>BreakException</c> that is caught by the enclosing loop.
 /// </remarks>
 public class BreakStmt : Stmt

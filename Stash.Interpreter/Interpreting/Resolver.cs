@@ -229,6 +229,27 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitForStmt(ForStmt stmt)
+    {
+        BeginScope();
+        if (stmt.Initializer is not null)
+        {
+            stmt.Initializer.Accept(this);
+        }
+        if (stmt.Condition is not null)
+        {
+            Resolve(stmt.Condition);
+        }
+        if (stmt.Increment is not null)
+        {
+            Resolve(stmt.Increment);
+        }
+        Resolve(stmt.Body);
+        EndScope();
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitForInStmt(ForInStmt stmt)
     {
         Resolve(stmt.Iterable);

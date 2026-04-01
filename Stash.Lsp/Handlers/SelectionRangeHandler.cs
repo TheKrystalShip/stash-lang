@@ -173,6 +173,12 @@ public class SelectionRangeHandler : SelectionRangeHandlerBase
                 CollectContainingSpansExpr(whileStmt.Condition, line, col, spans);
                 CollectContainingSpans(whileStmt.Body, line, col, spans);
                 break;
+            case ForStmt forStmt:
+                if (forStmt.Initializer is not null) CollectContainingSpans(forStmt.Initializer, line, col, spans);
+                if (forStmt.Condition is not null) CollectContainingSpansExpr(forStmt.Condition, line, col, spans);
+                if (forStmt.Increment is not null) CollectContainingSpansExpr(forStmt.Increment, line, col, spans);
+                CollectContainingSpans(forStmt.Body, line, col, spans);
+                break;
             case ForInStmt forInStmt:
                 CollectContainingSpansExpr(forInStmt.Iterable, line, col, spans);
                 CollectContainingSpans(forInStmt.Body, line, col, spans);

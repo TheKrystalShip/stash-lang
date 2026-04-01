@@ -270,6 +270,24 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitForStmt(ForStmt stmt)
+    {
+        if (stmt.Initializer is not null)
+        {
+            stmt.Initializer.Accept(this);
+        }
+        if (stmt.Condition is not null)
+        {
+            stmt.Condition.Accept(this);
+        }
+        if (stmt.Increment is not null)
+        {
+            stmt.Increment.Accept(this);
+        }
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
     public int VisitForInStmt(ForInStmt stmt)
     {
         if (stmt.IndexName is not null)

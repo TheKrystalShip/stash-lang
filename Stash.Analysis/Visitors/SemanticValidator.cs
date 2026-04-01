@@ -192,6 +192,26 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitForStmt(ForStmt stmt)
+    {
+        if (stmt.Initializer is not null)
+        {
+            stmt.Initializer.Accept(this);
+        }
+        if (stmt.Condition is not null)
+        {
+            stmt.Condition.Accept(this);
+        }
+        _loopDepth++;
+        stmt.Body.Accept(this);
+        if (stmt.Increment is not null)
+        {
+            stmt.Increment.Accept(this);
+        }
+        _loopDepth--;
+        return null;
+    }
+
     /// <summary>
     /// Validates the optional element type annotation, recurses into the iterable expression,
     /// then visits the loop body within an incremented loop-depth context.

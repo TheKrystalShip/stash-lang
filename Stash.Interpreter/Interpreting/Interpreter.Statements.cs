@@ -167,6 +167,49 @@ public partial class Interpreter
     }
 
     /// <inheritdoc />
+    public object? VisitForStmt(ForStmt stmt)
+    {
+        var outerEnv = _environment;
+        try
+        {
+            // Initializer runs in a new scope (so `let i = 0` is scoped to the loop)
+            _environment = new Environment(_environment);
+
+            if (stmt.Initializer is not null)
+            {
+                Execute(stmt.Initializer);
+            }
+
+            while (stmt.Condition is null || EvalConditionTruthy(stmt.Condition))
+            {
+                try
+                {
+                    Execute(stmt.Body);
+                }
+                catch (BreakException)
+                {
+                    break;
+                }
+                catch (ContinueException)
+                {
+                    // Fall through to increment
+                }
+
+                if (stmt.Increment is not null)
+                {
+                    stmt.Increment.Accept(this);
+                }
+            }
+        }
+        finally
+        {
+            _environment = outerEnv;
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitForInStmt(ForInStmt stmt)
     {
         object? iterable = stmt.Iterable.Accept(this);

@@ -504,6 +504,36 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitForStmt(ForStmt stmt)
+    {
+        EmitToken(); // for
+        Space();
+        EmitToken(); // (
+        if (stmt.Initializer is not null)
+        {
+            stmt.Initializer.Accept(this); // emits initializer tokens including trailing ;
+        }
+        else
+        {
+            EmitToken(); // ;
+        }
+        Space();
+        if (stmt.Condition is not null)
+        {
+            stmt.Condition.Accept(this);
+        }
+        EmitToken(); // ;
+        if (stmt.Increment is not null)
+        {
+            Space();
+            stmt.Increment.Accept(this);
+        }
+        EmitToken(); // )
+        Space();
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
     public int VisitForInStmt(ForInStmt stmt)
     {
         EmitToken(); // for

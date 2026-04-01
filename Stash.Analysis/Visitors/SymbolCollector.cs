@@ -660,6 +660,29 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitForStmt(ForStmt stmt)
+    {
+        PushScope(ScopeKind.Loop, stmt.Span);
+        if (stmt.Initializer is not null)
+        {
+            stmt.Initializer.Accept(this);
+        }
+        if (stmt.Condition is not null)
+        {
+            stmt.Condition.Accept(this);
+        }
+        if (stmt.Increment is not null)
+        {
+            stmt.Increment.Accept(this);
+        }
+        foreach (var s in stmt.Body.Statements)
+        {
+            s.Accept(this);
+        }
+        PopScope();
+        return null;
+    }
+
     /// <summary>
     /// Recurses into the iterable expression, opens a <see cref="ScopeKind.Loop"/> scope,
     /// registers the optional index <see cref="SymbolKind.LoopVariable"/> and the iteration

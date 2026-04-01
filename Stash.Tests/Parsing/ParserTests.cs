@@ -1869,6 +1869,86 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parse_CStyleFor_BasicLoop()
+    {
+        var stmts = ParseProgram("for (let i = 0; i < 10; i++) { }");
+        var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
+        Assert.IsType<VarDeclStmt>(forStmt.Initializer);
+        Assert.NotNull(forStmt.Condition);
+        Assert.NotNull(forStmt.Increment);
+        Assert.IsType<BlockStmt>(forStmt.Body);
+    }
+
+    [Fact]
+    public void Parse_CStyleFor_EmptyInit()
+    {
+        var stmts = ParseProgram("for (; i < 10; i++) { }");
+        var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
+        Assert.Null(forStmt.Initializer);
+        Assert.NotNull(forStmt.Condition);
+        Assert.NotNull(forStmt.Increment);
+    }
+
+    [Fact]
+    public void Parse_CStyleFor_EmptyCondition()
+    {
+        var stmts = ParseProgram("for (let i = 0; ; i++) { }");
+        var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
+        Assert.IsType<VarDeclStmt>(forStmt.Initializer);
+        Assert.Null(forStmt.Condition);
+        Assert.NotNull(forStmt.Increment);
+    }
+
+    [Fact]
+    public void Parse_CStyleFor_EmptyIncrement()
+    {
+        var stmts = ParseProgram("for (let i = 0; i < 10;) { }");
+        var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
+        Assert.IsType<VarDeclStmt>(forStmt.Initializer);
+        Assert.NotNull(forStmt.Condition);
+        Assert.Null(forStmt.Increment);
+    }
+
+    [Fact]
+    public void Parse_CStyleFor_AllEmpty()
+    {
+        var stmts = ParseProgram("for (;;) { }");
+        var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
+        Assert.Null(forStmt.Initializer);
+        Assert.Null(forStmt.Condition);
+        Assert.Null(forStmt.Increment);
+    }
+
+    [Fact]
+    public void Parse_CStyleFor_ExpressionInit()
+    {
+        var stmts = ParseProgram("for (i = 0; i < 10; i++) { }");
+        var forStmt = Assert.IsType<ForStmt>(Assert.Single(stmts));
+        Assert.IsType<ExprStmt>(forStmt.Initializer);
+        Assert.NotNull(forStmt.Condition);
+        Assert.NotNull(forStmt.Increment);
+    }
+
+    [Fact]
+    public void Parse_ForIn_StillWorks()
+    {
+        // Ensure for-in still works after adding C-style for
+        var stmts = ParseProgram("for (let x in items) { }");
+        var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
+        Assert.Equal("x", forIn.VariableName.Lexeme);
+    }
+
+    [Fact]
+    public void Parse_ForIn_WithIndex_StillWorks()
+    {
+        var stmts = ParseProgram("for (let i, x in items) { }");
+        var forIn = Assert.IsType<ForInStmt>(Assert.Single(stmts));
+        Assert.NotNull(forIn.IndexName);
+        Assert.Equal("i", forIn.IndexName!.Lexeme);
+        Assert.Equal("x", forIn.VariableName.Lexeme);
+    }
+
+    [Fact]
     public void Parse_VarDecl_WithUserDefinedType()
     {
         var stmts = ParseProgram("let server: Server = null;");
