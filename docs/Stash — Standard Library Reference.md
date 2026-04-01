@@ -39,10 +39,11 @@
 23. [`term` — Terminal Formatting](#term--terminal-formatting)
 24. [`sys` — System Information](#sys--system-information)
 25. [`task` — Parallel Tasks](#task--parallel-tasks)
-26. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-27. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-28. [`log` — Logging](#log--logging)
-29. [Argument Parsing](#argument-parsing)
+26. [`net` — Networking](#net--networking)
+27. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+28. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+29. [`log` — Logging](#log--logging)
+30. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -2533,6 +2534,134 @@ async fn compute() { return 42; }
 let f = compute();       // Returns Future immediately
 io.println(f is Future); // true
 let result = await f;    // 42
+```
+
+## `net` — Networking
+
+The `net` namespace provides networking utilities including subnet computation, DNS resolution, connectivity testing, and network interface discovery. Requires the **Network** capability.
+
+### Subnet Information
+
+| Function         | Signature | Returns      | Description                                                  |
+| ---------------- | --------- | ------------ | ------------------------------------------------------------ |
+| `net.subnetInfo` | `(ip)`    | `SubnetInfo` | Returns comprehensive subnet details for a CIDR IP           |
+| `net.mask`       | `(ip)`    | `ip`         | Returns the subnet mask for a CIDR IP address                |
+| `net.network`    | `(ip)`    | `ip`         | Returns the network address for a CIDR IP address            |
+| `net.broadcast`  | `(ip)`    | `ip`         | Returns the broadcast address for a CIDR IP address          |
+| `net.hostCount`  | `(ip)`    | `int`        | Returns the number of usable host addresses in a CIDR subnet |
+
+All subnet functions require a CIDR IP address (with prefix length, e.g., `@192.168.1.0/24`). Passing an IP without a prefix throws a runtime error.
+
+#### `SubnetInfo` Struct
+
+| Field       | Type  | Description                        |
+| ----------- | ----- | ---------------------------------- |
+| `network`   | `ip`  | Network address (with CIDR prefix) |
+| `broadcast` | `ip`  | Broadcast address                  |
+| `mask`      | `ip`  | Subnet mask                        |
+| `wildcard`  | `ip`  | Wildcard (inverse) mask            |
+| `hostCount` | `int` | Number of usable host addresses    |
+| `firstHost` | `ip`  | First usable host address          |
+| `lastHost`  | `ip`  | Last usable host address           |
+
+```stash
+let info = net.subnetInfo(@192.168.1.100/24)
+println(info.network)    // @192.168.1.0/24
+println(info.broadcast)  // @192.168.1.255
+println(info.mask)       // @255.255.255.0
+println(info.wildcard)   // @0.0.0.255
+println(info.hostCount)  // 254
+println(info.firstHost)  // @192.168.1.1
+println(info.lastHost)   // @192.168.1.254
+
+// Convenience accessors
+let mask = net.mask(@10.0.0.0/8)         // @255.0.0.0
+let netAddr = net.network(@10.5.3.1/8)   // @10.0.0.0/8
+let bcast = net.broadcast(@10.0.0.0/8)   // @10.255.255.255
+let count = net.hostCount(@10.0.0.0/8)   // 16777214
+```
+
+Special prefix lengths:
+
+- `/32` — Single host: `hostCount` = 1, `firstHost` and `lastHost` equal the address
+- `/31` — Point-to-point link: `hostCount` = 2, both addresses usable
+- `/0` — Entire address space
+
+### DNS Resolution
+
+| Function            | Signature    | Returns  | Description                                   |
+| ------------------- | ------------ | -------- | --------------------------------------------- |
+| `net.resolve`       | `(hostname)` | `ip`     | Resolves hostname to first IP address via DNS |
+| `net.resolveAll`    | `(hostname)` | `array`  | Resolves hostname to all IP addresses via DNS |
+| `net.reverseLookup` | `(ip)`       | `string` | Performs reverse DNS lookup for an IP address |
+
+```stash
+let addr = net.resolve("example.com")      // @93.184.216.34
+let all = net.resolveAll("example.com")    // [@93.184.216.34, ...]
+let name = net.reverseLookup(@8.8.8.8)    // "dns.google"
+```
+
+### Connectivity Testing
+
+| Function         | Signature                | Returns      | Description                  |
+| ---------------- | ------------------------ | ------------ | ---------------------------- |
+| `net.ping`       | `(host)`                 | `PingResult` | Sends ICMP ping to host      |
+| `net.isPortOpen` | `(host, port, ?timeout)` | `bool`       | Checks if a TCP port is open |
+
+#### `PingResult` Struct
+
+| Field     | Type    | Description                     |
+| --------- | ------- | ------------------------------- |
+| `alive`   | `bool`  | Whether the host responded      |
+| `latency` | `float` | Round-trip time in milliseconds |
+| `ttl`     | `int`   | Time-to-live from reply         |
+
+```stash
+let result = net.ping(@8.8.8.8)
+if (result.alive) {
+    println("Host up, latency: ${result.latency}ms, TTL: ${result.ttl}")
+}
+
+// Port checking — accepts IP or hostname string
+let open = net.isPortOpen(@192.168.1.1, 22)
+let webOpen = net.isPortOpen("example.com", 443, 5000)  // 5s timeout
+```
+
+> **Note**: On Linux, `net.ping` requires root privileges or the `CAP_NET_RAW` capability for raw ICMP sockets.
+
+### Network Interfaces
+
+| Function         | Signature | Returns         | Description                               |
+| ---------------- | --------- | --------------- | ----------------------------------------- |
+| `net.interfaces` | `()`      | `array`         | Returns info about all network interfaces |
+| `net.interface`  | `(name)`  | `InterfaceInfo` | Returns info about a specific interface   |
+
+#### `InterfaceInfo` Struct
+
+| Field     | Type     | Description                                        |
+| --------- | -------- | -------------------------------------------------- |
+| `name`    | `string` | Interface name (e.g., "eth0", "wlan0")             |
+| `ip`      | `ip?`    | Primary IPv4 address, or `null` if none            |
+| `ipv6`    | `ip?`    | Primary IPv6 address, or `null` if none            |
+| `mac`     | `string` | MAC address (e.g., "AA:BB:CC:DD:EE:FF")            |
+| `gateway` | `ip?`    | Default gateway address, or `null` if none         |
+| `subnet`  | `ip?`    | Subnet as CIDR network address, or `null` if none  |
+| `status`  | `string` | Operational status ("Up", "Down")                  |
+| `type`    | `string` | Interface type ("Ethernet", "Wireless80211", etc.) |
+| `up`      | `bool`   | Whether the interface is operational               |
+
+```stash
+// List all interfaces
+for (let iface in net.interfaces()) {
+    if (iface.up) {
+        println("${iface.name}: ${iface.ip} (${iface.type})")
+    }
+}
+
+// Get specific interface
+let eth0 = net.interface("eth0")
+println("IP: ${eth0.ip}, Gateway: ${eth0.gateway}")
+println("Subnet: ${eth0.subnet}")
 ```
 
 ## `ssh` — SSH Remote Execution

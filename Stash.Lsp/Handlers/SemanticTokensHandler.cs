@@ -145,7 +145,20 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             }
             else if (token.Type == TokenType.IpAddressLiteral)
             {
-                builder.Push(line, col, length, TokenTypeNumber, 0);
+                // Split: `@` → operator, address body → number, `/` → operator, CIDR prefix → number
+                builder.Push(line, col, 1, TokenTypeOperator, 0);
+                string lexeme = token.Lexeme;
+                int slashIndex = lexeme.IndexOf('/', 1);
+                if (slashIndex < 0)
+                {
+                    builder.Push(line, col + 1, length - 1, TokenTypeNumber, 0);
+                }
+                else
+                {
+                    builder.Push(line, col + 1, slashIndex - 1, TokenTypeNumber, 0);
+                    builder.Push(line, col + slashIndex, 1, TokenTypeOperator, 0);
+                    builder.Push(line, col + slashIndex + 1, length - slashIndex - 1, TokenTypeNumber, 0);
+                }
             }
             else if (token.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
             {

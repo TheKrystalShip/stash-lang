@@ -270,6 +270,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `range`     | `1..10`, `0..100..5`                       | Lazy integer sequence (see Section 3d)        |
 | `Error`     | `try failingFn()`                          | Error value (see Section 7b)                  |
 | `Future`    | `async fn() { return 42; }`                | Async computation (see Section 8c)            |
+| `ip`        | `@192.168.1.1`, `@::1`, `@10.0.0.0/24`   | IP address — IPv4/IPv6 with optional CIDR     |
 
 ### Number Literals
 
@@ -295,6 +296,75 @@ let bits = 0b1111_0000_1010_0101;  // binary with separators
 ```
 
 All hex, octal, and binary literals produce integer (`long`) values. Floating-point hex/octal/binary is not supported.
+
+### IP Address Literals
+
+IP address literals use the `@` prefix — a single character followed by the address with no quotes:
+
+```stash
+let addr   = @192.168.1.1;            // IPv4
+let v6     = @::1;                     // IPv6 loopback
+let mapped = @::ffff:192.168.1.1;     // IPv4-mapped IPv6
+let cidr   = @10.0.0.0/24;            // Subnet (CIDR notation)
+let link   = @fe80::1%eth0;           // IPv6 with zone ID
+```
+
+The `@` sigil means "at an address" — it already carries this meaning in networking contexts (SSH `user@host`, email `user@domain`). The lexer sees `@` and enters dedicated IP-address scanning mode, consuming hex digits, dots, colons (for IPv6), `/` (for CIDR), and `%` (for zone IDs), stopping at whitespace or any operator/delimiter.
+
+**Why not bare `192.168.1.1`?** Bare IP addresses create deep lexer ambiguity. `10.0` is a valid float. `192.168` would tokenize as `192`, `.`, `168` (integer-dot-integer). IPv6 is impossible without a delimiter — `::1` and `fe80::1%eth0` cannot be expressed as bare tokens.
+
+#### Type System
+
+IP addresses are a first-class type with value-based equality:
+
+```stash
+typeof(@192.168.1.1)                    // "ip"
+@192.168.1.1 is ip                      // true
+@192.168.1.1 == @192.168.1.1            // true (value equality)
+@192.168.1.1 == "192.168.1.1"           // false (no cross-type coercion)
+$"Server: {@192.168.1.1}"               // "Server: 192.168.1.1"
+```
+
+IP addresses with different CIDR prefixes are distinct: `@10.0.0.0/24 != @10.0.0.0/16`. An IP without a prefix is distinct from one with a prefix: `@10.0.0.0 != @10.0.0.0/24`.
+
+#### Operator Integration
+
+Bitwise, comparison, arithmetic, and containment operators work natively on IP addresses:
+
+**Bitwise** — subnet masking with `&`, `|`, `~`:
+
+```stash
+let addr = @192.168.1.100;
+let mask = @255.255.255.0;
+let network   = addr & mask;           // @192.168.1.0
+let broadcast = (addr & mask) | ~mask; // @192.168.1.255
+let wildcard  = ~mask;                 // @0.0.0.255
+```
+
+**Comparison** — lexicographic byte ordering with `<`, `>`, `<=`, `>=`:
+
+```stash
+@10.0.0.1 < @10.0.0.254               // true
+@192.168.1.1 > @10.0.0.1              // true
+```
+
+**Arithmetic** — address offset with `+` and `-`:
+
+```stash
+@10.0.0.0 + 42                        // @10.0.0.42
+@192.168.1.254 + 2                    // @192.168.2.0 (wraps octets)
+@10.0.0.42 - @10.0.0.0                // 42 (integer distance)
+@10.0.0.42 - 42                       // @10.0.0.0
+```
+
+**CIDR containment** — subnet membership with `in`:
+
+```stash
+@192.168.1.50 in @192.168.1.0/24      // true
+@192.168.2.1 in @192.168.1.0/24       // false
+```
+
+IPv4 and IPv6 addresses cannot be mixed in operators — `@192.168.1.1 & @::1` is a runtime error.
 
 ### Type Coercion & Truthiness
 
@@ -759,12 +829,14 @@ let y = 128 >> 3;          // right shift: left is an integer expression
 
 ### Type Restrictions
 
-All bitwise operators require integer operands. Applying them to floats, strings, booleans, or any other type produces a runtime error:
+Bitwise operators require integer or IP address operands. Both operands must be the same type — mixing integers with IP addresses is a runtime error. Applying bitwise operators to floats, strings, booleans, or any other type produces a runtime error:
 
 ```stash
-let x = 5 & 3;       // OK: both integers
-let y = 5.0 & 3;     // Runtime error: bitwise operators require integer operands
-let z = ~"hello";    // Runtime error: bitwise operators require integer operands
+let x = 5 & 3;                        // OK: both integers
+let y = @192.168.1.100 & @255.255.255.0;  // OK: both IP addresses → @192.168.1.0
+let z = ~@255.255.255.0;              // OK: IP bitwise NOT → @0.0.0.255
+let w = 5.0 & 3;                      // Runtime error: operands must be two integers or two IP addresses
+let v = 5 & @192.168.1.1;             // Runtime error: operands must be two integers or two IP addresses
 ```
 
 ### Compound Assignment
@@ -804,6 +876,15 @@ println(10 in 1..10);           // false (end-exclusive)
 | `string`        | Substring / character containment                  |
 | `dict`          | Key existence (equivalent to `dict.has(d, key)`)   |
 | `range`         | Integer falls within the range respecting the step |
+| `ip` (CIDR)    | IP address falls within the CIDR subnet            |
+
+```stash
+// CIDR containment with the `in` operator:
+let subnet = @192.168.1.0/24;
+io.println(@192.168.1.50 in subnet);     // true  — address is in subnet
+io.println(@192.168.2.1 in subnet);      // false — different network
+io.println(@10.0.0.1 in @10.0.0.0/8);   // true  — /8 covers 10.x.x.x
+```
 
 Using `in` against any other type is a runtime error.
 
@@ -851,6 +932,7 @@ When the RHS identifier is immediately followed by `(`, `[`, or `.`, or when the
 | `enum`          | Enum values (any enum type)                                       |
 | `function`      | Functions and lambdas                                             |
 | `range`         | Range values (`1..10`)                                            |
+| `ip`            | IP address values (`@192.168.1.1`)                                |
 | `namespace`     | Namespace values (e.g. `io`, `fs`)                                |
 | `Error`         | Error values returned by `try`                                    |
 | `Future`        | Future values returned by async functions                         |

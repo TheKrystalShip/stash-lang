@@ -1,0 +1,200 @@
+#!/usr/bin/env stash
+
+// examples/ip_addresses.stash
+// IP Address Literals & Networking Operators — first-class IP support with
+// literal syntax, bitwise masking, CIDR containment, and address arithmetic
+
+io.println("=" * 56);
+io.println("  IP Address Literals & Operators");
+io.println("=" * 56);
+
+// ─── IP Literal Syntax ───────────────────────────────────────────────────────
+
+io.println("\n-- IPv4 Literals --");
+let server  = @192.168.1.10;
+let gateway = @192.168.1.1;
+let dns     = @8.8.8.8;
+io.println($"  Server:  {server}");
+io.println($"  Gateway: {gateway}");
+io.println($"  DNS:     {dns}");
+
+io.println("\n-- IPv6 Literals --");
+let loopback  = @::1;
+let linkLocal = @fe80::1;
+io.println($"  Loopback:   {loopback}");
+io.println($"  Link-local: {linkLocal}");
+
+io.println("\n-- CIDR Notation --");
+let subnet   = @192.168.1.0/24;
+let wideNet  = @10.0.0.0/8;
+let v6Subnet = @fe80::/10;
+io.println($"  Subnet:   {subnet}");
+io.println($"  Wide net: {wideNet}");
+io.println($"  IPv6 net: {v6Subnet}");
+
+// ─── Type System ─────────────────────────────────────────────────────────────
+
+io.println("\n-- Type System --");
+io.println($"  typeof(@192.168.1.1) = {typeof(@192.168.1.1)}");
+io.println($"  @192.168.1.1 is ip   = {@192.168.1.1 is ip}");
+io.println($"  @192.168.1.1 is int  = {@192.168.1.1 is int}");
+
+// ─── Value Equality ──────────────────────────────────────────────────────────
+
+io.println("\n-- Value Equality --");
+let a = @10.0.0.1;
+let b = @10.0.0.1;
+let c = @10.0.0.2;
+io.println($"  @10.0.0.1 == @10.0.0.1  → {a == b}");
+io.println($"  @10.0.0.1 == @10.0.0.2  → {a == c}");
+io.println($"  @10.0.0.1 == \"10.0.0.1\" → {a == "10.0.0.1"}");
+
+// CIDR prefix is part of identity — different prefix lengths are not equal
+io.println($"  @10.0.0.0/24 == @10.0.0.0/16 → {@10.0.0.0/24 == @10.0.0.0/16}");
+
+// ─── Bitwise Operators — Subnet Masking ──────────────────────────────────────
+
+io.println("\n-- Bitwise: Subnet Masking --");
+let addr = @192.168.1.100;
+let mask = @255.255.255.0;
+
+let network   = addr & mask;
+let wildcard  = ~mask;
+let broadcast = network | wildcard;
+
+io.println($"  Address:   {addr}");
+io.println($"  Mask:      {mask}");
+io.println($"  Network:   {network}");
+io.println($"  Wildcard:  {wildcard}");
+io.println($"  Broadcast: {broadcast}");
+
+// ─── Comparison Operators ────────────────────────────────────────────────────
+
+io.println("\n-- Comparison Operators --");
+io.println($"  @10.0.0.1 < @10.0.0.254   → {@10.0.0.1 < @10.0.0.254}");
+io.println($"  @192.168.1.1 > @10.0.0.1  → {@192.168.1.1 > @10.0.0.1}");
+io.println($"  @10.0.0.1 <= @10.0.0.1    → {@10.0.0.1 <= @10.0.0.1}");
+io.println($"  @10.0.0.2 >= @10.0.0.1    → {@10.0.0.2 >= @10.0.0.1}");
+
+// ─── Arithmetic — Address Offset ─────────────────────────────────────────────
+
+io.println("\n-- Arithmetic: Address Offset --");
+let base = @10.0.0.0;
+io.println($"  @10.0.0.0 + 42  → {base + 42}");
+io.println($"  @10.0.0.0 + 256 → {base + 256}");
+
+let edge = @192.168.1.254;
+io.println($"  @192.168.1.254 + 2 → {edge + 2}");
+
+io.println("\n-- Arithmetic: Distance --");
+let start = @10.0.0.0;
+let end   = @10.0.0.42;
+io.println($"  @10.0.0.42 - @10.0.0.0 → {end - start}");
+
+// ─── CIDR Containment — the `in` Operator ────────────────────────────────────
+
+io.println("\n-- CIDR Containment (in operator) --");
+let net = @192.168.1.0/24;
+io.println($"  @192.168.1.50 in {net}  → {@192.168.1.50 in net}");
+io.println($"  @192.168.2.1 in {net}   → {@192.168.2.1 in net}");
+io.println($"  @10.0.0.1 in {net}      → {@10.0.0.1 in net}");
+
+// ─── Practical: Firewall Allow-List Check ────────────────────────────────────
+
+io.println("\n-- Practical: Firewall Allow-List --");
+
+struct AllowRule {
+    name,
+    subnet
+}
+
+let allowList = [
+    AllowRule { name: "Office",     subnet: @192.168.1.0/24 },
+    AllowRule { name: "VPN",        subnet: @10.8.0.0/16 },
+    AllowRule { name: "Management", subnet: @172.16.0.0/12 }
+];
+
+let incomingIps = [@192.168.1.42, @10.8.0.15, @203.0.113.5, @172.20.1.1];
+
+for (let ip in incomingIps) {
+    let allowed     = false;
+    let matchedRule = "";
+    for (let rule in allowList) {
+        if (ip in rule.subnet) {
+            allowed     = true;
+            matchedRule = rule.name;
+        }
+    }
+    if (allowed) {
+        io.println($"  ✓ {ip} — allowed ({matchedRule})");
+    } else {
+        io.println($"  ✗ {ip} — blocked");
+    }
+}
+
+// ─── Practical: Subnet Calculator ────────────────────────────────────────────
+
+io.println("\n-- Practical: Subnet Calculator --");
+
+fn subnetInfo(cidr) {
+    // Mask table indexed from /32 (index 0) down to /8 (index 24).
+    // Look up with masks[32 - prefixLen].
+    let masks = [
+        @255.255.255.255,  // /32
+        @255.255.255.254,  // /31
+        @255.255.255.252,  // /30
+        @255.255.255.248,  // /29
+        @255.255.255.240,  // /28
+        @255.255.255.224,  // /27
+        @255.255.255.192,  // /26
+        @255.255.255.128,  // /25
+        @255.255.255.0,    // /24
+        @255.255.254.0,    // /23
+        @255.255.252.0,    // /22
+        @255.255.248.0,    // /21
+        @255.255.240.0,    // /20
+        @255.255.224.0,    // /19
+        @255.255.192.0,    // /18
+        @255.255.128.0,    // /17
+        @255.255.0.0,      // /16
+        @255.254.0.0,      // /15
+        @255.252.0.0,      // /14
+        @255.248.0.0,      // /13
+        @255.240.0.0,      // /12
+        @255.224.0.0,      // /11
+        @255.192.0.0,      // /10
+        @255.128.0.0,      // /9
+        @255.0.0.0         // /8
+    ];
+
+    // Simplified demo: assumes /24 — index 8 = 32 - 24
+    let maskAddr  = masks[8];
+    let network   = cidr & maskAddr;
+    let wildcard  = ~maskAddr;
+    let broadcast = network | wildcard;
+    let firstHost = network + 1;
+    let lastHost  = broadcast - 1;
+
+    io.println($"  Network:    {network}");
+    io.println($"  Mask:       {maskAddr}");
+    io.println($"  Wildcard:   {wildcard}");
+    io.println($"  Broadcast:  {broadcast}");
+    io.println($"  First host: {firstHost}");
+    io.println($"  Last host:  {lastHost}");
+}
+
+subnetInfo(@192.168.1.0/24);
+
+// ─── Practical: Host Range Iteration ─────────────────────────────────────────
+
+io.println("\n-- Practical: Host Range Iteration --");
+let scanBase = @192.168.1.0;
+io.println($"  Scanning {scanBase}/24 (first 5 hosts):");
+for (let i in 1..6) {
+    let host = scanBase + i;
+    io.println($"    → {host}");
+}
+
+io.println("\n" + "=" * 56);
+io.println("  Done.");
+io.println("=" * 56);

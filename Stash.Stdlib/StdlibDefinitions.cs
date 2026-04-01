@@ -65,6 +65,7 @@ public static class StdlibDefinitions
             TaskBuiltIns.Define(),
             SshBuiltIns.Define(),
             SftpBuiltIns.Define(),
+            NetBuiltIns.Define(),
         ];
     }
 }

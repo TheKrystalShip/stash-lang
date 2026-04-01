@@ -87,6 +87,13 @@ public static class Args
         throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a {typeName}.");
     }
 
+    public static StashIpAddress IpAddress(List<object?> args, int index, string funcName)
+    {
+        GuardIndex(args, index, funcName);
+        if (args[index] is StashIpAddress ip) return ip;
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an IP address.");
+    }
+
     public static StashFuture Future(List<object?> args, int index, string funcName)
     {
         GuardIndex(args, index, funcName);
