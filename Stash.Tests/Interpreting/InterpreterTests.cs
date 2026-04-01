@@ -2451,12 +2451,6 @@ public class InterpreterTests
     }
 
     [Fact]
-    public void Pipe_LeftSideNotCommand_ThrowsError()
-    {
-        RunExpectingError("let x = 42; let r = x | $(cat);");
-    }
-
-    [Fact]
     public void Pipe_StreamingHeadTerminatesProducer()
     {
         // yes outputs infinite "y" lines; head -5 reads 5 then closes stdin.

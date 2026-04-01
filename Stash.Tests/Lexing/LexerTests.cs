@@ -690,11 +690,11 @@ public class LexerTests
     [Fact]
     public void ScanTokens_UnexpectedCharacter_AddsErrorAndContinues()
     {
-        var lexer = CreateLexer("@42");
+        var lexer = CreateLexer("#42");
         var tokens = lexer.ScanTokens();
 
         Assert.NotEmpty(lexer.Errors);
-        Assert.Contains(lexer.Errors, e => e.Contains("Unexpected character '@'"));
+        Assert.Contains(lexer.Errors, e => e.Contains("Unexpected character '#'"));
 
         // Scanning continues past the bad character
         Assert.Equal(TokenType.IntegerLiteral, tokens[0].Type);

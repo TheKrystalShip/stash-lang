@@ -37,6 +37,7 @@ public static class GlobalBuiltIns
                 StashRange => "range",
                 StashFuture => "Future",
                 StashNamespace => "namespace",
+                StashIpAddress => "ip",
                 IStashCallable => "function",
                 _ => "unknown"
             };

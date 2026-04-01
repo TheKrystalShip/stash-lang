@@ -403,6 +403,7 @@ public partial class Interpreter
                 "namespace" => value is StashNamespace,
                 "function" => value is IStashCallable,
                 "Future" => value is StashFuture,
+                "ip" => value is StashIpAddress,
                 _ => CheckCustomType(value, typeName, expr.TypeName.Span)
             };
         }

@@ -196,6 +196,9 @@ public enum TokenType
     /// <summary>A passthrough command literal for interactive shell execution.</summary>
     PassthroughCommandLiteral,
 
+    /// <summary>An IP address literal (e.g. <c>@192.168.1.1</c>, <c>@::1</c>, <c>@10.0.0.0/24</c>). The <see cref="Token.Literal"/> value is a <see cref="Stash.Runtime.Types.StashIpAddress"/>.</summary>
+    IpAddressLiteral,
+
     // ── Keywords ─────────────────────────────────────────────────────
 
     /// <summary>The <c>let</c> keyword. Declares a mutable variable binding.</summary>

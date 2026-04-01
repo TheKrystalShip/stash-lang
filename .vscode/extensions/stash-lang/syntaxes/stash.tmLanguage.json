@@ -594,6 +594,14 @@
     "numbers": {
       "patterns": [
         {
+          "name": "constant.numeric.ip.stash",
+          "match": "@(?:[0-9]{1,3}\\.){3}[0-9]{1,3}(?:/[0-9]{1,2})?\\b"
+        },
+        {
+          "name": "constant.numeric.ip.ipv6.stash",
+          "match": "@(?:[0-9a-fA-F]*:[0-9a-fA-F:]+(?:%[a-zA-Z0-9]+)?(?:/[0-9]{1,3})?|\\[[0-9a-fA-F]*:[0-9a-fA-F:]+(?:%[a-zA-Z0-9]+)?\\](?::[0-9]+)?)"
+        },
+        {
           "name": "constant.numeric.hex.stash",
           "match": "\\b0[xX][0-9a-fA-F][0-9a-fA-F_]*\\b"
         },

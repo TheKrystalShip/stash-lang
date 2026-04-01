@@ -143,6 +143,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 builder.Push(line, col, length, TokenTypeString, 0);
             }
+            else if (token.Type == TokenType.IpAddressLiteral)
+            {
+                builder.Push(line, col, length, TokenTypeNumber, 0);
+            }
             else if (token.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
             {
                 ProcessCommandLiteral(builder, classified, token);

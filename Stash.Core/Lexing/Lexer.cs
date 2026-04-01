@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Frozen;
 using System.Text;
 using Stash.Common;
+using Stash.Runtime.Types;
 
 namespace Stash.Lexing;
 
@@ -454,6 +455,10 @@ public class Lexer
                 {
                     AddToken(TokenType.QuestionMark);
                 }
+                break;
+
+            case '@':
+                ScanIpAddress();
                 break;
 
             case ' ':
@@ -1572,6 +1577,71 @@ public class Lexer
         }
 
         parts.Add(innerTokens);
+    }
+
+    private void ScanIpAddress()
+    {
+        char next = Peek();
+
+        // @ must be followed by a digit (IPv4), hex digit (IPv6 like fe80::), or colon (IPv6 ::1)
+        if (!IsHexDigit(next) && next != ':')
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unexpected character '@'.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unexpected character '@'."));
+            return;
+        }
+
+        // Consume valid IP address characters
+        bool inZoneId = false;
+        while (!IsAtEnd)
+        {
+            char ch = _source[_current];
+            if (ch == '%')
+            {
+                inZoneId = true;
+                _current++;
+                _column++;
+            }
+            else if (inZoneId)
+            {
+                // Zone IDs allow alphanumeric chars (e.g., eth0, wlan0, en0)
+                if (IsAlphaNumeric(ch))
+                {
+                    _current++;
+                    _column++;
+                }
+                else
+                {
+                    break;
+                }
+            }
+            else if (IsDigit(ch) || IsHexDigit(ch) || ch == '.' || ch == ':' || ch == '/')
+            {
+                _current++;
+                _column++;
+            }
+            else
+            {
+                break;
+            }
+        }
+
+        string lexeme = _source[_start.._current];
+        string addressText = lexeme[1..]; // Strip the '@' prefix
+
+        if (StashIpAddress.TryParse(addressText, out StashIpAddress? ipAddress))
+        {
+            AddToken(TokenType.IpAddressLiteral, ipAddress, lexeme);
+        }
+        else
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Invalid IP address literal '{lexeme}'.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _line, _column),
+                $"Invalid IP address literal '{lexeme}'."));
+        }
     }
 
     /// <summary>

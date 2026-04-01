@@ -149,6 +149,11 @@ public static class RuntimeValues
             return future.ToString();
         }
 
+        if (value is StashIpAddress ipAddr)
+        {
+            return ipAddr.ToString();
+        }
+
         return value.ToString()!;
     }
 
@@ -261,6 +266,7 @@ public static class RuntimeValues
             StashEnum => value,
             StashStruct => value,
             StashRange => value,
+            StashIpAddress => value,        // Immutable value type
             StashError => value,
             StashNamespace => value,        // Frozen after init
             BuiltInFunction => value,       // Stateless delegate wrapper
