@@ -72,7 +72,7 @@ public enum TokenType
     /// <summary>The <c>?</c> character. Used in ternary conditional expressions (<c>cond ? a : b</c>).</summary>
     QuestionMark,
 
-    /// <summary>The <c>|</c> character. Reserved for future use (e.g. pipeline or bitwise OR).</summary>
+    /// <summary>The <c>|</c> character. Used for command piping and bitwise OR between integer operands.</summary>
     Pipe,
 
     // ── Two-character tokens ─────────────────────────────────────────
@@ -113,7 +113,7 @@ public enum TokenType
     /// <summary>The <c>=&gt;</c> operator. Used for lambda/arrow function expressions.</summary>
     FatArrow,
 
-    /// <summary>The <c>&gt;&gt;</c> operator. Output redirection — appends stdout to a file.</summary>
+    /// <summary>The <c>&gt;&gt;</c> operator. Output redirection (append stdout) or bitwise right-shift.</summary>
     GreaterGreater,
 
     /// <summary>The <c>2&gt;</c> operator. Output redirection — writes stderr to a file (overwrite).</summary>
@@ -148,6 +148,33 @@ public enum TokenType
 
     /// <summary>The <c>??=</c> operator. Null-coalescing assignment — assigns only if the target is null.</summary>
     QuestionQuestionEqual,
+
+    /// <summary>The <c>&amp;</c> operator. Bitwise AND between integer operands.</summary>
+    Ampersand,
+
+    /// <summary>The <c>^</c> operator. Bitwise XOR between integer operands.</summary>
+    Caret,
+
+    /// <summary>The <c>~</c> operator. Bitwise NOT (unary complement) of an integer operand.</summary>
+    Tilde,
+
+    /// <summary>The <c>&lt;&lt;</c> operator. Left bit-shift of an integer operand.</summary>
+    LessLess,
+
+    /// <summary>The <c>&amp;=</c> operator. Compound bitwise AND assignment.</summary>
+    AmpersandEqual,
+
+    /// <summary>The <c>|=</c> operator. Compound bitwise OR assignment.</summary>
+    PipeEqual,
+
+    /// <summary>The <c>^=</c> operator. Compound bitwise XOR assignment.</summary>
+    CaretEqual,
+
+    /// <summary>The <c>&lt;&lt;=</c> operator. Compound left-shift assignment.</summary>
+    LessLessEqual,
+
+    /// <summary>The <c>&gt;&gt;=</c> operator. Compound right-shift assignment.</summary>
+    GreaterGreaterEqual,
 
     // ── Literals ─────────────────────────────────────────────────────
 

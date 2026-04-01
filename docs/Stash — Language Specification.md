@@ -83,7 +83,7 @@ Variables declared with `let` are **mutable** — they can be reassigned after d
 
 ### Operators
 
-Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `?.` (optional chaining, see [Section 5e](#5e-optional-chaining)), `++` (increment), `--` (decrement). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)). Type checking: `is` (see [Section 4c](#4c-the-is-operator)).
+Standard C-style: `+`, `-`, `*`, `/`, `%`, `==`, `!=`, `<`, `>`, `<=`, `>=`, `&&`, `||`, `!`, `?:` (ternary), `??` (null-coalescing), `?.` (optional chaining, see [Section 5e](#5e-optional-chaining)), `++` (increment), `--` (decrement). Bitwise: `&` (AND), `|` (OR), `^` (XOR), `~` (NOT), `<<` (left shift), `>>` (right shift) — see [Section 3g](#3g-bitwise-operators). Compound assignment: `+=`, `-=`, `*=`, `/=`, `%=`, `??=`, `&=`, `|=`, `^=`, `<<=`, `>>=` (see [Section 3b](#3b-compound-assignment-operators)). Range: `..` (see [Section 3d](#3d-range-expressions)). Membership: `in` (see [Section 4b](#4b-the-in-operator)). Type checking: `is` (see [Section 4c](#4c-the-is-operator)).
 
 Keyword aliases: `and` is a synonym for `&&`, and `or` is a synonym for `||`. They are pure syntactic sugar — identical precedence, same short-circuit evaluation, identical semantics.
 
@@ -483,6 +483,11 @@ name ??= "other";     // name is still "default" (was not null)
 | `/=`     | `x = x / y`  | Divide and assign        |
 | `%=`     | `x = x % y`  | Modulo and assign        |
 | `??=`    | `x = x ?? y` | Null-coalesce and assign |
+| `&=`     | `x = x & y`  | Bitwise AND and assign   |
+| `\|=`    | `x = x \| y` | Bitwise OR and assign    |
+| `^=`     | `x = x ^ y`  | Bitwise XOR and assign   |
+| `<<=`    | `x = x << y` | Left shift and assign    |
+| `>>=`    | `x = x >> y` | Right shift and assign   |
 
 ### Semantics
 
@@ -679,6 +684,102 @@ let [a, b, c] = [1];                    // a=1, b=null, c=null
 ### Implementation
 
 Destructuring is a dedicated AST node (`DestructureStmt`) with a `PatternKind` (Array or Object), a list of variable names, a `const` flag, and an initializer expression. The parser detects destructuring when it sees `let [` or `let {` (similarly for `const`). At runtime, the interpreter evaluates the initializer and distributes values to each named variable.
+
+---
+
+## 3g. Bitwise Operators
+
+Bitwise operators perform bit-level manipulation on integer values. All bitwise operators require integer (`long`) operands — applying them to any other type produces a runtime error.
+
+### Binary Operators
+
+| Operator | Name        | Example            | Result        |
+| -------- | ----------- | ------------------ | ------------- |
+| `&`      | Bitwise AND | `0b1100 & 0b1010`  | `0b1000` (8)  |
+| `\|`     | Bitwise OR  | `0b1100 \| 0b1010` | `0b1110` (14) |
+| `^`      | Bitwise XOR | `0b1100 ^ 0b1010`  | `0b0110` (6)  |
+| `<<`     | Left shift  | `1 << 4`           | `16`          |
+| `>>`     | Right shift | `128 >> 3`         | `16`          |
+
+### Unary NOT
+
+The `~` (bitwise NOT) operator inverts every bit of its integer operand:
+
+```stash
+let mask = 0xFF;
+let inverted = ~mask;   // all bits flipped (two's complement)
+let cleared = 0b1111 & ~0b0100;  // clear bit 2 → 0b1011 (11)
+```
+
+### Precedence
+
+Within the bitwise group, operators follow C-standard relative precedence: `&` binds tighter than `^`, which binds tighter than `|`. Note that `&&`/`||` sit outside this group at separate levels — see the full table below.
+
+```
+... → Comparison → Shift (<<, >>) → Range (..) → Term (+, -) → ...
+... → And (&&) → Bitwise AND (&) → Bitwise XOR (^) → Bitwise OR (|) → Or (||) → ...
+... → Unary (!, -, ~) → ...
+```
+
+The full precedence chain from lowest to highest:
+
+| Level | Operators                        | Associativity |
+| ----- | -------------------------------- | ------------- |
+| 1     | `=` and compound assignments     | Right         |
+| 2     | `? :` (ternary)                  | Right         |
+| 3     | `??` (null-coalesce)             | Right         |
+| 4     | `\|` (pipe — command context)    | Left          |
+| 5     | `\|\|`, `or`                     | Left          |
+| 6     | `\|` (bitwise OR)                | Left          |
+| 7     | `^` (bitwise XOR)                | Left          |
+| 8     | `&` (bitwise AND)                | Left          |
+| 9     | `&&`, `and`                      | Left          |
+| 10    | `==`, `!=`                       | Left          |
+| 11    | `<`, `>`, `<=`, `>=`, `in`, `is` | Left          |
+| 12    | `<<`, `>>`                       | Left          |
+| 13    | `..` (range)                     | Left          |
+| 14    | `+`, `-`                         | Left          |
+| 15    | `*`, `/`, `%`                    | Left          |
+| 16    | `!`, `-`, `~` (unary)            | Right         |
+| 17    | `.`, `()`, `[]`                  | Left          |
+
+### Context-Sensitive `|` and `>>`
+
+The `|` and `>>` tokens are shared with shell pipe and redirect syntax. The parser disambiguates based on context:
+
+- **`|` is a pipe** when the left operand is a command expression (`CommandExpr`, `PipeExpr`, or `RedirectExpr`). Otherwise it is bitwise OR.
+- **`>>` is a redirect** when the left operand is a command expression. Otherwise it is right shift.
+
+```stash
+$(ls) | $(grep ".txt")    // pipe: left is a command
+let x = 0xFF | 0x0F;      // bitwise OR: left is an integer expression
+$(echo "log") >> "file";   // redirect: left is a command
+let y = 128 >> 3;          // right shift: left is an integer expression
+```
+
+### Type Restrictions
+
+All bitwise operators require integer operands. Applying them to floats, strings, booleans, or any other type produces a runtime error:
+
+```stash
+let x = 5 & 3;       // OK: both integers
+let y = 5.0 & 3;     // Runtime error: bitwise operators require integer operands
+let z = ~"hello";    // Runtime error: bitwise operators require integer operands
+```
+
+### Compound Assignment
+
+Bitwise compound assignment operators desugar to the equivalent operation (see [Section 3b](#3b-compound-assignment-operators)):
+
+```stash
+let flags = 0b0000;
+flags |= 0b0100;    // set bit 2    → 0b0100
+flags |= 0b0001;    // set bit 0    → 0b0101
+flags &= ~0b0100;   // clear bit 2  → 0b0001
+flags ^= 0b0011;    // toggle bits  → 0b0010
+flags <<= 2;        // shift left 2 → 0b1000
+flags >>= 1;        // shift right 1→ 0b0100
+```
 
 ---
 

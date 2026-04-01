@@ -1,0 +1,318 @@
+#!/usr/bin/env stash
+
+// examples/bitwise.stash
+// Bitwise Operators — AND, OR, XOR, NOT, shifts, permission flags, IP packing, color manipulation
+
+io.println("=" * 56);
+io.println("  Bitwise Operators");
+io.println("=" * 56);
+
+// ─── Bitwise AND, OR, XOR ────────────────────────────────────────────────────
+
+io.println("\n-- Bitwise AND, OR, XOR --");
+
+let a = 0b1100;   // 12
+let b = 0b1010;   // 10
+
+//  AND: 1 only where BOTH bits are 1
+//    1100
+//  & 1010
+//  ------
+//    1000   (8)
+let and_result = a & b;
+
+//  OR: 1 where EITHER bit is 1
+//    1100
+//  | 1010
+//  ------
+//    1110   (14)
+let or_result = a | b;
+
+//  XOR: 1 where bits DIFFER
+//    1100
+//  ^ 1010
+//  ------
+//    0110   (6)
+let xor_result = a ^ b;
+
+io.println($"  a        = {a}  (0b{conv.toBin(a)})");
+io.println($"  b        = {b}  (0b{conv.toBin(b)})");
+io.println($"  a & b    = {and_result}   (0b{str.padStart(conv.toBin(and_result), 4)})");
+io.println($"  a | b    = {or_result}  (0b{str.padStart(conv.toBin(or_result),  4)})");
+io.println($"  a ^ b    = {xor_result}   (0b{str.padStart(conv.toBin(xor_result),  4)})");
+
+// Masking: extract the low and high bytes from a 16-bit word
+let raw      = 0xFF_A3;
+let low_byte  = raw & 0xFF;
+let high_byte = (raw >> 8) & 0xFF;
+
+io.println($"\n  raw word  = 0x{str.padStart(conv.toHex(raw),      4)}");
+io.println($"  low byte  = 0x{str.padStart(conv.toHex(low_byte),  2)}");
+io.println($"  high byte = 0x{str.padStart(conv.toHex(high_byte), 2)}");
+
+// ─── Bitwise NOT ─────────────────────────────────────────────────────────────
+
+io.println("\n-- Bitwise NOT --");
+
+let x = 0b0000_1111;   // 15
+
+// ~x flips every bit (64-bit two's complement: result = -(x + 1))
+let not_x      = ~x;
+let not_x_byte = ~x & 0xFF;   // mask to 8 bits to see the flip clearly
+
+io.println($"  x          =  {x}   (0b{str.padStart(conv.toBin(x), 8)})");
+io.println($"  ~x         = {not_x}  (two's complement: -(x+1))");
+io.println($"  ~x & 0xFF  =  {not_x_byte}  (0b{str.padStart(conv.toBin(not_x_byte), 8)})");
+
+// Practical: build an inverted mask from a nibble
+let nibble   = 0b0000_1111;
+let inv_mask = ~nibble & 0xFF;
+
+io.println($"\n  nibble          = 0b{str.padStart(conv.toBin(nibble), 8)}");
+io.println($"  ~nibble & 0xFF  = 0b{str.padStart(conv.toBin(inv_mask), 8)}");
+
+// ─── Shift Operators ─────────────────────────────────────────────────────────
+
+io.println("\n-- Shift Operators --");
+
+io.println("  Left shifts multiply by powers of 2:");
+io.println($"  1 << 0  = {1 << 0}    (2^0)");
+io.println($"  1 << 1  = {1 << 1}    (2^1)");
+io.println($"  1 << 2  = {1 << 2}    (2^2)");
+io.println($"  1 << 4  = {1 << 4}   (2^4)");
+io.println($"  1 << 8  = {1 << 8}  (2^8)");
+io.println($"  1 << 10 = {1 << 10} (2^10)");
+
+io.println("\n  Right shifts divide by powers of 2:");
+io.println($"  1024 >> 1  = {1024 >> 1}");
+io.println($"  1024 >> 2  = {1024 >> 2}");
+io.println($"  1024 >> 4  = {1024 >> 4}");
+io.println($"  1024 >> 10 = {1024 >> 10}");
+
+// Extract the high and low nibbles from a byte
+let byte_val  = 0xAB;
+let hi_nibble = (byte_val >> 4) & 0xF;
+let lo_nibble =  byte_val & 0xF;
+
+io.println($"\n  byte 0x{conv.toHex(byte_val)}: hi nibble = 0x{conv.toHex(hi_nibble)}, lo nibble = 0x{conv.toHex(lo_nibble)}");
+
+// ─── Compound Assignment ─────────────────────────────────────────────────────
+
+io.println("\n-- Compound Assignment --");
+
+let flags = 0b0000_0000;
+io.println($"  start:     0b{str.padStart(conv.toBin(flags), 8)}");
+
+flags |= 0b0000_0001;
+io.println($"  |= 0b0001: 0b{str.padStart(conv.toBin(flags), 8)}  (set bit 0)");
+
+flags |= 0b0000_0100;
+io.println($"  |= 0b0100: 0b{str.padStart(conv.toBin(flags), 8)}  (set bit 2)");
+
+flags |= 0b0001_0000;
+io.println($"  |= 0b0001_0000: 0b{str.padStart(conv.toBin(flags), 8)}  (set bit 4)");
+
+flags &= 0b1111_1110;
+io.println($"  &= ~bit0:  0b{str.padStart(conv.toBin(flags), 8)}  (clear bit 0)");
+
+flags ^= 0b0000_0100;
+io.println($"  ^= 0b0100: 0b{str.padStart(conv.toBin(flags), 8)}  (toggle bit 2)");
+
+let n = 3;
+io.println($"\n  n = {n}");
+n <<= 3;
+io.println($"  n <<= 3 → {n}  (3 * 8)");
+n >>= 2;
+io.println($"  n >>= 2 → {n}  ({n * 4} / 4)");
+
+// ─── Permission Flags ────────────────────────────────────────────────────────
+
+io.println("\n-- Permission Flags (Unix) --");
+
+//  Bit layout: rwxrwxrwx → owner bits[8:6], group bits[5:3], other bits[2:0]
+const PERM_R     = 0o4;
+const PERM_W     = 0o2;
+const PERM_X     = 0o1;
+const OWNER_SHIFT = 6;
+const GROUP_SHIFT = 3;
+
+fn permString(bits) {
+    let r = (bits & PERM_R) != 0 ? "r" : "-";
+    let w = (bits & PERM_W) != 0 ? "w" : "-";
+    let x = (bits & PERM_X) != 0 ? "x" : "-";
+    return r + w + x;
+}
+
+let mode = 0o755;   // rwxr-xr-x
+let owner_bits = (mode >> OWNER_SHIFT) & 0o7;
+let group_bits = (mode >> GROUP_SHIFT) & 0o7;
+let other_bits =  mode & 0o7;
+
+io.println($"  0o755 in binary: 0b{str.padStart(conv.toBin(mode), 9)}");
+io.println($"  owner: {owner_bits}  ({permString(owner_bits)})");
+io.println($"  group: {group_bits}  ({permString(group_bits)})");
+io.println($"  other: {other_bits}  ({permString(other_bits)})");
+
+// Add owner-execute to 0o644, then strip group-write
+let new_mode = 0o644;
+new_mode |= (PERM_X << OWNER_SHIFT);
+io.println($"\n  0o644 + owner execute = 0o{conv.toOct(new_mode)}  ({permString((new_mode >> OWNER_SHIFT) & 0o7)}{permString((new_mode >> GROUP_SHIFT) & 0o7)}{permString(new_mode & 0o7)})");
+
+new_mode &= ~(PERM_W << GROUP_SHIFT) & 0o777;
+io.println($"  remove group write    = 0o{conv.toOct(new_mode)}  ({permString((new_mode >> OWNER_SHIFT) & 0o7)}{permString((new_mode >> GROUP_SHIFT) & 0o7)}{permString(new_mode & 0o7)})");
+
+// ─── IP Address Packing ──────────────────────────────────────────────────────
+
+io.println("\n-- IP Address Packing --");
+
+// Pack four octets into a single 32-bit integer
+let oct1 = 192;
+let oct2 = 168;
+let oct3 =   1;
+let oct4 =  42;
+
+let ip_packed = (oct1 << 24) | (oct2 << 16) | (oct3 << 8) | oct4;
+
+io.println($"  {oct1}.{oct2}.{oct3}.{oct4}  →  packed = {ip_packed}");
+io.println($"  hex = 0x{str.upper(str.padStart(conv.toHex(ip_packed), 8, "0"))}");
+
+// Unpack back into individual octets
+let p1 = (ip_packed >> 24) & 0xFF;
+let p2 = (ip_packed >> 16) & 0xFF;
+let p3 = (ip_packed >>  8) & 0xFF;
+let p4 =  ip_packed & 0xFF;
+
+io.println($"  unpacked  →  {p1}.{p2}.{p3}.{p4}");
+io.println($"  round-trip match: {p1 == oct1 and p2 == oct2 and p3 == oct3 and p4 == oct4}");
+
+// ─── Subnet Masks ────────────────────────────────────────────────────────────
+
+io.println("\n-- Subnet Masks --");
+
+// CIDR prefix length → subnet mask (e.g. /24 → 255.255.255.0)
+fn cidrToMask(prefix) {
+    return ~((1 << (32 - prefix)) - 1) & 0xFFFF_FFFF;
+}
+
+fn maskToString(mask) {
+    let o1 = (mask >> 24) & 0xFF;
+    let o2 = (mask >> 16) & 0xFF;
+    let o3 = (mask >>  8) & 0xFF;
+    let o4 =  mask & 0xFF;
+    return $"{o1}.{o2}.{o3}.{o4}";
+}
+
+let mask24 = cidrToMask(24);
+let mask16 = cidrToMask(16);
+let mask28 = cidrToMask(28);
+
+io.println($"  /24  mask: {maskToString(mask24)}    (0x{str.upper(conv.toHex(mask24))})");
+io.println($"  /16  mask: {maskToString(mask16)}      (0x{str.upper(conv.toHex(mask16))})");
+io.println($"  /28  mask: {maskToString(mask28)}  (0x{str.upper(conv.toHex(mask28))})");
+
+// Decompose 10.20.30.99/24 into network, broadcast, and host
+let addr = (10 << 24) | (20 << 16) | (30 << 8) | 99;
+let net_mask   = cidrToMask(24);
+let network    = addr & net_mask;
+let broadcast  = network | (~net_mask & 0xFFFF_FFFF);
+let host_part  = addr & (~net_mask & 0xFFFF_FFFF);
+
+io.println($"\n  10.20.30.99 / 24:");
+io.println($"  network:   {maskToString(network)}");
+io.println($"  broadcast: {maskToString(broadcast)}");
+io.println($"  host part: {host_part}");
+
+// ─── Color Manipulation ──────────────────────────────────────────────────────
+
+io.println("\n-- Color Manipulation --");
+
+// 32-bit ARGB layout: bits 31-24 = alpha, 23-16 = red, 15-8 = green, 7-0 = blue
+struct ColorChannels {
+    a,
+    r,
+    g,
+    b
+}
+
+fn packColor(a, r, g, b) {
+    return (a << 24) | (r << 16) | (g << 8) | b;
+}
+
+fn unpackColor(color) {
+    return ColorChannels {
+        a: (color >> 24) & 0xFF,
+        r: (color >> 16) & 0xFF,
+        g: (color >>  8) & 0xFF,
+        b:  color & 0xFF
+    };
+}
+
+let red     = packColor(0xFF, 0xFF, 0x00, 0x00);
+let lime    = packColor(0xFF, 0x00, 0xFF, 0x00);
+let skyblue = packColor(0xFF, 0x87, 0xCE, 0xEB);
+
+io.println($"  red:     0x{str.upper(str.padStart(conv.toHex(red), 8, "0"))}");
+io.println($"  lime:    0x{str.upper(str.padStart(conv.toHex(lime), 8, "0"))}");
+io.println($"  skyblue: 0x{str.upper(str.padStart(conv.toHex(skyblue), 8, "0"))}");
+
+let sky = unpackColor(skyblue);
+io.println($"\n  skyblue unpacked: a={sky.a}, r={sky.r}, g={sky.g}, b={sky.b}");
+
+// Darken: right-shift each colour channel by 1 (integer divide each by 2)
+fn darkenColor(color) {
+    let ch = unpackColor(color);
+    return packColor(ch.a, ch.r >> 1, ch.g >> 1, ch.b >> 1);
+}
+
+let dark = darkenColor(skyblue);
+let ds   = unpackColor(dark);
+io.println($"  darkened:         a={ds.a}, r={ds.r}, g={ds.g}, b={ds.b}");
+
+// Blend two colours at 50% by averaging each channel with shifts
+fn blendColors(c1, c2) {
+    let a = ((c1 >> 24 & 0xFF) + (c2 >> 24 & 0xFF)) >> 1;
+    let r = ((c1 >> 16 & 0xFF) + (c2 >> 16 & 0xFF)) >> 1;
+    let g = ((c1 >>  8 & 0xFF) + (c2 >>  8 & 0xFF)) >> 1;
+    let b = ((c1       & 0xFF) + (c2       & 0xFF)) >> 1;
+    return packColor(a, r, g, b);
+}
+
+let blended = blendColors(red, skyblue);
+let bl      = unpackColor(blended);
+io.println($"  red+skyblue blend: a={bl.a}, r={bl.r}, g={bl.g}, b={bl.b}");
+
+// ─── Bit Manipulation Utilities ──────────────────────────────────────────────
+
+io.println("\n-- Bit Manipulation Utilities --");
+
+fn setBit(value, pos)    { return value |  (1 << pos); }
+fn clearBit(value, pos)  { return value & ~(1 << pos); }
+fn toggleBit(value, pos) { return value ^  (1 << pos); }
+fn hasBit(value, pos)    { return (value & (1 << pos)) != 0; }
+
+// Population count (Brian Kernighan): repeatedly clear the lowest set bit
+fn countBits(value) {
+    let count = 0;
+    let v = value;
+    while (v != 0) {
+        v &= v - 1;
+        count = count + 1;
+    }
+    return count;
+}
+
+let val = 0b0101_0000;   // bits 4 and 6 set
+
+io.println($"  value:           0b{str.padStart(conv.toBin(val), 8)}  ({val})");
+io.println($"  setBit(val, 1):  0b{str.padStart(conv.toBin(setBit(val,    1)), 8)}");
+io.println($"  clearBit(val,6): 0b{str.padStart(conv.toBin(clearBit(val,  6)), 8)}");
+io.println($"  toggleBit(val,4):0b{str.padStart(conv.toBin(toggleBit(val, 4)), 8)}");
+io.println($"  hasBit(val, 6):  {hasBit(val, 6)}   (bit 6 is set)");
+io.println($"  hasBit(val, 5):  {hasBit(val, 5)}  (bit 5 is clear)");
+io.println($"  countBits(val):  {countBits(val)} set bit(s)");
+
+io.println($"\n  countBits(0xFF):       {countBits(0xFF)}  (all 8 bits set)");
+io.println($"  countBits(0x00):       {countBits(0)}  (no bits set)");
+io.println($"  countBits(0b1010_1010):{countBits(0b1010_1010)}  (alternating bits)");
+
+io.println("\n" + "=" * 56);

@@ -620,11 +620,11 @@
       "patterns": [
         {
           "name": "keyword.operator.redirection.stash",
-          "match": "&>>|&>|>>|2>>|2>"
+          "match": "&>>|&>|2>>|2>"
         },
         {
           "name": "keyword.operator.comparison.stash",
-          "match": "==|!=|<=|>=|<|>"
+          "match": "==|!=|<=|>=|<(?!<)|>(?!>)"
         },
         {
           "name": "keyword.operator.logical.stash",
@@ -652,7 +652,7 @@
         },
         {
           "name": "keyword.operator.assignment.compound.stash",
-          "match": "\\+\\=|-\\=|\\*\\=|/\\=|%\\=|\\?\\?\\="
+          "match": "<<=|>>=|&=|\\|=|\\^=|\\+\\=|-\\=|\\*\\=|/\\=|%\\=|\\?\\?\\="
         },
         {
           "name": "keyword.operator.assignment.stash",
@@ -661,6 +661,10 @@
         {
           "name": "keyword.operator.range.stash",
           "match": "\\.\\."
+        },
+        {
+          "name": "keyword.operator.bitwise.stash",
+          "match": "<<|>>|[&|^~]"
         },
         {
           "name": "keyword.operator.arithmetic.stash",

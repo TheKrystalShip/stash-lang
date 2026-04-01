@@ -1060,7 +1060,9 @@ public class Parser
         }
 
         if (Match(TokenType.PlusEqual, TokenType.MinusEqual, TokenType.StarEqual,
-                  TokenType.SlashEqual, TokenType.PercentEqual, TokenType.QuestionQuestionEqual))
+                  TokenType.SlashEqual, TokenType.PercentEqual, TokenType.QuestionQuestionEqual,
+                  TokenType.AmpersandEqual, TokenType.PipeEqual, TokenType.CaretEqual,
+                  TokenType.LessLessEqual, TokenType.GreaterGreaterEqual))
         {
             Token op = Previous();
             Expr value = Assignment();
@@ -1110,6 +1112,11 @@ public class Parser
             TokenType.StarEqual => TokenType.Star,
             TokenType.SlashEqual => TokenType.Slash,
             TokenType.PercentEqual => TokenType.Percent,
+            TokenType.AmpersandEqual => TokenType.Ampersand,
+            TokenType.PipeEqual => TokenType.Pipe,
+            TokenType.CaretEqual => TokenType.Caret,
+            TokenType.LessLessEqual => TokenType.LessLess,
+            TokenType.GreaterGreaterEqual => TokenType.GreaterGreater,
             _ => throw new InvalidOperationException($"Unexpected compound operator: {compoundOp.Type}")
         };
 
@@ -1255,13 +1262,22 @@ public class Parser
     /// Parses a pipe expression: <c>$(cmd1) | $(cmd2)</c>.
     /// Pipe chains process stdout → stdin, left-associative.
     /// </summary>
+    /// <summary>
+    /// Parses a pipe expression: <c>$(cmd1) | $(cmd2)</c>.
+    /// Pipe chains process stdout → stdin, left-associative.
+    /// Only consumes <c>|</c> as a pipe when the left operand is a command-producing expression;
+    /// otherwise <c>|</c> is left for the <see cref="BitwiseOr"/> precedence level.
+    /// </summary>
     private Expr Pipe()
     {
         Expr expr = Or();
 
-        while (Match(TokenType.Pipe))
+        while (Check(TokenType.Pipe))
         {
-            Token op = Previous();
+            bool isCommandLike = expr is CommandExpr or PipeExpr or RedirectExpr;
+            if (!isCommandLike) break;
+
+            Advance();
             Expr right = Or();
             expr = new PipeExpr(expr, right, MakeSpan(expr.Span, right.Span));
         }
@@ -1274,13 +1290,69 @@ public class Parser
     /// </summary>
     /// <returns>
     /// A left-associative chain of <see cref="BinaryExpr"/> nodes for <c>||</c>,
-    /// or the result of <see cref="And"/> if no <c>||</c> operator is present.
+    /// or the result of <see cref="BitwiseOr"/> if no <c>||</c> operator is present.
     /// </returns>
     private Expr Or()
     {
-        Expr expr = And();
+        Expr expr = BitwiseOr();
 
         while (Match(TokenType.PipePipe))
+        {
+            Token op = Previous();
+            Expr right = BitwiseOr();
+            expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Parses a bitwise OR expression: <c>left | right</c> (integer operands only).
+    /// When the left operand is a command-producing expression, <c>|</c> is left for
+    /// <see cref="Pipe"/> to consume as a shell pipe operator instead.
+    /// </summary>
+    private Expr BitwiseOr()
+    {
+        Expr expr = BitwiseXor();
+
+        while (Check(TokenType.Pipe))
+        {
+            if (expr is CommandExpr or PipeExpr or RedirectExpr) break;
+
+            Advance();
+            Token op = Previous();
+            Expr right = BitwiseXor();
+            expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Parses a bitwise XOR expression: <c>left ^ right</c> (integer operands only).
+    /// </summary>
+    private Expr BitwiseXor()
+    {
+        Expr expr = BitwiseAnd();
+
+        while (Match(TokenType.Caret))
+        {
+            Token op = Previous();
+            Expr right = BitwiseAnd();
+            expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Parses a bitwise AND expression: <c>left &amp; right</c> (integer operands only).
+    /// </summary>
+    private Expr BitwiseAnd()
+    {
+        Expr expr = And();
+
+        while (Match(TokenType.Ampersand))
         {
             Token op = Previous();
             Expr right = And();
@@ -1347,7 +1419,7 @@ public class Parser
     /// </remarks>
     private Expr Comparison()
     {
-        Expr expr = Range();
+        Expr expr = Shift();
 
         while (true)
         {
@@ -1364,14 +1436,14 @@ public class Parser
             }
 
             Token op = Previous();
-            Expr right = Range();
+            Expr right = Shift();
             expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
         }
 
         while (Match(TokenType.In))
         {
             Token op = Previous();
-            Expr right = Range();
+            Expr right = Shift();
             expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
         }
 
@@ -1405,6 +1477,42 @@ public class Parser
                 // Non-identifier expression start (e.g., parenthesized group)
                 Expr typeExpr = Call();
                 expr = new IsExpr(expr, isKeyword, typeExpr, MakeSpan(expr.Span, typeExpr.Span));
+            }
+        }
+
+        return expr;
+    }
+
+    /// <summary>
+    /// Parses a bit-shift expression: <c>left &lt;&lt; right</c> or <c>left &gt;&gt; right</c> (integer operands only).
+    /// In command context, <c>&gt;&gt;</c> is consumed as redirection by <see cref="Redirect"/>, not as right-shift.
+    /// </summary>
+    private Expr Shift()
+    {
+        Expr expr = Range();
+
+        while (true)
+        {
+            if (Match(TokenType.LessLess))
+            {
+                Token op = Previous();
+                Expr right = Range();
+                expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
+            }
+            else if (Check(TokenType.GreaterGreater))
+            {
+                // In command context, >> is redirection, not right-shift.
+                bool isCommandLike = expr is CommandExpr or PipeExpr or RedirectExpr;
+                if (isCommandLike) break;
+
+                Advance();
+                Token op = Previous();
+                Expr right = Range();
+                expr = new BinaryExpr(expr, op, right, MakeSpan(expr.Span, right.Span));
+            }
+            else
+            {
+                break;
             }
         }
 
@@ -1483,7 +1591,7 @@ public class Parser
     /// </remarks>
     private Expr Unary()
     {
-        if (Match(TokenType.Bang, TokenType.Minus))
+        if (Match(TokenType.Bang, TokenType.Minus, TokenType.Tilde))
         {
             Token op = Previous();
             Expr right = Unary();

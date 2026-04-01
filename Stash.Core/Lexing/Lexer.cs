@@ -370,6 +370,10 @@ public class Lexer
                 {
                     AddToken(TokenType.LessEqual);
                 }
+                else if (Match('<'))
+                {
+                    AddToken(Match('=') ? TokenType.LessLessEqual : TokenType.LessLess);
+                }
                 else
                 {
                     AddToken(TokenType.Less);
@@ -382,7 +386,7 @@ public class Lexer
                 }
                 else if (Match('>'))
                 {
-                    AddToken(TokenType.GreaterGreater);
+                    AddToken(Match('=') ? TokenType.GreaterGreaterEqual : TokenType.GreaterGreater);
                 }
                 else
                 {
@@ -406,17 +410,36 @@ public class Lexer
                         AddToken(TokenType.AmpersandGreater);
                     }
                 }
+                else if (Match('='))
+                {
+                    AddToken(TokenType.AmpersandEqual);
+                }
                 else
                 {
-                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unexpected character '&'.");
-                    _structuredErrors.Add(new DiagnosticError(
-                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
-                        "Unexpected character '&'."));
+                    AddToken(TokenType.Ampersand);
                 }
 
                 break;
             case '|':
-                AddToken(Match('|') ? TokenType.PipePipe : TokenType.Pipe);
+                if (Match('|'))
+                {
+                    AddToken(TokenType.PipePipe);
+                }
+                else if (Match('='))
+                {
+                    AddToken(TokenType.PipeEqual);
+                }
+                else
+                {
+                    AddToken(TokenType.Pipe);
+                }
+
+                break;
+            case '^':
+                AddToken(Match('=') ? TokenType.CaretEqual : TokenType.Caret);
+                break;
+            case '~':
+                AddToken(TokenType.Tilde);
                 break;
             case '?':
                 if (Match('?'))

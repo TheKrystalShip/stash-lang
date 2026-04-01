@@ -60,6 +60,14 @@ public partial class Interpreter
 
                 throw new RuntimeError("Operand must be a number.", expr.Operator.Span);
 
+            case TokenType.Tilde:
+                if (right is long ti)
+                {
+                    return ~ti;
+                }
+
+                throw new RuntimeError("Operand must be an integer.", expr.Operator.Span);
+
             default:
                 throw new RuntimeError($"Unknown unary operator '{expr.Operator.Lexeme}'.", expr.Operator.Span);
         }
@@ -173,6 +181,11 @@ public partial class Interpreter
                 case TokenType.Star:
                 case TokenType.Slash:
                 case TokenType.Percent:
+                case TokenType.Ampersand:
+                case TokenType.Pipe:
+                case TokenType.Caret:
+                case TokenType.LessLess:
+                case TokenType.GreaterGreater:
                     if (TryEvalLong(expr, out long longResult))
                     {
                         return longResult;
@@ -300,6 +313,50 @@ public partial class Interpreter
 
             case TokenType.In:
                 return EvaluateIn(leftVal, rightVal, expr);
+
+            case TokenType.Ampersand:
+                if (leftVal is long lAnd && rightVal is long rAnd)
+                {
+                    return lAnd & rAnd;
+                }
+
+                throw new RuntimeError("Operands must be integers.", expr.Operator.Span);
+
+            case TokenType.Pipe:
+                if (leftVal is long lOr && rightVal is long rOr)
+                {
+                    return lOr | rOr;
+                }
+
+                throw new RuntimeError("Operands must be integers.", expr.Operator.Span);
+
+            case TokenType.Caret:
+                if (leftVal is long lXor && rightVal is long rXor)
+                {
+                    return lXor ^ rXor;
+                }
+
+                throw new RuntimeError("Operands must be integers.", expr.Operator.Span);
+
+            case TokenType.LessLess:
+                if (leftVal is long lShl && rightVal is long rShl)
+                {
+                    if (rShl < 0 || rShl > 63)
+                        throw new RuntimeError("Shift count must be in the range 0..63.", expr.Operator.Span);
+                    return lShl << (int)rShl;
+                }
+
+                throw new RuntimeError("Operands must be integers.", expr.Operator.Span);
+
+            case TokenType.GreaterGreater:
+                if (leftVal is long lShr && rightVal is long rShr)
+                {
+                    if (rShr < 0 || rShr > 63)
+                        throw new RuntimeError("Shift count must be in the range 0..63.", expr.Operator.Span);
+                    return lShr >> (int)rShr;
+                }
+
+                throw new RuntimeError("Operands must be integers.", expr.Operator.Span);
 
             default:
                 throw new RuntimeError($"Unknown binary operator '{expr.Operator.Lexeme}'.", expr.Operator.Span);
@@ -1185,6 +1242,14 @@ public partial class Interpreter
                 }
                 break;
 
+            case UnaryExpr u when u.Operator.Type == TokenType.Tilde:
+                if (TryEvalLong(u.Right, out long tRes))
+                {
+                    result = ~tRes;
+                    return true;
+                }
+                break;
+
             case BinaryExpr bin:
                 if (TryEvalLong(bin.Left, out long left) && TryEvalLong(bin.Right, out long right))
                 {
@@ -1205,6 +1270,15 @@ public partial class Interpreter
                         case TokenType.Percent:
                             if (right != 0) { result = left % right; return true; }
                             break;
+                        case TokenType.Ampersand: result = left & right; return true;
+                        case TokenType.Pipe: result = left | right; return true;
+                        case TokenType.Caret: result = left ^ right; return true;
+                        case TokenType.LessLess:
+                            if (right < 0 || right > 63) break;
+                            result = left << (int)right; return true;
+                        case TokenType.GreaterGreater:
+                            if (right < 0 || right > 63) break;
+                            result = left >> (int)right; return true;
                     }
                 }
                 break;

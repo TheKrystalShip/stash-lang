@@ -761,7 +761,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.MinusMinus or TokenType.Arrow or TokenType.FatArrow or
         TokenType.Pipe or TokenType.GreaterGreater or TokenType.AmpersandGreater or
         TokenType.AmpersandGreaterGreater or TokenType.TwoGreater or
-        TokenType.TwoGreaterGreater;
+        TokenType.TwoGreaterGreater or TokenType.Ampersand or TokenType.Caret or
+        TokenType.Tilde or TokenType.LessLess or TokenType.AmpersandEqual or
+        TokenType.PipeEqual or TokenType.CaretEqual or TokenType.LessLessEqual or
+        TokenType.GreaterGreaterEqual;
 
     /// <summary>
     /// Returns or creates the <see cref="SemanticTokensDocument"/> for the given document URI,

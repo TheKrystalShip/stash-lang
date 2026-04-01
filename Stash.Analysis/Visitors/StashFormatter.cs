@@ -267,7 +267,9 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     private static bool IsCompoundOperator(TokenType t) => t is
         TokenType.PlusEqual or TokenType.MinusEqual or TokenType.StarEqual or
-        TokenType.SlashEqual or TokenType.PercentEqual or TokenType.QuestionQuestionEqual;
+        TokenType.SlashEqual or TokenType.PercentEqual or TokenType.QuestionQuestionEqual or
+        TokenType.AmpersandEqual or TokenType.PipeEqual or TokenType.CaretEqual or
+        TokenType.LessLessEqual or TokenType.GreaterGreaterEqual;
 
     private bool NextIsCompoundOperator() =>
         _cursor < _codeTokens.Length && IsCompoundOperator(_codeTokens[_cursor].Type);

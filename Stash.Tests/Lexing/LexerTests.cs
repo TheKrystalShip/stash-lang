@@ -704,13 +704,12 @@ public class LexerTests
     // ── 19. Single & ────────────────────────────────────────────────────
 
     [Fact]
-    public void ScanTokens_SingleAmpersand_ProducesError()
+    public void ScanTokens_SingleAmpersand_ProducesAmpersand()
     {
-        var lexer = CreateLexer("&");
-        lexer.ScanTokens();
+        var tokens = Scan("&");
 
-        Assert.NotEmpty(lexer.Errors);
-        Assert.Contains(lexer.Errors, e => e.Contains("Unexpected character '&'"));
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.Ampersand, tokens[0].Type);
     }
 
     [Fact]
