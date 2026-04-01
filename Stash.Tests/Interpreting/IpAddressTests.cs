@@ -357,4 +357,399 @@ public class IpAddressTests
         Assert.Equal(TokenType.IpAddressLiteral, tokens[0].Type);
         Assert.Equal("@fe80::1%eth0", tokens[0].Lexeme);
     }
+
+    // ── Phase 2: Operator Integration ───────────────────────────────
+
+    // ── Bitwise: AND ─────────────────────────────────────────────────
+
+    [Fact]
+    public void IpBitwise_And_NetworkAddress()
+    {
+        // addr & mask → network address
+        object? result = Run("let result = @192.168.1.100 & @255.255.255.0;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("192.168.1.0", result!.ToString());
+    }
+
+    [Fact]
+    public void IpBitwise_And_SubnetMask()
+    {
+        object? result = Run("let result = @10.20.30.40 & @255.255.0.0;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("10.20.0.0", result!.ToString());
+    }
+
+    // ── Bitwise: OR ──────────────────────────────────────────────────
+
+    [Fact]
+    public void IpBitwise_Or_BroadcastAddress()
+    {
+        // network | ~mask → broadcast
+        object? result = Run("let result = @192.168.1.0 | @0.0.0.255;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("192.168.1.255", result!.ToString());
+    }
+
+    [Fact]
+    public void IpBitwise_Or_SetBits()
+    {
+        object? result = Run("let result = @10.0.0.0 | @0.0.0.42;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("10.0.0.42", result!.ToString());
+    }
+
+    // ── Bitwise: NOT (complement) ────────────────────────────────────
+
+    [Fact]
+    public void IpBitwise_Not_WildcardMask()
+    {
+        // ~mask → wildcard mask
+        object? result = Run("let result = ~@255.255.255.0;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("0.0.0.255", result!.ToString());
+    }
+
+    [Fact]
+    public void IpBitwise_Not_InvertsAllBits()
+    {
+        object? result = Run("let result = ~@0.0.0.0;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("255.255.255.255", result!.ToString());
+    }
+
+    // ── Bitwise: Combined (AND + OR + NOT) ──────────────────────────
+
+    [Fact]
+    public void IpBitwise_BroadcastFromAddrAndMask()
+    {
+        // broadcast = (addr & mask) | ~mask
+        object? result = Run("let addr = @192.168.1.100; let mask = @255.255.255.0; let result = (addr & mask) | ~mask;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("192.168.1.255", result!.ToString());
+    }
+
+    // ── Comparison: Less Than ────────────────────────────────────────
+
+    [Fact]
+    public void IpComparison_LessThan_True()
+    {
+        object? result = Run("let result = @10.0.0.1 < @10.0.0.254;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpComparison_LessThan_False()
+    {
+        object? result = Run("let result = @10.0.0.254 < @10.0.0.1;");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void IpComparison_LessThan_Equal_ReturnsFalse()
+    {
+        object? result = Run("let result = @10.0.0.1 < @10.0.0.1;");
+        Assert.Equal(false, result);
+    }
+
+    // ── Comparison: Greater Than ─────────────────────────────────────
+
+    [Fact]
+    public void IpComparison_GreaterThan_True()
+    {
+        object? result = Run("let result = @192.168.1.100 > @192.168.1.1;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpComparison_GreaterThan_False()
+    {
+        object? result = Run("let result = @10.0.0.1 > @10.0.0.254;");
+        Assert.Equal(false, result);
+    }
+
+    // ── Comparison: Less Than or Equal ───────────────────────────────
+
+    [Fact]
+    public void IpComparison_LessEqual_WhenLess()
+    {
+        object? result = Run("let result = @10.0.0.1 <= @10.0.0.2;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpComparison_LessEqual_WhenEqual()
+    {
+        object? result = Run("let result = @10.0.0.1 <= @10.0.0.1;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpComparison_LessEqual_WhenGreater()
+    {
+        object? result = Run("let result = @10.0.0.2 <= @10.0.0.1;");
+        Assert.Equal(false, result);
+    }
+
+    // ── Comparison: Greater Than or Equal ────────────────────────────
+
+    [Fact]
+    public void IpComparison_GreaterEqual_WhenGreater()
+    {
+        object? result = Run("let result = @10.0.0.2 >= @10.0.0.1;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpComparison_GreaterEqual_WhenEqual()
+    {
+        object? result = Run("let result = @10.0.0.1 >= @10.0.0.1;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpComparison_GreaterEqual_WhenLess()
+    {
+        object? result = Run("let result = @10.0.0.1 >= @10.0.0.2;");
+        Assert.Equal(false, result);
+    }
+
+    // ── Comparison: Cross-octet ordering ─────────────────────────────
+
+    [Fact]
+    public void IpComparison_CrossOctet_HigherFirstOctet()
+    {
+        // 192.x.x.x > 10.x.x.x
+        object? result = Run("let result = @192.168.1.1 > @10.0.0.1;");
+        Assert.Equal(true, result);
+    }
+
+    // ── CIDR: in operator ────────────────────────────────────────────
+
+    [Fact]
+    public void IpIn_AddressInSubnet_ReturnsTrue()
+    {
+        object? result = Run("let result = @192.168.1.50 in @192.168.1.0/24;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpIn_AddressNotInSubnet_ReturnsFalse()
+    {
+        object? result = Run("let result = @192.168.2.1 in @192.168.1.0/24;");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void IpIn_DifferentNetwork_ReturnsFalse()
+    {
+        object? result = Run("let result = @10.0.0.1 in @192.168.1.0/24;");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void IpIn_NetworkAddress_ReturnsTrue()
+    {
+        // Network address itself is in the subnet
+        object? result = Run("let result = @192.168.1.0 in @192.168.1.0/24;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpIn_BroadcastAddress_ReturnsTrue()
+    {
+        // Broadcast address is in the subnet
+        object? result = Run("let result = @192.168.1.255 in @192.168.1.0/24;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpIn_LargerSubnet()
+    {
+        object? result = Run("let result = @10.20.30.40 in @10.0.0.0/8;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpIn_SmallSubnet()
+    {
+        object? result = Run("let result = @192.168.1.5 in @192.168.1.0/28;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpIn_OutsideSmallSubnet()
+    {
+        // /28 = .0-.15, so .20 is outside
+        object? result = Run("let result = @192.168.1.20 in @192.168.1.0/28;");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void IpIn_HostAddress_ExactMatch()
+    {
+        // When RHS has no CIDR, it's an exact match (Contains returns Equals)
+        object? result = Run("let result = @192.168.1.1 in @192.168.1.1;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpIn_HostAddress_NoMatch()
+    {
+        object? result = Run("let result = @192.168.1.2 in @192.168.1.1;");
+        Assert.Equal(false, result);
+    }
+
+    // ── Arithmetic: Addition ─────────────────────────────────────────
+
+    [Fact]
+    public void IpArithmetic_AddOffset()
+    {
+        object? result = Run("let result = @10.0.0.0 + 42;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("10.0.0.42", result!.ToString());
+    }
+
+    [Fact]
+    public void IpArithmetic_AddOffset_Commutative()
+    {
+        // 42 + @10.0.0.0 should also work
+        object? result = Run("let result = 42 + @10.0.0.0;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("10.0.0.42", result!.ToString());
+    }
+
+    [Fact]
+    public void IpArithmetic_AddOffset_CrossOctet()
+    {
+        // @192.168.1.254 + 2 → crosses into next octet
+        object? result = Run("let result = @192.168.1.254 + 2;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("192.168.2.0", result!.ToString());
+    }
+
+    [Fact]
+    public void IpArithmetic_AddOne()
+    {
+        object? result = Run("let result = @192.168.1.1 + 1;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("192.168.1.2", result!.ToString());
+    }
+
+    // ── Arithmetic: Subtraction ──────────────────────────────────────
+
+    [Fact]
+    public void IpArithmetic_SubtractIps_Distance()
+    {
+        // ip - ip → long distance
+        object? result = Run("let result = @10.0.0.42 - @10.0.0.0;");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void IpArithmetic_SubtractIps_Zero()
+    {
+        object? result = Run("let result = @10.0.0.1 - @10.0.0.1;");
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void IpArithmetic_SubtractOffset()
+    {
+        // ip - long → ip
+        object? result = Run("let result = @10.0.0.42 - 42;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("10.0.0.0", result!.ToString());
+    }
+
+    [Fact]
+    public void IpArithmetic_SubtractOffset_CrossOctet()
+    {
+        // @192.168.2.0 - 1 → @192.168.1.255
+        object? result = Run("let result = @192.168.2.0 - 1;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("192.168.1.255", result!.ToString());
+    }
+
+    // ── Edge cases: Negative subtraction ─────────────────────────────
+
+    [Fact]
+    public void IpArithmetic_SubtractIps_NegativeDistance()
+    {
+        object? result = Run("let result = @10.0.0.0 - @10.0.0.42;");
+        Assert.Equal(-42L, result);
+    }
+
+    // ── Edge cases: Address wraparound ───────────────────────────────
+
+    [Fact]
+    public void IpArithmetic_AddOverflow_Wraps()
+    {
+        object? result = Run("let result = @255.255.255.255 + 1;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("0.0.0.0", result!.ToString());
+    }
+
+    [Fact]
+    public void IpArithmetic_SubtractUnderflow_Wraps()
+    {
+        object? result = Run("let result = @0.0.0.0 - 1;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("255.255.255.255", result!.ToString());
+    }
+
+    // ── IPv6 operator coverage ───────────────────────────────────────
+
+    [Fact]
+    public void IpBitwise_Not_IPv6()
+    {
+        object? result = Run("let result = ~@::1;");
+        Assert.IsType<StashIpAddress>(result);
+        // ::1 = 0000...0001, ~::1 = ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe
+        Assert.Equal("ffff:ffff:ffff:ffff:ffff:ffff:ffff:fffe", result!.ToString());
+    }
+
+    [Fact]
+    public void IpBitwise_And_IPv6()
+    {
+        // AND two IPv6 addresses
+        object? result = Run("let result = @fe80::1 & @ffff::;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("fe80::", result!.ToString());
+    }
+
+    [Fact]
+    public void IpComparison_IPv6_LessThan()
+    {
+        object? result = Run("let result = @::1 < @::2;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpComparison_IPv6_GreaterThan()
+    {
+        object? result = Run("let result = @::2 > @::1;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpArithmetic_IPv6_AddOffset()
+    {
+        object? result = Run("let result = @::1 + 1;");
+        Assert.IsType<StashIpAddress>(result);
+        Assert.Equal("::2", result!.ToString());
+    }
+
+    [Fact]
+    public void IpIn_IPv6_Subnet()
+    {
+        object? result = Run("let result = @fe80::1 in @fe80::/16;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IpIn_IPv6_NotInSubnet()
+    {
+        object? result = Run("let result = @2001:db8::1 in @fe80::/16;");
+        Assert.Equal(false, result);
+    }
 }

@@ -66,6 +66,11 @@ public partial class Interpreter
                     return ~ti;
                 }
 
+                if (right is StashIpAddress tipAddr)
+                {
+                    return tipAddr.BitwiseNot();
+                }
+
                 throw new RuntimeError("Operand must be an integer.", expr.Operator.Span);
 
             default:
@@ -214,7 +219,17 @@ public partial class Interpreter
                     return ToDouble(leftVal) - ToDouble(rightVal);
                 }
 
-                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+                if (leftVal is StashIpAddress ipSubL && rightVal is StashIpAddress ipSubR)
+                {
+                    return ipSubL.Subtract(ipSubR);
+                }
+
+                if (leftVal is StashIpAddress ipSubA && rightVal is long offsetSub)
+                {
+                    return ipSubA.Add(-offsetSub);
+                }
+
+                throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.Star:
                 if (leftVal is string ls && rightVal is long ri)
@@ -270,7 +285,12 @@ public partial class Interpreter
                     return ToDouble(leftVal) < ToDouble(rightVal);
                 }
 
-                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+                if (leftVal is StashIpAddress ipLtL && rightVal is StashIpAddress ipLtR)
+                {
+                    return ipLtL.CompareTo(ipLtR) < 0;
+                }
+
+                throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.Greater:
                 if (leftVal is long lGt && rightVal is long rGt)
@@ -283,7 +303,12 @@ public partial class Interpreter
                     return ToDouble(leftVal) > ToDouble(rightVal);
                 }
 
-                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+                if (leftVal is StashIpAddress ipGtL && rightVal is StashIpAddress ipGtR)
+                {
+                    return ipGtL.CompareTo(ipGtR) > 0;
+                }
+
+                throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.LessEqual:
                 if (leftVal is long lLe && rightVal is long rLe)
@@ -296,7 +321,12 @@ public partial class Interpreter
                     return ToDouble(leftVal) <= ToDouble(rightVal);
                 }
 
-                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+                if (leftVal is StashIpAddress ipLeL && rightVal is StashIpAddress ipLeR)
+                {
+                    return ipLeL.CompareTo(ipLeR) <= 0;
+                }
+
+                throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.GreaterEqual:
                 if (leftVal is long lGe && rightVal is long rGe)
@@ -309,7 +339,12 @@ public partial class Interpreter
                     return ToDouble(leftVal) >= ToDouble(rightVal);
                 }
 
-                throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
+                if (leftVal is StashIpAddress ipGeL && rightVal is StashIpAddress ipGeR)
+                {
+                    return ipGeL.CompareTo(ipGeR) >= 0;
+                }
+
+                throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.In:
                 return EvaluateIn(leftVal, rightVal, expr);
@@ -320,7 +355,12 @@ public partial class Interpreter
                     return lAnd & rAnd;
                 }
 
-                throw new RuntimeError("Operands must be integers.", expr.Operator.Span);
+                if (leftVal is StashIpAddress ipAndL && rightVal is StashIpAddress ipAndR)
+                {
+                    return ipAndL.BitwiseAnd(ipAndR);
+                }
+
+                throw new RuntimeError("Operands must be two integers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.Pipe:
                 if (leftVal is long lOr && rightVal is long rOr)
@@ -328,7 +368,12 @@ public partial class Interpreter
                     return lOr | rOr;
                 }
 
-                throw new RuntimeError("Operands must be integers.", expr.Operator.Span);
+                if (leftVal is StashIpAddress ipOrL && rightVal is StashIpAddress ipOrR)
+                {
+                    return ipOrL.BitwiseOr(ipOrR);
+                }
+
+                throw new RuntimeError("Operands must be two integers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.Caret:
                 if (leftVal is long lXor && rightVal is long rXor)
@@ -375,6 +420,8 @@ public partial class Interpreter
             StashRange range when left is double d && d == Math.Floor(d) => range.Contains((long)d),
             StashRange => throw new RuntimeError("Left operand of 'in' must be an integer when checking range membership.", expr.Span),
             string => throw new RuntimeError("Left operand of 'in' must be a string when checking string containment.", expr.Span),
+            StashIpAddress ipNet when left is StashIpAddress ipAddr => ipNet.Contains(ipAddr),
+            StashIpAddress => throw new RuntimeError("Left operand of 'in' must be an IP address when checking CIDR containment.", expr.Span),
             _ => throw new RuntimeError("Right operand of 'in' must be an array, string, dictionary, or range.", expr.Span)
         };
     }
@@ -1038,6 +1085,16 @@ public partial class Interpreter
         if (left is string || right is string)
         {
             return Stringify(left) + Stringify(right);
+        }
+
+        if (left is StashIpAddress ipPlus && right is long offsetPlus)
+        {
+            return ipPlus.Add(offsetPlus);
+        }
+
+        if (left is long offsetPlusL && right is StashIpAddress ipPlusR)
+        {
+            return ipPlusR.Add(offsetPlusL);
         }
 
         throw new RuntimeError("Operands must be numbers or strings.", expr.Operator.Span);

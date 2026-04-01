@@ -1637,10 +1637,11 @@ public class Lexer
         }
         else
         {
-            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Invalid IP address literal '{lexeme}'.");
+            string detail = StashIpAddress.ValidateFormat(addressText) ?? $"Invalid IP address '{addressText}'.";
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] {detail}");
             _structuredErrors.Add(new DiagnosticError(
                 new SourceSpan(_file, _startLine, _startColumn, _line, _column),
-                $"Invalid IP address literal '{lexeme}'."));
+                detail));
         }
     }
 

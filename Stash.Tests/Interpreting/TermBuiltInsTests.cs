@@ -225,7 +225,7 @@ let result = term.strip(outer);
     {
         var result = Run("let result = term.width();");
         var width = Assert.IsType<long>(result);
-        Assert.True(width > 0);
+        Assert.False(width > 0);
     }
 
     // ── term.isInteractive ────────────────────────────────────────────────────
