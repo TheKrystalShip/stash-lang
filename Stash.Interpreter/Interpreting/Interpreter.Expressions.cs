@@ -732,7 +732,40 @@ public partial class Interpreter
             return ns.GetMember(expr.Name.Lexeme, expr.Name.Span);
         }
 
-        throw new RuntimeError("Only struct instances, dictionaries, enums, and namespaces have members.", expr.Name.Span);
+        // UFCS: allow namespace functions to be called as methods on strings and arrays
+        string? ufcsNamespaceName = obj switch
+        {
+            string => "str",
+            List<object?> => "arr",
+            _ => null
+        };
+
+        if (ufcsNamespaceName is not null)
+        {
+            string methodName = expr.Name.Lexeme;
+            if (_globals.TryGet(ufcsNamespaceName, out object? nsValue) &&
+                nsValue is StashNamespace ufcsNs && ufcsNs.HasMember(methodName))
+            {
+                object? member = ufcsNs.GetMember(methodName, expr.Name.Span);
+                if (member is IStashCallable callable)
+                {
+                    return new BuiltInBoundMethod(obj, callable);
+                }
+            }
+
+            string typeName = ufcsNamespaceName == "str" ? "string" : "array";
+            throw new RuntimeError($"No method '{methodName}' on type '{typeName}'.", expr.Name.Span);
+        }
+
+        string objType = obj switch
+        {
+            long => "int",
+            double => "float",
+            bool => "bool",
+            null => "null",
+            _ => obj.GetType().Name
+        };
+        throw new RuntimeError($"Type '{objType}' does not support member access.", expr.Name.Span);
     }
 
     /// <inheritdoc />

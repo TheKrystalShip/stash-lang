@@ -289,6 +289,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void GetPermissions_OwnerReadWriteExecute()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_testDir, "perm_755.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
@@ -308,6 +313,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void GetPermissions_GroupPermissions()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_testDir, "perm_750.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
@@ -326,6 +336,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void GetPermissions_OthersPermissions()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_testDir, "perm_754.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
@@ -345,6 +360,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void GetPermissions_ReadOnlyFile()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_testDir, "perm_444.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
@@ -372,6 +392,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void GetPermissions_DirectoryPermissions()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var dirPath = Path.Combine(_testDir, "perm_dir");
         Directory.CreateDirectory(dirPath);
         System.IO.File.SetUnixFileMode(dirPath,
@@ -391,6 +416,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetPermissions_SetsOwnerReadWriteExecute()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         // Source file has 755 — get the struct and apply it to the target.
         var srcPath = Path.Combine(_testDir, "setperm_src_all.txt");
         var dstPath = Path.Combine(_testDir, "setperm_dst_all.txt");
@@ -418,6 +448,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetPermissions_RemovesWritePermission()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         // Source file has 444 (no write). Apply its permissions to a writable target.
         var srcPath = Path.Combine(_testDir, "setperm_src_nowrite.txt");
         var dstPath = Path.Combine(_testDir, "setperm_dst_nowrite.txt");
@@ -476,6 +511,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetPermissions_RoundTrip()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         // Set known permissions on src via SetUnixFileMode, copy to dst, verify dst matches.
         var srcPath = Path.Combine(_testDir, "setperm_src_rt.txt");
         var dstPath = Path.Combine(_testDir, "setperm_dst_rt.txt");
@@ -517,6 +557,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetReadOnly_MakesFileWritable()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_testDir, "setro_false.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
@@ -567,6 +612,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetExecutable_AddsExecuteBit()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_testDir, "setexec_true.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
@@ -581,6 +631,11 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetExecutable_RemovesExecuteBit()
     {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS())
+        {
+            return;
+        }
+
         var filePath = Path.Combine(_testDir, "setexec_false.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,

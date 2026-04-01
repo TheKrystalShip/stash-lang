@@ -1,0 +1,113 @@
+#!/usr/bin/env stash
+
+// examples/ufcs.stash
+// Uniform Function Call Syntax — method-style calls on any value
+
+io.println("=" * 54);
+io.println("  Uniform Function Call Syntax (UFCS)");
+io.println("=" * 54);
+
+// ─── 1. Basic UFCS — Strings ──────────────────────────────────────────────────
+
+io.println("\n-- Basic String Methods --");
+
+let greeting = "  hello, world!  ";
+
+// Traditional namespace syntax
+io.println("  trim (ns):   '" + str.trim(greeting) + "'");
+
+// UFCS — first argument becomes the receiver
+io.println("  trim (ufcs): '" + greeting.trim() + "'");
+
+io.println("  upper: " + greeting.trim().upper());
+io.println("  title: " + greeting.trim().title());
+
+// ─── 2. Equivalence — Both Syntaxes, Same Result ──────────────────────────────
+
+io.println("\n-- Equivalence --");
+
+let tag = "stash-lang";
+
+let ns_result   = str.replace(str.upper(tag), "-", "_");
+let ufcs_result = tag.upper().replace("-", "_");
+
+io.println("  namespace: " + ns_result);
+io.println("  ufcs:      " + ufcs_result);
+io.println("  equal:     " + (ns_result == ufcs_result));
+
+// ─── 3. String Chaining Pipeline ─────────────────────────────────────────────
+
+io.println("\n-- String Chaining --");
+
+// Raw user input → normalised slug
+let raw_input = "  My Awesome Project  ";
+let slug = raw_input.trim().lower().replaceAll(" ", "-");
+io.println("  raw:  '" + raw_input + "'");
+io.println("  slug: '" + slug + "'");
+
+// Pad a version number to a fixed width
+let version = "7";
+let padded  = version.padStart(3, "0");
+io.println("  version: v" + padded);
+
+// ─── 4. Array Pipelines — Filter, Map, Sort ───────────────────────────────────
+
+io.println("\n-- Array Pipelines --");
+
+let scores = [42, 91, 17, 68, 55, 83, 29, 76];
+
+// Keep scores above 50, double them, sort ascending
+let high_doubled = scores.filter((s) => s > 50).map((s) => s * 2);
+high_doubled.sort();
+
+io.println("  scores > 50, doubled, sorted: " + high_doubled);
+
+// Mixed: arr namespace + UFCS in the same expression
+let words = ["banana", "fig", "apple", "kiwi", "grape"];
+let short_upper = arr.filter(words, (w) => len(w) <= 4).map((w) => w.upper());
+io.println("  short fruits (≤4 chars), uppercased: " + short_upper);
+
+// ─── 5. Practical Example — Server Log Processing ────────────────────────────
+
+io.println("\n-- Log Entry Processing --");
+
+// Simulate raw log lines from a monitoring system
+let logs = [
+    "  [ERROR] prod-web-01: disk usage 91%  ",
+    "  [INFO]  prod-web-02: all systems ok  ",
+    "  [WARN]  prod-db-01: slow query 1.8s  ",
+    "  [ERROR] prod-db-02: connection timeout  ",
+    "  [INFO]  prod-cache-01: hit ratio 99%  "
+];
+
+// Normalise and extract only error/warn lines
+let alerts = logs.map((line) => line.trim()).filter((line) => line.startsWith("[ERROR]") || line.startsWith("[WARN]"));
+
+io.println("  alerts (" + len(alerts) + "):");
+for (let alert in alerts) {
+    io.println("    " + alert);
+}
+
+// Extract host names from alerts: token after the closing bracket
+let hosts = alerts.map((line) => {
+    let after_bracket = line.substring(line.indexOf("]") + 2, len(line));
+    return after_bracket.substring(0, after_bracket.indexOf(":"));
+});
+io.println("  affected hosts: " + hosts);
+
+// ─── 6. Mixed Usage — UFCS + Namespace in One Expression ─────────────────────
+
+io.println("\n-- Mixed Namespace + UFCS --");
+
+fn formatStat(label, values) {
+    let total = arr.reduce(values, (acc, x) => acc + x, 0);
+    let avg   = conv.toFloat(total) / len(values);
+    // namespace call feeds result directly into UFCS chain
+    let avg_str = conv.toStr(avg).substring(0, 5);
+    io.println($"  {label}: total={total}  avg≈{avg_str}");
+}
+
+formatStat("response_ms", [120, 95, 210, 88, 143]);
+formatStat("req_per_sec", [340, 412, 389, 401, 366]);
+
+io.println("\n" + "=" * 54);

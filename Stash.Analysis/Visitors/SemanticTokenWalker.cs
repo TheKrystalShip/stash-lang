@@ -181,6 +181,14 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             return;
         }
 
+        // UFCS: classify str/arr namespace methods used as method calls on values
+        if (StdlibRegistry.TryGetNamespaceFunction("str." + memberName, out _) ||
+            StdlibRegistry.TryGetNamespaceFunction("arr." + memberName, out _))
+        {
+            EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
+            return;
+        }
+
         if (StdlibRegistry.IsBuiltInFunction(memberName))
         {
             EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);

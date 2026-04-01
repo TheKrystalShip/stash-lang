@@ -49,6 +49,8 @@ public static partial class StdlibRegistry
 
     private static readonly FrozenDictionary<string, IReadOnlyList<NamespaceConstant>> _namespaceConstantsByNamespace;
 
+    private static readonly FrozenDictionary<string, string> _ufcsTypeToNamespace;
+
     static StdlibRegistry()
     {
         ValidTypes = new[] { "string", "int", "float", "bool", "null", "array", "dict", "function",
@@ -81,6 +83,12 @@ public static partial class StdlibRegistry
 
         _namespaceConstantsByNamespace = NamespaceConstants.GroupBy(c => c.Namespace)
             .ToFrozenDictionary(g => g.Key, g => (IReadOnlyList<NamespaceConstant>)g.ToList());
+
+        _ufcsTypeToNamespace = new Dictionary<string, string>
+        {
+            ["string"] = "str",
+            ["array"] = "arr",
+        }.ToFrozenDictionary();
     }
 
     // ── Public query methods ──
@@ -103,4 +111,17 @@ public static partial class StdlibRegistry
     public static bool IsBuiltInFunction(string name) => _builtInFunctionNames.Contains(name);
 
     public static bool IsBuiltInNamespace(string name) => _namespaceNameSet.Contains(name);
+
+    /// <summary>
+    /// Returns the namespace name that provides UFCS methods for a given Stash runtime type,
+    /// or null if the type does not have UFCS support.
+    /// </summary>
+    public static string? GetUfcsNamespace(string typeName)
+        => _ufcsTypeToNamespace.TryGetValue(typeName, out var ns) ? ns : null;
+
+    /// <summary>
+    /// Returns true if the given Stash runtime type has UFCS support.
+    /// </summary>
+    public static bool HasUfcsSupport(string typeName)
+        => _ufcsTypeToNamespace.ContainsKey(typeName);
 }

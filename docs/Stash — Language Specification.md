@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -255,33 +255,33 @@ $(cat /tmp/listing.txt) | $(grep app) >> "/tmp/matches.txt";
 
 Dynamically typed. Values carry their type at runtime. The following built-in types exist:
 
-| Type        | Examples                       | Notes                                     |
-| ----------- | ------------------------------ | ----------------------------------------- |
+| Type        | Examples                                   | Notes                                         |
+| ----------- | ------------------------------------------ | --------------------------------------------- |
 | `int`       | `42`, `-7`, `0`, `0xFF`, `0o755`, `0b1010` | Integer numbers (decimal, hex, octal, binary) |
-| `float`     | `3.14`, `-0.5`                 | Floating-point numbers                    |
-| `string`    | `"hello"`, `""`                | Immutable strings                         |
-| `bool`      | `true`, `false`                |                                           |
-| `null`      | `null`                         | Absence of value                          |
-| `array`     | `[1, 2, 3]`, `["a", 42, true]` | Ordered, mixed-type, dynamic-size         |
-| `struct`    | `Server { host: "...", ... }`  | Named structured data (see Section 5)     |
-| `enum`      | `Status.Active`, `Color.Red`   | Named constants (see Section 5b)          |
-| `dict`      | `{ key: value }`, `dict.new()` | Key-value map (see Section 5c)            |
-| `interface` | `interface Printable { ... }`  | Structural contract for structs (see §5f) |
-| `range`     | `1..10`, `0..100..5`           | Lazy integer sequence (see Section 3d)    |
-| `Error`     | `try failingFn()`              | Error value (see Section 7b)              |
-| `Future`    | `async fn() { return 42; }`    | Async computation (see Section 8c)        |
+| `float`     | `3.14`, `-0.5`                             | Floating-point numbers                        |
+| `string`    | `"hello"`, `""`                            | Immutable strings                             |
+| `bool`      | `true`, `false`                            |                                               |
+| `null`      | `null`                                     | Absence of value                              |
+| `array`     | `[1, 2, 3]`, `["a", 42, true]`             | Ordered, mixed-type, dynamic-size             |
+| `struct`    | `Server { host: "...", ... }`              | Named structured data (see Section 5)         |
+| `enum`      | `Status.Active`, `Color.Red`               | Named constants (see Section 5b)              |
+| `dict`      | `{ key: value }`, `dict.new()`             | Key-value map (see Section 5c)                |
+| `interface` | `interface Printable { ... }`              | Structural contract for structs (see §5f)     |
+| `range`     | `1..10`, `0..100..5`                       | Lazy integer sequence (see Section 3d)        |
+| `Error`     | `try failingFn()`                          | Error value (see Section 7b)                  |
+| `Future`    | `async fn() { return 42; }`                | Async computation (see Section 8c)            |
 
 ### Number Literals
 
 Stash supports integer literals in four bases and optional underscore digit separators for readability.
 
-| Format        | Prefix      | Digits          | Example             |
-| ------------- | ----------- | --------------- | ------------------- |
-| Decimal       | _(none)_    | `0-9`           | `42`, `1_000_000`   |
-| Hexadecimal   | `0x` / `0X` | `0-9`, `a-f`, `A-F` | `0xFF`, `0x00FF_00FF` |
-| Octal         | `0o` / `0O` | `0-7`           | `0o755`, `0o7_5_5`  |
-| Binary        | `0b` / `0B` | `0`, `1`        | `0b1010`, `0b1111_0000` |
-| Floating-point | _(none)_   | `0-9`, `.`      | `3.14`, `1_000.50`  |
+| Format         | Prefix      | Digits              | Example                 |
+| -------------- | ----------- | ------------------- | ----------------------- |
+| Decimal        | _(none)_    | `0-9`               | `42`, `1_000_000`       |
+| Hexadecimal    | `0x` / `0X` | `0-9`, `a-f`, `A-F` | `0xFF`, `0x00FF_00FF`   |
+| Octal          | `0o` / `0O` | `0-7`               | `0o755`, `0o7_5_5`      |
+| Binary         | `0b` / `0B` | `0`, `1`            | `0b1010`, `0b1111_0000` |
+| Floating-point | _(none)_    | `0-9`, `.`          | `3.14`, `1_000.50`      |
 
 **Underscore separators (`_`):** An underscore may appear between any two digits for readability. Underscores are not allowed at the start or end of a literal, may not appear consecutively, may not appear adjacent to a decimal point, and may not appear immediately after a base prefix.
 
@@ -2658,6 +2658,124 @@ The `task` namespace provides utility functions for working with Futures (see St
 An `async fn` declaration sets `IsAsync = true` on the `FnDeclStmt` AST node. When called, `StashFunction.Call()` forks the interpreter via `interpreter.Fork()`, snapshots the environment via `Environment.Snapshot()`, runs the body on the .NET `ThreadPool`, and returns a `StashFuture` wrapping the resulting `Task<object?>`.
 
 `await` is parsed as an `AwaitExpr` prefix expression. The interpreter's `VisitAwaitExpr` calls `StashFuture.GetResult()` which blocks on the underlying task and unwraps exceptions. If the awaited value is not a `Future`, it is returned as-is (transparent await).
+
+---
+
+## 8c. UFCS — Uniform Function Call Syntax
+
+UFCS (Uniform Function Call Syntax) allows namespace functions to be called as methods on values, enabling left-to-right chaining syntax alongside the existing `namespace.function(value)` syntax.
+
+### Motivation
+
+Stash organizes built-in functions into namespaces: `str.upper(s)`, `arr.push(a, v)`. While consistent, this forces inside-out nesting for chained operations:
+
+```stash
+// Without UFCS: inside-out — read right-to-left
+let result = str.split(str.upper(str.trim(input)), ",");
+
+// With UFCS: left-to-right chaining
+let result = input.trim().upper().split(",");
+```
+
+### Syntax
+
+Given an expression `receiver.method(arg1, arg2, ...)`, if the receiver is not a struct instance, dictionary, enum, or namespace, the interpreter maps the receiver's type to its corresponding namespace and looks up `method` as a function. The receiver is implicitly prepended as the first argument.
+
+```stash
+// These pairs are equivalent:
+str.upper(s)           ↔  s.upper()
+str.split(s, ",")      ↔  s.split(",")
+arr.push(a, 42)        ↔  a.push(42)
+arr.map(a, (x) => x*2) ↔  a.map((x) => x*2)
+```
+
+### Type-to-Namespace Mapping
+
+Only type-centric namespaces participate in UFCS:
+
+| Runtime Type | Namespace |
+| ------------ | --------- |
+| `string`     | `str`     |
+| `array`      | `arr`     |
+
+All other namespaces (`dict`, `math`, `conv`, `fs`, `http`, `env`, `io`, etc.) are **not** eligible for UFCS. Dictionary dot access resolves to key lookup, not UFCS — `d.keys` returns the dict entry at key `"keys"`, not `dict.keys(d)`.
+
+### Resolution Rules
+
+When evaluating `receiver.name`, the interpreter follows this precedence:
+
+1. **StashError** — access `.message`, `.type`, `.stack` fields
+2. **Struct instance** — field or method lookup
+3. **Dictionary** — key lookup
+4. **Enum** — member lookup
+5. **Namespace** — member lookup
+6. **UFCS** — map receiver type to namespace, return bound method
+7. **Error** — "No method 'name' on type 'typename'"
+
+Existing resolution (steps 1–5) always takes priority. UFCS is a **fallback**, not an override.
+
+### Arity Adjustment
+
+UFCS-bound methods report arity reduced by 1 since the receiver is implicit:
+
+```stash
+str.upper     // namespace function: arity 1 (takes s)
+s.upper       // UFCS method: arity 0 (receiver is implicit)
+
+str.split     // namespace function: arity 2 (takes s, delimiter)
+s.split       // UFCS method: arity 1 (takes delimiter)
+```
+
+### Chaining
+
+Each UFCS call returns a value that can be the receiver of the next call:
+
+```stash
+// String chaining
+let slug = title.trim().lower().replaceAll(" ", "-");
+
+// Array pipelines
+let names = users
+    .filter((u) => u.active)
+    .sortBy((u) => u.name)
+    .map((u) => u.email);
+
+// Mixed: namespace call result → UFCS
+let words = fs.readFile("data.txt").trim().split("\n");
+```
+
+### Limitations
+
+```stash
+// No UFCS on dictionaries (ambiguous with key lookup)
+d.keys()          // dict key lookup, NOT dict.keys(d) — use dict.keys(d)
+
+// No UFCS on null
+null.upper()      // ERROR — null has no methods
+
+// No UFCS on numbers or booleans
+42.abs()          // ERROR — use math.abs(42)
+true.toStr()      // ERROR — use conv.toStr(true)
+
+// Variadic/factory functions not reachable via UFCS
+str.format("{0}", val)  // use namespace syntax
+arr.zip(a, b)           // use namespace syntax
+```
+
+### Both Syntaxes Coexist
+
+Neither syntax is deprecated. Use whichever is clearer for the context:
+
+```stash
+// UFCS for chaining
+let result = input.trim().upper().split(",");
+
+// Namespace for standalone calls
+let upper = str.upper(name);
+
+// Mixed in a single expression
+let count = len(lines.filter((l) => l.contains("ERROR")));
+```
 
 ---
 
