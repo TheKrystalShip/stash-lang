@@ -401,6 +401,17 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitExtendStmt(ExtendStmt stmt)
+    {
+        EmitFromToken(stmt.ExtendKeyword, TokenTypeKeyword, 0);
+        EmitFromToken(stmt.TypeName, TokenTypeType, 0);
+        foreach (var method in stmt.Methods)
+        {
+            method.Accept(this);
+        }
+        return 0;
+    }
+
     public int VisitEnumDeclStmt(EnumDeclStmt stmt)
     {
         EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);

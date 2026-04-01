@@ -387,6 +387,45 @@ public partial class Interpreter
         return null;
     }
 
+    /// <inheritdoc />
+    public object? VisitExtendStmt(ExtendStmt stmt)
+    {
+        string typeName = stmt.TypeName.Lexeme;
+
+        bool isBuiltInType = typeName is "string" or "array" or "dict" or "int" or "float";
+
+        if (!isBuiltInType)
+        {
+            // Must be a struct in scope
+            if (!_environment.TryGet(typeName, out object? resolved) || resolved is not StashStruct structDef)
+            {
+                throw new RuntimeError($"Cannot extend '{typeName}': not a known type. Expected a built-in type (string, array, dict, int, float) or a struct name.", stmt.TypeName.Span);
+            }
+
+            // For structs, register extension methods directly on the struct's Methods dictionary
+            // Original struct methods take priority (per spec §7), so only add if not already defined
+            foreach (FnDeclStmt method in stmt.Methods)
+            {
+                var function = new StashFunction(method, _environment);
+                if (!structDef.Methods.ContainsKey(method.Name.Lexeme))
+                {
+                    structDef.Methods[method.Name.Lexeme] = function;
+                }
+            }
+        }
+        else
+        {
+            // For built-in types, register in the extension registry only
+            foreach (FnDeclStmt method in stmt.Methods)
+            {
+                var function = new StashFunction(method, _environment);
+                _extensionRegistry.Register(typeName, method.Name.Lexeme, function);
+            }
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Validates that a struct satisfies all requirements of an interface.
     /// </summary>

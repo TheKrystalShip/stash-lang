@@ -99,6 +99,11 @@ public interface IStmtVisitor<T>
     T VisitInterfaceDeclStmt(InterfaceDeclStmt stmt);
 
     /// <summary>
+    /// Visits an <see cref="ExtendStmt"/> node (type extension <c>extend Type { fn method() { ... } }</c>).
+    /// </summary>
+    T VisitExtendStmt(ExtendStmt stmt);
+
+    /// <summary>
     /// Visits an <see cref="ImportStmt"/> node (<c>import { name } from "file.stash";</c>).
     /// </summary>
     T VisitImportStmt(ImportStmt stmt);

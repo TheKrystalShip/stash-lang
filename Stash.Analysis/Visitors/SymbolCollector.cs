@@ -398,6 +398,74 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Collects extension method symbols from an extend block.</summary>
+    public object? VisitExtendStmt(ExtendStmt stmt)
+    {
+        string typeName = stmt.TypeName.Lexeme;
+
+        foreach (var method in stmt.Methods)
+        {
+            var paramParts = new List<string>();
+            for (int i = 0; i < method.Parameters.Count; i++)
+            {
+                var paramName = method.Parameters[i].Lexeme;
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var part = paramType != null ? $"{paramName}: {paramType}" : paramName;
+
+                if (i < method.DefaultValues.Count && method.DefaultValues[i] != null)
+                {
+                    part += $" = {FormatDefaultValue(method.DefaultValues[i]!)}";
+                }
+
+                paramParts.Add(part);
+            }
+
+            var methodDetail = $"fn {method.Name.Lexeme}({string.Join(", ", paramParts)})";
+            if (method.ReturnType != null)
+            {
+                methodDetail += $" -> {method.ReturnType.Lexeme}";
+            }
+
+            var returnTypeStr = method.ReturnType?.Lexeme;
+            var paramNames = method.Parameters.Select(p => p.Lexeme).ToArray();
+            int requiredCount = method.DefaultValues.TakeWhile(d => d == null).Count();
+            var methodParamTypes = method.ParameterTypes.Select(t => t?.Lexeme).ToArray();
+
+            RecordTypeReference(method.ReturnType);
+            foreach (var pt in method.ParameterTypes) RecordTypeReference(pt);
+
+            _currentScope.AddSymbol(new SymbolInfo(method.Name.Lexeme, SymbolKind.Method, method.Name.Span, method.Span, methodDetail,
+                parentName: typeName, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: methodParamTypes));
+
+            foreach (var defaultVal in method.DefaultValues)
+            {
+                defaultVal?.Accept(this);
+            }
+
+            PushScope(ScopeKind.Function, method.Body.Span);
+
+            _currentScope.AddSymbol(new SymbolInfo("self", SymbolKind.Parameter, method.Name.Span,
+                detail: $"instance of {typeName}", parentName: method.Name.Lexeme, typeHint: typeName));
+
+            for (int i = 0; i < method.Parameters.Count; i++)
+            {
+                var param = method.Parameters[i];
+                var paramType = i < method.ParameterTypes.Count ? method.ParameterTypes[i]?.Lexeme : null;
+                var paramDetail = paramType != null ? $"parameter of {method.Name.Lexeme}: {paramType}" : $"parameter of {method.Name.Lexeme}";
+                _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: method.Name.Lexeme, typeHint: paramType, isExplicitTypeHint: paramType != null));
+            }
+
+            foreach (var s in method.Body.Statements)
+            {
+                s.Accept(this);
+            }
+
+            PopScope();
+        }
+
+        return null;
+    }
+
     /// <summary>
     /// Registers a <see cref="SymbolKind.Enum"/> symbol and all its
     /// <see cref="SymbolKind.EnumMember"/> children into the current scope.

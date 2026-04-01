@@ -112,6 +112,14 @@ public class CompletionHandler : CompletionHandlerBase
             }
         }
 
+        // Type name completions after `extend` keyword
+        if (currentLine != null && IsAfterExtendKeyword(currentLine, col))
+        {
+            var extendItems = BuildExtendTypeCompletionList(uri, line + 1, col + 1);
+            _logger.LogDebug("Completion: {Count} extend type items for {Uri}", extendItems.Items?.Count() ?? 0, request.TextDocument.Uri);
+            return Task.FromResult(extendItems);
+        }
+
         // Type name completions after `is` keyword
         if (currentLine != null && IsAfterIsKeyword(currentLine, col))
         {
@@ -292,6 +300,37 @@ public class CompletionHandler : CompletionHandlerBase
         return false;
     }
 
+    private static bool IsAfterExtendKeyword(string line, int col)
+    {
+        // Walk backwards from cursor to find the start of the current partial word
+        int pos = col;
+        while (pos > 0 && (char.IsLetterOrDigit(line[pos - 1]) || line[pos - 1] == '_'))
+        {
+            pos--;
+        }
+
+        // Skip whitespace before the partial word
+        while (pos > 0 && char.IsWhiteSpace(line[pos - 1]))
+        {
+            pos--;
+        }
+
+        // Check if the six characters before are "extend" preceded by a non-identifier char (or start of line)
+        if (pos >= 6 &&
+            line[pos - 1] == 'd' &&
+            line[pos - 2] == 'n' &&
+            line[pos - 3] == 'e' &&
+            line[pos - 4] == 't' &&
+            line[pos - 5] == 'x' &&
+            line[pos - 6] == 'e')
+        {
+            // Ensure "extend" is a whole word (not part of a longer identifier)
+            return pos - 6 == 0 || !char.IsLetterOrDigit(line[pos - 7]) && line[pos - 7] != '_';
+        }
+
+        return false;
+    }
+
     /// <summary>
     /// Builds a completion list containing all valid type names for <c>is</c> expressions.
     /// </summary>
@@ -309,6 +348,42 @@ public class CompletionHandler : CompletionHandlerBase
                 Documentation = new MarkupContent { Kind = MarkupKind.Markdown, Value = desc.Description }
             });
         }
+        return new CompletionList(items);
+    }
+
+    private CompletionList BuildExtendTypeCompletionList(Uri uri, int line, int col)
+    {
+        var items = new List<CompletionItem>();
+
+        // Built-in extendable types
+        string[] builtInTypes = ["string", "array", "dict", "int", "float"];
+        foreach (var typeName in builtInTypes)
+        {
+            items.Add(new CompletionItem
+            {
+                Label = typeName,
+                Kind = LspCompletionItemKind.TypeParameter,
+                Detail = "built-in type"
+            });
+        }
+
+        // User-defined struct names from analysis
+        var result = _analysis.GetCachedResult(uri);
+        if (result != null)
+        {
+            var seen = new HashSet<string>(builtInTypes);
+            foreach (var sym in result.Symbols.All.Where(s => s.Kind == StashSymbolKind.Struct))
+            {
+                if (!seen.Add(sym.Name)) continue;
+                items.Add(new CompletionItem
+                {
+                    Label = sym.Name,
+                    Kind = LspCompletionItemKind.Struct,
+                    Detail = sym.Detail
+                });
+            }
+        }
+
         return new CompletionList(items);
     }
 

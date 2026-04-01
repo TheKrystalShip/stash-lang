@@ -470,4 +470,32 @@ public class FormatterTests
         var result = Format("if(item is types[0]){io.println(\"yes\");}");
         Assert.Equal("if (item is types[0]) {\n  io.println(\"yes\");\n}\n", result);
     }
+
+    [Fact]
+    public void Format_ConsecutiveExpressionStatements_NoBlankLines()
+    {
+        var result = Format("io.println(\"a\");\nio.println(\"b\");\nio.println(\"c\");");
+        Assert.Equal("io.println(\"a\");\nio.println(\"b\");\nio.println(\"c\");\n", result);
+    }
+
+    [Fact]
+    public void Format_StructNoFields_MultipleMethods_NoBlankLineAfterBrace()
+    {
+        var result = Format("struct Foo{fn bar(){return 1;}fn baz(){return 2;}}");
+        Assert.Equal("struct Foo {\n  fn bar() {\n    return 1;\n  }\n\n  fn baz() {\n    return 2;\n  }\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_ExtendBlock_NoBlankLineAfterBrace()
+    {
+        var result = Format("extend string{fn upper(){return self;}fn lower(){return self;}}");
+        Assert.Equal("extend string {\n  fn upper() {\n    return self;\n  }\n\n  fn lower() {\n    return self;\n  }\n}\n", result);
+    }
+
+    [Fact]
+    public void Format_DeclarationBetweenStatements_BlankLinesAroundDeclaration()
+    {
+        var result = Format("let x=1;\nfn foo(){return x;}\nlet y=2;");
+        Assert.Equal("let x = 1;\n\nfn foo() {\n  return x;\n}\n\nlet y = 2;\n", result);
+    }
 }

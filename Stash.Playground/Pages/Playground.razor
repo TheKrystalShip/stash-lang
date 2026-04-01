@@ -581,6 +581,67 @@
             io.println($"  Min:   {s.min}");
             io.println($"  Max:   {s.max}");
             """),
+
+        new("Extend Blocks", """
+            // Extend Blocks — add methods to any type
+            //   extend string  { fn method() { ... } }
+            //   extend array   { fn method() { ... } }
+            //   extend MyStruct { fn method() { ... } }
+
+            // ── Extending string ──────────────────────────────
+            extend string {
+                fn isPalindrome() {
+                    let lower = self.lower();
+                    return lower == lower.reverse();
+                }
+
+                fn wordCount() {
+                    if (self.trim() == "") { return 0; }
+                    return len(self.trim().split(" "));
+                }
+
+                fn truncate(maxLen) {
+                    if (len(self) <= maxLen) { return self; }
+                    return str.substring(self, 0, maxLen) + "...";
+                }
+            }
+
+            io.println("=== String Extensions ===");
+            io.println($"  'racecar'.isPalindrome()    = {"racecar".isPalindrome()}");
+            io.println($"  'hello'.isPalindrome()      = {"hello".isPalindrome()}");
+            io.println($"  'Stash is great'.wordCount() = {"Stash is great".wordCount()}");
+            io.println($"  'Hello, World!'.truncate(7) = {"Hello, World!".truncate(7)}");
+
+            // ── Extending array ────────────────────────────────
+            extend array {
+                fn sum()     { return arr.reduce(self, (a, b) => a + b, 0); }
+                fn average() { return self.sum() / len(self); }
+            }
+
+            let nums = [10, 20, 30, 40, 50];
+            io.println("\nArray [10, 20, 30, 40, 50]:");
+            io.println($"  .sum()     = {nums.sum()}");
+            io.println($"  .average() = {nums.average()}");
+
+            // ── Extending a struct ─────────────────────────────
+            struct Rectangle { width, height }
+
+            extend Rectangle {
+                fn area()      { return self.width * self.height; }
+                fn perimeter() { return 2 * (self.width + self.height); }
+                fn isSquare()  { return self.width == self.height; }
+            }
+
+            let r = Rectangle { width: 8, height: 5 };
+            io.println("\nRectangle { width: 8, height: 5 }:");
+            io.println($"  .area()      = {r.area()}");
+            io.println($"  .perimeter() = {r.perimeter()}");
+            io.println($"  .isSquare()  = {r.isSquare()}");
+
+            let sq = Rectangle { width: 6, height: 6 };
+            io.println("\nRectangle { width: 6, height: 6 }:");
+            io.println($"  .isSquare()  = {sq.isSquare()}");
+            """),
     ];
 
     private sealed record Showcase(string Title, string Code, string Output);

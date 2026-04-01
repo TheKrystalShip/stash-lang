@@ -3,6 +3,7 @@ namespace Stash.Interpreting;
 using System.Collections.Generic;
 using Stash.Parsing.AST;
 using Stash.Lexing;
+using Stash.Runtime;
 
 /// <summary>Static analysis pass that resolves variable references to their lexical scope distances, enabling O(1) variable lookup at runtime.</summary>
 /// <remarks>Walks the AST before execution, computing the number of scope hops for each variable reference. Results are stored via <see cref="Interpreter.Resolve"/>.</remarks>
@@ -300,6 +301,27 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         Declare(stmt.Name.Lexeme);
         Define(stmt.Name.Lexeme);
+
+        foreach (var method in stmt.Methods)
+        {
+            BeginScope();
+            Declare("self");
+            Define("self");
+            ResolveFunction(method.Parameters, method.DefaultValues, method.Body, FunctionType.Method);
+            EndScope();
+        }
+
+        return null;
+    }
+
+    /// <inheritdoc />
+    public object? VisitExtendStmt(ExtendStmt stmt)
+    {
+        // extend blocks must be declared at the top level (not inside functions, if-blocks, etc.)
+        if (_scopes.Count > 0)
+        {
+            throw new RuntimeError("'extend' blocks must be declared at the top level.", stmt.Span);
+        }
 
         foreach (var method in stmt.Methods)
         {

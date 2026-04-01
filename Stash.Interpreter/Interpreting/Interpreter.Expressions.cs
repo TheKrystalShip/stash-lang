@@ -718,6 +718,13 @@ public partial class Interpreter
 
         if (obj is StashDictionary dict)
         {
+            // Check for dict extension methods before key lookup
+            if (_extensionRegistry.TryGetMethod("dict", expr.Name.Lexeme, out IStashCallable? dictExtMethod) &&
+                dictExtMethod is StashFunction dictExtFunc)
+            {
+                return new ExtensionBoundMethod(obj, dictExtFunc);
+            }
+
             return dict.Get(expr.Name.Lexeme);
         }
 
@@ -730,6 +737,26 @@ public partial class Interpreter
         if (obj is StashNamespace ns)
         {
             return ns.GetMember(expr.Name.Lexeme, expr.Name.Span);
+        }
+
+        // Extension method lookup (priority: after namespace, before UFCS)
+        string? extTypeName = obj switch
+        {
+            StashInstance inst => inst.TypeName,
+            string => "string",
+            List<object?> => "array",
+            StashDictionary => "dict",
+            long => "int",
+            double => "float",
+            _ => null
+        };
+
+        if (extTypeName is not null && _extensionRegistry.TryGetMethod(extTypeName, expr.Name.Lexeme, out IStashCallable? extMethod))
+        {
+            if (extMethod is StashFunction extFunc)
+            {
+                return new ExtensionBoundMethod(obj, extFunc);
+            }
         }
 
         // UFCS: allow namespace functions to be called as methods on strings and arrays

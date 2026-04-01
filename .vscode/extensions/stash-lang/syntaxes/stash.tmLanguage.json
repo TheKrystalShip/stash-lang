@@ -11,6 +11,7 @@
     { "include": "#struct-declaration" },
     { "include": "#enum-declaration" },
     { "include": "#interface-declaration" },
+    { "include": "#extend-declaration" },
     { "include": "#control-keywords" },
     { "include": "#constants" },
     { "include": "#return-type-annotation" },
@@ -243,6 +244,33 @@
       ]
     },
 
+    "extend-declaration": {
+      "begin": "\\b(extend)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\{)",
+      "beginCaptures": {
+        "1": { "name": "storage.type.stash" },
+        "2": { "name": "entity.name.type.stash" },
+        "3": { "name": "punctuation.definition.extend.begin.stash" }
+      },
+      "end": "\\}",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.extend.end.stash" }
+      },
+      "patterns": [
+        { "include": "#comments" },
+        { "include": "#function-declaration" },
+        { "include": "#return-type-annotation" },
+        {
+          "begin": "\\{",
+          "beginCaptures": { "0": { "name": "punctuation.section.block.begin.stash" } },
+          "end": "\\}",
+          "endCaptures": { "0": { "name": "punctuation.section.block.end.stash" } },
+          "patterns": [
+            { "include": "$self" }
+          ]
+        }
+      ]
+    },
+
     "return-type-annotation": {
       "match": "(->)\\s*([a-zA-Z_][a-zA-Z0-9_]*)",
       "captures": {
@@ -352,8 +380,8 @@
         { "include": "#string" },
         { "include": "#numbers" },
         { "include": "#operators" },
-        { "include": "#function-call" },
         { "include": "#control-keywords" },
+        { "include": "#function-call" },
         { "include": "#variable-declaration" },
         { "include": "#identifiers" }
       ]
@@ -551,8 +579,8 @@
         { "include": "#string" },
         { "include": "#numbers" },
         { "include": "#operators" },
-        { "include": "#function-call" },
         { "include": "#control-keywords" },
+        { "include": "#function-call" },
         { "include": "#variable-declaration" },
         { "include": "#identifiers" }
       ]
@@ -663,10 +691,25 @@
     },
 
     "function-call": {
-      "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
-      "captures": {
-        "1": { "name": "entity.name.function.call.stash" }
-      }
+      "begin": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(\\()",
+      "beginCaptures": {
+        "1": { "name": "entity.name.function.call.stash" },
+        "2": { "name": "punctuation.definition.parameters.begin.stash" }
+      },
+      "end": "\\)",
+      "endCaptures": {
+        "0": { "name": "punctuation.definition.parameters.end.stash" }
+      },
+      "patterns": [
+        {
+          "begin": "\\(",
+          "end": "\\)",
+          "patterns": [
+            { "include": "$self" }
+          ]
+        },
+        { "include": "$self" }
+      ]
     },
 
     "identifiers": {

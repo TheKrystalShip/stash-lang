@@ -107,6 +107,7 @@ public class Lexer
             ["async"] = TokenType.Async,
             ["await"] = TokenType.Await,
             ["elevate"] = TokenType.Elevate,
+            ["extend"] = TokenType.Extend,
             ["and"] = TokenType.AmpersandAmpersand,
             ["or"] = TokenType.PipePipe,
         }.ToFrozenDictionary();

@@ -79,6 +79,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     private Stash.Runtime.ITestHarness? _testHarness;
     /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime. Thread-safe for concurrent resolver writes during parallel execution.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Expr, (int Distance, int Slot)> _locals = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Registry of extension methods added by <c>extend</c> blocks. Keyed by (typeName, methodName).</summary>
+    internal readonly ExtensionRegistry _extensionRegistry = new();
     /// <summary>The raw script arguments, parsed by <c>args</c> declarations.</summary>
     internal string[] ScriptArgs = Array.Empty<string>();
     /// <summary>The mutable per-execution state. Encapsulates environment, call stack, I/O, and other state that varies per execution path.</summary>

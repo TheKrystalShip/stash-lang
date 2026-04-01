@@ -544,6 +544,26 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
         return null;
     }
+
+    /// <summary>Validates method bodies in an extend block.</summary>
+    public object? VisitExtendStmt(ExtendStmt stmt)
+    {
+        foreach (var method in stmt.Methods)
+        {
+            foreach (var paramType in method.ParameterTypes)
+            {
+                ValidateTypeHint(paramType);
+            }
+            ValidateTypeHint(method.ReturnType);
+
+            _functionDepth++;
+            CheckUnreachableStatements(method.Body.Statements);
+            _functionDepth--;
+        }
+
+        return null;
+    }
+
     /// <summary>No-op — enum declarations introduce no semantic constraints to validate.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt) => null;

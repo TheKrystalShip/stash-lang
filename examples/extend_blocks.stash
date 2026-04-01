@@ -1,0 +1,118 @@
+#!/usr/bin/env stash
+
+// examples/extend_blocks.stash
+// Extend Blocks — add methods to any type without modifying it
+
+// ─── 1. Extending the string type ────────────────────────────────────────────
+
+extend string {
+    fn isPalindrome() {
+        let lower = self.lower();
+        return lower == lower.reverse();
+    }
+
+    fn wordCount() {
+        if (self.trim() == "") { return 0; }
+        return len(self.trim().split(" "));
+    }
+
+    fn truncate(maxLen) {
+        if (len(self) <= maxLen) { return self; }
+        return str.substring(self, 0, maxLen) + "...";
+    }
+}
+
+io.println("=== String Extensions ===");
+io.println($"  'racecar'.isPalindrome()          → {"racecar".isPalindrome()}");
+io.println($"  'hello'.isPalindrome()            → {"hello".isPalindrome()}");
+io.println($"  'A man a plan a canal'.isPalindrome() → {"amanaplanacanal".isPalindrome()}");
+io.println($"  'The quick brown fox'.wordCount() → {"The quick brown fox".wordCount()}");
+io.println($"  'Hello, World!'.truncate(7)       → {"Hello, World!".truncate(7)}");
+
+// ─── 2. Extending the array type ─────────────────────────────────────────────
+
+extend array {
+    fn sum() {
+        return arr.reduce(self, (a, b) => a + b, 0);
+    }
+
+    fn average() {
+        return self.sum() / len(self);
+    }
+
+    fn unique() {
+        return arr.unique(self);
+    }
+}
+
+io.println("\n=== Array Extensions ===");
+let scores = [85, 92, 78, 92, 88, 78, 95];
+io.println($"  scores:          {scores}");
+io.println($"  scores.sum()     → {scores.sum()}");
+io.println($"  scores.average() → {scores.average()}");
+io.println($"  scores.unique()  → {scores.unique()}");
+
+// ─── 3. Extending the int type ────────────────────────────────────────────────
+
+extend int {
+    fn isEven() {
+        return self % 2 == 0;
+    }
+
+    fn factorial() {
+        if (self <= 1) { return 1; }
+        let result = 1;
+        for (let i in 2..self + 1) {
+            result = result * i;
+        }
+        return result;
+    }
+
+    fn isPrime() {
+        if (self < 2) { return false; }
+        for (let i in 2..conv.toInt(math.sqrt(self)) + 1) {
+            if (self % i == 0) { return false; }
+        }
+        return true;
+    }
+}
+
+io.println("\n=== Int Extensions ===");
+io.println($"  7.isEven()    → {7.isEven()}");
+io.println($"  8.isEven()    → {8.isEven()}");
+io.println($"  6.factorial() → {6.factorial()}");
+let primes = arr.filter([2, 3, 4, 5, 8, 11, 13, 15], (n) => n.isPrime());
+io.println($"  primes in [2,3,4,5,8,11,13,15]: {primes}");
+
+// ─── 4. Extending a user-defined struct ───────────────────────────────────────
+
+struct Product {
+    name,
+    price,
+    quantity
+}
+
+extend Product {
+    fn totalValue() {
+        return self.price * self.quantity;
+    }
+
+    fn isInStock() {
+        return self.quantity > 0;
+    }
+
+    fn applyDiscount(pct) {
+        self.price = math.round(self.price * (1.0 - pct / 100.0));
+    }
+}
+
+io.println("\n=== Product Extensions ===");
+let item = Product { name: "Widget", price: 19.99, quantity: 50 };
+io.println($"  product:       {item.name} @ {item.price} x {item.quantity} units");
+io.println($"  totalValue()   → {item.totalValue()}");
+io.println($"  isInStock()    → {item.isInStock()}");
+item.applyDiscount(10);
+io.println($"  after 10% off: {item.name} @ {item.price}");
+
+let empty = Product { name: "Sold Out", price: 0.0, quantity: 0 };
+io.println($"  isInStock(\"{empty.name}\") → {empty.isInStock()}");

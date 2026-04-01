@@ -182,6 +182,11 @@ public class Parser
                 return InterfaceDeclaration();
             }
 
+            if (Match(TokenType.Extend))
+            {
+                return ExtendDeclaration();
+            }
+
             if (Match(TokenType.Import))
             {
                 return ImportDeclaration();
@@ -533,6 +538,39 @@ public class Parser
 
         Token close = Consume(TokenType.RightBrace, "Expected '}' after interface body.");
         return new InterfaceDeclStmt(name, fields, fieldTypes, methods, MakeSpan(interfaceToken.Span, close.Span));
+    }
+
+    /// <summary>Parses a type extension block: <c>extend TypeName { fn method() { ... } }</c>.</summary>
+    /// <returns>An <see cref="ExtendStmt"/> node.</returns>
+    private Stmt ExtendDeclaration()
+    {
+        Token extendToken = Previous();
+        Token typeName = Consume(TokenType.Identifier, "Expected type name after 'extend'.");
+
+        Consume(TokenType.LeftBrace, "Expected '{' after type name in extend block.");
+
+        List<FnDeclStmt> methods = new();
+
+        while (!Check(TokenType.RightBrace) && !IsAtEnd)
+        {
+            if (Match(TokenType.Async))
+            {
+                Token asyncToken = Previous();
+                Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
+                methods.Add((FnDeclStmt)FnDeclaration(isAsync: true, asyncToken: asyncToken));
+            }
+            else if (Match(TokenType.Fn))
+            {
+                methods.Add((FnDeclStmt)FnDeclaration());
+            }
+            else
+            {
+                throw Error(Peek(), "Only method declarations (fn) are allowed inside extend blocks.");
+            }
+        }
+
+        Token close = Consume(TokenType.RightBrace, "Expected '}' after extend block body.");
+        return new ExtendStmt(extendToken, typeName, methods, MakeSpan(extendToken.Span, close.Span));
     }
 
     /// <summary>

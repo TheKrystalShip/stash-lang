@@ -261,6 +261,9 @@ public enum TokenType
     /// <summary>The <c>elevate</c> keyword. Begins a scoped privilege elevation block.</summary>
     Elevate,
 
+    /// <summary>The <c>extend</c> keyword. Begins a type extension block that adds methods to an existing type.</summary>
+    Extend,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

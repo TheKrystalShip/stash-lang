@@ -37,7 +37,7 @@ public static partial class StdlibRegistry
 
     public static readonly IReadOnlyList<string> Keywords =
     [
-        "let", "const", "fn", "struct", "enum", "interface", "if", "else",
+        "let", "const", "fn", "struct", "enum", "interface", "extend", "if", "else",
         "for", "in", "is", "while", "do", "return", "break", "continue",
         "true", "false", "null", "try", "catch", "finally", "throw",
         "import", "from", "as", "switch", "elevate",

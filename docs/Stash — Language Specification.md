@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -2776,6 +2776,244 @@ let upper = str.upper(name);
 // Mixed in a single expression
 let count = len(lines.filter((l) => l.contains("ERROR")));
 ```
+
+---
+
+## 8d. Extend Blocks — Type Extension Methods
+
+Extend blocks allow adding new methods to existing types — both built-in types (`string`, `array`, `dict`, `int`, `float`) and user-defined structs. Extension methods receive an implicit `self` parameter bound to the receiver value at call time.
+
+### Syntax
+
+```stash
+extend string {
+    fn isPalindrome() {
+        let reversed = self.split("").reverse().join("");
+        return self.lower() == reversed.lower();
+    }
+
+    fn shout() {
+        return self.upper() + "!!!";
+    }
+}
+
+"hello".shout();              // "HELLO!!!"
+"racecar".isPalindrome();     // true
+```
+
+### Target Types
+
+The following types can be extended:
+
+| Type keyword | Description           | Example                                                       |
+| ------------ | --------------------- | ------------------------------------------------------------- |
+| `string`     | String values         | `extend string { fn shout() { return self.upper() + "!"; } }` |
+| `array`      | Array values          | `extend array { fn second() { return self[1]; } }`            |
+| `dict`       | Dictionary values     | `extend dict { fn hasKey(k) { return k in self; } }`          |
+| `int`        | Integer values        | `extend int { fn isEven() { return self % 2 == 0; } }`        |
+| `float`      | Floating-point values | `extend float { fn doubled() { return self * 2.0; } }`        |
+| User structs | Any struct in scope   | `extend MyStruct { fn greet() { return self.name; } }`        |
+
+Types that **cannot** be extended: `bool`, `null`, `function`, `range`, `enum`, `namespace`, `Error`.
+
+### The `self` Binding
+
+Inside extension methods, `self` refers to the receiver value:
+
+```stash
+extend int {
+    fn clamp(min, max) {
+        if (self < min) { return min; }
+        if (self > max) { return max; }
+        return self;
+    }
+}
+
+150.clamp(0, 100);    // 100
+
+extend string {
+    fn initials() {
+        return self.split(" ")
+            .map((w) => w[0].upper() + ".")
+            .join(" ");
+    }
+}
+
+"John Michael Doe".initials();    // "J. M. D."
+```
+
+For built-in types, `self` is **read-only** — reassigning `self` produces a runtime error:
+
+```stash
+extend string {
+    fn broken() {
+        self = "modified";   // ERROR — cannot reassign constant 'self'
+    }
+}
+```
+
+For struct types, `self` is a reference to the instance — field mutation via `self.field = value` is allowed, but reassigning `self` itself is not.
+
+### Extending Structs
+
+Extension methods on structs have full access to struct fields via `self`:
+
+```stash
+struct User { name, email, age }
+
+extend User {
+    fn isAdult() {
+        return self.age >= 18;
+    }
+
+    fn displayName() {
+        return self.name + " <" + self.email + ">";
+    }
+}
+
+let user = User { name: "Alice", email: "alice@example.com", age: 30 };
+user.isAdult();        // true
+user.displayName();    // "Alice <alice@example.com>"
+```
+
+Extension methods can coexist with methods defined in the struct declaration:
+
+```stash
+struct Counter {
+    count
+
+    fn increment() {
+        self.count = self.count + 1;
+    }
+}
+
+extend Counter {
+    fn reset() {
+        self.count = 0;
+    }
+}
+
+let c = Counter { count: 5 };
+c.increment();    // count → 6
+c.reset();        // count → 0
+```
+
+### Multiple Extend Blocks
+
+Multiple `extend` blocks for the same type accumulate their methods:
+
+```stash
+extend string {
+    fn isPalindrome() { ... }
+}
+
+extend string {
+    fn isBlank() { ... }
+}
+
+// Both methods are available
+"racecar".isPalindrome();    // true
+"   ".isBlank();              // true
+```
+
+### Method Resolution Order
+
+When evaluating `receiver.name(args)`, the interpreter checks in this order:
+
+| Priority | Source                   | Example                                     |
+| -------- | ------------------------ | ------------------------------------------- |
+| 1        | Struct fields            | `instance.fieldName`                        |
+| 2        | Struct methods           | `instance.method()` from struct declaration |
+| 3        | Dict key lookup          | `myDict.key`                                |
+| 4        | Enum member lookup       | `Status.Active`                             |
+| 5        | Namespace member lookup  | `fs.readFile`                               |
+| 6        | **Extension methods**    | Methods from `extend` blocks in scope       |
+| 7        | UFCS namespace functions | `str.upper(s)` called as `s.upper()`        |
+| 8        | Error                    | `"No method 'name' on type 'typename'"`     |
+
+Key ordering rules:
+
+- **Struct methods before extensions** — methods defined in the original struct declaration take priority over extensions. Extensions cannot silently override the struct author's methods.
+- **Extensions before UFCS** — extension methods can shadow UFCS namespace functions:
+
+```stash
+extend string {
+    fn upper() {
+        return "CUSTOM: " + str.upper(self);
+    }
+}
+
+"hello".upper();        // "CUSTOM: HELLO" — extension wins
+str.upper("hello");     // "HELLO" — namespace call unaffected
+```
+
+- **Last-registration-wins on conflict** — when two `extend` blocks define a method with the same name for the same type, the last one loaded wins.
+
+### Dict Extensions
+
+Extension methods on dictionaries take priority over key lookup for the same name:
+
+```stash
+extend dict {
+    fn isEmpty() {
+        return len(dict.keys(self)) == 0;
+    }
+}
+
+let d = dict.new();
+d.isEmpty();     // true — calls extension method, not key lookup
+```
+
+### Constraints
+
+1. **Methods only** — no fields, constants, or nested types inside `extend` blocks:
+
+```stash
+extend string {
+    fn valid() { ... }     // OK
+    let x = 5;             // ERROR — only fn declarations allowed
+}
+```
+
+2. **Top-level only** — `extend` cannot appear inside functions, if-blocks, loops, or other scopes:
+
+```stash
+fn setup() {
+    extend string { ... }  // ERROR — extend must be at top level
+}
+```
+
+3. **Target type must exist** — the type name must resolve at the point of declaration:
+
+```stash
+extend UnknownType { ... }     // ERROR — not a known type
+struct User { name }
+extend User { ... }             // OK — User is defined above
+```
+
+4. **Forward references not allowed** — the struct must be declared before the `extend` block:
+
+```stash
+extend Config { ... }          // ERROR — Config not yet defined
+struct Config { host, port }
+```
+
+### Scoping & Imports
+
+Extension methods follow Stash's import model:
+
+```stash
+// string-extras.stash
+extend string {
+    fn shout() { return self.upper() + "!"; }
+}
+
+// main.stash
+import "string-extras.stash";
+"hello".shout();    // "HELLO!" — extension is active
+```
+
+Extensions propagate transitively through imports. Without an import, extensions defined in other files are not visible.
 
 ---
 

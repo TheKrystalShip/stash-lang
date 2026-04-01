@@ -70,6 +70,29 @@ public class StashFunction : UserCallable
 
     public override string ToString() => $"<fn {_declaration.Name.Lexeme}>";
 
+    /// <summary>
+    /// Calls this function with <c>self</c> bound to an arbitrary value.
+    /// Used for extension methods on built-in types where <c>self</c> is not a <see cref="StashInstance"/>.
+    /// </summary>
+    public object? CallWithSelfValue(IInterpreterContext context, object? selfValue, List<object?> arguments)
+    {
+        var interpreter = (Interpreter)context;
+
+        // Outer scope: binds 'self' to the receiver value (immutable for built-in types)
+        var selfEnv = new Environment(Closure);
+        selfEnv.DefineConstant("self", selfValue);
+
+        // Inner scope: binds parameters
+        var env = BindParameters(interpreter, arguments, selfEnv);
+
+        if (IsAsync)
+        {
+            return RunAsync(interpreter, env);
+        }
+
+        return ExecuteBody(interpreter, env);
+    }
+
     /// <summary>Creates a deep copy of this function with a snapshotted (deep-cloned) closure chain.</summary>
     public StashFunction DeepCopyWithSnapshot()
     {

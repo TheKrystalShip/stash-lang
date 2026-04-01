@@ -272,6 +272,9 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     private bool NextIsCompoundOperator() =>
         _cursor < _codeTokens.Length && IsCompoundOperator(_codeTokens[_cursor].Type);
 
+    private static bool IsDeclaration(Stmt stmt) =>
+        stmt is FnDeclStmt or StructDeclStmt or EnumDeclStmt or InterfaceDeclStmt or ExtendStmt;
+
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Public API
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -322,12 +325,19 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         _lastCodeToken = null;
         _pending = PendingWs.None;
 
-        // 5. Walk the AST; blank line between every pair of top-level statements
+        // 5. Walk the AST; blank line around declarations, newline between regular statements
         for (int i = 0; i < statements.Count; i++)
         {
             if (i > 0)
             {
-                BlankLine();
+                if (IsDeclaration(statements[i]) || IsDeclaration(statements[i - 1]))
+                {
+                    BlankLine();
+                }
+                else
+                {
+                    NewLine();
+                }
             }
 
             statements[i].Accept(this);
@@ -632,6 +642,32 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitExtendStmt(ExtendStmt stmt)
+    {
+        EmitToken(); // extend
+        Space();
+        EmitToken(); // type name
+        Space();
+        EmitToken(); // {
+        _indent++;
+        for (int i = 0; i < stmt.Methods.Count; i++)
+        {
+            if (i > 0)
+            {
+                BlankLine();
+            }
+            else
+            {
+                NewLine();
+            }
+            stmt.Methods[i].Accept(this);
+        }
+        _indent--;
+        NewLine();
+        EmitToken(); // }
+        return 0;
+    }
+
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
         EmitToken(); // struct
@@ -670,10 +706,17 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 EmitToken(); // , (only if present in source)
             }
         }
-        foreach (var method in stmt.Methods)
+        for (int i = 0; i < stmt.Methods.Count; i++)
         {
-            BlankLine();
-            method.Accept(this);
+            if (i > 0 || stmt.Fields.Count > 0)
+            {
+                BlankLine();
+            }
+            else
+            {
+                NewLine();
+            }
+            stmt.Methods[i].Accept(this);
         }
         _indent--;
         NewLine();
