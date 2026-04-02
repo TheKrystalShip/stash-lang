@@ -159,6 +159,11 @@ public static class RuntimeValues
             return byteSize.ToString();
         }
 
+        if (value is StashSemVer semVer)
+        {
+            return semVer.ToString();
+        }
+
         if (value is StashIpAddress ipAddr)
         {
             return ipAddr.ToString();
@@ -277,6 +282,7 @@ public static class RuntimeValues
             StashStruct => value,
             StashRange => value,
             StashIpAddress => value,        // Immutable value type
+            StashSemVer => value,           // Immutable value type
             StashError => value,
             StashNamespace => value,        // Frozen after init
             BuiltInFunction => value,       // Stateless delegate wrapper

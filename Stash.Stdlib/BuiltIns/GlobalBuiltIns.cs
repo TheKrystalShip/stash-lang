@@ -40,10 +40,24 @@ public static class GlobalBuiltIns
                 StashDuration => "duration",
                 StashByteSize => "bytes",
                 StashIpAddress => "ip",
+                StashSemVer => "semver",
                 IStashCallable => "function",
                 _ => "unknown"
             };
         }, returnType: "string");
+
+        gb.Function("semver", [Param("value", "string")], (_, args) =>
+        {
+            string str = Args.String(args, 0, "semver");
+
+            if (StashSemVer.TryParse(str, out StashSemVer? result))
+            {
+                return result;
+            }
+
+            string detail = StashSemVer.ValidateFormat(str) ?? $"Invalid semantic version '{str}'.";
+            throw new RuntimeError(detail, null);
+        }, returnType: "semver", documentation: "Parses a string into a semver value.");
 
         gb.Function("nameof", [Param("value")], (_, args) =>
         {

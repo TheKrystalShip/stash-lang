@@ -1802,7 +1802,7 @@ public class Parser
     /// </exception>
     private Expr Primary()
     {
-        if (Match(TokenType.IntegerLiteral, TokenType.FloatLiteral, TokenType.StringLiteral, TokenType.IpAddressLiteral, TokenType.DurationLiteral, TokenType.ByteSizeLiteral))
+        if (Match(TokenType.IntegerLiteral, TokenType.FloatLiteral, TokenType.StringLiteral, TokenType.IpAddressLiteral, TokenType.DurationLiteral, TokenType.ByteSizeLiteral, TokenType.SemVerLiteral))
         {
             Token token = Previous();
             return new LiteralExpr(token.Literal, token.Span);

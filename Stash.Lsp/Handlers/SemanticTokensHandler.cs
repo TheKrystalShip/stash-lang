@@ -164,6 +164,12 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     builder.Push(line, col + slashIndex + 1, length - slashIndex - 1, TokenTypeNumber, 0);
                 }
             }
+            else if (token.Type == TokenType.SemVerLiteral)
+            {
+                // Split: `@` → operator, `v` + version → number
+                builder.Push(line, col, 1, TokenTypeOperator, 0);
+                builder.Push(line, col + 1, length - 1, TokenTypeNumber, 0);
+            }
             else if (token.Type is TokenType.CommandLiteral or TokenType.PassthroughCommandLiteral)
             {
                 ProcessCommandLiteral(builder, classified, token);

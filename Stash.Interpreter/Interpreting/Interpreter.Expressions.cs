@@ -350,6 +350,16 @@ public partial class Interpreter
                     return bsLtL.CompareTo(bsLtR) < 0;
                 }
 
+                if (leftVal is StashSemVer svLtL && rightVal is StashSemVer svLtR)
+                {
+                    return svLtL.CompareTo(svLtR) < 0;
+                }
+
+                if (leftVal is StashSemVer || rightVal is StashSemVer)
+                {
+                    throw new RuntimeError("Semver can only be compared to another semver.", expr.Operator.Span);
+                }
+
                 if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
                 {
                     throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", expr.Operator.Span);
@@ -381,6 +391,16 @@ public partial class Interpreter
                 if (leftVal is StashByteSize bsGtL && rightVal is StashByteSize bsGtR)
                 {
                     return bsGtL.CompareTo(bsGtR) > 0;
+                }
+
+                if (leftVal is StashSemVer svGtL && rightVal is StashSemVer svGtR)
+                {
+                    return svGtL.CompareTo(svGtR) > 0;
+                }
+
+                if (leftVal is StashSemVer || rightVal is StashSemVer)
+                {
+                    throw new RuntimeError("Semver can only be compared to another semver.", expr.Operator.Span);
                 }
 
                 if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
@@ -416,6 +436,16 @@ public partial class Interpreter
                     return bsLeL.CompareTo(bsLeR) <= 0;
                 }
 
+                if (leftVal is StashSemVer svLeL && rightVal is StashSemVer svLeR)
+                {
+                    return svLeL.CompareTo(svLeR) <= 0;
+                }
+
+                if (leftVal is StashSemVer || rightVal is StashSemVer)
+                {
+                    throw new RuntimeError("Semver can only be compared to another semver.", expr.Operator.Span);
+                }
+
                 if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
                 {
                     throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", expr.Operator.Span);
@@ -447,6 +477,16 @@ public partial class Interpreter
                 if (leftVal is StashByteSize bsGeL && rightVal is StashByteSize bsGeR)
                 {
                     return bsGeL.CompareTo(bsGeR) >= 0;
+                }
+
+                if (leftVal is StashSemVer svGeL && rightVal is StashSemVer svGeR)
+                {
+                    return svGeL.CompareTo(svGeR) >= 0;
+                }
+
+                if (leftVal is StashSemVer || rightVal is StashSemVer)
+                {
+                    throw new RuntimeError("Semver can only be compared to another semver.", expr.Operator.Span);
                 }
 
                 if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
@@ -532,7 +572,9 @@ public partial class Interpreter
             string => throw new RuntimeError("Left operand of 'in' must be a string when checking string containment.", expr.Span),
             StashIpAddress ipNet when left is StashIpAddress ipAddr => ipNet.Contains(ipAddr),
             StashIpAddress => throw new RuntimeError("Left operand of 'in' must be an IP address when checking CIDR containment.", expr.Span),
-            _ => throw new RuntimeError("Right operand of 'in' must be an array, string, dictionary, or range.", expr.Span)
+            StashSemVer svRange when left is StashSemVer svVal => svRange.Matches(svVal),
+            StashSemVer => throw new RuntimeError("Left operand of 'in' must be a semver when checking version range.", expr.Span),
+            _ => throw new RuntimeError("Right operand of 'in' must be an array, string, dictionary, range, or semver.", expr.Span)
         };
     }
 
@@ -563,6 +605,7 @@ public partial class Interpreter
                 "duration" => value is StashDuration,
                 "bytes" => value is StashByteSize,
                 "ip" => value is StashIpAddress,
+                "semver" => value is StashSemVer,
                 _ => CheckCustomType(value, typeName, expr.TypeName.Span)
             };
         }
@@ -960,6 +1003,22 @@ public partial class Interpreter
                 "tb" => bs.Tb,
                 _ => throw new RuntimeError(
                     $"Byte size has no field '{expr.Name.Lexeme}'. Available fields: bytes, kb, mb, gb, tb.",
+                    expr.Name.Span)
+            };
+        }
+
+        if (obj is StashSemVer sv)
+        {
+            return expr.Name.Lexeme switch
+            {
+                "major" => (object)sv.Major,
+                "minor" => (object)sv.Minor,
+                "patch" => (object)sv.Patch,
+                "prerelease" => sv.Prerelease ?? (object)"",
+                "build" => sv.BuildMetadata ?? (object)"",
+                "isPrerelease" => sv.IsPrerelease,
+                _ => throw new RuntimeError(
+                    $"Semver has no field '{expr.Name.Lexeme}'. Available fields: major, minor, patch, prerelease, build, isPrerelease.",
                     expr.Name.Span)
             };
         }

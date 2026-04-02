@@ -205,6 +205,9 @@ public enum TokenType
     /// <summary>A byte-size literal (e.g. <c>100B</c>, <c>1.5MB</c>, <c>2GB</c>). The <see cref="Token.Literal"/> value is a <see cref="Stash.Runtime.Types.StashByteSize"/>.</summary>
     ByteSizeLiteral,
 
+    /// <summary>A semantic version literal (e.g. <c>@v2.4.1</c>, <c>@v1.0.0-beta.2</c>, <c>@v2.x</c>). The <see cref="Token.Literal"/> value is a <see cref="Stash.Runtime.Types.StashSemVer"/>.</summary>
+    SemVerLiteral,
+
     // ── Keywords ─────────────────────────────────────────────────────
 
     /// <summary>The <c>let</c> keyword. Declares a mutable variable binding.</summary>

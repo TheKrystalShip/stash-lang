@@ -209,6 +209,8 @@ public static class TypeInferenceEngine
                     null => "null",
                     StashDuration => "duration",
                     StashByteSize => "bytes",
+                    StashIpAddress => "ip",
+                    StashSemVer => "semver",
                     _ => null
                 };
 

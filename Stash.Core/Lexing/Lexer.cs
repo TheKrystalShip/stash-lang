@@ -1583,6 +1583,13 @@ public class Lexer
     {
         char next = Peek();
 
+        // @v followed by a digit starts a semver literal
+        if (next == 'v' && _current + 1 < _source.Length && IsDigit(_source[_current + 1]))
+        {
+            ScanSemVer();
+            return;
+        }
+
         // @ must be followed by a digit (IPv4), hex digit (IPv6 like fe80::), or colon (IPv6 ::1)
         if (!IsHexDigit(next) && next != ':')
         {
@@ -1642,6 +1649,105 @@ public class Lexer
             _structuredErrors.Add(new DiagnosticError(
                 new SourceSpan(_file, _startLine, _startColumn, _line, _column),
                 detail));
+        }
+    }
+
+    private void ScanSemVer()
+    {
+        // Skip the 'v' after '@'
+        _current++;
+        _column++;
+
+        // Phase 1: Consume MAJOR (digits or wildcard 'x'/'*')
+        ConsumeWhile(static ch => ch is >= '0' and <= '9');
+
+        // Check for wildcard at major level (e.g., @v2.x or @v2.*)
+        // Phase 2: Consume .MINOR if present
+        if (!IsAtEnd && _source[_current] == '.')
+        {
+            int dotPos = _current;
+            _current++;
+            _column++;
+
+            // Check if this is a wildcard minor (x or *)
+            if (!IsAtEnd && (_source[_current] == 'x' || _source[_current] == 'X' || _source[_current] == '*'))
+            {
+                _current++;
+                _column++;
+                // Wildcard minor: @v2.x — done, don't consume further
+            }
+            else if (!IsAtEnd && _source[_current] is >= '0' and <= '9')
+            {
+                ConsumeWhile(static ch => ch is >= '0' and <= '9');
+
+                // Phase 3: Consume .PATCH if present
+                if (!IsAtEnd && _source[_current] == '.')
+                {
+                    _current++;
+                    _column++;
+
+                    // Check if this is a wildcard patch (x or *)
+                    if (!IsAtEnd && (_source[_current] == 'x' || _source[_current] == 'X' || _source[_current] == '*'))
+                    {
+                        _current++;
+                        _column++;
+                        // Wildcard patch: @v2.4.x — done
+                    }
+                    else
+                    {
+                        ConsumeWhile(static ch => ch is >= '0' and <= '9');
+                    }
+                }
+
+                // Phase 4: Consume -prerelease if present (only after PATCH)
+                if (!IsAtEnd && _source[_current] == '-')
+                {
+                    _current++;
+                    _column++;
+                    // Prerelease identifiers: alphanumeric and dots and hyphens
+                    ConsumeWhile(static ch => ch is (>= '0' and <= '9') or (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or '-' or '.');
+                }
+
+                // Phase 5: Consume +build if present
+                if (!IsAtEnd && _source[_current] == '+')
+                {
+                    _current++;
+                    _column++;
+                    // Build metadata: alphanumeric and dots and hyphens
+                    ConsumeWhile(static ch => ch is (>= '0' and <= '9') or (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or '-' or '.');
+                }
+            }
+            else
+            {
+                // Consumed a dot but nothing valid follows — backtrack
+                _current = dotPos;
+                _column--;
+            }
+        }
+
+        string lexeme = _source[_start.._current];
+        string versionText = lexeme[2..]; // Strip the '@v' prefix
+
+        if (StashSemVer.TryParse(versionText, out StashSemVer? semver))
+        {
+            AddToken(TokenType.SemVerLiteral, semver, lexeme);
+        }
+        else
+        {
+            string detail = StashSemVer.ValidateFormat(versionText) ?? $"Invalid semantic version '{versionText}'.";
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] {detail}");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _line, _column),
+                detail));
+        }
+    }
+
+    private void ConsumeWhile(Func<char, bool> predicate)
+    {
+        while (!IsAtEnd && predicate(_source[_current]))
+        {
+            _current++;
+            _column++;
         }
     }
 

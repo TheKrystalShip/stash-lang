@@ -518,6 +518,104 @@ $"size: {1536B}"                       // "size: 1.5KB"
 
 ByteSize and non-bytesize types cannot be mixed in operators — `1KB + 5s` is a runtime error.
 
+### Semantic Version Literals
+
+Semantic version literals use the `@v` prefix for inline version values following [SemVer 2.0.0](https://semver.org/):
+
+```stash
+let current    = @v2.4.1
+let minimum    = @v2.0.0
+let prerelease = @v3.0.0-beta.2
+let tagged     = @v1.0.0-rc.1+build.456
+let wildcard   = @v2.x                    // matches any 2.x.x
+```
+
+**Format:** `@v<major>.<minor>.<patch>` with optional `-<prerelease>` and `+<build>` suffixes. Wildcard patterns use `x` for minor or patch: `@v2.x` (any 2.x.x) or `@v2.4.x` (any 2.4.x).
+
+| Component  | Description                            | Example                                        |
+| ---------- | -------------------------------------- | ---------------------------------------------- |
+| Major      | Breaking changes                       | `@v2.0.0` → `.major` = 2                       |
+| Minor      | New features (backward-compatible)     | `@v2.4.0` → `.minor` = 4                       |
+| Patch      | Bug fixes                              | `@v2.4.1` → `.patch` = 1                       |
+| Prerelease | Pre-release identifier                 | `@v1.0.0-beta.2` → `.prerelease` = `"beta.2"`  |
+| Build      | Build metadata (ignored in comparison) | `@v1.0.0+build.123` → `.build` = `"build.123"` |
+
+#### Type System
+
+```stash
+typeof(@v1.0.0)                         // "semver"
+@v1.0.0 is semver                       // true
+@v1.0.0 == @v1.0.0                      // true
+@v1.0.0 == "1.0.0"                      // false (no cross-type coercion)
+$"version: {@v2.4.1}"                   // "version: 2.4.1"
+```
+
+#### Properties
+
+| Property        | Type     | Description                                   | Example: `@v2.4.1-beta.2+build.5` |
+| --------------- | -------- | --------------------------------------------- | --------------------------------- |
+| `.major`        | `int`    | Major version number                          | `2`                               |
+| `.minor`        | `int`    | Minor version number                          | `4`                               |
+| `.patch`        | `int`    | Patch version number                          | `1`                               |
+| `.prerelease`   | `string` | Pre-release identifier (empty string if none) | `"beta.2"`                        |
+| `.build`        | `string` | Build metadata (empty string if none)         | `"build.5"`                       |
+| `.isPrerelease` | `bool`   | Whether version has a pre-release tag         | `true`                            |
+
+#### Comparison
+
+Comparison follows the [SemVer 2.0.0 precedence rules](https://semver.org/#spec-item-11):
+
+1. Major → Minor → Patch compared numerically (not lexicographically: `@v1.10.0 > @v1.9.0`)
+2. A release version has **higher** precedence than its pre-release: `@v2.0.0 > @v2.0.0-alpha`
+3. Pre-release identifiers compared by dot-separated segments: numeric segments numerically, alphanumeric segments lexicographically
+4. Build metadata is **ignored** in all comparisons: `@v1.0.0+a == @v1.0.0+b`
+
+```stash
+@v2.0.0 > @v1.0.0                      // true
+@v1.10.0 > @v1.9.0                     // true (numeric, not string)
+@v2.0.0-alpha < @v2.0.0                // true (pre-release < release)
+@v1.0.0-alpha < @v1.0.0-beta           // true (lexicographic)
+@v1.0.0-alpha.1 < @v1.0.0-alpha.2     // true (numeric segment)
+@v1.0.0+build1 == @v1.0.0+build2      // true (build metadata ignored)
+```
+
+#### Wildcard Range Matching (`in`)
+
+Wildcard patterns match versions by major or major.minor using the `in` operator:
+
+```stash
+@v2.4.1 in @v2.x                       // true (major match)
+@v3.0.0 in @v2.x                       // false
+@v2.4.1 in @v2.4.x                     // true (minor match)
+@v2.5.0 in @v2.4.x                     // false
+```
+
+#### Parsing from Strings
+
+The global `semver()` function parses a string into a semver value:
+
+```stash
+let v = semver("2.4.1")                 // @v2.4.1
+let pre = semver("1.0.0-beta.2")        // @v1.0.0-beta.2
+```
+
+Invalid version strings cause a runtime error.
+
+#### Practical Use
+
+```stash
+let nodeVersion = semver($(node --version).stdout)
+if (nodeVersion < @v18.0.0) {
+    throw "Node 18+ required, found ${nodeVersion}"
+}
+
+// Deployment version gates
+let deployed = @v2.4.1
+if (deployed in @v2.x && deployed >= @v2.4.0) {
+    io.println("Version ${deployed} is compatible")
+}
+```
+
 ### Type Coercion & Truthiness
 
 **Truthiness:** The following values are **falsy**: `false`, `null`, `0` (integer zero), `0.0` (float zero), `""` (empty string), and **error values** (see [Section 7b](#7b-error-handling)). All other values are **truthy** (including empty arrays and struct instances).

@@ -54,7 +54,7 @@ public static partial class StdlibRegistry
     static StdlibRegistry()
     {
         ValidTypes = new[] { "string", "int", "float", "bool", "null", "array", "dict", "function",
-                    "namespace", "range", "Future", "ip", "duration", "bytes" }
+                    "namespace", "range", "Future", "ip", "duration", "bytes", "semver" }
                 .Concat(Structs.Select(s => s.Name))
                 .Concat(Enums.Select(e => e.Name))
                 .ToFrozenSet();

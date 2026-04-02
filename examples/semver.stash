@@ -1,0 +1,239 @@
+#!/usr/bin/env stash
+
+// examples/semver.stash
+// Semantic Versioning — version gating, compatibility checks, and release management
+
+io.println("=" * 56);
+io.println("  Semantic Versioning Literals");
+io.println("=" * 56);
+
+// ─── Basic Semver Literals ────────────────────────────────────────────────────
+
+io.println("\n-- Basic Semver Literals --");
+
+let current   = @v2.4.1;
+let minimum   = @v2.0.0;
+let latest    = @v3.1.0;
+let initial   = @v0.1.0;
+
+io.println($"  current:  {current}");
+io.println($"  minimum:  {minimum}");
+io.println($"  latest:   {latest}");
+io.println($"  initial:  {initial}");
+io.println($"  typeof:   {typeof(current)}");
+io.println($"  is semver: {current is semver}");
+
+// ─── Pre-release and Build Metadata ──────────────────────────────────────────
+
+io.println("\n-- Pre-release and Build Metadata --");
+
+let alpha       = @v3.0.0-alpha;
+let beta        = @v3.0.0-beta.2;
+let rc          = @v3.0.0-rc.1;
+let release     = @v3.0.0;
+let stamped     = @v3.0.0+build.20260402;
+let stamped_pr  = @v3.0.0-beta.2+git.abc1234;
+
+io.println($"  alpha:      {alpha}");
+io.println($"  beta:       {beta}");
+io.println($"  rc:         {rc}");
+io.println($"  release:    {release}");
+io.println($"  stamped:    {stamped}");
+io.println($"  stamped+pr: {stamped_pr}");
+
+// ─── Property Access ──────────────────────────────────────────────────────────
+
+io.println("\n-- Property Access --");
+
+let v = @v2.14.7-beta.3+ci.99;
+
+io.println($"  version:      {v}");
+io.println($"  .major:       {v.major}");
+io.println($"  .minor:       {v.minor}");
+io.println($"  .patch:       {v.patch}");
+io.println($"  .prerelease:  {v.prerelease}");
+io.println($"  .build:       {v.build}");
+io.println($"  .isPrerelease: {v.isPrerelease}");
+
+let stable = @v2.14.7;
+io.println($"\n  stable.prerelease: '{stable.prerelease}'");
+io.println($"  stable.isPrerelease: {stable.isPrerelease}");
+
+// ─── Comparison Operators ─────────────────────────────────────────────────────
+
+io.println("\n-- Comparison Operators --");
+
+io.println($"  @v2.0.0 >  @v1.9.9:  {@v2.0.0 > @v1.9.9}");
+io.println($"  @v1.0.0 <  @v1.0.1:  {@v1.0.0 < @v1.0.1}");
+io.println($"  @v1.2.3 == @v1.2.3:  {@v1.2.3 == @v1.2.3}");
+io.println($"  @v1.2.3 != @v1.2.4:  {@v1.2.3 != @v1.2.4}");
+io.println($"  @v1.0.0 <= @v1.0.0:  {@v1.0.0 <= @v1.0.0}");
+io.println($"  @v2.0.0 >= @v1.9.9:  {@v2.0.0 >= @v1.9.9}");
+
+// Numeric comparison — 1.10.0 is greater than 1.9.0 (not lexicographic)
+io.println($"\n  Numeric (not lexicographic):");
+io.println($"  @v1.10.0 > @v1.9.0:  {@v1.10.0 > @v1.9.0}");
+io.println($"  @v1.9.0  > @v1.10.0: {@v1.9.0 > @v1.10.0}");
+
+// ─── Pre-release Precedence ───────────────────────────────────────────────────
+
+io.println("\n-- Pre-release Precedence --");
+
+// A release always outranks its pre-release counterpart
+io.println($"  @v2.0.0 > @v2.0.0-rc.1:   {@v2.0.0 > @v2.0.0-rc.1}");
+io.println($"  @v2.0.0 > @v2.0.0-alpha:  {@v2.0.0 > @v2.0.0-alpha}");
+io.println($"  @v2.0.0-beta > @v2.0.0-alpha: {@v2.0.0-beta > @v2.0.0-alpha}");
+io.println($"  @v1.0.0-alpha.2 > @v1.0.0-alpha.1: {@v1.0.0-alpha.2 > @v1.0.0-alpha.1}");
+
+// ─── Build Metadata Ignored ───────────────────────────────────────────────────
+
+io.println("\n-- Build Metadata Ignored in Equality --");
+
+// Build metadata carries no precedence per SemVer 2.0.0
+let build_a = @v1.0.0+linux.amd64;
+let build_b = @v1.0.0+darwin.arm64;
+
+io.println($"  {build_a} == {build_b}: {build_a == build_b}");
+io.println($"  {build_a} != {build_b}: {build_a != build_b}");
+
+// ─── Wildcard Range Matching ──────────────────────────────────────────────────
+
+io.println("\n-- Wildcard Range Matching (in operator) --");
+
+let installed = @v2.4.1;
+let v2_range  = @v2.x;       // any 2.x.x release
+let v24_range = @v2.4.x;     // any 2.4.x release
+let v3_range  = @v3.x;       // any 3.x.x release
+
+io.println($"  installed: {installed}");
+io.println($"  {installed} in @v2.x:   {installed in v2_range}");
+io.println($"  {installed} in @v2.4.x: {installed in v24_range}");
+io.println($"  {installed} in @v3.x:   {installed in v3_range}");
+
+// Out-of-range checks
+io.println($"  @v3.0.0 in @v2.x:   {@v3.0.0 in @v2.x}");
+io.println($"  @v2.5.0 in @v2.4.x: {@v2.5.0 in @v2.4.x}");
+
+// ─── semver() — Parse from String ─────────────────────────────────────────────
+
+io.println("\n-- semver() — Parse from String --");
+
+// Useful when reading versions from config files, API responses, or env vars
+let raw         = "1.18.3";
+let parsed      = semver(raw);
+let raw_rc      = "2.0.0-rc.2";
+let parsed_rc   = semver(raw_rc);
+
+io.println($"  semver(\"{raw}\"):    {parsed}");
+io.println($"  semver(\"{raw_rc}\"): {parsed_rc}");
+io.println($"  parsed >= @v1.18.0: {parsed >= @v1.18.0}");
+
+// ─── Type Checking ────────────────────────────────────────────────────────────
+
+io.println("\n-- typeof() and is --");
+
+io.println($"  typeof(@v1.0.0):         {typeof(@v1.0.0)}");
+io.println($"  typeof(@v2.x):           {typeof(@v2.x)}");
+io.println($"  @v1.0.0 is semver:       {@v1.0.0 is semver}");
+io.println($"  \"1.0.0\" is semver:       {"1.0.0" is semver}");
+
+// ─── Practical Use Case: Service Version Gate ─────────────────────────────────
+
+io.println("\n-- Service Version Gate --");
+
+struct ServiceInfo {
+    name, version, required
+}
+
+fn check_version(svc: ServiceInfo) -> bool {
+    return svc.version >= svc.required;
+}
+
+fn version_status(svc: ServiceInfo) -> string {
+    if (check_version(svc)) {
+        return "ok";
+    }
+    return $"OUTDATED (need >= {svc.required})";
+}
+
+let services = [
+    ServiceInfo { name: "nginx",       version: @v1.25.3,  required: @v1.24.0 },
+    ServiceInfo { name: "postgres",    version: @v15.2.0,  required: @v15.2.0 },
+    ServiceInfo { name: "redis",       version: @v7.0.11,  required: @v7.2.0  },
+    ServiceInfo { name: "node",        version: @v20.9.0,  required: @v20.0.0 },
+    ServiceInfo { name: "prometheus",  version: @v2.45.0,  required: @v2.40.0 }
+];
+
+let pass_count = 0;
+let fail_count = 0;
+
+for (let svc in services) {
+    let status = version_status(svc);
+    io.println($"  [{status}] {svc.name} {svc.version}");
+    if (check_version(svc)) {
+        pass_count = pass_count + 1;
+    } else {
+        fail_count = fail_count + 1;
+    }
+}
+
+io.println($"\n  {pass_count} service(s) up-to-date, {fail_count} require update(s)");
+
+// ─── Deployment Gating ────────────────────────────────────────────────────────
+
+io.println("\n-- Deployment Gating --");
+
+// Block pre-release versions from reaching production
+fn is_production_ready(ver: semver) -> bool {
+    return !ver.isPrerelease;
+}
+
+// Require at least a minimum baseline release
+fn meets_baseline(ver: semver, baseline: semver) -> bool {
+    return ver >= baseline && !ver.isPrerelease;
+}
+
+let baseline        = @v2.0.0;
+let candidate_prod  = @v2.3.1;
+let candidate_pre   = @v2.4.0-rc.1;
+let candidate_old   = @v1.9.5;
+
+let candidates = [candidate_prod, candidate_pre, candidate_old];
+
+for (let c in candidates) {
+    let ready = meets_baseline(c, baseline);
+    let label = ready ? "DEPLOY" : "block";
+    io.println($"  [{label}] {c}  (prerelease={c.isPrerelease})");
+}
+
+// ─── Compatibility Matrix ─────────────────────────────────────────────────────
+
+io.println("\n-- Compatibility Matrix --");
+
+// Check if a plugin version is compatible with the host application
+fn is_compatible(plugin: semver, host_range: semver) -> bool {
+    return plugin in host_range;
+}
+
+let host_v2 = @v2.x;
+let host_v3 = @v3.x;
+
+struct Plugin {
+    name, version
+}
+
+let plugins = [
+    Plugin { name: "auth-provider",   version: @v2.1.0 },
+    Plugin { name: "log-shipper",     version: @v2.8.3 },
+    Plugin { name: "metrics-bridge",  version: @v3.0.1 },
+    Plugin { name: "secret-vault",    version: @v1.5.0 }
+];
+
+io.println($"  Host app range: {host_v2} and {host_v3}");
+io.println("  Plugin compatibility:");
+for (let p in plugins) {
+    let compat_v2 = is_compatible(p.version, host_v2);
+    let compat_v3 = is_compatible(p.version, host_v3);
+    let status = (compat_v2 || compat_v3) ? "compatible" : "incompatible";
+    io.println($"    {p.name} {p.version}: {status}");
+}
