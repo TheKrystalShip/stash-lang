@@ -58,6 +58,16 @@ public partial class Interpreter
                     return -d;
                 }
 
+                if (right is StashDuration durNeg)
+                {
+                    return durNeg.Negate();
+                }
+
+                if (right is StashByteSize bsNeg)
+                {
+                    return new StashByteSize(-bsNeg.TotalBytes);
+                }
+
                 throw new RuntimeError("Operand must be a number.", expr.Operator.Span);
 
             case TokenType.Tilde:
@@ -229,6 +239,21 @@ public partial class Interpreter
                     return ipSubA.Add(-offsetSub);
                 }
 
+                if (leftVal is StashDuration durSubL && rightVal is StashDuration durSubR)
+                {
+                    return durSubL.Subtract(durSubR);
+                }
+
+                if (leftVal is StashByteSize bsSubL && rightVal is StashByteSize bsSubR)
+                {
+                    return bsSubL.Subtract(bsSubR);
+                }
+
+                if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
+                {
+                    throw new RuntimeError("Cannot mix duration or byte size with other types in subtraction.", expr.Operator.Span);
+                }
+
                 throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.Star:
@@ -258,6 +283,31 @@ public partial class Interpreter
                 if (IsNumeric(leftVal) && IsNumeric(rightVal))
                 {
                     return ToDouble(leftVal) * ToDouble(rightVal);
+                }
+
+                if (leftVal is StashDuration durMulL && IsNumeric(rightVal))
+                {
+                    return durMulL.Multiply(ToDouble(rightVal));
+                }
+
+                if (IsNumeric(leftVal) && rightVal is StashDuration durMulR)
+                {
+                    return durMulR.Multiply(ToDouble(leftVal));
+                }
+
+                if (leftVal is StashByteSize bsMulL && IsNumeric(rightVal))
+                {
+                    return bsMulL.Multiply(ToDouble(rightVal));
+                }
+
+                if (IsNumeric(leftVal) && rightVal is StashByteSize bsMulR)
+                {
+                    return bsMulR.Multiply(ToDouble(leftVal));
+                }
+
+                if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
+                {
+                    throw new RuntimeError("Duration and byte size can only be multiplied by a number.", expr.Operator.Span);
                 }
 
                 throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);
@@ -290,6 +340,21 @@ public partial class Interpreter
                     return ipLtL.CompareTo(ipLtR) < 0;
                 }
 
+                if (leftVal is StashDuration durLtL && rightVal is StashDuration durLtR)
+                {
+                    return durLtL.CompareTo(durLtR) < 0;
+                }
+
+                if (leftVal is StashByteSize bsLtL && rightVal is StashByteSize bsLtR)
+                {
+                    return bsLtL.CompareTo(bsLtR) < 0;
+                }
+
+                if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
+                {
+                    throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", expr.Operator.Span);
+                }
+
                 throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.Greater:
@@ -306,6 +371,21 @@ public partial class Interpreter
                 if (leftVal is StashIpAddress ipGtL && rightVal is StashIpAddress ipGtR)
                 {
                     return ipGtL.CompareTo(ipGtR) > 0;
+                }
+
+                if (leftVal is StashDuration durGtL && rightVal is StashDuration durGtR)
+                {
+                    return durGtL.CompareTo(durGtR) > 0;
+                }
+
+                if (leftVal is StashByteSize bsGtL && rightVal is StashByteSize bsGtR)
+                {
+                    return bsGtL.CompareTo(bsGtR) > 0;
+                }
+
+                if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
+                {
+                    throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", expr.Operator.Span);
                 }
 
                 throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
@@ -326,6 +406,21 @@ public partial class Interpreter
                     return ipLeL.CompareTo(ipLeR) <= 0;
                 }
 
+                if (leftVal is StashDuration durLeL && rightVal is StashDuration durLeR)
+                {
+                    return durLeL.CompareTo(durLeR) <= 0;
+                }
+
+                if (leftVal is StashByteSize bsLeL && rightVal is StashByteSize bsLeR)
+                {
+                    return bsLeL.CompareTo(bsLeR) <= 0;
+                }
+
+                if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
+                {
+                    throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", expr.Operator.Span);
+                }
+
                 throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
 
             case TokenType.GreaterEqual:
@@ -342,6 +437,21 @@ public partial class Interpreter
                 if (leftVal is StashIpAddress ipGeL && rightVal is StashIpAddress ipGeR)
                 {
                     return ipGeL.CompareTo(ipGeR) >= 0;
+                }
+
+                if (leftVal is StashDuration durGeL && rightVal is StashDuration durGeR)
+                {
+                    return durGeL.CompareTo(durGeR) >= 0;
+                }
+
+                if (leftVal is StashByteSize bsGeL && rightVal is StashByteSize bsGeR)
+                {
+                    return bsGeL.CompareTo(bsGeR) >= 0;
+                }
+
+                if ((leftVal is StashDuration || rightVal is StashDuration) || (leftVal is StashByteSize || rightVal is StashByteSize))
+                {
+                    throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", expr.Operator.Span);
                 }
 
                 throw new RuntimeError("Operands must be two numbers or two IP addresses.", expr.Operator.Span);
@@ -450,6 +560,8 @@ public partial class Interpreter
                 "namespace" => value is StashNamespace,
                 "function" => value is IStashCallable,
                 "Future" => value is StashFuture,
+                "duration" => value is StashDuration,
+                "bytes" => value is StashByteSize,
                 "ip" => value is StashIpAddress,
                 _ => CheckCustomType(value, typeName, expr.TypeName.Span)
             };
@@ -816,6 +928,42 @@ public partial class Interpreter
             };
         }
 
+        if (obj is StashDuration dur)
+        {
+            // Explicit (object) casts prevent C# switch type unification from promoting long → double.
+            return expr.Name.Lexeme switch
+            {
+                "totalMs" => (object)dur.TotalMilliseconds,
+                "totalSeconds" => dur.TotalSeconds,
+                "totalMinutes" => dur.TotalMinutes,
+                "totalHours" => dur.TotalHours,
+                "totalDays" => dur.TotalDays,
+                "milliseconds" => (object)dur.Milliseconds,
+                "seconds" => (object)dur.Seconds,
+                "minutes" => (object)dur.Minutes,
+                "hours" => (object)dur.Hours,
+                "days" => (object)dur.Days,
+                _ => throw new RuntimeError(
+                    $"Duration has no field '{expr.Name.Lexeme}'. Available fields: totalMs, totalSeconds, totalMinutes, totalHours, totalDays, milliseconds, seconds, minutes, hours, days.",
+                    expr.Name.Span)
+            };
+        }
+
+        if (obj is StashByteSize bs)
+        {
+            return expr.Name.Lexeme switch
+            {
+                "bytes" => (object)bs.TotalBytes,
+                "kb" => bs.Kb,
+                "mb" => bs.Mb,
+                "gb" => bs.Gb,
+                "tb" => bs.Tb,
+                _ => throw new RuntimeError(
+                    $"Byte size has no field '{expr.Name.Lexeme}'. Available fields: bytes, kb, mb, gb, tb.",
+                    expr.Name.Span)
+            };
+        }
+
         if (obj is StashInstance instance)
         {
             return instance.GetField(expr.Name.Lexeme, expr.Name.Span);
@@ -1097,6 +1245,21 @@ public partial class Interpreter
             return ipPlusR.Add(offsetPlusL);
         }
 
+        if (left is StashDuration durPlusL && right is StashDuration durPlusR)
+        {
+            return durPlusL.Add(durPlusR);
+        }
+
+        if (left is StashByteSize bsPlusL && right is StashByteSize bsPlusR)
+        {
+            return bsPlusL.Add(bsPlusR);
+        }
+
+        if ((left is StashDuration || right is StashDuration) || (left is StashByteSize || right is StashByteSize))
+        {
+            throw new RuntimeError("Cannot mix duration or byte size with other types in addition.", expr.Operator.Span);
+        }
+
         throw new RuntimeError("Operands must be numbers or strings.", expr.Operator.Span);
     }
 
@@ -1158,6 +1321,34 @@ public partial class Interpreter
     /// </exception>
     private object? EvaluateDivision(object? left, object? right, BinaryExpr expr)
     {
+        // Duration / number → duration, Duration / duration → float (ratio)
+        if (left is StashDuration durDivL)
+        {
+            if (right is StashDuration durDivR)
+            {
+                return durDivL.DivideBy(durDivR);
+            }
+            if (IsNumeric(right))
+            {
+                return durDivL.Divide(ToDouble(right));
+            }
+            throw new RuntimeError("Duration can only be divided by a number or another duration.", expr.Operator.Span);
+        }
+
+        // ByteSize / number → bytes, ByteSize / bytes → float (ratio)
+        if (left is StashByteSize bsDivL)
+        {
+            if (right is StashByteSize bsDivR)
+            {
+                return bsDivL.DivideBy(bsDivR);
+            }
+            if (IsNumeric(right))
+            {
+                return bsDivL.Divide(ToDouble(right));
+            }
+            throw new RuntimeError("Byte size can only be divided by a number or another byte size.", expr.Operator.Span);
+        }
+
         if (!IsNumeric(left) || !IsNumeric(right))
         {
             throw new RuntimeError("Operands must be numbers.", expr.Operator.Span);

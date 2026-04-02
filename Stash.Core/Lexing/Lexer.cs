@@ -1666,7 +1666,18 @@ public class Lexer
             char next = _source[_current];
             if (next == 'x' || next == 'X') { ScanHexLiteral(); return; }
             if (next == 'o' || next == 'O') { ScanOctalLiteral(); return; }
-            if (next == 'b' || next == 'B') { ScanBinaryLiteral(); return; }
+            if (next == 'b') { ScanBinaryLiteral(); return; }
+            if (next == 'B')
+            {
+                // Uppercase B: binary literal only if followed by a digit or underscore
+                // (e.g., 0B1010, 0B2 → binary). Otherwise fall through so
+                // ScanDecimalNumber → TryScanUnitSuffix can treat 'B' as a byte-size suffix (0B = 0 bytes).
+                if (_current + 1 < _source.Length && (IsDigit(_source[_current + 1]) || _source[_current + 1] == '_'))
+                {
+                    ScanBinaryLiteral();
+                    return;
+                }
+            }
         }
 
         ScanDecimalNumber();
@@ -1980,6 +1991,7 @@ public class Lexer
                 string floatStr = floatLexeme.Replace("_", "");
                 if (double.TryParse(floatStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double floatValue))
                 {
+                    if (TryScanUnitSuffix(floatValue)) return;
                     AddToken(TokenType.FloatLiteral, floatValue, floatLexeme);
                 }
                 else
@@ -1994,12 +2006,208 @@ public class Lexer
         string intStr = lexeme.Replace("_", "");
         if (long.TryParse(intStr, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
         {
+            if (TryScanUnitSuffix(value)) return;
             AddToken(TokenType.IntegerLiteral, value, lexeme);
         }
         else
         {
             ReportNumberError($"Integer literal '{lexeme}' is too large.");
         }
+    }
+
+    // ── Duration / ByteSize suffix scanning ──────────────────────────────────
+
+    /// <summary>
+    /// After scanning a decimal number, check for a unit suffix to produce a
+    /// <see cref="TokenType.DurationLiteral"/> or <see cref="TokenType.ByteSizeLiteral"/> token.
+    /// </summary>
+    /// <param name="numValue">The numeric value of the already-scanned number.</param>
+    /// <returns><c>true</c> if a unit suffix was found and a token was emitted.</returns>
+    private bool TryScanUnitSuffix(double numValue)
+    {
+        if (IsAtEnd) return false;
+
+        // ── Duration suffix ─────────────────────────────────────────────
+        string? durUnit = TryMatchDurationUnit();
+        if (durUnit is not null)
+        {
+            long totalMs;
+            try
+            {
+                totalMs = DurationUnitToMs(numValue, durUnit);
+            }
+            catch (OverflowException)
+            {
+                ReportNumberError($"Duration literal is too large.");
+                return true;
+            }
+
+            // Compound durations: 2h30m15s500ms
+            while (!IsAtEnd && IsDigit(_source[_current]))
+            {
+                int compStart = _current;
+                while (!IsAtEnd && IsDigit(_source[_current]))
+                {
+                    _current++;
+                    _column++;
+                }
+
+                int compNumEnd = _current;
+                string? compUnit = TryMatchDurationUnit();
+                if (compUnit is null)
+                {
+                    string badText = _source[compStart..compNumEnd];
+                    ReportNumberError($"Expected duration unit after '{badText}' in compound duration literal.");
+                    return true;
+                }
+
+                double compValue = double.Parse(
+                    _source[compStart..compNumEnd],
+                    System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture);
+
+                try
+                {
+                    totalMs += DurationUnitToMs(compValue, compUnit);
+                }
+                catch (OverflowException)
+                {
+                    ReportNumberError($"Duration literal is too large.");
+                    return true;
+                }
+            }
+
+            string lexeme = _source[_start.._current];
+            AddToken(TokenType.DurationLiteral, new StashDuration(totalMs), lexeme);
+            return true;
+        }
+
+        // ── ByteSize suffix ─────────────────────────────────────────────
+        string? byteUnit = TryMatchByteSizeUnit();
+        if (byteUnit is not null)
+        {
+            long totalBytes;
+            try
+            {
+                totalBytes = ByteSizeUnitToBytes(numValue, byteUnit);
+            }
+            catch (OverflowException)
+            {
+                ReportNumberError($"Byte size literal is too large.");
+                return true;
+            }
+
+            string lexeme = _source[_start.._current];
+            AddToken(TokenType.ByteSizeLiteral, new StashByteSize(totalBytes), lexeme);
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Tries to match a duration unit at the current position: <c>ms</c>, <c>s</c>, <c>m</c>, <c>h</c>, <c>d</c>.
+    /// Advances the read head past the unit if matched.
+    /// </summary>
+    private string? TryMatchDurationUnit()
+    {
+        if (IsAtEnd) return null;
+        char c = _source[_current];
+
+        // Two-char: ms (must check before single-char 'm')
+        if (c == 'm' && _current + 1 < _source.Length && _source[_current + 1] == 's')
+        {
+            if (_current + 2 < _source.Length && IsAlpha(_source[_current + 2]))
+                return null;
+            _current += 2;
+            _column += 2;
+            return "ms";
+        }
+
+        // Single-char: s, m, h, d
+        if (c is 's' or 'm' or 'h' or 'd')
+        {
+            if (_current + 1 < _source.Length && IsAlpha(_source[_current + 1]))
+                return null;
+            _current++;
+            _column++;
+            return c.ToString();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Tries to match a byte-size unit at the current position: <c>B</c>, <c>KB</c>, <c>MB</c>, <c>GB</c>, <c>TB</c>.
+    /// Advances the read head past the unit if matched.
+    /// </summary>
+    private string? TryMatchByteSizeUnit()
+    {
+        if (IsAtEnd) return null;
+        char c = _source[_current];
+
+        // Two-char: KB, MB, GB, TB
+        if (c is 'K' or 'M' or 'G' or 'T')
+        {
+            if (_current + 1 < _source.Length && _source[_current + 1] == 'B')
+            {
+                if (_current + 2 < _source.Length && IsAlphaNumeric(_source[_current + 2]))
+                    return null;
+                string unit = _source.Substring(_current, 2);
+                _current += 2;
+                _column += 2;
+                return unit;
+            }
+            return null;
+        }
+
+        // Single-char: B
+        if (c == 'B')
+        {
+            if (_current + 1 < _source.Length && IsAlphaNumeric(_source[_current + 1]))
+                return null;
+            _current++;
+            _column++;
+            return "B";
+        }
+
+        return null;
+    }
+
+    private static long DurationUnitToMs(double value, string unit)
+    {
+        double result = unit switch
+        {
+            "ms" => value,
+            "s" => value * 1_000,
+            "m" => value * 60_000,
+            "h" => value * 3_600_000,
+            "d" => value * 86_400_000,
+            _ => throw new InvalidOperationException($"Unknown duration unit '{unit}'.")
+        };
+
+        if (result > long.MaxValue || result < long.MinValue)
+            throw new OverflowException($"Duration value '{value}{unit}' is too large.");
+
+        return (long)result;
+    }
+
+    private static long ByteSizeUnitToBytes(double value, string unit)
+    {
+        double result = unit switch
+        {
+            "B" => value,
+            "KB" => value * 1_024,
+            "MB" => value * 1_048_576,
+            "GB" => value * 1_073_741_824,
+            "TB" => value * 1_099_511_627_776,
+            _ => throw new InvalidOperationException($"Unknown byte-size unit '{unit}'.")
+        };
+
+        if (result > long.MaxValue || result < long.MinValue)
+            throw new OverflowException($"Byte size value '{value}{unit}' is too large.");
+
+        return (long)result;
     }
 
     private void ReportNumberError(string message)

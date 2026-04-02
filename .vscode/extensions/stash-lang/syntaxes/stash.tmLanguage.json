@@ -614,6 +614,14 @@
           "match": "\\b0[bB][01][01_]*\\b"
         },
         {
+          "name": "constant.numeric.duration.stash",
+          "match": "\\b[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?(?:ms|[smhd])(?:[0-9]+(?:ms|[smhd]))*\\b"
+        },
+        {
+          "name": "constant.numeric.bytesize.stash",
+          "match": "\\b[0-9][0-9_]*(?:\\.[0-9][0-9_]*)?(?:TB|GB|MB|KB|B)\\b"
+        },
+        {
           "name": "constant.numeric.float.stash",
           "match": "\\b[0-9][0-9_]*\\.[0-9][0-9_]*\\b"
         },

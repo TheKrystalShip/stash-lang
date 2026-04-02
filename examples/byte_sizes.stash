@@ -1,0 +1,159 @@
+#!/usr/bin/env stash
+
+// examples/byte_sizes.stash
+// ByteSize Literals — storage reporting, bandwidth estimation, and capacity planning
+
+io.println("=" * 56);
+io.println("  ByteSize Literals");
+io.println("=" * 56);
+
+// ─── Basic ByteSize Literals ──────────────────────────────────────────────────
+
+io.println("\n-- Basic ByteSize Literals --");
+
+let packet_header    = 64B;
+let config_file      = 4KB;
+let log_chunk        = 512KB;
+let container_image  = 850MB;
+let disk_snapshot    = 2.5GB;
+let nfs_volume       = 4TB;
+
+io.println($"  packet header:    {packet_header}");
+io.println($"  config file:      {config_file}");
+io.println($"  log chunk:        {log_chunk}");
+io.println($"  container image:  {container_image}");
+io.println($"  disk snapshot:    {disk_snapshot}");
+io.println($"  NFS volume:       {nfs_volume}");
+io.println($"  typeof(1KB):      {typeof(1KB)}");
+io.println($"  1KB is bytes:     {1KB is bytes}");
+
+// ─── ByteSize Properties ──────────────────────────────────────────────────────
+
+io.println("\n-- ByteSize Properties --");
+
+let archive_size = 1.5GB;
+io.println($"  archive: {archive_size}");
+io.println($"    .bytes:  {archive_size.bytes}");
+io.println($"    .kb:     {archive_size.kb}");
+io.println($"    .mb:     {archive_size.mb}");
+io.println($"    .gb:     {archive_size.gb}");
+io.println($"    .tb:     {archive_size.tb}");
+
+// ─── ByteSize Arithmetic ──────────────────────────────────────────────────────
+
+io.println("\n-- ByteSize Arithmetic --");
+
+let db_data   = 8GB;
+let db_index  = 2GB;
+let db_wal    = 512MB;
+let db_total  = db_data + db_index + db_wal;
+
+io.println($"  DB data:    {db_data}");
+io.println($"  DB index:   {db_index}");
+io.println($"  DB WAL:     {db_wal}");
+io.println($"  DB total:   {db_total}");
+
+let quota       = 20GB;
+let usage_ratio = db_total / quota;
+io.println($"\n  quota:        {quota}");
+io.println($"  quota used:   {usage_ratio * 100}%");
+io.println($"  quota free:   {quota - db_total}");
+
+let avg_partition = db_total / 3;
+io.println($"  avg partition size (÷3): {avg_partition}");
+
+// ─── Disk Usage Report ────────────────────────────────────────────────────────
+
+io.println("\n-- Disk Usage Report --");
+
+struct ServiceUsage {
+    name, used
+}
+
+let services = [
+    ServiceUsage { name: "postgres",        used: 14GB },
+    ServiceUsage { name: "elasticsearch",   used: 38GB },
+    ServiceUsage { name: "redis",           used: 4GB },
+    ServiceUsage { name: "nginx-logs",      used: 2GB },
+    ServiceUsage { name: "app-server",      used: 6GB }
+];
+
+let disk_capacity = 256GB;
+let total_used    = 0B;
+
+for (let svc in services) {
+    total_used = total_used + svc.used;
+}
+
+io.println($"  Disk capacity: {disk_capacity}");
+io.println("  Service breakdown:");
+for (let svc in services) {
+    let pct = (svc.used / disk_capacity) * 100;
+    io.println($"    {svc.name}: {svc.used}  ({pct}%)");
+}
+
+let overall_pct = (total_used / disk_capacity) * 100;
+io.println($"\n  total used:   {total_used}");
+io.println($"  utilization:  {overall_pct}%");
+io.println($"  free:         {disk_capacity - total_used}");
+
+// ─── Bandwidth Calculator ─────────────────────────────────────────────────────
+
+io.println("\n-- Bandwidth Calculator --");
+
+struct TransferJob {
+    name, size
+}
+
+let jobs = [
+    TransferJob { name: "nightly DB backup",      size: 12GB },
+    TransferJob { name: "log archive bundle",      size: 4GB },
+    TransferJob { name: "container image sync",    size: 6GB },
+    TransferJob { name: "ML model weights",        size: 24GB }
+];
+
+let link_mb_per_sec = 125.0;   // 1 Gbps = 125 MB/s
+
+io.println($"  link speed: 1 Gbps  ({link_mb_per_sec} MB/s)");
+io.println("  Transfer estimates:");
+for (let job in jobs) {
+    let transfer_s = job.size.mb / link_mb_per_sec;
+    io.println($"    {job.name}: {job.size}  → {transfer_s}s");
+}
+
+// ─── Storage Capacity Planning ────────────────────────────────────────────────
+
+io.println("\n-- Storage Capacity Planning --");
+
+struct StorageTier {
+    name, capacity, used, growth_per_month
+}
+
+let tiers = [
+    StorageTier { name: "primary-ssd",   capacity: 2TB,   used: 1TB,   growth_per_month: 40GB },
+    StorageTier { name: "archive-hdd",   capacity: 16TB,  used: 9TB,   growth_per_month: 200GB },
+    StorageTier { name: "cold-storage",  capacity: 64TB,  used: 13TB,  growth_per_month: 500GB }
+];
+
+let plan_months = 6;
+io.println($"  {plan_months}-month capacity projection:");
+
+for (let tier in tiers) {
+    let growth    = tier.growth_per_month * plan_months;
+    let projected = tier.used + growth;
+    let fits      = projected < tier.capacity;
+    let proj_pct  = (projected / tier.capacity) * 100;
+
+    io.println($"\n  [{tier.name}]");
+    io.println($"    capacity:       {tier.capacity}");
+    io.println($"    current use:    {tier.used}");
+    io.println($"    +{plan_months}mo growth:   {growth}");
+    io.println($"    projected:      {projected}  ({proj_pct}%)");
+    if (fits) {
+        let headroom = tier.capacity - projected;
+        io.println($"    headroom:       {headroom}  ✓ OK");
+    } else {
+        let overflow = projected - tier.capacity;
+        io.println($"    OVERFLOW by:    {overflow}  ✗ ACTION REQUIRED");
+    }
+}

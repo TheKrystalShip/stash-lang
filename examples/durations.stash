@@ -1,0 +1,181 @@
+#!/usr/bin/env stash
+
+// examples/durations.stash
+// Duration Literals — timeouts, retry backoff, task timing, and deployment windows
+
+io.println("=" * 56);
+io.println("  Duration Literals");
+io.println("=" * 56);
+
+// ─── Basic Duration Literals ──────────────────────────────────────────────────
+
+io.println("\n-- Basic Duration Literals --");
+
+let ping_timeout    = 2s;
+let response_limit  = 500ms;
+let cache_ttl       = 5m;
+let session_timeout = 2h;
+let log_retention   = 30d;
+let deploy_window   = 2h30m;
+let sla_budget      = 1d12h;
+
+io.println($"  ping timeout:     {ping_timeout}");
+io.println($"  response limit:   {response_limit}");
+io.println($"  cache TTL:        {cache_ttl}");
+io.println($"  session timeout:  {session_timeout}");
+io.println($"  log retention:    {log_retention}");
+io.println($"  deploy window:    {deploy_window}");
+io.println($"  SLA budget:       {sla_budget}");
+io.println($"  typeof(2s):       {typeof(2s)}");
+io.println($"  2s is duration:   {2s is duration}");
+
+// ─── Duration Properties ──────────────────────────────────────────────────────
+
+io.println("\n-- Duration Properties --");
+
+let uptime = 2d14h37m45s500ms;
+
+io.println($"  uptime: {uptime}");
+io.println("  Components:");
+io.println($"    days:           {uptime.days}");
+io.println($"    hours:          {uptime.hours}");
+io.println($"    minutes:        {uptime.minutes}");
+io.println($"    seconds:        {uptime.seconds}");
+io.println($"    milliseconds:   {uptime.milliseconds}");
+io.println("  Totals:");
+io.println($"    totalDays:      {uptime.totalDays}");
+io.println($"    totalHours:     {uptime.totalHours}");
+io.println($"    totalMinutes:   {uptime.totalMinutes}");
+io.println($"    totalSeconds:   {uptime.totalSeconds}");
+io.println($"    totalMs:        {uptime.totalMs}");
+
+// ─── Duration Arithmetic ──────────────────────────────────────────────────────
+
+io.println("\n-- Duration Arithmetic --");
+
+let connect_timeout = 5s;
+let read_timeout    = 30s;
+let total_timeout   = connect_timeout + read_timeout;
+io.println($"  connect timeout:  {connect_timeout}");
+io.println($"  read timeout:     {read_timeout}");
+io.println($"  total timeout:    {total_timeout}");
+
+let base_delay = 250ms;
+let scaled_2x  = base_delay * 2;
+let scaled_4x  = base_delay * 4;
+let scaled_8x  = base_delay * 8;
+io.println($"\n  base retry delay:  {base_delay}");
+io.println($"  2x backoff:        {scaled_2x}");
+io.println($"  4x backoff:        {scaled_4x}");
+io.println($"  8x backoff:        {scaled_8x}");
+
+let budget   = 10s;
+let elapsed  = 7s500ms;
+let remaining = budget - elapsed;
+let ratio    = elapsed / budget;
+io.println($"\n  SLA request budget:  {budget}");
+io.println($"  elapsed:             {elapsed}");
+io.println($"  remaining:           {remaining}");
+io.println($"  budget used:         {ratio * 100}%");
+io.println($"  under budget:        {elapsed < budget}");
+
+// ─── Retry with Exponential Backoff ──────────────────────────────────────────
+
+io.println("\n-- Retry with Exponential Backoff --");
+
+fn backoff_delay(attempt, base) {
+    let delay = base;
+    for (let i = 0; i < attempt; i++) {
+        delay = delay * 2;
+    }
+    return delay;
+}
+
+let base     = 500ms;
+let max_cap  = 30s;
+let attempts = 6;
+
+io.println($"  base: {base},  cap: {max_cap},  attempts: {attempts}");
+io.println("  Schedule:");
+for (let attempt = 0; attempt < attempts; attempt++) {
+    let delay     = backoff_delay(attempt, base);
+    let capped    = delay < max_cap;
+    let wait      = capped ? delay : max_cap;
+    io.println($"    attempt {attempt + 1}: wait {wait} before retry");
+}
+
+// ─── Task Timing Comparison ───────────────────────────────────────────────────
+
+io.println("\n-- Task Timing Comparison --");
+
+struct TaskResult {
+    name, elapsed
+}
+
+let tasks = [
+    TaskResult { name: "database-backup",  elapsed: 4m32s },
+    TaskResult { name: "config-sync",      elapsed: 8s400ms },
+    TaskResult { name: "log-rotation",     elapsed: 1m15s },
+    TaskResult { name: "health-check",     elapsed: 2s100ms },
+    TaskResult { name: "index-rebuild",    elapsed: 11m48s }
+];
+
+let fastest = tasks[0];
+let slowest = tasks[0];
+for (let task in tasks) {
+    if (task.elapsed < fastest.elapsed) {
+        fastest = task;
+    }
+    if (task.elapsed > slowest.elapsed) {
+        slowest = task;
+    }
+}
+
+io.println("  Task runtimes:");
+for (let task in tasks) {
+    io.println($"    {task.name}: {task.elapsed}");
+}
+
+let speedup = slowest.elapsed / fastest.elapsed;
+io.println($"\n  fastest:  {fastest.name}  ({fastest.elapsed})");
+io.println($"  slowest:  {slowest.name}  ({slowest.elapsed})");
+io.println($"  ratio:    slowest is {speedup}x longer than fastest");
+
+// ─── Deployment Window Calculator ────────────────────────────────────────────
+
+io.println("\n-- Deployment Window Calculator --");
+
+struct DeployStep {
+    name, duration
+}
+
+let steps = [
+    DeployStep { name: "pre-flight checks",   duration: 5m },
+    DeployStep { name: "snapshot databases",  duration: 12m },
+    DeployStep { name: "deploy app servers",  duration: 8m30s },
+    DeployStep { name: "run migrations",      duration: 4m15s },
+    DeployStep { name: "smoke tests",         duration: 3m },
+    DeployStep { name: "DNS cutover",         duration: 1m30s },
+    DeployStep { name: "monitoring warmup",   duration: 5m }
+];
+
+let maintenance_window = 1h;
+let total_time = 0s;
+
+io.println("  Deployment plan:");
+for (let step in steps) {
+    io.println($"    {step.name}: {step.duration}");
+    total_time = total_time + step.duration;
+}
+
+let fits = total_time < maintenance_window;
+io.println($"\n  total estimated:  {total_time}");
+io.println($"  window allowed:   {maintenance_window}");
+io.println($"  fits in window:   {fits}");
+if (fits) {
+    let buffer = maintenance_window - total_time;
+    io.println($"  buffer time:      {buffer}");
+} else {
+    let overrun = total_time - maintenance_window;
+    io.println($"  overrun by:       {overrun}  ← window too small");
+}

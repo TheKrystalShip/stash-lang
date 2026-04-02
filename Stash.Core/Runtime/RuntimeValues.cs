@@ -149,6 +149,16 @@ public static class RuntimeValues
             return future.ToString();
         }
 
+        if (value is StashDuration duration)
+        {
+            return duration.ToString();
+        }
+
+        if (value is StashByteSize byteSize)
+        {
+            return byteSize.ToString();
+        }
+
         if (value is StashIpAddress ipAddr)
         {
             return ipAddr.ToString();

@@ -270,7 +270,9 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `range`     | `1..10`, `0..100..5`                       | Lazy integer sequence (see Section 3d)        |
 | `Error`     | `try failingFn()`                          | Error value (see Section 7b)                  |
 | `Future`    | `async fn() { return 42; }`                | Async computation (see Section 8c)            |
-| `ip`        | `@192.168.1.1`, `@::1`, `@10.0.0.0/24`   | IP address — IPv4/IPv6 with optional CIDR     |
+| `ip`        | `@192.168.1.1`, `@::1`, `@10.0.0.0/24`     | IP address — IPv4/IPv6 with optional CIDR     |
+| `duration`  | `5s`, `500ms`, `2h30m`, `1.5h`             | Time duration with unit suffixes              |
+| `bytes`     | `100B`, `1.5KB`, `256MB`, `2GB`            | Byte size with binary unit suffixes           |
 
 ### Number Literals
 
@@ -365,6 +367,156 @@ let wildcard  = ~mask;                 // @0.0.0.255
 ```
 
 IPv4 and IPv6 addresses cannot be mixed in operators — `@192.168.1.1 & @::1` is a runtime error.
+
+### Duration Literals
+
+Duration literals express time spans directly in code with unit suffixes. The numeric value is followed immediately (no space) by a unit:
+
+| Unit         | Suffix | Example          |
+| ------------ | ------ | ---------------- |
+| Milliseconds | `ms`   | `500ms`, `100ms` |
+| Seconds      | `s`    | `5s`, `1.5s`     |
+| Minutes      | `m`    | `30m`, `2.5m`    |
+| Hours        | `h`    | `1h`, `1.5h`     |
+| Days         | `d`    | `7d`, `365d`     |
+
+**Compound durations** combine multiple units in descending order:
+
+```stash
+let timeout = 2h30m;               // 2 hours 30 minutes
+let precise = 1h30m15s;            // 1 hour 30 minutes 15 seconds
+let full    = 1d12h30m15s500ms;    // compound with all units
+```
+
+Underscore separators work in the leading number: `1_000ms`. Float values are supported for the first number only: `1.5h` (90 minutes). Compound continuation segments are integer-only.
+
+Internally, durations are stored as total milliseconds (a 64-bit integer).
+
+#### Type System
+
+```stash
+typeof(5s)                             // "duration"
+5s is duration                         // true
+5s == 5000ms                           // true (value equality by total ms)
+5s == 5                                // false (no cross-type coercion)
+$"timeout: {2h30m}"                    // "timeout: 2h30m"
+```
+
+#### Properties
+
+Durations support dot-access properties in two categories:
+
+**Component properties** — extract a single unit from the decomposed duration (like reading a clock):
+
+| Property        | Type  | Description                    | Example: `2h30m15s500ms` |
+| --------------- | ----- | ------------------------------ | ------------------------ |
+| `.days`         | `int` | Full days (0+)                 | `0`                      |
+| `.hours`        | `int` | Hours component (0–23)         | `2`                      |
+| `.minutes`      | `int` | Minutes component (0–59)       | `30`                     |
+| `.seconds`      | `int` | Seconds component (0–59)       | `15`                     |
+| `.milliseconds` | `int` | Milliseconds component (0–999) | `500`                    |
+
+**Total properties** — express the entire duration in a single unit:
+
+| Property        | Type    | Description        | Example: `2h30m` |
+| --------------- | ------- | ------------------ | ---------------- |
+| `.totalMs`      | `int`   | Total milliseconds | `9000000`        |
+| `.totalSeconds` | `float` | Total seconds      | `9000.0`         |
+| `.totalMinutes` | `float` | Total minutes      | `150.0`          |
+| `.totalHours`   | `float` | Total hours        | `2.5`            |
+| `.totalDays`    | `float` | Total days         | `0.104167`       |
+
+#### Operator Integration
+
+**Arithmetic:**
+
+```stash
+5s + 3s                                // 8s
+10s - 3s                               // 7s
+5s * 3                                 // 15s
+3 * 5s                                 // 15s (commutative)
+5s * 1.5                               // 7500ms
+15s / 3                                // 5s
+10s / 5s                               // 2.0 (float ratio)
+-5s                                    // negation (-5000ms)
+```
+
+**Comparison:**
+
+```stash
+5s > 3s                                // true
+1h == 60m                              // true (both are 3600000ms)
+1h > 59m                               // true
+```
+
+Duration and non-duration types cannot be mixed in operators — `5s + 1KB` is a runtime error.
+
+### ByteSize Literals
+
+ByteSize literals express data sizes with binary unit suffixes (1 KB = 1024 bytes):
+
+| Unit      | Suffix | Bytes             | Example          |
+| --------- | ------ | ----------------- | ---------------- |
+| Bytes     | `B`    | 1                 | `100B`, `0KB`    |
+| Kilobytes | `KB`   | 1,024             | `1KB`, `1.5KB`   |
+| Megabytes | `MB`   | 1,048,576         | `256MB`, `512MB` |
+| Gigabytes | `GB`   | 1,073,741,824     | `2GB`, `1.5GB`   |
+| Terabytes | `TB`   | 1,099,511,627,776 | `1TB`            |
+
+```stash
+let maxSize  = 100MB;
+let diskSize = 2TB;
+let chunk    = 1.5KB;
+let buffer   = 1_024B;
+```
+
+Internally, byte sizes are stored as total bytes (a 64-bit integer). Float values are supported: `1.5GB`. Unlike durations, byte sizes do not have compound syntax — each literal uses a single unit.
+
+**Note:** `0b1010` and `0B1010` are binary literals (not byte sizes). The `B` suffix is only treated as a byte unit when not followed by a binary digit — so `0B` is zero bytes, while `0B1` is the binary literal for 1.
+
+#### Type System
+
+```stash
+typeof(1KB)                            // "bytes"
+1KB is bytes                           // true
+1KB == 1024B                           // true (value equality by total bytes)
+1KB == 1024                            // false (no cross-type coercion)
+$"size: {1536B}"                       // "size: 1.5KB"
+```
+
+#### Properties
+
+| Property | Type    | Description             | Example: `1536B` |
+| -------- | ------- | ----------------------- | ---------------- |
+| `.bytes` | `int`   | Total bytes (raw value) | `1536`           |
+| `.kb`    | `float` | Value in kilobytes      | `1.5`            |
+| `.mb`    | `float` | Value in megabytes      | `0.001465`       |
+| `.gb`    | `float` | Value in gigabytes      | `0.000001`       |
+| `.tb`    | `float` | Value in terabytes      | `0.0`            |
+
+#### Operator Integration
+
+**Arithmetic:**
+
+```stash
+1KB + 1KB                              // 2KB (2048 bytes)
+1MB - 512KB                            // 512KB
+1KB * 3                                // 3KB (3072 bytes)
+3 * 1KB                                // 3KB (commutative)
+1MB / 2                                // 512KB
+1MB / 512KB                            // 2.0 (float ratio)
+-1KB                                   // negation (-1024 bytes)
+```
+
+**Comparison:**
+
+```stash
+1MB > 1KB                              // true
+1KB == 1024B                           // true
+1GB > 999MB                            // true
+```
+
+ByteSize and non-bytesize types cannot be mixed in operators — `1KB + 5s` is a runtime error.
 
 ### Type Coercion & Truthiness
 
@@ -876,7 +1028,7 @@ println(10 in 1..10);           // false (end-exclusive)
 | `string`        | Substring / character containment                  |
 | `dict`          | Key existence (equivalent to `dict.has(d, key)`)   |
 | `range`         | Integer falls within the range respecting the step |
-| `ip` (CIDR)    | IP address falls within the CIDR subnet            |
+| `ip` (CIDR)     | IP address falls within the CIDR subnet            |
 
 ```stash
 // CIDR containment with the `in` operator:

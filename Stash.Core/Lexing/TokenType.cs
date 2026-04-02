@@ -199,6 +199,12 @@ public enum TokenType
     /// <summary>An IP address literal (e.g. <c>@192.168.1.1</c>, <c>@::1</c>, <c>@10.0.0.0/24</c>). The <see cref="Token.Literal"/> value is a <see cref="Stash.Runtime.Types.StashIpAddress"/>.</summary>
     IpAddressLiteral,
 
+    /// <summary>A duration literal (e.g. <c>5s</c>, <c>2h30m</c>, <c>500ms</c>). The <see cref="Token.Literal"/> value is a <see cref="Stash.Runtime.Types.StashDuration"/>.</summary>
+    DurationLiteral,
+
+    /// <summary>A byte-size literal (e.g. <c>100B</c>, <c>1.5MB</c>, <c>2GB</c>). The <see cref="Token.Literal"/> value is a <see cref="Stash.Runtime.Types.StashByteSize"/>.</summary>
+    ByteSizeLiteral,
+
     // ── Keywords ─────────────────────────────────────────────────────
 
     /// <summary>The <c>let</c> keyword. Declares a mutable variable binding.</summary>

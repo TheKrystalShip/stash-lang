@@ -139,6 +139,10 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
             {
                 builder.Push(line, col, length, TokenTypeNumber, 0);
             }
+            else if (token.Type is TokenType.DurationLiteral or TokenType.ByteSizeLiteral)
+            {
+                builder.Push(line, col, length, TokenTypeNumber, 0);
+            }
             else if (token.Type == TokenType.StringLiteral)
             {
                 builder.Push(line, col, length, TokenTypeString, 0);

@@ -3,6 +3,7 @@ namespace Stash.Analysis;
 using System.Collections.Generic;
 using Stash.Common;
 using Stash.Parsing.AST;
+using Stash.Runtime.Types;
 using Stash.Stdlib;
 
 /// <summary>
@@ -206,6 +207,8 @@ public static class TypeInferenceEngine
                     string => "string",
                     bool => "bool",
                     null => "null",
+                    StashDuration => "duration",
+                    StashByteSize => "bytes",
                     _ => null
                 };
 
