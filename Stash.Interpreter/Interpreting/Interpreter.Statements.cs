@@ -413,12 +413,12 @@ public partial class Interpreter
                 throw new RuntimeError($"Cannot extend '{typeName}': not a known type. Expected a built-in type (string, array, dict, int, float) or a struct name.", stmt.TypeName.Span);
             }
 
-            // For structs, register extension methods directly on the struct's Methods dictionary
-            // Original struct methods take priority (per spec §7), so only add if not already defined
+            // For structs, register extension methods directly on the struct's Methods dictionary.
+            // Original struct methods take priority (per spec §7), but extension methods follow last-wins.
             foreach (FnDeclStmt method in stmt.Methods)
             {
                 var function = new StashFunction(method, _environment);
-                if (!structDef.Methods.ContainsKey(method.Name.Lexeme))
+                if (!structDef.OriginalMethodNames.Contains(method.Name.Lexeme))
                 {
                     structDef.Methods[method.Name.Lexeme] = function;
                 }

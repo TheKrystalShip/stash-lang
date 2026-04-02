@@ -664,6 +664,22 @@ public class ExtendBlockTests
     }
 
     [Fact]
+    public void MRO_LastExtendBlockWins_OnConflict_ForStructs()
+    {
+        var result = Run("""
+            struct Foo { x }
+            extend Foo {
+                fn bar() { return "first"; }
+            }
+            extend Foo {
+                fn bar() { return "second"; }
+            }
+            let result = Foo { x: 1 }.bar();
+            """);
+        Assert.Equal("second", result);
+    }
+
+    [Fact]
     public void MRO_StructFieldBeforeExtension_FieldWins()
     {
         var result = Run("""

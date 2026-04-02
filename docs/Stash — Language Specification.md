@@ -3571,6 +3571,8 @@ When evaluating `receiver.name(args)`, the interpreter checks in this order:
 | 7        | UFCS namespace functions | `str.upper(s)` called as `s.upper()`        |
 | 8        | Error                    | `"No method 'name' on type 'typename'"`     |
 
+> **Dict exception:** For dictionaries, extension methods are checked *before* key lookup (priority 6 beats priority 3). Without this, any dict key matching an extension method name would shadow the extension, making dict extensions effectively unusable. The `dict.get(d, "key")` namespace function is available when you need explicit key access.
+
 Key ordering rules:
 
 - **Struct methods before extensions** — methods defined in the original struct declaration take priority over extensions. Extensions cannot silently override the struct author's methods.

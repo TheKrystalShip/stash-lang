@@ -11,6 +11,7 @@ public class StashStruct
     public List<string> Fields { get; }
     public Dictionary<string, IStashCallable> Methods { get; }
     public List<StashInterface> Interfaces { get; }
+    public HashSet<string> OriginalMethodNames { get; }
 
     public StashStruct(string name, List<string> fields, Dictionary<string, IStashCallable> methods)
     {
@@ -18,6 +19,7 @@ public class StashStruct
         Fields = fields;
         Methods = methods;
         Interfaces = new List<StashInterface>();
+        OriginalMethodNames = new HashSet<string>(methods.Keys);
     }
 
     public override string ToString() => $"<struct {Name}>";
