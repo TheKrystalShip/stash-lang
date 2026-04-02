@@ -28,3 +28,6 @@ examples/packages/**/stashes/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Spec files
+.kanban/
