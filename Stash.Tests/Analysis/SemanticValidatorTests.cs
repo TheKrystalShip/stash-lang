@@ -908,4 +908,220 @@ public class SemanticValidatorTests
         var diagnostics = Validate("interface Calc { add(a: FakeType, b: int) }");
         Assert.Contains(diagnostics, d => d.Message.Contains("FakeType"));
     }
+
+    [Fact]
+    public void Retry_ShellOnlyBodyWithoutUntil_ReportsWarning()
+    {
+        var diagnostics = Validate("retry (3) { $(echo hello); }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("shell commands") &&
+            d.Message.Contains("until") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void Retry_ShellBodyWithUntil_NoShellWarning()
+    {
+        var diagnostics = Validate("retry (3) until (r) => r.exitCode == 0 { $(echo hello); }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("shell commands"));
+    }
+
+    [Fact]
+    public void Retry_StrictCommandBody_NoShellWarning()
+    {
+        var diagnostics = Validate("retry (3) { $!(echo hello); }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("shell commands"));
+    }
+
+    [Fact]
+    public void Retry_MixedBody_NoShellWarning()
+    {
+        var diagnostics = Validate(@"retry (3) { $(echo hello); throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("shell commands"));
+    }
+
+    [Fact]
+    public void Retry_MaxAttemptsOne_ReportsHint()
+    {
+        var diagnostics = Validate(@"retry (1) { throw ""fail""; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("1 attempt") &&
+            d.Message.Contains("never retry") &&
+            d.Level == DiagnosticLevel.Information);
+    }
+
+    [Fact]
+    public void Retry_MaxAttemptsThree_NoHint()
+    {
+        var diagnostics = Validate(@"retry (3) { throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("never retry"));
+    }
+
+    [Fact]
+    public void Retry_UntilLambda_NoCallableWarning()
+    {
+        var diagnostics = Validate("retry (3) until (r) => true { 1; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("callable"));
+    }
+
+    [Fact]
+    public void Retry_UntilIdentifier_NoCallableWarning()
+    {
+        var diagnostics = Validate("fn check(r) { return true; } retry (3) until check { 1; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("callable"));
+    }
+
+    [Fact]
+    public void Retry_UntilNonCallable_ReportsWarning()
+    {
+        var diagnostics = Validate("retry (3) until 42 { 1; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("callable") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void Retry_BackoffWithoutDelay_ReportsHint()
+    {
+        var diagnostics = Validate(@"retry (3, backoff: Backoff.Exponential) { throw ""fail""; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("backoff") &&
+            d.Message.Contains("delay") &&
+            d.Level == DiagnosticLevel.Information);
+    }
+
+    [Fact]
+    public void Retry_BackoffWithDelay_NoHint()
+    {
+        var diagnostics = Validate(@"retry (3, delay: 1s, backoff: Backoff.Exponential) { throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("backoff") && d.Message.Contains("delay"));
+    }
+
+    [Fact]
+    public void Retry_OnWithIdentifierArray_NoWarning()
+    {
+        var diagnostics = Validate(@"retry (3, on: [NetworkError, TimeoutError]) { throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("'on'") && d.Message.Contains("error type"));
+    }
+
+    [Fact]
+    public void Retry_OnWithNonArray_ReportsWarning()
+    {
+        var diagnostics = Validate(@"retry (3, on: 42) { throw ""fail""; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("'on'") &&
+            d.Message.Contains("array") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void Retry_BackoffWithZeroDelay_ReportsHint()
+    {
+        var diagnostics = Validate(@"retry (3, delay: 0s, backoff: Backoff.Exponential) { throw ""fail""; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("backoff") &&
+            d.Message.Contains("delay") &&
+            d.Level == DiagnosticLevel.Information);
+    }
+
+    [Fact]
+    public void Retry_UntilDotExpr_NoCallableWarning()
+    {
+        var diagnostics = Validate("fn check(r) { return true; } let obj = { check: check }; retry (3) until obj.check { 1; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("callable"));
+    }
+
+    [Fact]
+    public void Retry_UntilCallExpr_NoCallableWarning()
+    {
+        var diagnostics = Validate("fn getChecker() { return (r) => true; } retry (3) until getChecker() { 1; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("callable"));
+    }
+
+    [Fact]
+    public void Retry_OnWithStringLiteralArray_NoWarning()
+    {
+        var diagnostics = Validate(@"retry (3, on: [""NetworkError"", ""TimeoutError""]) { throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("'on'") && d.Message.Contains("error type"));
+    }
+
+    [Fact]
+    public void Retry_OnWithVariableReference_NoWarning()
+    {
+        var diagnostics = Validate(@"let errors = [""NetworkError""]; retry (3, on: errors) { throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("'on'") && d.Message.Contains("error type"));
+    }
+
+    [Fact]
+    public void Retry_PipedCommandBodyWithoutUntil_ReportsWarning()
+    {
+        var diagnostics = Validate("retry (3) { $(echo hello) | $(grep world); }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("shell commands") &&
+            d.Message.Contains("until") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void Retry_MaxAttemptsZero_ReportsWarning()
+    {
+        var diagnostics = Validate(@"retry (0) { throw ""fail""; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("0 attempts") &&
+            d.Message.Contains("never execute") &&
+            d.Level == DiagnosticLevel.Warning);
+    }
+
+    [Fact]
+    public void Retry_MaxAttemptsZero_NoOneAttemptHint()
+    {
+        var diagnostics = Validate(@"retry (0) { throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("1 attempt"));
+    }
+
+    [Fact]
+    public void Retry_NoThrowableBody_ReportsHint()
+    {
+        var diagnostics = Validate("retry (3) { let x = 5 + 3; x; }");
+        Assert.Contains(diagnostics, d =>
+            d.Message.Contains("no operations that can throw") &&
+            d.Level == DiagnosticLevel.Information);
+    }
+
+    [Fact]
+    public void Retry_BodyWithFunctionCall_NoThrowableHint()
+    {
+        var diagnostics = Validate(@"retry (3) { throw ""fail""; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("no operations that can throw"));
+    }
+
+    [Fact]
+    public void Retry_BodyWithDotAccess_NoThrowableHint()
+    {
+        var diagnostics = Validate("let obj = {}; retry (3) { obj.field; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("no operations that can throw"));
+    }
+
+    [Fact]
+    public void Retry_NoThrowableBodyWithUntil_NoHint()
+    {
+        var diagnostics = Validate("retry (3) until (r) => r == 8 { let x = 5 + 3; x; }");
+        Assert.DoesNotContain(diagnostics, d =>
+            d.Message.Contains("no operations that can throw"));
+    }
 }

@@ -678,6 +678,14 @@ public class Parser
             return ParseBlock();
         }
 
+        // retry (n) { ... } — block-bodied expression doesn't require semicolon
+        if (Check(TokenType.Retry))
+        {
+            Expr expr = Expression();
+            Match(TokenType.Semicolon); // Optional semicolon
+            return new ExprStmt(expr, expr.Span);
+        }
+
         return ExpressionStatement();
     }
 
@@ -1723,6 +1731,95 @@ public class Parser
         return expr;
     }
 
+    /// <summary>
+    /// Parses a retry expression: <c>retry (maxAttempts, options...) onRetry (...) { ... } until predicate { body }</c>.
+    /// The <c>retry</c> token has already been consumed.
+    /// </summary>
+    private Expr ParseRetryExpr()
+    {
+        Token retryKeyword = Previous();
+
+        // Parse (maxAttempts, options...)
+        Consume(TokenType.LeftParen, "Expected '(' after 'retry'.");
+        Expr maxAttempts = Expression();
+
+        List<(Token Name, Expr Value)>? namedOptions = null;
+        Expr? optionsExpr = null;
+
+        if (Match(TokenType.Comma))
+        {
+            // Disambiguate: named options (Identifier ':') vs struct expression
+            if (Check(TokenType.Identifier) && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Colon)
+            {
+                // Named options: delay: 1s, backoff: Backoff.Exponential, ...
+                namedOptions = new List<(Token, Expr)>();
+                do
+                {
+                    Token name = Consume(TokenType.Identifier, "Expected option name.");
+                    Consume(TokenType.Colon, "Expected ':' after option name.");
+                    Expr value = Assignment();
+                    namedOptions.Add((name, value));
+                } while (Match(TokenType.Comma) && Check(TokenType.Identifier) && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Colon);
+            }
+            else
+            {
+                // Single expression (RetryOptions struct instance)
+                optionsExpr = Assignment();
+            }
+        }
+
+        Consume(TokenType.RightParen, "Expected ')' after retry arguments.");
+
+        // Parse optional onRetry clause (contextual — check for identifier "onRetry")
+        OnRetryNode? onRetryClause = null;
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "onRetry")
+        {
+            Token onRetryToken = Advance();
+            SourceSpan onRetryStart = onRetryToken.Span;
+
+            if (Check(TokenType.LeftParen))
+            {
+                // Inline block: onRetry (n, err) { ... }
+                Advance(); // consume '('
+                Token paramAttempt = Consume(TokenType.Identifier, "Expected parameter name for attempt number.");
+                Token? paramAttemptTypeHint = null;
+                if (Match(TokenType.Colon))
+                    paramAttemptTypeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                Consume(TokenType.Comma, "Expected ',' between onRetry parameters.");
+                Token paramError = Consume(TokenType.Identifier, "Expected parameter name for error.");
+                Token? paramErrorTypeHint = null;
+                if (Match(TokenType.Colon))
+                    paramErrorTypeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                Consume(TokenType.RightParen, "Expected ')' after onRetry parameters.");
+                BlockStmt hookBody = ParseBlock();
+                onRetryClause = new OnRetryNode(onRetryToken, false, paramAttempt, paramAttemptTypeHint, paramError, paramErrorTypeHint, hookBody, null, MakeSpan(onRetryStart, hookBody.Span));
+            }
+            else
+            {
+                // Function reference: onRetry logRetry
+                Expr reference = Primary();
+                onRetryClause = new OnRetryNode(onRetryToken, true, null, null, null, null, null, reference, MakeSpan(onRetryStart, reference.Span));
+            }
+        }
+
+        // Parse optional until clause (contextual — check for identifier "until")
+        Token? untilKeyword = null;
+        Expr? untilClause = null;
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "until")
+        {
+            untilKeyword = Advance(); // consume and store "until"
+            untilClause = Assignment();
+        }
+
+        // Parse retry body block
+        BlockStmt body = ParseBlock();
+
+        return new RetryExpr(
+            retryKeyword, maxAttempts, namedOptions, optionsExpr,
+            untilKeyword, untilClause, onRetryClause, body,
+            MakeSpan(retryKeyword.Span, body.Span));
+    }
+
     /// <summary>Parses the arms of a <c>switch</c> expression after the subject has been parsed.</summary>
     /// <param name="subject">The switch subject expression.</param>
     /// <returns>A <see cref="SwitchExpr"/> node containing all parsed arms.</returns>
@@ -1946,6 +2043,11 @@ public class Parser
             }
 
             return new IdentifierExpr(name, name.Span);
+        }
+
+        if (Match(TokenType.Retry))
+        {
+            return ParseRetryExpr();
         }
 
         if (Match(TokenType.Async))

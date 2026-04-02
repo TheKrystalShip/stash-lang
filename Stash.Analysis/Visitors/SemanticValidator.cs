@@ -1,8 +1,10 @@
 namespace Stash.Analysis;
 
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Runtime.Types;
 using Stash.Stdlib;
 
 /// <summary>
@@ -959,6 +961,150 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         expr.Expression.Accept(this);
         return null;
+    }
+
+    /// <summary>Validates all sub-expressions and the body of a retry expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitRetryExpr(RetryExpr expr)
+    {
+        expr.MaxAttempts.Accept(this);
+        expr.OptionsExpr?.Accept(this);
+        if (expr.NamedOptions is not null)
+            foreach (var (_, value) in expr.NamedOptions)
+                value.Accept(this);
+        expr.UntilClause?.Accept(this);
+        if (expr.OnRetryClause is { IsReference: true, Reference: not null })
+            expr.OnRetryClause.Reference.Accept(this);
+        else if (expr.OnRetryClause is { Body: not null } onRetry)
+            onRetry.Body.Accept(this);
+        expr.Body.Accept(this);
+
+        if (expr.Body.Statements.Count > 0
+            && expr.UntilClause is null
+            && expr.Body.Statements.All(s => s is ExprStmt es && es.Expression is CommandExpr { IsStrict: false } or PipeExpr or RedirectExpr))
+        {
+            _diagnostics.Add(new SemanticDiagnostic(
+                "Retry body contains only shell commands, which never throw. Add an 'until' clause to check command results, or use '$!(...)' strict commands.",
+                DiagnosticLevel.Warning,
+                expr.RetryKeyword.Span));
+        }
+
+        if (expr.MaxAttempts is LiteralExpr { Value: long attempts })
+        {
+            if (attempts == 0)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    "'retry' with 0 attempts will never execute the body.",
+                    DiagnosticLevel.Warning,
+                    expr.MaxAttempts.Span));
+            }
+            else if (attempts == 1)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    "'retry' with 1 attempt will never retry. Consider removing the retry block.",
+                    DiagnosticLevel.Information,
+                    expr.MaxAttempts.Span));
+            }
+        }
+
+        if (expr.NamedOptions is not null)
+        {
+            foreach (var option in expr.NamedOptions)
+            {
+                if (option.Name.Lexeme == "on")
+                {
+                    if (option.Value is ArrayExpr arrayExpr)
+                    {
+                        foreach (var element in arrayExpr.Elements)
+                        {
+                            if (element is not LiteralExpr { Value: string } and not IdentifierExpr)
+                            {
+                                _diagnostics.Add(new SemanticDiagnostic(
+                                    "'on' filter expects an array of error type names (identifiers or string literals).",
+                                    DiagnosticLevel.Warning,
+                                    element.Span));
+                            }
+                        }
+                    }
+                    else if (option.Value is not IdentifierExpr)
+                    {
+                        _diagnostics.Add(new SemanticDiagnostic(
+                            "'on' option expects an array of error type names.",
+                            DiagnosticLevel.Warning,
+                            option.Value.Span));
+                    }
+                    break;
+                }
+            }
+        }
+
+        if (expr.UntilClause is not null
+            && expr.UntilClause is not LambdaExpr
+            && expr.UntilClause is not IdentifierExpr
+            && expr.UntilClause is not DotExpr
+            && expr.UntilClause is not CallExpr)
+        {
+            _diagnostics.Add(new SemanticDiagnostic(
+                "'until' clause expects a callable expression (lambda or function reference).",
+                DiagnosticLevel.Warning,
+                expr.UntilClause.Span));
+        }
+
+        if (expr.NamedOptions is not null)
+        {
+            (Token Name, Expr Value)? backoffOption = null;
+            bool hasNonZeroDelay = false;
+            foreach (var option in expr.NamedOptions)
+            {
+                if (option.Name.Lexeme == "backoff")
+                    backoffOption = option;
+                else if (option.Name.Lexeme == "delay")
+                {
+                    if (option.Value is LiteralExpr lit && lit.Value is StashDuration dur)
+                        hasNonZeroDelay = dur.TotalMilliseconds != 0;
+                    else
+                        hasNonZeroDelay = true;
+                }
+            }
+            if (backoffOption is { } b && !hasNonZeroDelay)
+            {
+                _diagnostics.Add(new SemanticDiagnostic(
+                    "'backoff' has no effect without a non-zero 'delay'.",
+                    DiagnosticLevel.Information,
+                    b.Name.Span));
+            }
+        }
+
+        if (expr.UntilClause is null
+            && expr.Body.Statements.Count > 0
+            && !ContainsThrowableOperation(expr.Body.Statements))
+        {
+            _diagnostics.Add(new SemanticDiagnostic(
+                "Retry body contains no operations that can throw. The retry block will always succeed on the first attempt.",
+                DiagnosticLevel.Information,
+                expr.RetryKeyword.Span));
+        }
+
+        return null;
+    }
+
+    private static bool ContainsThrowableOperation(List<Stmt> statements)
+    {
+        foreach (var stmt in statements)
+        {
+            if (stmt is ExprStmt es && ContainsThrowableExpr(es.Expression)) return true;
+            if (stmt is ThrowStmt) return true;
+            if (stmt is VarDeclStmt vds && vds.Initializer is not null && ContainsThrowableExpr(vds.Initializer)) return true;
+            if (stmt is ConstDeclStmt cds && ContainsThrowableExpr(cds.Initializer)) return true;
+            if (stmt is IfStmt or TryCatchStmt or ForInStmt or ForStmt or WhileStmt or DoWhileStmt) return true;
+            if (stmt is ReturnStmt rs && rs.Value is not null && ContainsThrowableExpr(rs.Value)) return true;
+        }
+        return false;
+    }
+
+    private static bool ContainsThrowableExpr(Expr expr)
+    {
+        return expr is CallExpr or CommandExpr or DotExpr or IndexExpr or PipeExpr or RedirectExpr;
     }
 
     /// <summary>Recurses into both sides of a null-coalescing expression (<c>??</c>).</summary>

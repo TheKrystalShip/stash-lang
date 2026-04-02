@@ -9,7 +9,7 @@ function registerStashLanguage() {
     monaco.languages.setMonarchTokensProvider('stash', {
         keywords: [
             'let', 'const', 'fn', 'struct', 'enum', 'interface', 'extend', 'if', 'else', 'while', 'do',
-            'for', 'in', 'return', 'break', 'continue', 'try', 'catch', 'finally',
+            'for', 'in', 'return', 'break', 'continue', 'try', 'catch', 'finally', 'retry', 'onRetry', 'until',
             'throw', 'switch', 'case', 'default', 'as', 'import',
             'async', 'await', 'spawn', 'typeof', 'delete', 'match'
         ],
@@ -89,6 +89,8 @@ function registerStashLanguage() {
 
                 // self keyword
                 [/\bself\b/, 'variable.language'],
+                // attempt keyword (retry block implicit variable)
+                [/\battempt\b/, 'variable.language'],
 
                 // is TYPE pattern
                 [/\b(is\s+)(int|float|string|bool|null|array|dict|struct|enum|function|range|namespace|Error|duration|bytes|ip|semver|Future)\b/, ['keyword', 'type']],

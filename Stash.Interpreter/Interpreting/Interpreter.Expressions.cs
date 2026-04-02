@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using Stash.Common;
 using Stash.Debugging;
 using Stash.Lexing;
@@ -761,6 +762,353 @@ public partial class Interpreter
 
         // Transparent: non-future values pass through
         return value;
+    }
+
+    /// <inheritdoc />
+    public object? VisitRetryExpr(RetryExpr expr)
+    {
+        // 1. Evaluate max attempts
+        object? maxAttemptsVal = expr.MaxAttempts.Accept(this);
+        if (maxAttemptsVal is not long maxAttempts)
+            throw new RuntimeError("First argument to 'retry' must be an integer.", expr.MaxAttempts.Span);
+        if (maxAttempts < 0)
+            throw new RuntimeError("Retry attempt count must be non-negative.", expr.MaxAttempts.Span);
+
+        // 2. Evaluate options
+        long delayMs = 0;
+        string backoff = "Fixed";
+        long maxDelayMs = long.MaxValue;
+        bool jitter = false;
+        long timeoutMs = 0;
+        List<string>? onTypes = null;
+
+        if (expr.NamedOptions is not null)
+        {
+            foreach (var (name, value) in expr.NamedOptions)
+            {
+                object? v = value.Accept(this);
+                switch (name.Lexeme)
+                {
+                    case "delay":
+                        delayMs = ExtractDurationMs(v, "delay", name.Span);
+                        break;
+                    case "backoff":
+                        if (v is StashEnumValue bev)
+                            backoff = bev.MemberName;
+                        else
+                            throw new RuntimeError("Option 'backoff' must be a Backoff enum value.", name.Span);
+                        break;
+                    case "maxDelay":
+                        maxDelayMs = ExtractDurationMs(v, "maxDelay", name.Span);
+                        break;
+                    case "jitter":
+                        if (v is not bool jitterVal)
+                            throw new RuntimeError("Option 'jitter' must be a boolean.", name.Span);
+                        jitter = jitterVal;
+                        break;
+                    case "timeout":
+                        timeoutMs = ExtractDurationMs(v, "timeout", name.Span);
+                        break;
+                    case "on":
+                        if (v is not List<object?> typeList)
+                            throw new RuntimeError("Option 'on' must be an array of error type names.", name.Span);
+                        onTypes = new List<string>();
+                        foreach (object? item in typeList)
+                        {
+                            if (item is string s) onTypes.Add(s);
+                            else if (item is StashEnumValue ev) onTypes.Add(ev.MemberName);
+                            else onTypes.Add(RuntimeValues.Stringify(item));
+                        }
+                        break;
+                    default:
+                        throw new RuntimeError($"Unknown retry option '{name.Lexeme}'.", name.Span);
+                }
+            }
+        }
+        else if (expr.OptionsExpr is not null)
+        {
+            object? opts = expr.OptionsExpr.Accept(this);
+            if (opts is StashInstance optsInst)
+            {
+                ExtractRetryOptionsFromInstance(optsInst, ref delayMs, ref backoff, ref maxDelayMs,
+                    ref jitter, ref timeoutMs, ref onTypes, expr.OptionsExpr.Span);
+            }
+            else
+            {
+                throw new RuntimeError("Second argument to 'retry' must be retry options.", expr.OptionsExpr.Span);
+            }
+        }
+
+        // 3. Evaluate until predicate
+        IStashCallable? untilPredicate = null;
+        if (expr.UntilClause is not null)
+        {
+            object? untilVal = expr.UntilClause.Accept(this);
+            if (untilVal is not IStashCallable callable)
+                throw new RuntimeError("'until' clause must be a function or lambda.", expr.UntilClause.Span);
+            untilPredicate = callable;
+        }
+
+        // 4. Evaluate onRetry hook
+        IStashCallable? onRetryFn = null;
+        Token? onRetryParamAttempt = null;
+        Token? onRetryParamError = null;
+        BlockStmt? onRetryBody = null;
+        if (expr.OnRetryClause is not null)
+        {
+            var clause = expr.OnRetryClause;
+            if (clause.IsReference)
+            {
+                object? refVal = clause.Reference!.Accept(this);
+                if (refVal is not IStashCallable refCallable)
+                    throw new RuntimeError("'onRetry' function reference must be callable.", clause.Reference!.Span);
+                onRetryFn = refCallable;
+            }
+            else
+            {
+                onRetryParamAttempt = clause.ParamAttempt;
+                onRetryParamError = clause.ParamError;
+                onRetryBody = clause.Body;
+            }
+        }
+
+        // 5. Execute retry loop
+        RuntimeError? lastError = null;
+        bool lastFailureWasException = false;
+        object? lastValue = null;
+        var collectedErrors = new List<object?>();
+        long startTimeMs = System.Environment.TickCount64;
+        var random = jitter ? new Random() : null;
+
+        for (long currentAttempt = 1; currentAttempt <= maxAttempts; currentAttempt++)
+        {
+            // Check timeout before each attempt
+            if (timeoutMs > 0)
+            {
+                long elapsed = System.Environment.TickCount64 - startTimeMs;
+                if (elapsed >= timeoutMs)
+                {
+                    throw new RuntimeError(
+                        $"Retry timed out after {FormatDuration(elapsed)} (completed {currentAttempt - 1} of {maxAttempts} attempts)",
+                        expr.Span,
+                        errorType: "RetryTimeoutError")
+                    {
+                        Properties = new Dictionary<string, object?>
+                        {
+                            ["elapsed"] = new StashDuration(elapsed),
+                            ["completedAttempts"] = currentAttempt - 1
+                        }
+                    };
+                }
+            }
+
+            // Bind attempt context in a new scope
+            var retryEnv = new Environment(_environment);
+            var attemptContext = new StashInstance("RetryContext", new Dictionary<string, object?>
+            {
+                ["current"] = currentAttempt,
+                ["max"] = maxAttempts,
+                ["remaining"] = maxAttempts - currentAttempt,
+                ["elapsed"] = new StashDuration(System.Environment.TickCount64 - startTimeMs),
+                ["errors"] = new List<object?>(collectedErrors)
+            });
+            retryEnv.Define("attempt", attemptContext);
+
+            object? result = null;
+            bool bodyThrew = false;
+            RuntimeError? bodyError = null;
+
+            try
+            {
+                result = ExecuteRetryBody(expr.Body, retryEnv);
+            }
+            catch (RuntimeError e)
+            {
+                if (onTypes is not null)
+                {
+                    string errorType = e.ErrorType ?? "RuntimeError";
+                    if (!onTypes.Contains(errorType) && !onTypes.Contains("Error"))
+                        throw;
+                }
+
+                bodyThrew = true;
+                bodyError = e;
+                lastError = e;
+                lastFailureWasException = true;
+                var stashErr = StashError.FromRuntimeError(e, _ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
+                collectedErrors.Add(stashErr);
+                InvokeOnRetryHook(onRetryFn, onRetryParamAttempt, onRetryParamError, onRetryBody,
+                    currentAttempt, stashErr, currentAttempt < maxAttempts);
+            }
+
+            // Predicate evaluation runs OUTSIDE the try/catch so that predicate throws
+            // and onRetry hook throws (on predicate failure) propagate immediately (spec §5.5, §6.4)
+            if (!bodyThrew)
+            {
+                if (untilPredicate is not null)
+                {
+                    object? predicateResult;
+                    int predicateArity = untilPredicate.Arity == -1 ? 1 : untilPredicate.Arity;
+                    if (predicateArity >= 2)
+                        predicateResult = untilPredicate.Call(this, new List<object?> { result, currentAttempt });
+                    else
+                        predicateResult = untilPredicate.Call(this, new List<object?> { result });
+
+                    if (RuntimeValues.IsTruthy(predicateResult))
+                    {
+                        return result;
+                    }
+                    else
+                    {
+                        lastValue = result;
+                        lastFailureWasException = false;
+                        var predErr = new StashError("Predicate not satisfied", "RetryPredicateError");
+                        collectedErrors.Add(predErr);
+                        InvokeOnRetryHook(onRetryFn, onRetryParamAttempt, onRetryParamError, onRetryBody,
+                            currentAttempt, predErr, currentAttempt < maxAttempts);
+                    }
+                }
+                else
+                {
+                    return result;
+                }
+            }
+
+            // Delay before next attempt (skip after last attempt)
+            if (currentAttempt < maxAttempts && delayMs > 0)
+            {
+                long computedDelay = ComputeRetryDelay(delayMs, backoff, currentAttempt, maxDelayMs, jitter, random);
+                if (computedDelay > 0)
+                    Thread.Sleep((int)Math.Min(computedDelay, int.MaxValue));
+            }
+        }
+
+        // Exhaustion
+        if (lastFailureWasException && lastError is not null)
+        {
+            throw lastError;
+        }
+        else
+        {
+            throw new RuntimeError(
+                $"All {maxAttempts} retry attempts exhausted \u2014 predicate not satisfied",
+                expr.Span,
+                errorType: "RetryExhaustedError")
+            {
+                Properties = new Dictionary<string, object?>
+                {
+                    ["attempts"] = maxAttempts,
+                    ["lastValue"] = lastValue,
+                    ["errors"] = new List<object?>(collectedErrors)
+                }
+            };
+        }
+    }
+
+    private object? ExecuteRetryBody(BlockStmt body, Environment env)
+    {
+        Environment previous = _environment;
+        try
+        {
+            _environment = env;
+            object? result = null;
+            for (int i = 0; i < body.Statements.Count; i++)
+            {
+                Stmt stmt = body.Statements[i];
+                if (i == body.Statements.Count - 1 && stmt is ExprStmt exprStmt)
+                {
+                    result = exprStmt.Expression.Accept(this);
+                }
+                else
+                {
+                    Execute(stmt);
+                }
+            }
+            return result;
+        }
+        finally
+        {
+            _environment = previous;
+        }
+    }
+
+    private static long ExtractDurationMs(object? value, string optionName, SourceSpan span)
+    {
+        if (value is StashDuration dur) return dur.TotalMilliseconds;
+        if (value is long l) return l * 1000;
+        if (value is double d) return (long)(d * 1000);
+        throw new RuntimeError($"Option '{optionName}' must be a duration, integer, or float.", span);
+    }
+
+    private void ExtractRetryOptionsFromInstance(StashInstance inst, ref long delayMs, ref string backoff,
+        ref long maxDelayMs, ref bool jitter, ref long timeoutMs, ref List<string>? onTypes, SourceSpan span)
+    {
+        try { var v = inst.GetField("delay", null); if (v is not null) delayMs = ExtractDurationMs(v, "delay", span); } catch (RuntimeError) { }
+        try { var v = inst.GetField("backoff", null); if (v is StashEnumValue bev) backoff = bev.MemberName; } catch (RuntimeError) { }
+        try { var v = inst.GetField("maxDelay", null); if (v is not null) maxDelayMs = ExtractDurationMs(v, "maxDelay", span); } catch (RuntimeError) { }
+        try { var v = inst.GetField("jitter", null); if (v is bool j) jitter = j; } catch (RuntimeError) { }
+        try { var v = inst.GetField("timeout", null); if (v is not null) timeoutMs = ExtractDurationMs(v, "timeout", span); } catch (RuntimeError) { }
+        try
+        {
+            var v = inst.GetField("on", null);
+            if (v is List<object?> typeList)
+            {
+                onTypes = new List<string>();
+                foreach (object? item in typeList)
+                {
+                    if (item is string s) onTypes.Add(s);
+                    else onTypes.Add(RuntimeValues.Stringify(item));
+                }
+            }
+        }
+        catch (RuntimeError) { }
+    }
+
+    private void InvokeOnRetryHook(IStashCallable? onRetryFn, Token? paramAttempt, Token? paramError,
+        BlockStmt? onRetryBody, long attemptNumber, object? error, bool hasMoreAttempts)
+    {
+        if (!hasMoreAttempts) return;
+
+        if (onRetryFn is not null)
+        {
+            onRetryFn.Call(this, new List<object?> { attemptNumber, error });
+        }
+        else if (onRetryBody is not null)
+        {
+            var hookEnv = new Environment(_environment);
+            if (paramAttempt is not null)
+                hookEnv.Define(paramAttempt.Lexeme, attemptNumber);
+            if (paramError is not null)
+                hookEnv.Define(paramError.Lexeme, error);
+            ExecuteBlock(onRetryBody.Statements, hookEnv);
+        }
+    }
+
+    private static long ComputeRetryDelay(long baseDelay, string backoff, long attempt, long maxDelay, bool jitter, Random? random)
+    {
+        long delay = backoff switch
+        {
+            "Linear" => baseDelay * attempt,
+            "Exponential" => baseDelay * (1L << (int)Math.Min(attempt - 1, 30)),
+            _ => baseDelay,
+        };
+
+        if (delay > maxDelay) delay = maxDelay;
+
+        if (jitter && random is not null)
+        {
+            double factor = 0.75 + (random.NextDouble() * 0.5);
+            delay = (long)(delay * factor);
+        }
+
+        return delay;
+    }
+
+    private static string FormatDuration(long ms)
+    {
+        if (ms < 1000) return $"{ms}ms";
+        if (ms < 60_000) return $"{ms / 1000.0:F1}s";
+        return $"{ms / 60_000.0:F1}m";
     }
 
     /// <inheritdoc />

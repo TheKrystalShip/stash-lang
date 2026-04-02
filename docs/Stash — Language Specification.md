@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -1897,14 +1897,14 @@ try {
 
 The `CommandError` provides these properties:
 
-| Property   | Type     | Description                              |
-|------------|----------|------------------------------------------|
-| `.type`    | `string` | Always `"CommandError"`                  |
-| `.message` | `string` | Human-readable: includes exit code and command |
-| `.exitCode`| `int`    | The non-zero exit code                   |
-| `.stderr`  | `string` | The command's stderr output              |
-| `.stdout`  | `string` | The command's stdout output              |
-| `.command` | `string` | The command string that was executed      |
+| Property    | Type     | Description                                    |
+| ----------- | -------- | ---------------------------------------------- |
+| `.type`     | `string` | Always `"CommandError"`                        |
+| `.message`  | `string` | Human-readable: includes exit code and command |
+| `.exitCode` | `int`    | The non-zero exit code                         |
+| `.stderr`   | `string` | The command's stderr output                    |
+| `.stdout`   | `string` | The command's stdout output                    |
+| `.command`  | `string` | The command string that was executed           |
 
 #### Strict Passthrough Commands
 
@@ -2765,6 +2765,128 @@ Both patterns are first-class — `try expr` is lightweight and composable; `try
 ### Design History
 
 The original design used only `try expr` — lightweight, no exception machinery, no Go-style verbosity. After a gap analysis revealed that the absence of structured error handling blocked reliable deploy scripts and resource cleanup patterns, `try/catch/finally` was added as a **complement** (not a replacement). The `try expr` pattern remains the recommended choice for simple fallible expressions.
+
+---
+
+## 7d. Retry Blocks
+
+The `retry` keyword introduces a language-level construct that re-executes a block of code when it fails, with configurable attempt limits, delays, backoff strategies, and failure predicates. It is a keyword, not a library function, to compose naturally with `try`, access block scope, and provide retry-aware diagnostics.
+
+### Syntax
+
+```stash
+// Minimal form
+retry (<maxAttempts>) {
+    <body>
+}
+
+// Full options (inline fields)
+retry (<maxAttempts>, delay: <duration>, backoff: Backoff.<strategy>, maxDelay: <duration>, jitter: <bool>, timeout: <duration>, on: [<ErrorTypes>]) {
+    <body>
+}
+
+// With until clause (predicate-based retry)
+retry (<maxAttempts>) until <predicate> {
+    <body>
+}
+
+// With onRetry hook
+retry (<maxAttempts>) onRetry (<attempt>, <error>) {
+    <hook body>
+} {
+    <retry body>
+}
+
+// Combined
+retry (<maxAttempts>, <options...>) onRetry <hookFn> until <predicateFn> {
+    <body>
+}
+```
+
+### Success and Failure Determination
+
+**Exception-based (default):** The body retries when it throws an uncaught `RuntimeError`. If the body completes without throwing, the result is returned. On exhaustion, the last `RuntimeError` is re-thrown transparently.
+
+**Predicate-based (`until` clause):** After the body completes without throwing, its return value is passed to the `until` predicate. If the predicate returns truthy, the result is returned (success). If falsy, the body is retried. On exhaustion, a `RetryExhaustedError` is thrown. The `until` clause layers on top of exception-based retry — blocks with `until` retry on both exceptions and predicate failures.
+
+**Error type filtering (`on` option):** Restricts which error types trigger a retry. Errors not in the list propagate immediately without consuming an attempt.
+
+### Options
+
+| Option     | Type       | Default         | Description                                  |
+| ---------- | ---------- | --------------- | -------------------------------------------- |
+| `delay`    | `duration` | `0s`            | Wait time before each retry                  |
+| `backoff`  | `Backoff`  | `Backoff.Fixed` | Backoff strategy: Fixed, Linear, Exponential |
+| `maxDelay` | `duration` | unlimited       | Upper bound on computed delay                |
+| `jitter`   | `bool`     | `false`         | ±25% random jitter on delay                  |
+| `timeout`  | `duration` | none            | Wall-clock deadline for all attempts         |
+| `on`       | `array`    | all error types | Error type names to retry                    |
+
+Options can be passed as inline named fields or as a pre-built `RetryOptions` struct instance.
+
+### Backoff Enum
+
+```stash
+enum Backoff { Fixed, Linear, Exponential }
+```
+
+- **Fixed:** Every retry waits `delay`.
+- **Linear:** Delay increases by `delay` each retry (delay × attempt).
+- **Exponential:** Delay doubles each retry (delay × 2^(attempt-1)).
+
+### Attempt Context
+
+Inside the retry body, `attempt` is bound to a `RetryContext` value:
+
+| Field       | Type       | Description                         |
+| ----------- | ---------- | ----------------------------------- |
+| `current`   | `int`      | Current attempt number (1-indexed)  |
+| `max`       | `int`      | Maximum attempts configured         |
+| `remaining` | `int`      | Attempts remaining after this one   |
+| `elapsed`   | `duration` | Wall-clock time since retry started |
+| `errors`    | `array`    | All errors from previous attempts   |
+
+### `until` Clause
+
+The predicate receives 1 or 2 parameters: `(result)` or `(result, attemptNumber)`. Accepts inline lambdas or named function references. If the predicate itself throws, the error propagates immediately (not retried).
+
+### `onRetry` Hook
+
+Executes between retries — after a failure, before the next delay. Receives the failed attempt number and the error. Accepts inline blocks or named function references. The hook is NOT called after the last failed attempt. If the hook throws, the error propagates immediately.
+
+### Expression Value
+
+`retry` is an expression. The body's last expression is the return value:
+
+```stash
+let data = retry (3) { http.get(url) }
+let safe = try retry (3) { riskyOp() } ?? fallback
+```
+
+### Composability
+
+- **`try retry`:** Catches exhaustion as an Error value.
+- **`retry` inside `try/catch`:** Exhaustion caught by enclosing handler.
+- **`try/catch` inside `retry`:** Only uncaught exceptions trigger retry.
+- **Nested retry:** Inner and outer blocks are independent.
+
+### Control Flow
+
+`return` inside a retry body returns from the enclosing function. `break` and `continue` affect the enclosing loop. These propagate through the retry block — it is not a function boundary.
+
+### Scope
+
+The retry body creates a fresh block scope for each attempt. Variables declared inside the body are local to that attempt. The body has read/write access to variables in enclosing scopes.
+
+### Error Types
+
+| Error Type            | Thrown When                                           | Key Properties                       |
+| --------------------- | ----------------------------------------------------- | ------------------------------------ |
+| `RetryExhaustedError` | All attempts fail the `until` predicate               | `.attempts`, `.lastValue`, `.errors` |
+| `RetryTimeoutError`   | Wall-clock `timeout` exceeded                         | `.elapsed`, `.completedAttempts`     |
+| `RetryPredicateError` | (Internal) Passed to `onRetry` for predicate failures | `.message`                           |
+
+Exception-based exhaustion re-throws the original error transparently — no wrapping, no new types.
 
 ---
 
@@ -3662,7 +3784,7 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Token Types
 
-Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `import`, `as`, `switch`, `and`, `or`, `async`, `await`
+Keywords: `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `in`, `is`, `while`, `do`, `return`, `break`, `continue`, `true`, `false`, `null`, `try`, `retry`, `import`, `as`, `switch`, `and`, `or`, `async`, `await`
 
 `and` and `or` are keyword aliases for `&&` and `||` respectively — they have identical precedence, short-circuit behavior, and semantics.
 

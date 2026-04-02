@@ -1,0 +1,276 @@
+#!/usr/bin/env stash
+
+// examples/retry_blocks.stash
+// Retry Blocks in Stash — language-level resilience with configurable backoff
+
+io.println("=" * 60);
+io.println("  Stash Retry Blocks Demo");
+io.println("=" * 60);
+io.println("");
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+// Simulate a counter that fails on the first N calls, then succeeds
+
+let callCount = 0;
+
+fn flakyOperation() {
+    callCount = callCount + 1;
+    if (callCount < 3) {
+        throw { type: "NetworkError", message: "Connection refused (call ${callCount})" };
+    }
+    return "data payload";
+}
+
+fn resetCounter() {
+    callCount = 0;
+}
+
+// ─── 1. Minimal Retry ─────────────────────────────────────────────────────────
+
+io.println("── 1. Minimal Retry ──");
+
+// retry (<maxAttempts>) { body } — retries on any thrown exception.
+// If the body completes without throwing, its result value is returned.
+// If all attempts exhaust, the last error is re-thrown.
+
+resetCounter();
+
+let data = retry (5) {
+    flakyOperation();
+};
+
+io.println("  Succeeded: ${data}");
+io.println("  Total calls made: ${callCount}");
+io.println("");
+
+// ─── 2. Retry with Options — Delay and Backoff ────────────────────────────────
+
+io.println("── 2. Retry with Options ──");
+
+// Inline option fields: delay sets the initial wait between attempts.
+// Backoff strategies: Backoff.Fixed, Backoff.Linear, Backoff.Exponential
+// (No actual sleeping in this demo — using delay: 0ms to keep output instant.)
+
+resetCounter();
+
+let result = retry (5, delay: 0ms, backoff: Backoff.Exponential) {
+    flakyOperation();
+};
+
+io.println("  Result with exponential backoff: ${result}");
+
+// RetryOptions struct form — useful for reusing options across multiple blocks
+let networkOpts = RetryOptions {
+    delay: 0ms,
+    backoff: Backoff.Linear,
+    maxDelay: 0ms,
+    jitter: false,
+    on: ["NetworkError"]
+};
+
+resetCounter();
+
+let result2 = retry (5, networkOpts) {
+    flakyOperation();
+};
+
+io.println("  Result with RetryOptions struct: ${result2}");
+io.println("");
+
+// ─── 3. Retry with `until` Clause ────────────────────────────────────────────
+
+io.println("── 3. Retry with `until` Clause ──");
+
+// The `until` clause provides a predicate that evaluates the body's return value.
+// The block retries until the predicate returns truthy — even if no exception is thrown.
+// This is the idiomatic solution for soft failures (poll loops, status checks, etc.).
+
+let pollStep = 0;
+
+fn checkStatus() {
+    pollStep = pollStep + 1;
+    return { status: "pending", ready: pollStep >= 3, step: pollStep };
+}
+
+let status = retry (10, delay: 0ms) until (r) => r.ready {
+    checkStatus();
+};
+
+io.println("  Status polling complete after step: ${status.step}");
+io.println("  Final status: ${status.status}");
+io.println("");
+
+// ─── 4. Retry with `onRetry` Hook ────────────────────────────────────────────
+
+io.println("── 4. Retry with `onRetry` Hook ──");
+
+// The onRetry hook fires between retries — after a failure, before the next attempt.
+// It receives the failed attempt number (1-indexed) and the error from that attempt.
+
+resetCounter();
+
+let hookData = retry (5, delay: 0ms) onRetry (n, err) {
+    io.println("  [onRetry] attempt ${n} failed — ${err.message}");
+} {
+    flakyOperation();
+};
+
+io.println("  Final result: ${hookData}");
+io.println("");
+
+// ─── 5. Named Function References for `onRetry` and `until` ──────────────────
+
+io.println("── 5. Named Function References ──");
+
+// Both `onRetry` and `until` accept named function references — no inline lambda required.
+
+fn logRetry(n, err) {
+    io.println("  [logRetry] attempt ${n} — ${err.message}");
+}
+
+fn isReady(result) {
+    return result.ready;
+}
+
+pollStep = 0;
+
+let namedResult = retry (10, delay: 0ms) onRetry logRetry until isReady {
+    checkStatus();
+};
+
+io.println("  Named-fn result — ready at step: ${namedResult.step}");
+io.println("");
+
+// ─── 6. Attempt Context ───────────────────────────────────────────────────────
+
+io.println("── 6. Attempt Context ──");
+
+// Inside the retry body, `attempt` is a RetryContext struct automatically bound
+// by the interpreter. Fields: current, max, remaining, elapsed, errors.
+
+resetCounter();
+
+let ctxResult = retry (5, delay: 0ms) {
+    io.println("  attempt.current=${attempt.current}  remaining=${attempt.remaining}  max=${attempt.max}");
+    if (attempt.current > 1 && len(attempt.errors) > 0) {
+        io.println("  Previous error: ${attempt.errors[0].message}");
+    }
+    flakyOperation();
+};
+
+io.println("  Context demo succeeded: ${ctxResult}");
+io.println("");
+
+// ─── 7. Retry as an Expression ────────────────────────────────────────────────
+
+io.println("── 7. Retry as an Expression ──");
+
+// `retry` is an expression — its value can be used anywhere a value is expected.
+
+resetCounter();
+
+// Inline in a variable binding
+let value = retry (5, delay: 0ms) { flakyOperation(); };
+io.println("  Expression binding: ${value}");
+
+// With null-coalescing via `try`
+resetCounter();
+let safe = try retry (5, delay: 0ms) { flakyOperation(); } ?? "fallback";
+io.println("  try retry ?? fallback: ${safe}");
+
+io.println("");
+
+// ─── 8. Error Type Filtering with `on` ────────────────────────────────────────
+
+io.println("── 8. Error Type Filtering (`on`)  ──");
+
+// The `on` option restricts which error types trigger a retry.
+// Errors NOT in the list propagate immediately — no attempt is consumed.
+// This lets you fail-fast on programming errors while retrying transient failures.
+
+resetCounter();
+
+// NetworkError IS in the `on` list — will be retried
+let filtered = retry (5, delay: 0ms, on: ["NetworkError"]) {
+    flakyOperation();
+};
+
+io.println("  Retried NetworkError, got: ${filtered}");
+
+// Now demonstrate a non-retriable error passing through immediately
+fn throwsAuthError() {
+    throw { type: "AuthError", message: "Token expired" };
+}
+
+let authResult = try retry (5, delay: 0ms, on: ["NetworkError"]) {
+    throwsAuthError();
+};
+
+// AuthError is NOT in the `on` list → not retried, propagated immediately to `try`
+io.println("  AuthError bypassed retry: ${authResult.type} - ${authResult.message}");
+io.println("");
+
+// ─── 9. `try retry` — Catching Exhaustion ────────────────────────────────────
+
+io.println("── 9. try retry — Catching Exhaustion ──");
+
+// When a retry block exhausts all attempts, it re-throws the last error.
+// Wrapping in `try` catches that exhaustion as an Error value instead of crashing.
+
+fn alwaysFails() {
+    throw { type: "NetworkError", message: "Server unreachable" };
+}
+
+let exhausted = try retry (1, delay: 0ms) {
+    alwaysFails();
+};
+
+if (exhausted is Error) {
+    io.println("  Caught exhaustion — type: ${exhausted.type}");
+    io.println("  Caught exhaustion — message: ${exhausted.message}");
+}
+
+// Predicate-based exhaustion throws RetryExhaustedError
+fn neverReady() {
+    return { ready: false };
+}
+
+let predExhausted = try retry (3, delay: 0ms) until (r) => r.ready {
+    neverReady();
+};
+
+if (predExhausted is Error) {
+    io.println("  Predicate exhaustion — type: ${predExhausted.type}");
+}
+
+io.println("");
+
+// ─── 10. Backoff Enum ─────────────────────────────────────────────────────────
+
+io.println("── 10. Backoff Enum Values ──");
+
+// Backoff is a typed enum — never use magic strings.
+// Always use: Backoff.Fixed, Backoff.Linear, Backoff.Exponential
+
+io.println("  Backoff.Fixed       = ${Backoff.Fixed}");
+io.println("  Backoff.Linear      = ${Backoff.Linear}");
+io.println("  Backoff.Exponential = ${Backoff.Exponential}");
+
+// Inline fields — identical to passing a RetryOptions struct
+resetCounter();
+let fixedResult = retry (5, delay: 0ms, backoff: Backoff.Fixed) { flakyOperation(); };
+io.println("  Fixed backoff result: ${fixedResult}");
+
+resetCounter();
+let linearResult = retry (5, delay: 0ms, backoff: Backoff.Linear) { flakyOperation(); };
+io.println("  Linear backoff result: ${linearResult}");
+
+resetCounter();
+let expResult = retry (5, delay: 0ms, backoff: Backoff.Exponential) { flakyOperation(); };
+io.println("  Exponential backoff result: ${expResult}");
+
+io.println("");
+io.println("=" * 60);
+io.println("  Done");
+io.println("=" * 60);

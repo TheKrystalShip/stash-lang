@@ -609,6 +609,11 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
             _globals.Define(nsDef.Name, nsDef.Namespace);
         }
 
+        // Register built-in types for retry blocks
+        _globals.Define("Backoff", new StashEnum("Backoff", new List<string> { "Fixed", "Linear", "Exponential" }));
+        _globals.Define("RetryOptions", new StashStruct("RetryOptions",
+            new List<string> { "delay", "backoff", "maxDelay", "jitter", "timeout", "on" },
+            new Dictionary<string, IStashCallable>()));
     }
 
     /// <summary>

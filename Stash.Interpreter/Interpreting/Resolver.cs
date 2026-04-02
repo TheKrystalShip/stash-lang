@@ -645,6 +645,44 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    public object? VisitRetryExpr(RetryExpr expr)
+    {
+        Resolve(expr.MaxAttempts);
+        expr.OptionsExpr?.Accept(this);
+        if (expr.NamedOptions is not null)
+            foreach (var (_, value) in expr.NamedOptions)
+                Resolve(value);
+        if (expr.UntilClause is not null)
+            Resolve(expr.UntilClause);
+        if (expr.OnRetryClause is { IsReference: true, Reference: not null })
+            Resolve(expr.OnRetryClause.Reference);
+        else if (expr.OnRetryClause is { Body: not null } onRetry)
+        {
+            BeginScope();
+            if (onRetry.ParamAttempt is not null)
+            {
+                Declare(onRetry.ParamAttempt.Lexeme);
+                Define(onRetry.ParamAttempt.Lexeme);
+            }
+            if (onRetry.ParamError is not null)
+            {
+                Declare(onRetry.ParamError.Lexeme);
+                Define(onRetry.ParamError.Lexeme);
+            }
+            foreach (var stmt in onRetry.Body.Statements)
+                Resolve(stmt);
+            EndScope();
+        }
+        BeginScope();
+        Declare("attempt");
+        Define("attempt");
+        foreach (var stmt in expr.Body.Statements)
+            Resolve(stmt);
+        EndScope();
+        return null;
+    }
+
+    /// <inheritdoc />
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         Resolve(expr.Left);

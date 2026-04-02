@@ -293,7 +293,7 @@
       "patterns": [
         {
           "name": "keyword.control.stash",
-          "match": "\\b(if|else|while|do|for|break|continue|try|catch|finally|throw|switch|as|elevate)\\b"
+          "match": "\\b(if|else|while|do|for|break|continue|try|catch|finally|throw|switch|as|elevate|retry|onRetry|until)\\b"
         }
       ]
     },
@@ -310,7 +310,7 @@
         },
         {
           "name": "constant.language.stash",
-          "match": "(?<!\\.)\\b(is|and|or|in|fn|return|self)\\b"
+          "match": "(?<!\\.)\\b(is|and|or|in|fn|return|self|attempt)\\b"
         },
         {
           "match": "\\bis\\s+(int|float|string|bool|null|array|dict|struct|enum|function|range|namespace|Error)\\b",

@@ -1275,6 +1275,88 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitRetryExpr(RetryExpr expr)
+    {
+        EmitToken(); // retry
+        Space();
+        EmitToken(); // (
+        expr.MaxAttempts.Accept(this);
+
+        if (expr.NamedOptions is not null)
+        {
+            foreach (var (_, value) in expr.NamedOptions)
+            {
+                EmitToken(); // ,
+                Space();
+                EmitToken(); // option name identifier
+                EmitToken(); // :
+                Space();
+                value.Accept(this);
+            }
+        }
+        else if (expr.OptionsExpr is not null)
+        {
+            EmitToken(); // ,
+            Space();
+            expr.OptionsExpr.Accept(this);
+        }
+
+        EmitToken(); // )
+
+        if (expr.OnRetryClause is not null)
+        {
+            Space();
+            EmitToken(); // onRetry (contextual identifier)
+            if (expr.OnRetryClause.IsReference)
+            {
+                Space();
+                expr.OnRetryClause.Reference!.Accept(this);
+            }
+            else
+            {
+                Space();
+                EmitToken(); // (
+                if (expr.OnRetryClause.ParamAttempt is not null)
+                {
+                    EmitToken(); // attempt param identifier
+                    if (expr.OnRetryClause.ParamAttemptTypeHint is not null)
+                    {
+                        EmitToken(); // :
+                        Space();
+                        EmitToken(); // type hint identifier
+                    }
+                }
+                if (expr.OnRetryClause.ParamError is not null)
+                {
+                    EmitToken(); // ,
+                    Space();
+                    EmitToken(); // error param identifier
+                    if (expr.OnRetryClause.ParamErrorTypeHint is not null)
+                    {
+                        EmitToken(); // :
+                        Space();
+                        EmitToken(); // type hint identifier
+                    }
+                }
+                EmitToken(); // )
+                Space();
+                expr.OnRetryClause.Body!.Accept(this);
+            }
+        }
+
+        if (expr.UntilClause is not null)
+        {
+            Space();
+            EmitToken(); // until (contextual identifier)
+            Space();
+            expr.UntilClause.Accept(this);
+        }
+
+        Space();
+        expr.Body.Accept(this);
+        return 0;
+    }
+
     public int VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         expr.Left.Accept(this);

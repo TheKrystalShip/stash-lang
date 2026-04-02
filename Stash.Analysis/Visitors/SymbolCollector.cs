@@ -1138,6 +1138,52 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Collects symbols from all sub-expressions and the body of a retry expression.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitRetryExpr(RetryExpr expr)
+    {
+        expr.MaxAttempts.Accept(this);
+        expr.OptionsExpr?.Accept(this);
+        if (expr.NamedOptions is not null)
+            foreach (var (_, value) in expr.NamedOptions)
+                value.Accept(this);
+        expr.UntilClause?.Accept(this);
+
+        if (expr.OnRetryClause is { IsReference: true, Reference: not null })
+        {
+            expr.OnRetryClause.Reference.Accept(this);
+        }
+        else if (expr.OnRetryClause is { Body: not null } onRetry)
+        {
+            PushScope(ScopeKind.Block, onRetry.Body.Span);
+            if (onRetry.ParamAttempt is not null)
+            {
+                var typeStr = onRetry.ParamAttemptTypeHint?.Lexeme;
+                var detail = typeStr != null ? $"retry attempt number: {typeStr}" : "retry attempt number";
+                _currentScope.AddSymbol(new SymbolInfo(onRetry.ParamAttempt.Lexeme, SymbolKind.Parameter, onRetry.ParamAttempt.Span, detail: detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
+                RecordTypeReference(onRetry.ParamAttemptTypeHint);
+            }
+            if (onRetry.ParamError is not null)
+            {
+                var typeStr = onRetry.ParamErrorTypeHint?.Lexeme;
+                var detail = typeStr != null ? $"retry error: {typeStr}" : "retry error";
+                _currentScope.AddSymbol(new SymbolInfo(onRetry.ParamError.Lexeme, SymbolKind.Parameter, onRetry.ParamError.Span, detail: detail, typeHint: typeStr, isExplicitTypeHint: typeStr != null));
+                RecordTypeReference(onRetry.ParamErrorTypeHint);
+            }
+            foreach (var s in onRetry.Body.Statements)
+                s.Accept(this);
+            PopScope();
+        }
+
+        PushScope(ScopeKind.Block, expr.Body.Span);
+        _currentScope.AddSymbol(new SymbolInfo("attempt", SymbolKind.Parameter, expr.Body.Span, detail: "current retry attempt context", typeHint: "RetryContext"));
+        foreach (var s in expr.Body.Statements)
+            s.Accept(this);
+        PopScope();
+
+        return null;
+    }
+
     /// <summary>Recurses into both sides of a null-coalescing expression (<c>left ?? right</c>).</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)

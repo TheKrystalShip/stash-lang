@@ -203,4 +203,12 @@ public interface IExprVisitor<T>
     /// <param name="expr">The await expression node to visit.</param>
     /// <returns>The resolved value of the future, or the value itself if not a future.</returns>
     T VisitAwaitExpr(AwaitExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="RetryExpr"/> node (retry expression <c>retry (n) { body }</c>).
+    /// Re-executes the body on failure, returning the body's result on success.
+    /// </summary>
+    /// <param name="expr">The retry expression node to visit.</param>
+    /// <returns>The result of the retry body on success, or an error on exhaustion.</returns>
+    T VisitRetryExpr(RetryExpr expr);
 }

@@ -84,7 +84,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     private void ClassifyStandaloneIdentifier(Token token)
     {
-        if (token.Lexeme == "self")
+        if (token.Lexeme is "self" or "attempt")
         {
             return;
         }
@@ -671,6 +671,44 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     {
         EmitFromToken(expr.Keyword, TokenTypeKeyword, 0);
         expr.Expression.Accept(this);
+        return 0;
+    }
+
+    public int VisitRetryExpr(RetryExpr expr)
+    {
+        EmitFromToken(expr.RetryKeyword, TokenTypeKeyword, 0);
+        expr.MaxAttempts.Accept(this);
+        expr.OptionsExpr?.Accept(this);
+        if (expr.NamedOptions is not null)
+            foreach (var (_, value) in expr.NamedOptions)
+                value.Accept(this);
+
+        if (expr.OnRetryClause is not null)
+        {
+            EmitFromToken(expr.OnRetryClause.OnRetryKeyword, TokenTypeKeyword, 0);
+            if (expr.OnRetryClause.IsReference && expr.OnRetryClause.Reference is not null)
+            {
+                expr.OnRetryClause.Reference.Accept(this);
+            }
+            else if (expr.OnRetryClause.Body is not null)
+            {
+                if (expr.OnRetryClause.ParamAttempt is not null)
+                    EmitFromToken(expr.OnRetryClause.ParamAttempt, TokenTypeVariable, ModifierDeclaration);
+                if (expr.OnRetryClause.ParamAttemptTypeHint is not null)
+                    EmitFromToken(expr.OnRetryClause.ParamAttemptTypeHint, TokenTypeType, 0);
+                if (expr.OnRetryClause.ParamError is not null)
+                    EmitFromToken(expr.OnRetryClause.ParamError, TokenTypeVariable, ModifierDeclaration);
+                if (expr.OnRetryClause.ParamErrorTypeHint is not null)
+                    EmitFromToken(expr.OnRetryClause.ParamErrorTypeHint, TokenTypeType, 0);
+                expr.OnRetryClause.Body.Accept(this);
+            }
+        }
+
+        if (expr.UntilKeyword is not null)
+            EmitFromToken(expr.UntilKeyword, TokenTypeKeyword, 0);
+        expr.UntilClause?.Accept(this);
+
+        expr.Body.Accept(this);
         return 0;
     }
 

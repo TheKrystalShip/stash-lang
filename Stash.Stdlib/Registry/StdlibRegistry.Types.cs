@@ -17,6 +17,21 @@ public static partial class StdlibRegistry
             new BuiltInField("type", "string"),
             new BuiltInField("stack", "array"),
         ]),
+        new BuiltInStruct("RetryOptions", [
+            new BuiltInField("delay", "duration"),
+            new BuiltInField("backoff", "Backoff"),
+            new BuiltInField("maxDelay", "duration"),
+            new BuiltInField("jitter", "bool"),
+            new BuiltInField("timeout", "duration"),
+            new BuiltInField("on", "array"),
+        ]),
+        new BuiltInStruct("RetryContext", [
+            new BuiltInField("current", "int"),
+            new BuiltInField("max", "int"),
+            new BuiltInField("remaining", "int"),
+            new BuiltInField("elapsed", "duration"),
+            new BuiltInField("errors", "array"),
+        ]),
     ];
 
     // ── Built-in Structs (derived from namespace definitions + global types) ──
@@ -24,10 +39,15 @@ public static partial class StdlibRegistry
     public static readonly IReadOnlyList<BuiltInStruct> Structs =
         _globalStructs.Concat(StdlibDefinitions.Structs).ToArray();
 
-    // ── Built-in Enums (derived from namespace definitions) ──
+    // ── Built-in Enums (derived from namespace definitions + global types) ──
+
+    private static readonly BuiltInEnum[] _globalEnums =
+    [
+        new BuiltInEnum("Backoff", ["Fixed", "Linear", "Exponential"]),
+    ];
 
     public static readonly IReadOnlyList<BuiltInEnum> Enums =
-        StdlibDefinitions.Enums.ToArray();
+        _globalEnums.Concat(StdlibDefinitions.Enums).ToArray();
 
     // ── Built-in Interfaces ──
 
@@ -40,7 +60,7 @@ public static partial class StdlibRegistry
         "let", "const", "fn", "struct", "enum", "interface", "extend", "if", "else",
         "for", "in", "is", "while", "do", "return", "break", "continue",
         "true", "false", "null", "try", "catch", "finally", "throw",
-        "import", "from", "as", "switch", "elevate",
+        "import", "from", "as", "switch", "elevate", "retry",
         "and", "or", "args", "async", "await"
     ];
 
@@ -66,5 +86,8 @@ public static partial class StdlibRegistry
         ["namespace"] = new("namespace", "Namespace type. Built-in module namespaces like `io`, `fs`."),
         ["Error"] = new("Error", "Error type. Returned by `try` on failure. Has `.message`, `.type`, and `.stack` fields."),
         ["Future"] = new("Future", "Represents an asynchronous computation that may not have completed yet. Returned by async functions. Use `await` to get the resolved value."),
+        ["RetryOptions"] = new("RetryOptions", "Options for `retry` blocks. Fields: `delay` (duration), `backoff` (Backoff), `maxDelay` (duration), `jitter` (bool), `timeout` (duration), `on` (array of error type names)."),
+        ["RetryContext"] = new("RetryContext", "Attempt context available inside `retry` blocks via `attempt`. Fields: `current` (int), `max` (int), `remaining` (int), `elapsed` (duration), `errors` (array)."),
+        ["Backoff"] = new("Backoff", "Backoff strategy enum for `retry` blocks. Members: `Fixed`, `Linear`, `Exponential`."),
     }.ToFrozenDictionary();
 }

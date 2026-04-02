@@ -309,6 +309,9 @@ public enum TokenType
     /// <summary>The <c>extend</c> keyword. Begins a type extension block that adds methods to an existing type.</summary>
     Extend,
 
+    /// <summary>The <c>retry</c> keyword. Begins a retry expression that re-executes a block on failure.</summary>
+    Retry,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>
