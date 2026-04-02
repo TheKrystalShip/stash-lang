@@ -230,7 +230,7 @@ public partial class Interpreter
     {
         string command = BuildCommandString(expr);
 
-        // Passthrough mode ($>): inherit terminal stdin/stdout/stderr directly.
+        // Passthrough mode ($> or $!>): inherit terminal stdin/stdout/stderr directly.
         if (expr.IsPassthrough)
         {
             if (EmbeddedMode)
@@ -249,6 +249,23 @@ public partial class Interpreter
             (program, arguments) = ApplyElevationPrefix(program, arguments);
             var (_, _, exitCode) = RunPassthrough(program, arguments, expr.Span);
 
+            if (expr.IsStrict && exitCode != 0)
+            {
+                throw new RuntimeError(
+                    $"Command failed with exit code {exitCode}: {command}",
+                    expr.Span,
+                    "CommandError")
+                {
+                    Properties = new Dictionary<string, object?>
+                    {
+                        ["exitCode"] = (long)exitCode,
+                        ["stderr"] = "",
+                        ["stdout"] = "",
+                        ["command"] = command
+                    }
+                };
+            }
+
             return new StashInstance("CommandResult", new Dictionary<string, object?>
             {
                 ["stdout"] = "",
@@ -264,6 +281,23 @@ public partial class Interpreter
         // finally block is the true cleanup owner. Any future caller that sets _pendingStdin
         // before calling RunCaptured must ensure cleanup in its own finally block.
         _pendingStdin = null;
+
+        if (expr.IsStrict && capExitCode != 0)
+        {
+            throw new RuntimeError(
+                $"Command failed with exit code {capExitCode}: {command}",
+                expr.Span,
+                "CommandError")
+            {
+                Properties = new Dictionary<string, object?>
+                {
+                    ["exitCode"] = (long)capExitCode,
+                    ["stderr"] = stderr,
+                    ["stdout"] = stdout,
+                    ["command"] = command
+                }
+            };
+        }
 
         var fields = new Dictionary<string, object?>
         {
@@ -521,7 +555,32 @@ public partial class Interpreter
         string? initialStdin = _pendingStdin;
         _pendingStdin = null;
 
-        return RunPipeline(stages, initialStdin, expr.Span);
+        StashInstance result = RunPipeline(stages, initialStdin, expr.Span);
+
+        // Strict mode: throw CommandError if the pipeline's exit code is non-zero.
+        // Per spec §9.3, the exit code is that of the last command in the pipeline.
+        var lastStage = commandExprs[^1];
+        if (lastStage is CommandExpr { IsStrict: true } && result.GetField("exitCode", null) is long exitCode && exitCode != 0)
+        {
+            string command = BuildCommandString((CommandExpr)lastStage);
+            string stdout = result.GetField("stdout", null) as string ?? "";
+            string stderr = result.GetField("stderr", null) as string ?? "";
+            throw new RuntimeError(
+                $"Command failed with exit code {exitCode}: {command}",
+                lastStage.Span,
+                "CommandError")
+            {
+                Properties = new Dictionary<string, object?>
+                {
+                    ["exitCode"] = exitCode,
+                    ["stderr"] = stderr,
+                    ["stdout"] = stdout,
+                    ["command"] = command
+                }
+            };
+        }
+
+        return result;
     }
 
     /// <summary>

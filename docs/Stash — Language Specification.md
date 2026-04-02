@@ -1851,6 +1851,91 @@ $>(cargo build --profile ${target});
 
 > **Note:** Passthrough commands cannot be used with pipes (`|`) or output redirection (`>`, `>>`), since their output is not captured. Use `$(...)` for commands that participate in pipes or redirections.
 
+### Strict Commands
+
+The strict command syntax `$!(...)` is an opt-in alternative to `$(...)` that **throws a `CommandError` on non-zero exit codes**. It is syntactic sugar for executing a command, checking the exit code, and throwing on failure.
+
+#### Syntax
+
+```stash
+$!(command args...)
+```
+
+All existing command features work: string interpolation, pipes, environment variables.
+
+```stash
+$!(mkdir -p /opt/myapp)
+$!(docker push ${registry}/${image}:${tag})
+$!(cat /etc/hosts | grep ${hostname})
+```
+
+#### Success (Exit Code 0)
+
+When the command exits with code 0, `$!(...)` returns a `CommandResult` — identical to `$(...)`:
+
+```stash
+let result = $!(echo "hello")
+io.println(result.stdout)     // "hello"
+io.println(result.exitCode)   // 0
+```
+
+#### Failure (Non-Zero Exit Code)
+
+When the command exits with a non-zero code, `$!(...)` throws a `CommandError`:
+
+```stash
+try {
+    $!(curl -f https://unreachable.example.com)
+} catch (e) {
+    io.println(e.type)        // "CommandError"
+    io.println(e.message)     // "Command failed with exit code 7: curl -f https://unreachable.example.com"
+    io.println(e.exitCode)    // 7
+    io.println(e.stderr)      // "curl: (7) Failed to connect..."
+    io.println(e.command)     // "curl -f https://unreachable.example.com"
+}
+```
+
+The `CommandError` provides these properties:
+
+| Property   | Type     | Description                              |
+|------------|----------|------------------------------------------|
+| `.type`    | `string` | Always `"CommandError"`                  |
+| `.message` | `string` | Human-readable: includes exit code and command |
+| `.exitCode`| `int`    | The non-zero exit code                   |
+| `.stderr`  | `string` | The command's stderr output              |
+| `.stdout`  | `string` | The command's stdout output              |
+| `.command` | `string` | The command string that was executed      |
+
+#### Strict Passthrough Commands
+
+The strict passthrough variant `$!>(...)` combines strict mode with inherited I/O:
+
+```stash
+$!>(apt install -y nginx)  // throws if install fails
+```
+
+#### Composition
+
+Strict commands compose naturally with `try` expressions and `try/catch`:
+
+```stash
+// With try expression:
+let version = try $!(node --version) ?? "unknown"
+
+// With try/catch:
+try {
+    $!(systemctl restart nginx)
+} catch (e) {
+    if (e.exitCode == 3) {
+        log.warn("Service not found")
+    } else {
+        throw e
+    }
+}
+```
+
+The `$(...)` contract is unchanged — it continues to never throw.
+
 ### Pipes
 
 Pipelines can be written in two equivalent forms:

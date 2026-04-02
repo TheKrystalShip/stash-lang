@@ -331,12 +331,23 @@ public partial class Interpreter
         {
             string msg = dict.Get("message") as string ?? "Unknown error";
             string type = dict.Get("type") as string ?? "Error";
-            throw new RuntimeError(msg, stmt.Span, type);
+
+            // Preserve all extra fields from the dict as Properties, excluding type and message
+            // which are already first-class on RuntimeError.
+            Dictionary<string, object?>? properties = null;
+            foreach (var kvp in dict.GetAllEntries())
+            {
+                if (kvp.Key is not string key || key is "type" or "message") continue;
+                properties ??= new Dictionary<string, object?>();
+                properties[key] = kvp.Value;
+            }
+
+            throw new RuntimeError(msg, stmt.Span, type) { Properties = properties };
         }
 
         if (value is StashError error)
         {
-            throw new RuntimeError(error.Message, stmt.Span, error.Type);
+            throw new RuntimeError(error.Message, stmt.Span, error.Type) { Properties = error.Properties };
         }
 
         throw new RuntimeError(RuntimeValues.Stringify(value), stmt.Span);

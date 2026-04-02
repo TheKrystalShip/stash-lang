@@ -1814,7 +1814,7 @@ public class Parser
             return ParseInterpolatedString(token);
         }
 
-        if (Match(TokenType.CommandLiteral, TokenType.PassthroughCommandLiteral))
+        if (Match(TokenType.CommandLiteral, TokenType.PassthroughCommandLiteral, TokenType.StrictCommandLiteral, TokenType.StrictPassthroughCommandLiteral))
         {
             Token token = Previous();
             return ParseCommandLiteral(token);
@@ -2216,7 +2216,9 @@ public class Parser
             }
         }
 
-        return new CommandExpr(exprParts, token.Span, token.Type == TokenType.PassthroughCommandLiteral);
+        bool isPassthrough = token.Type is TokenType.PassthroughCommandLiteral or TokenType.StrictPassthroughCommandLiteral;
+        bool isStrict = token.Type is TokenType.StrictCommandLiteral or TokenType.StrictPassthroughCommandLiteral;
+        return new CommandExpr(exprParts, token.Span, isPassthrough, isStrict);
     }
 
     // ── Helper methods ────────────────────────────────────────────

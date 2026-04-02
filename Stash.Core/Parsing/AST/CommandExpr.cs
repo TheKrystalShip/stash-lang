@@ -4,8 +4,9 @@ using Stash.Common;
 namespace Stash.Parsing.AST;
 
 /// <summary>
-/// Represents a command literal expression: <c>$(command text {interpolation})</c> or
-/// a passthrough command: <c>$&gt;(command text {interpolation})</c>.
+/// Represents a command literal expression: <c>$(command text {interpolation})</c>,
+/// a passthrough command: <c>$&gt;(command text {interpolation})</c>, or a strict
+/// command: <c>$!(...)</c> / <c>$!&gt;(...)</c>.
 /// </summary>
 /// <remarks>
 /// Command literals execute a shell command and return a struct-like result with
@@ -16,6 +17,10 @@ namespace Stash.Parsing.AST;
 /// When <see cref="IsPassthrough"/> is <c>true</c>, the command runs with inherited I/O —
 /// stdin, stdout, and stderr flow directly to/from the terminal. The returned
 /// <c>CommandResult</c> contains the exit code but empty <c>stdout</c>/<c>stderr</c> fields.
+/// </para>
+/// <para>
+/// When <see cref="IsStrict"/> is <c>true</c>, a non-zero exit code causes the interpreter
+/// to throw a <c>CommandError</c> instead of returning the result normally.
 /// </para>
 /// </remarks>
 public class CommandExpr : Expr
@@ -35,15 +40,23 @@ public class CommandExpr : Expr
     public bool IsPassthrough { get; }
 
     /// <summary>
+    /// Gets whether this command uses strict mode (<c>$!(...)</c>), which throws a
+    /// <c>CommandError</c> on non-zero exit codes instead of returning normally.
+    /// </summary>
+    public bool IsStrict { get; }
+
+    /// <summary>
     /// Creates a new command literal expression node.
     /// </summary>
     /// <param name="parts">The ordered list of text and expression parts.</param>
     /// <param name="span">The source span covering the entire command literal.</param>
     /// <param name="isPassthrough">Whether this is a passthrough command (<c>$&gt;(...)</c>).</param>
-    public CommandExpr(List<Expr> parts, SourceSpan span, bool isPassthrough = false) : base(span)
+    /// <param name="isStrict">Whether this is a strict command (<c>$!(...)</c>) that throws on non-zero exit code.</param>
+    public CommandExpr(List<Expr> parts, SourceSpan span, bool isPassthrough = false, bool isStrict = false) : base(span)
     {
         Parts = parts;
         IsPassthrough = isPassthrough;
+        IsStrict = isStrict;
     }
 
     /// <inheritdoc />

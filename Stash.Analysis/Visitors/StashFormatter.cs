@@ -1198,7 +1198,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitCommandExpr(CommandExpr expr)
     {
-        EmitToken(); // single CommandLiteral / PassthroughCommandLiteral token
+        EmitToken(); // single CommandLiteral / PassthroughCommandLiteral / StrictCommandLiteral / StrictPassthroughCommandLiteral token
         return 0;
     }
 

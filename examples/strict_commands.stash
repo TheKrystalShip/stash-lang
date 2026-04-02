@@ -1,0 +1,55 @@
+#!/usr/bin/env stash
+// Strict Command Syntax — $!(...)
+// Demonstrates strict commands that throw on non-zero exit codes.
+
+// ── Basic Usage ─────────────────────────────────────────────────
+
+// Regular commands never throw — you must check exit codes manually:
+let regular = $(false);
+io.println("Regular command exit code: ${regular.exitCode}");
+
+// Strict commands throw a CommandError on non-zero exit codes:
+try {
+    $!(false);
+} catch (e) {
+    io.println("Caught CommandError:");
+    io.println("  type:     ${e.type}");
+    io.println("  message:  ${e.message}");
+    io.println("  exitCode: ${e.exitCode}");
+    io.println("  command:  ${e.command}");
+}
+
+// ── Success Path ────────────────────────────────────────────────
+
+// On success (exit code 0), strict commands return a normal CommandResult:
+let result = $!(echo "hello from strict command");
+io.println("\nStrict success: ${result.stdout}");
+io.println("Exit code: ${result.exitCode}");
+
+// ── Try Expression ──────────────────────────────────────────────
+
+// Combine with `try` expression for inline error handling:
+let version = try $!(node --version);
+if (version is Error) {
+    io.println("\nNode.js not found — using fallback");
+} else {
+    io.println("\nNode.js version: ${version.stdout}");
+}
+
+// ── Chained Strict Commands ─────────────────────────────────────
+
+// In deployment scripts, chain strict commands for fail-fast behavior:
+fn deploy(dir) {
+    try {
+        $!(mkdir -p ${dir});
+        $!(echo "deployed" > ${dir}/status.txt);
+        io.println("\nDeployment succeeded to ${dir}");
+    } catch (e) {
+        io.println("\nDeployment failed: ${e.message}");
+    }
+}
+
+deploy("/tmp/stash-deploy-test");
+
+// ── Cleanup ─────────────────────────────────────────────────────
+$(rm -rf /tmp/stash-deploy-test);

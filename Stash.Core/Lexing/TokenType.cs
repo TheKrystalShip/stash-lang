@@ -196,6 +196,12 @@ public enum TokenType
     /// <summary>A passthrough command literal for interactive shell execution.</summary>
     PassthroughCommandLiteral,
 
+    /// <summary>A strict command literal that throws on non-zero exit code. Triggered by <c>$!(...)</c>.</summary>
+    StrictCommandLiteral,
+
+    /// <summary>A strict passthrough command literal that throws on non-zero exit code. Triggered by <c>$!&gt;(...)</c>.</summary>
+    StrictPassthroughCommandLiteral,
+
     /// <summary>An IP address literal (e.g. <c>@192.168.1.1</c>, <c>@::1</c>, <c>@10.0.0.0/24</c>). The <see cref="Token.Literal"/> value is a <see cref="Stash.Runtime.Types.StashIpAddress"/>.</summary>
     IpAddressLiteral,
 

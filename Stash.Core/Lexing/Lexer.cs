@@ -256,6 +256,21 @@ public class Lexer
                 {
                     ScanInterpolatedString(prefixed: true);
                 }
+                // Strict passthrough command: $!>(...)
+                else if (_current + 2 < _source.Length && _source[_current] == '!' && _source[_current + 1] == '>' && _source[_current + 2] == '(')
+                {
+                    _current += 3;
+                    _column += 3;
+                    ScanCommandLiteral(passthrough: true, strict: true);
+                }
+                // Strict command: $!(...)
+                else if (_current + 1 < _source.Length && _source[_current] == '!' && _source[_current + 1] == '(')
+                {
+                    _current += 2;
+                    _column += 2;
+                    ScanCommandLiteral(strict: true);
+                }
+                // Passthrough command: $>(...)
                 else if (_current + 1 < _source.Length && _source[_current] == '>' && _source[_current + 1] == '(')
                 {
                     _current += 2;
@@ -1269,7 +1284,7 @@ public class Lexer
     /// embed Stash expressions. Parentheses are tracked for nesting so that subshells or
     /// grouped commands work correctly.
     /// </remarks>
-    private void ScanCommandLiteral(bool passthrough = false)
+    private void ScanCommandLiteral(bool passthrough = false, bool strict = false)
     {
         var parts = new List<object>(); // string or List<Token>
         var textSegment = new StringBuilder();
@@ -1279,6 +1294,22 @@ public class Lexer
         int segmentSourceStart = _current;
         int segmentStartLine = _startLine;
         int segmentStartColumn = _startColumn;
+
+        TokenType cmdTokenType = (passthrough, strict) switch
+        {
+            (true, true)   => TokenType.StrictPassthroughCommandLiteral,
+            (true, false)  => TokenType.PassthroughCommandLiteral,
+            (false, true)  => TokenType.StrictCommandLiteral,
+            (false, false) => TokenType.CommandLiteral,
+        };
+
+        string cmdPrefix = (passthrough, strict) switch
+        {
+            (true, true)   => "$!>(",
+            (true, false)  => "$>(",
+            (false, true)  => "$!(",
+            (false, false) => "$(",
+        };
 
         while (!IsAtEnd && depth > 0)
         {
@@ -1321,8 +1352,8 @@ public class Lexer
                     textSegment.Clear();
 
                     _tokens.Add(new Token(
-                        TokenType.CommandLiteral,
-                        "$(" + _source[segmentSourceStart.._current].Trim() + ")",
+                        cmdTokenType,
+                        cmdPrefix + _source[segmentSourceStart.._current].Trim() + ")",
                         new List<object>(parts),
                         new SourceSpan(_file, segmentStartLine, segmentStartColumn, _line, _column)
                     ));
@@ -1439,8 +1470,8 @@ public class Lexer
                 parts.Add(trimmedFinal);
 
             _tokens.Add(new Token(
-                TokenType.CommandLiteral,
-                "$(" + _source[segmentSourceStart.._current].Trim() + ")",
+                cmdTokenType,
+                cmdPrefix + _source[segmentSourceStart.._current].Trim() + ")",
                 new List<object>(parts),
                 new SourceSpan(_file, segmentStartLine, segmentStartColumn, _line, _column)
             ));
@@ -1461,7 +1492,7 @@ public class Lexer
         _column++;
 
         string lexeme = _source[_start.._current];
-        AddToken(passthrough ? TokenType.PassthroughCommandLiteral : TokenType.CommandLiteral, parts, lexeme);
+        AddToken(cmdTokenType, parts, lexeme);
     }
 
     /// <summary>

@@ -9334,4 +9334,262 @@ public class InterpreterTests
             let result = nameof(3.14);
         "));
     }
+
+    // ── Strict Command Expressions ──────────────────────────────────────
+
+    [Fact]
+    public void StrictCommand_Success_ReturnsCommandResult()
+    {
+        var result = Run("let r = $!(echo hello); let result = r.stdout;");
+        Assert.IsType<string>(result);
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void StrictCommand_Success_ExitCodeZero()
+    {
+        Assert.Equal(0L, Run("let r = $!(true); let result = r.exitCode;"));
+    }
+
+    [Fact]
+    public void StrictCommand_Failure_ThrowsCommandError()
+    {
+        var ex = Assert.Throws<RuntimeError>(() =>
+            Run("$!(false); let result = null;")
+        );
+        Assert.Equal("CommandError", ex.ErrorType);
+        Assert.Contains("Command failed with exit code", ex.Message);
+    }
+
+    [Fact]
+    public void StrictCommand_Failure_CaughtWithTryCatch_AccessProperties()
+    {
+        string source = @"
+            let result = null;
+            try {
+                $!(false);
+            } catch (e) {
+                result = e.type;
+            }
+        ";
+        Assert.Equal("CommandError", Run(source));
+    }
+
+    [Fact]
+    public void StrictCommand_Failure_CaughtExitCode()
+    {
+        string source = @"
+            let result = null;
+            try {
+                $!(false);
+            } catch (e) {
+                result = e.exitCode;
+            }
+        ";
+        object? result = Run(source);
+        Assert.IsType<long>(result);
+        Assert.NotEqual(0L, result);
+    }
+
+    [Fact]
+    public void StrictCommand_Failure_CaughtCommand()
+    {
+        string source = @"
+            let result = null;
+            try {
+                $!(false);
+            } catch (e) {
+                result = e.command;
+            }
+        ";
+        object? result = Run(source);
+        Assert.IsType<string>(result);
+        Assert.Equal("false", result);
+    }
+
+    [Fact]
+    public void StrictCommand_Failure_CaughtMessage()
+    {
+        string source = @"
+            let result = null;
+            try {
+                $!(false);
+            } catch (e) {
+                result = e.message;
+            }
+        ";
+        object? result = Run(source);
+        Assert.IsType<string>(result);
+        Assert.Contains("Command failed", (string)result!);
+    }
+
+    [Fact]
+    public void StrictCommand_Failure_CaughtStderr()
+    {
+        string source = @"
+            let result = null;
+            try {
+                $!(false);
+            } catch (e) {
+                result = e.stderr;
+            }
+        ";
+        // `false` produces no stderr, but the field should be a string
+        object? result = Run(source);
+        Assert.IsType<string>(result);
+    }
+
+    [Fact]
+    public void StrictCommand_Failure_CaughtStdout()
+    {
+        string source = @"
+            let result = null;
+            try {
+                $!(false);
+            } catch (e) {
+                result = e.stdout;
+            }
+        ";
+        object? result = Run(source);
+        Assert.IsType<string>(result);
+    }
+
+    [Fact]
+    public void StrictCommand_WithTryExpr_ReturnsError()
+    {
+        string source = @"
+            let err = try $!(false);
+            let result = err.type;
+        ";
+        Assert.Equal("CommandError", Run(source));
+    }
+
+    [Fact]
+    public void RegularCommand_Failure_DoesNotThrow()
+    {
+        // Regular $(false) should NOT throw, just return with non-zero exit code
+        var result = Run("let r = $(false); let result = r.exitCode;");
+        Assert.IsType<long>(result);
+        Assert.NotEqual(0L, result);
+    }
+
+    [Fact]
+    public void DictThrow_ExtraProperties_Accessible()
+    {
+        // Dict-based throw should preserve extra properties beyond type and message
+        string source = @"
+            let result = null;
+            try {
+                throw { type: ""CustomError"", message: ""fail"", code: 42 };
+            } catch (e) {
+                result = e.code;
+            }
+        ";
+        Assert.Equal(42L, Run(source));
+    }
+
+    // ── Strict Command Pipeline Tests ───────────────────────────────────
+
+    [Fact]
+    public void StrictCommand_Pipeline_Success_ReturnsCommandResult()
+    {
+        var result = Run("let r = $!(echo hello | tr a-z A-Z); let result = r.stdout;");
+        Assert.IsType<string>(result);
+        Assert.Contains("HELLO", (string)result!);
+    }
+
+    [Fact]
+    public void StrictCommand_Pipeline_Failure_ThrowsCommandError()
+    {
+        var ex = Assert.Throws<RuntimeError>(() =>
+            Run("$!(echo hello | false); let result = null;")
+        );
+        Assert.Equal("CommandError", ex.ErrorType);
+        Assert.Contains("Command failed", ex.Message);
+    }
+
+    [Fact]
+    public void StrictCommand_Pipeline_Failure_CaughtExitCode()
+    {
+        string source = @"
+            let result = null;
+            try {
+                $!(echo hello | false);
+            } catch (e) {
+                result = e.exitCode;
+            }
+        ";
+        object? result = Run(source);
+        Assert.IsType<long>(result);
+        Assert.NotEqual(0L, result);
+    }
+
+    // ── Re-throw Preserves Properties ───────────────────────────────────
+
+    [Fact]
+    public void StrictCommand_ReThrow_PreservesProperties()
+    {
+        string source = @"
+            let result = null;
+            try {
+                try {
+                    $!(false);
+                } catch (e) {
+                    throw e;
+                }
+            } catch (outer) {
+                result = outer.exitCode;
+            }
+        ";
+        object? result = Run(source);
+        Assert.IsType<long>(result);
+        Assert.NotEqual(0L, result);
+    }
+
+    [Fact]
+    public void StrictCommand_ReThrow_PreservesCommandField()
+    {
+        string source = @"
+            let result = null;
+            try {
+                try {
+                    $!(false);
+                } catch (e) {
+                    throw e;
+                }
+            } catch (outer) {
+                result = outer.command;
+            }
+        ";
+        Assert.Equal("false", Run(source));
+    }
+
+    [Fact]
+    public void DictThrow_ReThrow_PreservesExtraProperties()
+    {
+        string source = @"
+            let result = null;
+            try {
+                try {
+                    throw { type: ""CustomError"", message: ""fail"", detail: ""important"" };
+                } catch (e) {
+                    throw e;
+                }
+            } catch (outer) {
+                result = outer.detail;
+            }
+        ";
+        Assert.Equal("important", Run(source));
+    }
+
+    // ── Null Coalescing Composition ─────────────────────────────────────
+
+    [Fact]
+    public void StrictCommand_TryExpr_NullCoalesce()
+    {
+        string source = @"
+            let result = (try $!(false)) ?? ""fallback"";
+        ";
+        Assert.Equal("fallback", Run(source));
+    }
 }

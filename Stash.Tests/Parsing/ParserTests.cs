@@ -2300,4 +2300,43 @@ public class ParserTests
             Assert.Equal(type, isExpr.TypeName!.Lexeme);
         }
     }
+
+    // ── Strict Command Literal Parsing ──────────────────────────────────
+
+    [Fact]
+    public void Parse_StrictCommandLiteral_ProducesCommandExprWithIsStrict()
+    {
+        var result = ParseExpr("$!(echo hello)");
+        var cmd = Assert.IsType<CommandExpr>(result);
+        Assert.True(cmd.IsStrict);
+        Assert.False(cmd.IsPassthrough);
+        Assert.Single(cmd.Parts);
+    }
+
+    [Fact]
+    public void Parse_StrictPassthroughCommandLiteral_ProducesCommandExprWithBothFlags()
+    {
+        var result = ParseExpr("$!>(echo hello)");
+        var cmd = Assert.IsType<CommandExpr>(result);
+        Assert.True(cmd.IsStrict);
+        Assert.True(cmd.IsPassthrough);
+    }
+
+    [Fact]
+    public void Parse_RegularCommandLiteral_HasIsStrictFalse()
+    {
+        var result = ParseExpr("$(echo hello)");
+        var cmd = Assert.IsType<CommandExpr>(result);
+        Assert.False(cmd.IsStrict);
+        Assert.False(cmd.IsPassthrough);
+    }
+
+    [Fact]
+    public void Parse_StrictCommandLiteral_WithInterpolation_PreservesPartsAndStrict()
+    {
+        var result = ParseExpr("$!(echo ${name})");
+        var cmd = Assert.IsType<CommandExpr>(result);
+        Assert.True(cmd.IsStrict);
+        Assert.True(cmd.Parts.Count >= 2);
+    }
 }

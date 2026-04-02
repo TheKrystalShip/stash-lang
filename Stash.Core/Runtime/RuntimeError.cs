@@ -1,6 +1,7 @@
 namespace Stash.Runtime;
 
 using System;
+using System.Collections.Generic;
 using Stash.Common;
 
 /// <summary>
@@ -33,6 +34,14 @@ public class RuntimeError : Exception
     /// or <c>null</c> for built-in runtime errors (which default to <c>"RuntimeError"</c>).
     /// </summary>
     public string? ErrorType { get; }
+
+    /// <summary>
+    /// Optional dictionary of additional typed properties carried by this error.
+    /// Used by <c>CommandError</c> to expose <c>exitCode</c>, <c>stderr</c>, <c>stdout</c>,
+    /// and <c>command</c> fields, and by dict-based <c>throw</c> to preserve extra fields
+    /// beyond <c>type</c> and <c>message</c>.
+    /// </summary>
+    public Dictionary<string, object?>? Properties { get; init; }
 
     /// <summary>
     /// Initializes a new <see cref="RuntimeError"/> with a human-readable message and an

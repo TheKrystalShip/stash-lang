@@ -967,7 +967,9 @@ public partial class Interpreter
                 "message" => error.Message,
                 "type" => error.Type,
                 "stack" => error.Stack is not null ? new List<object?>(error.Stack) : null,
-                _ => throw new RuntimeError($"Error has no field '{expr.Name.Lexeme}'. Available fields: message, type, stack.", expr.Name.Span)
+                _ => error.Properties is not null && error.Properties.TryGetValue(expr.Name.Lexeme, out object? propValue)
+                    ? propValue
+                    : throw new RuntimeError($"Error has no field '{expr.Name.Lexeme}'.", expr.Name.Span)
             };
         }
 

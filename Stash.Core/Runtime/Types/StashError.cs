@@ -11,12 +11,14 @@ public class StashError
     public string Message { get; }
     public string Type { get; }
     public List<string>? Stack { get; }
+    public Dictionary<string, object?>? Properties { get; }
 
-    public StashError(string message, string type, List<string>? stack = null)
+    public StashError(string message, string type, List<string>? stack = null, Dictionary<string, object?>? properties = null)
     {
         Message = message;
         Type = type;
         Stack = stack;
+        Properties = properties;
     }
 
     /// <summary>
@@ -36,7 +38,7 @@ public class StashError
         }
 
         string type = error.ErrorType ?? "RuntimeError";
-        return new StashError(error.Message, type, stack);
+        return new StashError(error.Message, type, stack, error.Properties);
     }
 
     public override string ToString() => $"{Type}: {Message}";

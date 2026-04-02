@@ -1563,4 +1563,88 @@ public class LexerTests
         Assert.NotEmpty(lexer.Errors);
         Assert.Contains("Unterminated doc comment", lexer.Errors[0]);
     }
+
+    // ── Strict Command Literals ─────────────────────────────────────────
+
+    [Fact]
+    public void ScanTokens_StrictCommandLiteral_SimpleCommand()
+    {
+        var tokens = Scan("$!(echo hello)");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.StrictCommandLiteral, tokens[0].Type);
+        Assert.Equal("$!(echo hello)", tokens[0].Lexeme);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo hello", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_StrictCommandLiteral_WithInterpolation()
+    {
+        var tokens = Scan("$!(echo ${name})");
+
+        Assert.Equal(TokenType.StrictCommandLiteral, tokens[0].Type);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Equal(2, parts.Count);
+        Assert.Equal("echo ", parts[0]);
+        var exprTokens = Assert.IsType<List<Token>>(parts[1]);
+        Assert.Equal(TokenType.Identifier, exprTokens[0].Type);
+        Assert.Equal("name", exprTokens[0].Lexeme);
+    }
+
+    [Fact]
+    public void ScanTokens_StrictPassthroughCommand_SimpleCommand()
+    {
+        var tokens = Scan("$!>(echo hello)");
+
+        Assert.Equal(2, tokens.Count);
+        Assert.Equal(TokenType.StrictPassthroughCommandLiteral, tokens[0].Type);
+        Assert.Equal("$!>(echo hello)", tokens[0].Lexeme);
+        var parts = Assert.IsType<List<object>>(tokens[0].Literal);
+        Assert.Single(parts);
+        Assert.Equal("echo hello", parts[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_StrictCommandLiteral_Unterminated_ReportsError()
+    {
+        var lexer = CreateLexer("$!(echo hello");
+        lexer.ScanTokens();
+        Assert.NotEmpty(lexer.Errors);
+        Assert.Contains("Unterminated command literal", lexer.Errors[0]);
+    }
+
+    [Fact]
+    public void ScanTokens_StrictCommandLiteral_InlinePipe_SplitsIntoMultipleTokens()
+    {
+        var tokens = Scan("$!(ls | grep test)");
+
+        // Inline pipes produce: StrictCommandLiteral, Pipe, StrictCommandLiteral, EOF
+        Assert.True(tokens.Count >= 4);
+        Assert.Equal(TokenType.StrictCommandLiteral, tokens[0].Type);
+        Assert.Equal(TokenType.Pipe, tokens[1].Type);
+        Assert.Equal(TokenType.StrictCommandLiteral, tokens[2].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_DollarBang_WithoutParen_IsNotStrictCommand()
+    {
+        // $! without ( should produce $ and ! tokens, not a strict command
+        var tokens = Scan("$!x");
+        Assert.NotEqual(TokenType.StrictCommandLiteral, tokens[0].Type);
+    }
+
+    [Fact]
+    public void ScanTokens_StrictCommandLiteral_InlinePipe_HasCorrectLexemePrefix()
+    {
+        var tokens = Scan("$!(ls | grep test)");
+
+        // First segment should have $!( prefix, not $(
+        Assert.Equal(TokenType.StrictCommandLiteral, tokens[0].Type);
+        Assert.StartsWith("$!(", tokens[0].Lexeme);
+        // Last segment should also have $!( prefix
+        Assert.Equal(TokenType.StrictCommandLiteral, tokens[2].Type);
+        Assert.StartsWith("$!(", tokens[2].Lexeme);
+    }
 }
