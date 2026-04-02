@@ -615,4 +615,29 @@ public class ImportResolverTests
             CleanupTempDir(tempDir);
         }
     }
+
+    [Fact]
+    public void DynamicPath_SelectiveImport_EmitsInformationDiagnostic()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "stash_test_" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempDir);
+        var mainPath = Path.Combine(tempDir, "main.stash");
+        File.WriteAllText(mainPath, "import { x } from modulePath;");
+        var mainUri = new Uri($"file://{mainPath}");
+
+        try
+        {
+            var resolver = new ImportResolver();
+            var (stmts, _) = ParseSource("import { x } from modulePath;", mainPath);
+            var resolution = resolver.ResolveImports(mainUri, stmts, TestParseModule);
+
+            var diagnostic = Assert.Single(resolution.Diagnostics);
+            Assert.Equal(DiagnosticLevel.Information, diagnostic.Level);
+            Assert.Contains("Dynamic import path", diagnostic.Message);
+        }
+        finally
+        {
+            CleanupTempDir(tempDir);
+        }
+    }
 }

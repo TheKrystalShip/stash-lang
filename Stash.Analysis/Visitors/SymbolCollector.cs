@@ -856,7 +856,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         foreach (var name in stmt.Names)
         {
-            _currentScope.AddSymbol(new SymbolInfo(name.Lexeme, SymbolKind.Variable, name.Span, detail: $"imported from {stmt.Path.Lexeme}"));
+            _currentScope.AddSymbol(new SymbolInfo(name.Lexeme, SymbolKind.Variable, name.Span, detail: $"imported from {stmt.StaticPathValue ?? "<dynamic>"}"));
         }
         return null;
     }
@@ -869,7 +869,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Alias.Lexeme, SymbolKind.Namespace, stmt.Alias.Span, detail: $"namespace from {stmt.Path.Lexeme}"));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Alias.Lexeme, SymbolKind.Namespace, stmt.Alias.Span, detail: $"namespace from {stmt.StaticPathValue ?? "<dynamic>"}"));
         return null;
     }
 

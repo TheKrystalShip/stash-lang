@@ -167,9 +167,16 @@ public class ImportResolver
     /// </summary>
     private void ResolveSelectiveImport(ImportStmt stmt, string documentDir, ImportResolution resolution, ModuleParser parseModule, Uri documentUri)
     {
-        var importPath = stmt.Path.Literal as string;
+        var importPath = stmt.StaticPathValue;
         if (string.IsNullOrEmpty(importPath))
         {
+            if (!stmt.IsStaticPath)
+            {
+                resolution.Diagnostics.Add(new SemanticDiagnostic(
+                    "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.",
+                    DiagnosticLevel.Information,
+                    stmt.Path.Span));
+            }
             return;
         }
 
@@ -237,9 +244,16 @@ public class ImportResolver
     /// </summary>
     private void ResolveNamespaceImport(ImportAsStmt stmt, string documentDir, ImportResolution resolution, ModuleParser parseModule, Uri documentUri)
     {
-        var importPath = stmt.Path.Literal as string;
+        var importPath = stmt.StaticPathValue;
         if (string.IsNullOrEmpty(importPath))
         {
+            if (!stmt.IsStaticPath)
+            {
+                resolution.Diagnostics.Add(new SemanticDiagnostic(
+                    "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.",
+                    DiagnosticLevel.Information,
+                    stmt.Path.Span));
+            }
             return;
         }
 

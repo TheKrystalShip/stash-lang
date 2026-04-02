@@ -819,7 +819,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     {
         EmitToken(); // import
         Space();
-        EmitToken(); // path string
+        stmt.Path.Accept(this); // path expression (may be multi-token)
         Space();
         EmitToken(); // as
         Space();
@@ -844,7 +844,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // from
         Space();
-        EmitToken(); // path
+        stmt.Path.Accept(this); // path expression (may be multi-token)
         EmitToken(); // ;
         return 0;
     }

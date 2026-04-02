@@ -4,21 +4,31 @@ using Stash.Lexing;
 namespace Stash.Parsing.AST;
 
 /// <summary>
-/// A module import with namespace alias: <c>import "file.stash" as name;</c>
+/// A module import with namespace alias: <c>import expr as name;</c>
 /// </summary>
 public class ImportAsStmt : Stmt
 {
     /// <summary>
-    /// Gets the string literal token containing the module file path.
+    /// Gets the expression that evaluates to the module file path.
     /// </summary>
-    public Token Path { get; }
+    public Expr Path { get; }
 
     /// <summary>
     /// Gets the identifier token for the namespace alias.
     /// </summary>
     public Token Alias { get; }
 
-    public ImportAsStmt(Token path, Token alias, SourceSpan span) : base(span)
+    /// <summary>
+    /// Gets a value indicating whether the path is a static string literal.
+    /// </summary>
+    public bool IsStaticPath => Path is LiteralExpr { Value: string };
+
+    /// <summary>
+    /// Gets the static string value of the path if it is a string literal; otherwise <c>null</c>.
+    /// </summary>
+    public string? StaticPathValue => (Path as LiteralExpr)?.Value as string;
+
+    public ImportAsStmt(Expr path, Token alias, SourceSpan span) : base(span)
     {
         Path = path;
         Alias = alias;

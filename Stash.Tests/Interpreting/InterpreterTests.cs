@@ -3306,6 +3306,102 @@ public class InterpreterTests
         }
     }
 
+    [Fact]
+    public void Import_DynamicPathVariable_ResolvesCorrectly()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "math.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "let path = \"math.stash\"; import { add } from path; let result = add(3, 4);";
+
+            Assert.Equal(7L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_DynamicPathConcatenation_ResolvesCorrectly()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "math.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "let dir = \"./\"; let name = \"math\"; import { add } from dir + name + \".stash\"; let result = add(10, 20);";
+
+            Assert.Equal(30L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_DynamicPathInterpolation_ResolvesCorrectly()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "math.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "let name = \"math\"; import { add } from $\"{name}.stash\"; let result = add(5, 5);";
+
+            Assert.Equal(10L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void ImportAs_DynamicPathVariable_ResolvesCorrectly()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "math.stash");
+            System.IO.File.WriteAllText(modulePath, "fn add(a, b) { return a + b; }");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "let path = \"math.stash\"; import path as m; let result = m.add(2, 3);";
+
+            Assert.Equal(5L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
+    public void Import_DynamicPath_NonStringThrowsError()
+    {
+        RunExpectingError("import { x } from 42;");
+    }
+
+    [Fact]
+    public void Import_DynamicPath_NullThrowsError()
+    {
+        RunExpectingError("import { x } from null;");
+    }
+
     // ===== Phase 5: Try + ?? Combined Patterns =====
 
     [Fact]

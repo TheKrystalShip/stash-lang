@@ -3715,9 +3715,34 @@ let status = enums.Status.Active;
 
 All top-level declarations from the module are wrapped in a `StashNamespace` object and bound to the given alias. Members are accessed with dot notation. The alias is a regular value — `typeof(utils)` returns `"namespace"`.
 
+**Dynamic import paths** — the path in both forms can be any expression, not just a string literal:
+
+```stash
+// Variable path
+let modulePath = "utils.stash";
+import { deploy } from modulePath;
+
+// Concatenation
+let dir = "./lib/";
+import { Parser } from dir + "parser.stash";
+
+// String interpolation
+let env = env.get("DEPLOY_ENV") ?? "dev";
+import { config } from $"./config/{env}.stash";
+
+// Dynamic namespace import
+let pluginPath = "./plugins/" + pluginName + ".stash";
+import pluginPath as plugin;
+plugin.init();
+```
+
+The path expression is evaluated at runtime and must produce a string value. If it evaluates to a non-string type, a runtime error is raised.
+
+> **Editor note:** Dynamic import paths cannot be statically analyzed. The language server (LSP) will show an informational hint on dynamic paths indicating that autocomplete, go-to-definition, and other editor features are unavailable for dynamically imported names. Use static string literal paths when possible for the best editor experience.
+
 ### Semantics
 
-1. The interpreter resolves the file path relative to the importing script's directory.
+1. The import path expression is evaluated. For string literals, this is the literal value. For dynamic expressions (variables, concatenation, interpolation), the expression is evaluated at runtime and must produce a string. The resulting path is resolved relative to the importing script's directory.
 2. If the file has not been imported before, it is **lexed, parsed, and executed** in an isolated module environment.
 3. Each imported file is **executed only once** — subsequent imports of the same file reuse the cached module environment (no re-execution).
 4. The requested names are looked up in the module's top-level environment. If a name is not found, a runtime error is raised.
@@ -3756,7 +3781,6 @@ This is checked during the resolve/import phase, not at runtime.
 
 - **Wildcard imports:** `import * from "utils.stash";` — imports everything (bash-style, for convenience).
 - **Per-name aliased imports:** `import { deploy as remoteDeploy } from "utils.stash";` — rename individual names on import.
-- **Relative path shortcuts:** `import { util } from "./lib/";` — directory-based module resolution.
 
 ---
 

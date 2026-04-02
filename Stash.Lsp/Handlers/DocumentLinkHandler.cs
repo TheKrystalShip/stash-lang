@@ -10,7 +10,6 @@ using OmniSharp.Extensions.LanguageServer.Protocol.Document;
 using Microsoft.Extensions.Logging;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Common;
-using Stash.Lexing;
 using Stash.Analysis;
 using Stash.Lsp.Analysis;
 using Stash.Parsing.AST;
@@ -112,19 +111,19 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
     }
 
     /// <summary>
-    /// Constructs a <see cref="DocumentLink"/> for a single import path token, resolving the path
-    /// to a <c>file://</c> URI when possible.
+    /// Constructs a <see cref="DocumentLink"/> for a single import path expression, resolving the path
+    /// to a <c>file://</c> URI when possible. Only static string literal paths produce a link.
     /// </summary>
     /// <param name="links">The accumulator list to append the link to.</param>
-    /// <param name="pathToken">The string literal token containing the import path.</param>
+    /// <param name="pathExpr">The expression containing the import path.</param>
     /// <param name="documentDir">
     /// The directory of the importing document, used as the base for relative path resolution.
     /// May be <see langword="null"/> for non-file URIs.
     /// </param>
-    private static void AddLink(List<DocumentLink> links, Token pathToken, string? documentDir)
+    private static void AddLink(List<DocumentLink> links, Expr pathExpr, string? documentDir)
     {
-        // The path token's Literal is the string value (without quotes)
-        var importPath = pathToken.Literal as string;
+        // Only static string literal paths can be resolved to a link
+        var importPath = (pathExpr as LiteralExpr)?.Value as string;
         if (string.IsNullOrEmpty(importPath))
         {
             return;
@@ -156,8 +155,8 @@ public class DocumentLinkHandler : DocumentLinkHandlerBase
             }
         }
 
-        // The token span covers the string literal including quotes; map to 0-based LSP positions
-        var span = pathToken.Span;
+        // The expression span covers the string literal including quotes; map to 0-based LSP positions
+        var span = pathExpr.Span;
         var range = span.ToLspRange();
 
         var link = new DocumentLink

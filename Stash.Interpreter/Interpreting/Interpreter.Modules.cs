@@ -12,7 +12,14 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
-        string modulePath = (string)stmt.Path.Literal!;
+        object? pathValue = stmt.Path.Accept(this);
+        if (pathValue is not string modulePath)
+        {
+            throw new RuntimeError(
+                "Import path must evaluate to a string.",
+                stmt.Path.Span);
+        }
+
         string resolvedPath = ResolveModulePath(modulePath, stmt.Path.Span);
 
         // Check for circular imports
@@ -39,7 +46,14 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
-        string modulePath = (string)stmt.Path.Literal!;
+        object? pathValue = stmt.Path.Accept(this);
+        if (pathValue is not string modulePath)
+        {
+            throw new RuntimeError(
+                "Import path must evaluate to a string.",
+                stmt.Path.Span);
+        }
+
         string resolvedPath = ResolveModulePath(modulePath, stmt.Path.Span);
 
         // Check for circular imports

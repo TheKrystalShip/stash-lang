@@ -115,7 +115,7 @@ public class LspFeaturesRound3Tests
         Assert.Empty(parser.Errors);
         var importStmt = stmts[0] as ImportStmt;
         Assert.NotNull(importStmt);
-        Assert.Equal("lib/utils.stash", importStmt!.Path.Literal as string);
+        Assert.Equal("lib/utils.stash", importStmt!.StaticPathValue);
     }
 
     [Fact]
@@ -129,7 +129,7 @@ public class LspFeaturesRound3Tests
         Assert.Empty(parser.Errors);
         var importAs = stmts[0] as ImportAsStmt;
         Assert.NotNull(importAs);
-        Assert.Equal("lib/utils.stash", importAs!.Path.Literal as string);
+        Assert.Equal("lib/utils.stash", importAs!.StaticPathValue);
     }
 
     // ──────────────────────────────────────────────────────────

@@ -261,8 +261,24 @@ public class CodeActionHandler : CodeActionHandlerBase
 
                 if (usedNames.Count > 0)
                 {
-                    string names = string.Join(", ", usedNames);
-                    keptImports.Add($"import {{ {names} }} from {importStmt.Path.Lexeme};");
+                    if (importStmt.StaticPathValue is string importStaticPath)
+                    {
+                        string names = string.Join(", ", usedNames);
+                        keptImports.Add($"import {{ {names} }} from \"{importStaticPath}\";");
+                    }
+                    else
+                    {
+                        // Dynamic path — preserve original source text verbatim
+                        int sl = importStmt.Span.StartColumn - 1;
+                        int el = importStmt.Span.EndColumn;
+                        string[] srcLines = text.Split('\n');
+                        int startIdx = importStmt.Span.StartLine - 1;
+                        int endIdx = importStmt.Span.EndLine - 1;
+                        var origParts = new List<string>();
+                        for (int li = startIdx; li <= endIdx && li < srcLines.Length; li++)
+                            origParts.Add(srcLines[li]);
+                        keptImports.Add(string.Join("\n", origParts).TrimEnd());
+                    }
                 }
             }
             else if (stmt is ImportAsStmt importAsStmt)
@@ -273,7 +289,21 @@ public class CodeActionHandler : CodeActionHandlerBase
                     importAsStmt.Alias.Span.StartColumn);
                 if (refs.Count > 1)
                 {
-                    keptImports.Add($"import {importAsStmt.Path.Lexeme} as {importAsStmt.Alias.Lexeme};");
+                    if (importAsStmt.StaticPathValue is string nsStaticPath)
+                    {
+                        keptImports.Add($"import \"{nsStaticPath}\" as {importAsStmt.Alias.Lexeme};");
+                    }
+                    else
+                    {
+                        // Dynamic path — preserve original source text verbatim
+                        string[] srcLines = text.Split('\n');
+                        int startIdx = importAsStmt.Span.StartLine - 1;
+                        int endIdx = importAsStmt.Span.EndLine - 1;
+                        var origParts = new List<string>();
+                        for (int li = startIdx; li <= endIdx && li < srcLines.Length; li++)
+                            origParts.Add(srcLines[li]);
+                        keptImports.Add(string.Join("\n", origParts).TrimEnd());
+                    }
                 }
             }
         }

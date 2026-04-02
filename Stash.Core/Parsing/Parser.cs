@@ -574,46 +574,51 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses an import declaration: <c>import { name1, name2 } from "path";</c>.
-    /// The <c>import</c> token has already been consumed.
+    /// Parses an import declaration. The <c>import</c> token has already been consumed.
+    /// Supports two forms:
+    /// <list type="bullet">
+    ///   <item><description><c>import { name1, name2 } from expr;</c></description></item>
+    ///   <item><description><c>import expr as name;</c></description></item>
+    /// </list>
+    /// The path may be any expression, not just a string literal.
     /// </summary>
     private Stmt ImportDeclaration()
     {
         Token importToken = Previous();
 
-        // import "path" as name;
-        if (Check(TokenType.StringLiteral))
+        // import { name1, name2 } from expr;
+        if (Check(TokenType.LeftBrace))
         {
-            Token path = Consume(TokenType.StringLiteral, "Expected module path string.");
-            Consume(TokenType.As, "Expected 'as' after module path.");
-            Token alias = Consume(TokenType.Identifier, "Expected namespace name after 'as'.");
-            Token semi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
-            return new ImportAsStmt(path, alias, MakeSpan(importToken.Span, semi.Span));
-        }
+            Advance(); // consume {
 
-        // import { name1, name2 } from "path";
-        Consume(TokenType.LeftBrace, "Expected '{' or module path after 'import'.");
-
-        List<Token> names = new();
-        if (!Check(TokenType.RightBrace))
-        {
-            do
+            List<Token> names = new();
+            if (!Check(TokenType.RightBrace))
             {
-                names.Add(Consume(TokenType.Identifier, "Expected name to import."));
-            } while (Match(TokenType.Comma));
+                do
+                {
+                    names.Add(Consume(TokenType.Identifier, "Expected name to import."));
+                } while (Match(TokenType.Comma));
+            }
+
+            Consume(TokenType.RightBrace, "Expected '}' after import names.");
+            if (names.Count == 0)
+            {
+                Error(Previous(), "Expected at least one name to import.");
+            }
+
+            ConsumeIdentifier("from", "Expected 'from' after import names.");
+            Expr pathExpr = Expression();
+            Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
+
+            return new ImportStmt(names, pathExpr, MakeSpan(importToken.Span, finalSemi.Span));
         }
 
-        Consume(TokenType.RightBrace, "Expected '}' after import names.");
-        if (names.Count == 0)
-        {
-            Error(Previous(), "Expected at least one name to import.");
-        }
-
-        ConsumeIdentifier("from", "Expected 'from' after import names.");
-        Token fromPath = Consume(TokenType.StringLiteral, "Expected module path string after 'from'.");
-        Token finalSemi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
-
-        return new ImportStmt(names, fromPath, MakeSpan(importToken.Span, finalSemi.Span));
+        // import expr as name;
+        Expr path = Expression();
+        Consume(TokenType.As, "Expected 'as' after module path.");
+        Token alias = Consume(TokenType.Identifier, "Expected namespace name after 'as'.");
+        Token semi = Consume(TokenType.Semicolon, "Expected ';' after import declaration.");
+        return new ImportAsStmt(path, alias, MakeSpan(importToken.Span, semi.Span));
     }
 
     /// <summary>

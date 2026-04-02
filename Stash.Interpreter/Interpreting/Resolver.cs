@@ -380,6 +380,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
+        Resolve(stmt.Path);
         foreach (var name in stmt.Names)
         {
             Declare(name.Lexeme);
@@ -391,6 +392,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     /// <inheritdoc />
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
+        Resolve(stmt.Path);
         Declare(stmt.Alias.Lexeme);
         Define(stmt.Alias.Lexeme);
         return null;

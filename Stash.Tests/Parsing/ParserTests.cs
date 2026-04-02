@@ -1400,7 +1400,7 @@ public class ParserTests
         var importStmt = Assert.IsType<ImportStmt>(Assert.Single(stmts));
         Assert.Single(importStmt.Names);
         Assert.Equal("deploy", importStmt.Names[0].Lexeme);
-        Assert.Equal("utils.stash", importStmt.Path.Literal);
+        Assert.Equal("utils.stash", importStmt.StaticPathValue);
     }
 
     [Fact]
@@ -1618,7 +1618,7 @@ public class ParserTests
     {
         var stmts = ParseProgram("import \"utils.stash\" as utils;");
         var importAs = Assert.IsType<ImportAsStmt>(Assert.Single(stmts));
-        Assert.Equal("utils.stash", importAs.Path.Literal);
+        Assert.Equal("utils.stash", importAs.StaticPathValue);
         Assert.Equal("utils", importAs.Alias.Lexeme);
     }
 
@@ -1638,6 +1638,62 @@ public class ParserTests
         Assert.Equal(2, stmts.Count);
         Assert.IsType<ImportAsStmt>(stmts[0]);
         Assert.IsType<ImportStmt>(stmts[1]);
+    }
+
+    // ── Dynamic import path tests ────────────────────────────────────────
+
+    [Fact]
+    public void Parse_ImportDecl_DynamicPathVariable()
+    {
+        var stmts = ParseProgram("import { x } from modulePath;");
+        var stmt = Assert.IsType<ImportStmt>(Assert.Single(stmts));
+        Assert.False(stmt.IsStaticPath);
+        Assert.IsType<IdentifierExpr>(stmt.Path);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_DynamicPathConcatenation()
+    {
+        var stmts = ParseProgram("import { x } from dir + \"/lib.stash\";");
+        var stmt = Assert.IsType<ImportStmt>(Assert.Single(stmts));
+        Assert.False(stmt.IsStaticPath);
+        Assert.IsType<BinaryExpr>(stmt.Path);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_DynamicPathInterpolation()
+    {
+        var stmts = ParseProgram("import { x } from $\"./config/{env}.stash\";");
+        var stmt = Assert.IsType<ImportStmt>(Assert.Single(stmts));
+        Assert.False(stmt.IsStaticPath);
+        Assert.IsType<InterpolatedStringExpr>(stmt.Path);
+    }
+
+    [Fact]
+    public void Parse_ImportAs_DynamicPath()
+    {
+        var stmts = ParseProgram("import myPath as utils;");
+        var stmt = Assert.IsType<ImportAsStmt>(Assert.Single(stmts));
+        Assert.False(stmt.IsStaticPath);
+        Assert.IsType<IdentifierExpr>(stmt.Path);
+    }
+
+    [Fact]
+    public void Parse_ImportAs_StaticPath_BackwardCompatible()
+    {
+        var stmts = ParseProgram("import \"utils.stash\" as utils;");
+        var stmt = Assert.IsType<ImportAsStmt>(Assert.Single(stmts));
+        Assert.True(stmt.IsStaticPath);
+        Assert.Equal("utils.stash", stmt.StaticPathValue);
+    }
+
+    [Fact]
+    public void Parse_ImportDecl_StaticPath_IsStaticPathTrue()
+    {
+        var stmts = ParseProgram("import { x } from \"lib.stash\";");
+        var stmt = Assert.IsType<ImportStmt>(Assert.Single(stmts));
+        Assert.True(stmt.IsStaticPath);
+        Assert.Equal("lib.stash", stmt.StaticPathValue);
     }
 
     // ── Type Hints ─────────────────────────────────────────────────────

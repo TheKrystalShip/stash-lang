@@ -467,11 +467,13 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                 EmitFromToken(name, TokenTypeVariable, ModifierDeclaration);
             }
         }
+        stmt.Path.Accept(this);
         return 0;
     }
 
     public int VisitImportAsStmt(ImportAsStmt stmt)
     {
+        stmt.Path.Accept(this);
         EmitFromToken(stmt.Alias, TokenTypeNamespace, ModifierDeclaration);
         return 0;
     }
