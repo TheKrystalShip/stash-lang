@@ -75,13 +75,17 @@ public class NamespaceBuilder
     }
 
     /// <summary>
-    /// Registers metadata for a built-in struct type produced by this namespace.
+    /// Registers a built-in struct type produced by this namespace.
+    /// The struct is both added to the LSP/Analysis metadata list and defined as a constructible
+    /// type in the runtime namespace so that <c>ns.StructName { field: value }</c> works in Stash.
     /// </summary>
     public NamespaceBuilder Struct(string name, BuiltInField[] fields)
     {
         if (_structs.Any(s => s.Name == name))
             throw new ArgumentException($"Struct '{name}' is already registered in namespace '{_name}'.", nameof(name));
         _structs.Add(new BuiltInStruct(name, fields));
+        var fieldNames = fields.Select(f => f.Name).ToList();
+        _namespace.Define(name, new StashStruct(name, fieldNames, new Dictionary<string, IStashCallable>()));
         return this;
     }
 

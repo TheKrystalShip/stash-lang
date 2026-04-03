@@ -80,20 +80,20 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime. Thread-safe for concurrent resolver writes during parallel execution.</summary>
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Expr, (int Distance, int Slot)> _locals = new(ReferenceEqualityComparer.Instance);
     /// <summary>Registry of extension methods added by <c>extend</c> blocks. Keyed by (typeName, methodName).</summary>
-    internal readonly ExtensionRegistry _extensionRegistry = new();
+    internal readonly ExtensionRegistry ExtensionRegistry = new();
     /// <summary>The raw script arguments, parsed by <c>args</c> declarations.</summary>
     internal string[] ScriptArgs = Array.Empty<string>();
     /// <summary>The mutable per-execution state. Encapsulates environment, call stack, I/O, and other state that varies per execution path.</summary>
-    internal ExecutionContext _ctx;
-    private readonly object _cleanupLock = new();
+    internal ExecutionContext Ctx;
+    private readonly Lock _cleanupLock = new();
     internal TaskRegistry TaskRegistry { get; private set; }
 
     // Private shims — allow partial-class files to continue using short field names while state lives in _ctx.
-    private Environment _environment { get => _ctx.Environment; set => _ctx.Environment = value; }
-    private string? _pendingStdin { get => _ctx.PendingStdin; set => _ctx.PendingStdin = value; }
-    private HashSet<string> _importStack => _ctx.ImportStack;
-    private string? _currentFile { get => _ctx.CurrentFile; set => _ctx.CurrentFile = value; }
-    private List<CallFrame> _callStack => _ctx.CallStack;
+    private Environment _environment { get => Ctx.Environment; set => Ctx.Environment = value; }
+    private string? _pendingStdin { get => Ctx.PendingStdin; set => Ctx.PendingStdin = value; }
+    private HashSet<string> _importStack => Ctx.ImportStack;
+    private string? _currentFile { get => Ctx.CurrentFile; set => Ctx.CurrentFile = value; }
+    private List<CallFrame> _callStack => Ctx.CallStack;
 
     /// <summary>
     /// Gets or sets the current file path being executed.
@@ -101,8 +101,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public string? CurrentFile
     {
-        get => _ctx.CurrentFile;
-        set => _ctx.CurrentFile = value;
+        get => Ctx.CurrentFile;
+        set => Ctx.CurrentFile = value;
     }
 
     /// <summary>
@@ -142,8 +142,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public string? CurrentDescribe
     {
-        get => _ctx.CurrentDescribe;
-        set => _ctx.CurrentDescribe = value;
+        get => Ctx.CurrentDescribe;
+        set => Ctx.CurrentDescribe = value;
     }
 
     /// <summary>
@@ -152,8 +152,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public string[]? TestFilter
     {
-        get => _ctx.TestFilter;
-        set => _ctx.TestFilter = value;
+        get => Ctx.TestFilter;
+        set => Ctx.TestFilter = value;
     }
 
     /// <summary>
@@ -162,16 +162,16 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public bool DiscoveryMode
     {
-        get => _ctx.DiscoveryMode;
-        set => _ctx.DiscoveryMode = value;
+        get => Ctx.DiscoveryMode;
+        set => Ctx.DiscoveryMode = value;
     }
 
     /// <summary>Gets the stack of <c>beforeEach</c> hook lists.</summary>
-    internal List<List<IStashCallable>> BeforeEachHooks => _ctx.BeforeEachHooks;
+    internal List<List<IStashCallable>> BeforeEachHooks => Ctx.BeforeEachHooks;
     /// <summary>Gets the stack of <c>afterEach</c> hook lists.</summary>
-    internal List<List<IStashCallable>> AfterEachHooks => _ctx.AfterEachHooks;
+    internal List<List<IStashCallable>> AfterEachHooks => Ctx.AfterEachHooks;
     /// <summary>Gets the stack of <c>afterAll</c> hook lists.</summary>
-    internal List<List<IStashCallable>> AfterAllHooks => _ctx.AfterAllHooks;
+    internal List<List<IStashCallable>> AfterAllHooks => Ctx.AfterAllHooks;
 
     /// <summary>
     /// Gets or sets the output writer used by io.println and io.print.
@@ -179,8 +179,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public TextWriter Output
     {
-        get => _ctx.Output;
-        set => _ctx.Output = value;
+        get => Ctx.Output;
+        set => Ctx.Output = value;
     }
 
     /// <summary>
@@ -189,8 +189,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public TextWriter ErrorOutput
     {
-        get => _ctx.ErrorOutput;
-        set => _ctx.ErrorOutput = value;
+        get => Ctx.ErrorOutput;
+        set => Ctx.ErrorOutput = value;
     }
 
     /// <summary>
@@ -199,8 +199,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public TextReader Input
     {
-        get => _ctx.Input;
-        set => _ctx.Input = value;
+        get => Ctx.Input;
+        set => Ctx.Input = value;
     }
 
     /// <summary>
@@ -217,8 +217,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public CancellationToken CancellationToken
     {
-        get => _ctx.CancellationToken;
-        set => _ctx.CancellationToken = value;
+        get => Ctx.CancellationToken;
+        set => Ctx.CancellationToken = value;
     }
 
     /// <summary>
@@ -235,12 +235,12 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// <summary>
     /// Gets the number of statements executed since the last reset or start of execution.
     /// </summary>
-    public long StepCount => _ctx.StepCount;
+    public long StepCount => Ctx.StepCount;
 
     /// <summary>
     /// Gets the current call stack as a read-only list.
     /// </summary>
-    public IReadOnlyList<CallFrame> CallStack => _ctx.CallStack;
+    public IReadOnlyList<CallFrame> CallStack => Ctx.CallStack;
 
     /// <summary>
     /// Gets all source files that have been loaded during execution (main script + imports).
@@ -253,40 +253,44 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// Null when the interpreter is not executing. Useful for DAP to determine
     /// the current position when paused.
     /// </summary>
-    public SourceSpan? CurrentSpan => _ctx.CurrentSpan;
+    public SourceSpan? CurrentSpan => Ctx.CurrentSpan;
 
     /// <summary>The last caught error. Used by lastError() built-in and try expressions.</summary>
     internal object? LastError
     {
-        get => _ctx.LastError;
-        set => _ctx.LastError = value;
+        get => Ctx.LastError;
+        set => Ctx.LastError = value;
     }
 
     /// <summary>Background processes tracked for cleanup. Used by ProcessBuiltIns.</summary>
-    internal List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses => _ctx.TrackedProcesses;
+    internal List<(StashInstance Handle, System.Diagnostics.Process OsProcess)> TrackedProcesses => Ctx.TrackedProcesses;
 
     /// <summary>Cache mapping process handles to wait results. Used by ProcessBuiltIns.</summary>
-    internal Dictionary<StashInstance, StashInstance> ProcessWaitCache => _ctx.ProcessWaitCache;
+    internal Dictionary<StashInstance, StashInstance> ProcessWaitCache => Ctx.ProcessWaitCache;
 
     /// <summary>Process exit callbacks. Used by ProcessBuiltIns.</summary>
-    internal Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
+    internal Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks => Ctx.ProcessExitCallbacks;
+
+    /// <summary>Active file watchers tracked for cleanup. Used by FsBuiltIns.</summary>
+    internal List<(StashInstance Handle, FileSystemWatcher Watcher)> TrackedWatchers => Ctx.TrackedWatchers;
 
     // ── Sub-interface explicit interface implementations ───────────────────────────────────────
-    object? IExecutionContext.LastError { get => _ctx.LastError; set => _ctx.LastError = value; }
+    object? IExecutionContext.LastError { get => Ctx.LastError; set => Ctx.LastError = value; }
     string[]? IExecutionContext.ScriptArgs => ScriptArgs;
-    IInterpreterContext IInterpreterContext.Fork(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(_ctx.Environment), cancellationToken);
-    IInterpreterContext IInterpreterContext.ForkParallel(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(_ctx.Environment), cancellationToken, attachDebugger: false);
+    IInterpreterContext IInterpreterContext.Fork(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(Ctx.Environment), cancellationToken);
+    IInterpreterContext IInterpreterContext.ForkParallel(System.Threading.CancellationToken cancellationToken) => Fork(Environment.Snapshot(Ctx.Environment), cancellationToken, attachDebugger: false);
     object? IExecutionContext.Debugger => _debugger;
     string IExecutionContext.ExpandTilde(string path) => Interpreter.ExpandTilde(path);
     void IExecutionContext.NotifyOutput(string category, string text) => _debugger?.OnOutput(category, text);
-    void IExecutionContext.EmitExit(int code) { CleanupTrackedProcesses(); if (EmbeddedMode) throw new Stash.Interpreting.Exceptions.ExitException(code); System.Environment.Exit(code); }
-    List<(StashInstance Handle, System.Diagnostics.Process Process)> IProcessContext.TrackedProcesses => _ctx.TrackedProcesses;
-    Dictionary<StashInstance, StashInstance> IProcessContext.ProcessWaitCache => _ctx.ProcessWaitCache;
-    Dictionary<StashInstance, List<IStashCallable>> IProcessContext.ProcessExitCallbacks => _ctx.ProcessExitCallbacks;
+    void IExecutionContext.EmitExit(int code) { CleanupTrackedProcesses(); CleanupTrackedWatchers(); if (EmbeddedMode) throw new Stash.Interpreting.Exceptions.ExitException(code); System.Environment.Exit(code); }
+    List<(StashInstance Handle, System.Diagnostics.Process Process)> IProcessContext.TrackedProcesses => Ctx.TrackedProcesses;
+    Dictionary<StashInstance, StashInstance> IProcessContext.ProcessWaitCache => Ctx.ProcessWaitCache;
+    Dictionary<StashInstance, List<IStashCallable>> IProcessContext.ProcessExitCallbacks => Ctx.ProcessExitCallbacks;
+    List<(StashInstance Handle, FileSystemWatcher Watcher)> IFileWatchContext.TrackedWatchers => Ctx.TrackedWatchers;
     Stash.Runtime.ITestHarness? ITestContext.TestHarness { get => _testHarness; set => _testHarness = value; }
-    List<List<IStashCallable>> ITestContext.BeforeEachHooks => _ctx.BeforeEachHooks;
-    List<List<IStashCallable>> ITestContext.AfterEachHooks => _ctx.AfterEachHooks;
-    List<List<IStashCallable>> ITestContext.AfterAllHooks => _ctx.AfterAllHooks;
+    List<List<IStashCallable>> ITestContext.BeforeEachHooks => Ctx.BeforeEachHooks;
+    List<List<IStashCallable>> ITestContext.AfterEachHooks => Ctx.AfterEachHooks;
+    List<List<IStashCallable>> ITestContext.AfterAllHooks => Ctx.AfterAllHooks;
     object? ITemplateContext.CompileAndRenderTemplate(string template, StashDictionary data, string? basePath) { var r = new Stash.Tpl.TemplateRenderer(this, basePath); return r.Render(template, data); }
     object? ITemplateContext.CompileTemplate(string template) { var l = new Stash.Tpl.TemplateLexer(template); var t = l.Scan(); var p = new Stash.Tpl.TemplateParser(t); return p.Parse(); }
     object? ITemplateContext.RenderCompiledTemplate(object? compiled, StashDictionary data) { if (compiled is not List<Stash.Tpl.TemplateNode> nodes) throw new RuntimeError("'tpl.render' expects a string or compiled template as the first argument."); var r = new Stash.Tpl.TemplateRenderer(this); return r.Render(nodes, data); }
@@ -311,7 +315,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     {
         _capabilities = capabilities;
         _globals = new Environment();
-        _ctx = new ExecutionContext(_globals);
+        Ctx = new ExecutionContext(_globals);
         TaskRegistry = new TaskRegistry();
         DefineBuiltIns();
     }
@@ -334,7 +338,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         TaskRegistry = parent.TaskRegistry; // Shared — tasks from any fork can be awaited by any other
         ScriptArgs = parent.ScriptArgs;
         EmbeddedMode = parent.EmbeddedMode;
-        _ctx = forkedContext;
+        Ctx = forkedContext;
     }
 
     /// <summary>
@@ -350,24 +354,24 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     {
         // Upgrade to synchronized writers on first fork to prevent interleaved output.
         // The same wrapper is shared between parent and all children so they share the lock.
-        if (_ctx.Output is not SynchronizedTextWriter)
+        if (Ctx.Output is not SynchronizedTextWriter)
         {
-            _ctx.Output = new SynchronizedTextWriter(_ctx.Output);
+            Ctx.Output = new SynchronizedTextWriter(Ctx.Output);
         }
-        if (_ctx.ErrorOutput is not SynchronizedTextWriter)
+        if (Ctx.ErrorOutput is not SynchronizedTextWriter)
         {
-            _ctx.ErrorOutput = new SynchronizedTextWriter(_ctx.ErrorOutput);
+            Ctx.ErrorOutput = new SynchronizedTextWriter(Ctx.ErrorOutput);
         }
 
         var forkedCtx = new ExecutionContext(taskScope)
         {
-            Output = _ctx.Output,
-            ErrorOutput = _ctx.ErrorOutput,
-            Input = _ctx.Input,
-            CurrentFile = _ctx.CurrentFile,
+            Output = Ctx.Output,
+            ErrorOutput = Ctx.ErrorOutput,
+            Input = Ctx.Input,
+            CurrentFile = Ctx.CurrentFile,
             CancellationToken = cancellationToken,
-            ElevationActive = _ctx.ElevationActive,
-            ElevationCommand = _ctx.ElevationCommand,
+            ElevationActive = Ctx.ElevationActive,
+            ElevationCommand = Ctx.ElevationCommand,
         };
         var child = new Interpreter(this, forkedCtx);
         if (!attachDebugger)
@@ -426,19 +430,19 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         catch (BreakException)
         {
             var err = new RuntimeError("'break' used outside of a loop.");
-            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
+            _debugger?.OnError(err, Ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ContinueException)
         {
             var err = new RuntimeError("'continue' used outside of a loop.");
-            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
+            _debugger?.OnError(err, Ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ReturnException)
         {
             var err = new RuntimeError("'return' used outside of a function.");
-            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
+            _debugger?.OnError(err, Ctx.CallStack, DebugThreadId);
             throw err;
         }
     }
@@ -447,18 +451,18 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// <param name="stmt">The statement to execute.</param>
     private void Execute(Stmt stmt)
     {
-        if (_ctx.CancellationToken.IsCancellationRequested)
+        if (Ctx.CancellationToken.IsCancellationRequested)
         {
             throw new ScriptCancelledException();
         }
 
-        if (_stepLimit > 0 && ++_ctx.StepCount > _stepLimit)
+        if (_stepLimit > 0 && ++Ctx.StepCount > _stepLimit)
         {
             throw new StepLimitExceededException(_stepLimit);
         }
 
-        _ctx.CurrentSpan = stmt.Span;
-        _debugger?.OnBeforeExecute(stmt.Span, _ctx.Environment, DebugThreadId);
+        Ctx.CurrentSpan = stmt.Span;
+        _debugger?.OnBeforeExecute(stmt.Span, Ctx.Environment, DebugThreadId);
         stmt.Accept(this);
     }
 
@@ -492,13 +496,13 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         catch (BreakException)
         {
             var err = new RuntimeError("'break' used outside of a loop.");
-            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
+            _debugger?.OnError(err, Ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ContinueException)
         {
             var err = new RuntimeError("'continue' used outside of a loop.");
-            _debugger?.OnError(err, _ctx.CallStack, DebugThreadId);
+            _debugger?.OnError(err, Ctx.CallStack, DebugThreadId);
             throw err;
         }
         catch (ReturnException)
@@ -515,7 +519,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public void ResetStepCount()
     {
-        _ctx.StepCount = 0;
+        Ctx.StepCount = 0;
     }
 
     /// <summary>Executes a list of statements in the given environment, restoring the previous environment afterwards.</summary>
@@ -523,10 +527,10 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// <param name="environment">The environment (scope) to execute in.</param>
     public void ExecuteBlock(List<Stmt> statements, Environment environment)
     {
-        Environment previous = _ctx.Environment;
+        Environment previous = Ctx.Environment;
         try
         {
-            _ctx.Environment = environment;
+            Ctx.Environment = environment;
             foreach (Stmt statement in statements)
             {
                 Execute(statement);
@@ -534,7 +538,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         }
         finally
         {
-            _ctx.Environment = previous;
+            Ctx.Environment = previous;
         }
     }
 
@@ -544,18 +548,18 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public object? EvaluateInEnvironment(Expr expr, Environment environment)
     {
-        Environment previous = _ctx.Environment;
-        bool previousAdHocEval = _ctx.IsAdHocEval;
+        Environment previous = Ctx.Environment;
+        bool previousAdHocEval = Ctx.IsAdHocEval;
         try
         {
-            _ctx.Environment = environment;
-            _ctx.IsAdHocEval = true;
+            Ctx.Environment = environment;
+            Ctx.IsAdHocEval = true;
             return expr.Accept(this);
         }
         finally
         {
-            _ctx.Environment = previous;
-            _ctx.IsAdHocEval = previousAdHocEval;
+            Ctx.Environment = previous;
+            Ctx.IsAdHocEval = previousAdHocEval;
         }
     }
 
@@ -646,6 +650,29 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
             catch { /* Process may have already exited */ }
 
             try { osProcess.Dispose(); }
+            catch { /* Best-effort disposal */ }
+        }
+    }
+
+    /// <summary>
+    /// Disposes all active file watchers on script exit.
+    /// </summary>
+    public void CleanupTrackedWatchers()
+    {
+        List<(StashInstance Handle, FileSystemWatcher Watcher)> snapshot;
+        lock (_cleanupLock)
+        {
+            snapshot = new List<(StashInstance, FileSystemWatcher)>(TrackedWatchers);
+            TrackedWatchers.Clear();
+        }
+
+        foreach (var (_, watcher) in snapshot)
+        {
+            try
+            {
+                watcher.EnableRaisingEvents = false;
+                watcher.Dispose();
+            }
             catch { /* Best-effort disposal */ }
         }
     }

@@ -11,9 +11,10 @@ using System.Threading;
 ///   <item><see cref="IProcessContext"/> — process tracking (ProcessBuiltIns)</item>
 ///   <item><see cref="ITestContext"/> — test framework hooks (TestBuiltIns, AssertBuiltins)</item>
 ///   <item><see cref="ITemplateContext"/> — template rendering (TplBuiltIns)</item>
+///   <item><see cref="IFileWatchContext"/> — file watcher tracking (FsBuiltIns)</item>
 /// </list>
 /// </summary>
-public interface IInterpreterContext : IExecutionContext, IProcessContext, ITestContext, ITemplateContext
+public interface IInterpreterContext : IExecutionContext, IProcessContext, ITestContext, ITemplateContext, IFileWatchContext
 {
     // --- Parallel execution ---
     IInterpreterContext Fork(CancellationToken cancellationToken = default);

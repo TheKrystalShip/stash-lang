@@ -485,7 +485,7 @@ public partial class Interpreter
             foreach (FnDeclStmt method in stmt.Methods)
             {
                 var function = new StashFunction(method, _environment);
-                _extensionRegistry.Register(typeName, method.Name.Lexeme, function);
+                ExtensionRegistry.Register(typeName, method.Name.Lexeme, function);
             }
         }
 
@@ -684,7 +684,7 @@ public partial class Interpreter
         if (EmbeddedMode)
             throw new RuntimeError("Privilege elevation is not available in embedded mode.", stmt.Span);
 
-        bool wasAlreadyActive = _ctx.ElevationActive;
+        bool wasAlreadyActive = Ctx.ElevationActive;
 
         if (!wasAlreadyActive && System.Environment.IsPrivilegedProcess)
         {
@@ -715,8 +715,8 @@ public partial class Interpreter
 
             AcquireCredentials(elevator, stmt.Span);
 
-            _ctx.ElevationActive = true;
-            _ctx.ElevationCommand = elevator;
+            Ctx.ElevationActive = true;
+            Ctx.ElevationCommand = elevator;
         }
 
         try
@@ -727,8 +727,8 @@ public partial class Interpreter
         {
             if (!wasAlreadyActive)
             {
-                _ctx.ElevationActive = false;
-                _ctx.ElevationCommand = null;
+                Ctx.ElevationActive = false;
+                Ctx.ElevationCommand = null;
             }
         }
 
@@ -747,7 +747,7 @@ public partial class Interpreter
         }
         catch (RuntimeError e) when (hasCatch || !hasFinally)
         {
-            var error = StashError.FromRuntimeError(e, _ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
+            var error = StashError.FromRuntimeError(e, Ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
             LastError = error;
             if (hasCatch)
             {

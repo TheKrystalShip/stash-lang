@@ -316,13 +316,13 @@ public partial class Interpreter
     private (string Program, List<string> Arguments) ApplyElevationPrefix(
         string program, List<string> arguments)
     {
-        if (!_ctx.ElevationActive || _ctx.ElevationCommand is null)
+        if (!Ctx.ElevationActive || Ctx.ElevationCommand is null)
             return (program, arguments);
 
         // Don't double-prefix commands that are already elevation commands
         string lowerProgram = program.ToLowerInvariant();
         if (lowerProgram is "sudo" or "doas" or "gsudo" or "runas" ||
-            string.Equals(program, _ctx.ElevationCommand, StringComparison.OrdinalIgnoreCase))
+            string.Equals(program, Ctx.ElevationCommand, StringComparison.OrdinalIgnoreCase))
         {
             return (program, arguments);
         }
@@ -330,7 +330,7 @@ public partial class Interpreter
         // Prefix: sudo ufw enable → FileName="sudo", Args=["ufw", "enable"]
         var prefixedArgs = new List<string>(arguments.Count + 1) { program };
         prefixedArgs.AddRange(arguments);
-        return (_ctx.ElevationCommand, prefixedArgs);
+        return (Ctx.ElevationCommand, prefixedArgs);
     }
 
     /// <summary>

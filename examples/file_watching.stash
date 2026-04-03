@@ -1,0 +1,153 @@
+#!/usr/bin/env stash
+
+// examples/file_watching.stash
+// File Watching — monitoring files and directories for changes with fs.watch.
+// Run with: stash examples/file_watching.stash
+
+io.println("=" * 58);
+io.println("  File Watching");
+io.println("=" * 58);
+
+// ── Basic file watching ───────────────────────────────────────────────
+// fs.watch(path, callback) starts a watcher and returns a handle.
+// The callback receives a WatchEvent with .type and .path fields.
+// fs.unwatch(handle) stops the watcher.
+
+io.println("\n-- Basic File Watching --");
+
+let tempDir = fs.tempDir();
+io.println($"Watching temp directory: {tempDir}");
+
+// Watch a directory for any changes
+let watcher = fs.watch(tempDir, (event) => {
+    io.println($"  [{event.type}] {event.path}");
+});
+
+// Trigger some events
+fs.writeFile($"{tempDir}/hello.txt", "Hello, world!");
+time.sleep(0.3);
+
+fs.writeFile($"{tempDir}/hello.txt", "Updated content");
+time.sleep(0.3);
+
+fs.delete($"{tempDir}/hello.txt");
+time.sleep(0.3);
+
+fs.unwatch(watcher);
+io.println("Basic watcher stopped.");
+
+// ── Watching with options ─────────────────────────────────────────────
+// fs.WatchOptions lets you filter by glob pattern and watch recursively.
+// Only events matching the filter pattern will invoke the callback.
+
+io.println("\n-- Filtered and Recursive Watching --");
+
+let subDir = $"{tempDir}/src";
+fs.createDir(subDir);
+
+// Only watch .stash files, recursively through all subdirectories
+let filteredWatcher = fs.watch(tempDir, (event) => {
+    io.println($"  [{event.type}] {path.base(event.path)}");
+}, fs.WatchOptions { recursive: true, filter: "*.stash" });
+
+// This should NOT trigger (wrong extension)
+fs.writeFile($"{tempDir}/readme.md", "# Docs");
+time.sleep(0.2);
+
+// This SHOULD trigger (matches *.stash in a subdirectory)
+fs.writeFile($"{subDir}/main.stash", "io.println(\"hello\");");
+time.sleep(0.3);
+
+fs.unwatch(filteredWatcher);
+io.println("Filtered watcher stopped.");
+
+// ── Config hot-reload pattern ─────────────────────────────────────────
+// A common sysadmin pattern: watch a config file and reload in-memory
+// state whenever it changes — no restart required.
+
+io.println("\n-- Config Hot-Reload Pattern --");
+
+struct ReloadState {
+    count
+}
+
+let configPath = $"{tempDir}/config.toml";
+fs.writeFile(configPath, "port = 8080\nhost = \"localhost\"");
+
+let state = ReloadState { count: 0 };
+
+let configWatcher = fs.watch(configPath, (event) => {
+    if (event.type == fs.WatchEventType.Modified) {
+        state.count = state.count + 1;
+        let content = fs.readFile(event.path);
+        io.println($"  Config reloaded (#{state.count}): {str.trim(content)}");
+    }
+});
+
+// Simulate two in-place config updates
+fs.writeFile(configPath, "port = 9090\nhost = \"0.0.0.0\"");
+time.sleep(0.3);
+
+fs.writeFile(configPath, "port = 3000\nhost = \"127.0.0.1\"");
+time.sleep(0.3);
+
+fs.unwatch(configWatcher);
+io.println($"  Total reloads: {state.count}");
+io.println("Config watcher stopped.");
+
+// ── Watching multiple paths ───────────────────────────────────────────
+// You can run several watchers in parallel — one per directory.
+// Collect the handles into an array to unwatch them all at once.
+
+io.println("\n-- Watching Multiple Paths --");
+
+let dirs = ["alpha", "beta", "gamma"];
+let watchers = [];
+
+for (let name in dirs) {
+    let dirPath = $"{tempDir}/{name}";
+    fs.createDir(dirPath);
+    let w = fs.watch(dirPath, (event) => {
+        io.println($"  [{name}] {event.type}: {path.base(event.path)}");
+    });
+    watchers = arr.push(watchers, w);
+}
+
+fs.writeFile($"{tempDir}/alpha/data.txt", "alpha data");
+fs.writeFile($"{tempDir}/beta/data.txt", "beta data");
+fs.writeFile($"{tempDir}/gamma/data.txt", "gamma data");
+time.sleep(0.5);
+
+// Stop all watchers in one pass
+for (let w in watchers) {
+    fs.unwatch(w);
+}
+io.println("All watchers stopped.");
+
+// ── Rename detection ──────────────────────────────────────────────────
+// When a file is renamed, event.type == "renamed" and event.oldPath
+// carries the original path (where available on the platform).
+
+io.println("\n-- Rename Detection --");
+
+let renameDir = $"{tempDir}/rename_demo";
+fs.createDir(renameDir);
+fs.writeFile($"{renameDir}/before.txt", "moving this file");
+
+let renameWatcher = fs.watch(renameDir, (event) => {
+    if (event.type == fs.WatchEventType.Renamed) {
+        let from = event.oldPath ?? "(unknown)";
+        io.println($"  Renamed: {path.base(from)} → {path.base(event.path)}");
+    }
+});
+
+fs.move($"{renameDir}/before.txt", $"{renameDir}/after.txt");
+time.sleep(0.3);
+
+fs.unwatch(renameWatcher);
+io.println("Rename watcher stopped.");
+
+// ── Cleanup ───────────────────────────────────────────────────────────
+
+fs.delete(tempDir);
+io.println("\nDone! Temp directory cleaned up.");

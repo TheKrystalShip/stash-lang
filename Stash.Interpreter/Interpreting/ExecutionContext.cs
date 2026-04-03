@@ -65,6 +65,9 @@ public class ExecutionContext
     /// <summary>Callbacks registered via process.onExit().</summary>
     public Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks { get; }
 
+    /// <summary>Active file watchers launched by fs.watch(), tracked for cleanup.</summary>
+    public List<(StashInstance Handle, FileSystemWatcher Watcher)> TrackedWatchers { get; }
+
     /// <summary>The name of the current describe block, used to namespace test names.</summary>
     public string? CurrentDescribe { get; set; }
 
@@ -102,6 +105,7 @@ public class ExecutionContext
         TrackedProcesses = new();
         ProcessWaitCache = new(ReferenceEqualityComparer.Instance);
         ProcessExitCallbacks = new(ReferenceEqualityComparer.Instance);
+        TrackedWatchers = new();
         BeforeEachHooks = new();
         AfterEachHooks = new();
         AfterAllHooks = new();

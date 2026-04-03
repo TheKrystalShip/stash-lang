@@ -192,6 +192,8 @@ let config = env.withPrefix("MYAPP_");
 | `fs.setPermissions(path, permissions)` | Set file permissions from a `FilePermissions` struct                              |
 | `fs.setReadOnly(path, readOnly)`       | Set or clear the read-only state of a file or directory                           |
 | `fs.setExecutable(path, executable)`   | Set or clear the executable bit (Unix) — no-op on Windows                         |
+| `fs.watch(path, callback, options?)`   | Watch a file or directory for changes, returns a `Watcher` handle                 |
+| `fs.unwatch(watcher)`                  | Stop a file watcher previously created by `fs.watch()`                            |
 
 ### Permission Types
 
@@ -234,6 +236,68 @@ fs.setPermissions("config.toml", perms);
 ```stash
 fs.setReadOnly("config.toml", true);     // Make read-only
 fs.setExecutable("deploy.sh", true);     // Make executable (Unix)
+```
+
+### File Watching
+
+```stash
+enum WatchEventType {
+    Created,
+    Modified,
+    Deleted,
+    Renamed
+}
+
+struct WatchEvent {
+    type: WatchEventType,  // The type of file system event
+    path: string,          // Absolute path of the affected file/directory
+    oldPath: string        // Only populated for Renamed events; null otherwise
+}
+
+struct WatchOptions {
+    recursive: bool,    // Watch subdirectories (default: false)
+    filter: string,     // Glob filter for filenames (default: "*" — all files)
+    bufferSize: int,    // Internal buffer size in bytes (default: 8192)
+    debounce: int       // Debounce window in milliseconds (default: 100; 0 = no debounce)
+}
+```
+
+`fs.watch(path, callback, options?)` watches a file or directory for changes. It returns a `Watcher` handle used to stop watching via `fs.unwatch()`. The callback receives a `WatchEvent` struct for each file system event.
+
+```stash
+// Watch a directory for changes
+let watcher = fs.watch("/var/log", (event) => {
+    io.println($"[{event.type}] {event.path}");
+});
+
+// Watch with options
+let watcher = fs.watch("./src", (event) => {
+    if (event.type == fs.WatchEventType.Modified) {
+        $(dotnet build);
+    }
+}, fs.WatchOptions { recursive: true, filter: "*.cs" });
+```
+
+**Callback execution:** Callbacks run in forked contexts (`ctx.Fork()`). Value-type variables from the parent scope are snapshotted — changes inside the callback are not visible outside. However, reference types (dicts, struct instances) are shared, so mutations to shared objects are visible in both directions:
+
+```stash
+let state = { configDirty: false };
+fs.watch("/etc/app/config.toml", (event) => {
+    state.configDirty = true;  // Mutates the shared dict — visible in parent
+});
+```
+
+**Debouncing:** Events for the same `(path, type)` pair within the debounce window (default: 100ms) are collapsed into a single callback invocation. This prevents duplicate notifications when editors save files. Renamed events are never debounced. Set `debounce: 0` in `WatchOptions` to receive every raw OS event.
+
+`fs.unwatch(watcher)` stops a watcher and releases OS resources. Calling `fs.unwatch()` on an already-stopped handle is a no-op. All active watchers are automatically disposed when the script exits.
+
+```stash
+let watcher = fs.watch("./logs", (event) => {
+    io.println($"Changed: {event.path}");
+});
+
+// Later: stop watching
+fs.unwatch(watcher);
 ```
 
 ---

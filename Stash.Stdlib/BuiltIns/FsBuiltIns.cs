@@ -1,6 +1,10 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.IO;
+using System.Threading;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Models;
@@ -12,7 +16,7 @@ using static Stash.Stdlib.Registration.P;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Provides 31 functions for reading, writing, and inspecting the filesystem:
+/// Provides 33 functions for reading, writing, and inspecting the filesystem:
 /// <c>fs.readFile</c>, <c>fs.writeFile</c>, <c>fs.appendFile</c>, <c>fs.readLines</c>,
 /// <c>fs.createFile</c>, <c>fs.exists</c>, <c>fs.dirExists</c>, <c>fs.pathExists</c>,
 /// <c>fs.createDir</c>, <c>fs.listDir</c>, <c>fs.delete</c>, <c>fs.copy</c>, <c>fs.move</c>,
@@ -20,7 +24,7 @@ using static Stash.Stdlib.Registration.P;
 /// <c>fs.isDir</c>, <c>fs.isSymlink</c>, <c>fs.symlink</c>, <c>fs.modifiedAt</c>,
 /// <c>fs.readable</c>, <c>fs.writable</c>, <c>fs.executable</c>, <c>fs.tempFile</c>,
 /// <c>fs.tempDir</c>, <c>fs.getPermissions</c>, <c>fs.setPermissions</c>,
-/// <c>fs.setReadOnly</c>, and <c>fs.setExecutable</c>.
+/// <c>fs.setReadOnly</c>, <c>fs.setExecutable</c>, <c>fs.watch</c>, and <c>fs.unwatch</c>.
 /// </para>
 /// <para>
 /// This namespace is only registered when the <see cref="StashCapabilities.FileSystem"/>
@@ -29,6 +33,89 @@ using static Stash.Stdlib.Registration.P;
 /// </remarks>
 public static class FsBuiltIns
 {
+    // ── File watcher state ────────────────────────────────────────────────
+    private static readonly ConcurrentDictionary<StashInstance, WatcherState> _activeWatchers = new(ReferenceEqualityComparer.Instance);
+
+    private sealed class WatcherState : IDisposable
+    {
+        public FileSystemWatcher OsWatcher { get; }
+        public IStashCallable Callback { get; }
+        public IInterpreterContext Context { get; }
+        public int DebounceMs { get; }
+        private readonly ConcurrentDictionary<string, System.Threading.Timer> _debounceTimers = new();
+
+        public WatcherState(FileSystemWatcher watcher, IStashCallable callback, IInterpreterContext context, int debounceMs)
+        {
+            OsWatcher = watcher;
+            Callback = callback;
+            Context = context;
+            DebounceMs = debounceMs;
+        }
+
+        public void FireCallback(StashEnumValue eventType, string path, string? oldPath)
+        {
+            if (DebounceMs <= 0 || eventType.MemberName == "Renamed")
+            {
+                // No debounce or rename events — fire immediately
+                InvokeCallback(eventType, path, oldPath);
+                return;
+            }
+
+            string key = $"{path}:{eventType.MemberName}";
+            if (_debounceTimers.TryGetValue(key, out System.Threading.Timer? existing))
+            {
+                existing.Change(DebounceMs, Timeout.Infinite);
+            }
+            else
+            {
+                var timer = new System.Threading.Timer(_ =>
+                {
+                    _debounceTimers.TryRemove(key, out System.Threading.Timer? _);
+                    InvokeCallback(eventType, path, oldPath);
+                }, null, DebounceMs, Timeout.Infinite);
+                if (!_debounceTimers.TryAdd(key, timer))
+                {
+                    timer.Dispose();
+                    if (_debounceTimers.TryGetValue(key, out System.Threading.Timer? other))
+                    {
+                        other.Change(DebounceMs, Timeout.Infinite);
+                    }
+                }
+            }
+        }
+
+        private void InvokeCallback(StashEnumValue eventType, string path, string? oldPath)
+        {
+            try
+            {
+                IInterpreterContext child = Context.Fork();
+                var eventFields = new Dictionary<string, object?>
+                {
+                    ["type"] = eventType,
+                    ["path"] = path,
+                    ["oldPath"] = oldPath
+                };
+                var watchEvent = new StashInstance("WatchEvent", eventFields);
+                Callback.Call(child, new List<object?> { watchEvent });
+            }
+            catch
+            {
+                // Errors in watcher callbacks are non-fatal (same as sys.onSignal)
+            }
+        }
+
+        public void Dispose()
+        {
+            try { OsWatcher.EnableRaisingEvents = false; } catch { }
+            foreach (var timer in _debounceTimers.Values)
+            {
+                try { timer.Dispose(); } catch { }
+            }
+            _debounceTimers.Clear();
+            try { OsWatcher.Dispose(); } catch { }
+        }
+    }
+
     /// <summary>
     /// Expands a leading <c>~</c> to the user's home directory in the given path.
     /// </summary>
@@ -39,6 +126,9 @@ public static class FsBuiltIns
         // ── fs namespace ──────────────────────────────────────────────────
         var ns = new NamespaceBuilder("fs");
         ns.RequiresCapability(StashCapabilities.FileSystem);
+
+        // fs.WatchEventType — Enum of file system event types
+        ns.Enum("WatchEventType", ["Created", "Modified", "Deleted", "Renamed"]);
 
         // fs.readFile(path) — Reads the entire contents of a file as a string. Throws on I/O error.
         ns.Function("readFile", [Param("path", "string")], (ctx, args) =>
@@ -699,6 +789,114 @@ public static class FsBuiltIns
             return null;
         }, returnType: "null", documentation: "Sets or clears the executable permission on a file. On Unix, toggles the user execute bit (adds on true, clears all execute bits on false). On Windows, this is a no-op since executability is determined by file extension.\n@param path The file path to modify.\n@param executable True to make executable, false to remove execute permission.");
 
+        // ── File watching ─────────────────────────────────────────────────────
+
+        // fs.watch(path, callback, options?) — Watch a file or directory for changes.
+        ns.Function("watch", [Param("path", "string"), Param("callback", "function"), Param("options", "WatchOptions")], (ctx, args) =>
+        {
+            Args.Count(args, 2, 3, "fs.watch");
+            var path = Args.String(args, 0, "fs.watch");
+            var callback = Args.Callable(args, 1, "fs.watch");
+            path = ctx.ExpandTilde(path);
+            path = System.IO.Path.GetFullPath(path);
+
+            if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+                throw new RuntimeError($"Cannot watch '{path}': path does not exist.");
+
+            // Parse options
+            bool recursive = false;
+            string filter = "*";
+            int bufferSize = 8192;
+            int debounceMs = 100;
+
+            if (args.Count > 2 && args[2] is StashInstance opts && opts.TypeName == "WatchOptions")
+            {
+                if (opts.GetField("recursive", null) is bool r) recursive = r;
+                if (opts.GetField("filter", null) is string f) filter = f;
+                if (opts.GetField("bufferSize", null) is long bs) bufferSize = (int)bs;
+                if (opts.GetField("debounce", null) is long db) debounceMs = (int)db;
+            }
+
+            // Determine watch path and filter for FileSystemWatcher
+            string watchPath;
+            string watchFilter;
+            if (System.IO.File.Exists(path))
+            {
+                watchPath = System.IO.Path.GetDirectoryName(path)!;
+                watchFilter = System.IO.Path.GetFileName(path);
+            }
+            else
+            {
+                watchPath = path;
+                watchFilter = filter;
+            }
+
+            var watcher = new FileSystemWatcher(watchPath, watchFilter)
+            {
+                IncludeSubdirectories = recursive,
+                InternalBufferSize = bufferSize,
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName |
+                               NotifyFilters.LastWrite | NotifyFilters.Size | NotifyFilters.CreationTime
+            };
+
+            // Create the handle
+            var handle = new StashInstance("Watcher", new Dictionary<string, object?>());
+
+            // Create watcher state (manages debouncing + callback invocation)
+            var state = new WatcherState(watcher, callback, ctx, debounceMs);
+            _activeWatchers[handle] = state;
+            ctx.TrackedWatchers.Add((handle, watcher));
+
+            // Attach event handlers
+            watcher.Created += (_, e) => state.FireCallback(new StashEnumValue("WatchEventType", "Created"), e.FullPath, null);
+            watcher.Changed += (_, e) => state.FireCallback(new StashEnumValue("WatchEventType", "Modified"), e.FullPath, null);
+            watcher.Deleted += (_, e) => state.FireCallback(new StashEnumValue("WatchEventType", "Deleted"), e.FullPath, null);
+            watcher.Renamed += (_, e) => state.FireCallback(new StashEnumValue("WatchEventType", "Renamed"), e.FullPath, e.OldFullPath);
+            watcher.Error += (_, e) =>
+            {
+                // Log warning but don't crash — watcher remains active
+                try
+                {
+                    IInterpreterContext child = ctx.Fork();
+                    // Use log.warn pattern — just write to error output
+                    child.ErrorOutput.WriteLine($"[WARN] fs.watch: {e.GetException().Message}");
+                }
+                catch { /* Best-effort warning */ }
+            };
+
+            // Start watching
+            try
+            {
+                watcher.EnableRaisingEvents = true;
+            }
+            catch (Exception ex)
+            {
+                // Cleanup on failure
+                _activeWatchers.TryRemove(handle, out _);
+                ctx.TrackedWatchers.RemoveAll(e => ReferenceEquals(e.Handle, handle));
+                state.Dispose();
+                throw new RuntimeError($"Cannot watch '{path}': {ex.Message}");
+            }
+
+            return handle;
+        }, isVariadic: true, returnType: "Watcher", documentation: "Watches a file or directory for changes and invokes a callback for each event. Returns a Watcher handle that can be passed to fs.unwatch() to stop watching.\n\nThe callback receives a WatchEvent struct with type (a WatchEventType enum: Created, Modified, Deleted, Renamed), path (absolute), and oldPath (for renames only).\n\nCallbacks execute in an isolated forked context. Value-type variables from the parent scope are snapshotted; mutations to reference types (dicts, struct instances) are visible in both directions.\n\nEvents are debounced by default (100ms window) to suppress duplicate OS notifications. Set debounce to 0 in WatchOptions to receive every raw event.\n\n@param path File or directory path to watch.\n@param callback Function receiving a WatchEvent on each change.\n@param options Optional WatchOptions struct: recursive (bool), filter (string glob), bufferSize (int bytes), debounce (int ms).");
+
+        // fs.unwatch(watcher) — Stop watching a file or directory.
+        ns.Function("unwatch", [Param("watcher", "Watcher")], (ctx, args) =>
+        {
+            var handle = Args.Instance(args, 0, "Watcher", "fs.unwatch");
+
+            if (_activeWatchers.TryRemove(handle, out WatcherState? state))
+            {
+                state.Dispose();
+            }
+
+            // Remove from tracked list (best-effort — may not be in this context's list)
+            ctx.TrackedWatchers.RemoveAll(e => ReferenceEquals(e.Handle, handle));
+
+            return null;
+        }, returnType: "null", documentation: "Stops a file watcher previously created by fs.watch(). Disposes the underlying OS watcher and removes it from tracking. Calling fs.unwatch() on an already-stopped watcher is a no-op.\n\n@param watcher The Watcher handle returned by fs.watch().");
+
         // ── Built-in structs for file permissions ─────────────────────────────
         ns.Struct("FilePermission", [
             new BuiltInField("read", "bool"),
@@ -711,6 +909,22 @@ public static class FsBuiltIns
             new BuiltInField("group", "FilePermission"),
             new BuiltInField("others", "FilePermission"),
         ]);
+
+        // ── Built-in structs for file watching ────────────────────────────────
+        ns.Struct("WatchEvent", [
+            new BuiltInField("type", "WatchEventType"),
+            new BuiltInField("path", "string"),
+            new BuiltInField("oldPath", "string"),
+        ]);
+
+        ns.Struct("WatchOptions", [
+            new BuiltInField("recursive", "bool"),
+            new BuiltInField("filter", "string"),
+            new BuiltInField("bufferSize", "int"),
+            new BuiltInField("debounce", "int"),
+        ]);
+
+        ns.Struct("Watcher", []);
 
         return ns.Build();
     }

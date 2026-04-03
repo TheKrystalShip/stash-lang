@@ -744,7 +744,7 @@ public partial class Interpreter
         }
         catch (RuntimeError e)
         {
-            var error = StashError.FromRuntimeError(e, _ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
+            var error = StashError.FromRuntimeError(e, Ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
             LastError = error;
             return error;
         }
@@ -935,7 +935,7 @@ public partial class Interpreter
                 bodyError = e;
                 lastError = e;
                 lastFailureWasException = true;
-                var stashErr = StashError.FromRuntimeError(e, _ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
+                var stashErr = StashError.FromRuntimeError(e, Ctx.CallStack.Select(f => (f.FunctionName, f.CallSite)).ToList());
                 collectedErrors.Add(stashErr);
                 InvokeOnRetryHook(onRetryFn, onRetryParamAttempt, onRetryParamError, onRetryBody,
                     currentAttempt, stashErr, currentAttempt < maxAttempts);
@@ -1405,7 +1405,7 @@ public partial class Interpreter
         if (obj is StashDictionary dict)
         {
             // Check for dict extension methods before key lookup
-            if (_extensionRegistry.TryGetMethod("dict", expr.Name.Lexeme, out IStashCallable? dictExtMethod) &&
+            if (ExtensionRegistry.TryGetMethod("dict", expr.Name.Lexeme, out IStashCallable? dictExtMethod) &&
                 dictExtMethod is StashFunction dictExtFunc)
             {
                 return new ExtensionBoundMethod(obj, dictExtFunc);
@@ -1437,7 +1437,7 @@ public partial class Interpreter
             _ => null
         };
 
-        if (extTypeName is not null && _extensionRegistry.TryGetMethod(extTypeName, expr.Name.Lexeme, out IStashCallable? extMethod))
+        if (extTypeName is not null && ExtensionRegistry.TryGetMethod(extTypeName, expr.Name.Lexeme, out IStashCallable? extMethod))
         {
             if (extMethod is StashFunction extFunc)
             {
