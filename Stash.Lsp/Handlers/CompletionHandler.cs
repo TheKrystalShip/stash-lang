@@ -540,6 +540,36 @@ public class CompletionHandler : CompletionHandlerBase
                 }
             }
 
+            // ── UFCS completions ──────────────────────────────────────────────
+            // If the resolved type is UFCS-eligible ("string" or "array"),
+            // offer namespace functions as method-style completions.
+            // Skip if the prefix is a struct type — user-defined structs are not UFCS-eligible.
+            var ufcsNamespace = prefixDef?.Kind != StashSymbolKind.Struct
+                ? StdlibRegistry.GetUfcsNamespace(structName)
+                : null;
+            if (ufcsNamespace != null)
+            {
+                foreach (var fn in StdlibRegistry.GetNamespaceMembers(ufcsNamespace))
+                {
+                    // Build arity-adjusted signature: remove the first parameter (implicit receiver)
+                    var adjustedParams = fn.Parameters.Skip(1).ToArray();
+                    var paramParts = adjustedParams.Select(p => p.Type != null ? $"{p.Name}: {p.Type}" : p.Name);
+                    string sig = $"{fn.Name}({string.Join(", ", paramParts)})";
+                    if (fn.ReturnType != null)
+                        sig += $" → {fn.ReturnType}";
+
+                    items.Add(new CompletionItem
+                    {
+                        Label = fn.Name,
+                        Kind = LspCompletionItemKind.Method,
+                        Detail = $"{sig}  (UFCS: {ufcsNamespace}.{fn.Name})",
+                        Documentation = fn.Documentation != null
+                            ? new MarkupContent { Kind = MarkupKind.Markdown, Value = fn.Documentation }
+                            : null
+                    });
+                }
+            }
+
             if (prefixDef != null && prefixDef.Kind == StashSymbolKind.Struct)
             {
                 var allSymbols = result.Symbols.All;

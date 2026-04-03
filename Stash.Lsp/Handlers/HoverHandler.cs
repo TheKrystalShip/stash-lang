@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Handlers;
 
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.Extensions.Logging;
@@ -153,6 +154,37 @@ public class HoverHandler : HoverHandlerBase
                                 Value = markdown
                             })
                         });
+                    }
+
+                    // ── UFCS hover fallback ───────────────────────────────────────
+                    // If the prefix is a variable with a UFCS-eligible type (string/array),
+                    // resolve the function from the corresponding namespace.
+                    if (result != null)
+                    {
+                        var visibleSymbols = result.Symbols.GetVisibleSymbols((int)line, (int)col);
+                        var prefixDef = visibleSymbols.FirstOrDefault(s => s.Name == dotPrefix);
+                        if (prefixDef != null)
+                        {
+                            var prefixType = result.Symbols.GetNarrowedTypeHint(dotPrefix, (int)line, (int)col)
+                                             ?? prefixDef.TypeHint;
+                            var ufcsNs = prefixType != null ? StdlibRegistry.GetUfcsNamespace(prefixType) : null;
+                            if (ufcsNs != null && StdlibRegistry.TryGetNamespaceFunction($"{ufcsNs}.{word}", out var ufcsFunc))
+                            {
+                                var markdown = $"```stash\n{ufcsFunc.Detail}\n```\n**(UFCS)** *built-in function* — `{dotPrefix}.{word}()` is equivalent to `{ufcsNs}.{word}({dotPrefix})`";
+                                if (ufcsFunc.Documentation != null)
+                                {
+                                    markdown += "\n\n---\n\n" + FormatDocumentation(ufcsFunc.Documentation);
+                                }
+                                return Task.FromResult<Hover?>(new Hover
+                                {
+                                    Contents = new MarkedStringsOrMarkupContent(new MarkupContent
+                                    {
+                                        Kind = MarkupKind.Markdown,
+                                        Value = markdown
+                                    })
+                                });
+                            }
+                        }
                     }
                 }
             }

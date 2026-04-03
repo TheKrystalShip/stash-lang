@@ -1065,11 +1065,33 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
-    /// <summary>Recurses into the object sub-expression of a dot-access expression.</summary>
+    /// <summary>
+    /// Recurses into the object sub-expression of a dot-access expression.
+    /// Records a UFCS reference when the receiver has a known UFCS-eligible type.
+    /// </summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDotExpr(DotExpr expr)
     {
         expr.Object.Accept(this);
+
+        // Record UFCS references for Find References support
+        if (expr.Object is IdentifierExpr identifier)
+        {
+            var symbol = FindSymbolInScopeChain(identifier.Name.Lexeme, expr.Name.Span.StartLine, expr.Name.Span.StartColumn);
+            if (symbol?.TypeHint != null)
+            {
+                var ufcsNs = StdlibRegistry.GetUfcsNamespace(symbol.TypeHint);
+                if (ufcsNs != null && StdlibRegistry.TryGetNamespaceFunction($"{ufcsNs}.{expr.Name.Lexeme}", out _))
+                {
+                    _references.Add(new ReferenceInfo(
+                        $"{ufcsNs}.{expr.Name.Lexeme}",
+                        expr.Name.Span,
+                        ReferenceKind.Call,
+                        null));
+                }
+            }
+        }
+
         return null;
     }
 
