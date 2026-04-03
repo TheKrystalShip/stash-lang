@@ -621,6 +621,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitCallExpr(CallExpr expr)
     {
+        bool hasSpread = expr.Arguments.Any(a => a is SpreadExpr);
+
         if (expr.Callee is IdentifierExpr id)
         {
             var line = id.Span.StartLine;
@@ -634,12 +636,31 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 if (paramCount >= 0)
                 {
                     int requiredCount = definition.RequiredParameterCount ?? paramCount;
-                    if (expr.Arguments.Count < requiredCount || expr.Arguments.Count > paramCount)
+                    if (hasSpread)
                     {
-                        string expected = requiredCount == paramCount
-                            ? $"{paramCount}"
-                            : $"{requiredCount} to {paramCount}";
-                        _diagnostics.Add(DiagnosticDescriptors.SA0401.CreateDiagnostic(expr.Paren.Span, expected, expr.Arguments.Count));
+                        int nonSpreadCount = expr.Arguments.Count(a => a is not SpreadExpr);
+                        if (!definition.IsVariadic && nonSpreadCount > paramCount)
+                        {
+                            _diagnostics.Add(DiagnosticDescriptors.SA0506.CreateDiagnostic(expr.Paren.Span, nonSpreadCount, id.Name.Lexeme, paramCount));
+                        }
+                    }
+                    else if (definition.IsVariadic)
+                    {
+                        if (expr.Arguments.Count < requiredCount)
+                        {
+                            string expected = $"{requiredCount}+";
+                            _diagnostics.Add(DiagnosticDescriptors.SA0401.CreateDiagnostic(expr.Paren.Span, expected, expr.Arguments.Count));
+                        }
+                    }
+                    else
+                    {
+                        if (expr.Arguments.Count < requiredCount || expr.Arguments.Count > paramCount)
+                        {
+                            string expected = requiredCount == paramCount
+                                ? $"{paramCount}"
+                                : $"{requiredCount} to {paramCount}";
+                            _diagnostics.Add(DiagnosticDescriptors.SA0401.CreateDiagnostic(expr.Paren.Span, expected, expr.Arguments.Count));
+                        }
                     }
                 }
 
@@ -648,6 +669,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 {
                     for (int i = 0; i < expr.Arguments.Count && i < definition.ParameterTypes.Length; i++)
                     {
+                        if (expr.Arguments[i] is SpreadExpr)
+                        {
+                            break; // Unknown distribution after spread
+                        }
+
                         var expectedType = definition.ParameterTypes[i];
                         if (expectedType == null)
                         {
@@ -670,11 +696,20 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                  StdlibRegistry.IsBuiltInNamespace(nsId.Name.Lexeme))
         {
             var qualifiedName = $"{nsId.Name.Lexeme}.{dot.Name.Lexeme}";
-            if (StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out var func) &&
-                !func.IsVariadic &&
-                expr.Arguments.Count != func.Parameters.Length)
+            if (StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out var func) && !func.IsVariadic)
             {
-                _diagnostics.Add(DiagnosticDescriptors.SA0402.CreateDiagnostic(expr.Paren.Span, func.Parameters.Length, expr.Arguments.Count));
+                if (hasSpread)
+                {
+                    int nonSpreadCount = expr.Arguments.Count(a => a is not SpreadExpr);
+                    if (nonSpreadCount > func.Parameters.Length)
+                    {
+                        _diagnostics.Add(DiagnosticDescriptors.SA0506.CreateDiagnostic(expr.Paren.Span, nonSpreadCount, $"{nsId.Name.Lexeme}.{dot.Name.Lexeme}", func.Parameters.Length));
+                    }
+                }
+                else if (expr.Arguments.Count != func.Parameters.Length)
+                {
+                    _diagnostics.Add(DiagnosticDescriptors.SA0402.CreateDiagnostic(expr.Paren.Span, func.Parameters.Length, expr.Arguments.Count));
+                }
             }
         }
         else
@@ -684,6 +719,17 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
         foreach (var arg in expr.Arguments)
         {
+            if (arg is SpreadExpr spreadArg)
+            {
+                if (spreadArg.Expression is ArrayExpr innerArr && innerArr.Elements.Count > 0)
+                {
+                    _diagnostics.Add(DiagnosticDescriptors.SA0504.CreateUnnecessaryDiagnostic(spreadArg.Span));
+                }
+                else
+                {
+                    CheckSpreadDiagnostics(spreadArg, isArrayContext: true);
+                }
+            }
             arg.Accept(this);
         }
         return null;
@@ -769,6 +815,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         foreach (var el in expr.Elements)
         {
+            if (el is SpreadExpr spread)
+            {
+                CheckSpreadDiagnostics(spread, isArrayContext: true);
+            }
             el.Accept(this);
         }
 
@@ -779,8 +829,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDictLiteralExpr(DictLiteralExpr expr)
     {
-        foreach (var (_, value) in expr.Entries)
+        foreach (var (key, value) in expr.Entries)
         {
+            if (key == null && value is SpreadExpr spread)
+            {
+                CheckSpreadDiagnostics(spread, isArrayContext: false);
+            }
             value.Accept(this);
         }
 
@@ -1108,5 +1162,63 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         }
 
         return inside.Split(',').Length;
+    }
+
+    /// <inheritdoc />
+    public object? VisitSpreadExpr(SpreadExpr expr)
+    {
+        expr.Expression.Accept(this);
+        return null;
+    }
+
+    /// <summary>
+    /// Emits spread-specific diagnostics (SA0501–SA0505) for a spread expression based on
+    /// whether it appears in an array context (positional spread) or a dict context (key-value spread).
+    /// </summary>
+    private void CheckSpreadDiagnostics(SpreadExpr spread, bool isArrayContext)
+    {
+        var inner = spread.Expression;
+
+        // SA0503: spreading null literal
+        if (inner is LiteralExpr lit && lit.Value == null)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0503.CreateDiagnostic(spread.Span));
+            return;
+        }
+
+        // SA0505: empty array spread
+        if (inner is ArrayExpr arr && arr.Elements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0505.CreateUnnecessaryDiagnostic(spread.Span, "array"));
+            return;
+        }
+
+        // SA0505: empty dict spread (dict context only)
+        if (!isArrayContext && inner is DictLiteralExpr dict && dict.Entries.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0505.CreateUnnecessaryDiagnostic(spread.Span, "dictionary"));
+            return;
+        }
+
+        // Type inference check
+        var line = spread.Span.StartLine;
+        var col = spread.Span.StartColumn;
+        var inferredType = TypeInferenceEngine.InferExpressionType(_scopeTree, inner, line, col);
+        if (inferredType != null && inferredType != "null")
+        {
+            if (isArrayContext && inferredType != "array")
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0501.CreateDiagnostic(spread.Span, inferredType));
+            }
+            else if (!isArrayContext && inferredType != "dict")
+            {
+                // Structs can also be spread into dicts
+                var structDef = _scopeTree.FindDefinition(inferredType, line, col);
+                if (structDef == null || structDef.Kind != SymbolKind.Struct)
+                {
+                    _diagnostics.Add(DiagnosticDescriptors.SA0502.CreateDiagnostic(spread.Span, inferredType));
+                }
+            }
+        }
     }
 }

@@ -36,6 +36,14 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0402 = new("SA0402", "Built-in function arity mismatch", DiagnosticLevel.Error, "Functions & calls", "Expected {0} arguments but got {1}.");
     public static readonly DiagnosticDescriptor SA0403 = new("SA0403", "Argument type mismatch", DiagnosticLevel.Warning, "Functions & calls", "Argument '{0}' expects type '{1}' but got '{2}'.");
 
+    // ── SA05xx — Spread / Rest ───────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0501 = new("SA0501", "Spread type mismatch (array context)", DiagnosticLevel.Warning, "Spread / Rest", "Spread argument has type '{0}', expected 'array'.");
+    public static readonly DiagnosticDescriptor SA0502 = new("SA0502", "Spread type mismatch (dict context)", DiagnosticLevel.Warning, "Spread / Rest", "Spread argument has type '{0}', expected 'dict' or struct instance.");
+    public static readonly DiagnosticDescriptor SA0503 = new("SA0503", "Spreading null literal", DiagnosticLevel.Warning, "Spread / Rest", "Spreading 'null' will always fail at runtime.");
+    public static readonly DiagnosticDescriptor SA0504 = new("SA0504", "Unnecessary spread of array literal", DiagnosticLevel.Information, "Spread / Rest", "Unnecessary spread of array literal in function call. Pass the elements as direct arguments instead.");
+    public static readonly DiagnosticDescriptor SA0505 = new("SA0505", "Empty spread", DiagnosticLevel.Information, "Spread / Rest", "Spreading an empty {0} literal has no effect.");
+    public static readonly DiagnosticDescriptor SA0506 = new("SA0506", "Too many arguments with spread", DiagnosticLevel.Error, "Spread / Rest", "At least {0} arguments provided but '{1}' expects at most {2}.");
+
     // ── SA07xx — Commands ────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0701 = new("SA0701", "Nested elevate", DiagnosticLevel.Warning, "Commands", "Nested 'elevate' has no effect. The outer elevation context already applies.");
     public static readonly DiagnosticDescriptor SA0702 = new("SA0702", "Retry shell commands only", DiagnosticLevel.Warning, "Commands", "Retry body contains only shell commands, which never throw. Add an 'until' clause to check command results, or use '$!(...)' strict commands.");
@@ -76,6 +84,12 @@ public static class DiagnosticDescriptors
         dict[SA0401.Code] = SA0401;
         dict[SA0402.Code] = SA0402;
         dict[SA0403.Code] = SA0403;
+        dict[SA0501.Code] = SA0501;
+        dict[SA0502.Code] = SA0502;
+        dict[SA0503.Code] = SA0503;
+        dict[SA0504.Code] = SA0504;
+        dict[SA0505.Code] = SA0505;
+        dict[SA0506.Code] = SA0506;
         dict[SA0701.Code] = SA0701;
         dict[SA0702.Code] = SA0702;
         dict[SA0703.Code] = SA0703;

@@ -63,6 +63,11 @@ public class LambdaExpr : Expr
     public Token? AsyncKeyword { get; }
 
     /// <summary>
+    /// Gets whether the last parameter is a rest parameter (<c>...name</c>).
+    /// </summary>
+    public bool HasRestParam { get; }
+
+    /// <summary>
     /// Creates a new lambda expression node.
     /// </summary>
     /// <param name="parameters">The parameter name tokens.</param>
@@ -74,7 +79,7 @@ public class LambdaExpr : Expr
     /// <param name="isAsync">Whether this lambda was declared with the <c>async</c> keyword.</param>
     /// <param name="asyncKeyword">The <c>async</c> keyword token, or <c>null</c>.</param>
     public LambdaExpr(List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues,
-                      Expr? expressionBody, BlockStmt? blockBody, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null) : base(span)
+                      Expr? expressionBody, BlockStmt? blockBody, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null, bool hasRestParam = false) : base(span)
     {
         Parameters = parameters;
         ParameterTypes = parameterTypes;
@@ -83,6 +88,7 @@ public class LambdaExpr : Expr
         BlockBody = blockBody;
         IsAsync = isAsync;
         AsyncKeyword = asyncKeyword;
+        HasRestParam = hasRestParam;
     }
 
     /// <inheritdoc />

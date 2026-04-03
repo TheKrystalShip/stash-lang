@@ -30,6 +30,8 @@ public class FnDeclStmt : Stmt
     public Token? AsyncKeyword { get; }
     /// <summary>Gets the function body block.</summary>
     public BlockStmt Body { get; }
+    /// <summary>Gets whether the last parameter is a rest parameter (<c>...name</c>).</summary>
+    public bool HasRestParam { get; }
 
     /// <summary>Initializes a new instance of <see cref="FnDeclStmt"/>.</summary>
     /// <param name="name">The function name token.</param>
@@ -41,7 +43,7 @@ public class FnDeclStmt : Stmt
     /// <param name="span">The source location of this declaration.</param>
     /// <param name="isAsync">Whether this function was declared with the <c>async</c> keyword.</param>
     /// <param name="asyncKeyword">The <c>async</c> keyword token, or <c>null</c>.</param>
-    public FnDeclStmt(Token name, List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues, Token? returnType, BlockStmt body, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null) : base(span)
+    public FnDeclStmt(Token name, List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues, Token? returnType, BlockStmt body, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null, bool hasRestParam = false) : base(span)
     {
         Name = name;
         Parameters = parameters;
@@ -51,6 +53,7 @@ public class FnDeclStmt : Stmt
         Body = body;
         IsAsync = isAsync;
         AsyncKeyword = asyncKeyword;
+        HasRestParam = hasRestParam;
     }
 
     /// <inheritdoc />

@@ -58,7 +58,7 @@ public class DictLiteralTests
         var result = ParseExpr("{ name: \"hello\" }");
         var dict = Assert.IsType<DictLiteralExpr>(result);
         Assert.Single(dict.Entries);
-        Assert.Equal("name", dict.Entries[0].Key.Lexeme);
+        Assert.Equal("name", dict.Entries[0].Key?.Lexeme);
     }
 
     [Fact]

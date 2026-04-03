@@ -679,6 +679,10 @@
           "match": "="
         },
         {
+          "name": "keyword.operator.spread.stash",
+          "match": "\\.\\.\\."
+        },
+        {
           "name": "keyword.operator.range.stash",
           "match": "\\.\\."
         },

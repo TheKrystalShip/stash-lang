@@ -198,6 +198,10 @@ public static class TypeInferenceEngine
             case TryExpr tryExpr:
                 return InferExpressionType(scopeTree, tryExpr.Expression, contextLine, contextCol);
 
+            // Rule 6b: Spread expression — infer type of inner expression
+            case SpreadExpr spreadExpr:
+                return InferExpressionType(scopeTree, spreadExpr.Expression, contextLine, contextCol);
+
             // Rule 7: Literal type inference
             case LiteralExpr literal:
                 return literal.Value switch

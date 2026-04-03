@@ -1194,7 +1194,19 @@ public partial class Interpreter
             arguments = new List<object?>(expr.Arguments.Count);
             foreach (Expr argument in expr.Arguments)
             {
-                arguments.Add(argument.Accept(this));
+                if (argument is SpreadExpr spreadArg)
+                {
+                    object? spreadValue = spreadArg.Expression.Accept(this);
+                    if (spreadValue is not List<object?> spreadList)
+                    {
+                        throw new RuntimeError("Cannot spread non-array value in function call.", spreadArg.Span);
+                    }
+                    arguments.AddRange(spreadList);
+                }
+                else
+                {
+                    arguments.Add(argument.Accept(this));
+                }
             }
         }
 
@@ -1215,6 +1227,12 @@ public partial class Interpreter
                     $"Expected {expected} arguments but got {arguments.Count}.",
                     expr.Paren.Span);
             }
+        }
+        else if (function is UserCallable userCallable && arguments.Count < userCallable.MinArity)
+        {
+            throw new RuntimeError(
+                $"Expected at least {userCallable.MinArity} arguments but got {arguments.Count}.",
+                expr.Paren.Span);
         }
 
         if (_debugger == null)
@@ -1508,7 +1526,19 @@ public partial class Interpreter
         var elements = new List<object?>();
         foreach (Expr element in expr.Elements)
         {
-            elements.Add(element.Accept(this));
+            if (element is SpreadExpr spread)
+            {
+                object? spreadValue = spread.Expression.Accept(this);
+                if (spreadValue is not List<object?> spreadList)
+                {
+                    throw new RuntimeError("Cannot spread non-array value into array literal.", spread.Span);
+                }
+                elements.AddRange(spreadList);
+            }
+            else
+            {
+                elements.Add(element.Accept(this));
+            }
         }
         return elements;
     }
@@ -1519,7 +1549,34 @@ public partial class Interpreter
         var dict = new StashDictionary();
         foreach (var (key, value) in expr.Entries)
         {
-            dict.Set(key.Lexeme, value.Accept(this));
+            if (key == null)
+            {
+                // Spread entry: ...expr
+                object? spreadValue = value is SpreadExpr spread ? spread.Expression.Accept(this) : value.Accept(this);
+                if (spreadValue is StashDictionary spreadDict)
+                {
+                    foreach (var kvp in spreadDict.GetAllEntries())
+                    {
+                        dict.Set(kvp.Key, kvp.Value);
+                    }
+                }
+                else if (spreadValue is StashInstance instance)
+                {
+                    foreach (var kvp in instance.GetFields())
+                    {
+                        dict.Set(kvp.Key, kvp.Value);
+                    }
+                }
+                else
+                {
+                    SourceSpan errorSpan = value is SpreadExpr s ? s.Span : value.Span;
+                    throw new RuntimeError("Cannot spread value into dictionary literal. Expected dictionary or struct instance.", errorSpan);
+                }
+            }
+            else
+            {
+                dict.Set(key.Lexeme, value.Accept(this));
+            }
         }
         return dict;
     }
@@ -1997,6 +2054,12 @@ public partial class Interpreter
         }
         value = 0;
         return false;
+    }
+
+    /// <inheritdoc />
+    public object? VisitSpreadExpr(SpreadExpr expr)
+    {
+        throw new RuntimeError("Spread operator '...' can only appear inside function calls, array literals, or dictionary literals.", expr.Span);
     }
 
 }

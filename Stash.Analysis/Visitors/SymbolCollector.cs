@@ -228,6 +228,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
                 part += $" = {FormatDefaultValue(stmt.DefaultValues[i]!)}";
             }
 
+            if (stmt.HasRestParam && i == stmt.Parameters.Count - 1)
+            {
+                part = "..." + part;
+            }
+
             paramParts.Add(part);
         }
 
@@ -238,15 +243,16 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         }
 
         var returnTypeStr = stmt.ReturnType?.Lexeme;
-        var paramNames = stmt.Parameters.Select(p => p.Lexeme).ToArray();
-        int requiredCount = stmt.DefaultValues.TakeWhile(d => d == null).Count();
-        var paramTypes = stmt.ParameterTypes.Select(t => t?.Lexeme).ToArray();
+        int paramCountForSymbol = stmt.HasRestParam ? stmt.Parameters.Count - 1 : stmt.Parameters.Count;
+        var paramNames = stmt.Parameters.Take(paramCountForSymbol).Select(p => p.Lexeme).ToArray();
+        int requiredCount = stmt.DefaultValues.Take(paramCountForSymbol).TakeWhile(d => d == null).Count();
+        var paramTypes = stmt.ParameterTypes.Take(paramCountForSymbol).Select(t => t?.Lexeme).ToArray();
 
         RecordTypeReference(stmt.ReturnType);
         foreach (var pt in stmt.ParameterTypes) RecordTypeReference(pt);
 
         // Function name goes into the parent (current) scope
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: paramTypes));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: paramTypes, isVariadic: stmt.HasRestParam));
 
         // Visit default value expressions for reference collection
         foreach (var defaultVal in stmt.DefaultValues)
@@ -260,8 +266,12 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         {
             var param = stmt.Parameters[i];
             var paramType = i < stmt.ParameterTypes.Count ? stmt.ParameterTypes[i]?.Lexeme : null;
-            var paramDetail = paramType != null ? $"parameter of {stmt.Name.Lexeme}: {paramType}" : $"parameter of {stmt.Name.Lexeme}";
-            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: stmt.Name.Lexeme, typeHint: paramType, isExplicitTypeHint: paramType != null));
+            bool isRestParam = stmt.HasRestParam && i == stmt.Parameters.Count - 1;
+            var paramDetail = isRestParam
+                ? (paramType != null ? $"...rest parameter of {stmt.Name.Lexeme}: {paramType}" : $"...rest parameter of {stmt.Name.Lexeme}")
+                : (paramType != null ? $"parameter of {stmt.Name.Lexeme}: {paramType}" : $"parameter of {stmt.Name.Lexeme}");
+            var typeHint = isRestParam ? "array" : paramType;
+            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: stmt.Name.Lexeme, typeHint: typeHint, isExplicitTypeHint: isRestParam || paramType != null));
         }
 
         foreach (var s in stmt.Body.Statements)
@@ -607,6 +617,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             var symbolKind = stmt.IsConst ? SymbolKind.Constant : SymbolKind.Variable;
             var detail = stmt.IsConst ? $"const {name.Lexeme}" : $"let {name.Lexeme}";
             _currentScope.AddSymbol(new SymbolInfo(name.Lexeme, symbolKind, name.Span, stmt.Span, detail));
+        }
+        if (stmt.RestName is Token restName)
+        {
+            var symbolKind = stmt.IsConst ? SymbolKind.Constant : SymbolKind.Variable;
+            var typeHint = stmt.Kind == DestructureStmt.PatternKind.Object ? "dict" : "array";
+            var detail = stmt.IsConst ? $"const ...{restName.Lexeme}" : $"let ...{restName.Lexeme}";
+            _currentScope.AddSymbol(new SymbolInfo(restName.Lexeme, symbolKind, restName.Span, stmt.Span, detail, typeHint: typeHint));
         }
         stmt.Initializer.Accept(this);
         return null;
@@ -1240,8 +1257,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         {
             var param = expr.Parameters[i];
             var paramType = i < expr.ParameterTypes.Count ? expr.ParameterTypes[i]?.Lexeme : null;
-            var paramDetail = paramType != null ? $"parameter: {paramType}" : "parameter";
-            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: "<lambda>", typeHint: paramType));
+            bool isRestParam = expr.HasRestParam && i == expr.Parameters.Count - 1;
+            var paramDetail = isRestParam
+                ? (paramType != null ? $"...rest parameter: {paramType}" : "...rest parameter")
+                : (paramType != null ? $"parameter: {paramType}" : "parameter");
+            _currentScope.AddSymbol(new SymbolInfo(param.Lexeme, SymbolKind.Parameter, param.Span, detail: paramDetail, parentName: "<lambda>", typeHint: isRestParam ? "array" : paramType));
             if (i < expr.ParameterTypes.Count) RecordTypeReference(expr.ParameterTypes[i]);
         }
 
@@ -1263,6 +1283,13 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         }
 
         PopScope();
+        return null;
+    }
+
+    /// <inheritdoc />
+    public object? VisitSpreadExpr(SpreadExpr expr)
+    {
+        expr.Expression.Accept(this);
         return null;
     }
 }

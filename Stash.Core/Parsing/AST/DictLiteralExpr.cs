@@ -17,15 +17,16 @@ public class DictLiteralExpr : Expr
     /// <summary>
     /// Gets the list of key-value entries in the dictionary literal.
     /// Each key is an identifier token whose lexeme becomes the string key.
+    /// When <c>Key</c> is <c>null</c>, the entry is a spread entry and <c>Value</c> is a <see cref="SpreadExpr"/>.
     /// </summary>
-    public List<(Token Key, Expr Value)> Entries { get; }
+    public List<(Token? Key, Expr Value)> Entries { get; }
 
     /// <summary>
     /// Creates a new dictionary literal expression node.
     /// </summary>
-    /// <param name="entries">The key-value entries (may be empty for <c>{}</c>).</param>
+    /// <param name="entries">The key-value entries (may be empty for <c>{}</c>). A null Key indicates a spread entry.</param>
     /// <param name="span">The source span covering the entire dict literal.</param>
-    public DictLiteralExpr(List<(Token Key, Expr Value)> entries, SourceSpan span) : base(span)
+    public DictLiteralExpr(List<(Token? Key, Expr Value)> entries, SourceSpan span) : base(span)
     {
         Entries = entries;
     }

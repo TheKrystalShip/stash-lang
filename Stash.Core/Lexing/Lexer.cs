@@ -236,7 +236,14 @@ public class Lexer
             case '.':
                 if (Match('.'))
                 {
-                    AddToken(TokenType.DotDot);
+                    if (Match('.'))
+                    {
+                        AddToken(TokenType.DotDotDot);
+                    }
+                    else
+                    {
+                        AddToken(TokenType.DotDot);
+                    }
                 }
                 else
                 {

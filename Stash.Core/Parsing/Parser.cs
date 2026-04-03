@@ -277,36 +277,67 @@ public class Parser
     {
         DestructureStmt.PatternKind kind;
         var names = new List<Token>();
+        Token? restName = null;
 
         if (Match(TokenType.LeftBracket))
         {
-            // Array destructuring: let [a, b, c] = ...
+            // Array destructuring: let [a, b, ...rest] = ...
             kind = DestructureStmt.PatternKind.Array;
             if (!Check(TokenType.RightBracket))
             {
                 do
                 {
-                    names.Add(Consume(TokenType.Identifier, "Expected variable name in destructuring pattern."));
+                    if (Match(TokenType.DotDotDot))
+                    {
+                        if (restName != null)
+                        {
+                            Error(Previous(), "Only one rest element is allowed in destructuring pattern.");
+                        }
+                        restName = Consume(TokenType.Identifier, "Expected variable name after '...' in destructuring pattern.");
+                    }
+                    else
+                    {
+                        if (restName != null)
+                        {
+                            Error(Previous(), "Rest element must be the last element in destructuring pattern.");
+                        }
+                        names.Add(Consume(TokenType.Identifier, "Expected variable name in destructuring pattern."));
+                    }
                 } while (Match(TokenType.Comma));
             }
             Consume(TokenType.RightBracket, "Expected ']' after destructuring pattern.");
         }
         else
         {
-            // Object destructuring: let { x, y } = ...
+            // Object destructuring: let { x, y, ...rest } = ...
             Match(TokenType.LeftBrace); // consume the '{'
             kind = DestructureStmt.PatternKind.Object;
             if (!Check(TokenType.RightBrace))
             {
                 do
                 {
-                    names.Add(Consume(TokenType.Identifier, "Expected property name in destructuring pattern."));
+                    if (Match(TokenType.DotDotDot))
+                    {
+                        if (restName != null)
+                        {
+                            Error(Previous(), "Only one rest element is allowed in destructuring pattern.");
+                        }
+                        restName = Consume(TokenType.Identifier, "Expected variable name after '...' in destructuring pattern.");
+                    }
+                    else
+                    {
+                        if (restName != null)
+                        {
+                            Error(Previous(), "Rest element must be the last element in destructuring pattern.");
+                        }
+                        names.Add(Consume(TokenType.Identifier, "Expected property name in destructuring pattern."));
+                    }
                 } while (Match(TokenType.Comma));
             }
             Consume(TokenType.RightBrace, "Expected '}' after destructuring pattern.");
         }
 
-        if (names.Count == 0)
+        if (names.Count == 0 && restName == null)
         {
             Error(Previous(), "Destructuring pattern must contain at least one name.");
         }
@@ -315,7 +346,7 @@ public class Parser
         Expr initializer = Expression();
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after destructuring declaration.");
 
-        return new DestructureStmt(kind, names, isConst, initializer, MakeSpan(keyword.Span, semi.Span));
+        return new DestructureStmt(kind, names, isConst, initializer, MakeSpan(keyword.Span, semi.Span), restName);
     }
 
     /// <summary>
@@ -334,11 +365,39 @@ public class Parser
         List<Token?> parameterTypes = new();
         List<Expr?> defaultValues = new();
         bool hasSeenDefault = false;
+        bool hasRestParam = false;
 
         if (!Check(TokenType.RightParen))
         {
             do
             {
+                if (Match(TokenType.DotDotDot))
+                {
+                    if (hasRestParam)
+                    {
+                        Error(Previous(), "Only one rest parameter is allowed.");
+                    }
+                    hasRestParam = true;
+                    Token restParamName = Consume(TokenType.Identifier, "Expected parameter name.");
+                    Token? restParamType = null;
+                    if (Match(TokenType.Colon))
+                    {
+                        restParamType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    }
+                    if (Check(TokenType.Equal))
+                    {
+                        Error(Previous(), "Rest parameter cannot have a default value.");
+                    }
+                    parameters.Add(restParamName);
+                    parameterTypes.Add(restParamType);
+                    defaultValues.Add(null);
+                    if (Check(TokenType.Comma))
+                    {
+                        Error(Previous(), "Rest parameter must be the last parameter.");
+                    }
+                    break;
+                }
+
                 parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
                 Token? paramType = null;
                 if (Match(TokenType.Colon))
@@ -368,7 +427,7 @@ public class Parser
             returnType = Consume(TokenType.Identifier, "Expected return type after '->'.");
         }
         BlockStmt body = ParseBlock();
-        return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(startSpan, body.Span), isAsync, asyncToken);
+        return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(startSpan, body.Span), isAsync, asyncToken, hasRestParam);
     }
 
     /// <summary>Parses a struct declaration: <c>struct Name { field1, field2, fn method() { ... } }</c>.</summary>
@@ -1882,7 +1941,16 @@ public class Parser
         {
             do
             {
-                arguments.Add(Expression());
+                if (Match(TokenType.DotDotDot))
+                {
+                    Token spread = Previous();
+                    Expr inner = Expression();
+                    arguments.Add(new SpreadExpr(spread, inner, MakeSpan(spread.Span, inner.Span)));
+                }
+                else
+                {
+                    arguments.Add(Expression());
+                }
             } while (Match(TokenType.Comma));
         }
 
@@ -1946,7 +2014,16 @@ public class Parser
             {
                 do
                 {
-                    elements.Add(Expression());
+                    if (Match(TokenType.DotDotDot))
+                    {
+                        Token spread = Previous();
+                        Expr inner = Expression();
+                        elements.Add(new SpreadExpr(spread, inner, MakeSpan(spread.Span, inner.Span)));
+                    }
+                    else
+                    {
+                        elements.Add(Expression());
+                    }
                 } while (Match(TokenType.Comma));
             }
             Token close = Consume(TokenType.RightBracket, "Expected ']' after array elements.");
@@ -1964,29 +2041,47 @@ public class Parser
             if (Check(TokenType.RightBrace))
             {
                 Token close = Advance();
-                return new DictLiteralExpr(new List<(Token, Expr)>(), MakeSpan(open.Span, close.Span));
+                return new DictLiteralExpr(new List<(Token?, Expr)>(), MakeSpan(open.Span, close.Span));
             }
 
-            // Check for dict pattern: Identifier ':' (key-value pair)
-            if (Check(TokenType.Identifier))
+            // Check for dict patterns: spread entry or Identifier ':' (key-value pair)
+            bool isDict = false;
+            if (Check(TokenType.DotDotDot))
+            {
+                isDict = true;
+            }
+            else if (Check(TokenType.Identifier))
             {
                 int peekAhead = _current;
                 if (peekAhead + 1 < _tokens.Count &&
                     _tokens[peekAhead + 1].Type == TokenType.Colon)
                 {
-                    // Confirmed dict literal — parse entries
-                    var entries = new List<(Token Key, Expr Value)>();
-                    do
+                    isDict = true;
+                }
+            }
+
+            if (isDict)
+            {
+                var entries = new List<(Token? Key, Expr Value)>();
+                do
+                {
+                    if (Match(TokenType.DotDotDot))
+                    {
+                        Token spread = Previous();
+                        Expr inner = Expression();
+                        entries.Add((null, new SpreadExpr(spread, inner, MakeSpan(spread.Span, inner.Span))));
+                    }
+                    else
                     {
                         Token key = Consume(TokenType.Identifier, "Expected identifier key in dict literal.");
                         Consume(TokenType.Colon, "Expected ':' after dict key.");
                         Expr value = Expression();
                         entries.Add((key, value));
-                    } while (Match(TokenType.Comma));
+                    }
+                } while (Match(TokenType.Comma));
 
-                    Token close = Consume(TokenType.RightBrace, "Expected '}' after dict entries.");
-                    return new DictLiteralExpr(entries, MakeSpan(open.Span, close.Span));
-                }
+                Token close = Consume(TokenType.RightBrace, "Expected '}' after dict entries.");
+                return new DictLiteralExpr(entries, MakeSpan(open.Span, close.Span));
             }
 
             // Not a dict literal — backtrack
@@ -2100,9 +2195,15 @@ public class Parser
                 return Check(TokenType.FatArrow);
             }
 
-            // Try to match: identifier [: type] (, identifier [: type])* ) =>
+            // Try to match: [... ] identifier [: type] (, [... ] identifier [: type])* ) =>
             while (true)
             {
+                // Allow rest parameter prefix
+                if (Check(TokenType.DotDotDot))
+                {
+                    Advance(); // skip '...'
+                }
+
                 if (!Check(TokenType.Identifier))
                 {
                     return false;
@@ -2192,12 +2293,40 @@ public class Parser
         List<Token?> parameterTypes = new();
         List<Expr?> defaultValues = new();
         bool hasSeenDefault = false;
+        bool hasRestParam = false;
         SourceSpan startSpan = asyncToken?.Span ?? open.Span;
 
         if (!Check(TokenType.RightParen))
         {
             do
             {
+                if (Match(TokenType.DotDotDot))
+                {
+                    if (hasRestParam)
+                    {
+                        Error(Previous(), "Only one rest parameter is allowed.");
+                    }
+                    hasRestParam = true;
+                    Token restParamName = Consume(TokenType.Identifier, "Expected parameter name.");
+                    Token? restParamType = null;
+                    if (Match(TokenType.Colon))
+                    {
+                        restParamType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    }
+                    if (Check(TokenType.Equal))
+                    {
+                        Error(Previous(), "Rest parameter cannot have a default value.");
+                    }
+                    parameters.Add(restParamName);
+                    parameterTypes.Add(restParamType);
+                    defaultValues.Add(null);
+                    if (Check(TokenType.Comma))
+                    {
+                        Error(Previous(), "Rest parameter must be the last parameter.");
+                    }
+                    break;
+                }
+
                 parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
                 Token? paramType = null;
                 if (Match(TokenType.Colon))
@@ -2228,13 +2357,13 @@ public class Parser
         {
             BlockStmt block = ParseBlock();
             return new LambdaExpr(parameters, parameterTypes, defaultValues, null, block,
-                                  MakeSpan(startSpan, block.Span), isAsync, asyncToken);
+                                  MakeSpan(startSpan, block.Span), isAsync, asyncToken, hasRestParam);
         }
 
         // Expression body: (params) => expr
         Expr body = Assignment();
         return new LambdaExpr(parameters, parameterTypes, defaultValues, body, null,
-                              MakeSpan(startSpan, body.Span), isAsync, asyncToken);
+                              MakeSpan(startSpan, body.Span), isAsync, asyncToken, hasRestParam);
     }
 
     // ── Interpolated string parsing ──────────────────────────────

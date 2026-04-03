@@ -1,0 +1,170 @@
+#!/usr/bin/env stash
+// examples/spread_rest.stash — Spread & Rest operator showcase
+
+io.println("=" * 56);
+io.println("  Spread & Rest — All Contexts");
+io.println("=" * 56);
+
+// ─── 1. Rest Parameters ───────────────────────────────────
+
+io.println("\n=== 1. Rest Parameters ===");
+
+// Basic rest: collects all arguments into an array
+fn sum(...nums) {
+    let total = 0;
+    for (let n in nums) { total += n; }
+    return total;
+}
+io.println($"  sum(1,2,3,4) = {sum(1, 2, 3, 4)}");   // Expected: 10
+
+// Leading params with rest: fixed head, variadic tail
+fn tag(label, ...items) {
+    return $"[{label}] {items}";
+}
+io.println($"  tag: {tag("fruits", "apple", "banana", "cherry")}");
+// Expected: [fruits] [apple, banana, cherry]
+
+// Default + rest: default is used when not overridden, rest captures extras
+fn connect(host, port = 8080, ...opts) {
+    return $"{host}:{port} opts={opts}";
+}
+io.println($"  defaults: {connect("localhost")}");
+// Expected: localhost:8080 opts=[]
+io.println($"  overridden: {connect("prod.io", 443, "tls", "v2")}");
+// Expected: prod.io:443 opts=[tls, v2]
+
+// ─── 2. Spread in Function Calls ─────────────────────────
+
+io.println("\n=== 2. Spread in Function Calls ===");
+
+fn add3(a, b, c) { return a + b + c; }
+
+let nums = [10, 20, 30];
+io.println($"  add3(...nums) = {add3(...nums)}");  // Expected: 60
+
+// Mix spread with extra arguments
+fn greet(greeting, first, last) {
+    return $"{greeting}, {first} {last}!";
+}
+let name_parts = ["Jane", "Doe"];
+io.println($"  greet: {greet("Hello", ...name_parts)}");  // Expected: Hello, Jane Doe!
+
+// Spread two arrays together into a rest receiver
+fn collect(...all) { return all; }
+let a = [1, 2];
+let b = [3, 4];
+io.println($"  spread two arrays: {collect(...a, ...b)}");  // Expected: [1, 2, 3, 4]
+
+// ─── 3. Spread in Array Literals ─────────────────────────
+
+io.println("\n=== 3. Spread in Array Literals ===");
+
+let front = ["a", "b"];
+let back  = ["d", "e"];
+
+// Concatenation via spread
+let full = [...front, "c", ...back];
+io.println($"  concatenated: {full}");  // Expected: [a, b, c, d, e]
+
+// Insertion: insert elements between two existing arrays
+let odds  = [1, 3, 5];
+let evens = [2, 4];
+let merged = [...odds, ...evens];
+let sorted = arr.sortBy(merged, (x) => x);
+io.println($"  sorted merge: {sorted}");  // Expected: [1, 2, 3, 4, 5]
+
+// Clone an array (shallow copy)
+let original = [10, 20, 30];
+let clone = [...original];
+io.println($"  clone equals original: {clone}");  // Expected: [10, 20, 30]
+
+// ─── 4. Spread in Dict Literals ──────────────────────────
+
+io.println("\n=== 4. Spread in Dict Literals ===");
+
+let defaults = { timeout: 30, retries: 3, verbose: false };
+let overrides = { retries: 5, verbose: true };
+
+// Merge: later keys win
+let config = { ...defaults, ...overrides };
+io.println($"  timeout: {dict.get(config, "timeout")}");  // Expected: 30
+io.println($"  retries: {dict.get(config, "retries")}");  // Expected: 5
+io.println($"  verbose: {dict.get(config, "verbose")}");  // Expected: true
+
+// Override a single key while preserving the rest
+let patched = { ...defaults, timeout: 60 };
+io.println($"  patched timeout: {dict.get(patched, "timeout")}");  // Expected: 60
+io.println($"  patched retries: {dict.get(patched, "retries")}");  // Expected: 3
+
+// ─── 5. Struct Spreading into Dict ───────────────────────
+
+io.println("\n=== 5. Struct Spreading into Dict ===");
+
+struct Point { x, y }
+let p = Point { x: 3, y: 7 };
+
+// Spread struct fields into a new dict and add extra keys
+let point_dict = { ...p, z: 0, label: "origin" };
+io.println($"  x:     {dict.get(point_dict, "x")}");      // Expected: 3
+io.println($"  y:     {dict.get(point_dict, "y")}");      // Expected: 7
+io.println($"  z:     {dict.get(point_dict, "z")}");      // Expected: 0
+io.println($"  label: {dict.get(point_dict, "label")}");  // Expected: origin
+
+// ─── 6. Rest in Destructuring ────────────────────────────
+
+io.println("\n=== 6. Rest in Destructuring ===");
+
+// Array destructuring — head variables + rest tail
+let scores = [95, 82, 78, 64, 51];
+let [first_score, second_score, ...remaining] = scores;
+io.println($"  first:     {first_score}");   // Expected: 95
+io.println($"  second:    {second_score}");  // Expected: 82
+io.println($"  remaining: {remaining}");     // Expected: [78, 64, 51]
+
+// Object destructuring — known keys + catch-all rest dict
+let user = { name: "Alice", role: "admin", active: true, id: 42 };
+let { name, role, ...extras } = user;
+io.println($"  name:   {name}");    // Expected: Alice
+io.println($"  role:   {role}");    // Expected: admin
+io.println($"  extras: {extras}");  // Expected: {active: true, id: 42}
+
+// ─── 7. Practical Patterns ───────────────────────────────
+
+io.println("\n=== 7. Practical Patterns ===");
+
+// Logger with prefix and variadic messages
+fn log(level, ...messages) {
+    let joined = arr.join(messages, " ");
+    io.println($"  [{level}] {joined}");
+}
+log("INFO", "Server", "started", "on", "port", "3000");
+log("WARN", "Retrying...");
+
+// Config merge helper: base → env → runtime overrides
+fn merge_config(base, env_cfg, runtime) {
+    return { ...base, ...env_cfg, ...runtime };
+}
+let base    = { host: "localhost", port: 5432, ssl: false };
+let env_cfg = { host: "db.internal", ssl: true };
+let runtime = { port: 5433 };
+let final_cfg = merge_config(base, env_cfg, runtime);
+io.println($"  host: {dict.get(final_cfg, "host")}");  // Expected: db.internal
+io.println($"  port: {dict.get(final_cfg, "port")}");  // Expected: 5433
+io.println($"  ssl:  {dict.get(final_cfg, "ssl")}");   // Expected: true
+
+// Variadic math: min and max over any number of values
+fn variadic_min(...values) {
+    let m = values[0];
+    for (let v in values) { if (v < m) { m = v; } }
+    return m;
+}
+fn variadic_max(...values) {
+    let m = values[0];
+    for (let v in values) { if (v > m) { m = v; } }
+    return m;
+}
+let data = [4, 1, 9, 2, 7, 3];
+io.println($"  min(...data) = {variadic_min(...data)}");  // Expected: 1
+io.println($"  max(...data) = {variadic_max(...data)}");  // Expected: 9
+
+io.println("\n" + "=" * 56);

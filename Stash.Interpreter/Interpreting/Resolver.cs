@@ -184,10 +184,18 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             Declare(name.Lexeme);
         }
+        if (stmt.RestName is Token restName)
+        {
+            Declare(restName.Lexeme);
+        }
         Resolve(stmt.Initializer);
         foreach (Token name in stmt.Names)
         {
             Define(name.Lexeme);
+        }
+        if (stmt.RestName is Token restDef)
+        {
+            Define(restDef.Lexeme);
         }
         return null;
     }
@@ -704,6 +712,13 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
             }
             Resolve(arm.Body);
         }
+        return null;
+    }
+
+    /// <inheritdoc />
+    public object? VisitSpreadExpr(SpreadExpr expr)
+    {
+        Resolve(expr.Expression);
         return null;
     }
 }

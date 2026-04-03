@@ -24,6 +24,7 @@ public class StashFunction : UserCallable
     protected override IReadOnlyList<Token> Parameters => _declaration.Parameters;
     protected override IReadOnlyList<Expr?> DefaultValues => _declaration.DefaultValues;
     protected override bool IsAsync => _declaration.IsAsync;
+    protected override bool HasRestParam => _declaration.HasRestParam;
 
     public override Stash.Common.SourceSpan DefinitionSpan => _declaration.Span;
 

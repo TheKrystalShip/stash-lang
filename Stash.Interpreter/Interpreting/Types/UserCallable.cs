@@ -26,19 +26,21 @@ public abstract class UserCallable : IStashCallable, IDeepCopyable
     protected abstract IReadOnlyList<Token> Parameters { get; }
     protected abstract IReadOnlyList<Expr?> DefaultValues { get; }
     protected abstract bool IsAsync { get; }
+    protected abstract bool HasRestParam { get; }
 
     public abstract SourceSpan DefinitionSpan { get; }
 
     SourceSpan? IStashCallable.DefinitionSpan => DefinitionSpan;
 
-    public int Arity => Parameters.Count;
+    public int Arity => HasRestParam ? -1 : Parameters.Count;
 
     public int MinArity
     {
         get
         {
+            int count = HasRestParam ? DefaultValues.Count - 1 : DefaultValues.Count;
             int required = 0;
-            for (int i = 0; i < DefaultValues.Count; i++)
+            for (int i = 0; i < count; i++)
             {
                 if (DefaultValues[i] == null)
                 {
@@ -61,7 +63,9 @@ public abstract class UserCallable : IStashCallable, IDeepCopyable
     {
         var env = new Environment(parentOverride ?? Closure);
 
-        for (int i = 0; i < Parameters.Count; i++)
+        int nonRestCount = HasRestParam ? Parameters.Count - 1 : Parameters.Count;
+
+        for (int i = 0; i < nonRestCount; i++)
         {
             object? value;
             if (i < arguments.Count)
@@ -73,6 +77,16 @@ public abstract class UserCallable : IStashCallable, IDeepCopyable
                 value = DefaultValues[i]!.Accept(interpreter);
             }
             env.Define(Parameters[i].Lexeme, value);
+        }
+
+        if (HasRestParam)
+        {
+            var restValues = new List<object?>();
+            for (int i = nonRestCount; i < arguments.Count; i++)
+            {
+                restValues.Add(arguments[i]);
+            }
+            env.Define(Parameters[^1].Lexeme, restValues);
         }
 
         return env;

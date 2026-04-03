@@ -485,6 +485,11 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             int modifiers = ModifierDeclaration | (stmt.IsConst ? ModifierReadonly : 0);
             EmitFromToken(name, TokenTypeVariable, modifiers);
         }
+        if (stmt.RestName is Token restName)
+        {
+            int modifiers = ModifierDeclaration | (stmt.IsConst ? ModifierReadonly : 0);
+            EmitFromToken(restName, TokenTypeVariable, modifiers);
+        }
         stmt.Initializer.Accept(this);
         return 0;
     }
@@ -779,9 +784,20 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     {
         foreach (var (key, value) in expr.Entries)
         {
-            EmitFromToken(key, TokenTypeProperty, 0);
+            if (key is not null)
+            {
+                EmitFromToken(key, TokenTypeProperty, 0);
+            }
             value.Accept(this);
         }
+        return 0;
+    }
+
+    /// <inheritdoc />
+    public int VisitSpreadExpr(SpreadExpr expr)
+    {
+        EmitFromToken(expr.Operator, TokenTypeOperator, 0);
+        expr.Expression.Accept(this);
         return 0;
     }
 }

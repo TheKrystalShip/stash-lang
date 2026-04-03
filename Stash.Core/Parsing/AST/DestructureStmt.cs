@@ -33,6 +33,8 @@ public class DestructureStmt : Stmt
     public bool IsConst { get; }
     /// <summary>Gets the expression producing the value to destructure.</summary>
     public Expr Initializer { get; }
+    /// <summary>Gets the rest binding token (<c>...name</c> in destructuring patterns), or <c>null</c> if none. Not included in <see cref="Names"/>.</summary>
+    public Token? RestName { get; }
 
     /// <summary>Initializes a new instance of <see cref="DestructureStmt"/>.</summary>
     /// <param name="kind">The destructuring pattern kind.</param>
@@ -40,12 +42,13 @@ public class DestructureStmt : Stmt
     /// <param name="isConst">Whether the bindings are constants or mutable variables.</param>
     /// <param name="initializer">The expression producing the value to destructure.</param>
     /// <param name="span">The source location of this statement.</param>
-    public DestructureStmt(PatternKind kind, List<Token> names, bool isConst, Expr initializer, SourceSpan span) : base(span)
+    public DestructureStmt(PatternKind kind, List<Token> names, bool isConst, Expr initializer, SourceSpan span, Token? restName = null) : base(span)
     {
         Kind = kind;
         Names = names;
         IsConst = isConst;
         Initializer = initializer;
+        RestName = restName;
     }
 
     /// <inheritdoc />

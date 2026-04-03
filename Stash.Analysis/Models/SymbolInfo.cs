@@ -132,6 +132,12 @@ public class SymbolInfo
     public bool IsExplicitTypeHint { get; }
 
     /// <summary>
+    /// Gets whether this callable accepts an unlimited number of arguments via a rest parameter
+    /// (<c>...rest</c>). When <see langword="true"/>, the upper-bound arity check is skipped.
+    /// </summary>
+    public bool IsVariadic { get; }
+
+    /// <summary>
     /// Gets or sets the documentation text extracted from a preceding <c>///</c> or
     /// <c>/** */</c> comment by <see cref="DocCommentResolver"/>.
     /// Shown in hover tooltips and completion item documentation.
@@ -153,7 +159,8 @@ public class SymbolInfo
     /// <param name="requiredParameterCount">Minimum required argument count, or <see langword="null"/>.</param>
     /// <param name="parameterTypes">Per-parameter type annotations, or <see langword="null"/>.</param>
     /// <param name="isExplicitTypeHint"><see langword="true"/> if <paramref name="typeHint"/> was written explicitly in source.</param>
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false)
+    /// <param name="isVariadic"><see langword="true"/> if this callable accepts unlimited arguments via a rest parameter.</param>
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false, bool isVariadic = false)
     {
         Name = name;
         Kind = kind;
@@ -167,5 +174,6 @@ public class SymbolInfo
         RequiredParameterCount = requiredParameterCount;
         ParameterTypes = parameterTypes;
         IsExplicitTypeHint = isExplicitTypeHint;
+        IsVariadic = isVariadic;
     }
 }

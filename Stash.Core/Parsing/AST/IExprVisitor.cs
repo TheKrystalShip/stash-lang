@@ -211,4 +211,11 @@ public interface IExprVisitor<T>
     /// <param name="expr">The retry expression node to visit.</param>
     /// <returns>The result of the retry body on success, or an error on exhaustion.</returns>
     T VisitRetryExpr(RetryExpr expr);
+
+    /// <summary>
+    /// Visits a <see cref="SpreadExpr"/> node (spread expression <c>...expr</c>).
+    /// </summary>
+    /// <param name="expr">The spread expression node to visit.</param>
+    /// <returns>The result of processing the spread expression.</returns>
+    T VisitSpreadExpr(SpreadExpr expr);
 }

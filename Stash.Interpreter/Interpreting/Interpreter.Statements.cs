@@ -65,12 +65,32 @@ public partial class Interpreter
                     _environment.Define(stmt.Names[i].Lexeme, element);
                 }
             }
+
+            if (stmt.RestName != null)
+            {
+                var restValues = new List<object?>();
+                for (int i = stmt.Names.Count; i < list.Count; i++)
+                {
+                    restValues.Add(list[i]);
+                }
+                if (stmt.IsConst)
+                {
+                    _environment.DefineConstant(stmt.RestName.Lexeme, restValues);
+                }
+                else
+                {
+                    _environment.Define(stmt.RestName.Lexeme, restValues);
+                }
+            }
         }
         else // Object pattern
         {
+            var namedFields = new HashSet<string>();
+
             for (int i = 0; i < stmt.Names.Count; i++)
             {
                 string fieldName = stmt.Names[i].Lexeme;
+                namedFields.Add(fieldName);
                 object? fieldValue;
 
                 if (value is StashInstance instance)
@@ -93,6 +113,41 @@ public partial class Interpreter
                 else
                 {
                     _environment.Define(fieldName, fieldValue);
+                }
+            }
+
+            if (stmt.RestName != null)
+            {
+                var restDict = new StashDictionary();
+
+                if (value is StashInstance instance)
+                {
+                    foreach (var kvp in instance.GetFields())
+                    {
+                        if (!namedFields.Contains(kvp.Key))
+                        {
+                            restDict.Set(kvp.Key, kvp.Value);
+                        }
+                    }
+                }
+                else if (value is StashDictionary dict)
+                {
+                    foreach (var kvp in dict.GetAllEntries())
+                    {
+                        if (!namedFields.Contains((string)kvp.Key))
+                        {
+                            restDict.Set(kvp.Key, kvp.Value);
+                        }
+                    }
+                }
+
+                if (stmt.IsConst)
+                {
+                    _environment.DefineConstant(stmt.RestName.Lexeme, restDict);
+                }
+                else
+                {
+                    _environment.Define(stmt.RestName.Lexeme, restDict);
                 }
             }
         }

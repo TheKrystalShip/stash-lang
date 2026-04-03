@@ -412,6 +412,10 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
             if (i > 0) { EmitToken(); Space(); } // ,
+            if (stmt.HasRestParam && i == stmt.Parameters.Count - 1)
+            {
+                EmitToken(); // ...
+            }
             EmitToken(); // param name
             if (stmt.ParameterTypes[i] != null)
             {
@@ -859,6 +863,12 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             if (i > 0) { EmitToken(); Space(); } // ,
             EmitToken(); // name
         }
+        if (stmt.RestName != null)
+        {
+            if (stmt.Names.Count > 0) { EmitToken(); Space(); } // ,
+            EmitToken(); // ...
+            EmitToken(); // rest name
+        }
         EmitToken(); // ] or }
         Space();
         EmitToken(); // =
@@ -1213,6 +1223,10 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
             if (i > 0) { EmitToken(); Space(); } // ,
+            if (expr.HasRestParam && i == expr.Parameters.Count - 1)
+            {
+                EmitToken(); // ...
+            }
             EmitToken(); // param name
             if (expr.ParameterTypes[i] != null)
             {
@@ -1410,9 +1424,12 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             for (int i = 0; i < expr.Entries.Count; i++)
             {
                 NewLine();
-                EmitToken(); // key
-                EmitToken(); // :
-                Space();
+                if (expr.Entries[i].Key != null)
+                {
+                    EmitToken(); // key
+                    EmitToken(); // :
+                    Space();
+                }
                 expr.Entries[i].Value.Accept(this);
                 if (NextIs(TokenType.Comma))
                 {
@@ -1428,9 +1445,12 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             for (int i = 0; i < expr.Entries.Count; i++)
             {
                 if (i > 0) { EmitToken(); Space(); } // ,
-                EmitToken(); // key
-                EmitToken(); // :
-                Space();
+                if (expr.Entries[i].Key != null)
+                {
+                    EmitToken(); // key
+                    EmitToken(); // :
+                    Space();
+                }
                 expr.Entries[i].Value.Accept(this);
             }
             // Consume any trailing comma silently — not emitted in inline format
@@ -1442,6 +1462,14 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             Space();
         }
         EmitToken(); // }
+        return 0;
+    }
+
+    /// <inheritdoc />
+    public int VisitSpreadExpr(SpreadExpr expr)
+    {
+        EmitToken(); // ...
+        expr.Expression.Accept(this);
         return 0;
     }
 }

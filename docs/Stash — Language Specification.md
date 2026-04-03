@@ -1001,6 +1001,41 @@ let [first, second] = [1, 2, 3, 4];    // first=1, second=2
 let [a, b, c] = [1];                    // a=1, b=null, c=null
 ```
 
+### Rest in Destructuring
+
+The rest syntax `...name` in destructuring patterns collects remaining elements:
+
+#### Array Destructuring with Rest
+
+```stash
+let [first, ...rest] = [1, 2, 3, 4];
+io.println(first);  // 1
+io.println(rest);   // [2, 3, 4]
+
+let [head, ...tail] = [1];
+io.println(tail);   // []
+
+let [...all] = [1, 2, 3];
+io.println(all);    // [1, 2, 3]
+```
+
+#### Dictionary Destructuring with Rest
+
+```stash
+let data = { name: "Alice", age: 30, role: "admin" };
+let { name, ...rest } = data;
+io.println(name);  // "Alice"
+io.println(rest);  // { age: 30, role: "admin" }
+```
+
+The rest binding in dictionary destructuring collects all keys not explicitly named into a new dictionary. Works with struct instances too — the rest becomes a dictionary.
+
+**Rules:**
+
+- The rest element must be last in the pattern
+- Only one rest element is allowed per pattern
+- Works with both `let` and `const` declarations
+
 ### Implementation
 
 Destructuring is a dedicated AST node (`DestructureStmt`) with a `PatternKind` (Array or Object), a list of variable names, a `const` flag, and an initializer expression. The parser detects destructuring when it sees `let [` or `let {` (similarly for `const`). At runtime, the interpreter evaluates the initializer and distributes values to each named variable.
@@ -3030,6 +3065,109 @@ fn f(a, b = 5) { return a + b; }
 f();  // Error: Expected 1 to 2 arguments but got 0
 ```
 
+### Rest Parameters
+
+Rest parameters collect any remaining arguments into an array using the `...` prefix:
+
+```stash
+fn log(level, ...messages) {
+    for (let msg in messages) {
+        io.println("[" + level + "] " + msg);
+    }
+}
+
+log("INFO", "Server started", "Listening on port 8080");
+// [INFO] Server started
+// [INFO] Listening on port 8080
+```
+
+**Rules:**
+
+- Only one rest parameter is allowed per function
+- The rest parameter must be the last parameter
+- Rest parameters cannot have default values
+- Rest parameters can follow default parameters: `fn f(a, b = 5, ...rest)`
+- When no extra arguments are passed, the rest parameter is an empty array `[]`
+- Rest parameters work in both function declarations and lambda expressions
+
+```stash
+// Rest with leading required and default params
+fn format(template, separator = ", ", ...values) {
+    return str.replace(template, "{}", arr.join(values, separator));
+}
+
+// Lambda with rest parameter
+let sum = (...nums) => arr.reduce(nums, (acc, n) => acc + n, 0);
+io.println(sum(1, 2, 3, 4));  // 10
+
+// Arity enforcement — required params still required
+fn process(name, ...items) { }
+process();  // Runtime error: Expected at least 1 argument
+```
+
+### Spread Syntax
+
+The spread operator `...` expands arrays and dictionaries in several contexts:
+
+#### Spread in Function Calls
+
+Spread an array as individual arguments:
+
+```stash
+fn add(a, b, c) { return a + b + c; }
+let args = [1, 2, 3];
+io.println(add(...args));  // 6
+
+// Mix spread with regular args
+let pair = [2, 3];
+io.println(add(1, ...pair));  // 6
+
+// Multiple spreads
+io.println(add(...[1], ...[2, 3]));  // 6
+```
+
+#### Spread in Array Literals
+
+Expand arrays inline to concatenate or insert elements:
+
+```stash
+let a = [1, 2];
+let b = [3, 4];
+let combined = [...a, ...b];        // [1, 2, 3, 4]
+let inserted = [0, ...a, 99, ...b]; // [0, 1, 2, 99, 3, 4]
+```
+
+Spreading is shallow — nested arrays remain references, not copies.
+
+#### Spread in Dictionary Literals
+
+Merge dictionaries or struct instances into a new dictionary:
+
+```stash
+let defaults = { host: "localhost", port: 8080 };
+let overrides = { port: 3000, debug: true };
+let config = { ...defaults, ...overrides };
+// { host: "localhost", port: 3000, debug: true }
+```
+
+Last-wins semantics: when keys conflict, the later entry wins. Struct instances can also be spread:
+
+```stash
+struct Point { x, y }
+let p = Point { x: 1, y: 2 };
+let dict = { ...p, z: 3 };  // { x: 1, y: 2, z: 3 }
+```
+
+#### Runtime Errors
+
+Spreading a non-iterable value is a runtime error:
+
+```stash
+[...5];        // RuntimeError: Cannot spread non-array value in array context
+{ ...5 };      // RuntimeError: Cannot spread a non-dict/struct value in dict literal
+[...null];     // RuntimeError: Cannot spread null value
+```
+
 ### Implicit Return Value
 
 Functions that do not execute a `return` statement implicitly return `null`:
@@ -3125,6 +3263,12 @@ Default values follow the same trailing-only rules as named functions:
 let connect = (host: string, port: int = 8080) => host + ":" + conv.toStr(port);
 connect("localhost");        // "localhost:8080"
 connect("localhost", 443);   // "localhost:443"
+```
+
+Lambdas support the same parameter features as functions, including default values and rest parameters:
+
+```stash
+let sum = (...args) => arr.reduce(args, (a, b) => a + b, 0);
 ```
 
 ### Closures

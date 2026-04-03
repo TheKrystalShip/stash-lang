@@ -39,6 +39,9 @@ public enum TokenType
     /// <summary>The <c>..</c> operator. Used to construct range expressions (e.g. <c>0..10</c> or <c>0..20..2</c>).</summary>
     DotDot,
 
+    /// <summary>The <c>...</c> operator. Used for spread and rest parameter syntax.</summary>
+    DotDotDot,
+
     /// <summary>The <c>;</c> character. Terminates statements.</summary>
     Semicolon,
 
