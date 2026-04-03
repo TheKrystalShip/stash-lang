@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Diagnostic Codes & Suppression](#9c-diagnostic-codes--suppression)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -3571,7 +3571,7 @@ When evaluating `receiver.name(args)`, the interpreter checks in this order:
 | 7        | UFCS namespace functions | `str.upper(s)` called as `s.upper()`        |
 | 8        | Error                    | `"No method 'name' on type 'typename'"`     |
 
-> **Dict exception:** For dictionaries, extension methods are checked *before* key lookup (priority 6 beats priority 3). Without this, any dict key matching an extension method name would shadow the extension, making dict extensions effectively unusable. The `dict.get(d, "key")` namespace function is available when you need explicit key access.
+> **Dict exception:** For dictionaries, extension methods are checked _before_ key lookup (priority 6 beats priority 3). Without this, any dict key matching an extension method name would shadow the extension, making dict extensions effectively unusable. The `dict.get(d, "key")` namespace function is available when you need explicit key access.
 
 Key ordering rules:
 
@@ -3783,6 +3783,117 @@ This is checked during the resolve/import phase, not at runtime.
 
 - **Wildcard imports:** `import * from "utils.stash";` — imports everything (bash-style, for convenience).
 - **Per-name aliased imports:** `import { deploy as remoteDeploy } from "utils.stash";` — rename individual names on import.
+
+---
+
+## 9c. Diagnostic Codes & Suppression
+
+The static analysis engine emits **structured diagnostics** — each with a code, message, severity, and source span.
+
+### Code Format
+
+```
+SA{CC}{NN}
+```
+
+- `SA` — Stash Analysis prefix (2 letters, always uppercase)
+- `CC` — 2-digit category number
+- `NN` — 2-digit sequential number within the category
+
+**Category ranges:**
+
+| Range    | Category                                      |
+| -------- | --------------------------------------------- |
+| `SA00xx` | Infrastructure (suppression meta-diagnostics) |
+| `SA01xx` | Control flow                                  |
+| `SA02xx` | Variables & names                             |
+| `SA03xx` | Types                                         |
+| `SA04xx` | Functions & calls                             |
+| `SA05xx` | _(reserved)_                                  |
+| `SA06xx` | _(reserved)_                                  |
+| `SA07xx` | Shell / retry / elevate                       |
+| `SA08xx` | Modules & imports                             |
+| `SA09xx` | Structs & enums                               |
+
+### Inline Suppression Directives
+
+Suppression directives are **single-line `//` comments only** — `/* */` and `///` block/doc comments are not recognised.
+
+**Next-line suppression** — suppresses the diagnostic on the immediately following line:
+
+```stash
+// stash-disable-next-line SA0201
+let unused = 42;
+```
+
+**Same-line suppression** — trailing comment on the line that emits the diagnostic:
+
+```stash
+let unused = 42; // stash-disable-line SA0201
+```
+
+**Range suppression** — suppresses from `disable` until the matching `restore`:
+
+```stash
+// stash-disable SA0201
+let a = 1;
+let b = 2;
+// stash-restore SA0201
+```
+
+**Suppress all diagnostics** — omit the code to suppress everything on the affected line(s):
+
+```stash
+// stash-disable-next-line
+let anything = doSomething();
+
+// stash-disable
+let x = 1;
+let y = 2;
+// stash-restore
+```
+
+### Project-Level Configuration (`.stashcheck`)
+
+A `.stashcheck` file at the project root configures analysis defaults. It is an INI-style file with `key = value` pairs:
+
+```ini
+# Globally suppress specific codes
+disable = SA0201, SA0202
+
+# Override severity for individual codes (error | warning | info | off)
+severity.SA0501 = error
+severity.SA0201 = off
+
+# Require a reason comment after every suppression directive (opt-in)
+require-suppression-reason = true
+```
+
+When `require-suppression-reason = true` is set, every suppression directive should include a reason — any non-whitespace text after the code list:
+
+```stash
+// stash-disable-next-line SA0201 — legacy variable, removal tracked in #123
+let unused = 42;
+```
+
+> **Note:** Reason enforcement is not yet active — the flag is parsed and stored for future use.
+
+### Resolution Order
+
+Diagnostic severity and suppression are resolved in this priority order (later entries win):
+
+1. **Built-in defaults** — the severity assigned to each `SA` code in the analysis engine
+2. **`.stashcheck` project config** — `disable` list and `severity.*` overrides
+3. **Inline directives** — `stash-disable-*` / `stash-restore` comments in source
+
+### Meta-Diagnostics
+
+The suppression system itself can emit diagnostics:
+
+| Code     | Description                                        |
+| -------- | -------------------------------------------------- |
+| `SA0001` | Unknown diagnostic code in suppression directive   |
+| `SA0002` | Malformed diagnostic code in suppression directive |
 
 ---
 

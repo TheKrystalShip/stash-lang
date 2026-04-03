@@ -172,10 +172,7 @@ public class ImportResolver
         {
             if (!stmt.IsStaticPath)
             {
-                resolution.Diagnostics.Add(new SemanticDiagnostic(
-                    "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.",
-                    DiagnosticLevel.Information,
-                    stmt.Path.Span));
+                resolution.Diagnostics.Add(DiagnosticDescriptors.SA0801.CreateDiagnostic(stmt.Path.Span));
             }
             return;
         }
@@ -249,10 +246,7 @@ public class ImportResolver
         {
             if (!stmt.IsStaticPath)
             {
-                resolution.Diagnostics.Add(new SemanticDiagnostic(
-                    "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.",
-                    DiagnosticLevel.Information,
-                    stmt.Path.Span));
+                resolution.Diagnostics.Add(DiagnosticDescriptors.SA0801.CreateDiagnostic(stmt.Path.Span));
             }
             return;
         }

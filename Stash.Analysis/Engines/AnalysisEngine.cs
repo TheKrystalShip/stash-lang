@@ -144,6 +144,15 @@ public class AnalysisEngine
         var semanticDiagnostics = validator.Validate(statements);
         semanticDiagnostics.AddRange(importResolution.Diagnostics);
 
+        // Parse suppression directives from trivia tokens
+        var suppressionMap = SuppressionDirectiveParser.Parse(tokens);
+        semanticDiagnostics = suppressionMap.Filter(semanticDiagnostics);
+
+        // Apply project-level configuration (.stashcheck file)
+        var scriptDir = uri.IsFile ? Path.GetDirectoryName(uri.LocalPath) : null;
+        var projectConfig = ProjectConfig.Load(scriptDir);
+        semanticDiagnostics = projectConfig.Apply(semanticDiagnostics);
+
         var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors,
             lexer.StructuredErrors, parser.StructuredErrors, symbols, semanticDiagnostics,
             importResolution.NamespaceImports);

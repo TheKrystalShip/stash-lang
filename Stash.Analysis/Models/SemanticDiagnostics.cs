@@ -4,7 +4,8 @@ namespace Stash.Analysis;
 
 /// <summary>
 /// Represents a single diagnostic message produced by <see cref="SemanticValidator"/>,
-/// carrying the message text, severity, source location, and an optional "unnecessary code" flag.
+/// carrying a stable code, message text, severity, source location, and an optional
+/// "unnecessary code" flag.
 /// </summary>
 /// <remarks>
 /// Diagnostics are forwarded by <see cref="AnalysisEngine"/> to the LSP
@@ -14,6 +15,9 @@ namespace Stash.Analysis;
 /// </remarks>
 public class SemanticDiagnostic
 {
+    /// <summary>Gets the stable diagnostic code (e.g. "SA0101"), or <see langword="null"/> for legacy diagnostics.</summary>
+    public string? Code { get; }
+
     /// <summary>Gets the human-readable diagnostic message shown in the editor tooltip.</summary>
     public string Message { get; }
 
@@ -31,15 +35,23 @@ public class SemanticDiagnostic
     public bool IsUnnecessary { get; }
 
     /// <summary>
-    /// Initializes a new <see cref="SemanticDiagnostic"/> with the given message, level, span,
-    /// and optional unnecessary-code flag.
+    /// Initializes a new <see cref="SemanticDiagnostic"/> with a stable diagnostic code.
     /// </summary>
-    /// <param name="message">Human-readable diagnostic text.</param>
-    /// <param name="level">Severity of the diagnostic.</param>
-    /// <param name="span">Source location to highlight.</param>
-    /// <param name="isUnnecessary"><see langword="true"/> to enable faded rendering for unreachable code.</param>
+    public SemanticDiagnostic(string code, string message, DiagnosticLevel level, SourceSpan span, bool isUnnecessary = false)
+    {
+        Code = code;
+        Message = message;
+        Level = level;
+        Span = span;
+        IsUnnecessary = isUnnecessary;
+    }
+
+    /// <summary>
+    /// Initializes a new <see cref="SemanticDiagnostic"/> without a diagnostic code (legacy).
+    /// </summary>
     public SemanticDiagnostic(string message, DiagnosticLevel level, SourceSpan span, bool isUnnecessary = false)
     {
+        Code = null;
         Message = message;
         Level = level;
         Span = span;

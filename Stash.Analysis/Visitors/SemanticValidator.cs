@@ -81,10 +81,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         var unresolved = _scopeTree.GetUnresolvedReferences(_builtInNames);
         foreach (var reference in unresolved)
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                $"'{reference.Name}' is not defined.",
-                DiagnosticLevel.Warning,
-                reference.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0202.CreateDiagnostic(reference.Span, reference.Name));
         }
 
         CheckUnusedSymbols();
@@ -120,10 +117,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             return;
         }
 
-        _diagnostics.Add(new SemanticDiagnostic(
-            $"Unknown type '{typeName}'.",
-            DiagnosticLevel.Warning,
-            typeHint.Span));
+        _diagnostics.Add(DiagnosticDescriptors.SA0303.CreateDiagnostic(typeHint.Span, typeName));
     }
 
     /// <summary>
@@ -166,10 +160,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         if (_elevateDepth > 0)
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                "Nested 'elevate' has no effect. The outer elevation context already applies.",
-                DiagnosticLevel.Warning,
-                stmt.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0701.CreateDiagnostic(stmt.Span));
         }
 
         stmt.Elevator?.Accept(this);
@@ -240,10 +231,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         if (_loopDepth == 0)
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                "'break' used outside of a loop.",
-                DiagnosticLevel.Error,
-                stmt.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0101.CreateDiagnostic(stmt.Span));
         }
         return null;
     }
@@ -258,10 +246,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         if (_loopDepth == 0)
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                "'continue' used outside of a loop.",
-                DiagnosticLevel.Error,
-                stmt.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0102.CreateDiagnostic(stmt.Span));
         }
         return null;
     }
@@ -276,10 +261,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         if (_functionDepth == 0)
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                "'return' used outside of a function.",
-                DiagnosticLevel.Error,
-                stmt.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0103.CreateDiagnostic(stmt.Span));
         }
         stmt.Value?.Accept(this);
         return null;
@@ -300,10 +282,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             var actualType = TypeInferenceEngine.InferExpressionType(_scopeTree, stmt.Initializer, stmt.Name.Span.StartLine, stmt.Name.Span.StartColumn);
             if (actualType != null && actualType != "null" && actualType != expectedType)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    $"Variable '{stmt.Name.Lexeme}' is declared as '{expectedType}' but initialized with '{actualType}'.",
-                    DiagnosticLevel.Warning,
-                    stmt.Initializer.Span));
+                _diagnostics.Add(DiagnosticDescriptors.SA0301.CreateDiagnostic(stmt.Initializer.Span, stmt.Name.Lexeme, expectedType, actualType));
             }
         }
         stmt.Initializer?.Accept(this);
@@ -325,10 +304,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             var actualType = TypeInferenceEngine.InferExpressionType(_scopeTree, stmt.Initializer, stmt.Name.Span.StartLine, stmt.Name.Span.StartColumn);
             if (actualType != null && actualType != "null" && actualType != expectedType)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    $"Constant '{stmt.Name.Lexeme}' is declared as '{expectedType}' but initialized with '{actualType}'.",
-                    DiagnosticLevel.Warning,
-                    stmt.Initializer.Span));
+                _diagnostics.Add(DiagnosticDescriptors.SA0302.CreateDiagnostic(stmt.Initializer.Span, stmt.Name.Lexeme, expectedType, actualType));
             }
         }
         stmt.Initializer.Accept(this);
@@ -395,11 +371,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         {
             if (!reachable)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    "Unreachable code detected.",
-                    DiagnosticLevel.Information,
-                    stmt.Span,
-                    isUnnecessary: true));
+                _diagnostics.Add(DiagnosticDescriptors.SA0104.CreateUnnecessaryDiagnostic(stmt.Span));
                 // Still visit for other diagnostics (e.g., nested errors)
                 stmt.Accept(this);
                 continue;
@@ -489,11 +461,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 _ => "Variable"
             };
 
-            _diagnostics.Add(new SemanticDiagnostic(
-                $"{label} '{symbol.Name}' is declared but never used.",
-                DiagnosticLevel.Information,
-                symbol.Span,
-                isUnnecessary: true));
+            _diagnostics.Add(DiagnosticDescriptors.SA0201.CreateUnnecessaryDiagnostic(symbol.Span, label, symbol.Name));
         }
     }
 
@@ -629,20 +597,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         var definition = _scopeTree.FindDefinition(expr.Name.Lexeme, line, col);
         if (definition != null && definition.Kind == SymbolKind.Constant)
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                $"Cannot reassign constant '{expr.Name.Lexeme}'.",
-                DiagnosticLevel.Error,
-                expr.Name.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0203.CreateDiagnostic(expr.Name.Span, expr.Name.Lexeme));
         }
         if (definition != null && definition.IsExplicitTypeHint && definition.TypeHint != null)
         {
             var valueType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Value, line, col);
             if (valueType != null && valueType != "null" && valueType != definition.TypeHint)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    $"Cannot assign value of type '{valueType}' to variable '{expr.Name.Lexeme}' of type '{definition.TypeHint}'.",
-                    DiagnosticLevel.Warning,
-                    expr.Name.Span));
+                _diagnostics.Add(DiagnosticDescriptors.SA0305.CreateDiagnostic(expr.Name.Span, valueType, expr.Name.Lexeme, definition.TypeHint));
             }
         }
         expr.Value.Accept(this);
@@ -677,10 +639,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                         string expected = requiredCount == paramCount
                             ? $"{paramCount}"
                             : $"{requiredCount} to {paramCount}";
-                        _diagnostics.Add(new SemanticDiagnostic(
-                            $"Expected {expected} arguments but got {expr.Arguments.Count}.",
-                            DiagnosticLevel.Error,
-                            expr.Paren.Span));
+                        _diagnostics.Add(DiagnosticDescriptors.SA0401.CreateDiagnostic(expr.Paren.Span, expected, expr.Arguments.Count));
                     }
                 }
 
@@ -701,10 +660,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                             var paramName = definition.ParameterNames != null && i < definition.ParameterNames.Length
                                 ? definition.ParameterNames[i]
                                 : $"argument {i + 1}";
-                            _diagnostics.Add(new SemanticDiagnostic(
-                                $"Argument '{paramName}' expects type '{expectedType}' but got '{argType}'.",
-                                DiagnosticLevel.Warning,
-                                expr.Arguments[i].Span));
+                            _diagnostics.Add(DiagnosticDescriptors.SA0403.CreateDiagnostic(expr.Arguments[i].Span, paramName, expectedType, argType));
                         }
                     }
                 }
@@ -718,10 +674,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 !func.IsVariadic &&
                 expr.Arguments.Count != func.Parameters.Length)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    $"Expected {func.Parameters.Length} arguments but got {expr.Arguments.Count}.",
-                    DiagnosticLevel.Error,
-                    expr.Paren.Span));
+                _diagnostics.Add(DiagnosticDescriptors.SA0402.CreateDiagnostic(expr.Paren.Span, func.Parameters.Length, expr.Arguments.Count));
             }
         }
         else
@@ -896,10 +849,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 var valueType = TypeInferenceEngine.InferExpressionType(_scopeTree, expr.Value, line, col);
                 if (valueType != null && valueType != "null" && valueType != field.TypeHint)
                 {
-                    _diagnostics.Add(new SemanticDiagnostic(
-                        $"Cannot assign value of type '{valueType}' to field '{expr.Name.Lexeme}' of type '{field.TypeHint}'.",
-                        DiagnosticLevel.Warning,
-                        expr.Name.Span));
+                    _diagnostics.Add(DiagnosticDescriptors.SA0304.CreateDiagnostic(expr.Name.Span, valueType, expr.Name.Lexeme, field.TypeHint));
                 }
             }
         }
@@ -983,27 +933,18 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             && expr.UntilClause is null
             && expr.Body.Statements.All(s => s is ExprStmt es && es.Expression is CommandExpr { IsStrict: false } or PipeExpr or RedirectExpr))
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                "Retry body contains only shell commands, which never throw. Add an 'until' clause to check command results, or use '$!(...)' strict commands.",
-                DiagnosticLevel.Warning,
-                expr.RetryKeyword.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0702.CreateDiagnostic(expr.RetryKeyword.Span));
         }
 
         if (expr.MaxAttempts is LiteralExpr { Value: long attempts })
         {
             if (attempts == 0)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    "'retry' with 0 attempts will never execute the body.",
-                    DiagnosticLevel.Warning,
-                    expr.MaxAttempts.Span));
+                _diagnostics.Add(DiagnosticDescriptors.SA0703.CreateDiagnostic(expr.MaxAttempts.Span));
             }
             else if (attempts == 1)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    "'retry' with 1 attempt will never retry. Consider removing the retry block.",
-                    DiagnosticLevel.Information,
-                    expr.MaxAttempts.Span));
+                _diagnostics.Add(DiagnosticDescriptors.SA0704.CreateDiagnostic(expr.MaxAttempts.Span));
             }
         }
 
@@ -1019,19 +960,13 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                         {
                             if (element is not LiteralExpr { Value: string } and not IdentifierExpr)
                             {
-                                _diagnostics.Add(new SemanticDiagnostic(
-                                    "'on' filter expects an array of error type names (identifiers or string literals).",
-                                    DiagnosticLevel.Warning,
-                                    element.Span));
+                                _diagnostics.Add(DiagnosticDescriptors.SA0705.CreateDiagnostic(element.Span));
                             }
                         }
                     }
                     else if (option.Value is not IdentifierExpr)
                     {
-                        _diagnostics.Add(new SemanticDiagnostic(
-                            "'on' option expects an array of error type names.",
-                            DiagnosticLevel.Warning,
-                            option.Value.Span));
+                        _diagnostics.Add(DiagnosticDescriptors.SA0706.CreateDiagnostic(option.Value.Span));
                     }
                     break;
                 }
@@ -1044,10 +979,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             && expr.UntilClause is not DotExpr
             && expr.UntilClause is not CallExpr)
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                "'until' clause expects a callable expression (lambda or function reference).",
-                DiagnosticLevel.Warning,
-                expr.UntilClause.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0707.CreateDiagnostic(expr.UntilClause.Span));
         }
 
         if (expr.NamedOptions is not null)
@@ -1068,10 +1000,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             }
             if (backoffOption is { } b && !hasNonZeroDelay)
             {
-                _diagnostics.Add(new SemanticDiagnostic(
-                    "'backoff' has no effect without a non-zero 'delay'.",
-                    DiagnosticLevel.Information,
-                    b.Name.Span));
+                _diagnostics.Add(DiagnosticDescriptors.SA0708.CreateDiagnostic(b.Name.Span));
             }
         }
 
@@ -1079,10 +1008,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             && expr.Body.Statements.Count > 0
             && !ContainsThrowableOperation(expr.Body.Statements))
         {
-            _diagnostics.Add(new SemanticDiagnostic(
-                "Retry body contains no operations that can throw. The retry block will always succeed on the first attempt.",
-                DiagnosticLevel.Information,
-                expr.RetryKeyword.Span));
+            _diagnostics.Add(DiagnosticDescriptors.SA0709.CreateDiagnostic(expr.RetryKeyword.Span));
         }
 
         return null;

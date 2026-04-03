@@ -1,5 +1,6 @@
 namespace Stash.Lsp.Analysis;
 
+using System;
 using System.Collections.Generic;
 using OmniSharp.Extensions.LanguageServer.Protocol.Models;
 using Stash.Analysis;
@@ -56,6 +57,12 @@ public static class DiagnosticBuilder
                 Message = semantic.Message,
                 Tags = semantic.IsUnnecessary
                     ? new Container<DiagnosticTag>(DiagnosticTag.Unnecessary)
+                    : null,
+                Code = semantic.Code != null
+                    ? new DiagnosticCode(semantic.Code)
+                    : (DiagnosticCode?)null,
+                CodeDescription = semantic.Code != null
+                    ? new CodeDescription { Href = new Uri($"https://stash-lang.dev/diagnostics/{semantic.Code}") }
                     : null
             });
         }
