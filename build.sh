@@ -33,6 +33,9 @@ INTERPRETER_DEST="${HOME}/.local/bin/stash"
 REGISTRY_SOURCE="./Stash.Registry/bin/Release/net10.0/${RUNTIME}/publish/StashRegistry"
 REGISTRY_DEST="${HOME}/.local/bin/stash-registry"
 
+CHECK_SOURCE="./Stash.Check/bin/Release/net10.0/${RUNTIME}/publish/StashCheck"
+CHECK_DEST="${HOME}/.local/bin/stash-check"
+
 VSCODE_EXTENSION_DIR="./.vscode/extensions/stash-lang"
 
 # ── Clean & Build ───────────────────────────────────────────────────
@@ -52,6 +55,7 @@ declare -A ARTIFACTS=(
     ["$LSP_SOURCE"]="$LSP_DEST"
     ["$DAP_SOURCE"]="$DAP_DEST"
     ["$REGISTRY_SOURCE"]="$REGISTRY_DEST"
+    ["$CHECK_SOURCE"]="$CHECK_DEST"
 )
 
 for source in "${!ARTIFACTS[@]}"; do

@@ -1,0 +1,108 @@
+#!/usr/bin/env stash
+
+// examples/static_analysis.stash
+// Static Analysis Violations — diagnostics caught by `stash-check`
+//
+// This script contains INTENTIONAL rule violations across every diagnostic
+// category. Run `stash-check examples/static_analysis.stash` to see all
+// diagnostics reported as SARIF output.
+//
+// NOTE: This file is NOT meant to be executed — it contains deliberate errors.
+
+// ─── SA00xx — Infrastructure ──────────────────────────────────────────────────
+
+// SA0001: Unknown diagnostic code — SA9999 does not exist in the rule set
+// stash-ignore SA9999
+let ignoredA = 1;
+
+// SA0002: Malformed diagnostic code — must match SA followed by 4 digits
+// stash-ignore INVALID
+let ignoredB = 2;
+
+// ─── SA02xx — Declarations ────────────────────────────────────────────────────
+
+// SA0203: Constant reassignment — const bindings are immutable
+const MAX_RETRIES = 5;
+MAX_RETRIES = 10;
+
+// SA0201: Unused declaration — variable declared but never referenced
+let unusedCounter = 0;
+
+// SA0202: Undefined identifier — referencing a name that was never declared
+io.println(undeclaredName);
+
+// ─── SA03xx — Type Safety ─────────────────────────────────────────────────────
+
+// SA0301: Variable type mismatch — declared int but initialised with string
+let timeout: int = "thirty seconds";
+
+// SA0302: Constant type mismatch — declared int but assigned a string
+const THRESHOLD: int = "high";
+
+// SA0303: Unknown type annotation — 'velocity' is not a built-in or declared type
+let speed: velocity = 120;
+
+// SA0305: Variable assignment type mismatch — score is int then assigned string
+let score: int = 95;
+score = "excellent";
+
+// ─── SA04xx — Functions & Calls ───────────────────────────────────────────────
+
+// SA0401: User function arity mismatch — add() expects 2 args, called with 1
+fn add(a: int, b: int) {
+    return a + b;
+}
+let sum = add(10);
+
+// SA0402: Built-in function arity mismatch — arr.len() takes exactly 1 argument
+let length = arr.len([1, 2, 3], "extra");
+
+// SA0403: Argument type mismatch — greet() expects string, called with int
+fn greet(name: string) {
+    io.println($"Hello, {name}!");
+}
+greet(42);
+
+// ─── SA05xx — Spread / Rest ───────────────────────────────────────────────────
+
+// SA0503: Spreading null literal — null has no elements to spread
+let withNull = [...null, 1, 2];
+
+// SA0505: Empty spread — spreading an empty array literal contributes nothing
+let items = [...[], 3, 4, 5];
+
+// ─── SA07xx — Commands ────────────────────────────────────────────────────────
+
+// SA0703: Retry with zero attempts — the body can never execute
+retry (0) {
+    $(curl https://api.example.com/status);
+}
+
+// SA0704: Retry with a single attempt — equivalent to no retry at all
+retry (1) {
+    $(curl https://api.example.com/health);
+}
+
+// SA0709: Retry body with no throwable operations — nothing can fail
+retry (3) {
+    io.println("checking status");
+}
+
+// ─── SA01xx — Control Flow ────────────────────────────────────────────────────
+// (placed last to prevent cascading unreachable-code diagnostics)
+
+// SA0104: Unreachable code — statements after an unconditional return
+fn describe(value) {
+    return "done";
+    io.println("this line can never be reached");
+}
+describe("test");
+
+// SA0101: break outside a loop — break is only valid inside for/while
+break;
+
+// SA0102: continue outside a loop — continue is only valid inside for/while
+continue;
+
+// SA0103: return at top level — return is only valid inside a function body
+return 1;

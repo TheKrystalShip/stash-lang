@@ -19,6 +19,9 @@ $INTERPRETER_DEST = "$env:USERPROFILE\.local\bin\stash.exe"
 $REGISTRY_SOURCE = ".\Stash.Registry\bin\Release\net10.0\$RUNTIME\publish\StashRegistry.exe"
 $REGISTRY_DEST = "$env:USERPROFILE\.local\bin\stash-registry.exe"
 
+$CHECK_SOURCE = ".\Stash.Check\bin\Release\net10.0\$RUNTIME\publish\StashCheck.exe"
+$CHECK_DEST = "$env:USERPROFILE\.local\bin\stash-check.exe"
+
 $VSCODE_EXTENSION_DIR = ".\.vscode\extensions\stash-lang"
 
 $artifacts = @{
@@ -26,6 +29,7 @@ $artifacts = @{
     $LSP_SOURCE         = $LSP_DEST
     $DAP_SOURCE         = $DAP_DEST
     $REGISTRY_SOURCE    = $REGISTRY_DEST
+    $CHECK_SOURCE       = $CHECK_DEST
 }
 
 # ── Clean & Build ───────────────────────────────────────────────────
