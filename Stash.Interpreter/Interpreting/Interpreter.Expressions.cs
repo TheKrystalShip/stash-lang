@@ -1178,6 +1178,12 @@ public partial class Interpreter
     {
         object? callee = expr.Callee.Accept(this);
 
+        // Optional chaining: x?.method() returns null when x is null
+        if (expr.IsOptional && callee is null)
+        {
+            return null;
+        }
+
         List<object?> arguments;
         if (expr.Arguments.Count == 0)
         {

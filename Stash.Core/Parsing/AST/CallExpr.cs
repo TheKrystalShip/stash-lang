@@ -32,17 +32,25 @@ public class CallExpr : Expr
     public List<Expr> Arguments { get; }
 
     /// <summary>
+    /// Gets whether this call originated from optional chaining (<c>x?.method()</c>).
+    /// When <c>true</c> and the callee evaluates to <c>null</c>, the call returns <c>null</c>.
+    /// </summary>
+    public bool IsOptional { get; }
+
+    /// <summary>
     /// Creates a new function call expression node.
     /// </summary>
     /// <param name="callee">The expression that evaluates to a callable.</param>
     /// <param name="paren">The closing parenthesis token (for error reporting).</param>
     /// <param name="arguments">The list of argument expressions.</param>
     /// <param name="span">The source span covering the entire call expression.</param>
-    public CallExpr(Expr callee, Token paren, List<Expr> arguments, SourceSpan span) : base(span)
+    /// <param name="isOptional">Whether this call is part of an optional chain (<c>?.</c>).</param>
+    public CallExpr(Expr callee, Token paren, List<Expr> arguments, SourceSpan span, bool isOptional = false) : base(span)
     {
         Callee = callee;
         Paren = paren;
         Arguments = arguments;
+        IsOptional = isOptional;
     }
 
     /// <inheritdoc />

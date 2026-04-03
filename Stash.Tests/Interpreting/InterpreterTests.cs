@@ -8244,6 +8244,61 @@ public class InterpreterTests
         RunExpectingError("let x = null; let y = x.name;");
     }
 
+    [Fact]
+    public void OptionalChaining_MethodCallOnNull_ReturnsNull()
+    {
+        Assert.Null(Run("let x = null; let result = x?.upper();"));
+    }
+
+    [Fact]
+    public void OptionalChaining_MethodCallOnNonNull_ReturnsValue()
+    {
+        Assert.Equal("HELLO", Run("""let x = "hello"; let result = x?.upper();"""));
+    }
+
+    [Fact]
+    public void OptionalChaining_UfcsMethodCallOnNull_ReturnsNull()
+    {
+        Assert.Null(Run("let x = null; let result = x?.trim();"));
+    }
+
+    [Fact]
+    public void OptionalChaining_MethodCallWithArgs_ReturnsNull()
+    {
+        Assert.Null(Run("""let x = null; let result = x?.split(",");"""));
+    }
+
+    [Fact]
+    public void OptionalChaining_MethodCallWithArgs_NonNull_ReturnsValue()
+    {
+        var result = Run("""let s = "a,b,c"; let result = s?.split(",");""");
+        Assert.IsType<List<object?>>(result);
+    }
+
+    [Fact]
+    public void OptionalChaining_ChainedMethodCalls_NullFirst_ReturnsNull()
+    {
+        Assert.Null(Run("""let x = null; let result = x?.trim()?.upper();"""));
+    }
+
+    [Fact]
+    public void OptionalChaining_ChainedMethodCalls_NonNull_ReturnsValue()
+    {
+        Assert.Equal("HELLO", Run("""let x = " hello "; let result = x?.trim()?.upper();"""));
+    }
+
+    [Fact]
+    public void OptionalChaining_NonOptionalCallOnNull_StillThrows()
+    {
+        RunExpectingError("let x = null; let y = x.upper();");
+    }
+
+    [Fact]
+    public void OptionalChaining_RegularCallOnNull_StillThrows()
+    {
+        RunExpectingError("let f = null; f();");
+    }
+
     // ── Shorthand Struct Init ───────────────────────────────────────────
 
     [Fact]

@@ -1887,7 +1887,8 @@ public class Parser
         }
 
         Token paren = Consume(TokenType.RightParen, "Expected ')' after arguments.");
-        return new CallExpr(callee, paren, arguments, MakeSpan(callee.Span, paren.Span));
+        bool isOptional = callee is DotExpr { IsOptional: true };
+        return new CallExpr(callee, paren, arguments, MakeSpan(callee.Span, paren.Span), isOptional);
     }
 
     /// <summary>
