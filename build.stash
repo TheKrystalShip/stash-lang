@@ -24,6 +24,10 @@ const CHECK_SOURCE: string = $"./Stash.Check/bin/Release/net10.0/{RUNTIME}/publi
 
 const CHECK_DEST: string = $"{HOME_DIR}/.local/bin/stash-check";
 
+const FORMAT_SOURCE: string = $"./Stash.Format/bin/Release/net10.0/{RUNTIME}/publish/StashFormat";
+
+const FORMAT_DEST: string = $"{HOME_DIR}/.local/bin/stash-format";
+
 const VSCODE_EXTENSION_BUILD_SCRIPT: string = "./.vscode/extensions/stash-lang/build.stash";
 
 let artifacts: dict = dict.new();
@@ -32,6 +36,7 @@ artifacts[$"{LSP_SOURCE}"] = $"{LSP_DEST}";
 artifacts[$"{DAP_SOURCE}"] = $"{DAP_DEST}";
 artifacts[$"{REGISTRY_SOURCE}"] = $"{REGISTRY_DEST}";
 artifacts[$"{CHECK_SOURCE}"] = $"{CHECK_DEST}";
+artifacts[$"{FORMAT_SOURCE}"] = $"{FORMAT_DEST}";
 
 fn cleanBuildStash() {
 

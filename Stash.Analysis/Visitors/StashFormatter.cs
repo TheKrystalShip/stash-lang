@@ -317,7 +317,10 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         // 3. Parse code tokens into an AST (re-attach the Eof token)
         var parserTokens = new List<Token>(code);
         parserTokens.Add(allTokens[^1]); // Eof
-        var statements = new Parser(parserTokens).ParseProgram();
+        var parser = new Parser(parserTokens);
+        var statements = parser.ParseProgram();
+        if (parser.Errors.Count > 0)
+            throw new InvalidOperationException(parser.Errors[0]);
 
         // 4. Reset per-call state
         _sb = new StringBuilder();

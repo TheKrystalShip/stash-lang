@@ -22,6 +22,9 @@ $REGISTRY_DEST = "$env:USERPROFILE\.local\bin\stash-registry.exe"
 $CHECK_SOURCE = ".\Stash.Check\bin\Release\net10.0\$RUNTIME\publish\StashCheck.exe"
 $CHECK_DEST = "$env:USERPROFILE\.local\bin\stash-check.exe"
 
+$FORMAT_SOURCE = ".\Stash.Format\bin\Release\net10.0\$RUNTIME\publish\StashFormat.exe"
+$FORMAT_DEST = "$env:USERPROFILE\.local\bin\stash-format.exe"
+
 $VSCODE_EXTENSION_DIR = ".\.vscode\extensions\stash-lang"
 
 $artifacts = @{
@@ -30,6 +33,7 @@ $artifacts = @{
     $DAP_SOURCE         = $DAP_DEST
     $REGISTRY_SOURCE    = $REGISTRY_DEST
     $CHECK_SOURCE       = $CHECK_DEST
+    $FORMAT_SOURCE     = $FORMAT_DEST
 }
 
 # ── Clean & Build ───────────────────────────────────────────────────
