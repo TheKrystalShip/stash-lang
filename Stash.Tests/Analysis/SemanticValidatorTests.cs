@@ -910,6 +910,13 @@ public class SemanticValidatorTests
     }
 
     [Fact]
+    public void Interface_UsedAsTypeHint_NoDiagnostic()
+    {
+        var diagnostics = Validate("interface Printable { toString() }\nfn process(item: Printable) { return item; }");
+        Assert.DoesNotContain(diagnostics, d => d.Message.Contains("Printable") || d.Message.Contains("Unknown type"));
+    }
+
+    [Fact]
     public void Retry_ShellOnlyBodyWithoutUntil_ReportsWarning()
     {
         var diagnostics = Validate("retry (3) { $(echo hello); }");

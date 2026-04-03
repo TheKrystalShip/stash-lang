@@ -1752,6 +1752,11 @@ public class DebugSession : IDebugger
                     : $"<struct {st.Name}> ({string.Join(", ", st.Fields)})";
                 break;
 
+            case StashInterface iface:
+                type = "interface";
+                displayValue = $"<interface {iface.Name}> ({iface.RequiredFields.Count} field(s), {iface.RequiredMethods.Count} method(s))";
+                break;
+
             default:
                 type = value.GetType().Name;
                 displayValue = RuntimeValues.Stringify(value);

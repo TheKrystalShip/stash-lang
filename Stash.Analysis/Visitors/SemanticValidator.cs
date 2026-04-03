@@ -115,7 +115,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         }
 
         var definition = _scopeTree.FindDefinition(typeName, typeHint.Span.StartLine, typeHint.Span.StartColumn);
-        if (definition != null && (definition.Kind == SymbolKind.Struct || definition.Kind == SymbolKind.Enum))
+        if (definition != null && (definition.Kind == SymbolKind.Struct || definition.Kind == SymbolKind.Enum || definition.Kind == SymbolKind.Interface))
         {
             return;
         }
