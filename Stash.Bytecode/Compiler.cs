@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
@@ -97,26 +98,26 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             ushort nameIdx = _builder.AddConstant(name);
             _builder.Emit(isLoad ? OpCode.LoadGlobal : OpCode.StoreGlobal, nameIdx);
         }
-        else if (resolvedDistance == 0)
+        else
         {
-            // Local in the current function
+            // Try current function's locals first — the scope chain covers all block depths
             int slot = _scope.ResolveLocal(name);
             if (slot >= 0)
             {
                 _builder.Emit(isLoad ? OpCode.LoadLocal : OpCode.StoreLocal, (byte)slot);
             }
+            else if (resolvedDistance > 0)
+            {
+                // Not a local in this function — must be an upvalue from an enclosing function
+                byte upvalueIdx = ResolveUpvalue(name, resolvedDistance);
+                _builder.Emit(isLoad ? OpCode.LoadUpvalue : OpCode.StoreUpvalue, upvalueIdx);
+            }
             else
             {
-                // Resolver said distance=0 but our scope doesn't have it — fall back to global
+                // Resolver said distance=0 but scope doesn't have it — fall back to global
                 ushort nameIdx = _builder.AddConstant(name);
                 _builder.Emit(isLoad ? OpCode.LoadGlobal : OpCode.StoreGlobal, nameIdx);
             }
-        }
-        else
-        {
-            // Upvalue captured from an enclosing function
-            byte upvalueIdx = ResolveUpvalue(name, resolvedDistance);
-            _builder.Emit(isLoad ? OpCode.LoadUpvalue : OpCode.StoreUpvalue, upvalueIdx);
         }
     }
 
@@ -615,20 +616,150 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     // --- Deferred statement visitors ---
 
     /// <inheritdoc />
-    public object? VisitStructDeclStmt(StructDeclStmt stmt) =>
-        throw new NotSupportedException("Struct declaration compilation deferred to Phase 5.");
+    public object? VisitStructDeclStmt(StructDeclStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
+        _scope.MarkInitialized(slot);
+
+        // Compile each method as a closure (pushes VMFunction onto stack)
+        var methodNames = new string[stmt.Methods.Count];
+        for (int i = 0; i < stmt.Methods.Count; i++)
+        {
+            methodNames[i] = stmt.Methods[i].Name.Lexeme;
+            CompileFunction(
+                stmt.Methods[i].Name.Lexeme,
+                stmt.Methods[i].Parameters,
+                stmt.Methods[i].DefaultValues,
+                stmt.Methods[i].Body,
+                stmt.Methods[i].IsAsync,
+                stmt.Methods[i].HasRestParam);
+        }
+
+        string[] fields = new string[stmt.Fields.Count];
+        for (int i = 0; i < stmt.Fields.Count; i++)
+            fields[i] = stmt.Fields[i].Lexeme;
+
+        string[] interfaceNames = new string[stmt.Interfaces.Count];
+        for (int i = 0; i < stmt.Interfaces.Count; i++)
+            interfaceNames[i] = stmt.Interfaces[i].Lexeme;
+
+        var metadata = new StructMetadata(stmt.Name.Lexeme, fields, methodNames, interfaceNames);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.StructDecl, metaIdx);
+
+        // Dup + StoreGlobal: needed because references use LoadGlobal (distance=-1 at top level)
+        // and harmless in local scopes where LoadLocal is used instead
+        _builder.Emit(OpCode.Dup);
+        {
+            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+        }
+
+        return null;
+    }
 
     /// <inheritdoc />
-    public object? VisitEnumDeclStmt(EnumDeclStmt stmt) =>
-        throw new NotSupportedException("Enum declaration compilation deferred to Phase 5.");
+    public object? VisitEnumDeclStmt(EnumDeclStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
+        _scope.MarkInitialized(slot);
+
+        string[] members = new string[stmt.Members.Count];
+        for (int i = 0; i < stmt.Members.Count; i++)
+            members[i] = stmt.Members[i].Lexeme;
+
+        var metadata = new EnumMetadata(stmt.Name.Lexeme, members);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.EnumDecl, metaIdx);
+
+        _builder.Emit(OpCode.Dup);
+        {
+            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+        }
+
+        return null;
+    }
 
     /// <inheritdoc />
-    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt) =>
-        throw new NotSupportedException("Interface declaration compilation deferred to Phase 5.");
+    public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
+        _scope.MarkInitialized(slot);
+
+        var fields = new InterfaceField[stmt.Fields.Count];
+        for (int i = 0; i < stmt.Fields.Count; i++)
+        {
+            string fieldName = stmt.Fields[i].Lexeme;
+            string? typeHint = i < stmt.FieldTypes.Count ? stmt.FieldTypes[i]?.Lexeme : null;
+            fields[i] = new InterfaceField(fieldName, typeHint);
+        }
+
+        var methods = new InterfaceMethod[stmt.Methods.Count];
+        for (int i = 0; i < stmt.Methods.Count; i++)
+        {
+            InterfaceMethodSignature sig = stmt.Methods[i];
+            var paramNames = new List<string>();
+            foreach (Token p in sig.Parameters)
+                paramNames.Add(p.Lexeme);
+
+            var paramTypes = new List<string?>();
+            for (int j = 0; j < sig.Parameters.Count; j++)
+            {
+                string? paramType = j < sig.ParameterTypes.Count ? sig.ParameterTypes[j]?.Lexeme : null;
+                paramTypes.Add(paramType);
+            }
+
+            string? returnType = sig.ReturnType?.Lexeme;
+            methods[i] = new InterfaceMethod(sig.Name.Lexeme, sig.Parameters.Count, paramNames, paramTypes, returnType);
+        }
+
+        var metadata = new InterfaceMetadata(stmt.Name.Lexeme, fields, methods);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.InterfaceDecl, metaIdx);
+
+        _builder.Emit(OpCode.Dup);
+        {
+            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+        }
+
+        return null;
+    }
 
     /// <inheritdoc />
-    public object? VisitExtendStmt(ExtendStmt stmt) =>
-        throw new NotSupportedException("Extend compilation deferred to Phase 5.");
+    public object? VisitExtendStmt(ExtendStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        string typeName = stmt.TypeName.Lexeme;
+        bool isBuiltIn = typeName is "string" or "array" or "dict" or "int" or "float";
+
+        var methodNames = new string[stmt.Methods.Count];
+        for (int i = 0; i < stmt.Methods.Count; i++)
+        {
+            methodNames[i] = stmt.Methods[i].Name.Lexeme;
+            CompileFunction(
+                stmt.Methods[i].Name.Lexeme,
+                stmt.Methods[i].Parameters,
+                stmt.Methods[i].DefaultValues,
+                stmt.Methods[i].Body,
+                stmt.Methods[i].IsAsync,
+                stmt.Methods[i].HasRestParam);
+        }
+
+        var metadata = new ExtendMetadata(typeName, methodNames, isBuiltIn);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.Extend, metaIdx);
+
+        return null;
+    }
 
     /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt) =>
@@ -908,7 +1039,29 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         _builder.AddSourceMapping(expr.Span);
         CompileExpr(expr.Object);
         ushort nameIdx = _builder.AddConstant(expr.Name.Lexeme);
-        _builder.Emit(OpCode.GetField, nameIdx);
+
+        if (expr.IsOptional)
+        {
+            // If object is null, short-circuit to null (leave null on stack)
+            _builder.Emit(OpCode.Dup);
+            _builder.Emit(OpCode.Null);
+            _builder.Emit(OpCode.Equal);
+            int nullJump = _builder.EmitJump(OpCode.JumpTrue);
+
+            // Not null — do field access
+            _builder.Emit(OpCode.GetField, nameIdx);
+            int endJump = _builder.EmitJump(OpCode.Jump);
+
+            // Was null — object is already null on stack, which is the result
+            _builder.PatchJump(nullJump);
+
+            _builder.PatchJump(endJump);
+        }
+        else
+        {
+            _builder.Emit(OpCode.GetField, nameIdx);
+        }
+
         return null;
     }
 

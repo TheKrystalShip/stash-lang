@@ -35,6 +35,7 @@ public sealed class VirtualMachine
 
     private readonly List<ExceptionHandler> _exceptionHandlers = new();
     private readonly VMContext _context;
+    private readonly ExtensionRegistry _extensionRegistry = new();
 
     public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
     {
@@ -57,6 +58,9 @@ public sealed class VirtualMachine
 
     /// <summary>Standard input stream for built-in functions. Defaults to Console.In.</summary>
     public TextReader Input { get => _context.Input; set => _context.Input = value; }
+
+    /// <summary>Extension method registry for extend blocks on built-in types.</summary>
+    internal ExtensionRegistry Extensions => _extensionRegistry;
 
     /// <summary>Execute a compiled chunk and return the result.</summary>
     public object? Execute(Chunk chunk)
@@ -653,17 +657,31 @@ public sealed class VirtualMachine
                     ushort fieldCount = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
                     // Stack layout: [structDef][name0][val0][name1][val1]...
-                    var fields = new Dictionary<string, object?>(fieldCount);
+                    var providedFields = new Dictionary<string, object?>(fieldCount);
                     int pairStart = _sp - (fieldCount * 2);
                     for (int i = pairStart; i < _sp; i += 2)
                     {
                         string fname = (string)_stack[i]!;
-                        fields[fname] = _stack[i + 1];
+                        providedFields[fname] = _stack[i + 1];
                     }
                     _sp = pairStart;
                     object? structDef = Pop();
                     if (structDef is StashStruct ss)
-                        Push(new StashInstance(ss.Name, fields, ss));
+                    {
+                        // Initialize all declared fields to null, then override with provided values
+                        var allFields = new Dictionary<string, object?>(ss.Fields.Count);
+                        foreach (string f in ss.Fields)
+                            allFields[f] = null;
+
+                        foreach (KeyValuePair<string, object?> kvp in providedFields)
+                        {
+                            if (!allFields.ContainsKey(kvp.Key))
+                                throw new RuntimeError($"Unknown field '{kvp.Key}' for struct '{ss.Name}'.", span);
+                            allFields[kvp.Key] = kvp.Value;
+                        }
+
+                        Push(new StashInstance(ss.Name, ss, allFields));
+                    }
                     else
                         throw new RuntimeError("Not a struct type.", span);
                     break;
@@ -686,6 +704,115 @@ public sealed class VirtualMachine
                     string typeName = (string)frame.Chunk.Constants[typeIdx]!;
                     object? value = Pop();
                     Push(CheckIsType(value, typeName));
+                    break;
+                }
+
+                case OpCode.StructDecl:
+                {
+                    ushort metaIdx = ReadU16(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    var metadata = (StructMetadata)frame.Chunk.Constants[metaIdx]!;
+
+                    // Pop method closures from stack (pushed in order, so pop in reverse)
+                    var methods = new Dictionary<string, IStashCallable>(metadata.MethodNames.Length);
+                    for (int i = metadata.MethodNames.Length - 1; i >= 0; i--)
+                    {
+                        object? methodObj = Pop();
+                        if (methodObj is VMFunction vmFunc)
+                            methods[metadata.MethodNames[i]] = vmFunc;
+                        else
+                            throw new RuntimeError($"Expected function for method '{metadata.MethodNames[i]}'.", span);
+                    }
+
+                    var fieldList = new List<string>(metadata.Fields);
+                    var structDef = new StashStruct(metadata.Name, fieldList, methods);
+
+                    // Resolve and validate interfaces
+                    foreach (string ifaceName in metadata.InterfaceNames)
+                    {
+                        if (!_globals.TryGetValue(ifaceName, out object? resolved) || resolved is not StashInterface iface)
+                            throw new RuntimeError($"'{ifaceName}' is not an interface.", span);
+
+                        foreach (InterfaceField reqField in iface.RequiredFields)
+                        {
+                            if (!fieldList.Contains(reqField.Name))
+                                throw new RuntimeError(
+                                    $"Struct '{metadata.Name}' does not implement interface '{ifaceName}': missing field '{reqField.Name}'.",
+                                    span);
+                        }
+
+                        foreach (InterfaceMethod reqMethod in iface.RequiredMethods)
+                        {
+                            if (!methods.ContainsKey(reqMethod.Name))
+                                throw new RuntimeError(
+                                    $"Struct '{metadata.Name}' does not implement interface '{ifaceName}': missing method '{reqMethod.Name}'.",
+                                    span);
+                        }
+
+                        structDef.Interfaces.Add(iface);
+                    }
+
+                    Push(structDef);
+                    break;
+                }
+
+                case OpCode.EnumDecl:
+                {
+                    ushort metaIdx = ReadU16(ref frame);
+                    var metadata = (EnumMetadata)frame.Chunk.Constants[metaIdx]!;
+
+                    var members = new List<string>(metadata.Members);
+                    var enumDef = new StashEnum(metadata.Name, members);
+                    Push(enumDef);
+                    break;
+                }
+
+                case OpCode.InterfaceDecl:
+                {
+                    ushort metaIdx = ReadU16(ref frame);
+                    var metadata = (InterfaceMetadata)frame.Chunk.Constants[metaIdx]!;
+
+                    var requiredFields = new List<InterfaceField>(metadata.Fields);
+                    var requiredMethods = new List<InterfaceMethod>(metadata.Methods);
+                    var interfaceDef = new StashInterface(metadata.Name, requiredFields, requiredMethods);
+                    Push(interfaceDef);
+                    break;
+                }
+
+                case OpCode.Extend:
+                {
+                    ushort metaIdx = ReadU16(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    var metadata = (ExtendMetadata)frame.Chunk.Constants[metaIdx]!;
+
+                    // Pop method closures (pushed in order, so pop in reverse)
+                    var methodFuncs = new IStashCallable[metadata.MethodNames.Length];
+                    for (int i = metadata.MethodNames.Length - 1; i >= 0; i--)
+                    {
+                        object? methodObj = Pop();
+                        if (methodObj is not VMFunction vmFunc)
+                            throw new RuntimeError($"Expected function for extension method '{metadata.MethodNames[i]}'.", span);
+                        methodFuncs[i] = vmFunc;
+                    }
+
+                    if (metadata.IsBuiltIn)
+                    {
+                        for (int i = 0; i < metadata.MethodNames.Length; i++)
+                            _extensionRegistry.Register(metadata.TypeName, metadata.MethodNames[i], methodFuncs[i]);
+                    }
+                    else
+                    {
+                        if (!_globals.TryGetValue(metadata.TypeName, out object? resolved) || resolved is not StashStruct structDef)
+                            throw new RuntimeError($"Cannot extend '{metadata.TypeName}': not a known type.", span);
+
+                        for (int i = 0; i < metadata.MethodNames.Length; i++)
+                        {
+                            string methodName = metadata.MethodNames[i];
+                            if (!structDef.OriginalMethodNames.Contains(methodName))
+                                structDef.Methods[methodName] = methodFuncs[i];
+                        }
+                    }
+
                     break;
                 }
 
@@ -807,10 +934,6 @@ public sealed class VirtualMachine
                 case OpCode.PreDecrement:
                 case OpCode.PostIncrement:
                 case OpCode.PostDecrement:
-                case OpCode.StructDecl:
-                case OpCode.EnumDecl:
-                case OpCode.InterfaceDecl:
-                case OpCode.Extend:
                 case OpCode.Import:
                 case OpCode.ImportAs:
                 case OpCode.Destructure:
@@ -901,6 +1024,130 @@ public sealed class VirtualMachine
             return;
         }
 
+        if (callee is VMBoundMethod bound)
+        {
+            VMFunction boundFn = bound.Function;
+            Chunk fnChunk = boundFn.Chunk;
+
+            // Shift existing args right by 1 to make room for self after the callee slot.
+            // This preserves the callee slot so OP_RETURN (_sp = baseSlot - 1) correctly
+            // discards the frame + callee.
+            int shiftStart = _sp - argc; // first arg position
+            Push(null!);                 // grow stack + increment _sp
+            for (int i = _sp - 2; i >= shiftStart; i--)
+                _stack[i + 1] = _stack[i];
+            _stack[shiftStart] = bound.Instance; // insert self after callee
+
+            int provided = argc + 1; // user args + self
+            int expected = fnChunk.Arity;
+            int minArity = fnChunk.MinArity;
+
+            if (fnChunk.HasRestParam)
+            {
+                int nonRestCount = expected - 1;
+                int minRequired = Math.Min(minArity, nonRestCount);
+                if (provided < minRequired)
+                    throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan);
+
+                if (provided < nonRestCount)
+                {
+                    for (int i = provided; i < nonRestCount; i++)
+                        Push(NotProvided);
+                    provided = nonRestCount;
+                }
+
+                int restCount = Math.Max(0, provided - nonRestCount);
+                var restList = new List<object?>(restCount);
+                int restStart = _sp - restCount;
+                for (int i = restStart; i < _sp; i++)
+                    restList.Add(_stack[i]);
+                _sp = restStart;
+                Push(restList);
+                provided = expected;
+            }
+            else
+            {
+                if (provided < minArity || provided > expected)
+                {
+                    string expectedStr = minArity == expected
+                        ? $"{expected - 1}"
+                        : $"{minArity - 1} to {expected - 1}";
+                    throw new RuntimeError($"Expected {expectedStr} arguments but got {argc}.", callSpan);
+                }
+
+                if (provided < expected)
+                {
+                    for (int i = provided; i < expected; i++)
+                        Push(NotProvided);
+                }
+            }
+
+            int baseSlot = _sp - fnChunk.Arity;
+            PushFrame(fnChunk, baseSlot, boundFn.Upvalues, fnChunk.Name);
+            return;
+        }
+
+        if (callee is VMExtensionBoundMethod extBound)
+        {
+            VMFunction extFn = extBound.Function;
+            Chunk fnChunk = extFn.Chunk;
+
+            // Same shift approach as VMBoundMethod — preserve callee slot for OP_RETURN.
+            int shiftStart = _sp - argc;
+            Push(null!);
+            for (int i = _sp - 2; i >= shiftStart; i--)
+                _stack[i + 1] = _stack[i];
+            _stack[shiftStart] = extBound.Receiver;
+
+            int provided = argc + 1; // user args + self
+            int expected = fnChunk.Arity;
+            int minArity = fnChunk.MinArity;
+
+            if (fnChunk.HasRestParam)
+            {
+                int nonRestCount = expected - 1;
+                int minRequired = Math.Min(minArity, nonRestCount);
+                if (provided < minRequired)
+                    throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan);
+
+                if (provided < nonRestCount)
+                {
+                    for (int i = provided; i < nonRestCount; i++)
+                        Push(NotProvided);
+                    provided = nonRestCount;
+                }
+
+                int restCount = Math.Max(0, provided - nonRestCount);
+                var restList = new List<object?>(restCount);
+                int restStart = _sp - restCount;
+                for (int i = restStart; i < _sp; i++)
+                    restList.Add(_stack[i]);
+                _sp = restStart;
+                Push(restList);
+                provided = expected;
+            }
+            else
+            {
+                if (provided < minArity || provided > expected)
+                {
+                    string expectedStr = minArity == expected
+                        ? $"{expected - 1}"
+                        : $"{minArity - 1} to {expected - 1}";
+                    throw new RuntimeError($"Expected {expectedStr} arguments but got {argc}.", callSpan);
+                }
+
+                if (provided < expected)
+                {
+                    for (int i = provided; i < expected; i++)
+                        Push(NotProvided);
+                }
+            }
+
+            int baseSlot = _sp - fnChunk.Arity;
+            PushFrame(fnChunk, baseSlot, extFn.Upvalues, fnChunk.Name);
+            return;
+        }
+
         if (callee is IStashCallable callable)
         {
             // Arity checking for IStashCallable
@@ -947,20 +1194,40 @@ public sealed class VirtualMachine
             callSpan);
     }
 
-    private static object? GetFieldValue(object? obj, string name, SourceSpan? span)
+    private object? GetFieldValue(object? obj, string name, SourceSpan? span)
     {
+        // 1. StashInstance: field + method access
         if (obj is StashInstance instance)
-            return instance.GetField(name, span);
+        {
+            object? result = instance.GetField(name, span);
+            // Intercept StashBoundMethod wrapping VMFunction → return VMBoundMethod instead
+            if (result is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
+                return new VMBoundMethod(bound.Instance, vmFunc);
+            return result;
+        }
+
+        // 2. StashDictionary: extension methods first, then key access
         if (obj is StashDictionary dict)
+        {
+            if (_extensionRegistry.TryGetMethod("dict", name, out IStashCallable? dictExtMethod) &&
+                dictExtMethod is VMFunction dictExtFunc)
+                return new VMExtensionBoundMethod(obj, dictExtFunc);
             return dict.Get(name);
+        }
+
+        // 3. StashNamespace: member access
         if (obj is StashNamespace ns)
             return ns.GetMember(name, span);
+
+        // 4. StashStruct: static method access
         if (obj is StashStruct structDef)
         {
             if (structDef.Methods.TryGetValue(name, out IStashCallable? method))
                 return method;
             throw new RuntimeError($"Struct '{structDef.Name}' has no static member '{name}'.", span);
         }
+
+        // 5. StashEnum: member access
         if (obj is StashEnum enumDef)
         {
             StashEnumValue? enumVal = enumDef.GetMember(name);
@@ -968,6 +1235,74 @@ public sealed class VirtualMachine
                 throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{name}'.", span);
             return enumVal;
         }
+
+        // 6. StashEnumValue: property access
+        if (obj is StashEnumValue enumValue)
+        {
+            return name switch
+            {
+                "typeName" => enumValue.TypeName,
+                "memberName" => enumValue.MemberName,
+                _ => throw new RuntimeError($"Enum value has no property '{name}'.", span)
+            };
+        }
+
+        // 7. StashError: property access
+        if (obj is StashError error)
+        {
+            return name switch
+            {
+                "message" => error.Message,
+                "type" => error.Type,
+                "stack" => error.Stack is not null ? new List<object?>(error.Stack) : null,
+                _ => error.Properties?.TryGetValue(name, out object? propVal) == true
+                    ? propVal
+                    : throw new RuntimeError($"Error has no property '{name}'.", span)
+            };
+        }
+
+        // 8. Built-in type .length properties
+        if (obj is List<object?> list && name == "length")
+            return (long)list.Count;
+        if (obj is string s && name == "length")
+            return (long)s.Length;
+
+        // 9. Extension methods on built-in types
+        string? extTypeName = obj switch
+        {
+            string => "string",
+            List<object?> => "array",
+            long => "int",
+            double => "float",
+            _ => null
+        };
+
+        if (extTypeName is not null &&
+            _extensionRegistry.TryGetMethod(extTypeName, name, out IStashCallable? extMethod))
+        {
+            if (extMethod is VMFunction extVmFunc)
+                return new VMExtensionBoundMethod(obj, extVmFunc);
+            return new BuiltInBoundMethod(obj, extMethod);
+        }
+
+        // 10. UFCS: namespace functions as methods on strings/arrays
+        string? ufcsNsName = obj switch
+        {
+            string => "str",
+            List<object?> => "arr",
+            _ => null
+        };
+
+        if (ufcsNsName is not null &&
+            _globals.TryGetValue(ufcsNsName, out object? nsVal) &&
+            nsVal is StashNamespace ufcsNs &&
+            ufcsNs.HasMember(name))
+        {
+            object? member = ufcsNs.GetMember(name, span);
+            if (member is IStashCallable callable)
+                return new BuiltInBoundMethod(obj, callable);
+        }
+
         throw new RuntimeError($"Cannot access field '{name}' on {RuntimeValues.Stringify(obj)}.", span);
     }
 
@@ -1047,7 +1382,8 @@ public sealed class VirtualMachine
         "semver"   => value is StashSemVer,
         "ip"       => value is StashIpAddress,
         "error"    => value is StashError,
-        _          => value is StashInstance inst && inst.TypeName == typeName,
+        _          => value is StashEnumValue ev ? ev.TypeName == typeName
+                     : value is StashInstance inst && inst.TypeName == typeName,
     };
 
     private static StashIterator CreateIterator(object? iterable, SourceSpan? span)

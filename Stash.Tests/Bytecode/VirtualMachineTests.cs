@@ -1855,6 +1855,821 @@ public class VirtualMachineTests
         Assert.Equal(6L, result);
     }
 
+    // ─── Section 26: Struct Declarations ───
+
+    [Fact]
+    public void Struct_SimpleDeclaration_CanInstantiate()
+    {
+        object? result = Execute("""
+            struct Point {
+                x,
+                y
+            }
+            let p = null;
+            p = Point { x: 10, y: 20 };
+            return p.x;
+            """);
+        Assert.Equal(10L, result);
+    }
+
+    [Fact]
+    public void Struct_FieldAccess_ReturnsValue()
+    {
+        object? result = Execute("""
+            struct Point {
+                x,
+                y
+            }
+            let p = null;
+            p = Point { x: 5, y: 15 };
+            return p.x + p.y;
+            """);
+        Assert.Equal(20L, result);
+    }
+
+    [Fact]
+    public void Struct_FieldMutation_UpdatesValue()
+    {
+        object? result = Execute("""
+            struct Counter {
+                count
+            }
+            let c = null;
+            c = Counter { count: 0 };
+            c.count = 42;
+            return c.count;
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Struct_OmittedFieldsDefaultToNull()
+    {
+        object? result = Execute("""
+            struct Config {
+                host,
+                port
+            }
+            let cfg = null;
+            cfg = Config { host: "localhost" };
+            return cfg.port;
+            """);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Struct_UnknownField_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            struct Point {
+                x,
+                y
+            }
+            let p = Point { x: 1, y: 2, z: 3 };
+            """));
+    }
+
+    [Fact]
+    public void Struct_UndefinedFieldAccess_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            struct Point {
+                x,
+                y
+            }
+            let p = null;
+            p = Point { x: 1, y: 2 };
+            return p.z;
+            """));
+    }
+
+    [Fact]
+    public void Struct_UndefinedFieldSet_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            struct Point {
+                x
+            }
+            let p = null;
+            p = Point { x: 1 };
+            p.z = 99;
+            """));
+    }
+
+    [Fact]
+    public void Struct_IsCheck_ReturnsTrue()
+    {
+        object? result = Execute("""
+            struct Foo {
+                value
+            }
+            let f = null;
+            f = Foo { value: 42 };
+            return f is Foo;
+            """);
+        Assert.Equal(true, result);
+    }
+
+    // ─── Section 27: Struct Methods ───
+
+    [Fact]
+    public void StructMethod_SimpleCall_ReturnsSelfField()
+    {
+        object? result = Execute("""
+            struct Greeter {
+                name
+                fn greet(self) {
+                    return "Hello, " + self.name;
+                }
+            }
+            let g = null;
+            g = Greeter { name: "World" };
+            return g.greet();
+            """);
+        Assert.Equal("Hello, World", result);
+    }
+
+    [Fact]
+    public void StructMethod_WithParams_Computes()
+    {
+        object? result = Execute("""
+            struct Calc {
+                base
+                fn add(self, n) {
+                    return self.base + n;
+                }
+            }
+            let c = null;
+            c = Calc { base: 100 };
+            return c.add(42);
+            """);
+        Assert.Equal(142L, result);
+    }
+
+    [Fact]
+    public void StructMethod_MutatesSelf_FieldUpdated()
+    {
+        object? result = Execute("""
+            struct Counter {
+                count
+                fn increment(self) {
+                    self.count = self.count + 1;
+                }
+            }
+            let c = null;
+            c = Counter { count: 0 };
+            c.increment();
+            c.increment();
+            c.increment();
+            return c.count;
+            """);
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void StructMethod_CallsOtherMethod_Works()
+    {
+        object? result = Execute("""
+            struct Rect {
+                w,
+                h
+                fn area(self) {
+                    return self.w * self.h;
+                }
+                fn describe(self) {
+                    return "area=" + self.area();
+                }
+            }
+            let r = null;
+            r = Rect { w: 3, h: 4 };
+            return r.describe();
+            """);
+        Assert.Equal("area=12", result);
+    }
+
+    [Fact]
+    public void StructMethod_MultipleInstances_IndependentState()
+    {
+        object? result = Execute("""
+            struct Box {
+                value
+                fn get(self) {
+                    return self.value;
+                }
+            }
+            let a = null;
+            a = Box { value: 10 };
+            let b = null;
+            b = Box { value: 20 };
+            return a.get() + b.get();
+            """);
+        Assert.Equal(30L, result);
+    }
+
+    [Fact]
+    public void StructMethod_DefaultParam_Works()
+    {
+        object? result = Execute("""
+            struct Adder {
+                base
+                fn add(self, n = 1) {
+                    return self.base + n;
+                }
+            }
+            let a = null;
+            a = Adder { base: 10 };
+            return a.add() + a.add(5);
+            """);
+        Assert.Equal(26L, result);
+    }
+
+    [Fact]
+    public void StructMethod_ClosureCapture_Works()
+    {
+        object? result = Execute("""
+            let multiplier = null;
+            multiplier = 10;
+            struct Scaler {
+                value
+                fn scale(self) {
+                    return self.value * multiplier;
+                }
+            }
+            let s = null;
+            s = Scaler { value: 5 };
+            return s.scale();
+            """);
+        Assert.Equal(50L, result);
+    }
+
+    [Fact]
+    public void StructMethod_ReturnsNull_WhenNoReturn()
+    {
+        object? result = Execute("""
+            struct Noop {
+                x
+                fn doNothing(self) {
+                    let tmp = self.x;
+                }
+            }
+            let n = null;
+            n = Noop { x: 42 };
+            let result = null;
+            result = n.doNothing();
+            return result;
+            """);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void StructMethod_SelfIsReferenceSemantics()
+    {
+        object? result = Execute("""
+            struct Pair {
+                a,
+                b
+                fn swap(self) {
+                    let tmp = self.a;
+                    self.a = self.b;
+                    self.b = tmp;
+                }
+            }
+            let p = null;
+            p = Pair { a: 1, b: 2 };
+            p.swap();
+            return p.a * 10 + p.b;
+            """);
+        Assert.Equal(21L, result);
+    }
+
+    [Fact]
+    public void StructMethod_ChainedCalls_Work()
+    {
+        object? result = Execute("""
+            struct Builder {
+                value
+                fn add(self, n) {
+                    self.value = self.value + n;
+                    return self;
+                }
+            }
+            let b = null;
+            b = Builder { value: 0 };
+            return b.add(1).add(2).add(3).value;
+            """);
+        Assert.Equal(6L, result);
+    }
+
+    // ─── Section 28: Enum Declarations ───
+
+    [Fact]
+    public void Enum_Declaration_MemberAccess()
+    {
+        object? result = Execute("""
+            enum Color {
+                Red,
+                Green,
+                Blue
+            }
+            let c = null;
+            c = Color.Red;
+            return c is Color;
+            """);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Enum_Equality_SameMembers()
+    {
+        object? result = Execute("""
+            enum Direction {
+                North,
+                South
+            }
+            return Direction.North == Direction.North;
+            """);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Enum_Inequality_DifferentMembers()
+    {
+        object? result = Execute("""
+            enum Direction {
+                North,
+                South
+            }
+            return Direction.North == Direction.South;
+            """);
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Enum_InvalidMember_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            enum Color {
+                Red,
+                Green
+            }
+            return Color.Blue;
+            """));
+    }
+
+    [Fact]
+    public void Enum_UsedInSwitch_Matches()
+    {
+        object? result = Execute("""
+            enum Status {
+                Active,
+                Inactive
+            }
+            let s = null;
+            s = Status.Active;
+            let msg = null;
+            if (s == Status.Active) {
+                msg = "active";
+            } else {
+                msg = "inactive";
+            }
+            return msg;
+            """);
+        Assert.Equal("active", result);
+    }
+
+    [Fact]
+    public void Enum_StoredInStruct_Works()
+    {
+        object? result = Execute("""
+            enum Color {
+                Red,
+                Green,
+                Blue
+            }
+            struct Pixel {
+                color,
+                x,
+                y
+            }
+            let px = null;
+            px = Pixel { color: Color.Red, x: 10, y: 20 };
+            return px.color == Color.Red;
+            """);
+        Assert.Equal(true, result);
+    }
+
+    // ─── Section 29: Interface Declarations ───
+
+    [Fact]
+    public void Interface_StructImplements_Works()
+    {
+        object? result = Execute("""
+            interface Describable {
+                fn describe(self)
+            }
+            struct Item : Describable {
+                name
+                fn describe(self) {
+                    return "Item: " + self.name;
+                }
+            }
+            let item = null;
+            item = Item { name: "Widget" };
+            return item.describe();
+            """);
+        Assert.Equal("Item: Widget", result);
+    }
+
+    [Fact]
+    public void Interface_MissingMethod_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            interface Runnable {
+                fn run(self)
+            }
+            struct Worker : Runnable {
+                name
+            }
+            """));
+    }
+
+    [Fact]
+    public void Interface_WithRequiredField_Validates()
+    {
+        object? result = Execute("""
+            interface Named {
+                name
+            }
+            struct Person : Named {
+                name,
+                age
+            }
+            let p = null;
+            p = Person { name: "Alice", age: 30 };
+            return p.name;
+            """);
+        Assert.Equal("Alice", result);
+    }
+
+    [Fact]
+    public void Interface_MissingField_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            interface HasId {
+                id
+            }
+            struct Thing : HasId {
+                name
+            }
+            """));
+    }
+
+    // ─── Section 30: Extend Blocks ───
+
+    [Fact]
+    public void Extend_StructMethod_Works()
+    {
+        object? result = Execute("""
+            struct Point {
+                x,
+                y
+            }
+            extend Point {
+                fn magnitude(self) {
+                    return self.x + self.y;
+                }
+            }
+            let p = null;
+            p = Point { x: 3, y: 4 };
+            return p.magnitude();
+            """);
+        Assert.Equal(7L, result);
+    }
+
+    [Fact]
+    public void Extend_OriginalMethodPriority_NotOverridden()
+    {
+        object? result = Execute("""
+            struct Greeter {
+                name
+                fn greet(self) {
+                    return "original";
+                }
+            }
+            extend Greeter {
+                fn greet(self) {
+                    return "extended";
+                }
+            }
+            let g = null;
+            g = Greeter { name: "test" };
+            return g.greet();
+            """);
+        Assert.Equal("original", result);
+    }
+
+    [Fact]
+    public void Extend_NewMethod_Added()
+    {
+        object? result = Execute("""
+            struct Data {
+                value
+            }
+            extend Data {
+                fn doubled(self) {
+                    return self.value * 2;
+                }
+            }
+            let d = null;
+            d = Data { value: 21 };
+            return d.doubled();
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Extend_BuiltInString_RegistersInRegistry()
+    {
+        object? result = Execute("""
+            extend string {
+                fn excited(self) {
+                    return self + "!";
+                }
+            }
+            return "hello".excited();
+            """);
+        Assert.Equal("hello!", result);
+    }
+
+    [Fact]
+    public void Extend_BuiltInArray_Works()
+    {
+        object? result = Execute("""
+            extend array {
+                fn first(self) {
+                    return self[0];
+                }
+            }
+            let items = null;
+            items = [10, 20, 30];
+            return items.first();
+            """);
+        Assert.Equal(10L, result);
+    }
+
+    [Fact]
+    public void Extend_BuiltInInt_Works()
+    {
+        object? result = Execute("""
+            extend int {
+                fn doubled(self) {
+                    return self * 2;
+                }
+            }
+            return 21.doubled();
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Extend_BuiltInDict_Works()
+    {
+        object? result = Execute("""
+            extend dict {
+                fn hasKey(self, key) {
+                    let found = null;
+                    found = false;
+                    for (let k in self) {
+                        if (k == key) {
+                            found = true;
+                        }
+                    }
+                    return found;
+                }
+            }
+            let d = null;
+            d = { name: "test" };
+            return d.hasKey("name");
+            """);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Extend_ClosureCapture_Works()
+    {
+        object? result = Execute("""
+            let prefix = null;
+            prefix = ">> ";
+            struct Msg {
+                text
+            }
+            extend Msg {
+                fn formatted(self) {
+                    return prefix + self.text;
+                }
+            }
+            let m = null;
+            m = Msg { text: "hello" };
+            return m.formatted();
+            """);
+        Assert.Equal(">> hello", result);
+    }
+
+    // ─── Section 31: Optional Chaining and Properties ───
+
+    [Fact]
+    public void OptionalChaining_NullReceiver_ReturnsNull()
+    {
+        object? result = Execute("""
+            let obj = null;
+            obj = null;
+            return obj?.name;
+            """);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void OptionalChaining_NonNullReceiver_ReturnsField()
+    {
+        object? result = Execute("""
+            struct User {
+                name
+            }
+            let u = null;
+            u = User { name: "Alice" };
+            return u?.name;
+            """);
+        Assert.Equal("Alice", result);
+    }
+
+    [Fact]
+    public void OptionalChaining_NestedNull_ReturnsNull()
+    {
+        object? result = Execute("""
+            struct Outer {
+                inner
+            }
+            let o = null;
+            o = Outer { inner: null };
+            return o.inner?.value;
+            """);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void ArrayLength_ReturnsCount()
+    {
+        object? result = Execute("""
+            let items = null;
+            items = [10, 20, 30, 40];
+            return items.length;
+            """);
+        Assert.Equal(4L, result);
+    }
+
+    [Fact]
+    public void StringLength_ReturnsCount()
+    {
+        object? result = Execute("""
+            return "hello".length;
+            """);
+        Assert.Equal(5L, result);
+    }
+
+    [Fact]
+    public void EmptyArrayLength_ReturnsZero()
+    {
+        object? result = Execute("""
+            let items = null;
+            items = [];
+            return items.length;
+            """);
+        Assert.Equal(0L, result);
+    }
+
+    // ─── Section 32: Complex Type Scenarios ───
+
+    [Fact]
+    public void Complex_StructWithArrayField_Works()
+    {
+        object? result = Execute("""
+            struct Inventory {
+                items
+                fn count(self) {
+                    return self.items.length;
+                }
+            }
+            let inv = null;
+            inv = Inventory { items: [1, 2, 3] };
+            return inv.count();
+            """);
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void Complex_StructWithDictField_Works()
+    {
+        object? result = Execute("""
+            struct Config {
+                settings
+                fn get(self, key) {
+                    return self.settings[key];
+                }
+            }
+            let cfg = null;
+            cfg = Config { settings: { host: "localhost", port: 8080 } };
+            return cfg.get("host");
+            """);
+        Assert.Equal("localhost", result);
+    }
+
+    [Fact]
+    public void Complex_StructReturnsNewStruct_Works()
+    {
+        object? result = Execute("""
+            struct Point {
+                x,
+                y
+                fn offset(self, dx, dy) {
+                    return Point { x: self.x + dx, y: self.y + dy };
+                }
+            }
+            let p1 = null;
+            p1 = Point { x: 1, y: 2 };
+            let p2 = null;
+            p2 = p1.offset(10, 20);
+            return p2.x + p2.y;
+            """);
+        Assert.Equal(33L, result);
+    }
+
+    [Fact]
+    public void Complex_EnumAndStructTogether_Works()
+    {
+        object? result = Execute("""
+            enum Shape {
+                Circle,
+                Square
+            }
+            struct Figure {
+                shape,
+                size
+                fn describe(self) {
+                    if (self.shape == Shape.Circle) {
+                        return "circle-" + self.size;
+                    }
+                    return "square-" + self.size;
+                }
+            }
+            let f = null;
+            f = Figure { shape: Shape.Circle, size: 5 };
+            return f.describe();
+            """);
+        Assert.Equal("circle-5", result);
+    }
+
+    [Fact]
+    public void Complex_StructFactory_CreatesInstances()
+    {
+        object? result = Execute("""
+            struct User {
+                name,
+                role
+            }
+            let createAdmin = null;
+            createAdmin = (name) => {
+                return User { name: name, role: "admin" };
+            };
+            let admin = null;
+            admin = createAdmin("Alice");
+            return admin.name + ":" + admin.role;
+            """);
+        Assert.Equal("Alice:admin", result);
+    }
+
+    [Fact]
+    public void Complex_MultipleStructsInteract_Works()
+    {
+        object? result = Execute("""
+            struct Address {
+                city
+            }
+            struct Person {
+                name,
+                address
+                fn getCity(self) {
+                    return self.address.city;
+                }
+            }
+            let addr = null;
+            addr = Address { city: "NYC" };
+            let person = null;
+            person = Person { name: "Bob", address: addr };
+            return person.getCity();
+            """);
+        Assert.Equal("NYC", result);
+    }
+
     /// <summary>Test helper: an IStashCallable wrapping a delegate.</summary>
     private class TestCallable : IStashCallable
     {

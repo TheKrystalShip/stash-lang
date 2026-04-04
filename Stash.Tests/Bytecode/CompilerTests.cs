@@ -715,15 +715,19 @@ public class CompilerTests
     // =========================================================================
 
     [Fact]
-    public void StructDecl_ThrowsNotSupported()
+    public void StructDecl_CompilesSuccessfully()
     {
-        Assert.Throws<NotSupportedException>(() => CompileSource("struct Point { x, y }"));
+        // Should compile without throwing — Phase 5 implements struct declarations
+        string disasm = Disassemble("struct Point { x, y }");
+        Assert.Contains("StructDecl", disasm);
     }
 
     [Fact]
-    public void EnumDecl_ThrowsNotSupported()
+    public void EnumDecl_CompilesSuccessfully()
     {
-        Assert.Throws<NotSupportedException>(() => CompileSource("enum Color { Red, Green, Blue }"));
+        // Should compile without throwing — Phase 5 implements enum declarations
+        string disasm = Disassemble("enum Color { Red, Green, Blue }");
+        Assert.Contains("EnumDecl", disasm);
     }
 
     [Fact]

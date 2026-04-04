@@ -538,6 +538,9 @@ public class Parser
                     break;
                 }
 
+                // Optional 'fn' keyword before a method name: "fn describe(self)" or "describe(self)"
+                Match(TokenType.Fn);
+
                 Token memberName = Consume(TokenType.Identifier, "Expected member name.");
 
                 if (memberNames.Contains(memberName.Lexeme))
