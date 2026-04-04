@@ -27,6 +27,7 @@ public abstract class UserCallable : IStashCallable, IDeepCopyable
     protected abstract IReadOnlyList<Expr?> DefaultValues { get; }
     protected abstract bool IsAsync { get; }
     protected abstract bool HasRestParam { get; }
+    protected abstract int LocalCount { get; }
 
     public abstract SourceSpan DefinitionSpan { get; }
 
@@ -61,7 +62,10 @@ public abstract class UserCallable : IStashCallable, IDeepCopyable
     /// </summary>
     protected Environment BindParameters(Interpreter interpreter, List<object?> arguments, Environment? parentOverride = null)
     {
-        var env = new Environment(parentOverride ?? Closure);
+        int localCount = LocalCount;
+        var env = localCount > 0
+            ? new Environment(parentOverride ?? Closure, localCount)
+            : new Environment(parentOverride ?? Closure);
 
         int nonRestCount = HasRestParam ? Parameters.Count - 1 : Parameters.Count;
 

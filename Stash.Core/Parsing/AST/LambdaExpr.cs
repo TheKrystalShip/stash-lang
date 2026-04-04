@@ -66,6 +66,8 @@ public class LambdaExpr : Expr
     /// Gets whether the last parameter is a rest parameter (<c>...name</c>).
     /// </summary>
     public bool HasRestParam { get; }
+    /// <summary>The number of local variable slots needed in this lambda's scope, set by the Resolver.</summary>
+    public int ResolvedLocalCount { get; set; }
 
     /// <summary>
     /// Creates a new lambda expression node.

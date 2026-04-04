@@ -16,6 +16,31 @@ using Stash.Runtime.Types;
 public partial class Interpreter
 {
     private static readonly List<object?> _emptyArgs = new(0);
+
+    [ThreadStatic]
+    private static Stack<List<object?>>? t_argListPool;
+
+    private static List<object?> RentArgList(int capacity)
+    {
+        var pool = t_argListPool ??= new Stack<List<object?>>();
+        if (pool.Count > 0)
+        {
+            List<object?> list = pool.Pop();
+            list.Clear();
+            return list;
+        }
+        return new List<object?>(capacity < 4 ? 4 : capacity);
+    }
+
+    private static void ReturnArgList(List<object?> list)
+    {
+        if (ReferenceEquals(list, _emptyArgs)) return;
+        var pool = t_argListPool ??= new Stack<List<object?>>();
+        if (pool.Count < 8) // cap pool size
+        {
+            pool.Push(list);
+        }
+    }
     /// <inheritdoc />
     public object? VisitLiteralExpr(LiteralExpr expr)
     {
@@ -1191,7 +1216,7 @@ public partial class Interpreter
         }
         else
         {
-            arguments = new List<object?>(expr.Arguments.Count);
+            arguments = RentArgList(expr.Arguments.Count);
             foreach (Expr argument in expr.Arguments)
             {
                 if (argument is SpreadExpr spreadArg)
@@ -1237,7 +1262,14 @@ public partial class Interpreter
 
         if (_debugger == null)
         {
-            return function.Call(this, arguments);
+            try
+            {
+                return function.Call(this, arguments);
+            }
+            finally
+            {
+                ReturnArgList(arguments);
+            }
         }
 
         string functionName = callee.ToString() ?? "<unknown>";
@@ -1269,6 +1301,7 @@ public partial class Interpreter
         }
         finally
         {
+            ReturnArgList(arguments);
             _callStack.RemoveAt(_callStack.Count - 1);
             _debugger?.OnFunctionExit(functionName, DebugThreadId);
         }

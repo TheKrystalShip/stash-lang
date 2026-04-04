@@ -51,6 +51,17 @@ public class Environment
     }
 
     /// <summary>
+    /// Creates a new local environment with a pre-allocated slot capacity.
+    /// Used when the Resolver has pre-computed the number of locals for a function scope.
+    /// </summary>
+    public Environment(Environment enclosing, int capacity)
+    {
+        Enclosing = enclosing;
+        _slots = new object?[capacity];
+        _slotNames = new string[capacity];
+    }
+
+    /// <summary>
     /// Defines a new variable in this scope.
     /// </summary>
     public void Define(string name, object? value)

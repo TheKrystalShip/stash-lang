@@ -196,10 +196,10 @@ public class CommandHelpersTests
 
     private static StashExecutionContext GetCtx(Interpreter interpreter)
     {
-        FieldInfo field = typeof(Interpreter).GetField("_ctx", BindingFlags.NonPublic | BindingFlags.Instance)
-            ?? throw new InvalidOperationException("Field '_ctx' not found on Interpreter");
+        FieldInfo field = typeof(Interpreter).GetField("Ctx", BindingFlags.NonPublic | BindingFlags.Instance)
+            ?? throw new InvalidOperationException("Field 'Ctx' not found on Interpreter");
         return (StashExecutionContext)(field.GetValue(interpreter)
-            ?? throw new InvalidOperationException("Field '_ctx' is null on Interpreter"));
+            ?? throw new InvalidOperationException("Field 'Ctx' is null on Interpreter"));
     }
 
     [Fact]

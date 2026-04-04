@@ -120,7 +120,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <summary>Resolves a function body: creates a scope, declares parameters, and resolves body statements.</summary>
-    private void ResolveFunction(List<Token> parameters, List<Expr?> defaultValues, BlockStmt body, FunctionType type)
+    private int ResolveFunction(List<Token> parameters, List<Expr?> defaultValues, BlockStmt body, FunctionType type)
     {
         FunctionType enclosingFunction = _currentFunction;
         _currentFunction = type;
@@ -140,9 +140,11 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
             Define(param.Lexeme);
         }
         Resolve(body.Statements);
+        int localCount = _scopes.Peek().NextSlot;
         EndScope();
 
         _currentFunction = enclosingFunction;
+        return localCount;
     }
 
     // --- Statement visitors ---
@@ -205,7 +207,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         Declare(stmt.Name.Lexeme);
         Define(stmt.Name.Lexeme);
-        ResolveFunction(stmt.Parameters, stmt.DefaultValues, stmt.Body, FunctionType.Function);
+        stmt.ResolvedLocalCount = ResolveFunction(stmt.Parameters, stmt.DefaultValues, stmt.Body, FunctionType.Function);
         return null;
     }
 
@@ -315,7 +317,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
             BeginScope();
             Declare("self");
             Define("self");
-            ResolveFunction(method.Parameters, method.DefaultValues, method.Body, FunctionType.Method);
+            method.ResolvedLocalCount = ResolveFunction(method.Parameters, method.DefaultValues, method.Body, FunctionType.Method);
             EndScope();
         }
 
@@ -336,7 +338,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
             BeginScope();
             Declare("self");
             Define("self");
-            ResolveFunction(method.Parameters, method.DefaultValues, method.Body, FunctionType.Method);
+            method.ResolvedLocalCount = ResolveFunction(method.Parameters, method.DefaultValues, method.Body, FunctionType.Method);
             EndScope();
         }
 
@@ -451,6 +453,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             Resolve(expr.BlockBody.Statements);
         }
+        expr.ResolvedLocalCount = _scopes.Peek().NextSlot;
         EndScope();
 
         _currentFunction = enclosingFunction;

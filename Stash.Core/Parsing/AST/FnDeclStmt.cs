@@ -32,6 +32,8 @@ public class FnDeclStmt : Stmt
     public BlockStmt Body { get; }
     /// <summary>Gets whether the last parameter is a rest parameter (<c>...name</c>).</summary>
     public bool HasRestParam { get; }
+    /// <summary>The number of local variable slots needed in this function's scope, set by the Resolver.</summary>
+    public int ResolvedLocalCount { get; set; }
 
     /// <summary>Initializes a new instance of <see cref="FnDeclStmt"/>.</summary>
     /// <param name="name">The function name token.</param>
