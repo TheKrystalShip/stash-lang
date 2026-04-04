@@ -20,6 +20,7 @@
 
   <ItemGroup>
     <ProjectReference Include="..\Stash.Analysis\Stash.Analysis.csproj" />
+    <ProjectReference Include="..\Stash.Bytecode\Stash.Bytecode.csproj" />
     <ProjectReference Include="..\Stash.Check\Stash.Check.csproj" />
     <ProjectReference Include="..\Stash.Format\Stash.Format.csproj" />
     <ProjectReference Include="..\Stash.Cli\Stash.Cli.csproj" />
