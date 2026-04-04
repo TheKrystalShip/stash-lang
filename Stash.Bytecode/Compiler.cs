@@ -193,6 +193,54 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <summary>
+    /// Emits bytecode that checks each parameter with a default value against the
+    /// <see cref="VirtualMachine.NotProvided"/> sentinel, and evaluates the default
+    /// expression if the argument was not provided by the caller.
+    /// </summary>
+    private void EmitDefaultPrologue(List<Token> parameters, List<Expr?> defaultValues, bool hasRestParam)
+    {
+        // Only process non-rest parameters
+        int count = hasRestParam ? parameters.Count - 1 : parameters.Count;
+
+        bool hasAnyDefault = false;
+        for (int i = 0; i < count && i < defaultValues.Count; i++)
+        {
+            if (defaultValues[i] != null)
+            {
+                hasAnyDefault = true;
+                break;
+            }
+        }
+        if (!hasAnyDefault) return;
+
+        // Add the NotProvided sentinel to the constant pool once
+        ushort notProvidedIdx = _builder.AddConstant(VirtualMachine.NotProvided);
+
+        for (int i = 0; i < count && i < defaultValues.Count; i++)
+        {
+            Expr? defaultExpr = defaultValues[i];
+            if (defaultExpr == null) continue;
+
+            // Load the parameter's current value
+            _builder.Emit(OpCode.LoadLocal, (byte)i);
+            // Load the NotProvided sentinel
+            _builder.Emit(OpCode.Const, notProvidedIdx);
+            // Compare: true if arg was provided (not equal to sentinel)
+            _builder.Emit(OpCode.NotEqual);
+            // If arg was provided, skip the default expression
+            int skipJump = _builder.EmitJump(OpCode.JumpTrue);
+
+            // Evaluate the default expression
+            CompileExpr(defaultExpr);
+            // Store the result to the parameter slot
+            _builder.Emit(OpCode.StoreLocal, (byte)i);
+
+            // Patch the skip jump
+            _builder.PatchJump(skipJump);
+        }
+    }
+
+    /// <summary>
     /// Compile a function or lambda, emit <c>OP_CLOSURE</c>, and inline upvalue descriptors.
     /// </summary>
     private void CompileFunction(
@@ -209,10 +257,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         fnCompiler._builder.HasRestParam = hasRestParam;
 
         // MinArity = params without defaults (trailing defaults only)
-        int minArity = parameters.Count;
-        for (int i = defaultValues.Count - 1; i >= 0; i--)
+        int paramCount = hasRestParam ? parameters.Count - 1 : parameters.Count;
+        int minArity = paramCount;
+        for (int i = paramCount - 1; i >= 0; i--)
         {
-            if (defaultValues[i] != null) minArity--;
+            if (i < defaultValues.Count && defaultValues[i] != null) minArity--;
             else break;
         }
         fnCompiler._builder.MinArity = minArity;
@@ -224,6 +273,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             int paramSlot = fnCompiler._scope.DeclareLocal(param.Lexeme, isConst: false);
             fnCompiler._scope.MarkInitialized(paramSlot);
         }
+
+        // Emit default parameter prologue: for each param with a default,
+        // check if the arg was provided (not NotProvided sentinel) and
+        // evaluate the default expression if missing.
+        fnCompiler.EmitDefaultPrologue(parameters, defaultValues, hasRestParam);
 
         foreach (Stmt s in body.Statements)
             fnCompiler.CompileStmt(s);
@@ -740,12 +794,52 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
+    /// <inheritdoc />
     public object? VisitCallExpr(CallExpr expr)
     {
         _builder.AddSourceMapping(expr.Span);
+
         CompileExpr(expr.Callee);
+
+        if (expr.IsOptional)
+        {
+            // Optional call: if callee is null, short-circuit to null
+            _builder.Emit(OpCode.Dup);
+            _builder.Emit(OpCode.Null);
+            _builder.Emit(OpCode.Equal);
+            int nullJump = _builder.EmitJump(OpCode.JumpTrue);
+
+            // Callee is not null — compile and execute call
+            foreach (Expr arg in expr.Arguments)
+                CompileExpr(arg);
+            _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
+            int endJump = _builder.EmitJump(OpCode.Jump);
+
+            // Callee was null — pop callee, push null as result
+            _builder.PatchJump(nullJump);
+            _builder.Emit(OpCode.Pop); // pop the callee (null)
+            _builder.Emit(OpCode.Null); // push null as result
+
+            _builder.PatchJump(endJump);
+            return null;
+        }
+
+        // Non-optional: compile args, emit call
+        int spreadCount = 0;
         foreach (Expr arg in expr.Arguments)
-            CompileExpr(arg);
+        {
+            if (arg is SpreadExpr spread)
+            {
+                // Compile the spread expression — defer full spread support to Phase 5
+                CompileExpr(spread.Expression);
+                spreadCount++;
+            }
+            else
+            {
+                CompileExpr(arg);
+            }
+        }
+
         _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
         return null;
     }
@@ -974,10 +1068,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         fnCompiler._builder.IsAsync = expr.IsAsync;
         fnCompiler._builder.HasRestParam = expr.HasRestParam;
 
-        int minArity = expr.Parameters.Count;
-        for (int i = expr.DefaultValues.Count - 1; i >= 0; i--)
+        int paramCount = expr.HasRestParam ? expr.Parameters.Count - 1 : expr.Parameters.Count;
+        int minArity = paramCount;
+        for (int i = paramCount - 1; i >= 0; i--)
         {
-            if (expr.DefaultValues[i] != null) minArity--;
+            if (i < expr.DefaultValues.Count && expr.DefaultValues[i] != null) minArity--;
             else break;
         }
         fnCompiler._builder.MinArity = minArity;
@@ -988,6 +1083,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             int slot = fnCompiler._scope.DeclareLocal(param.Lexeme, isConst: false);
             fnCompiler._scope.MarkInitialized(slot);
         }
+
+        // Emit default parameter prologue
+        fnCompiler.EmitDefaultPrologue(expr.Parameters, expr.DefaultValues, expr.HasRestParam);
 
         if (expr.ExpressionBody != null)
         {

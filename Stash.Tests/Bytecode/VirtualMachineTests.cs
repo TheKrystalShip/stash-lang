@@ -1308,4 +1308,568 @@ public class VirtualMachineTests
         var vm = new VirtualMachine(ct: cts.Token);
         Assert.Throws<OperationCanceledException>(() => vm.Execute(chunk));
     }
+
+    // =========================================================================
+    // 20. Default Parameters
+    // =========================================================================
+
+    [Fact]
+    public void DefaultParam_SingleDefault_UsedWhenOmitted()
+    {
+        object? result = Execute("""
+            let greet = null;
+            greet = (name, greeting = "hello") => greeting + " " + name;
+            return greet("world");
+            """);
+        Assert.Equal("hello world", result);
+    }
+
+    [Fact]
+    public void DefaultParam_SingleDefault_OverriddenWhenProvided()
+    {
+        object? result = Execute("""
+            let greet = null;
+            greet = (name, greeting = "hello") => greeting + " " + name;
+            return greet("world", "hi");
+            """);
+        Assert.Equal("hi world", result);
+    }
+
+    [Fact]
+    public void DefaultParam_MultipleDefaults_AllOmitted()
+    {
+        object? result = Execute("""
+            let calc = null;
+            calc = (x, y = 10, z = 20) => x + y + z;
+            return calc(1);
+            """);
+        Assert.Equal(31L, result);
+    }
+
+    [Fact]
+    public void DefaultParam_MultipleDefaults_PartiallyProvided()
+    {
+        object? result = Execute("""
+            let calc = null;
+            calc = (x, y = 10, z = 20) => x + y + z;
+            return calc(1, 5);
+            """);
+        Assert.Equal(26L, result);
+    }
+
+    [Fact]
+    public void DefaultParam_MultipleDefaults_AllProvided()
+    {
+        object? result = Execute("""
+            let calc = null;
+            calc = (x, y = 10, z = 20) => x + y + z;
+            return calc(1, 2, 3);
+            """);
+        Assert.Equal(6L, result);
+    }
+
+    [Fact]
+    public void DefaultParam_NullCanBePassedExplicitly()
+    {
+        // Passing null should NOT trigger default evaluation
+        object? result = Execute("""
+            let fn = null;
+            fn = (x, y = 42) => y;
+            return fn(1, null);
+            """);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void DefaultParam_FalseCanBePassedExplicitly()
+    {
+        // Passing false should NOT trigger default evaluation
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (x, y = true) => y;
+            return myFn(1, false);
+            """);
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void DefaultParam_ZeroCanBePassedExplicitly()
+    {
+        // Passing 0 should NOT trigger default evaluation
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (x, y = 42) => y;
+            return myFn(1, 0);
+            """);
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void DefaultParam_EmptyStringCanBePassedExplicitly()
+    {
+        // Passing "" should NOT trigger default evaluation
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (x, y = "default") => y;
+            return myFn(1, "");
+            """);
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void DefaultParam_ExpressionDefault_EvaluatedPerCall()
+    {
+        // Default expressions are evaluated at call time, not definition time
+        object? result = Execute("""
+            let counter = null;
+            counter = 0;
+            let myFn = null;
+            myFn = (x = counter) => x;
+            counter = 10;
+            return myFn();
+            """);
+        Assert.Equal(10L, result);
+    }
+
+    [Fact]
+    public void DefaultParam_ClosureCaptureInDefault()
+    {
+        // Default params work correctly inside returned closures
+        object? result = Execute("""
+            let makeAdder = null;
+            makeAdder = (offset) => {
+                let add = null;
+                add = (x, y = 5) => x + y + offset;
+                return add;
+            };
+            let add10 = null;
+            add10 = makeAdder(10);
+            return add10(1);
+            """);
+        Assert.Equal(16L, result);
+    }
+
+    [Fact]
+    public void DefaultParam_WithFnDecl()
+    {
+        // Test defaults with all three params: first required, rest optional
+        object? result = Execute("""
+            let calc = null;
+            calc = (x, y = 10, z = 20) => x + y + z;
+            return calc(1);
+            """);
+        Assert.Equal(31L, result);
+    }
+
+    [Fact]
+    public void DefaultParam_FnDecl_PartiallyProvided()
+    {
+        object? result = Execute("""
+            let calc = null;
+            calc = (x, y = 10, z = 20) => x + y + z;
+            return calc(1, 5);
+            """);
+        Assert.Equal(26L, result);
+    }
+
+    // =========================================================================
+    // 21. Rest Parameters
+    // =========================================================================
+
+    [Fact]
+    public void RestParam_CollectsTrailingArgs()
+    {
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (first, ...rest) => first + rest[0] + rest[1] + rest[2];
+            return myFn(1, 2, 3, 4);
+            """);
+        Assert.Equal(10L, result);
+    }
+
+    [Fact]
+    public void RestParam_EmptyWhenNoTrailingArgs()
+    {
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (x, ...rest) => rest;
+            return myFn(1);
+            """);
+        Assert.NotNull(result);
+        Assert.IsType<List<object?>>(result);
+    }
+
+    [Fact]
+    public void RestParam_WithDefaults()
+    {
+        // Rest collects trailing args even when the function has default params
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (a, b = 100, ...rest) => rest[0];
+            return myFn(1, 2, 42);
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void RestParam_WithDefaults_DefaultOverridden()
+    {
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (a, b = 100, ...rest) => a + b;
+            return myFn(1, 2);
+            """);
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void RestParam_WithDefaults_ExtraArgsCollected()
+    {
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (a, b = 100, ...rest) => rest;
+            let result = null;
+            result = myFn(1, 2, 3, 4);
+            return result[0] + result[1];
+            """);
+        Assert.Equal(7L, result);
+    }
+
+    [Fact]
+    public void RestParam_WithDefaults_OnlyRequiredProvided()
+    {
+        // Calling fn(a, b = 100, ...rest) with only 'a' should work — b uses default
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (a, b = 100, ...rest) => a + b;
+            return myFn(1);
+            """);
+        Assert.Equal(101L, result);
+    }
+
+    // =========================================================================
+    // 22. Arity Errors
+    // =========================================================================
+
+    [Fact]
+    public void Arity_TooFewArgs_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = (a, b) => a + b;
+            return myFn(1);
+            """));
+    }
+
+    [Fact]
+    public void Arity_TooManyArgs_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = (a, b) => a + b;
+            return myFn(1, 2, 3);
+            """));
+    }
+
+    [Fact]
+    public void Arity_TooFewForDefaults_ThrowsError()
+    {
+        // Must provide at least the required (non-default) params
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = (a, b, c = 10) => a + b + c;
+            return myFn(1);
+            """));
+    }
+
+    [Fact]
+    public void Arity_ExactMinArity_Succeeds()
+    {
+        object? result = Execute("""
+            let myFn = null;
+            myFn = (a, b, c = 10) => a + b + c;
+            return myFn(1, 2);
+            """);
+        Assert.Equal(13L, result);
+    }
+
+    [Fact]
+    public void Arity_CallNonFunction_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let x = null;
+            x = 42;
+            return x();
+            """));
+    }
+
+    [Fact]
+    public void Arity_RestParam_TooFewRequired_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = (a, b, ...rest) => a + b;
+            return myFn(1);
+            """));
+    }
+
+    [Fact]
+    public void Arity_ZeroArgs_ExactMatch()
+    {
+        object? result = Execute("""
+            let myFn = null;
+            myFn = () => 42;
+            return myFn();
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Arity_ErrorMessage_ContainsExpected()
+    {
+        var ex = Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = (a, b) => a + b;
+            return myFn(1);
+            """));
+        Assert.Contains("2", ex.Message);
+        Assert.Contains("1", ex.Message);
+    }
+
+    [Fact]
+    public void Arity_ErrorMessage_RangeForDefaults()
+    {
+        var ex = Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = (a, b = 10, c = 20) => a;
+            return myFn();
+            """));
+        Assert.Contains("1 to 3", ex.Message);
+    }
+
+    // =========================================================================
+    // 23. Calling Null / Non-Callable
+    // =========================================================================
+
+    [Fact]
+    public void Call_NullValue_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            return myFn();
+            """));
+    }
+
+    [Fact]
+    public void Call_NumberValue_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = 42;
+            return myFn();
+            """));
+    }
+
+    [Fact]
+    public void Call_StringValue_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let myFn = null;
+            myFn = "hello";
+            return myFn();
+            """));
+    }
+
+    // =========================================================================
+    // 24. Built-in Function Bridge (IInterpreterContext)
+    // =========================================================================
+
+    [Fact]
+    public void BuiltIn_IStashCallable_CalledWithContext()
+    {
+        // Test that built-in functions receive a valid context
+        // by using a custom IStashCallable that checks context isn't null
+        string source = """
+            return testFn(1, 2);
+            """;
+        Chunk chunk = CompileSource(source);
+
+        bool contextWasProvided = false;
+        var testFn = new TestCallable((ctx, args) =>
+        {
+            contextWasProvided = ctx != null;
+            return (long)args[0]! + (long)args[1]!;
+        });
+
+        var vm = new VirtualMachine();
+        vm.Globals["testFn"] = testFn;
+        object? result = vm.Execute(chunk);
+
+        Assert.True(contextWasProvided);
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void BuiltIn_OutputWrittenToCustomWriter()
+    {
+        // Verify that the VM's Output property is used by built-in context
+        string source = """
+            return testPrint("hello");
+            """;
+        Chunk chunk = CompileSource(source);
+
+        var output = new System.IO.StringWriter();
+        var testPrint = new TestCallable((ctx, args) =>
+        {
+            ctx.Output.Write(args[0]?.ToString());
+            return null;
+        });
+
+        var vm = new VirtualMachine();
+        vm.Output = output;
+        vm.Globals["testPrint"] = testPrint;
+        vm.Execute(chunk);
+
+        Assert.Equal("hello", output.ToString());
+    }
+
+    [Fact]
+    public void BuiltIn_ArityChecked()
+    {
+        // IStashCallable with Arity=2 should reject wrong arg count
+        string source = """
+            return testFn(1);
+            """;
+        Chunk chunk = CompileSource(source);
+
+        var testFn = new TestCallable((ctx, args) => null, arity: 2);
+        var vm = new VirtualMachine();
+        vm.Globals["testFn"] = testFn;
+
+        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
+    }
+
+    // =========================================================================
+    // 25. Complex Function Scenarios
+    // =========================================================================
+
+    [Fact]
+    public void Complex_CounterFactory_WithDefaults()
+    {
+        object? result = Execute("""
+            let makeCounter = null;
+            makeCounter = (start = 0, step = 1) => {
+                let count = start;
+                let inc = null;
+                inc = () => {
+                    count = count + step;
+                    return count;
+                };
+                return inc;
+            };
+            let counter = null;
+            counter = makeCounter();
+            counter();
+            counter();
+            return counter();
+            """);
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void Complex_CounterFactory_WithCustomStart()
+    {
+        object? result = Execute("""
+            let makeCounter = null;
+            makeCounter = (start = 0, step = 1) => {
+                let count = start;
+                let inc = null;
+                inc = () => {
+                    count = count + step;
+                    return count;
+                };
+                return inc;
+            };
+            let counter = null;
+            counter = makeCounter(10, 5);
+            counter();
+            counter();
+            return counter();
+            """);
+        Assert.Equal(25L, result);
+    }
+
+    [Fact]
+    public void Complex_HigherOrder_WithDefaults()
+    {
+        object? result = Execute("""
+            let apply = null;
+            apply = (f, x, y = 0) => f(x, y);
+            let add = null;
+            add = (a, b) => a + b;
+            return apply(add, 5);
+            """);
+        Assert.Equal(5L, result);
+    }
+
+    [Fact]
+    public void Complex_RecursiveWithDefault()
+    {
+        object? result = Execute("""
+            let countdown = null;
+            countdown = (n, acc = 0) =>
+                (n <= 0) ? acc : countdown(n - 1, acc + n);
+            return countdown(5);
+            """);
+        Assert.Equal(15L, result);
+    }
+
+    [Fact]
+    public void Complex_FnDecl_NestedWithDefaults()
+    {
+        // Nested lambdas with defaults at multiple levels
+        object? result = Execute("""
+            let outer = null;
+            outer = (x = 10) => {
+                let inner = null;
+                inner = (y = 20) => x + y;
+                return inner();
+            };
+            return outer();
+            """);
+        Assert.Equal(30L, result);
+    }
+
+    [Fact]
+    public void Complex_FnDecl_NestedWithDefaults_Overridden()
+    {
+        object? result = Execute("""
+            let outer = null;
+            outer = (x = 10) => {
+                let inner = null;
+                inner = (y = 20) => x + y;
+                return inner(5);
+            };
+            return outer(1);
+            """);
+        Assert.Equal(6L, result);
+    }
+
+    /// <summary>Test helper: an IStashCallable wrapping a delegate.</summary>
+    private class TestCallable : IStashCallable
+    {
+        private readonly Func<IInterpreterContext, List<object?>, object?> _impl;
+
+        public int Arity { get; }
+        public int MinArity { get; }
+
+        public TestCallable(Func<IInterpreterContext, List<object?>, object?> impl, int arity = -1, int minArity = -1)
+        {
+            _impl = impl;
+            Arity = arity;
+            MinArity = minArity == -1 ? (arity == -1 ? 0 : arity) : minArity;
+        }
+
+        public object? Call(IInterpreterContext context, List<object?> arguments) => _impl(context, arguments);
+    }
 }

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using Stash.Common;
@@ -16,6 +17,12 @@ public sealed class VirtualMachine
     private const int DefaultStackSize = 1024;
     private const int DefaultFrameDepth = 256;
 
+    /// <summary>
+    /// Sentinel value used to mark function parameters that were not provided by the caller.
+    /// The compiler emits a prologue that checks for this sentinel and evaluates default expressions.
+    /// </summary>
+    public static readonly object NotProvided = new();
+
     private object?[] _stack;
     private int _sp; // stack pointer: index of next free slot
 
@@ -27,6 +34,7 @@ public sealed class VirtualMachine
     private readonly CancellationToken _ct;
 
     private readonly List<ExceptionHandler> _exceptionHandlers = new();
+    private readonly VMContext _context;
 
     public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
     {
@@ -35,10 +43,20 @@ public sealed class VirtualMachine
         _globals = globals ?? new Dictionary<string, object?>();
         _openUpvalues = new List<Upvalue>();
         _ct = ct;
+        _context = new VMContext(ct);
     }
 
     /// <summary>The global variable store. Populate before Execute for built-in namespaces.</summary>
     public Dictionary<string, object?> Globals => _globals;
+
+    /// <summary>Standard output stream for built-in functions. Defaults to Console.Out.</summary>
+    public TextWriter Output { get => _context.Output; set => _context.Output = value; }
+
+    /// <summary>Standard error stream for built-in functions. Defaults to Console.Error.</summary>
+    public TextWriter ErrorOutput { get => _context.ErrorOutput; set => _context.ErrorOutput = value; }
+
+    /// <summary>Standard input stream for built-in functions. Defaults to Console.In.</summary>
+    public TextReader Input { get => _context.Input; set => _context.Input = value; }
 
     /// <summary>Execute a compiled chunk and return the result.</summary>
     public object? Execute(Chunk chunk)
@@ -827,16 +845,27 @@ public sealed class VirtualMachine
             Chunk fnChunk = fn.Chunk;
             int provided = argc;
             int expected = fnChunk.Arity;
+            int minArity = fnChunk.MinArity;
 
             if (fnChunk.HasRestParam)
             {
                 int nonRestCount = expected - 1;
+                int minRequired = Math.Min(minArity, nonRestCount);
+
+                if (provided < minRequired)
+                    throw new RuntimeError(
+                        $"Expected at least {minRequired} arguments but got {provided}.",
+                        callSpan);
+
+                // Pad non-rest params that weren't provided (may have defaults)
                 if (provided < nonRestCount)
                 {
                     for (int i = provided; i < nonRestCount; i++)
-                        Push(null);
+                        Push(NotProvided);
                     provided = nonRestCount;
                 }
+
+                // Collect rest args into a list
                 int restCount = Math.Max(0, provided - nonRestCount);
                 var restList = new List<object?>(restCount);
                 int restStart = _sp - restCount;
@@ -846,19 +875,49 @@ public sealed class VirtualMachine
                 Push(restList);
                 provided = expected;
             }
-            else if (provided < expected)
+            else
             {
-                for (int i = provided; i < expected; i++)
-                    Push(null);
+                // Arity checking for non-rest functions
+                if (provided < minArity || provided > expected)
+                {
+                    string expectedStr = minArity == expected
+                        ? $"{expected}"
+                        : $"{minArity} to {expected}";
+                    throw new RuntimeError(
+                        $"Expected {expectedStr} arguments but got {provided}.",
+                        callSpan);
+                }
+
+                // Pad missing optional args with NotProvided sentinel
+                if (provided < expected)
+                {
+                    for (int i = provided; i < expected; i++)
+                        Push(NotProvided);
+                }
             }
 
-            int baseSlot = _sp - Math.Max(provided, expected);
+            int baseSlot = _sp - expected;
             PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name);
             return;
         }
 
         if (callee is IStashCallable callable)
         {
+            // Arity checking for IStashCallable
+            if (callable.Arity != -1)
+            {
+                int minArity = callable.MinArity;
+                if (argc < minArity || argc > callable.Arity)
+                {
+                    string expectedStr = minArity == callable.Arity
+                        ? $"{callable.Arity}"
+                        : $"{minArity} to {callable.Arity}";
+                    throw new RuntimeError(
+                        $"Expected {expectedStr} arguments but got {argc}.",
+                        callSpan);
+                }
+            }
+
             var args = new List<object?>(argc);
             int argStart = _sp - argc;
             for (int i = argStart; i < _sp; i++)
@@ -868,7 +927,8 @@ public sealed class VirtualMachine
             object? result;
             try
             {
-                result = callable.Call(null!, args);
+                _context.CurrentSpan = callSpan;
+                result = callable.Call(_context, args);
             }
             catch (RuntimeError)
             {
