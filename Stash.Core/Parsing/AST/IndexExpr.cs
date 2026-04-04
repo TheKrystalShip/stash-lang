@@ -34,7 +34,7 @@ public class IndexExpr : Expr
     /// <param name="index">The index expression.</param>
     /// <param name="bracketSpan">The source span of the opening bracket.</param>
     /// <param name="span">The source span covering the entire index expression.</param>
-    public IndexExpr(Expr obj, Expr index, SourceSpan bracketSpan, SourceSpan span) : base(span)
+    public IndexExpr(Expr obj, Expr index, SourceSpan bracketSpan, SourceSpan span) : base(span, ExprType.Index)
     {
         Object = obj;
         Index = index;

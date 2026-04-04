@@ -30,7 +30,7 @@ public class AwaitExpr : Expr
     /// <param name="keyword">The <c>await</c> keyword token.</param>
     /// <param name="expression">The inner expression to await.</param>
     /// <param name="span">The source span covering the <c>await</c> keyword and the inner expression.</param>
-    public AwaitExpr(Token keyword, Expr expression, SourceSpan span) : base(span)
+    public AwaitExpr(Token keyword, Expr expression, SourceSpan span) : base(span, ExprType.Await)
     {
         Keyword = keyword;
         Expression = expression;

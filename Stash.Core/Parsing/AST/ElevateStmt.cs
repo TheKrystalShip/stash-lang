@@ -23,7 +23,7 @@ public class ElevateStmt : Stmt
     /// <param name="elevator">The optional elevator program expression, or null for platform default.</param>
     /// <param name="body">The block of statements to execute with elevated privileges.</param>
     /// <param name="span">The source location of this statement.</param>
-    public ElevateStmt(Expr? elevator, BlockStmt body, SourceSpan span) : base(span)
+    public ElevateStmt(Expr? elevator, BlockStmt body, SourceSpan span) : base(span, StmtType.Elevate)
     {
         Elevator = elevator;
         Body = body;

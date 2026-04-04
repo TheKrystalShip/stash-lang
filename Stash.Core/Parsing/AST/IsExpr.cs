@@ -39,7 +39,7 @@ public class IsExpr : Expr
     /// <param name="keyword">The <c>is</c> keyword token.</param>
     /// <param name="typeName">The type name token.</param>
     /// <param name="span">The source span covering the entire expression.</param>
-    public IsExpr(Expr left, Token keyword, Token typeName, SourceSpan span) : base(span)
+    public IsExpr(Expr left, Token keyword, Token typeName, SourceSpan span) : base(span, ExprType.Is)
     {
         Left = left;
         Keyword = keyword;
@@ -53,7 +53,7 @@ public class IsExpr : Expr
     /// <param name="keyword">The <c>is</c> keyword token.</param>
     /// <param name="typeExpr">The expression that produces the type to check against.</param>
     /// <param name="span">The source span covering the entire expression.</param>
-    public IsExpr(Expr left, Token keyword, Expr typeExpr, SourceSpan span) : base(span)
+    public IsExpr(Expr left, Token keyword, Expr typeExpr, SourceSpan span) : base(span, ExprType.Is)
     {
         Left = left;
         Keyword = keyword;

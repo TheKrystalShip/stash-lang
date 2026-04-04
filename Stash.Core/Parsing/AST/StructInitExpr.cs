@@ -25,7 +25,7 @@ public class StructInitExpr : Expr
     public List<(Token Field, Expr Value)> FieldValues { get; }
 
     public StructInitExpr(Token name, List<(Token Field, Expr Value)> fieldValues, SourceSpan span)
-        : base(span)
+        : base(span, ExprType.StructInit)
     {
         Name = name;
         Target = null;
@@ -33,7 +33,7 @@ public class StructInitExpr : Expr
     }
 
     public StructInitExpr(Token name, Expr target, List<(Token Field, Expr Value)> fieldValues, SourceSpan span)
-        : base(span)
+        : base(span, ExprType.StructInit)
     {
         Name = name;
         Target = target;

@@ -17,7 +17,7 @@ public class ReturnStmt : Stmt
     /// <summary>Initializes a new instance of <see cref="ReturnStmt"/>.</summary>
     /// <param name="value">The optional return value expression, or <c>null</c>.</param>
     /// <param name="span">The source location of this statement.</param>
-    public ReturnStmt(Expr? value, SourceSpan span) : base(span)
+    public ReturnStmt(Expr? value, SourceSpan span) : base(span, StmtType.Return)
     {
         Value = value;
     }

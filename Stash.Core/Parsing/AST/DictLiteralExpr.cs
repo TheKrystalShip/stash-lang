@@ -26,7 +26,7 @@ public class DictLiteralExpr : Expr
     /// </summary>
     /// <param name="entries">The key-value entries (may be empty for <c>{}</c>). A null Key indicates a spread entry.</param>
     /// <param name="span">The source span covering the entire dict literal.</param>
-    public DictLiteralExpr(List<(Token? Key, Expr Value)> entries, SourceSpan span) : base(span)
+    public DictLiteralExpr(List<(Token? Key, Expr Value)> entries, SourceSpan span) : base(span, ExprType.DictLiteral)
     {
         Entries = entries;
     }

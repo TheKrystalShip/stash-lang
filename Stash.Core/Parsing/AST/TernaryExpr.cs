@@ -39,7 +39,7 @@ public class TernaryExpr : Expr
     /// <param name="thenBranch">The expression for the truthy branch.</param>
     /// <param name="elseBranch">The expression for the falsy branch.</param>
     /// <param name="span">The source span covering the entire ternary expression.</param>
-    public TernaryExpr(Expr condition, Expr thenBranch, Expr elseBranch, SourceSpan span) : base(span)
+    public TernaryExpr(Expr condition, Expr thenBranch, Expr elseBranch, SourceSpan span) : base(span, ExprType.Ternary)
     {
         Condition = condition;
         ThenBranch = thenBranch;

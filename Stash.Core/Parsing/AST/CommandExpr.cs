@@ -52,7 +52,7 @@ public class CommandExpr : Expr
     /// <param name="span">The source span covering the entire command literal.</param>
     /// <param name="isPassthrough">Whether this is a passthrough command (<c>$&gt;(...)</c>).</param>
     /// <param name="isStrict">Whether this is a strict command (<c>$!(...)</c>) that throws on non-zero exit code.</param>
-    public CommandExpr(List<Expr> parts, SourceSpan span, bool isPassthrough = false, bool isStrict = false) : base(span)
+    public CommandExpr(List<Expr> parts, SourceSpan span, bool isPassthrough = false, bool isStrict = false) : base(span, ExprType.Command)
     {
         Parts = parts;
         IsPassthrough = isPassthrough;

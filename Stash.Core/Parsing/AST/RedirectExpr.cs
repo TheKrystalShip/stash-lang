@@ -36,7 +36,7 @@ public class RedirectExpr : Expr
     public Expr Target { get; }
 
     public RedirectExpr(Expr expression, RedirectStream stream, bool append, Expr target, SourceSpan span)
-        : base(span)
+        : base(span, ExprType.Redirect)
     {
         Expression = expression;
         Stream = stream;

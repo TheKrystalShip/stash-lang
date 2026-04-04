@@ -79,7 +79,7 @@ public class LambdaExpr : Expr
     /// <param name="isAsync">Whether this lambda was declared with the <c>async</c> keyword.</param>
     /// <param name="asyncKeyword">The <c>async</c> keyword token, or <c>null</c>.</param>
     public LambdaExpr(List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues,
-                      Expr? expressionBody, BlockStmt? blockBody, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null, bool hasRestParam = false) : base(span)
+                      Expr? expressionBody, BlockStmt? blockBody, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null, bool hasRestParam = false) : base(span, ExprType.Lambda)
     {
         Parameters = parameters;
         ParameterTypes = parameterTypes;

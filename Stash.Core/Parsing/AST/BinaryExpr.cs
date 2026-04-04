@@ -45,7 +45,7 @@ public class BinaryExpr : Expr
     /// <param name="op">The infix operator token.</param>
     /// <param name="right">The right-hand operand.</param>
     /// <param name="span">The source span covering the entire binary expression.</param>
-    public BinaryExpr(Expr left, Token op, Expr right, SourceSpan span) : base(span)
+    public BinaryExpr(Expr left, Token op, Expr right, SourceSpan span) : base(span, ExprType.Binary)
     {
         Left = left;
         Operator = op;

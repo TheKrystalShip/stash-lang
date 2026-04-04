@@ -20,7 +20,7 @@ public class DoWhileStmt : Stmt
     /// <param name="body">The block of statements executed on each iteration (at least once).</param>
     /// <param name="condition">The loop condition expression, evaluated after each iteration.</param>
     /// <param name="span">The source location of this statement.</param>
-    public DoWhileStmt(BlockStmt body, Expr condition, SourceSpan span) : base(span)
+    public DoWhileStmt(BlockStmt body, Expr condition, SourceSpan span) : base(span, StmtType.DoWhile)
     {
         Body = body;
         Condition = condition;

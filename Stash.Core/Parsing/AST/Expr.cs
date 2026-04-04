@@ -22,10 +22,20 @@ public abstract class Expr
     public SourceSpan Span { get; }
 
     /// <summary>
-    /// Initializes the base <see cref="Expr"/> with the given source location.
+    /// Gets the concrete node type of this expression for switch-based dispatch.
+    /// </summary>
+    public ExprType NodeType { get; }
+
+    /// <summary>
+    /// Initializes the base <see cref="Expr"/> with the given source location and node type.
     /// </summary>
     /// <param name="span">The source span covering this expression.</param>
-    protected Expr(SourceSpan span) => Span = span;
+    /// <param name="nodeType">The concrete node type of this expression.</param>
+    protected Expr(SourceSpan span, ExprType nodeType)
+    {
+        Span = span;
+        NodeType = nodeType;
+    }
 
     /// <summary>
     /// Dispatches to the correct visit method on <paramref name="visitor"/> for this node type.

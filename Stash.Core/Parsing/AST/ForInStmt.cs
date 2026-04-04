@@ -31,7 +31,7 @@ public class ForInStmt : Stmt
     /// <param name="iterable">The expression that produces the iterable collection.</param>
     /// <param name="body">The block of statements executed for each element.</param>
     /// <param name="span">The source location of this statement.</param>
-    public ForInStmt(Token? indexName, Token variableName, Token? typeHint, Expr iterable, BlockStmt body, SourceSpan span) : base(span)
+    public ForInStmt(Token? indexName, Token variableName, Token? typeHint, Expr iterable, BlockStmt body, SourceSpan span) : base(span, StmtType.ForIn)
     {
         IndexName = indexName;
         VariableName = variableName;

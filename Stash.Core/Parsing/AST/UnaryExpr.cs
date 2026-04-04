@@ -32,7 +32,7 @@ public class UnaryExpr : Expr
     /// <param name="op">The operator token (<c>!</c> or <c>-</c>).</param>
     /// <param name="right">The operand expression.</param>
     /// <param name="span">The source span covering the operator and operand.</param>
-    public UnaryExpr(Token op, Expr right, SourceSpan span) : base(span)
+    public UnaryExpr(Token op, Expr right, SourceSpan span) : base(span, ExprType.Unary)
     {
         Operator = op;
         Right = right;

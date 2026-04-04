@@ -23,7 +23,7 @@ public class ThrowStmt : Stmt
     /// <param name="keyword">The <c>throw</c> keyword token.</param>
     /// <param name="value">The value expression to throw.</param>
     /// <param name="span">The source location of this statement.</param>
-    public ThrowStmt(Token keyword, Expr value, SourceSpan span) : base(span)
+    public ThrowStmt(Token keyword, Expr value, SourceSpan span) : base(span, StmtType.Throw)
     {
         Keyword = keyword;
         Value = value;

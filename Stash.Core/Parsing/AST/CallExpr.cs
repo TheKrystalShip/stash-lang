@@ -45,7 +45,7 @@ public class CallExpr : Expr
     /// <param name="arguments">The list of argument expressions.</param>
     /// <param name="span">The source span covering the entire call expression.</param>
     /// <param name="isOptional">Whether this call is part of an optional chain (<c>?.</c>).</param>
-    public CallExpr(Expr callee, Token paren, List<Expr> arguments, SourceSpan span, bool isOptional = false) : base(span)
+    public CallExpr(Expr callee, Token paren, List<Expr> arguments, SourceSpan span, bool isOptional = false) : base(span, ExprType.Call)
     {
         Callee = callee;
         Paren = paren;

@@ -28,7 +28,7 @@ public class ImportAsStmt : Stmt
     /// </summary>
     public string? StaticPathValue => (Path as LiteralExpr)?.Value as string;
 
-    public ImportAsStmt(Expr path, Token alias, SourceSpan span) : base(span)
+    public ImportAsStmt(Expr path, Token alias, SourceSpan span) : base(span, StmtType.ImportAs)
     {
         Path = path;
         Alias = alias;

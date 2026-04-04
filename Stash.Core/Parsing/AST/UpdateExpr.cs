@@ -39,7 +39,7 @@ public class UpdateExpr : Expr
     /// <param name="operand">The expression being updated.</param>
     /// <param name="isPrefix">Whether this is the prefix form.</param>
     /// <param name="span">The source span covering the entire expression.</param>
-    public UpdateExpr(Token op, Expr operand, bool isPrefix, SourceSpan span) : base(span)
+    public UpdateExpr(Token op, Expr operand, bool isPrefix, SourceSpan span) : base(span, ExprType.Update)
     {
         Operator = op;
         Operand = operand;

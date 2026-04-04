@@ -24,10 +24,20 @@ public abstract class Stmt
     public SourceSpan Span { get; }
 
     /// <summary>
-    /// Initializes the base <see cref="Stmt"/> with the given source location.
+    /// Gets the concrete node type of this statement for switch-based dispatch.
+    /// </summary>
+    public StmtType NodeType { get; }
+
+    /// <summary>
+    /// Initializes the base <see cref="Stmt"/> with the given source location and node type.
     /// </summary>
     /// <param name="span">The source span covering this statement.</param>
-    protected Stmt(SourceSpan span) => Span = span;
+    /// <param name="nodeType">The concrete node type of this statement.</param>
+    protected Stmt(SourceSpan span, StmtType nodeType)
+    {
+        Span = span;
+        NodeType = nodeType;
+    }
 
     /// <summary>
     /// Dispatches to the correct visit method on <paramref name="visitor"/> for this node type.

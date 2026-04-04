@@ -13,7 +13,7 @@ public class BreakStmt : Stmt
 {
     /// <summary>Initializes a new instance of <see cref="BreakStmt"/>.</summary>
     /// <param name="span">The source location of this statement.</param>
-    public BreakStmt(SourceSpan span) : base(span) { }
+    public BreakStmt(SourceSpan span) : base(span, StmtType.Break) { }
 
     /// <inheritdoc />
     public override T Accept<T>(IStmtVisitor<T> visitor) => visitor.VisitBreakStmt(this);

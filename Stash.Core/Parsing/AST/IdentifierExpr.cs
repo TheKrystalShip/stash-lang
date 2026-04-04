@@ -27,7 +27,7 @@ public class IdentifierExpr : Expr
     /// </summary>
     /// <param name="name">The identifier token from the lexer.</param>
     /// <param name="span">The source span of the identifier.</param>
-    public IdentifierExpr(Token name, SourceSpan span) : base(span)
+    public IdentifierExpr(Token name, SourceSpan span) : base(span, ExprType.Identifier)
     {
         Name = name;
     }

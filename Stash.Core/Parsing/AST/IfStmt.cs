@@ -24,7 +24,7 @@ public class IfStmt : Stmt
     /// <param name="thenBranch">The statement to execute when the condition is truthy.</param>
     /// <param name="elseBranch">The optional else branch, or <c>null</c>.</param>
     /// <param name="span">The source location of this statement.</param>
-    public IfStmt(Expr condition, Stmt thenBranch, Stmt? elseBranch, SourceSpan span) : base(span)
+    public IfStmt(Expr condition, Stmt thenBranch, Stmt? elseBranch, SourceSpan span) : base(span, StmtType.If)
     {
         Condition = condition;
         ThenBranch = thenBranch;

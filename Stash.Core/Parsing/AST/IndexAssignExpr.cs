@@ -40,7 +40,7 @@ public class IndexAssignExpr : Expr
     /// <param name="value">The expression to assign at the given index.</param>
     /// <param name="bracketSpan">The source span of the opening bracket.</param>
     /// <param name="span">The source span covering the entire index assignment.</param>
-    public IndexAssignExpr(Expr obj, Expr index, Expr value, SourceSpan bracketSpan, SourceSpan span) : base(span)
+    public IndexAssignExpr(Expr obj, Expr index, Expr value, SourceSpan bracketSpan, SourceSpan span) : base(span, ExprType.IndexAssign)
     {
         Object = obj;
         Index = index;

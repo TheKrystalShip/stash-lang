@@ -31,7 +31,7 @@ public class AssignExpr : Expr
     /// <param name="name">The identifier token of the target variable.</param>
     /// <param name="value">The expression to evaluate and assign.</param>
     /// <param name="span">The source span covering the entire assignment expression.</param>
-    public AssignExpr(Token name, Expr value, SourceSpan span) : base(span)
+    public AssignExpr(Token name, Expr value, SourceSpan span) : base(span, ExprType.Assign)
     {
         Name = name;
         Value = value;

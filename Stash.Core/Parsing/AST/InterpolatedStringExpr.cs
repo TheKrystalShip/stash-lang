@@ -33,7 +33,7 @@ public class InterpolatedStringExpr : Expr
     /// </summary>
     /// <param name="parts">The ordered list of text and expression parts.</param>
     /// <param name="span">The source span covering the entire interpolated string.</param>
-    public InterpolatedStringExpr(List<Expr> parts, SourceSpan span) : base(span)
+    public InterpolatedStringExpr(List<Expr> parts, SourceSpan span) : base(span, ExprType.InterpolatedString)
     {
         Parts = parts;
     }

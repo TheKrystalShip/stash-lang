@@ -24,7 +24,7 @@ public class ConstDeclStmt : Stmt
     /// <param name="typeHint">The optional type hint token, or <c>null</c>.</param>
     /// <param name="initializer">The initializer expression (required).</param>
     /// <param name="span">The source location of this statement.</param>
-    public ConstDeclStmt(Token name, Token? typeHint, Expr initializer, SourceSpan span) : base(span)
+    public ConstDeclStmt(Token name, Token? typeHint, Expr initializer, SourceSpan span) : base(span, StmtType.ConstDecl)
     {
         Name = name;
         TypeHint = typeHint;

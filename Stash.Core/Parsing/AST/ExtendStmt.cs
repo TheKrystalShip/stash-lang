@@ -29,7 +29,7 @@ public class ExtendStmt : Stmt
     /// <param name="typeName">The token identifying the type being extended.</param>
     /// <param name="methods">The list of method declarations defined inside the extend body.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public ExtendStmt(Token extendKeyword, Token typeName, List<FnDeclStmt> methods, SourceSpan span) : base(span)
+    public ExtendStmt(Token extendKeyword, Token typeName, List<FnDeclStmt> methods, SourceSpan span) : base(span, StmtType.Extend)
     {
         ExtendKeyword = extendKeyword;
         TypeName = typeName;

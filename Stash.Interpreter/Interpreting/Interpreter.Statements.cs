@@ -16,7 +16,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitExprStmt(ExprStmt stmt)
     {
-        stmt.Expression.Accept(this);
+        Evaluate(stmt.Expression);
         return null;
     }
 
@@ -26,7 +26,7 @@ public partial class Interpreter
         object? value = null;
         if (stmt.Initializer is not null)
         {
-            value = stmt.Initializer.Accept(this);
+            value = Evaluate(stmt.Initializer);
         }
 
         _environment.Define(stmt.Name.Lexeme, value);
@@ -36,7 +36,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
-        object? value = stmt.Initializer.Accept(this);
+        object? value = Evaluate(stmt.Initializer);
         _environment.DefineConstant(stmt.Name.Lexeme, value);
         return null;
     }
@@ -44,7 +44,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitDestructureStmt(DestructureStmt stmt)
     {
-        object? value = stmt.Initializer.Accept(this);
+        object? value = Evaluate(stmt.Initializer);
 
         if (stmt.Kind == DestructureStmt.PatternKind.Array)
         {
@@ -165,7 +165,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitIfStmt(IfStmt stmt)
     {
-        if (IsTruthy(stmt.Condition.Accept(this)))
+        if (IsTruthy(Evaluate(stmt.Condition)))
         {
             Execute(stmt.ThenBranch);
         }
@@ -252,7 +252,7 @@ public partial class Interpreter
 
                 if (stmt.Increment is not null)
                 {
-                    stmt.Increment.Accept(this);
+                    Evaluate(stmt.Increment);
                 }
             }
         }
@@ -267,7 +267,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitForInStmt(ForInStmt stmt)
     {
-        object? iterable = stmt.Iterable.Accept(this);
+        object? iterable = Evaluate(stmt.Iterable);
 
         // Special case: two-variable for-in on dictionary iterates key-value pairs
         if (iterable is StashDictionary dict && stmt.IndexName is not null)
@@ -366,7 +366,7 @@ public partial class Interpreter
         object? value = null;
         if (stmt.Value is not null)
         {
-            value = stmt.Value.Accept(this);
+            value = Evaluate(stmt.Value);
         }
 
         throw new ReturnException(value);
@@ -375,7 +375,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitThrowStmt(ThrowStmt stmt)
     {
-        object? value = stmt.Value.Accept(this);
+        object? value = Evaluate(stmt.Value);
 
         if (value is string message)
         {
@@ -589,7 +589,7 @@ public partial class Interpreter
     {
         if (stmt.Elevator is not null)
         {
-            object? val = stmt.Elevator.Accept(this);
+            object? val = Evaluate(stmt.Elevator);
             if (val is not string elevatorStr)
                 throw new RuntimeError("Elevator expression must evaluate to a string.", stmt.Span);
             return elevatorStr;

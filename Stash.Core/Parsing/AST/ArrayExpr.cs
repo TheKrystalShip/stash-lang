@@ -22,7 +22,7 @@ public class ArrayExpr : Expr
     /// </summary>
     /// <param name="elements">The element expressions (may be empty for <c>[]</c>).</param>
     /// <param name="span">The source span covering the entire array literal.</param>
-    public ArrayExpr(List<Expr> elements, SourceSpan span) : base(span)
+    public ArrayExpr(List<Expr> elements, SourceSpan span) : base(span, ExprType.Array)
     {
         Elements = elements;
     }

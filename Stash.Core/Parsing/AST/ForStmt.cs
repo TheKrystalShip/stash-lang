@@ -22,7 +22,7 @@ public class ForStmt : Stmt
     /// <summary>Gets the block of statements executed on each iteration.</summary>
     public BlockStmt Body { get; }
 
-    public ForStmt(Stmt? initializer, Expr? condition, Expr? increment, BlockStmt body, SourceSpan span) : base(span)
+    public ForStmt(Stmt? initializer, Expr? condition, Expr? increment, BlockStmt body, SourceSpan span) : base(span, StmtType.For)
     {
         Initializer = initializer;
         Condition = condition;

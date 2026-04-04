@@ -27,7 +27,7 @@ public class GroupingExpr : Expr
     /// </summary>
     /// <param name="expression">The expression inside the parentheses.</param>
     /// <param name="span">The source span from the opening <c>(</c> to the closing <c>)</c>.</param>
-    public GroupingExpr(Expr expression, SourceSpan span) : base(span)
+    public GroupingExpr(Expr expression, SourceSpan span) : base(span, ExprType.Grouping)
     {
         Expression = expression;
     }

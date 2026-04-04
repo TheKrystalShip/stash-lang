@@ -17,7 +17,7 @@ public class ExprStmt : Stmt
     /// <summary>Initializes a new instance of <see cref="ExprStmt"/>.</summary>
     /// <param name="expression">The expression to wrap as a statement.</param>
     /// <param name="span">The source location of this statement.</param>
-    public ExprStmt(Expr expression, SourceSpan span) : base(span)
+    public ExprStmt(Expr expression, SourceSpan span) : base(span, StmtType.Expr)
     {
         Expression = expression;
     }

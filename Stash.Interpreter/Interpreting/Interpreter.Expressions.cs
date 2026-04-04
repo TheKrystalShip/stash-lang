@@ -35,13 +35,13 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitGroupingExpr(GroupingExpr expr)
     {
-        return expr.Expression.Accept(this);
+        return Evaluate(expr.Expression);
     }
 
     /// <inheritdoc />
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
-        object? right = expr.Right.Accept(this);
+        object? right = Evaluate(expr.Right);
 
         switch (expr.Operator.Type)
         {
@@ -105,7 +105,7 @@ public partial class Interpreter
             }
         }
 
-        object? oldValue = expr.Operand.Accept(this);
+        object? oldValue = Evaluate(expr.Operand);
 
         if (oldValue is not long && oldValue is not double)
         {
@@ -136,7 +136,7 @@ public partial class Interpreter
         }
         else if (expr.Operand is DotExpr dot)
         {
-            object? obj = dot.Object.Accept(this);
+            object? obj = Evaluate(dot.Object);
             if (obj is StashInstance instance)
             {
                 instance.SetField(dot.Name.Lexeme, newValue, dot.Name.Span);
@@ -148,8 +148,8 @@ public partial class Interpreter
         }
         else if (expr.Operand is IndexExpr idx)
         {
-            object? collection = idx.Object.Accept(this);
-            object? index = idx.Index.Accept(this);
+            object? collection = Evaluate(idx.Object);
+            object? index = Evaluate(idx.Index);
             if (collection is List<object?> list && index is long i)
             {
                 list[(int)i] = newValue;
@@ -173,14 +173,14 @@ public partial class Interpreter
         // Short-circuit operators evaluate left first, then conditionally evaluate right.
         if (expr.Operator.Type == TokenType.AmpersandAmpersand)
         {
-            object? left = expr.Left.Accept(this);
-            return !IsTruthy(left) ? left : expr.Right.Accept(this);
+            object? left = Evaluate(expr.Left);
+            return !IsTruthy(left) ? left : Evaluate(expr.Right);
         }
 
         if (expr.Operator.Type == TokenType.PipePipe)
         {
-            object? left = expr.Left.Accept(this);
-            return IsTruthy(left) ? left : expr.Right.Accept(this);
+            object? left = Evaluate(expr.Left);
+            return IsTruthy(left) ? left : Evaluate(expr.Right);
         }
 
         // Fast path: evaluate nested integer arithmetic without boxing intermediates.
@@ -211,8 +211,8 @@ public partial class Interpreter
         }
 
         // General path: evaluate both sides (boxing intermediates).
-        object? leftVal = expr.Left.Accept(this);
-        object? rightVal = expr.Right.Accept(this);
+        object? leftVal = Evaluate(expr.Left);
+        object? rightVal = Evaluate(expr.Right);
 
         switch (expr.Operator.Type)
         {
@@ -582,7 +582,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitIsExpr(IsExpr expr)
     {
-        object? value = expr.Left.Accept(this);
+        object? value = Evaluate(expr.Left);
 
         if (expr.TypeName != null)
         {
@@ -612,7 +612,7 @@ public partial class Interpreter
         }
 
         // Expression path: evaluate RHS, check resolved type value
-        object? typeValue = expr.TypeExpr!.Accept(this);
+        object? typeValue = Evaluate(expr.TypeExpr!);
         return CheckTypeValue(value, typeValue, expr.Span);
     }
 
@@ -710,26 +710,26 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
-        object? condition = expr.Condition.Accept(this);
+        object? condition = Evaluate(expr.Condition);
         return IsTruthy(condition)
-            ? expr.ThenBranch.Accept(this)
-            : expr.ElseBranch.Accept(this);
+            ? Evaluate(expr.ThenBranch)
+            : Evaluate(expr.ElseBranch);
     }
 
     /// <inheritdoc />
     public object? VisitSwitchExpr(SwitchExpr expr)
     {
-        object? subject = expr.Subject.Accept(this);
+        object? subject = Evaluate(expr.Subject);
         foreach (var arm in expr.Arms)
         {
             if (arm.IsDiscard)
             {
-                return arm.Body.Accept(this);
+                return Evaluate(arm.Body);
             }
-            object? pattern = arm.Pattern!.Accept(this);
+            object? pattern = Evaluate(arm.Pattern!);
             if (IsEqual(subject, pattern))
             {
-                return arm.Body.Accept(this);
+                return Evaluate(arm.Body);
             }
         }
         throw new RuntimeError("No matching arm in switch expression.", expr.Span);
@@ -740,7 +740,7 @@ public partial class Interpreter
     {
         try
         {
-            return expr.Expression.Accept(this);
+            return Evaluate(expr.Expression);
         }
         catch (RuntimeError e)
         {
@@ -753,7 +753,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitAwaitExpr(AwaitExpr expr)
     {
-        object? value = expr.Expression.Accept(this);
+        object? value = Evaluate(expr.Expression);
 
         if (value is StashFuture future)
         {
@@ -768,7 +768,7 @@ public partial class Interpreter
     public object? VisitRetryExpr(RetryExpr expr)
     {
         // 1. Evaluate max attempts
-        object? maxAttemptsVal = expr.MaxAttempts.Accept(this);
+        object? maxAttemptsVal = Evaluate(expr.MaxAttempts);
         if (maxAttemptsVal is not long maxAttempts)
             throw new RuntimeError("First argument to 'retry' must be an integer.", expr.MaxAttempts.Span);
         if (maxAttempts < 0)
@@ -786,7 +786,7 @@ public partial class Interpreter
         {
             foreach (var (name, value) in expr.NamedOptions)
             {
-                object? v = value.Accept(this);
+                object? v = Evaluate(value);
                 switch (name.Lexeme)
                 {
                     case "delay":
@@ -827,7 +827,7 @@ public partial class Interpreter
         }
         else if (expr.OptionsExpr is not null)
         {
-            object? opts = expr.OptionsExpr.Accept(this);
+            object? opts = Evaluate(expr.OptionsExpr);
             if (opts is StashInstance optsInst)
             {
                 ExtractRetryOptionsFromInstance(optsInst, ref delayMs, ref backoff, ref maxDelayMs,
@@ -843,7 +843,7 @@ public partial class Interpreter
         IStashCallable? untilPredicate = null;
         if (expr.UntilClause is not null)
         {
-            object? untilVal = expr.UntilClause.Accept(this);
+            object? untilVal = Evaluate(expr.UntilClause);
             if (untilVal is not IStashCallable callable)
                 throw new RuntimeError("'until' clause must be a function or lambda.", expr.UntilClause.Span);
             untilPredicate = callable;
@@ -859,7 +859,7 @@ public partial class Interpreter
             var clause = expr.OnRetryClause;
             if (clause.IsReference)
             {
-                object? refVal = clause.Reference!.Accept(this);
+                object? refVal = Evaluate(clause.Reference!);
                 if (refVal is not IStashCallable refCallable)
                     throw new RuntimeError("'onRetry' function reference must be callable.", clause.Reference!.Span);
                 onRetryFn = refCallable;
@@ -1017,7 +1017,7 @@ public partial class Interpreter
                 Stmt stmt = body.Statements[i];
                 if (i == body.Statements.Count - 1 && stmt is ExprStmt exprStmt)
                 {
-                    result = exprStmt.Expression.Accept(this);
+                    result = Evaluate(exprStmt.Expression);
                 }
                 else
                 {
@@ -1114,19 +1114,19 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
-        object? left = expr.Left.Accept(this);
+        object? left = Evaluate(expr.Left);
         if (left is not null and not StashError)
         {
             return left;
         }
-        return expr.Right.Accept(this);
+        return Evaluate(expr.Right);
     }
 
     /// <inheritdoc />
     public object? VisitRangeExpr(RangeExpr expr)
     {
-        object? startVal = expr.Start.Accept(this);
-        object? endVal = expr.End.Accept(this);
+        object? startVal = Evaluate(expr.Start);
+        object? endVal = Evaluate(expr.End);
 
         if (startVal is not long start)
         {
@@ -1141,7 +1141,7 @@ public partial class Interpreter
         long step = start <= end ? 1 : -1;
         if (expr.Step is not null)
         {
-            object? stepVal = expr.Step.Accept(this);
+            object? stepVal = Evaluate(expr.Step);
             if (stepVal is not long s)
             {
                 throw new RuntimeError("Range step must be an integer.", expr.Step.Span);
@@ -1161,7 +1161,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitAssignExpr(AssignExpr expr)
     {
-        object? value = expr.Value.Accept(this);
+        object? value = Evaluate(expr.Value);
         if (_locals.TryGetValue(expr, out var resolved))
         {
             _environment.SetAtSlot(resolved.Distance, resolved.Slot, expr.Name.Lexeme, value, expr.Name.Span);
@@ -1176,7 +1176,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitCallExpr(CallExpr expr)
     {
-        object? callee = expr.Callee.Accept(this);
+        object? callee = Evaluate(expr.Callee);
 
         // Optional chaining: x?.method() returns null when x is null
         if (expr.IsOptional && callee is null)
@@ -1196,7 +1196,7 @@ public partial class Interpreter
             {
                 if (argument is SpreadExpr spreadArg)
                 {
-                    object? spreadValue = spreadArg.Expression.Accept(this);
+                    object? spreadValue = Evaluate(spreadArg.Expression);
                     if (spreadValue is not List<object?> spreadList)
                     {
                         throw new RuntimeError("Cannot spread non-array value in function call.", spreadArg.Span);
@@ -1205,7 +1205,7 @@ public partial class Interpreter
                 }
                 else
                 {
-                    arguments.Add(argument.Accept(this));
+                    arguments.Add(Evaluate(argument));
                 }
             }
         }
@@ -1284,7 +1284,7 @@ public partial class Interpreter
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
         object? structDef = expr.Target is not null
-            ? expr.Target.Accept(this)
+            ? Evaluate(expr.Target)
             : _environment.Get(expr.Name.Lexeme, expr.Span);
 
         if (structDef is not StashStruct template)
@@ -1315,7 +1315,7 @@ public partial class Interpreter
                 throw new RuntimeError($"Duplicate field '{fieldName}' in struct initializer.", fieldToken.Span);
             }
 
-            fieldValues[fieldName] = valueExpr.Accept(this);
+            fieldValues[fieldName] = Evaluate(valueExpr);
         }
 
         return new StashInstance(template.Name, template, fieldValues);
@@ -1324,7 +1324,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitDotExpr(DotExpr expr)
     {
-        object? obj = expr.Object.Accept(this);
+        object? obj = Evaluate(expr.Object);
 
         // Optional chaining: a?.b returns null if a is null
         if (expr.IsOptional && obj is null)
@@ -1484,7 +1484,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitDotAssignExpr(DotAssignExpr expr)
     {
-        object? obj = expr.Object.Accept(this);
+        object? obj = Evaluate(expr.Object);
 
         if (obj is StashNamespace)
         {
@@ -1493,7 +1493,7 @@ public partial class Interpreter
 
         if (obj is StashDictionary dict)
         {
-            object? value = expr.Value.Accept(this);
+            object? value = Evaluate(expr.Value);
             dict.Set(expr.Name.Lexeme, value);
             return value;
         }
@@ -1503,7 +1503,7 @@ public partial class Interpreter
             throw new RuntimeError("Only struct instances and dictionaries have fields.", expr.Name.Span);
         }
 
-        object? assignValue = expr.Value.Accept(this);
+        object? assignValue = Evaluate(expr.Value);
         instance.SetField(expr.Name.Lexeme, assignValue, expr.Name.Span);
         return assignValue;
     }
@@ -1514,7 +1514,7 @@ public partial class Interpreter
         var sb = new StringBuilder();
         foreach (Expr part in expr.Parts)
         {
-            object? value = part.Accept(this);
+            object? value = Evaluate(part);
             sb.Append(Stringify(value));
         }
         return sb.ToString();
@@ -1528,7 +1528,7 @@ public partial class Interpreter
         {
             if (element is SpreadExpr spread)
             {
-                object? spreadValue = spread.Expression.Accept(this);
+                object? spreadValue = Evaluate(spread.Expression);
                 if (spreadValue is not List<object?> spreadList)
                 {
                     throw new RuntimeError("Cannot spread non-array value into array literal.", spread.Span);
@@ -1537,7 +1537,7 @@ public partial class Interpreter
             }
             else
             {
-                elements.Add(element.Accept(this));
+                elements.Add(Evaluate(element));
             }
         }
         return elements;
@@ -1552,7 +1552,7 @@ public partial class Interpreter
             if (key == null)
             {
                 // Spread entry: ...expr
-                object? spreadValue = value is SpreadExpr spread ? spread.Expression.Accept(this) : value.Accept(this);
+                object? spreadValue = value is SpreadExpr spread ? Evaluate(spread.Expression) : Evaluate(value);
                 if (spreadValue is StashDictionary spreadDict)
                 {
                     foreach (var kvp in spreadDict.GetAllEntries())
@@ -1575,7 +1575,7 @@ public partial class Interpreter
             }
             else
             {
-                dict.Set(key.Lexeme, value.Accept(this));
+                dict.Set(key.Lexeme, Evaluate(value));
             }
         }
         return dict;
@@ -1584,8 +1584,8 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitIndexExpr(IndexExpr expr)
     {
-        object? obj = expr.Object.Accept(this);
-        object? index = expr.Index.Accept(this);
+        object? obj = Evaluate(expr.Object);
+        object? index = Evaluate(expr.Index);
 
         if (obj is List<object?> list)
         {
@@ -1633,9 +1633,9 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitIndexAssignExpr(IndexAssignExpr expr)
     {
-        object? obj = expr.Object.Accept(this);
-        object? index = expr.Index.Accept(this);
-        object? value = expr.Value.Accept(this);
+        object? obj = Evaluate(expr.Object);
+        object? index = Evaluate(expr.Index);
+        object? value = Evaluate(expr.Value);
 
         if (obj is StashDictionary dict)
         {
@@ -2032,7 +2032,7 @@ public partial class Interpreter
             }
         }
 
-        return IsTruthy(condition.Accept(this));
+        return IsTruthy(Evaluate(condition));
     }
 
     /// <summary>

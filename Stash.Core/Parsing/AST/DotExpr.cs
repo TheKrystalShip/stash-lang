@@ -38,7 +38,7 @@ public class DotExpr : Expr
     /// <param name="name">The field or member name token.</param>
     /// <param name="span">The source span covering the entire dot expression.</param>
     /// <param name="isOptional"><c>true</c> for optional chaining (<c>?.</c>); <c>false</c> for regular access.</param>
-    public DotExpr(Expr obj, Token name, SourceSpan span, bool isOptional = false) : base(span)
+    public DotExpr(Expr obj, Token name, SourceSpan span, bool isOptional = false) : base(span, ExprType.Dot)
     {
         Object = obj;
         Name = name;

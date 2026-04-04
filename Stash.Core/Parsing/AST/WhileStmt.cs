@@ -20,7 +20,7 @@ public class WhileStmt : Stmt
     /// <param name="condition">The loop condition expression, evaluated before each iteration.</param>
     /// <param name="body">The block of statements executed on each iteration.</param>
     /// <param name="span">The source location of this statement.</param>
-    public WhileStmt(Expr condition, BlockStmt body, SourceSpan span) : base(span)
+    public WhileStmt(Expr condition, BlockStmt body, SourceSpan span) : base(span, StmtType.While)
     {
         Condition = condition;
         Body = body;

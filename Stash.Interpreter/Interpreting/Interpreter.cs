@@ -3,6 +3,7 @@ namespace Stash.Interpreting;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using Stash.Common;
 using Stash.Debugging;
@@ -402,7 +403,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </exception>
     public object? Interpret(Expr expression)
     {
-        return expression.Accept(this);
+        return Evaluate(expression);
     }
 
     /// <summary>Interprets a list of statements: resolves variable references, then executes each statement sequentially.</summary>
@@ -447,6 +448,45 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         }
     }
 
+    /// <summary>Evaluates an expression using switch-based dispatch instead of virtual Accept calls.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal object? Evaluate(Expr expr)
+    {
+        switch (expr.NodeType)
+        {
+            case ExprType.Literal: return VisitLiteralExpr((LiteralExpr)expr);
+            case ExprType.Identifier: return VisitIdentifierExpr((IdentifierExpr)expr);
+            case ExprType.Unary: return VisitUnaryExpr((UnaryExpr)expr);
+            case ExprType.Binary: return VisitBinaryExpr((BinaryExpr)expr);
+            case ExprType.Grouping: return VisitGroupingExpr((GroupingExpr)expr);
+            case ExprType.Ternary: return VisitTernaryExpr((TernaryExpr)expr);
+            case ExprType.Assign: return VisitAssignExpr((AssignExpr)expr);
+            case ExprType.Call: return VisitCallExpr((CallExpr)expr);
+            case ExprType.Array: return VisitArrayExpr((ArrayExpr)expr);
+            case ExprType.Index: return VisitIndexExpr((IndexExpr)expr);
+            case ExprType.IndexAssign: return VisitIndexAssignExpr((IndexAssignExpr)expr);
+            case ExprType.StructInit: return VisitStructInitExpr((StructInitExpr)expr);
+            case ExprType.Dot: return VisitDotExpr((DotExpr)expr);
+            case ExprType.DotAssign: return VisitDotAssignExpr((DotAssignExpr)expr);
+            case ExprType.InterpolatedString: return VisitInterpolatedStringExpr((InterpolatedStringExpr)expr);
+            case ExprType.Command: return VisitCommandExpr((CommandExpr)expr);
+            case ExprType.Pipe: return VisitPipeExpr((PipeExpr)expr);
+            case ExprType.Try: return VisitTryExpr((TryExpr)expr);
+            case ExprType.NullCoalesce: return VisitNullCoalesceExpr((NullCoalesceExpr)expr);
+            case ExprType.Switch: return VisitSwitchExpr((SwitchExpr)expr);
+            case ExprType.Update: return VisitUpdateExpr((UpdateExpr)expr);
+            case ExprType.Lambda: return VisitLambdaExpr((LambdaExpr)expr);
+            case ExprType.Redirect: return VisitRedirectExpr((RedirectExpr)expr);
+            case ExprType.Range: return VisitRangeExpr((RangeExpr)expr);
+            case ExprType.DictLiteral: return VisitDictLiteralExpr((DictLiteralExpr)expr);
+            case ExprType.Is: return VisitIsExpr((IsExpr)expr);
+            case ExprType.Await: return VisitAwaitExpr((AwaitExpr)expr);
+            case ExprType.Retry: return VisitRetryExpr((RetryExpr)expr);
+            case ExprType.Spread: return VisitSpreadExpr((SpreadExpr)expr);
+            default: return expr.Accept(this);
+        }
+    }
+
     /// <summary>Executes a single statement, checking for cancellation and step limits, invoking debug hooks, and dispatching to the visitor.</summary>
     /// <param name="stmt">The statement to execute.</param>
     private void Execute(Stmt stmt)
@@ -463,7 +503,33 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
 
         Ctx.CurrentSpan = stmt.Span;
         _debugger?.OnBeforeExecute(stmt.Span, Ctx.Environment, DebugThreadId);
-        stmt.Accept(this);
+        switch (stmt.NodeType)
+        {
+            case StmtType.Expr: VisitExprStmt((ExprStmt)stmt); break;
+            case StmtType.VarDecl: VisitVarDeclStmt((VarDeclStmt)stmt); break;
+            case StmtType.ConstDecl: VisitConstDeclStmt((ConstDeclStmt)stmt); break;
+            case StmtType.Block: VisitBlockStmt((BlockStmt)stmt); break;
+            case StmtType.If: VisitIfStmt((IfStmt)stmt); break;
+            case StmtType.While: VisitWhileStmt((WhileStmt)stmt); break;
+            case StmtType.DoWhile: VisitDoWhileStmt((DoWhileStmt)stmt); break;
+            case StmtType.ForIn: VisitForInStmt((ForInStmt)stmt); break;
+            case StmtType.For: VisitForStmt((ForStmt)stmt); break;
+            case StmtType.Break: VisitBreakStmt((BreakStmt)stmt); break;
+            case StmtType.Continue: VisitContinueStmt((ContinueStmt)stmt); break;
+            case StmtType.FnDecl: VisitFnDeclStmt((FnDeclStmt)stmt); break;
+            case StmtType.Return: VisitReturnStmt((ReturnStmt)stmt); break;
+            case StmtType.Throw: VisitThrowStmt((ThrowStmt)stmt); break;
+            case StmtType.StructDecl: VisitStructDeclStmt((StructDeclStmt)stmt); break;
+            case StmtType.EnumDecl: VisitEnumDeclStmt((EnumDeclStmt)stmt); break;
+            case StmtType.InterfaceDecl: VisitInterfaceDeclStmt((InterfaceDeclStmt)stmt); break;
+            case StmtType.Extend: VisitExtendStmt((ExtendStmt)stmt); break;
+            case StmtType.Import: VisitImportStmt((ImportStmt)stmt); break;
+            case StmtType.ImportAs: VisitImportAsStmt((ImportAsStmt)stmt); break;
+            case StmtType.Destructure: VisitDestructureStmt((DestructureStmt)stmt); break;
+            case StmtType.Elevate: VisitElevateStmt((ElevateStmt)stmt); break;
+            case StmtType.TryCatch: VisitTryCatchStmt((TryCatchStmt)stmt); break;
+            default: stmt.Accept(this); break;
+        }
     }
 
     /// <summary>
@@ -554,7 +620,7 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         {
             Ctx.Environment = environment;
             Ctx.IsAdHocEval = true;
-            return expr.Accept(this);
+            return Evaluate(expr);
         }
         finally
         {

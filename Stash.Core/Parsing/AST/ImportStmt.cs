@@ -35,7 +35,7 @@ public class ImportStmt : Stmt
     /// <param name="names">The list of identifier tokens to import.</param>
     /// <param name="path">The expression evaluating to the module file path.</param>
     /// <param name="span">The source span covering the entire import statement.</param>
-    public ImportStmt(List<Token> names, Expr path, SourceSpan span) : base(span)
+    public ImportStmt(List<Token> names, Expr path, SourceSpan span) : base(span, StmtType.Import)
     {
         Names = names;
         Path = path;

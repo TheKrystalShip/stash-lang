@@ -32,7 +32,7 @@ public class StructDeclStmt : Stmt
     /// <param name="methods">The list of method declarations defined inside the struct body.</param>
     /// <param name="interfaces">The list of interface name tokens this struct declares conformance with.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public StructDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, List<FnDeclStmt> methods, List<Token> interfaces, SourceSpan span) : base(span)
+    public StructDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, List<FnDeclStmt> methods, List<Token> interfaces, SourceSpan span) : base(span, StmtType.StructDecl)
     {
         Name = name;
         Fields = fields;

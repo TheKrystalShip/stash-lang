@@ -18,7 +18,7 @@ public class BlockStmt : Stmt
     /// <summary>Initializes a new instance of <see cref="BlockStmt"/>.</summary>
     /// <param name="statements">The list of statements contained in the block.</param>
     /// <param name="span">The source location of this block.</param>
-    public BlockStmt(List<Stmt> statements, SourceSpan span) : base(span)
+    public BlockStmt(List<Stmt> statements, SourceSpan span) : base(span, StmtType.Block)
     {
         Statements = statements;
     }

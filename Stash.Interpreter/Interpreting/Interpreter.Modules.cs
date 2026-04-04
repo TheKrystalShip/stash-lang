@@ -12,7 +12,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
-        object? pathValue = stmt.Path.Accept(this);
+        object? pathValue = Evaluate(stmt.Path);
         if (pathValue is not string modulePath)
         {
             throw new RuntimeError(
@@ -46,7 +46,7 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
-        object? pathValue = stmt.Path.Accept(this);
+        object? pathValue = Evaluate(stmt.Path);
         if (pathValue is not string modulePath)
         {
             throw new RuntimeError(

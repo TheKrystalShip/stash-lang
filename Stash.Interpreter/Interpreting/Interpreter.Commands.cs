@@ -204,7 +204,7 @@ public partial class Interpreter
         var commandBuilder = new StringBuilder();
         foreach (Expr part in expr.Parts)
         {
-            object? value = part.Accept(this);
+            object? value = Evaluate(part);
             commandBuilder.Append(Stringify(value));
         }
 
@@ -610,7 +610,7 @@ public partial class Interpreter
         }
 
         // Evaluate the inner command/pipe expression
-        object? result = expr.Expression.Accept(this);
+        object? result = Evaluate(expr.Expression);
 
         if (result is not StashInstance cmdResult || cmdResult.TypeName != "CommandResult")
         {
@@ -618,7 +618,7 @@ public partial class Interpreter
         }
 
         // Evaluate the target file path
-        object? targetVal = expr.Target.Accept(this);
+        object? targetVal = Evaluate(expr.Target);
         if (targetVal is not string filePath)
         {
             throw new RuntimeError("Redirection target must be a string file path.", expr.Target.Span);

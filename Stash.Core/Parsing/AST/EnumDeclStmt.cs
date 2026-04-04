@@ -22,7 +22,7 @@ public class EnumDeclStmt : Stmt
     /// <param name="name">The enum name token.</param>
     /// <param name="members">The list of member name tokens.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public EnumDeclStmt(Token name, List<Token> members, SourceSpan span) : base(span)
+    public EnumDeclStmt(Token name, List<Token> members, SourceSpan span) : base(span, StmtType.EnumDecl)
     {
         Name = name;
         Members = members;

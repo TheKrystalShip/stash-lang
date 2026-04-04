@@ -14,7 +14,7 @@ public class PipeExpr : Expr
     /// <summary>The right-hand side expression (which receives stdin).</summary>
     public Expr Right { get; }
 
-    public PipeExpr(Expr left, Expr right, SourceSpan span) : base(span)
+    public PipeExpr(Expr left, Expr right, SourceSpan span) : base(span, ExprType.Pipe)
     {
         Left = left;
         Right = right;

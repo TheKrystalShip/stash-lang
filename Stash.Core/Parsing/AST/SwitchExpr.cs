@@ -34,7 +34,7 @@ public class SwitchExpr : Expr
     /// <param name="subject">The expression being switched on.</param>
     /// <param name="arms">The ordered list of switch arms.</param>
     /// <param name="span">The source span covering the entire switch expression.</param>
-    public SwitchExpr(Expr subject, List<SwitchArm> arms, SourceSpan span) : base(span)
+    public SwitchExpr(Expr subject, List<SwitchArm> arms, SourceSpan span) : base(span, ExprType.Switch)
     {
         Subject = subject;
         Arms = arms;

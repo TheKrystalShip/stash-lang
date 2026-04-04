@@ -52,7 +52,7 @@ public class TryCatchStmt : Stmt
         BlockStmt? catchBody,
         Token? finallyKeyword,
         BlockStmt? finallyBody,
-        SourceSpan span) : base(span)
+        SourceSpan span) : base(span, StmtType.TryCatch)
     {
         TryKeyword = tryKeyword;
         TryBody = tryBody;

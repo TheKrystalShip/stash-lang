@@ -18,7 +18,7 @@ public class TryExpr : Expr
     /// </summary>
     /// <param name="expression">The inner expression to evaluate.</param>
     /// <param name="span">The source span covering the <c>try</c> keyword and the inner expression.</param>
-    public TryExpr(Expr expression, SourceSpan span) : base(span)
+    public TryExpr(Expr expression, SourceSpan span) : base(span, ExprType.Try)
     {
         Expression = expression;
     }

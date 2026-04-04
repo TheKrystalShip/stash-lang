@@ -15,7 +15,7 @@ public class SpreadExpr : Expr
     /// <summary>Gets the inner expression being spread.</summary>
     public Expr Expression { get; }
 
-    public SpreadExpr(Token op, Expr expression, SourceSpan span) : base(span)
+    public SpreadExpr(Token op, Expr expression, SourceSpan span) : base(span, ExprType.Spread)
     {
         Operator = op;
         Expression = expression;

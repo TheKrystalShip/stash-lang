@@ -23,7 +23,7 @@ public class RangeExpr : Expr
     /// <param name="end">The end expression.</param>
     /// <param name="step">The optional step expression.</param>
     /// <param name="span">The source span covering the entire range expression.</param>
-    public RangeExpr(Expr start, Expr end, Expr? step, SourceSpan span) : base(span)
+    public RangeExpr(Expr start, Expr end, Expr? step, SourceSpan span) : base(span, ExprType.Range)
     {
         Start = start;
         End = end;

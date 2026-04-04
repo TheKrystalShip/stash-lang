@@ -13,7 +13,7 @@ public class ContinueStmt : Stmt
 {
     /// <summary>Initializes a new instance of <see cref="ContinueStmt"/>.</summary>
     /// <param name="span">The source location of this statement.</param>
-    public ContinueStmt(SourceSpan span) : base(span) { }
+    public ContinueStmt(SourceSpan span) : base(span, StmtType.Continue) { }
 
     /// <inheritdoc />
     public override T Accept<T>(IStmtVisitor<T> visitor) => visitor.VisitContinueStmt(this);

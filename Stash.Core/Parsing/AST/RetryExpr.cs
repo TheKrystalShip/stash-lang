@@ -83,7 +83,7 @@ public class RetryExpr : Expr
         Expr? untilClause,
         OnRetryNode? onRetryClause,
         BlockStmt body,
-        SourceSpan span) : base(span)
+        SourceSpan span) : base(span, ExprType.Retry)
     {
         RetryKeyword = retryKeyword;
         MaxAttempts = maxAttempts;

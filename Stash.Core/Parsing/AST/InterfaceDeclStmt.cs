@@ -38,7 +38,7 @@ public class InterfaceDeclStmt : Stmt
     /// <param name="fieldTypes">The list of optional type hint tokens for each required field.</param>
     /// <param name="methods">The list of method signatures declared in the interface.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public InterfaceDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, List<InterfaceMethodSignature> methods, SourceSpan span) : base(span)
+    public InterfaceDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, List<InterfaceMethodSignature> methods, SourceSpan span) : base(span, StmtType.InterfaceDecl)
     {
         Name = name;
         Fields = fields;

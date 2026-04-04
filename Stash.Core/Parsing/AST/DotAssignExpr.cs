@@ -34,7 +34,7 @@ public class DotAssignExpr : Expr
     /// <param name="name">The field name token.</param>
     /// <param name="value">The expression to assign to the field.</param>
     /// <param name="span">The source span covering the entire dot assignment.</param>
-    public DotAssignExpr(Expr obj, Token name, Expr value, SourceSpan span) : base(span)
+    public DotAssignExpr(Expr obj, Token name, Expr value, SourceSpan span) : base(span, ExprType.DotAssign)
     {
         Object = obj;
         Name = name;

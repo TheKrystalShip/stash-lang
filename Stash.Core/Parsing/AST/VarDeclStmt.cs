@@ -24,7 +24,7 @@ public class VarDeclStmt : Stmt
     /// <param name="typeHint">The optional type hint token, or <c>null</c>.</param>
     /// <param name="initializer">The optional initializer expression, or <c>null</c>.</param>
     /// <param name="span">The source location of this statement.</param>
-    public VarDeclStmt(Token name, Token? typeHint, Expr? initializer, SourceSpan span) : base(span)
+    public VarDeclStmt(Token name, Token? typeHint, Expr? initializer, SourceSpan span) : base(span, StmtType.VarDecl)
     {
         Name = name;
         TypeHint = typeHint;

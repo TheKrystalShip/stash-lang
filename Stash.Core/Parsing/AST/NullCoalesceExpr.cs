@@ -24,7 +24,7 @@ public class NullCoalesceExpr : Expr
     /// <param name="left">The left-hand operand.</param>
     /// <param name="right">The right-hand operand (fallback value).</param>
     /// <param name="span">The source span covering the full expression.</param>
-    public NullCoalesceExpr(Expr left, Expr right, SourceSpan span) : base(span)
+    public NullCoalesceExpr(Expr left, Expr right, SourceSpan span) : base(span, ExprType.NullCoalesce)
     {
         Left = left;
         Right = right;

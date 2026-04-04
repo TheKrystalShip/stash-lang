@@ -35,7 +35,7 @@ public class LiteralExpr : Expr
     /// <see cref="bool"/>, or <c>null</c>.
     /// </param>
     /// <param name="span">The source span of the literal token.</param>
-    public LiteralExpr(object? value, SourceSpan span) : base(span)
+    public LiteralExpr(object? value, SourceSpan span) : base(span, ExprType.Literal)
     {
         Value = value;
     }

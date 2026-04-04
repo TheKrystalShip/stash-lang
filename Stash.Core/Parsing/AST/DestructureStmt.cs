@@ -42,7 +42,7 @@ public class DestructureStmt : Stmt
     /// <param name="isConst">Whether the bindings are constants or mutable variables.</param>
     /// <param name="initializer">The expression producing the value to destructure.</param>
     /// <param name="span">The source location of this statement.</param>
-    public DestructureStmt(PatternKind kind, List<Token> names, bool isConst, Expr initializer, SourceSpan span, Token? restName = null) : base(span)
+    public DestructureStmt(PatternKind kind, List<Token> names, bool isConst, Expr initializer, SourceSpan span, Token? restName = null) : base(span, StmtType.Destructure)
     {
         Kind = kind;
         Names = names;
