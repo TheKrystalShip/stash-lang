@@ -27,6 +27,18 @@ public abstract class Expr
     public ExprType NodeType { get; }
 
     /// <summary>
+    /// Resolver-computed scope distance for this expression. -1 means unresolved (global or non-variable).
+    /// Written once by the Resolver; read at runtime by the Interpreter.
+    /// </summary>
+    public int ResolvedDistance = -1;
+
+    /// <summary>
+    /// Resolver-computed slot index for this expression. -1 means unresolved.
+    /// Written once by the Resolver; read at runtime by the Interpreter.
+    /// </summary>
+    public int ResolvedSlot = -1;
+
+    /// <summary>
     /// Initializes the base <see cref="Expr"/> with the given source location and node type.
     /// </summary>
     /// <param name="span">The source span covering this expression.</param>

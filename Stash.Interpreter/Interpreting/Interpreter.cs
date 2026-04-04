@@ -78,8 +78,6 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, object> _moduleLocks = new(StringComparer.OrdinalIgnoreCase);
     /// <summary>The test harness for reporting test results. When set, <c>test()</c> and <c>describe()</c> report to it.</summary>
     private Stash.Runtime.ITestHarness? _testHarness;
-    /// <summary>Resolver-computed scope distances for variable references, enabling O(1) lookup at runtime. Thread-safe for concurrent resolver writes during parallel execution.</summary>
-    private readonly System.Collections.Concurrent.ConcurrentDictionary<Expr, (int Distance, int Slot)> _locals = new(ReferenceEqualityComparer.Instance);
     /// <summary>Registry of extension methods added by <c>extend</c> blocks. Keyed by (typeName, methodName).</summary>
     internal readonly ExtensionRegistry ExtensionRegistry = new();
     /// <summary>The raw script arguments, parsed by <c>args</c> declarations.</summary>
@@ -335,7 +333,6 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         _sharedModuleCache = parent._sharedModuleCache;
         _moduleLocks = parent._moduleLocks;
         _testHarness = parent._testHarness;
-        _locals = parent._locals;          // ConcurrentDictionary — safe to share
         TaskRegistry = parent.TaskRegistry; // Shared — tasks from any fork can be awaited by any other
         ScriptArgs = parent.ScriptArgs;
         EmbeddedMode = parent.EmbeddedMode;
@@ -387,7 +384,8 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
     /// </summary>
     public void Resolve(Expr expr, int distance, int slot)
     {
-        _locals[expr] = (distance, slot);
+        expr.ResolvedDistance = distance;
+        expr.ResolvedSlot = slot;
     }
 
     /// <summary>

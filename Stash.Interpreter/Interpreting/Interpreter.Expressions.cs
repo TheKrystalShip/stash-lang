@@ -25,9 +25,9 @@ public partial class Interpreter
     /// <inheritdoc />
     public object? VisitIdentifierExpr(IdentifierExpr expr)
     {
-        if (_locals.TryGetValue(expr, out var resolved))
+        if (expr.ResolvedDistance >= 0)
         {
-            return _environment.GetAtSlot(resolved.Distance, resolved.Slot);
+            return _environment.GetAtSlot(expr.ResolvedDistance, expr.ResolvedSlot);
         }
         return _environment.Get(expr.Name.Lexeme, expr.Span);
     }
@@ -93,14 +93,14 @@ public partial class Interpreter
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
         // Fast path: resolved identifier with long value — skip Accept() dispatch
-        if (expr.Operand is IdentifierExpr fastId && _locals.TryGetValue(expr, out var fastResolved))
+        if (expr.Operand is IdentifierExpr fastId && expr.ResolvedDistance >= 0)
         {
-            object? fastOld = _environment.GetAtSlot(fastResolved.Distance, fastResolved.Slot);
+            object? fastOld = _environment.GetAtSlot(expr.ResolvedDistance, expr.ResolvedSlot);
             if (fastOld is long fastL)
             {
                 long fastNew = expr.Operator.Type == TokenType.PlusPlus ? fastL + 1 : fastL - 1;
                 object boxedNew = fastNew;
-                _environment.SetAtSlot(fastResolved.Distance, fastResolved.Slot, fastId.Name.Lexeme, boxedNew, fastId.Name.Span);
+                _environment.SetAtSlot(expr.ResolvedDistance, expr.ResolvedSlot, fastId.Name.Lexeme, boxedNew, fastId.Name.Span);
                 return expr.IsPrefix ? boxedNew : fastOld;
             }
         }
@@ -125,9 +125,9 @@ public partial class Interpreter
         // Write back
         if (expr.Operand is IdentifierExpr id)
         {
-            if (_locals.TryGetValue(expr, out var resolved))
+            if (expr.ResolvedDistance >= 0)
             {
-                _environment.SetAtSlot(resolved.Distance, resolved.Slot, id.Name.Lexeme, newValue, id.Name.Span);
+                _environment.SetAtSlot(expr.ResolvedDistance, expr.ResolvedSlot, id.Name.Lexeme, newValue, id.Name.Span);
             }
             else
             {
@@ -1162,9 +1162,9 @@ public partial class Interpreter
     public object? VisitAssignExpr(AssignExpr expr)
     {
         object? value = Evaluate(expr.Value);
-        if (_locals.TryGetValue(expr, out var resolved))
+        if (expr.ResolvedDistance >= 0)
         {
-            _environment.SetAtSlot(resolved.Distance, resolved.Slot, expr.Name.Lexeme, value, expr.Name.Span);
+            _environment.SetAtSlot(expr.ResolvedDistance, expr.ResolvedSlot, expr.Name.Lexeme, value, expr.Name.Span);
         }
         else
         {
@@ -1941,9 +1941,9 @@ public partial class Interpreter
                 return true;
 
             case IdentifierExpr id:
-                if (_locals.TryGetValue(id, out var resolved))
+                if (id.ResolvedDistance >= 0)
                 {
-                    object? val = _environment.GetAtSlot(resolved.Distance, resolved.Slot);
+                    object? val = _environment.GetAtSlot(id.ResolvedDistance, id.ResolvedSlot);
                     if (val is long lv)
                     {
                         result = lv;
@@ -2042,9 +2042,9 @@ public partial class Interpreter
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
     private bool TryReadLong(Expr expr, out long value)
     {
-        if (expr is IdentifierExpr id && _locals.TryGetValue(id, out var res))
+        if (expr is IdentifierExpr id && id.ResolvedDistance >= 0)
         {
-            object? v = _environment.GetAtSlot(res.Distance, res.Slot);
+            object? v = _environment.GetAtSlot(id.ResolvedDistance, id.ResolvedSlot);
             if (v is long lv) { value = lv; return true; }
         }
         else if (expr is LiteralExpr lit && lit.Value is long l)
