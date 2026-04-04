@@ -127,8 +127,8 @@ public class ChunkBuilder
             }
         }
 
-        if (_constants.Count >= ushort.MaxValue)
-            throw new InvalidOperationException("Constant pool overflow (max 65535 entries).");
+        if (_constants.Count > ushort.MaxValue)
+            throw new InvalidOperationException("Constant pool overflow (max 65536 entries).");
 
         int index = _constants.Count;
         _constants.Add(value);
@@ -162,8 +162,8 @@ public class ChunkBuilder
                 return (byte)i;
         }
 
-        if (_upvalues.Count >= byte.MaxValue)
-            throw new InvalidOperationException("Upvalue overflow (max 255 per function).");
+        if (_upvalues.Count > byte.MaxValue)
+            throw new InvalidOperationException("Upvalue overflow (max 256 per function).");
 
         int result = _upvalues.Count;
         _upvalues.Add(new UpvalueDescriptor(index, isLocal));

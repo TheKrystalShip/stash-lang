@@ -762,24 +762,265 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
-    public object? VisitImportStmt(ImportStmt stmt) =>
-        throw new NotSupportedException("Import compilation deferred to Phase 6.");
+    public object? VisitImportStmt(ImportStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        // Compile path expression (pushes module path string onto stack)
+        CompileExpr(stmt.Path);
+
+        string[] names = new string[stmt.Names.Count];
+        for (int i = 0; i < stmt.Names.Count; i++)
+            names[i] = stmt.Names[i].Lexeme;
+
+        var metadata = new ImportMetadata(names);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.Import, metaIdx);
+        // VM pops path, loads module, pushes N values onto stack (one per name)
+
+        // Declare each imported name as a local
+        foreach (Token name in stmt.Names)
+        {
+            int slot = _scope.DeclareLocal(name.Lexeme, isConst: false);
+            _scope.MarkInitialized(slot);
+        }
+
+        return null;
+    }
 
     /// <inheritdoc />
-    public object? VisitImportAsStmt(ImportAsStmt stmt) =>
-        throw new NotSupportedException("Import-as compilation deferred to Phase 6.");
+    public object? VisitImportAsStmt(ImportAsStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        CompileExpr(stmt.Path);
+
+        var metadata = new ImportAsMetadata(stmt.Alias.Lexeme);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.ImportAs, metaIdx);
+        // VM pops path, loads module, wraps as StashNamespace, pushes 1 value
+
+        int slot = _scope.DeclareLocal(stmt.Alias.Lexeme, isConst: false);
+        _scope.MarkInitialized(slot);
+
+        return null;
+    }
 
     /// <inheritdoc />
-    public object? VisitDestructureStmt(DestructureStmt stmt) =>
-        throw new NotSupportedException("Destructure compilation deferred to Phase 6.");
+    public object? VisitDestructureStmt(DestructureStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        // Compile the initializer expression (pushes array/dict onto stack)
+        CompileExpr(stmt.Initializer);
+
+        string kind = stmt.Kind == DestructureStmt.PatternKind.Array ? "array" : "object";
+        string[] names = new string[stmt.Names.Count];
+        for (int i = 0; i < stmt.Names.Count; i++)
+            names[i] = stmt.Names[i].Lexeme;
+
+        var metadata = new DestructureMetadata(kind, names, stmt.RestName?.Lexeme, stmt.IsConst);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.Destructure, metaIdx);
+        // VM pops initializer, pushes N values (one per name + optional rest)
+
+        // Declare each name as a local
+        foreach (Token name in stmt.Names)
+        {
+            int slot = _scope.DeclareLocal(name.Lexeme, isConst: stmt.IsConst);
+            _scope.MarkInitialized(slot);
+        }
+
+        // Declare rest name if present
+        if (stmt.RestName != null)
+        {
+            int restSlot = _scope.DeclareLocal(stmt.RestName.Lexeme, isConst: stmt.IsConst);
+            _scope.MarkInitialized(restSlot);
+        }
+
+        return null;
+    }
 
     /// <inheritdoc />
-    public object? VisitElevateStmt(ElevateStmt stmt) =>
-        throw new NotSupportedException("Elevate compilation deferred to Phase 6.");
+    public object? VisitElevateStmt(ElevateStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        // Push elevator expression or null for platform default
+        if (stmt.Elevator != null)
+            CompileExpr(stmt.Elevator);
+        else
+            _builder.Emit(OpCode.Null);
+
+        _builder.Emit(OpCode.ElevateBegin);
+
+        // Wrap body in try-finally so ElevateEnd always runs
+        int finallyErrSlot = _scope.DeclareLocal("<elevate_err>", isConst: false);
+        _scope.MarkInitialized(finallyErrSlot);
+        _builder.Emit(OpCode.Null); // placeholder for error slot
+
+        int errorJump = _builder.EmitJump(OpCode.TryBegin);
+
+        // --- Body ---
+        foreach (Stmt s in stmt.Body.Statements)
+            CompileStmt(s);
+        _builder.Emit(OpCode.TryEnd);
+
+        // --- Success path: ElevateEnd ---
+        _builder.Emit(OpCode.ElevateEnd);
+        int endJump = _builder.EmitJump(OpCode.Jump);
+
+        // --- Error path: ElevateEnd then re-throw ---
+        _builder.PatchJump(errorJump);
+        _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
+        _builder.Emit(OpCode.ElevateEnd);
+        _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
+        _builder.Emit(OpCode.Throw);
+
+        _builder.PatchJump(endJump);
+
+        return null;
+    }
 
     /// <inheritdoc />
-    public object? VisitTryCatchStmt(TryCatchStmt stmt) =>
-        throw new NotSupportedException("Try/catch compilation deferred to Phase 6.");
+    public object? VisitTryCatchStmt(TryCatchStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        bool hasCatch = stmt.CatchBody != null;
+        bool hasFinally = stmt.FinallyBody != null;
+
+        // Synthetic local for storing error during finally's error path
+        int finallyErrSlot = -1;
+        if (hasFinally)
+        {
+            finallyErrSlot = _scope.DeclareLocal("<finally_err>", isConst: false);
+            _scope.MarkInitialized(finallyErrSlot);
+            _builder.Emit(OpCode.Null); // placeholder value for the local
+        }
+
+        if (hasCatch && hasFinally)
+        {
+            // Outer handler: catches errors from try body (when catch fails) or catch body itself
+            // Ensures finally always runs
+            int outerCatchJump = _builder.EmitJump(OpCode.TryBegin);
+
+            // Inner handler: catches errors from try body, routes to catch
+            int innerCatchJump = _builder.EmitJump(OpCode.TryBegin);
+
+            // --- Try body ---
+            foreach (Stmt s in stmt.TryBody.Statements)
+                CompileStmt(s);
+            _builder.Emit(OpCode.TryEnd); // pop inner handler
+            int afterCatchJump = _builder.EmitJump(OpCode.Jump); // skip catch
+
+            // --- Catch label (inner handler target) ---
+            _builder.PatchJump(innerCatchJump);
+            if (stmt.CatchVariable != null)
+            {
+                _scope.BeginScope();
+                int catchVarSlot = _scope.DeclareLocal(stmt.CatchVariable.Lexeme, isConst: false);
+                _scope.MarkInitialized(catchVarSlot);
+                // Error value is already on stack at the right position for this local
+            }
+            else
+            {
+                _builder.Emit(OpCode.Pop); // discard error
+            }
+            foreach (Stmt s in stmt.CatchBody!.Statements)
+                CompileStmt(s);
+            if (stmt.CatchVariable != null)
+                EmitScopePops();
+
+            // --- After catch ---
+            _builder.PatchJump(afterCatchJump);
+            _builder.Emit(OpCode.TryEnd); // pop outer handler
+
+            // --- Finally (success path) ---
+            foreach (Stmt s in stmt.FinallyBody!.Statements)
+                CompileStmt(s);
+            int endJump = _builder.EmitJump(OpCode.Jump);
+
+            // --- Outer catch label (finally error path) ---
+            _builder.PatchJump(outerCatchJump);
+            // Error is on stack, store it
+            _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
+            // Run finally body
+            foreach (Stmt s in stmt.FinallyBody!.Statements)
+                CompileStmt(s);
+            // Re-throw saved error
+            _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
+            _builder.Emit(OpCode.Throw);
+
+            _builder.PatchJump(endJump);
+        }
+        else if (hasCatch) // catch only, no finally
+        {
+            int catchJump = _builder.EmitJump(OpCode.TryBegin);
+
+            foreach (Stmt s in stmt.TryBody.Statements)
+                CompileStmt(s);
+            _builder.Emit(OpCode.TryEnd);
+            int endJump = _builder.EmitJump(OpCode.Jump);
+
+            _builder.PatchJump(catchJump);
+            if (stmt.CatchVariable != null)
+            {
+                _scope.BeginScope();
+                int catchVarSlot = _scope.DeclareLocal(stmt.CatchVariable.Lexeme, isConst: false);
+                _scope.MarkInitialized(catchVarSlot);
+            }
+            else
+            {
+                _builder.Emit(OpCode.Pop);
+            }
+            foreach (Stmt s in stmt.CatchBody!.Statements)
+                CompileStmt(s);
+            if (stmt.CatchVariable != null)
+                EmitScopePops();
+
+            _builder.PatchJump(endJump);
+        }
+        else if (hasFinally) // finally only, no catch
+        {
+            int errorJump = _builder.EmitJump(OpCode.TryBegin);
+
+            foreach (Stmt s in stmt.TryBody.Statements)
+                CompileStmt(s);
+            _builder.Emit(OpCode.TryEnd);
+
+            // Success path: run finally
+            foreach (Stmt s in stmt.FinallyBody!.Statements)
+                CompileStmt(s);
+            int endJump = _builder.EmitJump(OpCode.Jump);
+
+            // Error path: store error, run finally, re-throw
+            _builder.PatchJump(errorJump);
+            _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
+            foreach (Stmt s in stmt.FinallyBody!.Statements)
+                CompileStmt(s);
+            _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
+            _builder.Emit(OpCode.Throw);
+
+            _builder.PatchJump(endJump);
+        }
+        else // try only (error suppression)
+        {
+            int catchJump = _builder.EmitJump(OpCode.TryBegin);
+
+            foreach (Stmt s in stmt.TryBody.Statements)
+                CompileStmt(s);
+            _builder.Emit(OpCode.TryEnd);
+            int endJump = _builder.EmitJump(OpCode.Jump);
+
+            _builder.PatchJump(catchJump);
+            _builder.Emit(OpCode.Pop); // discard error
+
+            _builder.PatchJump(endJump);
+        }
+
+        return null;
+    }
 
     // =========================================================================
     // Expression Visitors
@@ -890,8 +1131,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             TokenType.Caret          => OpCode.BitXor,
             TokenType.LessLess       => OpCode.ShiftLeft,
             TokenType.GreaterGreater => OpCode.ShiftRight,
-            TokenType.In             => throw new NotSupportedException(
-                                            "'in' operator compilation deferred to Phase 6."),
+            TokenType.In             => OpCode.In,
             _ => throw new CompileError(
                      $"Unsupported binary operator '{expr.Operator.Lexeme}'.", expr.Operator.Span),
         };
@@ -1091,9 +1331,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         _builder.AddSourceMapping(expr.Span);
         foreach (Expr part in expr.Parts)
             CompileExpr(part);
-        // u16 operand = number of parts on the stack
-        // Passthrough/strict flags are Phase 3 concerns
-        _builder.Emit(OpCode.Command, (ushort)expr.Parts.Count);
+
+        var metadata = new CommandMetadata(expr.Parts.Count, expr.IsPassthrough, expr.IsStrict);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.Command, metaIdx);
         return null;
     }
 
@@ -1193,19 +1434,82 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             return null;
         }
 
-        if (expr.Operand is DotExpr)
+        if (expr.Operand is DotExpr dot)
         {
-            // Requires a Swap/Rot opcode to position the object reference correctly for SetField.
-            // Without stack manipulation primitives, the object gets buried under intermediate values.
-            throw new CompileError(
-                "Update expressions on field access (e.g. obj.field++) deferred to Phase 3.", expr.Span);
+            ushort nameIdx = _builder.AddConstant(dot.Name.Lexeme);
+
+            if (expr.IsPrefix)
+            {
+                CompileExpr(dot.Object);                          // [obj]
+                _builder.Emit(OpCode.Dup);                        // [obj, obj]
+                _builder.Emit(OpCode.GetField, nameIdx);          // [obj, oldVal]
+                ushort oneIdx = _builder.AddConstant(1L);
+                _builder.Emit(OpCode.Const, oneIdx);
+                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
+                // [obj, newVal]
+                _builder.Emit(OpCode.SetField, nameIdx);          // [newVal]
+            }
+            else
+            {
+                // Postfix: reserve temp slot BEFORE pushing expression operands
+                int tempSlot = _scope.DeclareLocal("<update_temp>", isConst: false);
+                _scope.MarkInitialized(tempSlot);
+                _builder.Emit(OpCode.Null);                             // reserve slot [null]
+
+                CompileExpr(dot.Object);                                // [..., obj]
+                _builder.Emit(OpCode.Dup);                              // [..., obj, obj]
+                _builder.Emit(OpCode.GetField, nameIdx);                // [..., obj, oldVal]
+                _builder.Emit(OpCode.Dup);                              // [..., obj, oldVal, oldVal]
+                _builder.Emit(OpCode.StoreLocal, (byte)tempSlot);       // [..., obj, oldVal]
+                ushort oneIdx = _builder.AddConstant(1L);
+                _builder.Emit(OpCode.Const, oneIdx);                    // [..., obj, oldVal, 1]
+                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
+                // [..., obj, newVal]
+                _builder.Emit(OpCode.SetField, nameIdx);                // [..., newVal]
+                _builder.Emit(OpCode.Pop);                              // [...]
+                _builder.Emit(OpCode.LoadLocal, (byte)tempSlot);        // [..., oldVal]
+            }
+            return null;
         }
 
-        if (expr.Operand is IndexExpr)
+        if (expr.Operand is IndexExpr idx)
         {
-            // Requires stack manipulation opcodes to retain both the object and index for SetIndex.
-            throw new CompileError(
-                "Update expressions on index access (e.g. arr[i]++) deferred to Phase 3.", expr.Span);
+            // Declare temp slot upfront so it doesn't overlap with expression operands
+            int tempSlot = _scope.DeclareLocal("<update_temp>", isConst: false);
+            _scope.MarkInitialized(tempSlot);
+            _builder.Emit(OpCode.Null);                               // reserve slot
+
+            // Prepare obj+index for SetIndex (they will be consumed later)
+            CompileExpr(idx.Object);                          // [obj]
+            CompileExpr(idx.Index);                           // [obj, index]
+            // Get current value via a second evaluation
+            CompileExpr(idx.Object);                          // [obj, index, obj2]
+            CompileExpr(idx.Index);                           // [obj, index, obj2, index2]
+            _builder.Emit(OpCode.GetIndex);                   // [obj, index, oldVal]
+
+            if (expr.IsPrefix)
+            {
+                ushort oneIdx = _builder.AddConstant(1L);
+                _builder.Emit(OpCode.Const, oneIdx);
+                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
+                // [obj, index, newVal]
+                _builder.Emit(OpCode.Dup);
+                _builder.Emit(OpCode.StoreLocal, (byte)tempSlot);
+                _builder.Emit(OpCode.SetIndex);                         // []
+                _builder.Emit(OpCode.LoadLocal, (byte)tempSlot);        // [newVal]
+            }
+            else
+            {
+                _builder.Emit(OpCode.Dup);
+                _builder.Emit(OpCode.StoreLocal, (byte)tempSlot);       // save oldVal
+                ushort oneIdx = _builder.AddConstant(1L);
+                _builder.Emit(OpCode.Const, oneIdx);
+                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
+                // [obj, index, newVal]
+                _builder.Emit(OpCode.SetIndex);                         // []
+                _builder.Emit(OpCode.LoadLocal, (byte)tempSlot);        // [oldVal]
+            }
+            return null;
         }
 
         throw new CompileError("Invalid update expression operand.", expr.Span);
@@ -1348,6 +1652,103 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     }
 
     /// <inheritdoc />
-    public object? VisitRetryExpr(RetryExpr expr) =>
-        throw new NotSupportedException("Retry expression compilation deferred to Phase 6.");
+    public object? VisitRetryExpr(RetryExpr expr)
+    {
+        _builder.AddSourceMapping(expr.Span);
+
+        // --- Compile max attempts ---
+        CompileExpr(expr.MaxAttempts); // [maxAttempts] on stack
+
+        // --- Compile options ---
+        int optionCount = 0;
+        if (expr.NamedOptions != null)
+        {
+            foreach (var (name, value) in expr.NamedOptions)
+            {
+                ushort nameIdx = _builder.AddConstant(name.Lexeme);
+                _builder.Emit(OpCode.Const, nameIdx);
+                CompileExpr(value);
+                optionCount++;
+            }
+        }
+        else if (expr.OptionsExpr != null)
+        {
+            CompileExpr(expr.OptionsExpr);
+            optionCount = -1; // Special: entire options struct on stack
+        }
+
+        // --- Compile body as closure ---
+        var bodyCompiler = new Compiler(this, "<retry_body>");
+        bodyCompiler._scope.BeginScope();
+        foreach (Stmt s in expr.Body.Statements)
+            bodyCompiler.CompileStmt(s);
+        bodyCompiler._builder.Emit(OpCode.Null);
+        bodyCompiler._builder.Emit(OpCode.Return);
+        bodyCompiler._builder.LocalCount = bodyCompiler._scope.LocalCount;
+        Chunk bodyChunk = bodyCompiler._builder.Build();
+        ushort bodyIdx = _builder.AddConstant(bodyChunk);
+        _builder.Emit(OpCode.Closure, bodyIdx);
+        foreach (UpvalueDescriptor uv in bodyChunk.Upvalues)
+        {
+            _builder.EmitByte(uv.IsLocal ? (byte)1 : (byte)0);
+            _builder.EmitByte(uv.Index);
+        }
+
+        // --- Compile until clause (if present) ---
+        bool hasUntil = expr.UntilClause != null;
+        if (hasUntil)
+        {
+            CompileExpr(expr.UntilClause!);
+        }
+
+        // --- Compile onRetry clause (if present) ---
+        bool hasOnRetry = expr.OnRetryClause != null;
+        bool onRetryIsReference = false;
+        if (hasOnRetry)
+        {
+            OnRetryNode onRetry = expr.OnRetryClause!;
+            onRetryIsReference = onRetry.IsReference;
+            if (onRetry.IsReference)
+            {
+                CompileExpr(onRetry.Reference!);
+            }
+            else
+            {
+                // Inline block: compile as a closure with (attempt, error) parameters
+                var onRetryCompiler = new Compiler(this, "<on_retry>");
+                onRetryCompiler._builder.Arity = 2;
+                onRetryCompiler._builder.MinArity = 2;
+                onRetryCompiler._scope.BeginScope();
+
+                string attemptName = onRetry.ParamAttempt?.Lexeme ?? "<attempt>";
+                int attemptSlot = onRetryCompiler._scope.DeclareLocal(attemptName, isConst: false);
+                onRetryCompiler._scope.MarkInitialized(attemptSlot);
+
+                string errorName = onRetry.ParamError?.Lexeme ?? "<error>";
+                int errorSlot = onRetryCompiler._scope.DeclareLocal(errorName, isConst: false);
+                onRetryCompiler._scope.MarkInitialized(errorSlot);
+
+                foreach (Stmt s in onRetry.Body!.Statements)
+                    onRetryCompiler.CompileStmt(s);
+                onRetryCompiler._builder.Emit(OpCode.Null);
+                onRetryCompiler._builder.Emit(OpCode.Return);
+                onRetryCompiler._builder.LocalCount = onRetryCompiler._scope.LocalCount;
+                Chunk onRetryChunk = onRetryCompiler._builder.Build();
+                ushort onRetryIdx = _builder.AddConstant(onRetryChunk);
+                _builder.Emit(OpCode.Closure, onRetryIdx);
+                foreach (UpvalueDescriptor uv in onRetryChunk.Upvalues)
+                {
+                    _builder.EmitByte(uv.IsLocal ? (byte)1 : (byte)0);
+                    _builder.EmitByte(uv.Index);
+                }
+            }
+        }
+
+        // --- Emit OP_RETRY ---
+        var metadata = new RetryMetadata(optionCount, hasUntil, hasOnRetry, onRetryIsReference);
+        ushort metaIdx = _builder.AddConstant(metadata);
+        _builder.Emit(OpCode.Retry, metaIdx);
+
+        return null;
+    }
 }

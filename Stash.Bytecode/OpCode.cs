@@ -200,7 +200,7 @@ public enum OpCode : byte
     Import,         // 60
     /// <summary>Import module with alias (u16 operand).</summary>
     ImportAs,       // 61
-    /// <summary>Destructure array/dict into locals (u8 operand).</summary>
+    /// <summary>Destructure array/dict into locals (u16 operand).</summary>
     Destructure,    // 62
 
     // -------------------------------------------------------------------------
@@ -247,6 +247,8 @@ public enum OpCode : byte
     Iterator,       // 76
     /// <summary>Advance iterator, push value or jump if done (i16 operand).</summary>
     Iterate,        // 77
+    /// <summary>Check if value is in collection (containment check).</summary>
+    In,             // 78
 }
 
 /// <summary>
@@ -304,6 +306,7 @@ public static class OpCodeInfo
         OpCode.ElevateBegin  => 0,
         OpCode.ElevateEnd    => 0,
         OpCode.Iterator      => 0,
+        OpCode.In            => 0,
 
         // 1-byte (u8) operands
         OpCode.LoadLocal     => 1,
@@ -312,9 +315,9 @@ public static class OpCodeInfo
         OpCode.StoreUpvalue  => 1,
         OpCode.Call          => 1,
         OpCode.Redirect      => 1,
-        OpCode.Destructure   => 1,
 
         // 2-byte (u16/i16) operands
+        OpCode.Destructure   => 2,
         OpCode.Const         => 2,
         OpCode.LoadGlobal    => 2,
         OpCode.StoreGlobal   => 2,

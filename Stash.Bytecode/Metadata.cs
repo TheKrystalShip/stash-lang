@@ -25,3 +25,18 @@ internal sealed record ExtendMetadata(
     string TypeName,
     string[] MethodNames,
     bool IsBuiltIn);
+
+/// <summary>Metadata for OP_COMMAND. Stored in the constant pool.</summary>
+internal sealed record CommandMetadata(int PartCount, bool IsPassthrough, bool IsStrict);
+
+/// <summary>Metadata for OP_IMPORT. Stored in the constant pool.</summary>
+internal sealed record ImportMetadata(string[] Names);
+
+/// <summary>Metadata for OP_IMPORTAS. Stored in the constant pool.</summary>
+internal sealed record ImportAsMetadata(string AliasName);
+
+/// <summary>Metadata for OP_DESTRUCTURE. Stored in the constant pool.</summary>
+internal sealed record DestructureMetadata(string Kind, string[] Names, string? RestName, bool IsConst);
+
+/// <summary>Metadata for OP_RETRY. Stored in the constant pool.</summary>
+internal sealed record RetryMetadata(int OptionCount, bool HasUntilClause, bool HasOnRetryClause, bool OnRetryIsReference);

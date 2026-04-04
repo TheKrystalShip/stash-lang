@@ -1,9 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Stash.Common;
+using Stash.Interpreting;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 
@@ -37,6 +41,10 @@ public sealed class VirtualMachine
     private readonly VMContext _context;
     private readonly ExtensionRegistry _extensionRegistry = new();
 
+    private Func<string, string?, Chunk>? _moduleLoader;
+    private Dictionary<string, Dictionary<string, object?>> _moduleCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
+
     public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
     {
         _stack = new object?[DefaultStackSize];
@@ -61,6 +69,16 @@ public sealed class VirtualMachine
 
     /// <summary>Extension method registry for extend blocks on built-in types.</summary>
     internal ExtensionRegistry Extensions => _extensionRegistry;
+
+    /// <summary>
+    /// Module loading callback. Receives (modulePath, currentFilePath) and returns a compiled Chunk.
+    /// Must be set by the host before executing scripts that use import statements.
+    /// </summary>
+    public Func<string, string?, Chunk>? ModuleLoader
+    {
+        get => _moduleLoader;
+        set => _moduleLoader = value;
+    }
 
     /// <summary>Execute a compiled chunk and return the result.</summary>
     public object? Execute(Chunk chunk)
@@ -180,7 +198,7 @@ public sealed class VirtualMachine
         {
             try
             {
-                return RunInner();
+                return RunInner(0);
             }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
             {
@@ -203,7 +221,7 @@ public sealed class VirtualMachine
         }
     }
 
-    private object? RunInner()
+    private object? RunInner(int targetFrameCount = 0)
     {
         while (true)
         {
@@ -372,7 +390,10 @@ public sealed class VirtualMachine
                 case OpCode.BitXor:
                 {
                     object? b = Pop(), a = Pop();
-                    Push(RuntimeOps.BitXor(a, b, GetCurrentSpan(ref frame)));
+                    if (a is long la && b is long lb)
+                        Push(la ^ lb);
+                    else
+                        Push(RuntimeOps.BitXor(a, b, GetCurrentSpan(ref frame)));
                     break;
                 }
 
@@ -532,6 +553,8 @@ public sealed class VirtualMachine
                     }
                     _sp = baseSlot - 1; // discard function stack window + callee slot
                     Push(result);
+                    if (_frameCount <= targetFrameCount)
+                        return result;
                     break;
                 }
 
@@ -916,30 +939,462 @@ public sealed class VirtualMachine
                     break;
                 }
 
-                // ==================== Shell (stubs) ====================
+                // ==================== Arithmetic (continued) ====================
+                case OpCode.Power:
+                {
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    object? right = Pop();
+                    object? left = Pop();
+                    Push(RuntimeOps.Power(left, right, span));
+                    break;
+                }
+
+                // ==================== Containment ====================
+                case OpCode.In:
+                {
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    object? right = Pop();
+                    object? left = Pop();
+                    Push(RuntimeOps.Contains(left, right, span));
+                    break;
+                }
+
+                // ==================== Shell Commands ====================
                 case OpCode.Command:
+                {
+                    ushort metaCmdIdx = ReadU16(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    var cmdMetadata = (CommandMetadata)frame.Chunk.Constants[metaCmdIdx]!;
+
+                    var sb = new StringBuilder();
+                    int partStart = _sp - cmdMetadata.PartCount;
+                    for (int i = partStart; i < _sp; i++)
+                        sb.Append(RuntimeOps.Stringify(_stack[i]));
+                    _sp = partStart;
+
+                    string command = _context.ExpandTilde(sb.ToString().Trim());
+                    if (string.IsNullOrEmpty(command))
+                        throw new RuntimeError("Command cannot be empty.", span);
+
+                    var (program, arguments) = CommandParser.Parse(command);
+
+                    // Apply elevation prefix if active
+                    if (_context.ElevationActive && _context.ElevationCommand != null)
+                    {
+                        string lowerProgram = program.ToLowerInvariant();
+                        if (lowerProgram is not ("sudo" or "doas" or "gsudo" or "runas") &&
+                            !string.Equals(program, _context.ElevationCommand, StringComparison.OrdinalIgnoreCase))
+                        {
+                            var prefixedArgs = new List<string>(arguments.Count + 1) { program };
+                            prefixedArgs.AddRange(arguments);
+                            arguments = prefixedArgs;
+                            program = _context.ElevationCommand;
+                        }
+                    }
+
+                    if (cmdMetadata.IsPassthrough)
+                    {
+                        var (_, _, exitCode) = ExecPassthrough(program, arguments, span);
+                        if (cmdMetadata.IsStrict && exitCode != 0)
+                        {
+                            throw new RuntimeError(
+                                $"Command failed with exit code {exitCode}: {command}",
+                                span, "CommandError")
+                            {
+                                Properties = new Dictionary<string, object?>
+                                {
+                                    ["exitCode"] = (long)exitCode,
+                                    ["stderr"] = "",
+                                    ["stdout"] = "",
+                                    ["command"] = command
+                                }
+                            };
+                        }
+                        Push(new StashInstance("CommandResult", new Dictionary<string, object?>
+                        {
+                            ["stdout"] = "",
+                            ["stderr"] = "",
+                            ["exitCode"] = (long)exitCode
+                        }) { StringifyField = "stdout" });
+                    }
+                    else
+                    {
+                        var (stdout, stderr, exitCode) = ExecCaptured(program, arguments, null, span);
+                        if (cmdMetadata.IsStrict && exitCode != 0)
+                        {
+                            throw new RuntimeError(
+                                $"Command failed with exit code {exitCode}: {command}",
+                                span, "CommandError")
+                            {
+                                Properties = new Dictionary<string, object?>
+                                {
+                                    ["exitCode"] = (long)exitCode,
+                                    ["stderr"] = stderr,
+                                    ["stdout"] = stdout,
+                                    ["command"] = command
+                                }
+                            };
+                        }
+                        Push(new StashInstance("CommandResult", new Dictionary<string, object?>
+                        {
+                            ["stdout"] = stdout,
+                            ["stderr"] = stderr,
+                            ["exitCode"] = (long)exitCode
+                        }) { StringifyField = "stdout" });
+                    }
+                    break;
+                }
+
                 case OpCode.Pipe:
+                {
+                    // Both sides have already been executed. Return the right result, which
+                    // carries the final exit code per pipeline semantics.
+                    // True streaming pipes are a future enhancement (Phase 7+).
+                    object? rightResult = Pop();
+                    _sp--; // discard left result
+                    Push(rightResult);
+                    break;
+                }
+
                 case OpCode.Redirect:
                 {
-                    int operandSize = OpCodeInfo.OperandSize((OpCode)instruction);
-                    frame.IP += operandSize;
-                    throw new RuntimeError(
-                        "Shell command execution is not yet supported in the bytecode VM.",
-                        GetCurrentSpan(ref frame));
+                    byte flags = ReadByte(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    object? target = Pop();
+                    object? cmdResult = Pop();
+
+                    string filePath = target is string fp
+                        ? fp
+                        : throw new RuntimeError("Redirect target must be a string.", span);
+
+                    int stream = flags & 0x03;
+                    bool append = (flags & 0x04) != 0;
+
+                    string stdout = "", stderr = "";
+                    if (cmdResult is StashInstance ri)
+                    {
+                        stdout = (ri.GetField("stdout", span) as string) ?? "";
+                        stderr = (ri.GetField("stderr", span) as string) ?? "";
+                    }
+
+                    string content = stream switch
+                    {
+                        0 => stdout,
+                        1 => stderr,
+                        _ => stdout + stderr
+                    };
+
+                    try
+                    {
+                        if (append)
+                            File.AppendAllText(filePath, content);
+                        else
+                            File.WriteAllText(filePath, content);
+                    }
+                    catch (Exception ex)
+                    {
+                        throw new RuntimeError($"Redirect failed: {ex.Message}", span);
+                    }
+
+                    var newFields = new Dictionary<string, object?>
+                    {
+                        ["stdout"] = (stream == 0 || stream == 2) ? "" : stdout,
+                        ["stderr"] = (stream == 1 || stream == 2) ? "" : stderr,
+                        ["exitCode"] = cmdResult is StashInstance ri2 ? ri2.GetField("exitCode", span) : 0L
+                    };
+                    Push(new StashInstance("CommandResult", newFields) { StringifyField = "stdout" });
+                    break;
+                }
+
+                // ==================== Module Import ====================
+                case OpCode.Import:
+                {
+                    ushort metaImportIdx = ReadU16(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    var importMeta = (ImportMetadata)frame.Chunk.Constants[metaImportIdx]!;
+
+                    object? pathObj = Pop();
+                    string modulePath = pathObj is string mp
+                        ? mp
+                        : throw new RuntimeError("Module path must be a string.", span);
+
+                    Dictionary<string, object?> moduleEnv = LoadModule(modulePath, span);
+
+                    foreach (string importName in importMeta.Names)
+                    {
+                        if (moduleEnv.TryGetValue(importName, out object? importedValue))
+                            Push(importedValue);
+                        else
+                            throw new RuntimeError($"Module does not export '{importName}'.", span);
+                    }
+                    break;
+                }
+
+                case OpCode.ImportAs:
+                {
+                    ushort metaImportAsIdx = ReadU16(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    var importAsMeta = (ImportAsMetadata)frame.Chunk.Constants[metaImportAsIdx]!;
+
+                    object? pathObj = Pop();
+                    string modulePath = pathObj is string mp
+                        ? mp
+                        : throw new RuntimeError("Module path must be a string.", span);
+
+                    Dictionary<string, object?> moduleEnv = LoadModule(modulePath, span);
+
+                    var ns = new StashNamespace(importAsMeta.AliasName);
+                    foreach (KeyValuePair<string, object?> kvp in moduleEnv)
+                    {
+                        if (kvp.Value is StashNamespace)
+                            continue; // skip inherited built-in namespaces
+                        ns.Define(kvp.Key, kvp.Value);
+                    }
+                    ns.Freeze();
+                    Push(ns);
+                    break;
+                }
+
+                // ==================== Destructure ====================
+                case OpCode.Destructure:
+                {
+                    ushort metaDestructIdx = ReadU16(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    var destructMeta = (DestructureMetadata)frame.Chunk.Constants[metaDestructIdx]!;
+
+                    object? initializer = Pop();
+
+                    if (destructMeta.Kind == "array")
+                    {
+                        if (initializer is not List<object?> list)
+                            throw new RuntimeError("Array destructuring requires an array value.", span);
+
+                        for (int i = 0; i < destructMeta.Names.Length; i++)
+                            Push(i < list.Count ? list[i] : null);
+
+                        if (destructMeta.RestName != null)
+                        {
+                            var rest = new List<object?>();
+                            for (int i = destructMeta.Names.Length; i < list.Count; i++)
+                                rest.Add(list[i]);
+                            Push(rest);
+                        }
+                    }
+                    else
+                    {
+                        if (initializer is StashInstance destructInst)
+                        {
+                            var usedNames = new HashSet<string>(destructMeta.Names);
+                            foreach (string dname in destructMeta.Names)
+                                Push(destructInst.GetField(dname, span));
+
+                            if (destructMeta.RestName != null)
+                            {
+                                var rest = new StashDictionary();
+                                foreach (KeyValuePair<string, object?> kvp in destructInst.GetAllFields())
+                                {
+                                    if (!usedNames.Contains(kvp.Key))
+                                        rest.Set(kvp.Key, kvp.Value);
+                                }
+                                Push(rest);
+                            }
+                        }
+                        else if (initializer is StashDictionary destructDict)
+                        {
+                            var usedNames = new HashSet<string>(destructMeta.Names);
+                            foreach (string dname in destructMeta.Names)
+                                Push(destructDict.Has(dname) ? destructDict.Get(dname) : null);
+
+                            if (destructMeta.RestName != null)
+                            {
+                                var rest = new StashDictionary();
+                                var allKeys = destructDict.Keys();
+                                foreach (object? k in allKeys)
+                                {
+                                    if (k is string ks && !usedNames.Contains(ks))
+                                        rest.Set(ks, destructDict.Get(ks));
+                                }
+                                Push(rest);
+                            }
+                        }
+                        else
+                        {
+                            throw new RuntimeError(
+                                "Object destructuring requires a struct instance or dictionary.", span);
+                        }
+                    }
+                    break;
+                }
+
+                // ==================== Elevation ====================
+                case OpCode.ElevateBegin:
+                {
+                    object? elevator = Pop();
+                    _context.ElevationActive = true;
+                    if (elevator is string elevStr)
+                        _context.ElevationCommand = elevStr;
+                    else if (elevator != null)
+                        _context.ElevationCommand = RuntimeOps.Stringify(elevator);
+                    else
+                        _context.ElevationCommand = OperatingSystem.IsWindows() ? "gsudo" : "sudo";
+                    break;
+                }
+
+                case OpCode.ElevateEnd:
+                {
+                    _context.ElevationActive = false;
+                    _context.ElevationCommand = null;
+                    break;
+                }
+
+                // ==================== Retry ====================
+                case OpCode.Retry:
+                {
+                    ushort metaRetryIdx = ReadU16(ref frame);
+                    SourceSpan? span = GetCurrentSpan(ref frame);
+                    var retryMeta = (RetryMetadata)frame.Chunk.Constants[metaRetryIdx]!;
+
+                    // Pop closures in reverse order of emission (onRetry first, then until, then body)
+                    VMFunction? onRetryVmFn = null;
+                    IStashCallable? onRetryCb = null;
+                    if (retryMeta.HasOnRetryClause)
+                    {
+                        object? obj = Pop();
+                        if (obj is VMFunction f1) onRetryVmFn = f1;
+                        else if (obj is IStashCallable c1) onRetryCb = c1;
+                    }
+
+                    VMFunction? untilVmFn = null;
+                    IStashCallable? untilCb = null;
+                    if (retryMeta.HasUntilClause)
+                    {
+                        object? obj = Pop();
+                        if (obj is VMFunction f2) untilVmFn = f2;
+                        else if (obj is IStashCallable c2) untilCb = c2;
+                    }
+
+                    object? bodyObj = Pop();
+                    VMFunction bodyVmFn = bodyObj as VMFunction
+                        ?? throw new RuntimeError("Retry body must be a function.", span);
+
+                    // Extract options from the stack (below body)
+                    long retryDelayMs = 0;
+                    if (retryMeta.OptionCount == -1)
+                    {
+                        object? optStruct = Pop();
+                        if (optStruct is StashInstance oi)
+                        {
+                            if (oi.GetFields().TryGetValue("delay", out object? dv))
+                            {
+                                if (dv is long dl) retryDelayMs = dl;
+                                else if (dv is StashDuration dd) retryDelayMs = (long)dd.TotalMilliseconds;
+                            }
+                        }
+                    }
+                    else if (retryMeta.OptionCount > 0)
+                    {
+                        int pairStart = _sp - retryMeta.OptionCount * 2;
+                        for (int oi = 0; oi < retryMeta.OptionCount; oi++)
+                        {
+                            string optKey = (string)_stack[pairStart + oi * 2]!;
+                            object? optVal = _stack[pairStart + oi * 2 + 1];
+                            if (optKey == "delay")
+                            {
+                                if (optVal is long dl) retryDelayMs = dl;
+                                else if (optVal is StashDuration dd) retryDelayMs = (long)dd.TotalMilliseconds;
+                            }
+                        }
+                        _sp = pairStart;
+                    }
+
+                    object? maxAttemptsObj = Pop();
+                    long maxAttempts = maxAttemptsObj is long ma ? ma : 3L;
+
+                    // Execute retry loop
+                    object? retryLastResult = null;
+                    RuntimeError? retryLastError = null;
+
+                    for (long attempt = 1; attempt <= maxAttempts; attempt++)
+                    {
+                        bool bodyThrew = false;
+                        try
+                        {
+                            retryLastResult = ExecuteVMFunctionInline(bodyVmFn, [], span);
+                        }
+                        catch (RuntimeError rex)
+                        {
+                            bodyThrew = true;
+                            retryLastError = rex;
+
+                            var retryErr = new StashError(rex.Message, rex.ErrorType ?? "RuntimeError");
+                            if (onRetryVmFn != null)
+                            {
+                                try
+                                {
+                                    ExecuteVMFunctionInline(onRetryVmFn,
+                                        new object?[] { attempt, retryErr }, span);
+                                }
+                                catch { /* suppress onRetry errors */ }
+                            }
+                            else if (onRetryCb != null)
+                            {
+                                try
+                                {
+                                    onRetryCb.Call(_context, new List<object?> { attempt, retryErr });
+                                }
+                                catch { /* suppress onRetry errors */ }
+                            }
+                        }
+
+                        if (!bodyThrew)
+                        {
+                            bool success = true;
+                            if (untilVmFn != null)
+                            {
+                                object? pred = ExecuteVMFunctionInline(untilVmFn,
+                                    new object?[] { retryLastResult, attempt }, span);
+                                if (RuntimeOps.IsFalsy(pred))
+                                    success = false;
+                            }
+                            else if (untilCb != null)
+                            {
+                                object? pred = untilCb.Call(_context,
+                                    new List<object?> { retryLastResult, attempt });
+                                if (RuntimeOps.IsFalsy(pred))
+                                    success = false;
+                            }
+
+                            if (success)
+                            {
+                                Push(retryLastResult);
+                                goto retryDone;
+                            }
+                            // Until predicate failed — treat as a retry-worthy failure
+                            bodyThrew = true;
+                        }
+
+                        if (retryDelayMs > 0 && attempt < maxAttempts)
+                            Thread.Sleep((int)retryDelayMs);
+
+                        if (attempt == maxAttempts)
+                        {
+                            if (retryLastError != null)
+                                throw new RuntimeError(retryLastError.Message, span,
+                                    retryLastError.ErrorType ?? "RuntimeError");
+                            throw new RuntimeError(
+                                $"All {maxAttempts} retry attempts exhausted — predicate not satisfied.",
+                                span, "RetryExhaustedError");
+                        }
+                    }
+                    retryDone:
+                    break;
                 }
 
                 // ==================== Deferred / Not-yet-implemented ====================
-                case OpCode.Power:
                 case OpCode.PreIncrement:
                 case OpCode.PreDecrement:
                 case OpCode.PostIncrement:
                 case OpCode.PostDecrement:
-                case OpCode.Import:
-                case OpCode.ImportAs:
-                case OpCode.Destructure:
-                case OpCode.ElevateBegin:
-                case OpCode.ElevateEnd:
-                case OpCode.Retry:
                 case OpCode.TryExpr:
                 {
                     int operandSize = OpCodeInfo.OperandSize((OpCode)instruction);
@@ -1397,6 +1852,193 @@ public sealed class VirtualMachine
             _ => throw new RuntimeError($"Cannot iterate over {RuntimeValues.Stringify(iterable)}.", span),
         };
         return new StashIterator(enumerator);
+    }
+
+    // ------------------------------------------------------------------
+    // Execution helpers
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Runs the dispatch loop until <see cref="_frameCount"/> drops to
+    /// <paramref name="targetFrameCount"/>. Handles exceptions the same
+    /// way as the outer <see cref="Run"/> loop.
+    /// </summary>
+    private object? RunUntilFrame(int targetFrameCount)
+    {
+        while (true)
+        {
+            try
+            {
+                return RunInner(targetFrameCount);
+            }
+            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
+            {
+                ExceptionHandler handler = _exceptionHandlers[^1];
+                _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
+                CloseUpvalues(handler.StackLevel);
+                _frameCount = handler.FrameIndex + 1;
+                _sp = handler.StackLevel;
+                Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
+                _frames[_frameCount - 1].IP = handler.CatchIP;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Calls a <see cref="VMFunction"/> closure inline on the same VM instance and
+    /// returns its result. Safe to call from within the dispatch loop (e.g. OP_RETRY).
+    /// </summary>
+    private object? ExecuteVMFunctionInline(VMFunction fn, object?[] args, SourceSpan? span)
+    {
+        Push(fn); // callee slot
+        foreach (object? arg in args)
+            Push(arg);
+        int targetFrameCount = _frameCount; // before CallValue pushes the new frame
+        CallValue(fn, args.Length, span);
+        return RunUntilFrame(targetFrameCount);
+    }
+
+    // ------------------------------------------------------------------
+    // Process execution helpers (replicate interpreter's RunCaptured/RunPassthrough)
+    // ------------------------------------------------------------------
+
+    private static (string Stdout, string Stderr, int ExitCode) ExecCaptured(
+        string program, List<string> arguments, string? stdin, SourceSpan? span)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = program,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                RedirectStandardInput = stdin is not null,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+            foreach (string arg in arguments)
+                psi.ArgumentList.Add(arg);
+
+            using var process = Process.Start(psi)
+                ?? throw new RuntimeError("Failed to start process.", span);
+
+            if (stdin is not null)
+            {
+                process.StandardInput.Write(stdin);
+                process.StandardInput.Close();
+            }
+
+            var stdoutTask = Task.Run(() => process.StandardOutput.ReadToEnd());
+            var stderrTask = Task.Run(() => process.StandardError.ReadToEnd());
+            Task.WaitAll(stdoutTask, stderrTask);
+            process.WaitForExit();
+
+            return (stdoutTask.Result, stderrTask.Result, process.ExitCode);
+        }
+        catch (RuntimeError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Command execution failed: {ex.Message}", span);
+        }
+    }
+
+    private static (string Stdout, string Stderr, int ExitCode) ExecPassthrough(
+        string program, List<string> arguments, SourceSpan? span)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = program,
+                RedirectStandardOutput = false,
+                RedirectStandardError = false,
+                RedirectStandardInput = false,
+                UseShellExecute = false,
+                CreateNoWindow = false
+            };
+            foreach (string arg in arguments)
+                psi.ArgumentList.Add(arg);
+
+            using var process = Process.Start(psi)
+                ?? throw new RuntimeError("Failed to start process.", span);
+            process.WaitForExit();
+
+            return ("", "", process.ExitCode);
+        }
+        catch (RuntimeError)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new RuntimeError($"Command execution failed: {ex.Message}", span);
+        }
+    }
+
+    // ------------------------------------------------------------------
+    // Module loading
+    // ------------------------------------------------------------------
+
+    private Dictionary<string, object?> LoadModule(string modulePath, SourceSpan? span)
+    {
+        string? currentFile = _context.CurrentFile;
+        string resolvedPath;
+
+        if (Path.IsPathRooted(modulePath))
+        {
+            resolvedPath = modulePath;
+        }
+        else if (currentFile != null)
+        {
+            string? dir = Path.GetDirectoryName(currentFile);
+            resolvedPath = Path.GetFullPath(Path.Combine(dir ?? ".", modulePath));
+        }
+        else
+        {
+            resolvedPath = Path.GetFullPath(modulePath);
+        }
+
+        if (!resolvedPath.EndsWith(".stash", StringComparison.OrdinalIgnoreCase))
+            resolvedPath += ".stash";
+
+        if (_moduleCache.TryGetValue(resolvedPath, out Dictionary<string, object?>? cached))
+            return cached;
+
+        if (_importStack.Contains(resolvedPath))
+            throw new RuntimeError($"Circular import detected: {resolvedPath}", span);
+
+        if (_moduleLoader == null)
+            throw new RuntimeError(
+                "Module loading is not configured for the bytecode VM.", span);
+
+        _importStack.Add(resolvedPath);
+        try
+        {
+            Chunk moduleChunk = _moduleLoader(resolvedPath, currentFile);
+
+            var moduleGlobals = new Dictionary<string, object?>(_globals);
+            var moduleVM = new VirtualMachine(moduleGlobals, _ct)
+            {
+                _moduleLoader = _moduleLoader,
+                _moduleCache = _moduleCache,
+            };
+            moduleVM._context.CurrentFile = resolvedPath;
+            moduleVM._context.Output = _context.Output;
+            moduleVM._context.ErrorOutput = _context.ErrorOutput;
+            moduleVM._context.Input = _context.Input;
+
+            moduleVM.Execute(moduleChunk);
+
+            _moduleCache[resolvedPath] = moduleVM.Globals;
+            return moduleVM.Globals;
+        }
+        finally
+        {
+            _importStack.Remove(resolvedPath);
+        }
     }
 }
 

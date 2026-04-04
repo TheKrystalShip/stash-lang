@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using Stash.Common;
@@ -139,6 +141,41 @@ internal static class RuntimeOps
         double dr = RuntimeValues.ToDouble(right);
         if (dr == 0.0) throw new RuntimeError("Division by zero.", span);
         return RuntimeValues.ToDouble(left) % dr;
+    }
+
+    public static object? Power(object? left, object? right, SourceSpan? span)
+    {
+        if (left is long ll && right is long rl)
+            return (long)Math.Pow(ll, rl);
+        double dl = left is long l1 ? l1 : left is double d1 ? d1
+            : throw new RuntimeError("Operands must be numbers.", span);
+        double dr = right is long l2 ? l2 : right is double d2 ? d2
+            : throw new RuntimeError("Operands must be numbers.", span);
+        return Math.Pow(dl, dr);
+    }
+
+    public static bool Contains(object? left, object? right, SourceSpan? span)
+    {
+        return right switch
+        {
+            List<object?> list => list.Any(item => IsEqual(left, item)),
+            string str when left is string sub => str.Contains(sub),
+            string => throw new RuntimeError(
+                "Left operand of 'in' must be a string when checking string containment.", span),
+            StashDictionary dict => left is not null && dict.Has(left),
+            StashRange range when left is long l => range.Contains(l),
+            StashRange range when left is double d && d == Math.Floor(d) => range.Contains((long)d),
+            StashRange => throw new RuntimeError(
+                "Left operand of 'in' must be an integer when checking range membership.", span),
+            StashIpAddress ipNet when left is StashIpAddress ipAddr => ipNet.Contains(ipAddr),
+            StashIpAddress => throw new RuntimeError(
+                "Left operand of 'in' must be an IP address when checking CIDR containment.", span),
+            StashSemVer svRange when left is StashSemVer svVal => svRange.Matches(svVal),
+            StashSemVer => throw new RuntimeError(
+                "Left operand of 'in' must be a semver when checking version range.", span),
+            _ => throw new RuntimeError(
+                "Right operand of 'in' must be an array, string, dictionary, range, or semver.", span)
+        };
     }
 
     public static object? Negate(object? value, SourceSpan? span)

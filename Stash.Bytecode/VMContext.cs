@@ -37,6 +37,10 @@ internal sealed class VMContext : IInterpreterContext
     public CancellationToken CancellationToken => _ct;
     public object? Debugger => null;
 
+    // --- Elevation Context ---
+    public bool ElevationActive { get; set; }
+    public string? ElevationCommand { get; set; }
+
     public string ExpandTilde(string path)
     {
         if (path.StartsWith('~'))
@@ -82,6 +86,8 @@ internal sealed class VMContext : IInterpreterContext
             Input = Input,
             CurrentFile = CurrentFile,
             ScriptArgs = ScriptArgs,
+            ElevationActive = ElevationActive,
+            ElevationCommand = ElevationCommand,
         };
     }
 }

@@ -2670,6 +2670,478 @@ public class VirtualMachineTests
         Assert.Equal("NYC", result);
     }
 
+    // =========================================================================
+    // 26. Power Operator
+    // =========================================================================
+
+    [Fact]
+    public void Power_IntegerBase_ReturnsLong()
+    {
+        var b = new ChunkBuilder { Name = "<test>" };
+        ushort c1 = b.AddConstant(2L); ushort c2 = b.AddConstant(3L);
+        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
+        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        Assert.Equal(8L, new VirtualMachine().Execute(b.Build()));
+    }
+
+    [Fact]
+    public void Power_FloatExponent_ReturnsDouble()
+    {
+        var b = new ChunkBuilder { Name = "<test>" };
+        ushort c1 = b.AddConstant(2.0); ushort c2 = b.AddConstant(3.0);
+        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
+        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        Assert.Equal(8.0, new VirtualMachine().Execute(b.Build()));
+    }
+
+    [Fact]
+    public void Power_ZeroPower_ReturnsOne()
+    {
+        var b = new ChunkBuilder { Name = "<test>" };
+        ushort c1 = b.AddConstant(5L); ushort c2 = b.AddConstant(0L);
+        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
+        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        Assert.Equal(1L, new VirtualMachine().Execute(b.Build()));
+    }
+
+    [Fact]
+    public void Power_NegativeFloatExponent_ReturnsDouble()
+    {
+        var b = new ChunkBuilder { Name = "<test>" };
+        ushort c1 = b.AddConstant(2.0); ushort c2 = b.AddConstant(-1.0);
+        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
+        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        Assert.Equal(0.5, new VirtualMachine().Execute(b.Build()));
+    }
+
+    [Fact]
+    public void Power_NonNumbers_ThrowsError()
+    {
+        var b = new ChunkBuilder { Name = "<test>" };
+        ushort c1 = b.AddConstant("a"); ushort c2 = b.AddConstant(2L);
+        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
+        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        Assert.Throws<RuntimeError>(() => new VirtualMachine().Execute(b.Build()));
+    }
+
+    // =========================================================================
+    // 27. In Operator (Containment)
+    // =========================================================================
+
+    [Fact]
+    public void In_ArrayContains_ReturnsTrue()
+    {
+        Assert.Equal(true, Execute("return 2 in [1, 2, 3];"));
+    }
+
+    [Fact]
+    public void In_ArrayNotContains_ReturnsFalse()
+    {
+        Assert.Equal(false, Execute("return 5 in [1, 2, 3];"));
+    }
+
+    [Fact]
+    public void In_DictContainsKey_ReturnsTrue()
+    {
+        Assert.Equal(true, Execute("return \"a\" in { a: 1, b: 2 };"));
+    }
+
+    [Fact]
+    public void In_DictNotContainsKey_ReturnsFalse()
+    {
+        Assert.Equal(false, Execute("return \"c\" in { a: 1, b: 2 };"));
+    }
+
+    [Fact]
+    public void In_StringContains_ReturnsTrue()
+    {
+        Assert.Equal(true, Execute("return \"lo\" in \"hello\";"));
+    }
+
+    [Fact]
+    public void In_StringNotContains_ReturnsFalse()
+    {
+        Assert.Equal(false, Execute("return \"xyz\" in \"hello\";"));
+    }
+
+    [Fact]
+    public void In_InvalidRight_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("return 1 in 42;"));
+    }
+
+    // =========================================================================
+    // 28. Try-Catch-Finally
+    // =========================================================================
+
+    [Fact]
+    public void TryCatch_CatchesThrow_ReturnsCatchValue()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                try {
+                    throw "boom";
+                } catch (e) {
+                    return e.message;
+                }
+            };
+            return func();
+            """);
+        Assert.Equal("boom", result);
+    }
+
+    [Fact]
+    public void TryCatch_NoCatch_Succeeds()
+    {
+        object? result = Execute("""
+            let result = null;
+            result = 0;
+            try {
+                result = 42;
+            }
+            return result;
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void TryCatch_ErrorType_Preserved()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                try {
+                    throw "test error";
+                } catch (e) {
+                    return e.type;
+                }
+            };
+            return func();
+            """);
+        Assert.Equal("RuntimeError", result);
+    }
+
+    [Fact]
+    public void TryCatchFinally_FinallyAlwaysRuns()
+    {
+        object? result = Execute("""
+            let flag = null;
+            flag = 0;
+            let func = null;
+            func = () => {
+                try {
+                    flag = 1;
+                } finally {
+                    flag = 2;
+                }
+            };
+            func();
+            return flag;
+            """);
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void TryCatchFinally_FinallyRunsAfterCatch()
+    {
+        object? result = Execute("""
+            let flag = null;
+            flag = 0;
+            let func = null;
+            func = () => {
+                try {
+                    throw "oops";
+                } catch (e) {
+                    flag = 1;
+                } finally {
+                    flag = flag + 10;
+                }
+            };
+            func();
+            return flag;
+            """);
+        Assert.Equal(11L, result);
+    }
+
+    [Fact]
+    public void TryCatch_UncaughtError_Propagates()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let func = null;
+            func = () => {
+                try {
+                    throw "fail";
+                } finally {
+                }
+            };
+            func();
+            """));
+    }
+
+    // =========================================================================
+    // 29. Destructuring
+    // =========================================================================
+
+    [Fact]
+    public void Destructure_Array_Basic()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                let [a, b, c] = [10, 20, 30];
+                return b;
+            };
+            return func();
+            """);
+        Assert.Equal(20L, result);
+    }
+
+    [Fact]
+    public void Destructure_Array_WithRest()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                let [first, ...rest] = [1, 2, 3, 4, 5];
+                return rest;
+            };
+            return func();
+            """);
+        var rest = Assert.IsType<List<object?>>(result);
+        Assert.Equal(4, rest.Count);
+        Assert.Equal(2L, rest[0]);
+        Assert.Equal(5L, rest[3]);
+    }
+
+    [Fact]
+    public void Destructure_Array_FewerElements_PadsNull()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                let [a, b, c] = [10, 20];
+                return c;
+            };
+            return func();
+            """);
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Destructure_Dict_Basic()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                let { x, y } = { x: 10, y: 20, z: 30 };
+                return x + y;
+            };
+            return func();
+            """);
+        Assert.Equal(30L, result);
+    }
+
+    [Fact]
+    public void Destructure_Dict_WithRest()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                let { a, ...rest } = { a: 1, b: 2, c: 3 };
+                return rest;
+            };
+            return func();
+            """);
+        var dict = Assert.IsType<StashDictionary>(result);
+        Assert.True(dict.Has("b"));
+        Assert.Equal(2L, dict.Get("b"));
+        Assert.True(dict.Has("c"));
+        Assert.Equal(3L, dict.Get("c"));
+    }
+
+    [Fact]
+    public void Destructure_NonArray_ThrowsError()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let func = null;
+            func = () => {
+                let [a, b] = "not an array";
+                return a;
+            };
+            func();
+            """));
+    }
+
+    // =========================================================================
+    // 30. Shell Commands
+    // =========================================================================
+
+    [Fact]
+    public void Command_Echo_CapturesStdout()
+    {
+        object? result = Execute("""
+            let result = null;
+            result = $(echo hello);
+            return result.stdout;
+            """);
+        Assert.Contains("hello", (string)result!);
+    }
+
+    [Fact]
+    public void Command_ExitCode_IsLong()
+    {
+        object? result = Execute("""
+            let result = null;
+            result = $(echo ok);
+            return result.exitCode;
+            """);
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void Command_Interpolation_Works()
+    {
+        object? result = Execute("""
+            let name = null;
+            name = "world";
+            let result = null;
+            result = $(echo ${name});
+            return result.stdout;
+            """);
+        Assert.Contains("world", (string)result!);
+    }
+
+    // =========================================================================
+    // 31. Elevate Blocks
+    // =========================================================================
+
+    [Fact]
+    public void Elevate_DefaultCommand_ExecutesBody()
+    {
+        object? result = Execute("""
+            let flag = null;
+            flag = 0;
+            elevate {
+                flag = 1;
+            }
+            return flag;
+            """);
+        Assert.Equal(1L, result);
+    }
+
+    // =========================================================================
+    // 32. Retry
+    // =========================================================================
+
+    [Fact]
+    public void Retry_SucceedsFirstAttempt_ReturnsValue()
+    {
+        object? result = Execute("""
+            let func = null;
+            func = () => {
+                return retry (3) {
+                    return 42;
+                };
+            };
+            return func();
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Retry_FailsThenSucceeds()
+    {
+        object? result = Execute("""
+            let counter = null;
+            counter = 0;
+            let func = null;
+            func = () => {
+                return retry (5) {
+                    counter = counter + 1;
+                    if (counter < 3) {
+                        throw "not yet";
+                    }
+                    return counter;
+                };
+            };
+            return func();
+            """);
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void Retry_ExhaustsAttempts_Throws()
+    {
+        Assert.Throws<RuntimeError>(() => Execute("""
+            let func = null;
+            func = () => {
+                return retry (2) {
+                    throw "always fails";
+                };
+            };
+            func();
+            """));
+    }
+
+    // =========================================================================
+    // 33. Module Import
+    // =========================================================================
+
+    [Fact]
+    public void Import_LoadsModuleExport()
+    {
+        string moduleSource = "let greeting = null; greeting = \"hello from module\";";
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import { greeting } from "mymod";
+                return greeting;
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal("hello from module", result);
+    }
+
+    [Fact]
+    public void ImportAs_LoadsModuleAsNamespace()
+    {
+        string moduleSource = "let value = null; value = 42;";
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as mod;
+                return mod.value;
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Import_NoModuleLoader_ThrowsError()
+    {
+        string source = """
+            import { foo } from "missing";
+            return foo;
+            """;
+        Assert.Throws<RuntimeError>(() => Execute(source));
+    }
+
     /// <summary>Test helper: an IStashCallable wrapping a delegate.</summary>
     private class TestCallable : IStashCallable
     {

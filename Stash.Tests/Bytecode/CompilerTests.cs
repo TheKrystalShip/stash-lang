@@ -731,9 +731,10 @@ public class CompilerTests
     }
 
     [Fact]
-    public void Import_ThrowsNotSupported()
+    public void Import_EmitsImportOpcode()
     {
-        Assert.Throws<NotSupportedException>(() => CompileSource("import { foo } from \"bar\";"));
+        string disasm = Disassemble("import { foo } from \"bar\";");
+        Assert.Contains("Import", disasm);
     }
 
     // =========================================================================
@@ -918,18 +919,18 @@ public class CompilerTests
     // =========================================================================
 
     [Fact]
-    public void Update_DotExpr_ThrowsCompileError()
+    public void Update_DotExpr_CompilesSuccessfully()
     {
-        var ex = Assert.Throws<CompileError>(() =>
-            CompileSource("fn foo() { let o = null; o.field++; }"));
-        Assert.Contains("deferred", ex.Message, StringComparison.OrdinalIgnoreCase);
+        // Should compile without throwing now that Phase 6 is implemented
+        var ex = Record.Exception(() => CompileSource("fn foo() { let o = null; o.field++; }"));
+        Assert.Null(ex);
     }
 
     [Fact]
-    public void Update_IndexExpr_ThrowsCompileError()
+    public void Update_IndexExpr_CompilesSuccessfully()
     {
-        var ex = Assert.Throws<CompileError>(() =>
-            CompileSource("fn foo() { let a = [1]; a[0]++; }"));
-        Assert.Contains("deferred", ex.Message, StringComparison.OrdinalIgnoreCase);
+        // Should compile without throwing now that Phase 6 is implemented
+        var ex = Record.Exception(() => CompileSource("fn foo() { let a = [1]; a[0]++; }"));
+        Assert.Null(ex);
     }
 }
