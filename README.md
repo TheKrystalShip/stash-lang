@@ -2,61 +2,6 @@
 
 A dynamically typed, interpreted scripting language that combines the **shell scripting power** of Bash, the **syntax familiarity** of C/C++/C#, and the **structured data** capabilities that shell languages have always lacked.
 
-```stash
-#!/usr/bin/env stash
-
-import { deploy } from "deploy.stash";
-import "lib/utils.stash" as utils;
-
-enum Status { Unknown, Active, Inactive }
-
-struct Server {
-  host: string,
-  port: int,
-  status: Status
-}
-
-const DEFAULT_HOST: string = "192.168.1.10";
-
-// try catches runtime errors, ?? provides a fallback
-let address: string = try fs.readFile("/etc/server.conf") ?? DEFAULT_HOST;
-
-let srv = Server { host: address, port: 22, status: Status.Unknown };
-
-// First-class command execution with interpolation
-let result = $(ping -c 1 ${srv.host});
-srv.status = result.exitCode == 0 ? Status.Active : Status.Inactive;
-
-// Functions with type hints
-fn checkServer(server: Server) -> string {
-  return server.status switch {
-    Status.Active => "online",
-    Status.Inactive => "offline",
-    _ => "unknown"
-  };
-}
-
-// Lambdas — concise anonymous functions
-let format = (label: string, value) => $"{label}: {value}";
-
-let servers = [
-  Server { host: "10.0.0.1", port: 22, status: Status.Unknown },
-  Server { host: "10.0.0.2", port: 22, status: Status.Unknown },
-];
-
-for (let s: Server in servers) {
-  if (deploy(s, "app.tar.gz")) {
-    utils.log(format("Deployed to", s.host));
-  } else {
-    utils.log("Failed: ${lastError()}");
-  }
-}
-
-// Pipe chains — stdout flows between commands, short-circuits on failure
-let errors = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
-io.println("Error count: " + errors.stdout);
-```
-
 ---
 
 ## Why Stash?
@@ -90,36 +35,49 @@ let pending;                  // null until assigned
 enum Status { Active, Inactive, Pending }
 
 struct Server {
-    host: string,
-    port: int,
-    status: Status
+  host: ip,
+  port: int,
+  status: Status
 }
 
-let srv = Server { host: "10.0.0.1", port: 22, status: Status.Active };
+let srv = Server { host: @10.0.0.1/16, port: 22, status: Status.Active };
 ```
 
 #### Command Execution
 
 ```stash
 let result = $(ping -c 1 ${srv.host});
-io.println(result.stdout);    // captured stdout
+io.println(result);           // captured stdout
 io.println(result.exitCode);  // 0 on success
 
 // Pipe chains — short-circuit on failure
-let count = $(cat /var/log/syslog) | $(grep error) | $(wc -l);
+let count = $(cat /var/log/syslog | grep error | wc -l);
 ```
 
-#### Error Handling
+#### Try expression
 
 ```stash
 let content = try fs.readFile("/etc/missing.conf") ?? "fallback config";
+```
+
+#### Try / Catch / Finally
+
+```stash
+try {
+  let data = fs.readFile("/etc/app.conf");
+  let config = json.parse(data);
+} catch (e) {
+  log.error("Config failed: " + e.message);
+} finally {
+  log.info("Config loading complete");
+}
 ```
 
 #### Functions & Lambdas
 
 ```stash
 fn add(a: int, b: int) -> int {
-    return a + b;
+  return a + b;
 }
 
 let double = (x) => x * 2;
@@ -180,22 +138,9 @@ struct App : Deployable {
   }
 }
 
-let app = App { name: "web-api", version: "2.1.0" };
+let app = App { name: "web-api", version: @v2.1.0 };
 if (app is Deployable) {
   app.deploy("prod-server");
-}
-```
-
-#### Try / Catch / Finally
-
-```stash
-try {
-  let data = fs.readFile("/etc/app.conf");
-  let config = json.parse(data);
-} catch (e) {
-  log.error("Config failed: " + e.message);
-} finally {
-  log.info("Config loading complete");
 }
 ```
 
@@ -228,26 +173,26 @@ let extended = [...base, 4, 5];  // [1, 2, 3, 4, 5]
 #### Rich Literals
 
 ```stash
-let timeout = 30s;            // Duration
-let maxSize = 1.5GB;          // ByteSize
-let appVersion = v2.1.0;      // SemVer
-let subnet = 192.168.1.0/24;  // IP Address
-let perms = 0o755;             // Octal number
-let mask = 0xFF00;             // Hex number
-let flags = 0b1010_0101;       // Binary with separators
+let timeout     = 30s;              // Duration
+let maxSize     = 1.5GB;            // ByteSize
+let appVersion  = @v2.1.0;          // SemVer
+let subnet      = @192.168.1.0/24;  // IP Address
+let perms       = 0o755;            // Octal number
+let mask        = 0xFF00;           // Hex number
+let flags       = 0b1010_0101;      // Binary with separators
 ```
 
 #### Retry Blocks
 
 ```stash
-retry (maxAttempts: 3, delay: 2s, backoff: "exponential") {
+retry (maxAttempts: 3, delay: 2s, backoff: Backoff.Exponential) {
   $!(curl -f https://api.example.com/deploy);
 }
 ```
 
 #### Elevate Blocks
 
-Escalate privileges for a scoped block — uses `sudo` on Linux/macOS and `runas` on Windows.
+Escalate privileges for a scoped block — uses `sudo` on Linux/macOS and `gsudo` on Windows.
 
 ```stash
 elevate {
@@ -262,7 +207,7 @@ Add methods to any existing type without inheritance.
 
 ```stash
 extend string {
-  fn shout(self) -> string {
+  fn shout() -> string {
     return str.upper(self) + "!!!";
   }
 }
@@ -420,35 +365,53 @@ See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 ## Performance
 
-Stash's .NET-backed interpreter outperforms Bash across the board. Both languages were benchmarked with equivalent scripts performing the same operations — identical algorithms, identical iteration counts, identical checksums. The numbers represent the median of 3 separate runs for each benchmark.
+**What each benchmark tests**
 
-| Benchmark                 | What it tests                                            |    Stash |      Bash |   Speedup |
-| ------------------------- | -------------------------------------------------------- | -------: | --------: | --------: |
-| **Algorithms**            | Recursion, sorting, searching, struct usage              | 2,130 ms | 10,610 ms |  **5.0×** |
-| **Function Calls**        | Dispatch overhead across 0–4 argument arities            | 1,944 ms |  3,712 ms |  **1.9×** |
-| **Expression Throughput** | Dense arithmetic, 70 variables, string interpolation     | 1,375 ms |  4,865 ms |  **3.5×** |
-| **Built-in Functions**    | 13 stdlib calls per iteration (math, string, conversion) |   830 ms | 24,000 ms | **28.9×** |
-| **Scope Lookup**          | Variable resolution across 5-level nested closures       | 1,599 ms |  3,125 ms |  **2.0×** |
+| Benchmark                 | What it tests                                                                                  |
+| ------------------------- | ---------------------------------------------------------------------------------------------- |
+| **Algorithms**            | Recursion (fib 26), bubble sort (1,000 elements), binary search (10,000 lookups), struct usage |
+| **Function Calls**        | 600,000 calls across 0–4 argument arities + a compute function                                 |
+| **Expression Throughput** | Dense arithmetic over 70 variables, string interpolation, nested math                          |
+| **Built-in Functions**    | 2,600,000 stdlib calls — math, string, and conversion functions                                |
+| **Scope Lookup**          | Variable resolution across 5-level nested closures (100,000 iterations)                        |
 
-> Measured on the same machine, same workload. Full scripts in [`benchmarks/`](benchmarks/).
->
-> Example scripts are in [`examples/`](examples/).
+**Results**
+
+| Benchmark                 |    Stash |      Bash |   Python | Node.js |     Ruby |   Perl |     Lua |
+| ------------------------- | -------: | --------: | -------: | ------: | -------: | -----: | ------: |
+| **Algorithms**            | 1,895 ms | 10,649 ms |    86 ms |    6 ms |    52 ms | 209 ms |   34 ms |
+| **Function Calls**        | 1,824 ms |  3,573 ms |    77 ms |    3 ms |    17 ms | 102 ms |   13 ms |
+| **Expression Throughput** | 1,177 ms |  5,001 ms |   188 ms |   13 ms |   187 ms | 132 ms |   85 ms |
+| **Built-in Functions**    |   737 ms | 23,478 ms |   294 ms |   27 ms |   343 ms | 321 ms |  208 ms |
+| **Scope Lookup**          | 1,487 ms |  3,297 ms |   104 ms |    4 ms |   134 ms | 261 ms |   58 ms |
+|                           |      --- |       --- |      --- |     --- |      --- |    --- |     --- |
+| **Average**               | 1,424 ms |  9.199 ms | 149,8 ms | 10.6 ms | 146.6 ms | 205 ms | 77.4 ms |
+
+
+> Measured on the same machine, same workload, identical algorithms and iteration counts across all languages. Median of 3 runs.
+
+Stash dramatically outperforms Bash, the language it most directly replaces for sysadmin scripting, on every benchmark. Node.js (V8 JIT), Lua, CPython 3, Ruby, and Perl use fundamentally different execution models (JIT compilation or bytecode pre-compilation) and are included for cross-language context rather than as direct competitors. Stash is a direct tree-walk interpreter with no JIT.
+
+
+Node.js uses V8's JIT compiler, compiling hot paths to native machine code. Lua uses a register-based bytecode VM. Python 3, Ruby, and Perl compile to stack-based bytecode before interpreting. Stash and Bash are direct interpreters. Despite this, Stash outperforms Bash **2–32×** on every workload while providing structured data types, modules, and a full standard library that Bash lacks.
+
+Full benchmark scripts in [`benchmarks/`](benchmarks/).
 
 ---
 
 ## Documentation
 
-| Document                                                                           | Description                                         |
-| ---------------------------------------------------------------------------------- | --------------------------------------------------- |
-| [Language Specification](docs/Stash%20—%20Language%20Specification.md)             | Complete syntax, type system, and language design   |
-| [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md)   | All built-in functions and namespaces               |
-| [Language Server Protocol](docs/LSP%20—%20Language%20Server%20Protocol.md)         | LSP architecture and supported features             |
-| [Debug Adapter Protocol](docs/DAP%20—%20Debug%20Adapter%20Protocol.md)             | DAP implementation and debugging support            |
-| [Testing Infrastructure](docs/TAP%20—%20Testing%20Infrastructure.md)               | Built-in test runner and TAP output                 |
-| [Templating Engine](docs/TPL%20—%20Templating%20Engine.md)                         | Jinja2-style template rendering and `tpl` namespace |
-| [Package Registry](docs/Registry%20—%20Package%20Registry.md)                      | Self-hosted registry server and CLI integration     |
-| [Package Manager CLI](docs/PKG%20—%20Package%20Manager%20CLI.md)                   | Package manager commands and manifest format        |
-| [Browser Playground](docs/Playground%20—%20Browser%20Playground.md)                | Interactive WASM-based playground                   |
+| Document                                                                         | Description                                         |
+| -------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [Language Specification](docs/Stash%20—%20Language%20Specification.md)           | Complete syntax, type system, and language design   |
+| [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md) | All built-in functions and namespaces               |
+| [Language Server Protocol](docs/LSP%20—%20Language%20Server%20Protocol.md)       | LSP architecture and supported features             |
+| [Debug Adapter Protocol](docs/DAP%20—%20Debug%20Adapter%20Protocol.md)           | DAP implementation and debugging support            |
+| [Testing Infrastructure](docs/TAP%20—%20Testing%20Infrastructure.md)             | Built-in test runner and TAP output                 |
+| [Templating Engine](docs/TPL%20—%20Templating%20Engine.md)                       | Jinja2-style template rendering and `tpl` namespace |
+| [Package Registry](docs/Registry%20—%20Package%20Registry.md)                    | Self-hosted registry server and CLI integration     |
+| [Package Manager CLI](docs/PKG%20—%20Package%20Manager%20CLI.md)                 | Package manager commands and manifest format        |
+| [Browser Playground](docs/Playground%20—%20Browser%20Playground.md)              | Interactive WASM-based playground                   |
 
 ---
 
