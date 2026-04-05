@@ -1,15 +1,10 @@
 namespace Stash.Interpreting.Exceptions;
 
-using System;
-
 /// <summary>
-/// Thrown when script execution is cancelled via a <see cref="CancellationToken"/>.
-/// The host application can catch this to handle graceful cancellation
-/// (e.g., when an HTTP request is aborted or a timeout fires).
+/// Thrown when script execution is cancelled via a CancellationToken.
+/// Derives from the shared base type in Stash.Core.
 /// </summary>
-public class ScriptCancelledException : Exception
+public class ScriptCancelledException : Stash.Runtime.ScriptCancelledException
 {
-    public ScriptCancelledException() : base("Script execution was cancelled.")
-    {
-    }
+    public ScriptCancelledException() : base() { }
 }

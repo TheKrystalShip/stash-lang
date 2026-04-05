@@ -1,16 +1,21 @@
 namespace Stash.Interpreting;
 
 using System;
-
 using System.IO;
 using System.Threading;
 using System.Collections.Generic;
+using Stash.Bytecode;
+using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib;
 using Stash.Interpreting.Exceptions;
+using ExitException = Stash.Runtime.ExitException;
+using ScriptCancelledException = Stash.Runtime.ScriptCancelledException;
+using StepLimitExceededException = Stash.Runtime.StepLimitExceededException;
 
 /// <summary>
 /// High-level API for embedding the Stash scripting language in a C# application.
@@ -31,6 +36,13 @@ public class StashEngine
 {
     /// <summary>The underlying interpreter instance that executes Stash code.</summary>
     private readonly Interpreter _interpreter;
+    private readonly StashCapabilities _capabilities;
+    private VirtualMachine? _vm;
+
+    /// <summary>
+    /// Gets or sets the execution backend. Defaults to <see cref="ExecutionBackend.Bytecode"/>.
+    /// </summary>
+    public ExecutionBackend Backend { get; set; } = ExecutionBackend.Bytecode;
 
     /// <summary>
     /// Creates a new Stash scripting engine with all capabilities enabled.
@@ -45,6 +57,7 @@ public class StashEngine
     /// </summary>
     public StashEngine(StashCapabilities capabilities)
     {
+        _capabilities = capabilities;
         _interpreter = new Interpreter(capabilities);
         _interpreter.EmbeddedMode = true;
     }
@@ -104,12 +117,94 @@ public class StashEngine
     /// <summary>
     /// Gets the number of statements executed since the last reset.
     /// </summary>
-    public long StepCount => _interpreter.StepCount;
+    public long StepCount => Backend == ExecutionBackend.Bytecode && _vm is not null
+        ? _vm.StepCount
+        : _interpreter.StepCount;
 
     /// <summary>
     /// Provides direct access to the underlying interpreter for advanced scenarios.
     /// </summary>
     public Interpreter Interpreter => _interpreter;
+
+    /// <summary>Creates and configures the bytecode VM with built-in globals.</summary>
+    private VirtualMachine EnsureVM()
+    {
+        if (_vm is not null)
+            return _vm;
+
+        var vmGlobals = new Dictionary<string, object?>();
+
+        // Register global functions (capability-filtered)
+        var globalDef = StdlibDefinitions.GetGlobals(_capabilities);
+        foreach (var (name, fn) in globalDef.RuntimeFunctions)
+            vmGlobals[name] = fn;
+
+        // Register namespace definitions, filtering by capabilities
+        foreach (var nsDef in StdlibDefinitions.Namespaces)
+        {
+            if (nsDef.RequiredCapability != StashCapabilities.None &&
+                !_capabilities.HasFlag(nsDef.RequiredCapability))
+                continue;
+
+            vmGlobals[nsDef.Name] = nsDef.Namespace;
+        }
+
+        // Register built-in types for retry blocks
+        vmGlobals["Backoff"] = new StashEnum("Backoff", new List<string> { "Fixed", "Linear", "Exponential" });
+        vmGlobals["RetryOptions"] = new StashStruct("RetryOptions",
+            new List<string> { "delay", "backoff", "maxDelay", "jitter", "timeout", "on" },
+            new Dictionary<string, IStashCallable>());
+
+        _vm = new VirtualMachine(vmGlobals, CancellationToken);
+        _vm.Output = Output;
+        _vm.ErrorOutput = ErrorOutput;
+        _vm.Input = Input;
+        _vm.StepLimit = StepLimit;
+        _vm.EmbeddedMode = true;
+        _vm.ModuleLoader = LoadModuleForVM;
+        return _vm;
+    }
+
+    /// <summary>Module loading callback for the bytecode VM.</summary>
+    private Chunk LoadModuleForVM(string modulePath, string? currentFile)
+    {
+        string? basePath = currentFile is not null ? Path.GetDirectoryName(currentFile) : null;
+        string fullPath;
+
+        if (Path.IsPathRooted(modulePath))
+        {
+            fullPath = modulePath;
+        }
+        else if (basePath is not null)
+        {
+            fullPath = Path.GetFullPath(Path.Combine(basePath, modulePath));
+        }
+        else
+        {
+            fullPath = Path.GetFullPath(modulePath);
+        }
+
+        string? resolvedPath = ModuleResolver.ResolveFilePath(fullPath);
+        if (resolvedPath is null && basePath is not null && ModuleResolver.IsBareSpecifier(modulePath))
+            resolvedPath = ModuleResolver.ResolvePackageImport(modulePath, basePath);
+
+        if (resolvedPath is null)
+            throw new RuntimeError($"Cannot find module '{modulePath}'.", null);
+
+        string source = File.ReadAllText(resolvedPath);
+        var lexer = new Lexer(source, resolvedPath);
+        var tokens = lexer.ScanTokens();
+        if (lexer.Errors.Count > 0)
+            throw new RuntimeError($"Lex errors in module '{resolvedPath}': {lexer.Errors[0]}", null);
+
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        if (parser.Errors.Count > 0)
+            throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", null);
+
+        _interpreter.ResolveStatements(stmts);
+        return Compiler.Compile(stmts);
+    }
 
     /// <summary>
     /// Executes Stash source code as statements (e.g., variable declarations, function
@@ -126,6 +221,77 @@ public class StashEngine
             return new ExecutionResult(null, errors);
         }
 
+        if (Backend == ExecutionBackend.Bytecode)
+            return RunBytecode(statements);
+
+        return RunTreeWalk(statements);
+    }
+
+    private ExecutionResult RunBytecode(List<Stmt> statements)
+    {
+        try
+        {
+            _interpreter.ResolveStatements(statements);
+            Chunk chunk = Compiler.Compile(statements);
+            var vm = EnsureVM();
+            vm.StepLimit = StepLimit;
+            vm.Output = Output;
+            vm.ErrorOutput = ErrorOutput;
+            vm.Input = Input;
+            object? result = vm.Execute(chunk);
+            return new ExecutionResult(result, []);
+        }
+        catch (ExitException ex)
+        {
+            return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
+        }
+        catch (OperationCanceledException)
+        {
+            return new ExecutionResult(null, ["Script execution was cancelled."]);
+        }
+        catch (Stash.Runtime.StepLimitExceededException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+        catch (RuntimeError ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+    }
+
+    private ExecutionResult RunBytecodeResolved(List<Stmt> statements)
+    {
+        try
+        {
+            Chunk chunk = Compiler.Compile(statements);
+            var vm = EnsureVM();
+            vm.StepLimit = StepLimit;
+            vm.Output = Output;
+            vm.ErrorOutput = ErrorOutput;
+            vm.Input = Input;
+            object? result = vm.Execute(chunk);
+            return new ExecutionResult(result, []);
+        }
+        catch (ExitException ex)
+        {
+            return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
+        }
+        catch (OperationCanceledException)
+        {
+            return new ExecutionResult(null, ["Script execution was cancelled."]);
+        }
+        catch (Stash.Runtime.StepLimitExceededException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+        catch (RuntimeError ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+    }
+
+    private ExecutionResult RunTreeWalk(List<Stmt> statements)
+    {
         try
         {
             _interpreter.Interpret(statements);
@@ -173,6 +339,45 @@ public class StashEngine
             return new ExecutionResult(null, parser.Errors);
         }
 
+        if (Backend == ExecutionBackend.Bytecode)
+            return EvaluateBytecode(expr);
+
+        return EvaluateTreeWalk(expr);
+    }
+
+    private ExecutionResult EvaluateBytecode(Expr expr)
+    {
+        try
+        {
+            Chunk chunk = Compiler.CompileExpression(expr);
+            var vm = EnsureVM();
+            vm.StepLimit = StepLimit;
+            vm.Output = Output;
+            vm.ErrorOutput = ErrorOutput;
+            vm.Input = Input;
+            object? result = vm.Execute(chunk);
+            return new ExecutionResult(result, []);
+        }
+        catch (ExitException ex)
+        {
+            return new ExecutionResult(null, [$"Script exited with code {ex.ExitCode}"]);
+        }
+        catch (OperationCanceledException)
+        {
+            return new ExecutionResult(null, ["Script execution was cancelled."]);
+        }
+        catch (Stash.Runtime.StepLimitExceededException ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+        catch (RuntimeError ex)
+        {
+            return new ExecutionResult(null, [ex.Message]);
+        }
+    }
+
+    private ExecutionResult EvaluateTreeWalk(Expr expr)
+    {
         try
         {
             var value = _interpreter.Interpret(expr);
@@ -242,6 +447,9 @@ public class StashEngine
             script.IsResolved = true;
         }
 
+        if (Backend == ExecutionBackend.Bytecode)
+            return RunBytecodeResolved(script.Statements);
+
         try
         {
             _interpreter.InterpretResolved(script.Statements);
@@ -281,6 +489,11 @@ public class StashEngine
 
         string source = File.ReadAllText(fullPath);
         _interpreter.CurrentFile = fullPath;
+        if (Backend == ExecutionBackend.Bytecode)
+        {
+            var vm = EnsureVM();
+            vm.CurrentFile = fullPath;
+        }
         return Run(source);
     }
 

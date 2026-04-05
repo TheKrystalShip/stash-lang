@@ -1,18 +1,10 @@
 namespace Stash.Interpreting.Exceptions;
 
-using System;
-
 /// <summary>
 /// Thrown when a Stash script calls process.exit() in embedded mode.
-/// The host application can catch this to handle script-requested exits
-/// without terminating the entire process.
+/// Derives from the shared base type in Stash.Core.
 /// </summary>
-public class ExitException : Exception
+public class ExitException : Stash.Runtime.ExitException
 {
-    public int ExitCode { get; }
-
-    public ExitException(int exitCode) : base($"Script exited with code {exitCode}")
-    {
-        ExitCode = exitCode;
-    }
+    public ExitException(int exitCode) : base(exitCode) { }
 }

@@ -81,6 +81,20 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         return compiler._builder.Build();
     }
 
+    /// <summary>
+    /// Compiles a single expression into a Chunk that returns the expression's value.
+    /// Used by StashEngine.Evaluate() for the bytecode backend.
+    /// </summary>
+    public static Chunk CompileExpression(Expr expression)
+    {
+        var compiler = new Compiler(null, null);
+        compiler.CompileExpr(expression);
+        compiler._builder.Emit(OpCode.Return);
+        compiler._builder.LocalCount = compiler._scope.LocalCount;
+        compiler._builder.LocalNames = compiler._scope.GetLocalNames();
+        return compiler._builder.Build();
+    }
+
     // ---- Core Helpers ----
 
     private void CompileStmt(Stmt stmt) => stmt.Accept(this);
@@ -330,6 +344,21 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         _scope.MarkInitialized(slot);
         // The initializer value on the stack IS the local — no separate store needed.
+
+        // At top-level, also seed globals so that OP_LOAD_GLOBAL (emitted because
+        // the Resolver leaves top-level variables unresolved at distance=-1) can
+        // find the initial value.
+        if (_enclosing is null)
+        {
+            int resolvedSlot = _scope.ResolveLocal(stmt.Name.Lexeme);
+            if (resolvedSlot >= 0)
+            {
+                _builder.Emit(OpCode.LoadLocal, (byte)resolvedSlot);
+                ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
+                _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            }
+        }
+
         return null;
     }
 
@@ -340,6 +369,21 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: true);
         CompileExpr(stmt.Initializer);
         _scope.MarkInitialized(slot);
+
+        // At top-level, also seed globals so that OP_LOAD_GLOBAL (emitted because
+        // the Resolver leaves top-level variables unresolved at distance=-1) can
+        // find the initial value.
+        if (_enclosing is null)
+        {
+            int resolvedSlot = _scope.ResolveLocal(stmt.Name.Lexeme);
+            if (resolvedSlot >= 0)
+            {
+                _builder.Emit(OpCode.LoadLocal, (byte)resolvedSlot);
+                ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
+                _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            }
+        }
+
         return null;
     }
 
@@ -602,7 +646,14 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             stmt.IsAsync,
             stmt.HasRestParam);
 
-        // OP_CLOSURE places the closure on the stack at the correct slot — no store needed
+        // Dup + StoreGlobal: needed because references use LoadGlobal (distance=-1 at top level)
+        // and harmless in local scopes where LoadLocal is used instead
+        _builder.Emit(OpCode.Dup);
+        {
+            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+        }
+
         return null;
     }
 

@@ -13,6 +13,7 @@
     <ProjectReference Include="..\Stash.Core\Stash.Core.csproj" />
     <ProjectReference Include="..\Stash.Stdlib\Stash.Stdlib.csproj" />
     <ProjectReference Include="..\Stash.Tpl\Stash.Tpl.csproj" />
+    <ProjectReference Include="..\Stash.Bytecode\Stash.Bytecode.csproj" />
   </ItemGroup>
 
   <ItemGroup>

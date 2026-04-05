@@ -1,18 +1,10 @@
 namespace Stash.Interpreting.Exceptions;
 
-using System;
-
 /// <summary>
 /// Thrown when a script exceeds the configured maximum number of execution steps.
-/// Prevents runaway scripts from consuming unbounded resources in embedded scenarios.
+/// Derives from the shared base type in Stash.Core.
 /// </summary>
-public class StepLimitExceededException : Exception
+public class StepLimitExceededException : Stash.Runtime.StepLimitExceededException
 {
-    /// <summary>The step limit that was exceeded.</summary>
-    public long StepLimit { get; }
-
-    public StepLimitExceededException(long stepLimit) : base($"Script exceeded the maximum step limit of {stepLimit}.")
-    {
-        StepLimit = stepLimit;
-    }
+    public StepLimitExceededException(long stepLimit) : base(stepLimit) { }
 }

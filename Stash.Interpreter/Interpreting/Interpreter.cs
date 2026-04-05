@@ -14,6 +14,8 @@ using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Interpreting.Exceptions;
 using Stash.Stdlib;
+using ScriptCancelledException = Stash.Interpreting.Exceptions.ScriptCancelledException;
+using StepLimitExceededException = Stash.Interpreting.Exceptions.StepLimitExceededException;
 
 /// <summary>
 /// Tree-walk interpreter that evaluates a Stash AST by visiting each expression node

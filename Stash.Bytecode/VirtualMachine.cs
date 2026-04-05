@@ -98,11 +98,41 @@ public sealed class VirtualMachine
         }
     }
 
+    /// <summary>
+    /// When true, sys.exit() throws ExitException instead of terminating the process.
+    /// Must be set by the host (e.g., StashEngine) for embedded scenarios.
+    /// </summary>
+    public bool EmbeddedMode
+    {
+        get => _context.EmbeddedMode;
+        set => _context.EmbeddedMode = value;
+    }
+
     /// <summary>Thread ID for debug hooks. Defaults to 1 (main thread).</summary>
     public int DebugThreadId
     {
         get => _debugThreadId;
         set => _debugThreadId = value;
+    }
+
+    /// <summary>Maximum number of operations before throwing StepLimitExceededException. 0 = unlimited.</summary>
+    public long StepLimit { get; set; }
+
+    /// <summary>Number of operations executed since the last Execute call.</summary>
+    public long StepCount { get; private set; }
+
+    /// <summary>Gets or sets the current file path, forwarded to VMContext for module resolution.</summary>
+    public string? CurrentFile
+    {
+        get => _context.CurrentFile;
+        set => _context.CurrentFile = value;
+    }
+
+    /// <summary>Script arguments accessible via the args namespace.</summary>
+    public string[]? ScriptArgs
+    {
+        get => _context.ScriptArgs;
+        set => _context.ScriptArgs = value;
     }
 
     /// <summary>Current call stack depth (for stepping).</summary>
@@ -116,6 +146,7 @@ public sealed class VirtualMachine
     {
         _sp = 0;
         _frameCount = 0;
+        StepCount = 0;
         _exceptionHandlers.Clear();
         _openUpvalues.Clear();
         _debugCallStack.Clear();
@@ -124,6 +155,40 @@ public sealed class VirtualMachine
         if (_debugger is not null)
             return RunDebug();
         return Run();
+    }
+
+    /// <summary>
+    /// Executes a chunk in REPL mode. After execution, top-level local variables
+    /// are promoted to globals so they persist across subsequent REPL inputs.
+    /// </summary>
+    public object? ExecuteRepl(Chunk chunk)
+    {
+        _sp = 0;
+        _frameCount = 0;
+        StepCount = 0;
+        _exceptionHandlers.Clear();
+        _openUpvalues.Clear();
+        _debugCallStack.Clear();
+        PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
+
+        object? result;
+        if (_debugger is not null)
+            result = RunDebug();
+        else
+            result = Run();
+
+        // Promote top-level locals to globals for next REPL input
+        if (chunk.LocalNames is not null)
+        {
+            for (int i = 0; i < chunk.LocalNames.Length; i++)
+            {
+                string? name = chunk.LocalNames[i];
+                if (!string.IsNullOrEmpty(name) && name[0] != '<')
+                    _globals[name] = _stack[i];
+            }
+        }
+
+        return result;
     }
 
     // ---- Frame Management ----
@@ -623,6 +688,8 @@ public sealed class VirtualMachine
                     frame.IP -= offset;
                     if (_ct.IsCancellationRequested)
                         throw new OperationCanceledException(_ct);
+                    if (StepLimit > 0 && ++StepCount >= StepLimit)
+                        throw new Stash.Runtime.StepLimitExceededException(StepLimit);
                     if (debugger is not null && debugger.IsPauseRequested)
                         lastDebugLine = -1; // Force debug check on next iteration
                     break;
@@ -637,6 +704,9 @@ public sealed class VirtualMachine
                     object? callee = _stack[_sp - argc - 1];
                     int prevFrameCount = _frameCount;
                     CallValue(callee, argc, callSpan);
+
+                    if (StepLimit > 0 && ++StepCount >= StepLimit)
+                        throw new Stash.Runtime.StepLimitExceededException(StepLimit);
 
                     // Debug: track function entry for VM function calls
                     if (debugger is not null && _frameCount > prevFrameCount)

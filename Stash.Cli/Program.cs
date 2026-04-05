@@ -23,12 +23,15 @@
 
 using System;
 using System.Collections.Generic;
+using Stash.Bytecode;
 using Stash.Debugging;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Interpreting;
 using Stash.Runtime;
+using Stash.Runtime.Types;
+using Stash.Stdlib;
 using Stash.Tap;
 
 namespace Stash;
@@ -53,6 +56,7 @@ public class Program
         bool test = false;
         bool testList = false;
         string? testFilter = null;
+        string? backendArg = null;
         string? scriptPath = null;
         int scriptArgStart = -1;
 
@@ -88,6 +92,10 @@ public class Program
             {
                 testFilter = args[i]["--test-filter=".Length..];
             }
+            else if (args[i].StartsWith("--backend=") && scriptPath is null && commandString is null)
+            {
+                backendArg = args[i]["--backend=".Length..];
+            }
             else if (args[i] == "--" && scriptPath is null && commandString is null)
             {
                 // Everything after -- becomes script args (for stdin piping)
@@ -110,6 +118,8 @@ public class Program
             ? args[scriptArgStart..]
             : Array.Empty<string>();
 
+        ExecutionBackend backend = GetBackend(backendArg);
+
         // Register cleanup handlers for graceful shutdown
         Console.CancelKeyPress += (_, e) =>
         {
@@ -131,7 +141,7 @@ public class Program
                 System.Environment.Exit(64);
                 return;
             }
-            RunSource(commandString, "<command>", scriptArgs);
+            RunSource(commandString, "<command>", scriptArgs, backend);
             return;
         }
 
@@ -145,7 +155,7 @@ public class Program
                 return;
             }
             string source = Console.In.ReadToEnd();
-            RunSource(source, "<stdin>", scriptArgs);
+            RunSource(source, "<stdin>", scriptArgs, backend);
             return;
         }
 
@@ -181,20 +191,21 @@ public class Program
             }
             else
             {
-                RunFile(scriptPath, scriptArgs);
+                RunFile(scriptPath, scriptArgs, backend);
             }
             return;
         }
 
         // Mode 5: Interactive REPL
-        RunRepl();
+        RunRepl(backend);
     }
 
     /// <summary>Executes Stash source code from a string (used by -c and stdin piping).</summary>
     /// <param name="source">The source code to execute.</param>
     /// <param name="sourceName">Diagnostic name for the source (e.g., "&lt;command&gt;" or "&lt;stdin&gt;").</param>
     /// <param name="scriptArgs">Arguments to pass to the script.</param>
-    private static void RunSource(string source, string sourceName, string[] scriptArgs)
+    /// <param name="backend">Execution backend to use.</param>
+    private static void RunSource(string source, string sourceName, string[] scriptArgs, ExecutionBackend backend = ExecutionBackend.Bytecode)
     {
         // Stage 1: Lex
         var lexer = new Lexer(source, sourceName);
@@ -224,30 +235,69 @@ public class Program
             return;
         }
 
-        // Stage 3: Interpret
-        var interpreter = new Interpreter();
-        _activeInterpreter = interpreter;
-        interpreter.SetScriptArgs(scriptArgs);
-        try
+        // Stage 3: Execute
+        if (backend == ExecutionBackend.Bytecode)
         {
-            interpreter.Interpret(statements);
+            var interpreter = new Interpreter();
+            _activeInterpreter = interpreter;
+            interpreter.SetScriptArgs(scriptArgs);
+            try
+            {
+                interpreter.ResolveStatements(statements);
+                Chunk chunk = Compiler.Compile(statements);
+                var globals = CreateVMGlobals();
+                var vm = new VirtualMachine(globals);
+                vm.Output = Console.Out;
+                vm.ErrorOutput = Console.Error;
+                vm.Input = Console.In;
+                vm.ScriptArgs = scriptArgs;
+                vm.ModuleLoader = (modulePath, currentFile) =>
+                    LoadModuleForVM(modulePath, currentFile, interpreter);
+                vm.Execute(chunk);
+            }
+            catch (RuntimeError ex)
+            {
+                PrintRuntimeError(ex);
+                System.Environment.Exit(70);
+            }
+            catch (OperationCanceledException)
+            {
+                Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
+                System.Environment.Exit(70);
+            }
+            finally
+            {
+                interpreter.CleanupTrackedProcesses();
+                _activeInterpreter = null;
+            }
         }
-        catch (RuntimeError ex)
+        else
         {
-            PrintRuntimeError(ex);
-            System.Environment.Exit(70);
-        }
-        finally
-        {
-            interpreter.CleanupTrackedProcesses();
-            _activeInterpreter = null;
+            var interpreter = new Interpreter();
+            _activeInterpreter = interpreter;
+            interpreter.SetScriptArgs(scriptArgs);
+            try
+            {
+                interpreter.Interpret(statements);
+            }
+            catch (RuntimeError ex)
+            {
+                PrintRuntimeError(ex);
+                System.Environment.Exit(70);
+            }
+            finally
+            {
+                interpreter.CleanupTrackedProcesses();
+                _activeInterpreter = null;
+            }
         }
     }
 
     /// <summary>Executes a Stash script file.</summary>
     /// <param name="path">Path to the script file.</param>
     /// <param name="scriptArgs">Arguments to pass to the script.</param>
-    private static void RunFile(string path, string[] scriptArgs)
+    /// <param name="backend">Execution backend to use.</param>
+    private static void RunFile(string path, string[] scriptArgs, ExecutionBackend backend = ExecutionBackend.Bytecode)
     {
         if (!System.IO.File.Exists(path))
         {
@@ -286,24 +336,64 @@ public class Program
             return;
         }
 
-        // Stage 3: Interpret
-        var interpreter = new Interpreter();
-        _activeInterpreter = interpreter;
-        interpreter.CurrentFile = path;
-        interpreter.SetScriptArgs(scriptArgs);
-        try
+        // Stage 3: Execute
+        if (backend == ExecutionBackend.Bytecode)
         {
-            interpreter.Interpret(statements);
+            var interpreter = new Interpreter();
+            _activeInterpreter = interpreter;
+            interpreter.CurrentFile = path;
+            interpreter.SetScriptArgs(scriptArgs);
+            try
+            {
+                interpreter.ResolveStatements(statements);
+                Chunk chunk = Compiler.Compile(statements);
+                var globals = CreateVMGlobals();
+                var vm = new VirtualMachine(globals);
+                vm.CurrentFile = path;
+                vm.Output = Console.Out;
+                vm.ErrorOutput = Console.Error;
+                vm.Input = Console.In;
+                vm.ScriptArgs = scriptArgs;
+                vm.ModuleLoader = (modulePath, currentFile) =>
+                    LoadModuleForVM(modulePath, currentFile, interpreter);
+                vm.Execute(chunk);
+            }
+            catch (RuntimeError ex)
+            {
+                PrintRuntimeError(ex);
+                System.Environment.Exit(70);
+            }
+            catch (OperationCanceledException)
+            {
+                Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
+                System.Environment.Exit(70);
+            }
+            finally
+            {
+                interpreter.CleanupTrackedProcesses();
+                _activeInterpreter = null;
+            }
         }
-        catch (RuntimeError ex)
+        else
         {
-            PrintRuntimeError(ex);
-            System.Environment.Exit(70);
-        }
-        finally
-        {
-            interpreter.CleanupTrackedProcesses();
-            _activeInterpreter = null;
+            var interpreter = new Interpreter();
+            _activeInterpreter = interpreter;
+            interpreter.CurrentFile = path;
+            interpreter.SetScriptArgs(scriptArgs);
+            try
+            {
+                interpreter.Interpret(statements);
+            }
+            catch (RuntimeError ex)
+            {
+                PrintRuntimeError(ex);
+                System.Environment.Exit(70);
+            }
+            finally
+            {
+                interpreter.CleanupTrackedProcesses();
+                _activeInterpreter = null;
+            }
         }
     }
 
@@ -554,16 +644,28 @@ public class Program
     }
 
     /// <summary>Starts the interactive REPL.</summary>
-    private static void RunRepl()
+    private static void RunRepl(ExecutionBackend backend = ExecutionBackend.Bytecode)
     {
         Console.WriteLine("Stash v0.5 — Type statements or expressions, or 'exit' to quit.");
 
-        // A single Interpreter instance is reused across all REPL iterations.
-        // The interpreter holds a variable environment that persists across lines,
-        // so reusing the instance is essential.
+        // A single Interpreter instance is reused across all REPL iterations
+        // (for resolution and tree-walk fallback).
         var interpreter = new Interpreter();
         _activeInterpreter = interpreter;
         var editor = new LineEditor();
+
+        // For bytecode mode, create a persistent VM with shared globals
+        VirtualMachine? vm = null;
+        if (backend == ExecutionBackend.Bytecode)
+        {
+            var globals = CreateVMGlobals();
+            vm = new VirtualMachine(globals);
+            vm.Output = Console.Out;
+            vm.ErrorOutput = Console.Error;
+            vm.Input = Console.In;
+            vm.ModuleLoader = (modulePath, currentFile) =>
+                LoadModuleForVM(modulePath, currentFile, interpreter);
+        }
 
         try
         {
@@ -597,8 +699,6 @@ public class Program
                 }
 
                 // Determine whether the input looks like statements or a bare expression.
-                // If it contains a semicolon, brace, or starts with a keyword that begins
-                // a statement/declaration, parse as a program; otherwise parse as expression.
                 bool isStatementMode = LooksLikeStatements(tokens);
 
                 if (isStatementMode)
@@ -619,7 +719,16 @@ public class Program
 
                     try
                     {
-                        interpreter.Interpret(statements);
+                        if (backend == ExecutionBackend.Bytecode && vm is not null)
+                        {
+                            interpreter.ResolveStatements(statements);
+                            Chunk chunk = Compiler.Compile(statements);
+                            vm.ExecuteRepl(chunk);
+                        }
+                        else
+                        {
+                            interpreter.Interpret(statements);
+                        }
                     }
                     catch (RuntimeError ex)
                     {
@@ -628,7 +737,7 @@ public class Program
                 }
                 else
                 {
-                    // --- Expression mode (backward-compatible) ---
+                    // --- Expression mode ---
                     var parser = new Parser(tokens);
                     Expr expr = parser.Parse();
 
@@ -644,10 +753,22 @@ public class Program
 
                     try
                     {
-                        object? result = interpreter.Interpret(expr);
-                        if (result is not null)
+                        if (backend == ExecutionBackend.Bytecode && vm is not null)
                         {
-                            Console.WriteLine(interpreter.Stringify(result));
+                            Chunk chunk = Compiler.CompileExpression(expr);
+                            object? result = vm.Execute(chunk);
+                            if (result is not null)
+                            {
+                                Console.WriteLine(interpreter.Stringify(result));
+                            }
+                        }
+                        else
+                        {
+                            object? result = interpreter.Interpret(expr);
+                            if (result is not null)
+                            {
+                                Console.WriteLine(interpreter.Stringify(result));
+                            }
                         }
                     }
                     catch (RuntimeError ex)
@@ -662,6 +783,84 @@ public class Program
             interpreter.CleanupTrackedProcesses();
             _activeInterpreter = null;
         }
+    }
+
+    /// <summary>
+    /// Determines the execution backend from CLI argument or STASH_BACKEND environment variable.
+    /// Defaults to Bytecode if neither is set.
+    /// </summary>
+    private static ExecutionBackend GetBackend(string? backendArg)
+    {
+        string? value = backendArg ?? System.Environment.GetEnvironmentVariable("STASH_BACKEND");
+        if (value is null)
+            return ExecutionBackend.Bytecode;
+        return value.ToLowerInvariant() switch
+        {
+            "treewalk" or "tree-walk" or "tw" => ExecutionBackend.TreeWalk,
+            "bytecode" or "vm" or "bc" => ExecutionBackend.Bytecode,
+            _ => ExecutionBackend.Bytecode,
+        };
+    }
+
+    /// <summary>Creates built-in globals dictionary for the bytecode VM.</summary>
+    private static Dictionary<string, object?> CreateVMGlobals()
+    {
+        var globals = new Dictionary<string, object?>();
+
+        var globalDef = StdlibDefinitions.GetGlobals(StashCapabilities.All);
+        foreach (var (name, fn) in globalDef.RuntimeFunctions)
+            globals[name] = fn;
+
+        foreach (var nsDef in StdlibDefinitions.Namespaces)
+            globals[nsDef.Name] = nsDef.Namespace;
+
+        globals["Backoff"] = new StashEnum("Backoff", new List<string> { "Fixed", "Linear", "Exponential" });
+        globals["RetryOptions"] = new StashStruct("RetryOptions",
+            new List<string> { "delay", "backoff", "maxDelay", "jitter", "timeout", "on" },
+            new Dictionary<string, IStashCallable>());
+
+        return globals;
+    }
+
+    /// <summary>Module loading callback for the bytecode VM.</summary>
+    private static Chunk LoadModuleForVM(string modulePath, string? currentFile, Interpreter interpreter)
+    {
+        string? basePath = currentFile is not null ? System.IO.Path.GetDirectoryName(currentFile) : null;
+        string fullPath;
+
+        if (System.IO.Path.IsPathRooted(modulePath))
+        {
+            fullPath = modulePath;
+        }
+        else if (basePath is not null)
+        {
+            fullPath = System.IO.Path.GetFullPath(System.IO.Path.Combine(basePath, modulePath));
+        }
+        else
+        {
+            fullPath = System.IO.Path.GetFullPath(modulePath);
+        }
+
+        string? resolvedPath = Stash.Common.ModuleResolver.ResolveFilePath(fullPath);
+        if (resolvedPath is null && basePath is not null && Stash.Common.ModuleResolver.IsBareSpecifier(modulePath))
+            resolvedPath = Stash.Common.ModuleResolver.ResolvePackageImport(modulePath, basePath);
+
+        if (resolvedPath is null)
+            throw new RuntimeError($"Cannot find module '{modulePath}'.", null);
+
+        string source = System.IO.File.ReadAllText(resolvedPath);
+        var lexer = new Lexer(source, resolvedPath);
+        List<Token> tokens = lexer.ScanTokens();
+        if (lexer.Errors.Count > 0)
+            throw new RuntimeError($"Lex errors in module '{resolvedPath}': {lexer.Errors[0]}", null);
+
+        var parser = new Parser(tokens);
+        List<Stmt> stmts = parser.ParseProgram();
+        if (parser.Errors.Count > 0)
+            throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", null);
+
+        interpreter.ResolveStatements(stmts);
+        return Compiler.Compile(stmts);
     }
 
     /// <summary>

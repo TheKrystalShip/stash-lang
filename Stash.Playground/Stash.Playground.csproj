@@ -18,6 +18,7 @@
 
   <ItemGroup>
     <ProjectReference Include="../Stash.Analysis/Stash.Analysis.csproj" />
+    <ProjectReference Include="../Stash.Bytecode/Stash.Bytecode.csproj" />
     <ProjectReference Include="../Stash.Core/Stash.Core.csproj" />
     <ProjectReference Include="../Stash.Interpreter/Stash.Interpreter.csproj" />
     <ProjectReference Include="../Stash.Stdlib/Stash.Stdlib.csproj" />

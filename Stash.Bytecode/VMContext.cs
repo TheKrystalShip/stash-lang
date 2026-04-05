@@ -27,7 +27,7 @@ internal sealed class VMContext : IInterpreterContext
     // --- IExecutionContext ---
 
     public object? LastError { get; set; }
-    public bool EmbeddedMode => false;
+    public bool EmbeddedMode { get; set; }
     public string? CurrentFile { get; set; }
     public SourceSpan? CurrentSpan { get; set; }
     public string[]? ScriptArgs { get; set; }
@@ -40,6 +40,13 @@ internal sealed class VMContext : IInterpreterContext
     // --- Elevation Context ---
     public bool ElevationActive { get; set; }
     public string? ElevationCommand { get; set; }
+
+    public void EmitExit(int code)
+    {
+        if (EmbeddedMode)
+            throw new Stash.Runtime.ExitException(code);
+        System.Environment.Exit(code);
+    }
 
     public string ExpandTilde(string path)
     {
