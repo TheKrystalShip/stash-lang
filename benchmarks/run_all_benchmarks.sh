@@ -61,7 +61,8 @@ echo ""
 echo ">>> Algorithms"
 declare -A algo_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_algorithms.stash" \
+    "Stash (VM):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_algorithms.stash" \
+    "Stash (TW):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- --backend=tw $SCRIPT_DIR/bench_algorithms.stash" \
     "Python:python3 $SCRIPT_DIR/bench_algorithms.py" \
     "Node.js:node $SCRIPT_DIR/bench_algorithms.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_algorithms.rb" \
@@ -82,7 +83,8 @@ echo ""
 echo ">>> Function Calls"
 declare -A func_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_function_calls.stash" \
+    "Stash (VM):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_function_calls.stash" \
+    "Stash (TW):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- --backend=tw $SCRIPT_DIR/bench_function_calls.stash" \
     "Python:python3 $SCRIPT_DIR/bench_function_calls.py" \
     "Node.js:node $SCRIPT_DIR/bench_function_calls.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_function_calls.rb" \
@@ -103,7 +105,8 @@ echo ""
 echo ">>> Expression Throughput"
 declare -A expr_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_lexer_heavy.stash" \
+    "Stash (VM):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_lexer_heavy.stash" \
+    "Stash (TW):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- --backend=tw $SCRIPT_DIR/bench_lexer_heavy.stash" \
     "Python:python3 $SCRIPT_DIR/bench_lexer_heavy.py" \
     "Node.js:node $SCRIPT_DIR/bench_lexer_heavy.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_lexer_heavy.rb" \
@@ -124,7 +127,8 @@ echo ""
 echo ">>> Built-in Functions"
 declare -A ns_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_namespace_calls.stash" \
+    "Stash (VM):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_namespace_calls.stash" \
+    "Stash (TW):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- --backend=tw $SCRIPT_DIR/bench_namespace_calls.stash" \
     "Python:python3 $SCRIPT_DIR/bench_namespace_calls.py" \
     "Node.js:node $SCRIPT_DIR/bench_namespace_calls.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_namespace_calls.rb" \
@@ -145,7 +149,8 @@ echo ""
 echo ">>> Scope Lookup"
 declare -A scope_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_scope_lookup.stash" \
+    "Stash (VM):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_scope_lookup.stash" \
+    "Stash (TW):dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- --backend=tw $SCRIPT_DIR/bench_scope_lookup.stash" \
     "Python:python3 $SCRIPT_DIR/bench_scope_lookup.py" \
     "Node.js:node $SCRIPT_DIR/bench_scope_lookup.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_scope_lookup.rb" \
@@ -164,11 +169,11 @@ echo ""
 echo "========================================================"
 echo "SUMMARY TABLE (all times in ms, median of $RUNS runs)"
 echo "========================================================"
-printf "%-26s %10s %10s %10s %10s %10s %10s %10s\n" "Benchmark" "Stash" "Python" "Node.js" "Ruby" "Perl" "Lua" "Bash"
-printf "%-26s %10s %10s %10s %10s %10s %10s %10s\n" "--------------------------" "--------" "--------" "--------" "--------" "--------" "--------" "--------"
-printf "%-26s %10s %10s %10s %10s %10s %10s %10s\n" "Algorithms"        "${algo_results[Stash]}"  "${algo_results[Python]}"  "${algo_results[Node.js]}"  "${algo_results[Ruby]}"  "${algo_results[Perl]}"  "${algo_results[Lua]}"  "${algo_results[Bash]}"
-printf "%-26s %10s %10s %10s %10s %10s %10s %10s\n" "Function Calls"    "${func_results[Stash]}"  "${func_results[Python]}"  "${func_results[Node.js]}"  "${func_results[Ruby]}"  "${func_results[Perl]}"  "${func_results[Lua]}"  "${func_results[Bash]}"
-printf "%-26s %10s %10s %10s %10s %10s %10s %10s\n" "Expression Throughput" "${expr_results[Stash]}"  "${expr_results[Python]}"  "${expr_results[Node.js]}"  "${expr_results[Ruby]}"  "${expr_results[Perl]}"  "${expr_results[Lua]}"  "${expr_results[Bash]}"
-printf "%-26s %10s %10s %10s %10s %10s %10s %10s\n" "Built-in Functions" "${ns_results[Stash]}"    "${ns_results[Python]}"    "${ns_results[Node.js]}"    "${ns_results[Ruby]}"    "${ns_results[Perl]}"    "${ns_results[Lua]}"    "${ns_results[Bash]}"
-printf "%-26s %10s %10s %10s %10s %10s %10s %10s\n" "Scope Lookup"      "${scope_results[Stash]}" "${scope_results[Python]}" "${scope_results[Node.js]}" "${scope_results[Ruby]}" "${scope_results[Perl]}" "${scope_results[Lua]}" "${scope_results[Bash]}"
+printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Benchmark" "Stash (VM)" "Stash (TW)" "Python" "Node.js" "Ruby" "Perl" "Lua" "Bash"
+printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "--------------------------" "----------" "----------" "--------" "--------" "--------" "--------" "--------" "--------"
+printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Algorithms"        "${algo_results[Stash (VM)]}"  "${algo_results[Stash (TW)]}"  "${algo_results[Python]}"  "${algo_results[Node.js]}"  "${algo_results[Ruby]}"  "${algo_results[Perl]}"  "${algo_results[Lua]}"  "${algo_results[Bash]}"
+printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Function Calls"    "${func_results[Stash (VM)]}"  "${func_results[Stash (TW)]}"  "${func_results[Python]}"  "${func_results[Node.js]}"  "${func_results[Ruby]}"  "${func_results[Perl]}"  "${func_results[Lua]}"  "${func_results[Bash]}"
+printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Expression Throughput" "${expr_results[Stash (VM)]}"  "${expr_results[Stash (TW)]}"  "${expr_results[Python]}"  "${expr_results[Node.js]}"  "${expr_results[Ruby]}"  "${expr_results[Perl]}"  "${expr_results[Lua]}"  "${expr_results[Bash]}"
+printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Built-in Functions" "${ns_results[Stash (VM)]}"    "${ns_results[Stash (TW)]}"    "${ns_results[Python]}"    "${ns_results[Node.js]}"    "${ns_results[Ruby]}"    "${ns_results[Perl]}"    "${ns_results[Lua]}"    "${ns_results[Bash]}"
+printf "%-26s %12s %12s %10s %10s %10s %10s %10s %10s\n" "Scope Lookup"      "${scope_results[Stash (VM)]}" "${scope_results[Stash (TW)]}" "${scope_results[Python]}" "${scope_results[Node.js]}" "${scope_results[Ruby]}" "${scope_results[Perl]}" "${scope_results[Lua]}" "${scope_results[Bash]}"
 echo ""

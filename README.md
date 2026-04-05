@@ -365,6 +365,8 @@ See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 ## Performance
 
+Stash ships with two execution backends: a **bytecode VM** (default) and a **tree-walk interpreter** (reference/debug mode, `--backend=tw`). The table below includes both to show the impact of the VM.
+
 **What each benchmark tests**
 
 | Benchmark                 | What it tests                                                                                  |
@@ -377,25 +379,21 @@ See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 **Results**
 
-| Benchmark                 |    Stash |      Bash |   Python | Node.js |     Ruby |   Perl |     Lua |
-| ------------------------- | -------: | --------: | -------: | ------: | -------: | -----: | ------: |
-| **Algorithms**            | 1,895 ms | 10,649 ms |    86 ms |    6 ms |    52 ms | 209 ms |   34 ms |
-| **Function Calls**        | 1,824 ms |  3,573 ms |    77 ms |    3 ms |    17 ms | 102 ms |   13 ms |
-| **Expression Throughput** | 1,177 ms |  5,001 ms |   188 ms |   13 ms |   187 ms | 132 ms |   85 ms |
-| **Built-in Functions**    |   737 ms | 23,478 ms |   294 ms |   27 ms |   343 ms | 321 ms |  208 ms |
-| **Scope Lookup**          | 1,487 ms |  3,297 ms |   104 ms |    4 ms |   134 ms | 261 ms |   58 ms |
-|                           |      --- |       --- |      --- |     --- |      --- |    --- |     --- |
-| **Average**               | 1,424 ms |  9.199 ms | 149,8 ms | 10.6 ms | 146.6 ms | 205 ms | 77.4 ms |
-
+| Benchmark                 | Stash (VM) | Stash (TW) |      Bash | Python | Node.js |   Ruby |   Perl |    Lua |
+| ------------------------- | ---------: | ---------: | --------: | -----: | ------: | -----: | -----: | -----: |
+| **Algorithms**            |     539 ms |   1,835 ms | 10,736 ms |  77 ms |    7 ms |  52 ms | 209 ms |  33 ms |
+| **Function Calls**        |     246 ms |   1,872 ms |  3,539 ms |  71 ms |    3 ms |  17 ms | 101 ms |  14 ms |
+| **Expression Throughput** |     659 ms |   1,194 ms |  4,987 ms | 160 ms |   14 ms | 190 ms | 131 ms |  84 ms |
+| **Built-in Functions**    |     778 ms |     764 ms | 23,395 ms | 290 ms |   28 ms | 351 ms | 339 ms | 205 ms |
+| **Scope Lookup**          |     261 ms |   1,470 ms |  3,237 ms |  97 ms |    4 ms | 135 ms | 278 ms |  59 ms |
 
 > Measured on the same machine, same workload, identical algorithms and iteration counts across all languages. Median of 3 runs.
-
-Stash dramatically outperforms Bash, the language it most directly replaces for sysadmin scripting, on every benchmark. Node.js (V8 JIT), Lua, CPython 3, Ruby, and Perl use fundamentally different execution models (JIT compilation or bytecode pre-compilation) and are included for cross-language context rather than as direct competitors. Stash is a direct tree-walk interpreter with no JIT.
-
-
-Node.js uses V8's JIT compiler, compiling hot paths to native machine code. Lua uses a register-based bytecode VM. Python 3, Ruby, and Perl compile to stack-based bytecode before interpreting. Stash and Bash are direct interpreters. Despite this, Stash outperforms Bash **2–32×** on every workload while providing structured data types, modules, and a full standard library that Bash lacks.
-
-Full benchmark scripts in [`benchmarks/`](benchmarks/).
+>
+> **Stash (VM)** is the default bytecode VM backend — a stack-based virtual machine that compiles the AST to bytecode before execution. **Stash (TW)** is the original tree-walk interpreter, preserved as a reference/debug backend. The VM is **1.8–7.6× faster** than the tree-walk interpreter across all benchmarks.
+>
+> Node.js uses V8's JIT compiler, compiling hot paths to native machine code. Lua uses a register-based bytecode VM. Python 3, Ruby, and Perl compile to stack-based bytecode before interpreting. Stash's bytecode VM and Bash are the only pure interpreters in this comparison — yet Stash outperforms Bash **4–30×** on every workload while providing structured data types, modules, and a full standard library that Bash lacks.
+>
+> Full benchmark scripts in [`benchmarks/`](benchmarks/).
 
 ---
 
