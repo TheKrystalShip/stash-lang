@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -8,7 +9,9 @@ using System.Threading;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Debugging;
-using Stash.Interpreting;
+using Stash.Lexing;
+using Stash.Parsing;
+using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using DebugCallFrame = Stash.Debugging.CallFrame;
@@ -39,6 +42,7 @@ public sealed class VirtualMachine
     private int _frameCount;
 
     private readonly Dictionary<string, object?> _globals;
+    private readonly HashSet<string> _constGlobals = new(StringComparer.Ordinal);
     private readonly List<Upvalue> _openUpvalues;
     private readonly CancellationToken _ct;
 
@@ -47,8 +51,9 @@ public sealed class VirtualMachine
     private readonly ExtensionRegistry _extensionRegistry = new();
 
     private Func<string, string?, Chunk>? _moduleLoader;
-    private Dictionary<string, Dictionary<string, object?>> _moduleCache = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
+    internal ConcurrentDictionary<string, Dictionary<string, object?>> _moduleCache = new(StringComparer.OrdinalIgnoreCase);
+    private HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
+    internal ConcurrentDictionary<string, object> _moduleLocks = new(StringComparer.OrdinalIgnoreCase);
 
     // ── Debugger Integration ──
     private IDebugger? _debugger;
@@ -63,6 +68,11 @@ public sealed class VirtualMachine
         _openUpvalues = new List<Upvalue>();
         _ct = ct;
         _context = new VMContext(ct);
+        _context.Globals = _globals;
+        _context.ActiveVM = this;
+        _context.MainThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
+        _context.ModuleCache = _moduleCache;
+        _context.ModuleLocks = _moduleLocks;
     }
 
     /// <summary>The global variable store. Populate before Execute for built-in namespaces.</summary>
@@ -87,7 +97,13 @@ public sealed class VirtualMachine
     public Func<string, string?, Chunk>? ModuleLoader
     {
         get => _moduleLoader;
-        set => _moduleLoader = value;
+        set
+        {
+            _moduleLoader = value;
+            _context.ModuleLoader = value;
+            _context.ModuleCache = _moduleCache;
+            _context.ModuleLocks = _moduleLocks;
+        }
     }
 
     /// <summary>Debugger hook interface. Set before Execute to enable debugging.</summary>
@@ -152,6 +168,19 @@ public sealed class VirtualMachine
         set => _context.TestFilter = value;
     }
 
+    /// <summary>When true, the TAP framework runs in discovery mode (collect test names, don't execute).</summary>
+    public bool DiscoveryMode
+    {
+        get => _context.DiscoveryMode;
+        set => _context.DiscoveryMode = value;
+    }
+
+    /// <summary>Kills and disposes all processes spawned by the script.</summary>
+    public void CleanupTrackedProcesses() => _context.CleanupTrackedProcesses();
+
+    /// <summary>Disposes all file system watchers created by the script.</summary>
+    public void CleanupTrackedWatchers() => _context.CleanupTrackedWatchers();
+
     /// <summary>Current call stack depth (for stepping).</summary>
     internal int FrameCount => _frameCount;
 
@@ -170,7 +199,10 @@ public sealed class VirtualMachine
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
 
         if (_debugger is not null)
+        {
             return RunDebug();
+        }
+
         return Run();
     }
 
@@ -190,9 +222,13 @@ public sealed class VirtualMachine
 
         object? result;
         if (_debugger is not null)
+        {
             result = RunDebug();
+        }
         else
+        {
             result = Run();
+        }
 
         // Promote top-level locals to globals for next REPL input
         if (chunk.LocalNames is not null)
@@ -201,7 +237,9 @@ public sealed class VirtualMachine
             {
                 string? name = chunk.LocalNames[i];
                 if (!string.IsNullOrEmpty(name) && name[0] != '<')
+                {
                     _globals[name] = _stack[i].ToObject();
+                }
             }
         }
 
@@ -213,7 +251,10 @@ public sealed class VirtualMachine
     private void PushFrame(Chunk chunk, int baseSlot, Upvalue[]? upvalues, string? name)
     {
         if (_frameCount >= _frames.Length)
+        {
             Array.Resize(ref _frames, _frames.Length * 2);
+        }
+
         ref CallFrame frame = ref _frames[_frameCount++];
         frame.Chunk = chunk;
         frame.IP = 0;
@@ -228,7 +269,10 @@ public sealed class VirtualMachine
     private void Push(StashValue value)
     {
         if (_sp >= _stack.Length)
+        {
             GrowStack();
+        }
+
         _stack[_sp++] = value;
     }
 
@@ -236,7 +280,9 @@ public sealed class VirtualMachine
     {
         Array.Resize(ref _stack, _stack.Length * 2);
         foreach (Upvalue uv in _openUpvalues)
+        {
             uv.UpdateStack(_stack);
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -272,13 +318,18 @@ public sealed class VirtualMachine
         {
             Upvalue existing = _openUpvalues[i];
             if (existing.StackIndex == stackIndex)
+            {
                 return existing;
+            }
         }
         var upvalue = new Upvalue(_stack, stackIndex);
         // Insert sorted by descending StackIndex for efficient closing
         int insertIdx = 0;
         while (insertIdx < _openUpvalues.Count && _openUpvalues[insertIdx].StackIndex > stackIndex)
+        {
             insertIdx++;
+        }
+
         _openUpvalues.Insert(insertIdx, upvalue);
         return upvalue;
     }
@@ -330,7 +381,9 @@ public sealed class VirtualMachine
                 _sp = handler.StackLevel;
 
                 // Push a StashError value for the catch block to consume
-                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
+                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                _context.LastError = stashError;
+                Push(StashValue.FromObj(stashError));
 
                 // Resume execution at the catch handler's bytecode offset
                 _frames[_frameCount - 1].IP = handler.CatchIP;
@@ -354,9 +407,15 @@ public sealed class VirtualMachine
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
-                while (_debugCallStack.Count > handler.FrameIndex) _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
+                while (_debugCallStack.Count > handler.FrameIndex)
+                {
+                    _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
+                }
+
                 _sp = handler.StackLevel;
-                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
+                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                _context.LastError = stashError;
+                Push(StashValue.FromObj(stashError));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
             }
             catch (RuntimeError ex)
@@ -403,7 +462,10 @@ public sealed class VirtualMachine
                     int curLine = span.StartLine;
                     int frameIdx = _frameCount - 1;
                     if (frameIdx >= lastDebugLinePerFrame.Length)
+                    {
                         Array.Resize(ref lastDebugLinePerFrame, _frames.Length);
+                    }
+
                     if (curLine != lastDebugLinePerFrame[frameIdx] || debugger.IsPauseRequested)
                     {
                         lastDebugLinePerFrame[frameIdx] = curLine;
@@ -467,8 +529,11 @@ public sealed class VirtualMachine
                     ushort nameIdx = ReadU16(ref frame);
                     string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
                     if (!_globals.TryGetValue(name, out object? value))
-                        throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
-                    Push(StashValue.FromObject(value));
+                        {
+                            throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
+                        }
+
+                        Push(StashValue.FromObject(value));
                     break;
                 }
 
@@ -476,7 +541,21 @@ public sealed class VirtualMachine
                 {
                     ushort nameIdx = ReadU16(ref frame);
                     string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
+                    if (_constGlobals.Contains(name))
+                        {
+                            throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+                        }
+
+                        _globals[name] = Pop().ToObject();
+                    break;
+                }
+
+                case OpCode.InitConstGlobal:
+                {
+                    ushort nameIdx = ReadU16(ref frame);
+                    string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
                     _globals[name] = Pop().ToObject();
+                    _constGlobals.Add(name);
                     break;
                 }
 
@@ -500,10 +579,15 @@ public sealed class VirtualMachine
                     StashValue b = Pop();
                     StashValue a = Pop();
                     if (a.IsInt && b.IsInt)
-                        Push(StashValue.FromInt(a.AsInt + b.AsInt));
-                    else
-                        Push(RuntimeOps.Add(a, b, GetCurrentSpan(ref frame)));
-                    break;
+                        {
+                            Push(StashValue.FromInt(a.AsInt + b.AsInt));
+                        }
+                        else
+                        {
+                            Push(RuntimeOps.Add(a, b, GetCurrentSpan(ref frame)));
+                        }
+
+                        break;
                 }
 
                 case OpCode.Subtract:
@@ -511,10 +595,15 @@ public sealed class VirtualMachine
                     StashValue b = Pop();
                     StashValue a = Pop();
                     if (a.IsInt && b.IsInt)
-                        Push(StashValue.FromInt(a.AsInt - b.AsInt));
-                    else
-                        Push(RuntimeOps.Subtract(a, b, GetCurrentSpan(ref frame)));
-                    break;
+                        {
+                            Push(StashValue.FromInt(a.AsInt - b.AsInt));
+                        }
+                        else
+                        {
+                            Push(RuntimeOps.Subtract(a, b, GetCurrentSpan(ref frame)));
+                        }
+
+                        break;
                 }
 
                 case OpCode.Multiply:
@@ -522,10 +611,15 @@ public sealed class VirtualMachine
                     StashValue b = Pop();
                     StashValue a = Pop();
                     if (a.IsInt && b.IsInt)
-                        Push(StashValue.FromInt(a.AsInt * b.AsInt));
-                    else
-                        Push(RuntimeOps.Multiply(a, b, GetCurrentSpan(ref frame)));
-                    break;
+                        {
+                            Push(StashValue.FromInt(a.AsInt * b.AsInt));
+                        }
+                        else
+                        {
+                            Push(RuntimeOps.Multiply(a, b, GetCurrentSpan(ref frame)));
+                        }
+
+                        break;
                 }
 
                 case OpCode.Divide:
@@ -548,10 +642,15 @@ public sealed class VirtualMachine
                 {
                     StashValue val = Pop();
                     if (val.IsInt)
-                        Push(StashValue.FromInt(-val.AsInt));
-                    else
-                        Push(RuntimeOps.Negate(val, GetCurrentSpan(ref frame)));
-                    break;
+                        {
+                            Push(StashValue.FromInt(-val.AsInt));
+                        }
+                        else
+                        {
+                            Push(RuntimeOps.Negate(val, GetCurrentSpan(ref frame)));
+                        }
+
+                        break;
                 }
 
                 // ==================== Bitwise ====================
@@ -559,30 +658,45 @@ public sealed class VirtualMachine
                 {
                     StashValue b = Pop(), a = Pop();
                     if (a.IsInt && b.IsInt)
-                        Push(StashValue.FromInt(a.AsInt & b.AsInt));
-                    else
-                        Push(RuntimeOps.BitAnd(a, b, GetCurrentSpan(ref frame)));
-                    break;
+                        {
+                            Push(StashValue.FromInt(a.AsInt & b.AsInt));
+                        }
+                        else
+                        {
+                            Push(RuntimeOps.BitAnd(a, b, GetCurrentSpan(ref frame)));
+                        }
+
+                        break;
                 }
 
                 case OpCode.BitOr:
                 {
                     StashValue b = Pop(), a = Pop();
                     if (a.IsInt && b.IsInt)
-                        Push(StashValue.FromInt(a.AsInt | b.AsInt));
-                    else
-                        Push(RuntimeOps.BitOr(a, b, GetCurrentSpan(ref frame)));
-                    break;
+                        {
+                            Push(StashValue.FromInt(a.AsInt | b.AsInt));
+                        }
+                        else
+                        {
+                            Push(RuntimeOps.BitOr(a, b, GetCurrentSpan(ref frame)));
+                        }
+
+                        break;
                 }
 
                 case OpCode.BitXor:
                 {
                     StashValue b = Pop(), a = Pop();
                     if (a.IsInt && b.IsInt)
-                        Push(StashValue.FromInt(a.AsInt ^ b.AsInt));
-                    else
-                        Push(RuntimeOps.BitXor(a, b, GetCurrentSpan(ref frame)));
-                    break;
+                        {
+                            Push(StashValue.FromInt(a.AsInt ^ b.AsInt));
+                        }
+                        else
+                        {
+                            Push(RuntimeOps.BitXor(a, b, GetCurrentSpan(ref frame)));
+                        }
+
+                        break;
                 }
 
                 case OpCode.BitNot:
@@ -656,10 +770,15 @@ public sealed class VirtualMachine
                     // Short-circuit AND: if top is falsy, keep it and jump (skip right); else pop and eval right
                     short offset = ReadI16(ref frame);
                     if (RuntimeOps.IsFalsy(Peek()))
-                        frame.IP += offset;
-                    else
-                        _sp--; // pop truthy left, continue to right operand
-                    break;
+                        {
+                            frame.IP += offset;
+                        }
+                        else
+                        {
+                            _sp--; // pop truthy left, continue to right operand
+                        }
+
+                        break;
                 }
 
                 case OpCode.Or:
@@ -667,21 +786,31 @@ public sealed class VirtualMachine
                     // Short-circuit OR: if top is truthy, keep it and jump (skip right); else pop and eval right
                     short offset = ReadI16(ref frame);
                     if (!RuntimeOps.IsFalsy(Peek()))
-                        frame.IP += offset;
-                    else
-                        _sp--; // pop falsy left, continue to right operand
-                    break;
+                        {
+                            frame.IP += offset;
+                        }
+                        else
+                        {
+                            _sp--; // pop falsy left, continue to right operand
+                        }
+
+                        break;
                 }
 
                 case OpCode.NullCoalesce:
                 {
                     // If top is non-null, keep it and jump; else pop null and eval right
                     short offset = ReadI16(ref frame);
-                    if (!Peek().IsNull)
-                        frame.IP += offset;
-                    else
-                        _sp--; // pop null, continue to right operand
-                    break;
+                    if (!Peek().IsNull && Peek().ToObject() is not StashError)
+                        {
+                            frame.IP += offset;
+                        }
+                        else
+                        {
+                            _sp--; // pop null, continue to right operand
+                        }
+
+                        break;
                 }
 
                 // ==================== Control Flow ====================
@@ -696,16 +825,22 @@ public sealed class VirtualMachine
                 {
                     short offset = ReadI16(ref frame);
                     if (!RuntimeOps.IsFalsy(Pop()))
-                        frame.IP += offset;
-                    break;
+                        {
+                            frame.IP += offset;
+                        }
+
+                        break;
                 }
 
                 case OpCode.JumpFalse:
                 {
                     short offset = ReadI16(ref frame);
                     if (RuntimeOps.IsFalsy(Pop()))
-                        frame.IP += offset;
-                    break;
+                        {
+                            frame.IP += offset;
+                        }
+
+                        break;
                 }
 
                 case OpCode.Loop:
@@ -713,12 +848,21 @@ public sealed class VirtualMachine
                     ushort offset = ReadU16(ref frame);
                     frame.IP -= offset;
                     if (_ct.IsCancellationRequested)
-                        throw new OperationCanceledException(_ct);
-                    if (StepLimit > 0 && ++StepCount >= StepLimit)
-                        throw new Stash.Runtime.StepLimitExceededException(StepLimit);
-                    if (debugger is not null && debugger.IsPauseRequested)
-                        lastDebugLinePerFrame[_frameCount - 1] = -1; // Force debug check on next iteration
-                    break;
+                        {
+                            throw new OperationCanceledException(_ct);
+                        }
+
+                        if (StepLimit > 0 && ++StepCount >= StepLimit)
+                        {
+                            throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+                        }
+
+                        if (debugger is not null && debugger.IsPauseRequested)
+                        {
+                            lastDebugLinePerFrame[_frameCount - 1] = -1; // Force debug check on next iteration
+                        }
+
+                        break;
                 }
 
                 // ==================== Functions ====================
@@ -732,10 +876,12 @@ public sealed class VirtualMachine
                     CallValue(callee, argc, callSpan);
 
                     if (StepLimit > 0 && ++StepCount >= StepLimit)
-                        throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+                        {
+                            throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+                        }
 
-                    // Debug: track function entry for VM function calls
-                    if (debugger is not null && _frameCount > prevFrameCount)
+                        // Debug: track function entry for VM function calls
+                        if (debugger is not null && _frameCount > prevFrameCount)
                     {
                         ref CallFrame newFrame = ref _frames[_frameCount - 1];
                         IDebugScope scope = BuildFrameScope(ref newFrame);
@@ -749,8 +895,10 @@ public sealed class VirtualMachine
                         });
 
                         if (debugger.ShouldBreakOnFunctionEntry(funcName))
-                            debugger.OnFunctionEnter(funcName, callSpan!, scope, _debugThreadId);
-                    }
+                            {
+                                debugger.OnFunctionEnter(funcName, callSpan!, scope, _debugThreadId);
+                            }
+                        }
                     break;
                 }
 
@@ -763,7 +911,7 @@ public sealed class VirtualMachine
                 case OpCode.CallSpread:
                 {
                     // Scan backward from stack top to find ArgSentinel
-                    int argc = 0;
+                    int rawArgc = 0;
                     int sentinelIdx = -1;
                     for (int i = _sp - 1; i >= 0; i--)
                     {
@@ -772,25 +920,63 @@ public sealed class VirtualMachine
                             sentinelIdx = i;
                             break;
                         }
-                        argc++;
+                        rawArgc++;
                     }
 
                     if (sentinelIdx < 0)
-                        throw new RuntimeError("Internal error: ArgMark sentinel not found.", GetCurrentSpan(ref frame));
+                        {
+                            throw new RuntimeError("Internal error: ArgMark sentinel not found.", GetCurrentSpan(ref frame));
+                        }
 
-                    // Callee is right below the sentinel
-                    object? callee = _stack[sentinelIdx - 1].AsObj;
+                        // Callee is right below the sentinel
+                        object? callee = _stack[sentinelIdx - 1].AsObj;
                     SourceSpan? callSpan = GetCurrentSpan(ref frame);
 
-                    // Remove sentinel by shifting args down by 1
-                    Array.Copy(_stack, sentinelIdx + 1, _stack, sentinelIdx, argc);
-                    _sp--;
+                    // Expand SpreadMarkers: collect all args, expanding spreads
+                    var expandedArgs = new List<object?>(rawArgc);
+                    for (int i = sentinelIdx + 1; i < _sp; i++)
+                    {
+                        object? argVal = _stack[i].ToObject();
+                        if (argVal is SpreadMarker sm)
+                        {
+                            if (sm.Items is List<object?> spreadList)
+                            {
+                                expandedArgs.AddRange(spreadList);
+                            }
+                            else
+                            {
+                                throw new RuntimeError("Spread in function call requires an array.",
+                                    callSpan);
+                            }
+                        }
+                        else
+                        {
+                            expandedArgs.Add(argVal);
+                        }
+                    }
+
+                    // Write expanded args back to stack starting at sentinelIdx
+                    int expandedArgc = expandedArgs.Count;
+                    // Ensure stack capacity
+                    while (sentinelIdx + expandedArgc >= _stack.Length)
+                    {
+                        var bigger = new StashValue[_stack.Length * 2];
+                        Array.Copy(_stack, bigger, _stack.Length);
+                        _stack = bigger;
+                    }
+                    for (int i = 0; i < expandedArgc; i++)
+                    {
+                        _stack[sentinelIdx + i] = StashValue.FromObject(expandedArgs[i]);
+                    }
+                    _sp = sentinelIdx + expandedArgc;
 
                     int prevFrameCount = _frameCount;
-                    CallValue(callee, argc, callSpan);
+                    CallValue(callee, expandedArgc, callSpan);
 
                     if (StepLimit > 0 && ++StepCount >= StepLimit)
+                    {
                         throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+                    }
 
                     // Debug: track function entry (same as OP_CALL)
                     if (debugger is not null && _frameCount > prevFrameCount)
@@ -807,8 +993,10 @@ public sealed class VirtualMachine
                         });
 
                         if (debugger.ShouldBreakOnFunctionEntry(funcName))
-                            debugger.OnFunctionEnter(funcName, callSpan!, scope, _debugThreadId);
-                    }
+                            {
+                                debugger.OnFunctionEnter(funcName, callSpan!, scope, _debugThreadId);
+                            }
+                        }
                     break;
                 }
 
@@ -835,8 +1023,11 @@ public sealed class VirtualMachine
                     _sp = baseSlot - 1; // discard function stack window + callee slot
                     Push(result);
                     if (_frameCount <= targetFrameCount)
-                        return result.ToObject();
-                    break;
+                        {
+                            return result.ToObject();
+                        }
+
+                        break;
                 }
 
                 case OpCode.Closure:
@@ -849,10 +1040,14 @@ public sealed class VirtualMachine
                         byte isLocal = frame.Chunk.Code[frame.IP++];
                         byte index = frame.Chunk.Code[frame.IP++];
                         if (isLocal == 1)
-                            upvalues[i] = CaptureUpvalue(frame.BaseSlot + index);
-                        else
-                            upvalues[i] = frame.Upvalues![index];
-                    }
+                            {
+                                upvalues[i] = CaptureUpvalue(frame.BaseSlot + index);
+                            }
+                            else
+                            {
+                                upvalues[i] = frame.Upvalues![index];
+                            }
+                        }
                     Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues)));
                     break;
                 }
@@ -864,7 +1059,25 @@ public sealed class VirtualMachine
                     var list = new List<object?>(count);
                     int start = _sp - count;
                     for (int i = start; i < _sp; i++)
-                        list.Add(_stack[i].ToObject());
+                    {
+                        object? val = _stack[i].ToObject();
+                        if (val is SpreadMarker sm)
+                        {
+                            if (sm.Items is List<object?> spreadItems)
+                            {
+                                list.AddRange(spreadItems);
+                            }
+                            else
+                            {
+                                throw new RuntimeError("Spread operator requires an array.",
+                                    GetCurrentSpan(ref frame));
+                            }
+                        }
+                        else
+                        {
+                            list.Add(val);
+                        }
+                    }
                     _sp = start;
                     Push(StashValue.FromObj(list));
                     break;
@@ -876,7 +1089,36 @@ public sealed class VirtualMachine
                     var dict = new StashDictionary();
                     int start = _sp - (count * 2);
                     for (int i = start; i < _sp; i += 2)
-                        dict.Set(_stack[i].ToObject()!, _stack[i + 1].ToObject());
+                    {
+                        object? key = _stack[i].ToObject();
+                        object? val = _stack[i + 1].ToObject();
+                        if (val is SpreadMarker sm)
+                        {
+                            if (sm.Items is StashDictionary spreadDict)
+                            {
+                                foreach (KeyValuePair<object, object?> kv in spreadDict.RawEntries())
+                                {
+                                    dict.Set(kv.Key, kv.Value);
+                                }
+                            }
+                            else if (sm.Items is StashInstance inst)
+                            {
+                                foreach (KeyValuePair<string, object?> kv in inst.GetFields())
+                                {
+                                    dict.Set(kv.Key, kv.Value);
+                                }
+                            }
+                            else
+                            {
+                                throw new RuntimeError("Cannot spread non-dict value into dict literal.",
+                                    GetCurrentSpan(ref frame));
+                            }
+                        }
+                        else
+                        {
+                            dict.Set(key!, val);
+                        }
+                    }
                     _sp = start;
                     Push(StashValue.FromObj(dict));
                     break;
@@ -892,6 +1134,8 @@ public sealed class VirtualMachine
                     long e = end.IsInt ? end.AsInt
                         : throw new RuntimeError("Range end must be an integer.", GetCurrentSpan(ref frame));
                     long st = step.IsInt ? step.AsInt : (s <= e ? 1L : -1L);
+                    if (st == 0)
+                        throw new RuntimeError("'range' step cannot be zero.", GetCurrentSpan(ref frame));
                     Push(StashValue.FromObj(new StashRange(s, e, st)));
                     break;
                 }
@@ -899,15 +1143,7 @@ public sealed class VirtualMachine
                 case OpCode.Spread:
                 {
                     object? iterable = Pop().ToObject();
-                    if (iterable is List<object?> spreadList)
-                    {
-                        foreach (object? item in spreadList)
-                            Push(StashValue.FromObject(item));
-                    }
-                    else
-                    {
-                        throw new RuntimeError("Spread operator requires an array.", GetCurrentSpan(ref frame));
-                    }
+                    Push(StashValue.FromObj(new SpreadMarker(iterable!)));
                     break;
                 }
 
@@ -964,6 +1200,8 @@ public sealed class VirtualMachine
                     for (int i = pairStart; i < _sp; i += 2)
                     {
                         string fname = (string)_stack[i].AsObj!;
+                        if (providedFields.ContainsKey(fname))
+                            throw new RuntimeError($"Duplicate field '{fname}' in struct initialization.", span);
                         providedFields[fname] = _stack[i + 1].ToObject();
                     }
                     _sp = pairStart;
@@ -973,20 +1211,28 @@ public sealed class VirtualMachine
                         // Initialize all declared fields to null, then override with provided values
                         var allFields = new Dictionary<string, object?>(ss.Fields.Count);
                         foreach (string f in ss.Fields)
-                            allFields[f] = null;
+                            {
+                                allFields[f] = null;
+                            }
 
-                        foreach (KeyValuePair<string, object?> kvp in providedFields)
+                            foreach (KeyValuePair<string, object?> kvp in providedFields)
                         {
                             if (!allFields.ContainsKey(kvp.Key))
-                                throw new RuntimeError($"Unknown field '{kvp.Key}' for struct '{ss.Name}'.", span);
-                            allFields[kvp.Key] = kvp.Value;
+                                {
+                                    throw new RuntimeError($"Unknown field '{kvp.Key}' for struct '{ss.Name}'.", span);
+                                }
+
+                                allFields[kvp.Key] = kvp.Value;
                         }
 
                         Push(StashValue.FromObj(new StashInstance(ss.Name, ss, allFields)));
                     }
                     else
-                        throw new RuntimeError("Not a struct type.", span);
-                    break;
+                        {
+                            throw new RuntimeError("Not a struct type.", span);
+                        }
+
+                        break;
                 }
 
                 // ==================== Strings ====================
@@ -1003,9 +1249,46 @@ public sealed class VirtualMachine
                 case OpCode.Is:
                 {
                     ushort typeIdx = ReadU16(ref frame);
-                    string typeName = (string)frame.Chunk.Constants[typeIdx].AsObj!;
-                    object? value = Pop().ToObject();
-                    Push(StashValue.FromBool(CheckIsType(value, typeName)));
+                    if (typeIdx == 0xFFFF)
+                    {
+                        // Dynamic type check: type expression is on the stack
+                        object? typeObj = Pop().ToObject();
+                        object? value = Pop().ToObject();
+                        bool result = typeObj switch
+                        {
+                            StashStruct sd => value is StashInstance inst && inst.TypeName == sd.Name,
+                            StashEnum se => value is StashEnumValue ev && ev.TypeName == se.Name,
+                            StashInterface si => value is StashInstance inst2 &&
+                                InstanceImplementsInterfaceName(inst2, si.Name),
+                            _ => throw new RuntimeError(
+                                $"Right-hand side of 'is' must be a type, got {RuntimeValues.Stringify(typeObj)}.",
+                                GetCurrentSpan(ref frame)),
+                        };
+                        Push(StashValue.FromBool(result));
+                    }
+                    else
+                    {
+                        string typeName = (string)frame.Chunk.Constants[typeIdx].AsObj!;
+                        object? value = Pop().ToObject();
+                        // Check globals for a variable holding a type definition (e.g. `let t = Foo; x is t`)
+                        if (_globals.TryGetValue(typeName, out object? globalType) &&
+                            globalType is StashStruct or StashEnum or StashInterface)
+                        {
+                            bool r = globalType switch
+                            {
+                                StashStruct sd => value is StashInstance inst && inst.TypeName == sd.Name,
+                                StashEnum se => value is StashEnumValue ev && ev.TypeName == se.Name,
+                                StashInterface si => value is StashInstance inst2 &&
+                                    InstanceImplementsInterfaceName(inst2, si.Name),
+                                _ => false,
+                            };
+                            Push(StashValue.FromBool(r));
+                        }
+                        else
+                        {
+                            Push(StashValue.FromBool(CheckIsType(value, typeName)));
+                        }
+                    }
                     break;
                 }
 
@@ -1021,10 +1304,14 @@ public sealed class VirtualMachine
                     {
                         object? methodObj = Pop().ToObject();
                         if (methodObj is VMFunction vmFunc)
-                            methods[metadata.MethodNames[i]] = vmFunc;
-                        else
-                            throw new RuntimeError($"Expected function for method '{metadata.MethodNames[i]}'.", span);
-                    }
+                            {
+                                methods[metadata.MethodNames[i]] = vmFunc;
+                            }
+                            else
+                            {
+                                throw new RuntimeError($"Expected function for method '{metadata.MethodNames[i]}'.", span);
+                            }
+                        }
 
                     var fieldList = new List<string>(metadata.Fields);
                     var structDef = new StashStruct(metadata.Name, fieldList, methods);
@@ -1033,23 +1320,44 @@ public sealed class VirtualMachine
                     foreach (string ifaceName in metadata.InterfaceNames)
                     {
                         if (!_globals.TryGetValue(ifaceName, out object? resolved) || resolved is not StashInterface iface)
-                            throw new RuntimeError($"'{ifaceName}' is not an interface.", span);
+                            {
+                                throw new RuntimeError($"'{ifaceName}' is not an interface.", span);
+                            }
 
-                        foreach (InterfaceField reqField in iface.RequiredFields)
+                            foreach (InterfaceField reqField in iface.RequiredFields)
                         {
                             if (!fieldList.Contains(reqField.Name))
-                                throw new RuntimeError(
+                                {
+                                    throw new RuntimeError(
                                     $"Struct '{metadata.Name}' does not implement interface '{ifaceName}': missing field '{reqField.Name}'.",
                                     span);
-                        }
+                                }
+                            }
 
                         foreach (InterfaceMethod reqMethod in iface.RequiredMethods)
                         {
                             if (!methods.ContainsKey(reqMethod.Name))
-                                throw new RuntimeError(
+                                {
+                                    throw new RuntimeError(
                                     $"Struct '{metadata.Name}' does not implement interface '{ifaceName}': missing method '{reqMethod.Name}'.",
                                     span);
-                        }
+                                }
+
+                            // Arity check: normalize both sides to exclude 'self'
+                            // Interface Arity = sig.Parameters.Count (includes 'self' if explicitly declared)
+                            // Struct method Chunk.Arity always includes synthetic 'self' as first param
+                            int reqUserArity = reqMethod.ParameterNames.Contains("self") ? reqMethod.Arity - 1 : reqMethod.Arity;
+                            if (methods[reqMethod.Name] is VMFunction vmMethod)
+                            {
+                                int implUserArity = vmMethod.Chunk.Arity - 1;
+                                if (implUserArity != reqUserArity)
+                                    {
+                                        throw new RuntimeError(
+                                        $"Struct '{metadata.Name}' implements interface '{ifaceName}': method '{reqMethod.Name}' has wrong number of parameters (expected {reqUserArity}, got {implUserArity}).",
+                                        span);
+                                    }
+                                }
+                            }
 
                         structDef.Interfaces.Add(iface);
                     }
@@ -1093,26 +1401,35 @@ public sealed class VirtualMachine
                     {
                         object? methodObj = Pop().ToObject();
                         if (methodObj is not VMFunction vmFunc)
-                            throw new RuntimeError($"Expected function for extension method '{metadata.MethodNames[i]}'.", span);
-                        methodFuncs[i] = vmFunc;
+                            {
+                                throw new RuntimeError($"Expected function for extension method '{metadata.MethodNames[i]}'.", span);
+                            }
+
+                            methodFuncs[i] = vmFunc;
                     }
 
                     if (metadata.IsBuiltIn)
                     {
                         for (int i = 0; i < metadata.MethodNames.Length; i++)
-                            _extensionRegistry.Register(metadata.TypeName, metadata.MethodNames[i], methodFuncs[i]);
-                    }
+                            {
+                                _extensionRegistry.Register(metadata.TypeName, metadata.MethodNames[i], methodFuncs[i]);
+                            }
+                        }
                     else
                     {
                         if (!_globals.TryGetValue(metadata.TypeName, out object? resolved) || resolved is not StashStruct structDef)
-                            throw new RuntimeError($"Cannot extend '{metadata.TypeName}': not a known type.", span);
+                            {
+                                throw new RuntimeError($"Cannot extend '{metadata.TypeName}': not a known type.", span);
+                            }
 
-                        for (int i = 0; i < metadata.MethodNames.Length; i++)
+                            for (int i = 0; i < metadata.MethodNames.Length; i++)
                         {
                             string methodName = metadata.MethodNames[i];
                             if (!structDef.OriginalMethodNames.Contains(methodName))
-                                structDef.Methods[methodName] = methodFuncs[i];
-                        }
+                                {
+                                    structDef.Methods[methodName] = methodFuncs[i];
+                                }
+                            }
                     }
 
                     break;
@@ -1124,9 +1441,34 @@ public sealed class VirtualMachine
                     object? errorVal = Pop().ToObject();
                     SourceSpan? span = GetCurrentSpan(ref frame);
                     if (errorVal is StashError se)
-                        throw new RuntimeError(se.Message, span, se.Type);
-                    if (errorVal is string msg)
-                        throw new RuntimeError(msg, span);
+                        {
+                            throw new RuntimeError(se.Message, span, se.Type) { Properties = se.Properties };
+                        }
+
+                        if (errorVal is string msg)
+                        {
+                            throw new RuntimeError(msg, span);
+                        }
+
+                        if (errorVal is StashDictionary throwDict)
+                    {
+                        string errMsg = throwDict.Has("message")
+                            ? throwDict.Get("message")?.ToString() ?? ""
+                            : RuntimeValues.Stringify(errorVal);
+                        string errType = throwDict.Has("type")
+                            ? throwDict.Get("type")?.ToString() ?? "RuntimeError"
+                            : "RuntimeError";
+                        var props = new Dictionary<string, object?>();
+                        foreach (var kv in throwDict.GetAllEntries())
+                            {
+                                if (kv.Key is string k)
+                                {
+                                    props[k] = kv.Value;
+                                }
+                            }
+
+                            throw new RuntimeError(errMsg, span, errType) { Properties = props };
+                    }
                     throw new RuntimeError(RuntimeValues.Stringify(errorVal), span);
                 }
 
@@ -1148,8 +1490,11 @@ public sealed class VirtualMachine
                 case OpCode.TryEnd:
                 {
                     if (_exceptionHandlers.Count > 0)
-                        _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
-                    break;
+                        {
+                            _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
+                        }
+
+                        break;
                 }
 
                 // ==================== Switch ====================
@@ -1187,9 +1532,11 @@ public sealed class VirtualMachine
                         }
                     }
                     if (iter == null)
-                        throw new RuntimeError("Internal error: no active iterator.", span);
+                        {
+                            throw new RuntimeError("Internal error: no active iterator.", span);
+                        }
 
-                    if (!iter.MoveNext())
+                        if (!iter.MoveNext())
                     {
                         frame.IP += exitOffset;
                     }
@@ -1202,7 +1549,19 @@ public sealed class VirtualMachine
                         // After Push, _sp increased by 1; forInLocals = (_sp - 1) - iterSlot
                         int forInLocals = (_sp - 1) - iterSlot;
                         if (forInLocals == 3)
-                            _stack[iterSlot + 1] = StashValue.FromInt(iter.Index);
+                        {
+                            if (iter.Dictionary != null)
+                            {
+                                // Dict key-value iteration: Current = key, look up value
+                                object? dictKey = iter.Current;
+                                _stack[iterSlot + 1] = StashValue.FromObject(dictKey);  // key
+                                _stack[_sp - 1] = StashValue.FromObject(iter.Dictionary.Get(dictKey!));  // value
+                            }
+                            else
+                            {
+                                _stack[iterSlot + 1] = StashValue.FromInt(iter.Index);
+                            }
+                        }
                     }
                     break;
                 }
@@ -1212,9 +1571,24 @@ public sealed class VirtualMachine
                 {
                     object? future = Pop().ToObject();
                     if (future is StashFuture sf)
-                        Push(StashValue.FromObject(sf.GetResult()));
-                    else
-                        Push(StashValue.FromObject(future)); // non-future values pass through
+                        {
+                            Push(StashValue.FromObject(sf.GetResult()));
+                        }
+                        else
+                        {
+                            Push(StashValue.FromObject(future)); // non-future values pass through
+                        }
+
+                        break;
+                }
+
+                case OpCode.CloseUpvalue:
+                {
+                    // Close all open upvalues rooted at or above the given local slot.
+                    // Used to freeze per-iteration loop variables before the VM loops back,
+                    // ensuring each closure captures the value at the moment it was created.
+                    byte localSlot = ReadByte(ref frame);
+                    CloseUpvalues(frame.BaseSlot + localSlot);
                     break;
                 }
 
@@ -1248,14 +1622,31 @@ public sealed class VirtualMachine
                     var sb = new StringBuilder();
                     int partStart = _sp - cmdMetadata.PartCount;
                     for (int i = partStart; i < _sp; i++)
-                        sb.Append(RuntimeOps.Stringify(_stack[i]));
-                    _sp = partStart;
+                        {
+                            sb.Append(RuntimeOps.Stringify(_stack[i]));
+                        }
+
+                        _sp = partStart;
 
                     string command = _context.ExpandTilde(sb.ToString().Trim());
                     if (string.IsNullOrEmpty(command))
-                        throw new RuntimeError("Command cannot be empty.", span);
+                        {
+                            throw new RuntimeError("Command cannot be empty.", span);
+                        }
 
                     var (program, arguments) = CommandParser.Parse(command);
+
+                    // Expand tilde in individual arguments (the full-command ExpandTilde above
+                    // only handles a leading ~ in the program name)
+                    string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    for (int i = 0; i < arguments.Count; i++)
+                    {
+                        string arg = arguments[i];
+                        if (arg == "~")
+                            arguments[i] = home;
+                        else if (arg.StartsWith("~/", StringComparison.Ordinal) || arg.StartsWith("~\\", StringComparison.Ordinal))
+                            arguments[i] = Path.Combine(home, arg[2..]);
+                    }
 
                     // Apply elevation prefix if active
                     if (_context.ElevationActive && _context.ElevationCommand != null)
@@ -1330,7 +1721,16 @@ public sealed class VirtualMachine
                     // carries the final exit code per pipeline semantics.
                     // True streaming pipes are a future enhancement (Phase 7+).
                     StashValue rightResult = Pop();
-                    _sp--; // discard left result
+                    StashValue leftResult = Pop();
+
+                    static bool IsCommandResult(object? obj) =>
+                        obj is StashDictionary d && d.Has("stdout") && d.Has("exitCode");
+
+                    if (!IsCommandResult(leftResult.ToObject()) || !IsCommandResult(rightResult.ToObject()))
+                    {
+                        throw new RuntimeError("All stages in a pipe must be command expressions.", GetCurrentSpan(ref frame));
+                    }
+
                     Push(rightResult);
                     break;
                 }
@@ -1366,10 +1766,14 @@ public sealed class VirtualMachine
                     try
                     {
                         if (append)
-                            File.AppendAllText(filePath, content);
-                        else
-                            File.WriteAllText(filePath, content);
-                    }
+                            {
+                                File.AppendAllText(filePath, content);
+                            }
+                            else
+                            {
+                                File.WriteAllText(filePath, content);
+                            }
+                        }
                     catch (Exception ex)
                     {
                         throw new RuntimeError($"Redirect failed: {ex.Message}", span);
@@ -1402,10 +1806,14 @@ public sealed class VirtualMachine
                     foreach (string importName in importMeta.Names)
                     {
                         if (moduleEnv.TryGetValue(importName, out object? importedValue))
-                            Push(StashValue.FromObject(importedValue));
-                        else
-                            throw new RuntimeError($"Module does not export '{importName}'.", span);
-                    }
+                            {
+                                Push(StashValue.FromObject(importedValue));
+                            }
+                            else
+                            {
+                                throw new RuntimeError($"Module does not export '{importName}'.", span);
+                            }
+                        }
                     break;
                 }
 
@@ -1426,8 +1834,11 @@ public sealed class VirtualMachine
                     foreach (KeyValuePair<string, object?> kvp in moduleEnv)
                     {
                         if (kvp.Value is StashNamespace)
-                            continue; // skip inherited built-in namespaces
-                        ns.Define(kvp.Key, kvp.Value);
+                            {
+                                continue; // skip inherited built-in namespaces
+                            }
+
+                            ns.Define(kvp.Key, kvp.Value);
                     }
                     ns.Freeze();
                     Push(StashValue.FromObj(ns));
@@ -1446,17 +1857,24 @@ public sealed class VirtualMachine
                     if (destructMeta.Kind == "array")
                     {
                         if (initializer is not List<object?> list)
-                            throw new RuntimeError("Array destructuring requires an array value.", span);
+                            {
+                                throw new RuntimeError("Array destructuring requires an array value.", span);
+                            }
 
-                        for (int i = 0; i < destructMeta.Names.Length; i++)
-                            Push(StashValue.FromObject(i < list.Count ? list[i] : null));
+                            for (int i = 0; i < destructMeta.Names.Length; i++)
+                            {
+                                Push(StashValue.FromObject(i < list.Count ? list[i] : null));
+                            }
 
-                        if (destructMeta.RestName != null)
+                            if (destructMeta.RestName != null)
                         {
                             var rest = new List<object?>();
                             for (int i = destructMeta.Names.Length; i < list.Count; i++)
-                                rest.Add(list[i]);
-                            Push(StashValue.FromObj(rest));
+                                {
+                                    rest.Add(list[i]);
+                                }
+
+                                Push(StashValue.FromObj(rest));
                         }
                     }
                     else
@@ -1465,16 +1883,20 @@ public sealed class VirtualMachine
                         {
                             var usedNames = new HashSet<string>(destructMeta.Names);
                             foreach (string dname in destructMeta.Names)
-                                Push(StashValue.FromObject(destructInst.GetField(dname, span)));
+                                {
+                                    Push(StashValue.FromObject(destructInst.GetField(dname, span)));
+                                }
 
-                            if (destructMeta.RestName != null)
+                                if (destructMeta.RestName != null)
                             {
                                 var rest = new StashDictionary();
                                 foreach (KeyValuePair<string, object?> kvp in destructInst.GetAllFields())
                                 {
                                     if (!usedNames.Contains(kvp.Key))
-                                        rest.Set(kvp.Key, kvp.Value);
-                                }
+                                        {
+                                            rest.Set(kvp.Key, kvp.Value);
+                                        }
+                                    }
                                 Push(StashValue.FromObj(rest));
                             }
                         }
@@ -1482,17 +1904,21 @@ public sealed class VirtualMachine
                         {
                             var usedNames = new HashSet<string>(destructMeta.Names);
                             foreach (string dname in destructMeta.Names)
-                                Push(StashValue.FromObject(destructDict.Has(dname) ? destructDict.Get(dname) : null));
+                                {
+                                    Push(StashValue.FromObject(destructDict.Has(dname) ? destructDict.Get(dname) : null));
+                                }
 
-                            if (destructMeta.RestName != null)
+                                if (destructMeta.RestName != null)
                             {
                                 var rest = new StashDictionary();
                                 var allKeys = destructDict.Keys();
                                 foreach (object? k in allKeys)
                                 {
                                     if (k is string ks && !usedNames.Contains(ks))
-                                        rest.Set(ks, destructDict.Get(ks));
-                                }
+                                        {
+                                            rest.Set(ks, destructDict.Get(ks));
+                                        }
+                                    }
                                 Push(StashValue.FromObj(rest));
                             }
                         }
@@ -1508,15 +1934,24 @@ public sealed class VirtualMachine
                 // ==================== Elevation ====================
                 case OpCode.ElevateBegin:
                 {
+                    if (_context.EmbeddedMode)
+                        throw new RuntimeError("Elevate blocks are not supported in embedded mode.", GetCurrentSpan(ref frame));
                     object? elevator = Pop().ToObject();
                     _context.ElevationActive = true;
                     if (elevator is string elevStr)
-                        _context.ElevationCommand = elevStr;
-                    else if (elevator != null)
-                        _context.ElevationCommand = RuntimeOps.Stringify(StashValue.FromObject(elevator));
-                    else
-                        _context.ElevationCommand = OperatingSystem.IsWindows() ? "gsudo" : "sudo";
-                    break;
+                        {
+                            _context.ElevationCommand = elevStr;
+                        }
+                        else if (elevator != null)
+                        {
+                            _context.ElevationCommand = RuntimeOps.Stringify(StashValue.FromObject(elevator));
+                        }
+                        else
+                        {
+                            _context.ElevationCommand = OperatingSystem.IsWindows() ? "gsudo" : "sudo";
+                        }
+
+                        break;
                 }
 
                 case OpCode.ElevateEnd:
@@ -1539,18 +1974,30 @@ public sealed class VirtualMachine
                     if (retryMeta.HasOnRetryClause)
                     {
                         object? obj = Pop().ToObject();
-                        if (obj is VMFunction f1) onRetryVmFn = f1;
-                        else if (obj is IStashCallable c1) onRetryCb = c1;
-                    }
+                        if (obj is VMFunction f1)
+                            {
+                                onRetryVmFn = f1;
+                            }
+                            else if (obj is IStashCallable c1)
+                            {
+                                onRetryCb = c1;
+                            }
+                        }
 
                     VMFunction? untilVmFn = null;
                     IStashCallable? untilCb = null;
                     if (retryMeta.HasUntilClause)
                     {
                         object? obj = Pop().ToObject();
-                        if (obj is VMFunction f2) untilVmFn = f2;
-                        else if (obj is IStashCallable c2) untilCb = c2;
-                    }
+                        if (obj is VMFunction f2)
+                            {
+                                untilVmFn = f2;
+                            }
+                            else if (obj is IStashCallable c2)
+                            {
+                                untilCb = c2;
+                            }
+                        }
 
                     object? bodyObj = Pop().ToObject();
                     VMFunction bodyVmFn = bodyObj as VMFunction
@@ -1565,9 +2012,15 @@ public sealed class VirtualMachine
                         {
                             if (oi.GetFields().TryGetValue("delay", out object? dv))
                             {
-                                if (dv is long dl) retryDelayMs = dl;
-                                else if (dv is StashDuration dd) retryDelayMs = (long)dd.TotalMilliseconds;
-                            }
+                                if (dv is long dl)
+                                    {
+                                        retryDelayMs = dl;
+                                    }
+                                    else if (dv is StashDuration dd)
+                                    {
+                                        retryDelayMs = (long)dd.TotalMilliseconds;
+                                    }
+                                }
                         }
                     }
                     else if (retryMeta.OptionCount > 0)
@@ -1579,49 +2032,74 @@ public sealed class VirtualMachine
                             object? optVal = _stack[pairStart + oi * 2 + 1].ToObject();
                             if (optKey == "delay")
                             {
-                                if (optVal is long dl) retryDelayMs = dl;
-                                else if (optVal is StashDuration dd) retryDelayMs = (long)dd.TotalMilliseconds;
-                            }
+                                if (optVal is long dl)
+                                    {
+                                        retryDelayMs = dl;
+                                    }
+                                    else if (optVal is StashDuration dd)
+                                    {
+                                        retryDelayMs = (long)dd.TotalMilliseconds;
+                                    }
+                                }
                         }
                         _sp = pairStart;
                     }
 
                     object? maxAttemptsObj = Pop().ToObject();
-                    long maxAttempts = maxAttemptsObj is long ma ? ma : 3L;
+                    if (maxAttemptsObj is not long maxAttempts)
+                    {
+                        throw new RuntimeError("Retry max attempts must be an integer.", span);
+                    }
+                    if (maxAttempts < 0)
+                    {
+                        throw new RuntimeError("Retry max attempts must be non-negative.", span);
+                    }
+                    if (maxAttempts == 0)
+                    {
+                        throw new RuntimeError(
+                            "All 0 retry attempts exhausted — predicate not satisfied.",
+                            span, "RetryExhaustedError");
+                    }
 
                     // Execute retry loop
                     object? retryLastResult = null;
                     RuntimeError? retryLastError = null;
+
+                    var retryErrors = new List<object?>();
 
                     for (long attempt = 1; attempt <= maxAttempts; attempt++)
                     {
                         bool bodyThrew = false;
                         try
                         {
-                            retryLastResult = ExecuteVMFunctionInline(bodyVmFn, [], span);
+                            // Build attempt context dict
+                            var attemptCtx = new StashDictionary();
+                            attemptCtx.Set("current", attempt);
+                            attemptCtx.Set("max", maxAttempts);
+                            attemptCtx.Set("remaining", maxAttempts - attempt);
+                            attemptCtx.Set("errors", new List<object?>(retryErrors));
+                            retryLastResult = ExecuteVMFunctionInline(bodyVmFn, new object?[] { attemptCtx }, span);
                         }
                         catch (RuntimeError rex)
                         {
                             bodyThrew = true;
                             retryLastError = rex;
 
-                            var retryErr = new StashError(rex.Message, rex.ErrorType ?? "RuntimeError");
-                            if (onRetryVmFn != null)
+                            var retryErr = new StashError(rex.Message, rex.ErrorType ?? "RuntimeError", null, rex.Properties);
+                            retryErrors.Add(retryErr);
+
+                            // Only call onRetry if this is NOT the last attempt
+                            if (attempt < maxAttempts)
                             {
-                                try
+                                if (onRetryVmFn != null)
                                 {
                                     ExecuteVMFunctionInline(onRetryVmFn,
                                         new object?[] { attempt, retryErr }, span);
                                 }
-                                catch { /* suppress onRetry errors */ }
-                            }
-                            else if (onRetryCb != null)
-                            {
-                                try
+                                else if (onRetryCb != null)
                                 {
                                     onRetryCb.Call(_context, new List<object?> { attempt, retryErr });
                                 }
-                                catch { /* suppress onRetry errors */ }
                             }
                         }
 
@@ -1630,17 +2108,25 @@ public sealed class VirtualMachine
                             bool success = true;
                             if (untilVmFn != null)
                             {
-                                object? pred = ExecuteVMFunctionInline(untilVmFn,
-                                    new object?[] { retryLastResult, attempt }, span);
+                                object?[] untilArgs = untilVmFn.Chunk.Arity >= 2
+                                    ? new object?[] { retryLastResult, attempt }
+                                    : new object?[] { retryLastResult };
+                                object? pred = ExecuteVMFunctionInline(untilVmFn, untilArgs, span);
                                 if (RuntimeOps.IsFalsy(StashValue.FromObject(pred)))
+                                {
                                     success = false;
+                                }
                             }
                             else if (untilCb != null)
                             {
-                                object? pred = untilCb.Call(_context,
-                                    new List<object?> { retryLastResult, attempt });
+                                List<object?> untilArgs2 = untilCb is VMFunction cbFn && cbFn.Chunk.Arity >= 2
+                                    ? new List<object?> { retryLastResult, attempt }
+                                    : new List<object?> { retryLastResult };
+                                object? pred = untilCb.Call(_context, untilArgs2);
                                 if (RuntimeOps.IsFalsy(StashValue.FromObject(pred)))
+                                {
                                     success = false;
+                                }
                             }
 
                             if (success)
@@ -1649,18 +2135,35 @@ public sealed class VirtualMachine
                                 goto retryDone;
                             }
                             // Until predicate failed — treat as a retry-worthy failure
+                            if (attempt < maxAttempts)
+                            {
+                                if (onRetryVmFn != null)
+                                {
+                                    ExecuteVMFunctionInline(onRetryVmFn,
+                                        new object?[] { attempt, new StashError("Predicate not satisfied", "RetryError") }, span);
+                                }
+                                else if (onRetryCb != null)
+                                {
+                                    onRetryCb.Call(_context, new List<object?> { attempt, new StashError("Predicate not satisfied", "RetryError") });
+                                }
+                            }
                             bodyThrew = true;
                         }
 
                         if (retryDelayMs > 0 && attempt < maxAttempts)
-                            Thread.Sleep((int)retryDelayMs);
+                            {
+                                Thread.Sleep((int)retryDelayMs);
+                            }
 
-                        if (attempt == maxAttempts)
+                            if (attempt == maxAttempts)
                         {
                             if (retryLastError != null)
-                                throw new RuntimeError(retryLastError.Message, span,
+                                {
+                                    throw new RuntimeError(retryLastError.Message, span,
                                     retryLastError.ErrorType ?? "RuntimeError");
-                            throw new RuntimeError(
+                                }
+
+                                throw new RuntimeError(
                                 $"All {maxAttempts} retry attempts exhausted — predicate not satisfied.",
                                 span, "RetryExhaustedError");
                         }
@@ -1670,6 +2173,16 @@ public sealed class VirtualMachine
                 }
 
                 // ==================== Deferred / Not-yet-implemented ====================
+                case OpCode.CheckNumeric:
+                {
+                    StashValue val = Peek();
+                    if (!val.IsNumeric)
+                    {
+                        throw new RuntimeError("Operand of '++' or '--' must be a number.", GetCurrentSpan(ref frame));
+                    }
+                    break;
+                }
+
                 case OpCode.PreIncrement:
                 case OpCode.PreDecrement:
                 case OpCode.PostIncrement:
@@ -1710,15 +2223,20 @@ public sealed class VirtualMachine
                 int minRequired = Math.Min(minArity, nonRestCount);
 
                 if (provided < minRequired)
+                {
                     throw new RuntimeError(
                         $"Expected at least {minRequired} arguments but got {provided}.",
                         callSpan);
+                }
 
                 // Pad non-rest params that weren't provided (may have defaults)
                 if (provided < nonRestCount)
                 {
                     for (int i = provided; i < nonRestCount; i++)
+                    {
                         Push(StashValue.FromObj(NotProvided));
+                    }
+
                     provided = nonRestCount;
                 }
 
@@ -1727,7 +2245,10 @@ public sealed class VirtualMachine
                 var restList = new List<object?>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
+                {
                     restList.Add(_stack[i].ToObject());
+                }
+
                 _sp = restStart;
                 Push(StashValue.FromObj(restList));
                 provided = expected;
@@ -1749,11 +2270,20 @@ public sealed class VirtualMachine
                 if (provided < expected)
                 {
                     for (int i = provided; i < expected; i++)
+                    {
                         Push(StashValue.FromObj(NotProvided));
+                    }
                 }
             }
 
             int baseSlot = _sp - expected;
+
+            if (fnChunk.IsAsync)
+            {
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, fn.Upvalues, baseSlot, callSpan)));
+                return;
+            }
+
             PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name);
             return;
         }
@@ -1769,7 +2299,10 @@ public sealed class VirtualMachine
             int shiftStart = _sp - argc; // first arg position
             Push(StashValue.Null);        // grow stack + increment _sp
             for (int i = _sp - 2; i >= shiftStart; i--)
+            {
                 _stack[i + 1] = _stack[i];
+            }
+
             _stack[shiftStart] = StashValue.FromObj(bound.Instance); // insert self after callee
 
             int provided = argc + 1; // user args + self
@@ -1781,12 +2314,17 @@ public sealed class VirtualMachine
                 int nonRestCount = expected - 1;
                 int minRequired = Math.Min(minArity, nonRestCount);
                 if (provided < minRequired)
+                {
                     throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan);
+                }
 
                 if (provided < nonRestCount)
                 {
                     for (int i = provided; i < nonRestCount; i++)
+                    {
                         Push(StashValue.FromObj(NotProvided));
+                    }
+
                     provided = nonRestCount;
                 }
 
@@ -1794,7 +2332,10 @@ public sealed class VirtualMachine
                 var restList = new List<object?>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
+                {
                     restList.Add(_stack[i].ToObject());
+                }
+
                 _sp = restStart;
                 Push(StashValue.FromObj(restList));
                 provided = expected;
@@ -1812,11 +2353,20 @@ public sealed class VirtualMachine
                 if (provided < expected)
                 {
                     for (int i = provided; i < expected; i++)
+                    {
                         Push(StashValue.FromObj(NotProvided));
+                    }
                 }
             }
 
             int baseSlot = _sp - fnChunk.Arity;
+
+            if (fnChunk.IsAsync)
+            {
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, boundFn.Upvalues, baseSlot, callSpan)));
+                return;
+            }
+
             PushFrame(fnChunk, baseSlot, boundFn.Upvalues, fnChunk.Name);
             return;
         }
@@ -1830,7 +2380,10 @@ public sealed class VirtualMachine
             int shiftStart = _sp - argc;
             Push(StashValue.Null);
             for (int i = _sp - 2; i >= shiftStart; i--)
+            {
                 _stack[i + 1] = _stack[i];
+            }
+
             _stack[shiftStart] = StashValue.FromObject(extBound.Receiver);
 
             int provided = argc + 1; // user args + self
@@ -1842,12 +2395,17 @@ public sealed class VirtualMachine
                 int nonRestCount = expected - 1;
                 int minRequired = Math.Min(minArity, nonRestCount);
                 if (provided < minRequired)
+                {
                     throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan);
+                }
 
                 if (provided < nonRestCount)
                 {
                     for (int i = provided; i < nonRestCount; i++)
+                    {
                         Push(StashValue.FromObj(NotProvided));
+                    }
+
                     provided = nonRestCount;
                 }
 
@@ -1855,7 +2413,10 @@ public sealed class VirtualMachine
                 var restList = new List<object?>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
+                {
                     restList.Add(_stack[i].ToObject());
+                }
+
                 _sp = restStart;
                 Push(StashValue.FromObj(restList));
                 provided = expected;
@@ -1873,11 +2434,20 @@ public sealed class VirtualMachine
                 if (provided < expected)
                 {
                     for (int i = provided; i < expected; i++)
+                    {
                         Push(StashValue.FromObj(NotProvided));
+                    }
                 }
             }
 
             int baseSlot = _sp - fnChunk.Arity;
+
+            if (fnChunk.IsAsync)
+            {
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, extFn.Upvalues, baseSlot, callSpan)));
+                return;
+            }
+
             PushFrame(fnChunk, baseSlot, extFn.Upvalues, fnChunk.Name);
             return;
         }
@@ -1902,7 +2472,10 @@ public sealed class VirtualMachine
             var args = new List<object?>(argc);
             int argStart = _sp - argc;
             for (int i = argStart; i < _sp; i++)
+            {
                 args.Add(_stack[i].ToObject());
+            }
+
             _sp = argStart - 1; // pop args + callee slot
 
             object? result;
@@ -1912,6 +2485,10 @@ public sealed class VirtualMachine
                 result = callable.Call(_context, args);
             }
             catch (RuntimeError)
+            {
+                throw;
+            }
+            catch (Stash.Tpl.TemplateException)
             {
                 throw;
             }
@@ -1936,7 +2513,10 @@ public sealed class VirtualMachine
             object? result = instance.GetField(name, span);
             // Intercept StashBoundMethod wrapping VMFunction → return VMBoundMethod instead
             if (result is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
+            {
                 return new VMBoundMethod(bound.Instance, vmFunc);
+            }
+
             return result;
         }
 
@@ -1945,19 +2525,27 @@ public sealed class VirtualMachine
         {
             if (_extensionRegistry.TryGetMethod("dict", name, out IStashCallable? dictExtMethod) &&
                 dictExtMethod is VMFunction dictExtFunc)
+            {
                 return new VMExtensionBoundMethod(obj, dictExtFunc);
+            }
+
             return dict.Get(name);
         }
 
         // 3. StashNamespace: member access
         if (obj is StashNamespace ns)
+        {
             return ns.GetMember(name, span);
+        }
 
         // 4. StashStruct: static method access
         if (obj is StashStruct structDef)
         {
             if (structDef.Methods.TryGetValue(name, out IStashCallable? method))
+            {
                 return method;
+            }
+
             throw new RuntimeError($"Struct '{structDef.Name}' has no static member '{name}'.", span);
         }
 
@@ -1966,7 +2554,10 @@ public sealed class VirtualMachine
         {
             StashEnumValue? enumVal = enumDef.GetMember(name);
             if (enumVal == null)
+            {
                 throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{name}'.", span);
+            }
+
             return enumVal;
         }
 
@@ -1995,11 +2586,81 @@ public sealed class VirtualMachine
             };
         }
 
+        // StashDuration: property access
+        if (obj is StashDuration dur)
+        {
+            return name switch
+            {
+                "totalMs" => (object)dur.TotalMilliseconds,
+                "totalSeconds" => (object)dur.TotalSeconds,
+                "totalMinutes" => (object)dur.TotalMinutes,
+                "totalHours" => (object)dur.TotalHours,
+                "totalDays" => (object)dur.TotalDays,
+                "milliseconds" => (object)dur.Milliseconds,
+                "seconds" => (object)dur.Seconds,
+                "minutes" => (object)dur.Minutes,
+                "hours" => (object)dur.Hours,
+                "days" => (object)dur.Days,
+                _ => throw new RuntimeError($"Duration has no property '{name}'.", span)
+            };
+        }
+
+        // StashByteSize: property access
+        if (obj is StashByteSize bs)
+        {
+            return name switch
+            {
+                "bytes" => (object)bs.TotalBytes,
+                "kb" => (object)bs.Kb,
+                "mb" => (object)bs.Mb,
+                "gb" => (object)bs.Gb,
+                "tb" => (object)bs.Tb,
+                _ => throw new RuntimeError($"ByteSize has no property '{name}'.", span)
+            };
+        }
+
+        // StashSemVer: property access
+        if (obj is StashSemVer sv)
+        {
+            return name switch
+            {
+                "major" => (object)sv.Major,
+                "minor" => (object)sv.Minor,
+                "patch" => (object)sv.Patch,
+                "prerelease" => (object)(sv.Prerelease ?? ""),
+                "build" => (object)(sv.BuildMetadata ?? ""),
+                "isPrerelease" => (object)sv.IsPrerelease,
+                _ => throw new RuntimeError($"SemVer has no property '{name}'.", span)
+            };
+        }
+
+        // StashIpAddress: property access
+        if (obj is StashIpAddress ip)
+        {
+            return name switch
+            {
+                "address" => (object)ip.Address.ToString(),
+                "version" => (object)(long)ip.Version,
+                "prefixLength" => ip.PrefixLength.HasValue ? (object)(long)ip.PrefixLength.Value : null,
+                "isLoopback" => (object)ip.IsLoopback,
+                "isPrivate" => (object)ip.IsPrivate,
+                "isLinkLocal" => (object)ip.IsLinkLocal,
+                "isIPv4" => (object)(ip.Version == 4),
+                "isIPv6" => (object)(ip.Version == 6),
+                _ => throw new RuntimeError($"IpAddress has no property '{name}'.", span)
+            };
+        }
+
         // 8. Built-in type .length properties
         if (obj is List<object?> list && name == "length")
+        {
             return (long)list.Count;
+        }
+
         if (obj is string s && name == "length")
+        {
             return (long)s.Length;
+        }
 
         // 9. Extension methods on built-in types
         string? extTypeName = obj switch
@@ -2015,7 +2676,10 @@ public sealed class VirtualMachine
             _extensionRegistry.TryGetMethod(extTypeName, name, out IStashCallable? extMethod))
         {
             if (extMethod is VMFunction extVmFunc)
+            {
                 return new VMExtensionBoundMethod(obj, extVmFunc);
+            }
+
             return new BuiltInBoundMethod(obj, extMethod);
         }
 
@@ -2034,7 +2698,9 @@ public sealed class VirtualMachine
         {
             object? member = ufcsNs.GetMember(name, span);
             if (member is IStashCallable callable)
+            {
                 return new BuiltInBoundMethod(obj, callable);
+            }
         }
 
         throw new RuntimeError($"Cannot access field '{name}' on {RuntimeValues.Stringify(obj)}.", span);
@@ -2060,21 +2726,46 @@ public sealed class VirtualMachine
         if (obj is List<object?> list)
         {
             if (index is not long i)
+            {
                 throw new RuntimeError("Array index must be an integer.", span);
-            if (i < 0) i += list.Count;
+            }
+
+            if (i < 0)
+            {
+                i += list.Count;
+            }
+
             if (i < 0 || i >= list.Count)
+            {
                 throw new RuntimeError($"Index {index} out of bounds for array of length {list.Count}.", span);
+            }
+
             return list[(int)i];
         }
         if (obj is StashDictionary dict)
-            return dict.Get(index!);
+        {
+            if (index is null)
+                throw new RuntimeError("Dictionary key cannot be null.", span);
+            return dict.Get(index);
+        }
+
         if (obj is string s)
         {
             if (index is not long idx)
+            {
                 throw new RuntimeError("String index must be an integer.", span);
-            if (idx < 0) idx += s.Length;
+            }
+
+            if (idx < 0)
+            {
+                idx += s.Length;
+            }
+
             if (idx < 0 || idx >= s.Length)
+            {
                 throw new RuntimeError($"Index {index} out of bounds for string of length {s.Length}.", span);
+            }
+
             return s[(int)idx].ToString();
         }
         throw new RuntimeError($"Cannot index into {RuntimeValues.Stringify(obj)}.", span);
@@ -2085,48 +2776,79 @@ public sealed class VirtualMachine
         if (obj is List<object?> list)
         {
             if (index is not long i)
+            {
                 throw new RuntimeError("Array index must be an integer.", span);
-            if (i < 0) i += list.Count;
+            }
+
+            if (i < 0)
+            {
+                i += list.Count;
+            }
+
             if (i < 0 || i >= list.Count)
+            {
                 throw new RuntimeError($"Index {index} out of bounds for array of length {list.Count}.", span);
+            }
+
             list[(int)i] = value;
             return;
         }
         if (obj is StashDictionary dict)
         {
-            dict.Set(index!, value);
+            if (index is null)
+                throw new RuntimeError("Dictionary key cannot be null.", span);
+            dict.Set(index, value);
             return;
         }
         throw new RuntimeError($"Cannot index-assign into {RuntimeValues.Stringify(obj)}.", span);
     }
 
+    private static bool InstanceImplementsInterfaceName(StashInstance inst, string ifaceName)
+    {
+        if (inst.Struct == null) return false;
+        foreach (StashInterface iface in inst.Struct.Interfaces)
+        {
+            if (iface.Name == ifaceName) return true;
+        }
+        return false;
+    }
+
     private static bool CheckIsType(object? value, string typeName) => typeName switch
     {
-        "int"      => value is long,
-        "float"    => value is double,
-        "string"   => value is string,
-        "bool"     => value is bool,
-        "array"    => value is List<object?>,
-        "dict"     => value is StashDictionary,
-        "null"     => value is null,
-        "function" => value is VMFunction or IStashCallable,
-        "range"    => value is StashRange,
-        "duration" => value is StashDuration,
-        "bytesize" => value is StashByteSize,
-        "semver"   => value is StashSemVer,
-        "ip"       => value is StashIpAddress,
-        "error"    => value is StashError,
-        _          => value is StashEnumValue ev ? ev.TypeName == typeName
+        "int"       => value is long,
+        "float"     => value is double,
+        "string"    => value is string,
+        "bool"      => value is bool,
+        "array"     => value is List<object?>,
+        "dict"      => value is StashDictionary,
+        "null"      => value is null,
+        "function"  => value is VMFunction or IStashCallable,
+        "range"     => value is StashRange,
+        "duration"  => value is StashDuration,
+        "bytes"     => value is StashByteSize,
+        "semver"    => value is StashSemVer,
+        "ip"        => value is StashIpAddress,
+        "Error"     => value is StashError,
+        "struct"    => value is StashInstance,
+        "enum"      => value is StashEnumValue,
+        "interface" => value is StashInterface,
+        "namespace" => value is StashNamespace,
+        "Future"    => value is StashFuture,
+        _           => value is StashEnumValue ev ? ev.TypeName == typeName
                      : value is StashInstance inst && inst.TypeName == typeName,
     };
 
     private static StashIterator CreateIterator(object? iterable, SourceSpan? span)
     {
+        if (iterable is StashDictionary dict)
+        {
+            return new StashIterator(dict.Keys().GetEnumerator(), dict);
+        }
+
         IEnumerator<object?> enumerator = iterable switch
         {
-            List<object?> list    => list.GetEnumerator(),
+            List<object?> list    => new List<object?>(list).GetEnumerator(),
             StashRange range      => range.Iterate().GetEnumerator(),
-            StashDictionary dict  => dict.Keys().GetEnumerator(),
             string s              => RuntimeValues.StringToChars(s).GetEnumerator(),
             _ => throw new RuntimeError($"Cannot iterate over {RuntimeValues.Stringify(iterable)}.", span),
         };
@@ -2145,7 +2867,9 @@ public sealed class VirtualMachine
     private object? RunUntilFrame(int targetFrameCount)
     {
         if (_debugger is not null)
+        {
             return RunUntilFrameDebug(targetFrameCount);
+        }
 
         while (true)
         {
@@ -2153,14 +2877,16 @@ public sealed class VirtualMachine
             {
                 return RunInner(targetFrameCount);
             }
-            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
+            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0 && _exceptionHandlers[^1].FrameIndex >= targetFrameCount)
             {
                 ExceptionHandler handler = _exceptionHandlers[^1];
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
                 _sp = handler.StackLevel;
-                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
+                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                _context.LastError = stashError;
+                Push(StashValue.FromObj(stashError));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
             }
         }
@@ -2176,15 +2902,21 @@ public sealed class VirtualMachine
             {
                 return RunInner(targetFrameCount);
             }
-            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
+            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0 && _exceptionHandlers[^1].FrameIndex >= targetFrameCount)
             {
                 ExceptionHandler handler = _exceptionHandlers[^1];
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
-                while (_debugCallStack.Count > handler.FrameIndex) _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
+                while (_debugCallStack.Count > handler.FrameIndex)
+                {
+                    _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
+                }
+
                 _sp = handler.StackLevel;
-                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
+                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                _context.LastError = stashError;
+                Push(StashValue.FromObj(stashError));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
             }
             catch (RuntimeError ex)
@@ -2207,17 +2939,136 @@ public sealed class VirtualMachine
     }
 
     /// <summary>
-    /// Calls a <see cref="VMFunction"/> closure inline on the same VM instance and
-    /// returns its result. Safe to call from within the dispatch loop (e.g. OP_RETRY).
+    /// Spawns an async <see cref="VMFunction"/> on a background thread via a child VM and
+    /// returns a <see cref="StashFuture"/>. Called when a Chunk with <c>IsAsync = true</c> is
+    /// invoked. All arity checks, rest-param collection, and default-param padding have already
+    /// been applied by <see cref="CallValue"/>; <paramref name="baseSlot"/> points to the first
+    /// argument on the current stack.
     /// </summary>
-    private object? ExecuteVMFunctionInline(VMFunction fn, object?[] args, SourceSpan? span)
+    private StashFuture SpawnAsyncFunction(Chunk fnChunk, Upvalue[] upvalues, int baseSlot, SourceSpan? callSpan)
     {
+        // Snapshot the fully-prepared arguments (rest-collected, defaults applied).
+        int arity = fnChunk.Arity;
+        var capturedArgs = new object?[arity];
+        for (int i = 0; i < arity; i++)
+        {
+            capturedArgs[i] = _stack[baseSlot + i].ToObject();
+        }
+
+        _sp = baseSlot - 1; // pop callee slot + all args off the parent stack
+
+        // Upgrade parent IO streams to thread-safe wrappers before spawning.
+        if (_context.Output is not SynchronizedTextWriter)
+        {
+            _context.Output = new SynchronizedTextWriter(_context.Output);
+        }
+
+        if (_context.ErrorOutput is not SynchronizedTextWriter)
+        {
+            _context.ErrorOutput = new SynchronizedTextWriter(_context.ErrorOutput);
+        }
+
+        // Snapshot everything the child VM needs — capture before Task.Run to avoid races.
+        var capturedGlobals = new Dictionary<string, object?>(_globals);
+        var capturedModuleLoader = _moduleLoader;
+        var capturedModuleCache = _moduleCache;
+        var capturedImportStack = _importStack;
+        var capturedModuleLocks = _moduleLocks;
+        string? capturedFile = _context.CurrentFile;
+        TextWriter capturedOutput = _context.Output;
+        TextWriter capturedErrorOutput = _context.ErrorOutput;
+        TextReader capturedInput = _context.Input;
+        bool capturedEmbedded = EmbeddedMode;
+
+        var cts = new CancellationTokenSource();
+        var task = Task.Run(() =>
+        {
+            var childVM = new VirtualMachine(capturedGlobals, cts.Token)
+            {
+                _moduleLoader = capturedModuleLoader,
+                _moduleCache = capturedModuleCache,
+                _importStack = capturedImportStack,
+                _moduleLocks = capturedModuleLocks,
+                EmbeddedMode = capturedEmbedded,
+            };
+            childVM._context.CurrentFile = capturedFile;
+            childVM._context.Output = capturedOutput;
+            childVM._context.ErrorOutput = capturedErrorOutput;
+            childVM._context.Input = capturedInput;
+
+            // Replicate the call-frame layout: callee slot + prepared args, then run.
+            childVM.Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues)));
+            for (int i = 0; i < arity; i++)
+            {
+                childVM.Push(StashValue.FromObject(capturedArgs[i]));
+            }
+
+            int childBase = childVM._sp - arity;
+            childVM.PushFrame(fnChunk, childBase, upvalues, fnChunk.Name);
+            return childVM.Run();
+        }, cts.Token);
+
+        return new StashFuture(task, cts);
+    }
+
+    /// <summary>
+    /// Calls a <see cref="VMFunction"/> closure inline on the same VM instance and
+    /// returns its result. Safe to call from within the dispatch loop (e.g. OP_RETRY)
+    /// and from built-in function callbacks (e.g. arr.map, test.it).
+    /// The stack pointer is saved and restored after the call so that repeated calls
+    /// (such as sort comparisons) do not leave stale values on the stack.
+    /// </summary>
+    internal object? ExecuteVMFunctionInline(VMFunction fn, object?[] args, SourceSpan? span)
+    {
+        int savedSp = _sp;
+        int savedFrameCount = _frameCount;
         Push(StashValue.FromObj(fn)); // callee slot
         foreach (object? arg in args)
+        {
             Push(StashValue.FromObject(arg));
-        int targetFrameCount = _frameCount; // before CallValue pushes the new frame
+        }
+
         CallValue(fn, args.Length, span);
-        return RunUntilFrame(targetFrameCount);
+        try
+        {
+            return RunUntilFrame(savedFrameCount);
+        }
+        finally
+        {
+            // CRITICAL: always restore the VM's stack pointer (and frame count on error),
+            // both for repeated calls (e.g. sort comparisons) and exception paths.
+            // Without this, RuntimeErrors that propagate through here and are caught by a
+            // built-in wrapper (e.g. assert.throws) leave the VM with a stale _sp,
+            // corrupting any subsequent stack operations.
+            if (_frameCount > savedFrameCount)
+            {
+                CloseUpvalues(savedSp);
+                _frameCount = savedFrameCount;
+            }
+            _sp = savedSp;
+        }
+    }
+
+    /// <summary>
+    /// Calls a <see cref="VMFunction"/> closure on this VM instance with a fresh execution state.
+    /// Used by <see cref="VMContext.InvokeCallback"/> to execute user lambdas from background threads
+    /// (e.g. fs.watch callbacks) on a dedicated child VM backed by shared globals.
+    /// </summary>
+    internal object? CallClosure(VMFunction fn, System.Collections.Generic.List<object?> args)
+    {
+        _sp = 0;
+        _frameCount = 0;
+        StepCount = 0;
+        _exceptionHandlers.Clear();
+        _openUpvalues.Clear();
+        Push(StashValue.FromObj(fn));
+        foreach (object? arg in args)
+        {
+            Push(StashValue.FromObject(arg));
+        }
+
+        CallValue(fn, args.Count, null);
+        return Run();
     }
 
     // ------------------------------------------------------------------
@@ -2239,7 +3090,9 @@ public sealed class VirtualMachine
                 CreateNoWindow = true
             };
             foreach (string arg in arguments)
+            {
                 psi.ArgumentList.Add(arg);
+            }
 
             using var process = Process.Start(psi)
                 ?? throw new RuntimeError("Failed to start process.", span);
@@ -2282,7 +3135,9 @@ public sealed class VirtualMachine
                 CreateNoWindow = false
             };
             foreach (string arg in arguments)
+            {
                 psi.ArgumentList.Add(arg);
+            }
 
             using var process = Process.Start(psi)
                 ?? throw new RuntimeError("Failed to start process.", span);
@@ -2316,7 +3171,9 @@ public sealed class VirtualMachine
         // immediately after the first assignment through StoreGlobal.  Returning the
         // global scope directly gives the debugger accurate, up-to-date values.
         if (_debugCallStack.Count == 0)
+        {
             return BuildGlobalScope();
+        }
 
         Chunk chunk = frame.Chunk;
         IDebugScope enclosing = BuildGlobalScope();
@@ -2355,7 +3212,11 @@ public sealed class VirtualMachine
 
     private Dictionary<string, object?> LoadModule(string modulePath, SourceSpan? span)
     {
+        // Use the context's current file, or fall back to the span's source file
+        // (populated when source is compiled with a real file path, e.g. via RunWithFile).
         string? currentFile = _context.CurrentFile;
+        if (currentFile == null && span?.File is { Length: > 0 } src && !src.StartsWith('<'))
+            currentFile = src;
         string resolvedPath;
 
         if (Path.IsPathRooted(modulePath))
@@ -2372,53 +3233,227 @@ public sealed class VirtualMachine
             resolvedPath = Path.GetFullPath(modulePath);
         }
 
+        // Try package resolution for non-path module specifiers
+        if (!File.Exists(resolvedPath) && !File.Exists(resolvedPath + ".stash"))
+        {
+            string? packagePath = ResolvePackagePath(modulePath, span);
+            if (packagePath != null)
+            {
+                resolvedPath = packagePath;
+            }
+        }
+
+        // Auto-append .stash extension if missing
         if (!resolvedPath.EndsWith(".stash", StringComparison.OrdinalIgnoreCase))
             resolvedPath += ".stash";
 
         if (_moduleCache.TryGetValue(resolvedPath, out Dictionary<string, object?>? cached))
+        {
             return cached;
+        }
 
-        if (_importStack.Contains(resolvedPath))
-            throw new RuntimeError($"Circular import detected: {resolvedPath}", span);
-
-        if (_moduleLoader == null)
-            throw new RuntimeError(
-                "Module loading is not configured for the bytecode VM.", span);
-
-        _importStack.Add(resolvedPath);
-        try
+        object moduleLock = _moduleLocks.GetOrAdd(resolvedPath, _ => new object());
+        lock (moduleLock)
         {
-            Chunk moduleChunk = _moduleLoader(resolvedPath, currentFile);
-
-            var moduleGlobals = new Dictionary<string, object?>(_globals);
-            var moduleVM = new VirtualMachine(moduleGlobals, _ct)
+            // Double-check after acquiring lock
+            if (_moduleCache.TryGetValue(resolvedPath, out Dictionary<string, object?>? cached2))
             {
-                _moduleLoader = _moduleLoader,
-                _moduleCache = _moduleCache,
-            };
-            moduleVM._context.CurrentFile = resolvedPath;
-            moduleVM._context.Output = _context.Output;
-            moduleVM._context.ErrorOutput = _context.ErrorOutput;
-            moduleVM._context.Input = _context.Input;
-            moduleVM.Debugger = _debugger;
-            moduleVM._debugThreadId = _debugThreadId;
-            moduleVM.EmbeddedMode = EmbeddedMode;
-            moduleVM.ScriptArgs = ScriptArgs;
-            moduleVM.TestHarness = TestHarness;
-            moduleVM.TestFilter = TestFilter;
+                return cached2;
+            }
 
-            // Notify debugger of newly loaded source
-            _debugger?.OnSourceLoaded(resolvedPath);
+            if (_importStack.Contains(resolvedPath))
+            {
+                throw new RuntimeError($"Circular import detected: {resolvedPath}", span);
+            }
 
-            moduleVM.Execute(moduleChunk);
+            _importStack.Add(resolvedPath);
+            try
+            {
+                Chunk moduleChunk;
+                try
+                {
+                    if (_moduleLoader != null)
+                    {
+                        moduleChunk = _moduleLoader(resolvedPath, currentFile);
+                    }
+                    else
+                    {
+                        // Built-in file-based loader: compile the module from disk.
+                        string moduleSource = File.ReadAllText(resolvedPath);
+                        var lex = new Lexer(moduleSource, resolvedPath);
+                        var tokens = lex.ScanTokens();
+                        if (lex.Errors.Count > 0)
+                            throw new RuntimeError($"Syntax error in module '{resolvedPath}': {lex.Errors[0]}", span);
+                        var par = new Parser(tokens);
+                        var stmts = par.ParseProgram();
+                        if (par.Errors.Count > 0)
+                            throw new RuntimeError($"Parse error in module '{resolvedPath}': {par.Errors[0]}", span);
+                        SemanticResolver.Resolve(stmts);
+                        moduleChunk = Compiler.Compile(stmts);
+                    }
+                }
+                catch (Exception ex) when (ex is FileNotFoundException or DirectoryNotFoundException)
+                {
+                    throw new RuntimeError($"Cannot find module '{modulePath}'.", span);
+                }
 
-            _moduleCache[resolvedPath] = moduleVM.Globals;
-            return moduleVM.Globals;
+                var moduleGlobals = new Dictionary<string, object?>(_globals);
+                var moduleVM = new VirtualMachine(moduleGlobals, _ct)
+                {
+                    _moduleLoader = _moduleLoader,
+                    _moduleCache = _moduleCache,
+                    _importStack = _importStack,
+                    _moduleLocks = _moduleLocks,
+                };
+                moduleVM._context.CurrentFile = resolvedPath;
+                moduleVM._context.Output = _context.Output;
+                moduleVM._context.ErrorOutput = _context.ErrorOutput;
+                moduleVM._context.Input = _context.Input;
+                moduleVM.Debugger = _debugger;
+                moduleVM._debugThreadId = _debugThreadId;
+                moduleVM.EmbeddedMode = EmbeddedMode;
+                moduleVM.ScriptArgs = ScriptArgs;
+                moduleVM.TestHarness = TestHarness;
+                moduleVM.TestFilter = TestFilter;
+
+                // Notify debugger of newly loaded source
+                _debugger?.OnSourceLoaded(resolvedPath);
+
+                moduleVM.Execute(moduleChunk);
+
+                _moduleCache[resolvedPath] = moduleVM.Globals;
+                return moduleVM.Globals;
+            }
+            finally
+            {
+                _importStack.Remove(resolvedPath);
+            }
         }
-        finally
+    }
+
+    private string? ResolvePackagePath(string modulePath, SourceSpan? span)
+    {
+        // Only attempt package resolution for non-path module specifiers
+        if (modulePath.StartsWith(".", StringComparison.Ordinal) ||
+            modulePath.StartsWith("/", StringComparison.Ordinal) ||
+            modulePath.StartsWith("\\", StringComparison.Ordinal) ||
+            modulePath.EndsWith(".stash", StringComparison.OrdinalIgnoreCase))
         {
-            _importStack.Remove(resolvedPath);
+            return null;
         }
+
+        // Find project root by walking up to find stash.json
+        string? startDir = _context.CurrentFile != null
+            ? Path.GetDirectoryName(Path.GetFullPath(_context.CurrentFile))
+            : null;
+
+        if (startDir == null) return null;
+
+        string? projectRoot = null;
+        string? dir = startDir;
+        while (dir != null)
+        {
+            if (File.Exists(Path.Combine(dir, "stash.json")))
+            {
+                projectRoot = dir;
+                break;
+            }
+            string? parent = Path.GetDirectoryName(dir);
+            if (parent == dir) break;
+            dir = parent;
+        }
+
+        if (projectRoot == null) return null;
+
+        string stashesDir = Path.Combine(projectRoot, "stashes");
+
+        // Parse package name and subpath
+        string packageName;
+        string? subPath = null;
+
+        if (modulePath.StartsWith("@", StringComparison.Ordinal))
+        {
+            // Scoped package: @scope/name or @scope/name/subpath
+            int secondSlash = modulePath.IndexOf('/', modulePath.IndexOf('/') + 1);
+            if (secondSlash >= 0)
+            {
+                packageName = modulePath[..secondSlash];
+                subPath = modulePath[(secondSlash + 1)..];
+            }
+            else
+            {
+                packageName = modulePath;
+            }
+        }
+        else if (modulePath.Contains('/'))
+        {
+            // Unscoped with subpath: pkg/lib/helpers
+            int firstSlash = modulePath.IndexOf('/');
+            packageName = modulePath[..firstSlash];
+            subPath = modulePath[(firstSlash + 1)..];
+        }
+        else
+        {
+            packageName = modulePath;
+        }
+
+        string packageDir = Path.Combine(stashesDir, packageName.Replace('/', Path.DirectorySeparatorChar));
+        if (!Directory.Exists(packageDir))
+        {
+            throw new RuntimeError(
+                $"Package '{packageName}' not found. Run `stash pkg install {packageName}` to install it.",
+                span);
+        }
+
+        if (subPath != null)
+        {
+            // Resolve subpath within package
+            string subFilePath = Path.Combine(packageDir, subPath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(subFilePath)) return subFilePath;
+            if (!subFilePath.EndsWith(".stash", StringComparison.OrdinalIgnoreCase))
+            {
+                string withExt = subFilePath + ".stash";
+                if (File.Exists(withExt)) return withExt;
+            }
+            throw new RuntimeError($"Module '{modulePath}' not found in package '{packageName}'.", span);
+        }
+
+        // Resolve entry point: check stash.json for "main" field
+        string pkgJsonPath = Path.Combine(packageDir, "stash.json");
+        if (File.Exists(pkgJsonPath))
+        {
+            try
+            {
+                string json = File.ReadAllText(pkgJsonPath);
+                // Simple JSON parsing for "main" field
+                int mainIdx = json.IndexOf("\"main\"", StringComparison.Ordinal);
+                if (mainIdx >= 0)
+                {
+                    int colonIdx = json.IndexOf(':', mainIdx);
+                    if (colonIdx >= 0)
+                    {
+                        int quoteStart = json.IndexOf('"', colonIdx + 1);
+                        if (quoteStart >= 0)
+                        {
+                            int quoteEnd = json.IndexOf('"', quoteStart + 1);
+                            if (quoteEnd > quoteStart)
+                            {
+                                string mainFile = json[(quoteStart + 1)..quoteEnd];
+                                string mainPath = Path.Combine(packageDir, mainFile.Replace('/', Path.DirectorySeparatorChar));
+                                if (File.Exists(mainPath)) return mainPath;
+                            }
+                        }
+                    }
+                }
+            }
+            catch { /* ignore parse errors, fall through to default */ }
+        }
+
+        // Default entry point: index.stash
+        string indexPath = Path.Combine(packageDir, "index.stash");
+        if (File.Exists(indexPath)) return indexPath;
+
+        throw new RuntimeError($"Package '{packageName}' has no entry point (no index.stash or main field).", span);
     }
 }
 
@@ -2432,7 +3467,16 @@ internal sealed class StashIterator
 
     public int Index { get; private set; } = -1;
 
+    /// <summary>When non-null, this iterator is iterating over a dict's keys; the dict is stored here for value lookup.</summary>
+    public StashDictionary? Dictionary { get; }
+
     public StashIterator(IEnumerator<object?> inner) => _inner = inner;
+
+    public StashIterator(IEnumerator<object?> inner, StashDictionary dict)
+    {
+        _inner = inner;
+        Dictionary = dict;
+    }
 
     public bool MoveNext()
     {
@@ -2441,4 +3485,15 @@ internal sealed class StashIterator
     }
 
     public object? Current => _inner.Current;
+}
+
+/// <summary>
+/// Wraps an iterable value pushed by <see cref="OpCode.Spread"/> so that
+/// <see cref="OpCode.Array"/> and <see cref="OpCode.Dict"/> can expand it
+/// without changing the compile-time element count.
+/// </summary>
+internal sealed class SpreadMarker
+{
+    public readonly object Items;
+    public SpreadMarker(object items) => Items = items;
 }

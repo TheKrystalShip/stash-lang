@@ -42,9 +42,13 @@ public static class Disassembler
         // Line number or continuation marker
         currentLine = chunk.SourceMap.GetLine(offset);
         if (currentLine == previousLine || currentLine == -1)
+        {
             sb.Append("   | ");
+        }
         else
+        {
             sb.Append($"{currentLine,4} ");
+        }
 
         byte raw = chunk.Code[offset];
         var opCode = (OpCode)raw;
@@ -87,8 +91,11 @@ public static class Disassembler
                     case OpCode.SetField:
                     case OpCode.Is:
                         if (operand < chunk.Constants.Length && chunk.Constants[operand].AsObj is string s)
-                            sb.Append($"    ; {s}");
-                        break;
+                            {
+                                sb.Append($"    ; {s}");
+                            }
+
+                            break;
 
                     case OpCode.Jump:
                     case OpCode.JumpTrue:

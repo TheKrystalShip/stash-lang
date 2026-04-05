@@ -117,7 +117,7 @@ public static class AssertBuiltIns
             var callable = Args.Callable(args, 0, "assert.throws");
             try
             {
-                callable.Call(ctx, new List<object?>());
+                ctx.InvokeCallback(callable, new List<object?>());
             }
             catch (RuntimeError ex)
             {

@@ -1,6 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 using Stash.Tap;
 
 namespace Stash.Tests.Interpreting;
@@ -10,21 +11,23 @@ public class TestDiscoveryTests
     // Helper for discovery mode
     private static (TapReporter reporter, string output) RunDiscovery(string source, string? currentFile = null)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         if (currentFile is not null)
         {
-            interpreter.CurrentFile = currentFile;
+            vm.CurrentFile = currentFile;
         }
 
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
-        interpreter.TestHarness = reporter;
-        interpreter.DiscoveryMode = true;
-        interpreter.Interpret(statements);
+        vm.TestHarness = reporter;
+        vm.DiscoveryMode = true;
+        vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
@@ -32,20 +35,22 @@ public class TestDiscoveryTests
     // Helper for running with harness and optional file
     private static (TapReporter reporter, string output) RunWithHarness(string source, string? currentFile = null)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         if (currentFile is not null)
         {
-            interpreter.CurrentFile = currentFile;
+            vm.CurrentFile = currentFile;
         }
 
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
-        interpreter.TestHarness = reporter;
-        interpreter.Interpret(statements);
+        vm.TestHarness = reporter;
+        vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
@@ -217,21 +222,24 @@ public class TestDiscoveryTests
     public void Discovery_WithFilter_OnlyMatchingDiscovered()
     {
         // When both discovery mode and filter are active, only matching tests are discovered
-        var lexer = new Lexer("""
+        string src = """
             test.it("alpha", () => { assert.true(true); });
             test.it("beta", () => { assert.true(true); });
-            """);
+            """;
+        var lexer = new Lexer(src, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.CurrentFile = "test.stash";
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.CurrentFile = "test.stash";
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
-        interpreter.TestHarness = reporter;
-        interpreter.DiscoveryMode = true;
-        interpreter.TestFilter = new[] { "test.stash > alpha" };
-        interpreter.Interpret(statements);
+        vm.TestHarness = reporter;
+        vm.DiscoveryMode = true;
+        vm.TestFilter = new[] { "test.stash > alpha" };
+        vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         var output = sw.ToString();
 
@@ -244,30 +252,30 @@ public class TestDiscoveryTests
     [Fact]
     public void TestFilter_DefaultsToNull()
     {
-        var interpreter = new Interpreter();
-        Assert.Null(interpreter.TestFilter);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        Assert.Null(vm.TestFilter);
     }
 
     [Fact]
     public void DiscoveryMode_DefaultsToFalse()
     {
-        var interpreter = new Interpreter();
-        Assert.False(interpreter.DiscoveryMode);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        Assert.False(vm.DiscoveryMode);
     }
 
     [Fact]
     public void TestFilter_CanBeSetAndRead()
     {
-        var interpreter = new Interpreter();
-        interpreter.TestFilter = new[] { "filter1", "filter2" };
-        Assert.Equal(new[] { "filter1", "filter2" }, interpreter.TestFilter);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.TestFilter = new[] { "filter1", "filter2" };
+        Assert.Equal(new[] { "filter1", "filter2" }, vm.TestFilter);
     }
 
     [Fact]
     public void DiscoveryMode_CanBeSetAndRead()
     {
-        var interpreter = new Interpreter();
-        interpreter.DiscoveryMode = true;
-        Assert.True(interpreter.DiscoveryMode);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.DiscoveryMode = true;
+        Assert.True(vm.DiscoveryMode);
     }
 }

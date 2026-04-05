@@ -1,7 +1,8 @@
 using System.Reflection;
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 using Stash.Stdlib.BuiltIns;
 using Stash.Runtime;
 
@@ -29,31 +30,30 @@ public class LogBuiltInsTests : IDisposable
 
     private static (string stderr, object? result) RunCapturingStderr(string source)
     {
-        var lexer = new Lexer(source);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var errSw = new StringWriter();
-        interpreter.ErrorOutput = errSw;
-        interpreter.Interpret(statements);
-
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        var result = interpreter.Interpret(resultExpr);
+        vm.ErrorOutput = errSw;
+        var result = vm.Execute(chunk);
         return (errSw.ToString(), result);
     }
 
     private static void RunExpectingError(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
     }
 
     // ── log.info ──────────────────────────────────────────────────────────
@@ -181,14 +181,17 @@ public class LogBuiltInsTests : IDisposable
         var tempFile = Path.GetTempFileName();
         try
         {
-            var lexer = new Lexer($"log.toFile(\"{tempFile.Replace("\\", "\\\\")}\");\nlog.info(\"file log\");");
+            string src = $"log.toFile(\"{tempFile.Replace("\\", "\\\\")}\");\nlog.info(\"file log\");";
+            var lexer = new Lexer(src, "<test>");
             var tokens = lexer.ScanTokens();
             var parser = new Parser(tokens);
-            var statements = parser.ParseProgram();
-            var interpreter = new Interpreter();
+            var stmts = parser.ParseProgram();
+            SemanticResolver.Resolve(stmts);
+            var chunk = Compiler.Compile(stmts);
+            var vm = new VirtualMachine(TestVM.CreateGlobals());
             var errSw = new StringWriter();
-            interpreter.ErrorOutput = errSw;
-            interpreter.Interpret(statements);
+            vm.ErrorOutput = errSw;
+            vm.Execute(chunk);
 
             var content = File.ReadAllText(tempFile);
             Assert.Contains("file log", content);

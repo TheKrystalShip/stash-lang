@@ -159,7 +159,7 @@ The toolbar sits at the top, on the right hand side of the screen, providing qui
 
 | Button         | Shortcut   | Description                                                |
 | -------------- | ---------- | ---------------------------------------------------------- |
-| **⚡ Format**   | —          | Formats the editor code using the built-in Stash formatter |
+| **⚡ Format**  | —          | Formats the editor code using the built-in Stash formatter |
 | **⬇ Download** | —          | Downloads the current code as `script.stash`               |
 | **🔗 Share**   | —          | Copies a shareable URL to the clipboard                    |
 | **▶ Run**      | Ctrl+Enter | Executes the code and displays the output                  |
@@ -237,23 +237,23 @@ The playground is a **Blazor WebAssembly** application that compiles the Stash i
 
 ### Technology Stack
 
-| Layer                | Technology                                                           |
-| -------------------- | -------------------------------------------------------------------- |
-| **UI framework**     | Blazor WebAssembly (.NET 10)                                         |
-| **Code editor**      | Monaco Editor via BlazorMonaco 3.4.0                                 |
-| **Language support** | Monarch tokenizer (syntax) + Stash.Analysis (IntelliSense)           |
-| **Interpreter**      | Stash.Core (lexer/parser) + Stash.Interpreter (tree-walk evaluation) |
-| **Formatter**        | StashFormatter from Stash.Analysis                                   |
+| Layer                | Technology                                                 |
+| -------------------- | ---------------------------------------------------------- |
+| **UI framework**     | Blazor WebAssembly (.NET 10)                               |
+| **Code editor**      | Monaco Editor via BlazorMonaco 3.4.0                       |
+| **Language support** | Monarch tokenizer (syntax) + Stash.Analysis (IntelliSense) |
+| **Execution**        | Stash.Core (lexer/parser) + Stash.Bytecode (bytecode VM)   |
+| **Formatter**        | StashFormatter from Stash.Analysis                         |
 
 ### How It Works
 
 The application compiles three Stash projects to WebAssembly:
 
 1. **Stash.Core** — The lexer and recursive-descent parser, producing AST nodes
-2. **Stash.Interpreter** — The tree-walk interpreter that evaluates AST nodes
+2. **Stash.Bytecode** — The bytecode VM that compiles and executes AST nodes
 3. **Stash.Analysis** — The analysis engine that provides diagnostics, completions, hover info, signature help, and formatting
 
-When the user clicks Run, the Blazor component calls `PlaygroundExecutor`, which creates a fresh Stash interpreter instance with sandbox restrictions (`StashCapabilities.None`, step limit, output cap), parses the code, executes it, and returns the captured output.
+When the user clicks Run, the Blazor component calls `PlaygroundExecutor`, which creates a fresh `StashEngine` instance with sandbox restrictions (`StashCapabilities.None`, step limit, output cap), compiles and executes the code, and returns the captured output.
 
 IntelliSense features work through `PlaygroundAnalyzer` — a static C# service with `[JSInvokable]` methods that the Monaco editor's JavaScript providers call via .NET interop. The analysis engine parses the code, resolves symbols, and returns structured results (diagnostics, completions, hover info, signatures) that the JavaScript layer transforms into Monaco-compatible objects.
 

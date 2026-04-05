@@ -1,6 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 using Stash.Runtime.Types;
 
 namespace Stash.Tests.Interpreting;
@@ -9,35 +10,29 @@ public class PkgBuiltInsTests
 {
     private static object? Run(string source)
     {
-        var lexer = new Lexer(source);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.Interpret(statements);
-
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        return vm.Execute(chunk);
     }
 
     private static object? RunWithFile(string source, string currentFile)
     {
-        var lexer = new Lexer(source);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.CurrentFile = currentFile;
-        interpreter.Interpret(statements);
-
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.CurrentFile = currentFile;
+        return vm.Execute(chunk);
     }
 
     private static string MakeTempDir()
@@ -115,7 +110,7 @@ public class PkgBuiltInsTests
 
     // ── With stash.json (basic project) ───────────────────────────────────
 
-    private static readonly string BasicManifest = """
+    private static readonly string _basicManifest = """
         {"name": "test-project", "version": "2.1.0", "description": "A test", "author": "Test Author", "license": "MIT", "main": "index.stash"}
         """;
 
@@ -125,7 +120,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), BasicManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _basicManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("let result = pkg.root();", currentFile);
             Assert.Equal(tmpDir, result);
@@ -142,7 +137,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), BasicManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _basicManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("let result = pkg.version();", currentFile);
             Assert.Equal("2.1.0", result);
@@ -159,7 +154,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), BasicManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _basicManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("let result = pkg.info();", currentFile);
             Assert.NotNull(result);
@@ -177,7 +172,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), BasicManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _basicManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("""
                 let info = pkg.info();
@@ -197,7 +192,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), BasicManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _basicManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("""
                 let info = pkg.info();
@@ -217,7 +212,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), BasicManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _basicManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("""
                 let info = pkg.info();
@@ -239,7 +234,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), BasicManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _basicManifest);
             string srcDir = Path.Combine(tmpDir, "src");
             Directory.CreateDirectory(srcDir);
             string currentFile = Path.Combine(srcDir, "main.stash");
@@ -254,7 +249,7 @@ public class PkgBuiltInsTests
 
     // ── Dependencies from manifest ────────────────────────────────────────
 
-    private static readonly string DepsManifest = """
+    private static readonly string _depsManifest = """
         {"name": "test", "version": "1.0.0", "dependencies": {"http-utils": "^1.2.0", "logger": "~2.0.0"}}
         """;
 
@@ -264,7 +259,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), DepsManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _depsManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("""
                 let deps = pkg.dependencies();
@@ -284,7 +279,7 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), DepsManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _depsManifest);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("""
                 let deps = pkg.dependencies();
@@ -300,7 +295,7 @@ public class PkgBuiltInsTests
 
     // ── Dependencies from lock file ───────────────────────────────────────
 
-    private static readonly string LockFileContent = """
+    private static readonly string _lockFileContent = """
         {"lockVersion": 1, "resolved": {"http-utils": {"version": "1.3.0"}, "logger": {"version": "2.0.1"}}}
         """;
 
@@ -310,8 +305,8 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), DepsManifest);
-            File.WriteAllText(Path.Combine(tmpDir, "stash-lock.json"), LockFileContent);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _depsManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash-lock.json"), _lockFileContent);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("""
                 let deps = pkg.dependencies();
@@ -331,8 +326,8 @@ public class PkgBuiltInsTests
         string tmpDir = MakeTempDir();
         try
         {
-            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), DepsManifest);
-            File.WriteAllText(Path.Combine(tmpDir, "stash-lock.json"), LockFileContent);
+            File.WriteAllText(Path.Combine(tmpDir, "stash.json"), _depsManifest);
+            File.WriteAllText(Path.Combine(tmpDir, "stash-lock.json"), _lockFileContent);
             string currentFile = Path.Combine(tmpDir, "main.stash");
             object? result = RunWithFile("""
                 let deps = pkg.dependencies();

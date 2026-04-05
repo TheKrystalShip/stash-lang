@@ -4,7 +4,7 @@ using System.Linq;
 using Stash.Bytecode;
 using Stash.Common;
 using Stash.Debugging;
-using Stash.Interpreting;
+using Stash.Resolution;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -28,9 +28,7 @@ public class VMDebugTests
         List<Token> tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         List<Stmt> stmts = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        var resolver = new Resolver(interpreter);
-        resolver.Resolve(stmts);
+        SemanticResolver.Resolve(stmts);
         return Compiler.Compile(stmts);
     }
 

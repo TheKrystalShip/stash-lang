@@ -86,7 +86,9 @@ public class ChunkBuilder
         int offset = jumpTarget - jumpFrom;
 
         if (offset > short.MaxValue || offset < short.MinValue)
+        {
             throw new InvalidOperationException($"Jump offset {offset} exceeds 16-bit signed range.");
+        }
 
         short signedOffset = (short)offset;
         ushort encoded = (ushort)signedOffset;
@@ -105,7 +107,9 @@ public class ChunkBuilder
         // back to loopStart.
         int offset = (_code.Count + 2) - loopStart;
         if (offset > ushort.MaxValue)
+        {
             throw new InvalidOperationException($"Loop body too large: {offset} bytes.");
+        }
 
         _code.Add((byte)(offset >> 8));
         _code.Add((byte)(offset & 0xFF));
@@ -136,13 +140,18 @@ public class ChunkBuilder
                         StashValueTag.Obj => object.Equals(existing.AsObj, value.AsObj),
                         _ => false,
                     };
-                    if (match) return (ushort)i;
+                    if (match)
+                    {
+                        return (ushort)i;
+                    }
                 }
             }
         }
 
         if (_constants.Count > ushort.MaxValue)
+        {
             throw new InvalidOperationException("Constant pool overflow (max 65536 entries).");
+        }
 
         int index = _constants.Count;
         _constants.Add(value);
@@ -188,11 +197,15 @@ public class ChunkBuilder
         {
             UpvalueDescriptor existing = _upvalues[i];
             if (existing.Index == index && existing.IsLocal == isLocal)
+            {
                 return (byte)i;
+            }
         }
 
         if (_upvalues.Count > byte.MaxValue)
+        {
             throw new InvalidOperationException("Upvalue overflow (max 256 per function).");
+        }
 
         int result = _upvalues.Count;
         _upvalues.Add(new UpvalueDescriptor(index, isLocal));

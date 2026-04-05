@@ -33,9 +33,13 @@ internal sealed class Upvalue
         set
         {
             if (IsOpen)
+            {
                 _stack[StackIndex] = value;
+            }
             else
+            {
                 _closed = value;
+            }
         }
     }
 
@@ -45,7 +49,11 @@ internal sealed class Upvalue
     /// </summary>
     public void Close()
     {
-        if (!IsOpen) return;
+        if (!IsOpen)
+        {
+            return;
+        }
+
         _closed = _stack[StackIndex];
         IsOpen = false;
     }
@@ -57,6 +65,8 @@ internal sealed class Upvalue
     internal void UpdateStack(StashValue[] newStack)
     {
         if (IsOpen)
+        {
             _stack = newStack;
+        }
     }
 }

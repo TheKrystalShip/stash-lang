@@ -1,6 +1,6 @@
 using System.Runtime.InteropServices;
 
-namespace Stash.Interpreting;
+namespace Stash.Common;
 
 /// <summary>
 /// P/Invoke wrappers for POSIX syscalls (kill, execvp) on Unix platforms.

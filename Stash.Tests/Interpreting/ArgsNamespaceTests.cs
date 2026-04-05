@@ -1,6 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 
 namespace Stash.Tests.Interpreting;
 
@@ -8,18 +9,16 @@ public class ArgsNamespaceTests
 {
     private static object? RunWithArgs(string source, string[] scriptArgs)
     {
-        var lexer = new Lexer(source);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.SetScriptArgs(scriptArgs);
-        interpreter.Interpret(statements);
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.ScriptArgs = scriptArgs;
+        return vm.Execute(chunk);
     }
 
     // =========================================================================

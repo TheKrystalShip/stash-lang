@@ -42,7 +42,7 @@ public static class GlobalBuiltIns
                 StashIpAddress => "ip",
                 StashSemVer => "semver",
                 IStashCallable => "function",
-                _ => "unknown"
+                _ => val.GetType().Name.Contains("BoundMethod") ? "function" : "unknown"
             };
         }, returnType: "string");
 

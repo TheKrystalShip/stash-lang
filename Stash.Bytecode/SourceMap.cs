@@ -47,7 +47,9 @@ public class SourceMap
     public SourceSpan? GetSpan(int bytecodeOffset)
     {
         if (_entries.Length == 0)
+        {
             return null;
+        }
 
         int lo = 0;
         int hi = _entries.Length - 1;

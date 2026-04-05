@@ -52,7 +52,7 @@ public static class TaskBuiltIns
             IInterpreterContext child = ctx.Fork(cts.Token);
             try
             {
-                return callable.Call(child, new List<object?>());
+                return child.InvokeCallback(callable, new List<object?>());
             }
             finally
             {

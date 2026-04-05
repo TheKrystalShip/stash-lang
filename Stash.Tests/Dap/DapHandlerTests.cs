@@ -1,10 +1,12 @@
 namespace Stash.Tests.Dap;
 
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Dap;
 using Stash.Dap.Handlers;
+using Stash.Debugging;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Models;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Requests;
 using Xunit;
@@ -306,7 +308,7 @@ public class DapHandlerTests
         // Need to set interpreter for the SetVariable path
         var field = typeof(DebugSession).GetField("_executor",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
-        field.SetValue(session, (Stash.Debugging.IDebugExecutor)new Stash.Interpreting.Interpreter());
+        field.SetValue(session, (Stash.Debugging.IDebugExecutor)new TestExecutor());
 
         var handler = new StashSetVariableHandler(session);
         var result = await handler.Handle(new SetVariableArguments
@@ -390,5 +392,12 @@ public class DapHandlerTests
         var result = await handler.Handle(new LoadedSourcesArguments(), CancellationToken.None);
         Assert.NotNull(result);
         Assert.Equal(2, result.Sources.Count());
+    }
+
+    private sealed class TestExecutor : IDebugExecutor
+    {
+        public IReadOnlyList<CallFrame> CallStack => [];
+        public IDebugScope GlobalScope => throw new NotImplementedException();
+        public (object? Value, string? Error) EvaluateExpression(string expression, IDebugScope scope) => (null, null);
     }
 }

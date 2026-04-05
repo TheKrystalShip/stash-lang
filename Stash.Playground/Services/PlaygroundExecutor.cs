@@ -1,9 +1,6 @@
 using System.Diagnostics;
-using Stash.Interpreting;
-using Stash.Interpreting.Exceptions;
+using Stash.Bytecode;
 using Stash.Runtime;
-using ScriptCancelledException = Stash.Interpreting.Exceptions.ScriptCancelledException;
-using StepLimitExceededException = Stash.Interpreting.Exceptions.StepLimitExceededException;
 
 namespace Stash.Playground.Services;
 

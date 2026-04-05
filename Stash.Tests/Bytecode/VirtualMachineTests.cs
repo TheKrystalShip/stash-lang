@@ -1,5 +1,5 @@
 using Stash.Bytecode;
-using Stash.Interpreting;
+using Stash.Resolution;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -30,9 +30,7 @@ public class VirtualMachineTests
         List<Token> tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         List<Stmt> stmts = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        var resolver = new Resolver(interpreter);
-        resolver.Resolve(stmts);
+        SemanticResolver.Resolve(stmts);
         return Compiler.Compile(stmts);
     }
 
@@ -1089,14 +1087,15 @@ public class VirtualMachineTests
     }
 
     [Fact]
-    public void Try_ExpressionError_ReturnsNull()
+    public void Try_ExpressionError_ReturnsStashError()
     {
         object? result = Execute("""
             let result = null;
             result = try (1 / 0);
             return result;
             """);
-        Assert.Null(result);
+        Assert.IsType<StashError>(result);
+        Assert.Contains("Division by zero", ((StashError)result!).Message);
     }
 
     [Fact]

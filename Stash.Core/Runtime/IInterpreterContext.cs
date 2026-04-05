@@ -24,4 +24,14 @@ public interface IInterpreterContext : IExecutionContext, IProcessContext, ITest
     /// The default falls back to Fork(); Interpreter overrides this with a proper snapshot.
     /// </summary>
     IInterpreterContext ForkParallel(CancellationToken cancellationToken = default) => Fork(cancellationToken);
+
+    /// <summary>
+    /// Invokes a callable (e.g. a user lambda) with the given arguments in a child execution context.
+    /// Built-in namespaces (e.g. fs.watch) use this instead of <c>callable.Call(Fork(), args)</c>
+    /// so that both the tree-walk interpreter and the bytecode VM can dispatch correctly.
+    /// The default implementation forks the context and calls <see cref="IStashCallable.Call"/>.
+    /// The bytecode VM overrides this to execute <c>VMFunction</c> closures on a child VM instance.
+    /// </summary>
+    object? InvokeCallback(IStashCallable callable, System.Collections.Generic.List<object?> args) =>
+        callable.Call(Fork(), args);
 }

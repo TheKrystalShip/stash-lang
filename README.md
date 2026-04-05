@@ -329,7 +329,7 @@ See [docs/Registry — Package Registry.md](docs/Registry%20—%20Package%20Regi
 
 ## Embedding
 
-Stash can be embedded into any .NET application as a scripting engine — similar to how Lua is embedded in games. The `Stash.Interpreter` library provides a clean `StashEngine` API:
+Stash can be embedded into any .NET application as a scripting engine — similar to how Lua is embedded in games. The `Stash.Bytecode` library provides a clean `StashEngine` API:
 
 ```csharp
 using Stash.Interpreting;
@@ -365,7 +365,7 @@ See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 ## Performance
 
-Stash ships with two execution backends: a **bytecode VM** (default) and a **tree-walk interpreter** (reference/debug mode, `--backend=tw`). The table below includes both to show the impact of the VM.
+Stash uses a **bytecode VM** as its sole execution engine. The table below compares the VM against the retired tree-walk interpreter and other languages to show its performance characteristics.
 
 **What each benchmark tests**
 
@@ -389,7 +389,7 @@ Stash ships with two execution backends: a **bytecode VM** (default) and a **tre
 
 > Measured on the same machine, same workload, identical algorithms and iteration counts across all languages. Median of 3 runs.
 >
-> **Stash (VM)** is the default bytecode VM backend — a stack-based virtual machine that compiles the AST to bytecode before execution. **Stash (TW)** is the original tree-walk interpreter, preserved as a reference/debug backend. The VM is **1.8–7.6× faster** than the tree-walk interpreter across all benchmarks.
+> **Stash (VM)** is the bytecode VM — a stack-based virtual machine that compiles the AST to bytecode before execution. **Stash (TW)** benchmark figures are from the retired tree-walk interpreter, included for historical reference. The VM is **1.8–7.6× faster** than the tree-walk interpreter across all benchmarks.
 >
 > Node.js uses V8's JIT compiler, compiling hot paths to native machine code. Lua uses a register-based bytecode VM. Python 3, Ruby, and Perl compile to stack-based bytecode before interpreting. Stash's bytecode VM and Bash are the only pure interpreters in this comparison — yet Stash outperforms Bash **4–30×** on every workload while providing structured data types, modules, and a full standard library that Bash lacks.
 >
@@ -418,7 +418,7 @@ Stash ships with two execution backends: a **bytecode VM** (default) and a **tre
 ```
 Stash.Core          → Lexer, Parser, 46 AST node types
 Stash.Stdlib        → Standard library metadata registry (30 namespaces)
-Stash.Interpreter   → Tree-walk interpreter, environment chain
+Stash.Bytecode      → Bytecode VM (compiler + stack-based VM)
 Stash.Analysis      → Static analysis engine, diagnostics, formatting
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol

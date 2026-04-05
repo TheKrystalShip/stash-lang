@@ -227,7 +227,7 @@ public static class ArrBuiltIns
             var result = new List<object?>();
             foreach (var item in list)
             {
-                result.Add(fn.Call(ctx, new List<object?> { item }));
+                result.Add(ctx.InvokeCallback(fn, new List<object?> { item }));
             }
 
             return result;
@@ -240,7 +240,7 @@ public static class ArrBuiltIns
             var result = new List<object?>();
             foreach (var item in list)
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
                 {
                     result.Add(item);
                 }
@@ -254,7 +254,7 @@ public static class ArrBuiltIns
             var fn = Args.Callable(args, 1, "arr.forEach");
             foreach (var item in list)
             {
-                fn.Call(ctx, new List<object?> { item });
+                ctx.InvokeCallback(fn, new List<object?> { item });
             }
 
             return null;
@@ -270,7 +270,7 @@ public static class ArrBuiltIns
             var fn = Args.Callable(args, 1, "arr.find");
             foreach (var item in list)
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
                 {
                     return item;
                 }
@@ -285,7 +285,7 @@ public static class ArrBuiltIns
             var accumulator = args[2];
             foreach (var item in list)
             {
-                accumulator = fn.Call(ctx, new List<object?> { accumulator, item });
+                accumulator = ctx.InvokeCallback(fn, new List<object?> { accumulator, item });
             }
 
             return accumulator;
@@ -320,7 +320,7 @@ public static class ArrBuiltIns
             var fn = Args.Callable(args, 1, "arr.any");
             foreach (var item in list)
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
                 {
                     return true;
                 }
@@ -334,7 +334,7 @@ public static class ArrBuiltIns
             var fn = Args.Callable(args, 1, "arr.every");
             foreach (var item in list)
             {
-                if (!RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
+                if (!RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
                 {
                     return false;
                 }
@@ -367,7 +367,7 @@ public static class ArrBuiltIns
             var result = new List<object?>();
             foreach (var item in list)
             {
-                var mapped = fn.Call(ctx, new List<object?> { item });
+                var mapped = ctx.InvokeCallback(fn, new List<object?> { item });
                 if (mapped is List<object?> inner)
                 {
                     result.AddRange(inner);
@@ -386,7 +386,7 @@ public static class ArrBuiltIns
             var fn = Args.Callable(args, 1, "arr.findIndex");
             for (int i = 0; i < list.Count; i++)
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { list[i] })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { list[i] })))
                 {
                     return (long)i;
                 }
@@ -401,7 +401,7 @@ public static class ArrBuiltIns
             long count = 0;
             foreach (var item in list)
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
                 {
                     count++;
                 }
@@ -418,8 +418,8 @@ public static class ArrBuiltIns
             {
                 sorted.Sort((a, b) =>
                 {
-                    var ka = fn.Call(ctx, new List<object?> { a });
-                    var kb = fn.Call(ctx, new List<object?> { b });
+                    var ka = ctx.InvokeCallback(fn, new List<object?> { a });
+                    var kb = ctx.InvokeCallback(fn, new List<object?> { b });
                     return CompareValues(ka, kb);
                 });
             }
@@ -437,7 +437,7 @@ public static class ArrBuiltIns
             var result = new StashDictionary();
             foreach (var item in list)
             {
-                var key = RuntimeValues.Stringify(fn.Call(ctx, new List<object?> { item }));
+                var key = RuntimeValues.Stringify(ctx.InvokeCallback(fn, new List<object?> { item }));
                 var existing = result.Get(key);
                 if (existing is List<object?> group)
                 {
@@ -597,7 +597,7 @@ public static class ArrBuiltIns
             var nonMatching = new List<object?>();
             foreach (var item in list)
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
                 {
                     matching.Add(item);
                 }
@@ -631,7 +631,7 @@ public static class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                results[i] = callable.Call(child, new List<object?> { list[i] });
+                results[i] = child.InvokeCallback(callable, new List<object?> { list[i] });
             }
             catch (Exception ex)
             {
@@ -676,7 +676,7 @@ public static class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                object? result = callable.Call(child, new List<object?> { list[i] });
+                object? result = child.InvokeCallback(callable, new List<object?> { list[i] });
                 keep[i] = RuntimeValues.IsTruthy(result);
             }
             catch (Exception ex)
@@ -728,7 +728,7 @@ public static class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                callable.Call(child, new List<object?> { list[i] });
+                child.InvokeCallback(callable, new List<object?> { list[i] });
             }
             catch (Exception ex)
             {

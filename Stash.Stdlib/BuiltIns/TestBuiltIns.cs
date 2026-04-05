@@ -57,11 +57,11 @@ public static class TestBuiltIns
                 {
                     foreach (var hook in level)
                     {
-                        hook.Call(ctx, new List<object?>());
+                        ctx.InvokeCallback(hook, new List<object?>());
                     }
                 }
 
-                body.Call(ctx, new List<object?>());
+                ctx.InvokeCallback(body, new List<object?>());
                 sw.Stop();
 
                 // Run afterEach hooks from all describe levels (innermost to outermost)
@@ -69,7 +69,7 @@ public static class TestBuiltIns
                 {
                     foreach (var hook in ctx.AfterEachHooks[i])
                     {
-                        hook.Call(ctx, new List<object?>());
+                        ctx.InvokeCallback(hook, new List<object?>());
                     }
                 }
 
@@ -171,14 +171,14 @@ public static class TestBuiltIns
 
             try
             {
-                body.Call(ctx, new List<object?>());
+                ctx.InvokeCallback(body, new List<object?>());
             }
             finally
             {
                 // Run afterAll hooks for this scope
                 foreach (var hook in ctx.AfterAllHooks[^1])
                 {
-                    hook.Call(ctx, new List<object?>());
+                    ctx.InvokeCallback(hook, new List<object?>());
                 }
 
                 // Pop hook layers
@@ -205,7 +205,7 @@ public static class TestBuiltIns
             {
                 throw new RuntimeError("test.beforeAll() must be used inside a test.describe() block.", ctx.CurrentSpan);
             }
-            callable.Call(ctx, new List<object?>());
+            ctx.InvokeCallback(callable, new List<object?>());
             return null;
         });
 
@@ -254,7 +254,7 @@ public static class TestBuiltIns
             ctx.Output = sw;
             try
             {
-                callable.Call(ctx, new List<object?>());
+                ctx.InvokeCallback(callable, new List<object?>());
             }
             finally
             {

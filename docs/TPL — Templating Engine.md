@@ -350,15 +350,15 @@ Templates can be parsed once and rendered multiple times with different data, av
 ### Implementation Files
 
 ```
-Stash.Interpreter/Interpreting/
-├── BuiltIns/TplBuiltIns.cs           — tpl namespace registration
-└── Templating/
-    ├── TemplateAst.cs                — AST node types
-    ├── TemplateException.cs          — template-specific errors
-    ├── TemplateLexer.cs              — template tokenizer
-    ├── TemplateParser.cs             — template parser
-    ├── TemplateFilters.cs            — filter registry
-    └── TemplateRenderer.cs           — AST walker / renderer
+Stash.Stdlib/BuiltIns/
+└── TplBuiltIns.cs                    — tpl namespace registration
+Stash.Tpl/
+├── TemplateAst.cs                    — AST node types
+├── TemplateException.cs              — template-specific errors
+├── TemplateLexer.cs                  — template tokenizer
+├── TemplateParser.cs                 — template parser
+├── TemplateFilters.cs                — filter registry
+└── TemplateRenderer.cs               — AST walker / renderer
 ```
 
 ---

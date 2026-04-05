@@ -162,7 +162,7 @@ public static class DictBuiltIns
 
             foreach (var entry in d.RawEntries())
             {
-                fn.Call(ctx, new List<object?> { entry.Key, entry.Value });
+                ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value });
             }
             return null;
         },
@@ -203,7 +203,7 @@ public static class DictBuiltIns
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
             {
-                result.Set(entry.Key, fn.Call(ctx, new List<object?> { entry.Key, entry.Value }));
+                result.Set(entry.Key, ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value }));
             }
             return result;
         },
@@ -221,7 +221,7 @@ public static class DictBuiltIns
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
             {
-                var keep = fn.Call(ctx, new List<object?> { entry.Key, entry.Value });
+                var keep = ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value });
                 if (RuntimeValues.IsTruthy(keep))
                 {
                     result.Set(entry.Key, entry.Value);
@@ -343,7 +343,7 @@ public static class DictBuiltIns
 
             foreach (var entry in d.RawEntries())
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { entry.Key, entry.Value })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value })))
                 {
                     return true;
                 }
@@ -363,7 +363,7 @@ public static class DictBuiltIns
 
             foreach (var entry in d.RawEntries())
             {
-                if (!RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { entry.Key, entry.Value })))
+                if (!RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value })))
                 {
                     return false;
                 }
@@ -383,7 +383,7 @@ public static class DictBuiltIns
 
             foreach (var entry in d.RawEntries())
             {
-                if (RuntimeValues.IsTruthy(fn.Call(ctx, new List<object?> { entry.Key, entry.Value })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value })))
                 {
                     return new List<object?> { entry.Key, entry.Value };
                 }

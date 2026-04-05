@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 using System.Text;
 
-namespace Stash.Interpreting;
+namespace Stash.Common;
 
 /// <summary>
 /// Splits a command string into a program name and arguments,

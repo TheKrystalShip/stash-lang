@@ -88,7 +88,6 @@ public static class FsBuiltIns
         {
             try
             {
-                IInterpreterContext child = Context.Fork();
                 var eventFields = new Dictionary<string, object?>
                 {
                     ["type"] = eventType,
@@ -96,7 +95,7 @@ public static class FsBuiltIns
                     ["oldPath"] = oldPath
                 };
                 var watchEvent = new StashInstance("WatchEvent", eventFields);
-                Callback.Call(child, new List<object?> { watchEvent });
+                Context.InvokeCallback(Callback, new List<object?> { watchEvent });
             }
             catch
             {

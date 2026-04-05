@@ -1,6 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 using Stash.Runtime;
 using AssertionError = Stash.Runtime.AssertionError;
 using Stash.Tap;
@@ -13,57 +14,61 @@ public class TestBuiltInsTests
 
     private static void RunStatements(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.Interpret(statements);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.Execute(chunk);
     }
 
     private static object? Run(string source)
     {
-        var lexer = new Lexer(source);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.Interpret(statements);
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        return vm.Execute(chunk);
     }
 
     private static (TapReporter reporter, string output) RunWithHarness(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
-        interpreter.TestHarness = reporter;
-        interpreter.Interpret(statements);
+        vm.TestHarness = reporter;
+        vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
 
-    private static (TapReporter reporter, string output, Interpreter interpreter) RunWithHarnessAndInterpreter(string source)
+    private static (TapReporter reporter, string output, VirtualMachine vm) RunWithHarnessAndVM(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
-        interpreter.TestHarness = reporter;
-        interpreter.Interpret(statements);
+        vm.TestHarness = reporter;
+        vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
-        return (reporter, sw.ToString(), interpreter);
+        return (reporter, sw.ToString(), vm);
     }
 
     // ── 1. Assert passing (no exception) ─────────────────────────────────────
@@ -486,16 +491,18 @@ public class TestBuiltInsTests
                 assert.fail("intentional");
             });
             """;
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        SemanticResolver.Resolve(statements);
+        var chunk = Compiler.Compile(statements);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var originalWriter = new StringWriter();
-        interpreter.Output = originalWriter;
+        vm.Output = originalWriter;
 
-        Assert.ThrowsAny<RuntimeError>(() => interpreter.Interpret(statements));
-        Assert.Same(originalWriter, interpreter.Output);
+        Assert.ThrowsAny<RuntimeError>(() => { vm.Execute(chunk); });
+        Assert.Same(originalWriter, vm.Output);
     }
 
     [Fact]
@@ -522,23 +529,25 @@ public class TestBuiltInsTests
     [Fact]
     public void InterpreterOutput_DefaultsToConsoleOut()
     {
-        var interpreter = new Interpreter();
-        Assert.Same(Console.Out, interpreter.Output);
-        Assert.Same(Console.Error, interpreter.ErrorOutput);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        Assert.Same(Console.Out, vm.Output);
+        Assert.Same(Console.Error, vm.ErrorOutput);
     }
 
     [Fact]
     public void InterpreterOutput_CanBeReplaced()
     {
         var source = """io.println("test output");""";
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new StringWriter();
-        interpreter.Output = sw;
-        interpreter.Interpret(statements);
+        vm.Output = sw;
+        vm.Execute(chunk);
         Assert.Equal("test output\n", sw.ToString());
     }
 
@@ -833,7 +842,7 @@ public class TestBuiltInsTests
     [Fact]
     public void AfterAll_RunsEvenIfTestFails()
     {
-        var (reporter, _, interp) = RunWithHarnessAndInterpreter("""
+        var (reporter, _, vm) = RunWithHarnessAndVM("""
             let cleaned = false;
             test.describe("cleanup", () => {
                 test.afterAll(() => { cleaned = true; });
@@ -842,11 +851,7 @@ public class TestBuiltInsTests
             """);
 
         Assert.Equal(1, reporter.FailedCount);
-        var resultLexer = new Lexer("cleaned");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        var cleaned = interp.Interpret(resultExpr);
+        var cleaned = vm.Globals["cleaned"];
         Assert.Equal(true, cleaned);
     }
 }

@@ -1,4 +1,5 @@
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
@@ -9,13 +10,14 @@ using RuntimeBuiltInFunction = Stash.Runtime.BuiltInFunction;
 
 public class StdlibConsistencyTests
 {
-    private static Interpreter CreateInterpreter() => new(StashCapabilities.All);
+    private static Dictionary<string, object?> CreateGlobals(StashCapabilities caps = StashCapabilities.All)
+        => TestVM.CreateGlobals(caps);
 
     [Fact]
     public void GlobalFunctions_RegistryEntries_HaveRuntimeImplementation()
     {
-        var interpreter = CreateInterpreter();
-        var runtimeNames = interpreter.Globals.GetAllBindings()
+        var globals = CreateGlobals();
+        var runtimeNames = globals
             .Where(b => b.Value is RuntimeBuiltInFunction)
             .Select(b => b.Key)
             .ToHashSet();
@@ -30,9 +32,9 @@ public class StdlibConsistencyTests
     [Fact]
     public void GlobalFunctions_RuntimeEntries_HaveRegistryMetadata()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
-        foreach (var binding in interpreter.Globals.GetAllBindings())
+        foreach (var binding in globals)
         {
             if (binding.Value is not RuntimeBuiltInFunction)
             {
@@ -47,9 +49,9 @@ public class StdlibConsistencyTests
     [Fact]
     public void GlobalFunctions_Arity_MatchesRegistryParameterCount()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
-        foreach (var binding in interpreter.Globals.GetAllBindings())
+        foreach (var binding in globals)
         {
             if (binding.Value is not RuntimeBuiltInFunction runtimeFn || runtimeFn.Arity < 0)
             {
@@ -69,8 +71,8 @@ public class StdlibConsistencyTests
     [Fact]
     public void Namespaces_RegistryEntries_HaveRuntimeNamespace()
     {
-        var interpreter = CreateInterpreter();
-        var runtimeNamespaceNames = interpreter.Globals.GetAllBindings()
+        var globals = CreateGlobals();
+        var runtimeNamespaceNames = globals
             .Where(b => b.Value is StashNamespace)
             .Select(b => b.Key)
             .ToHashSet();
@@ -85,9 +87,9 @@ public class StdlibConsistencyTests
     [Fact]
     public void Namespaces_RuntimeEntries_HaveRegistryMetadata()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
-        foreach (var binding in interpreter.Globals.GetAllBindings())
+        foreach (var binding in globals)
         {
             if (binding.Value is not StashNamespace ns)
             {
@@ -102,10 +104,10 @@ public class StdlibConsistencyTests
     [Fact]
     public void NamespaceFunctions_RegistryEntries_HaveRuntimeImplementation()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
         var runtimeQualifiedNames = new HashSet<string>();
-        foreach (var binding in interpreter.Globals.GetAllBindings())
+        foreach (var binding in globals)
         {
             if (binding.Value is not StashNamespace ns)
             {
@@ -131,9 +133,9 @@ public class StdlibConsistencyTests
     [Fact]
     public void NamespaceFunctions_RuntimeEntries_HaveRegistryMetadata()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
-        foreach (var binding in interpreter.Globals.GetAllBindings())
+        foreach (var binding in globals)
         {
             if (binding.Value is not StashNamespace ns)
             {
@@ -157,9 +159,9 @@ public class StdlibConsistencyTests
     [Fact]
     public void NamespaceFunctions_Arity_MatchesRegistryParameterCount()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
-        foreach (var binding in interpreter.Globals.GetAllBindings())
+        foreach (var binding in globals)
         {
             if (binding.Value is not StashNamespace ns)
             {
@@ -188,9 +190,9 @@ public class StdlibConsistencyTests
     [Fact]
     public void NamespaceConstants_RegistryEntries_HaveRuntimeValue()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
-        var runtimeNamespaces = interpreter.Globals.GetAllBindings()
+        var runtimeNamespaces = globals
             .Where(b => b.Value is StashNamespace)
             .ToDictionary(b => b.Key, b => (StashNamespace)b.Value!);
 
@@ -208,9 +210,9 @@ public class StdlibConsistencyTests
     [Fact]
     public void NamespaceConstants_RuntimeEntries_HaveRegistryMetadata()
     {
-        var interpreter = CreateInterpreter();
+        var globals = CreateGlobals();
 
-        foreach (var binding in interpreter.Globals.GetAllBindings())
+        foreach (var binding in globals)
         {
             if (binding.Value is not StashNamespace ns)
                 continue;
@@ -230,15 +232,15 @@ public class StdlibConsistencyTests
     [Fact]
     public void Construction_WithRestrictedCapabilities_DoesNotThrow()
     {
-        var ex = Record.Exception(() => new Interpreter(StashCapabilities.None));
+        var ex = Record.Exception(() => CreateGlobals(StashCapabilities.None));
         Assert.Null(ex);
     }
 
     [Fact]
     public void Construction_WithNoCapabilities_ExcludesCapabilityGatedNamespaces()
     {
-        var interpreter = new Interpreter(StashCapabilities.None);
-        var definedNamespaces = interpreter.Globals.GetAllBindings()
+        var globals = CreateGlobals(StashCapabilities.None);
+        var definedNamespaces = globals
             .Where(b => b.Value is StashNamespace)
             .Select(b => b.Key)
             .ToHashSet();

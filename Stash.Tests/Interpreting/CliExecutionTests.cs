@@ -1,7 +1,8 @@
 using System.Diagnostics;
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 
 namespace Stash.Tests.Interpreting;
 
@@ -13,18 +14,17 @@ public class CliExecutionTests
 
     private static object? Run(string source, string sourceName, string[] scriptArgs)
     {
-        var lexer = new Lexer(source, sourceName);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, sourceName);
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.SetScriptArgs(scriptArgs);
-        interpreter.Interpret(statements);
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.ScriptArgs = scriptArgs;
+        vm.CurrentFile = sourceName;
+        return vm.Execute(chunk);
     }
 
     // =========================================================================
@@ -125,9 +125,11 @@ public class CliExecutionTests
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.SetScriptArgs([]);
-        var ex = Record.Exception(() => interpreter.Interpret(statements));
+        SemanticResolver.Resolve(statements);
+        var chunk = Compiler.Compile(statements);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.ScriptArgs = [];
+        var ex = Record.Exception(() => { vm.Execute(chunk); });
         Assert.Null(ex);
     }
 

@@ -53,25 +53,11 @@ Stash.Core/                         # Shared class library
     └── AST/
         └── (all AST node types)
 
-Stash.Interpreter/                  # CLI: REPL + script runner
-├── Program.cs
-├── Debugging/
-│   ├── CallFrame.cs
-│   ├── CliDebugger.cs
-│   └── IDebugger.cs
-└── Interpreting/
-    ├── Environment.cs
-    ├── Interpreter.cs
-    ├── RuntimeError.cs
-    ├── StashFunction.cs
-    ├── StashStruct.cs
-    ├── StashInstance.cs
-    ├── StashEnum.cs
-    ├── StashEnumValue.cs
-    ├── IStashCallable.cs
-    ├── ReturnException.cs
-    ├── BreakException.cs
-    └── ContinueException.cs
+Stash.Bytecode/                     # Bytecode VM — sole execution engine
+├── StashEngine.cs
+├── VirtualMachine.cs
+├── Compiler.cs
+└── ...
 
 Stash.Lsp/                         # LSP server
 ├── Program.cs                     # Entry point — start server on stdio

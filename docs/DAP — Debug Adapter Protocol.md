@@ -35,7 +35,7 @@ For the language-level debugging hooks (`IDebugger` interface, `CallFrame`, `Sou
 └──────────────────────────────┬──────────────────────────────────┘
                                │  IDebugger interface
 ┌──────────────────────────────▼──────────────────────────────────┐
-│                   Stash.Interpreter (tree-walk evaluator)       │
+│                   Stash.Bytecode (bytecode VM)                  │
 │                                                                 │
 │   Calls OnBeforeExecute() before each statement                 │
 │   Calls OnFunctionEnter() / OnFunctionExit() around calls       │
@@ -45,8 +45,8 @@ For the language-level debugging hooks (`IDebugger` interface, `CallFrame`, `Sou
 There are three players:
 
 1. **DAP Client** — the editor or IDE. Sends requests (`setBreakpoints`, `continue`, `variables`, …) and receives events (`stopped`, `output`, `terminated`).
-2. **Stash.Dap** — translates between the DAP wire format and the interpreter. Owns `DebugSession`, which is the central coordinator.
-3. **Stash.Interpreter** — the tree-walk evaluator. It calls back into `DebugSession` via the `IDebugger` interface at every statement and function boundary.
+2. **Stash.Dap** — translates between the DAP wire format and the VM. Owns `DebugSession`, which is the central coordinator.
+3. **Stash.Bytecode** — the bytecode VM. It calls back into `DebugSession` via the `IDebugger` interface at every statement and function boundary.
 
 The interpreter threads and the DAP I/O thread are distinct. Per-thread `ManualResetEventSlim` gates keep them synchronized independently.
 
@@ -86,7 +86,7 @@ Stash.Dap/
 | Package                                    | Version       | Role                                   |
 | ------------------------------------------ | ------------- | -------------------------------------- |
 | `Stash.Core`                               | (project ref) | Lexer and parser                       |
-| `Stash.Interpreter`                        | (project ref) | Tree-walk evaluator and runtime values |
+| `Stash.Bytecode`                               | (project ref) | Bytecode VM and runtime values         |
 | `OmniSharp.Extensions.DebugAdapter.Server` | 0.19.9        | DAP protocol implementation            |
 
 ---

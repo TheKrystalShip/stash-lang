@@ -59,7 +59,9 @@ internal sealed class VMDebugScope : IDebugScope
     public IEnumerable<KeyValuePair<string, object?>> GetAllBindings()
     {
         if (_bindings is not null)
+        {
             return _bindings;
+        }
 
         if (_stack is not null)
         {
@@ -74,7 +76,9 @@ internal sealed class VMDebugScope : IDebugScope
         }
 
         if (_globals is not null)
+        {
             return _globals;
+        }
 
         return Enumerable.Empty<KeyValuePair<string, object?>>();
     }
@@ -88,20 +92,26 @@ internal sealed class VMDebugScope : IDebugScope
             for (int i = 0; i < _localCount; i++)
             {
                 if (_names[i] == name)
+                {
                     return true;
+                }
             }
             return false;
         }
 
         if (_globals is not null)
+        {
             return _globals.ContainsKey(name);
+        }
 
         if (_bindings is not null)
         {
             for (int i = 0; i < _bindings.Length; i++)
             {
                 if (_bindings[i].Key == name)
+                {
                     return true;
+                }
             }
             return false;
         }
@@ -116,7 +126,9 @@ internal sealed class VMDebugScope : IDebugScope
             for (int i = 0; i < _localCount; i++)
             {
                 if (_names[i] == name)
+                {
                     return _isConst[i];
+                }
             }
         }
         return false;

@@ -5,7 +5,7 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Threading.Tasks;
-using Stash.Interpreting;
+using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Models;
@@ -679,7 +679,7 @@ public static class ProcessBuiltIns
             System.Environment.CurrentDirectory = resolved;
             try
             {
-                return fn.Call(ctx, new List<object?>());
+                return ctx.InvokeCallback(fn, new List<object?>());
             }
             finally
             {
@@ -713,7 +713,7 @@ public static class ProcessBuiltIns
             {
                 try
                 {
-                    cb.Call(ctx, new List<object?> { result });
+                    ctx.InvokeCallback(cb, new List<object?> { result });
                 }
                 catch { /* Errors in onExit callbacks are non-fatal */ }
             }

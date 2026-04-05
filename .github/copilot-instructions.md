@@ -7,7 +7,7 @@ Stash is a cross-platform scripting language for system administration. The inte
 ```
 Stash.Core          → Lexer (two-pointer scanner), Parser (recursive-descent), 46 AST node types
 Stash.Stdlib        → Built-in metadata registry, model records, single source of truth for all namespaces
-Stash.Interpreter   → Tree-walk interpreter, Environment chain, 26 built-in namespaces
+Stash.Bytecode      → Bytecode VM (compiler + stack-based VM), 26 built-in namespaces
 Stash.Analysis      → Static analysis engine, resolvers, visitors for diagnostics and tooling
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol (OmniSharp — NOT AOT, requires reflection)
@@ -38,7 +38,7 @@ Test a specific namespace: `dotnet test --filter "FullyQualifiedName~ArrBuiltIns
 - **Naming:** `PascalCase` public, `_camelCase` private fields — enforced in `.editorconfig`
 - **var usage:** Never for built-in types (`string`, `int`), always when type is apparent from RHS
 - **AST nodes:** Each has a `SourceSpan` for diagnostics. Expression nodes implement `IExprVisitor<T>`, statement nodes `IStmtVisitor<T>`
-- **Built-in namespaces:** One file per namespace in `Stash.Interpreter/Interpreting/BuiltIns/` (e.g., `ArrBuiltIns.cs`). Register functions via `BuiltInFunction` delegates
+- **Built-in namespaces:** One file per namespace in `Stash.Stdlib/BuiltIns/` (e.g., `ArrBuiltIns.cs`). Register functions via `BuiltInFunction` delegates
 - **Tests:** `{Feature}_{Scenario}_{Expected}()` naming in `Stash.Tests/`, one test file per namespace (`ArrBuiltInsTests.cs`, `DictBuiltInsTests.cs`, etc.)
 
 ## Language Semantics (for writing tests and interpreting behavior)

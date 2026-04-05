@@ -315,8 +315,7 @@ public static class SysBuiltIns
                             {
                                 try
                                 {
-                                    IInterpreterContext child = entry.Context.Fork();
-                                    entry.Handler.Call(child, new List<object?>());
+                                    entry.Context.InvokeCallback(entry.Handler, new List<object?>());
                                 }
                                 catch
                                 {

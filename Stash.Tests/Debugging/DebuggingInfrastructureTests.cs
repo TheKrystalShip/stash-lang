@@ -1,10 +1,11 @@
+using Stash.Bytecode;
 using Stash.Debugging;
-using Stash.Interpreting;
+using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
-using Environment = Stash.Interpreting.Environment;
+using CallFrame = Stash.Debugging.CallFrame;
 
 namespace Stash.Tests.Debugging;
 
@@ -77,12 +78,12 @@ public class DebuggingInfrastructureTests
         var frame1 = new CallFrame
         {
             CallSite = new SourceSpan("test.stash", 1, 1, 1, 1),
-            LocalScope = new Environment()
+            LocalScope = new TestDebugScope()
         };
         var frame2 = new CallFrame
         {
             CallSite = new SourceSpan("test.stash", 2, 1, 2, 1),
-            LocalScope = new Environment()
+            LocalScope = new TestDebugScope()
         };
 
         Assert.NotEqual(frame1.Id, frame2.Id);
@@ -94,7 +95,7 @@ public class DebuggingInfrastructureTests
         var frame = new CallFrame
         {
             CallSite = new SourceSpan("test.stash", 1, 1, 1, 1),
-            LocalScope = new Environment()
+            LocalScope = new TestDebugScope()
         };
 
         Assert.Equal("<script>", frame.FunctionName);
@@ -106,7 +107,7 @@ public class DebuggingInfrastructureTests
         var frame = new CallFrame
         {
             CallSite = new SourceSpan("test.stash", 1, 1, 1, 1),
-            LocalScope = new Environment()
+            LocalScope = new TestDebugScope()
         };
 
         Assert.Null(frame.FunctionSpan);
@@ -120,7 +121,7 @@ public class DebuggingInfrastructureTests
         {
             FunctionName = "deploy",
             CallSite = new SourceSpan("main.stash", 5, 1, 5, 15),
-            LocalScope = new Environment(),
+            LocalScope = new TestDebugScope(),
             FunctionSpan = defSpan
         };
 
@@ -133,11 +134,10 @@ public class DebuggingInfrastructureTests
     [Fact]
     public void DebugScope_ReportsCorrectVariableCount()
     {
-        var env = new Environment();
-        env.Define("x", 1L);
-        env.Define("y", 2L);
-
-        var scope = new DebugScope(ScopeKind.Local, "Local", env);
+        var inner = new TestDebugScope();
+        inner.Define("x", 1L);
+        inner.Define("y", 2L);
+        var scope = new DebugScope(ScopeKind.Local, "Local", inner);
 
         Assert.Equal(ScopeKind.Local, scope.Kind);
         Assert.Equal("Local", scope.Name);
@@ -147,8 +147,8 @@ public class DebuggingInfrastructureTests
     [Fact]
     public void DebugScope_EmptyEnvironment_HasZeroVariables()
     {
-        var env = new Environment();
-        var scope = new DebugScope(ScopeKind.Global, "Global", env);
+        var inner = new TestDebugScope();
+        var scope = new DebugScope(ScopeKind.Global, "Global", inner);
 
         Assert.Equal(0, scope.VariableCount);
     }
@@ -170,18 +170,18 @@ public class DebuggingInfrastructureTests
     // ── IDebugger Hook Tests ──────────────────────────────────────────
 
     [Fact]
-    public void Interpreter_CallsDebuggerOnBeforeExecute()
+    public void VM_CallsDebuggerOnBeforeExecute()
     {
         var debugger = new TestDebugger();
-        var interpreter = new Interpreter { Debugger = debugger };
-
-        var source = "let x = 42;";
-        var lexer = new Lexer(source);
+        var lexer = new Lexer("let x = 42;", "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var stmts = parser.ParseProgram();
-
-        interpreter.Interpret(stmts);
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.Debugger = debugger;
+        vm.Execute(chunk);
 
         Assert.True(debugger.OnBeforeExecuteCalled);
         Assert.NotNull(debugger.LastSpan);
@@ -189,239 +189,57 @@ public class DebuggingInfrastructureTests
     }
 
     [Fact]
-    public void Interpreter_CallsDebuggerOnFunctionEnterExit()
+    public void VM_CallsDebuggerOnFunctionEnterExit()
     {
         var debugger = new TestDebugger();
-        var interpreter = new Interpreter { Debugger = debugger };
-
-        var source = "fn greet() { let x = 1; } greet();";
-        var lexer = new Lexer(source);
+        var lexer = new Lexer("fn greet() { let x = 1; } greet();", "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var stmts = parser.ParseProgram();
-
-        interpreter.Interpret(stmts);
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.Debugger = debugger;
+        vm.Execute(chunk);
 
         Assert.Contains("greet", debugger.FunctionsEntered);
         Assert.Contains("greet", debugger.FunctionsExited);
     }
 
     [Fact]
-    public void Interpreter_CallsDebuggerOnError()
+    public void VM_CallsDebuggerOnError()
     {
         var debugger = new TestDebugger();
-        var interpreter = new Interpreter { Debugger = debugger };
-
-        var source = "break;";
-        var lexer = new Lexer(source);
+        var lexer = new Lexer("let x = 1 / 0;", "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        vm.Debugger = debugger;
 
-        Assert.Throws<RuntimeError>(() => interpreter.Interpret(stmts));
+        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
         Assert.True(debugger.OnErrorCalled);
     }
 
     [Fact]
-    public void Interpreter_TracksLoadedSources()
+    public void VM_ExposesGlobals()
     {
-        var interpreter = new Interpreter();
-        interpreter.CurrentFile = "/tmp/test.stash";
-
-        var source = "let x = 1;";
-        var lexer = new Lexer(source);
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-
-        interpreter.Interpret(stmts);
-
-        Assert.Contains("/tmp/test.stash", interpreter.LoadedSources);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        Assert.NotNull(vm.Globals);
+        Assert.True(vm.Globals.ContainsKey("typeof"));
     }
 
-    [Fact]
-    public void Interpreter_NotifiesDebuggerOnSourceLoaded()
+    // ── Test Helpers ──────────────────────────────────────────────────
+
+    private class TestDebugScope : IDebugScope
     {
-        var debugger = new TestDebugger();
-        var interpreter = new Interpreter { Debugger = debugger };
-        interpreter.CurrentFile = "/tmp/test.stash";
-
-        var source = "let x = 1;";
-        var lexer = new Lexer(source);
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-
-        interpreter.Interpret(stmts);
-
-        Assert.Contains("/tmp/test.stash", debugger.SourcesLoaded);
+        private readonly Dictionary<string, object?> _vars = new();
+        public IDebugScope? EnclosingScope => null;
+        public IEnumerable<KeyValuePair<string, object?>> GetAllBindings() => _vars;
+        public void Define(string name, object? value) => _vars[name] = value;
     }
-
-    [Fact]
-    public void Interpreter_ExposesGlobals()
-    {
-        var interpreter = new Interpreter();
-
-        Assert.NotNull(interpreter.Globals);
-        // Globals should have built-in functions defined
-        Assert.True(interpreter.Globals.Contains("typeof"));
-    }
-
-    [Fact]
-    public void Interpreter_CurrentSpan_NullWhenNotExecuting()
-    {
-        var interpreter = new Interpreter();
-
-        Assert.Null(interpreter.CurrentSpan);
-    }
-
-    // ── EvaluateString Tests ──────────────────────────────────────────
-
-    [Fact]
-    public void EvaluateString_SimpleExpression()
-    {
-        var interpreter = new Interpreter();
-        var env = new Environment();
-        env.Define("x", 10L);
-
-        var (value, error) = interpreter.EvaluateString("x + 5", env);
-
-        Assert.Null(error);
-        Assert.Equal(15L, value);
-    }
-
-    [Fact]
-    public void EvaluateString_InvalidExpression_ReturnsError()
-    {
-        var interpreter = new Interpreter();
-        var env = new Environment();
-
-        var (value, error) = interpreter.EvaluateString("+ + +", env);
-
-        Assert.NotNull(error);
-    }
-
-    [Fact]
-    public void EvaluateString_UndefinedVariable_ReturnsError()
-    {
-        var interpreter = new Interpreter();
-        var env = new Environment();
-
-        var (value, error) = interpreter.EvaluateString("undefined_var", env);
-
-        Assert.NotNull(error);
-    }
-
-    [Fact]
-    public void EvaluateString_StringConcatenation()
-    {
-        var interpreter = new Interpreter();
-        var env = new Environment();
-        env.Define("name", "world");
-
-        var (value, error) = interpreter.EvaluateString("\"hello \" + name", env);
-
-        Assert.Null(error);
-        Assert.Equal("hello world", value);
-    }
-
-    [Fact]
-    public void EvaluateString_BooleanExpression()
-    {
-        var interpreter = new Interpreter();
-        var env = new Environment();
-        env.Define("x", 10L);
-
-        var (value, error) = interpreter.EvaluateString("x > 5", env);
-
-        Assert.Null(error);
-        Assert.Equal(true, value);
-    }
-
-    [Fact]
-    public void EvaluateString_NullCoalescing()
-    {
-        var interpreter = new Interpreter();
-        var env = new Environment();
-        env.Define("x", null);
-
-        var (value, error) = interpreter.EvaluateString("x ?? 42", env);
-
-        Assert.Null(error);
-        Assert.Equal(42L, value);
-    }
-
-    // ── CallStack with FunctionSpan Tests ─────────────────────────────
-
-    [Fact]
-    public void CallStack_FunctionHasDefinitionSpan()
-    {
-        CallFrame? capturedFrame = null;
-        var debugger = new TestDebugger
-        {
-            OnFunctionEnterCallback = (name, span, env) =>
-            {
-                // Will be called, but we need to check CallStack during execution
-            }
-        };
-
-        var interpreter = new Interpreter { Debugger = debugger };
-
-        // Set up a capturing debugger that grabs the call stack during function call
-        debugger.OnBeforeExecuteCallback = (span, env) =>
-        {
-            if (interpreter.CallStack.Count > 0)
-            {
-                capturedFrame = interpreter.CallStack[^1];
-            }
-        };
-
-        var source = "fn greet() { let x = 1; } greet();";
-        var lexer = new Lexer(source);
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-
-        interpreter.Interpret(stmts);
-
-        Assert.NotNull(capturedFrame);
-        Assert.Equal("greet", capturedFrame!.FunctionName);
-        Assert.NotNull(capturedFrame.FunctionSpan);
-    }
-
-    // ── FormatValue Tests ─────────────────────────────────────────────
-
-    [Theory]
-    [InlineData(null, "null")]
-    [InlineData(true, "true")]
-    [InlineData(false, "false")]
-    [InlineData(42L, "42")]
-    public void FormatValue_PrimitiveTypes(object? input, string expected)
-    {
-        Assert.Equal(expected, CliDebugger.FormatValue(input));
-    }
-
-    [Fact]
-    public void FormatValue_String_WrapsInQuotes()
-    {
-        Assert.Equal("\"hello\"", CliDebugger.FormatValue("hello"));
-    }
-
-    [Fact]
-    public void FormatValue_Double()
-    {
-        Assert.Equal("3.14", CliDebugger.FormatValue(3.14));
-    }
-
-    [Fact]
-    public void FormatValue_Array()
-    {
-        var list = new List<object?> { 1L, "two", null };
-        string result = CliDebugger.FormatValue(list);
-        Assert.Equal("[1, \"two\", null]", result);
-    }
-
-    // ── Test Helper ───────────────────────────────────────────────────
 
     private class TestDebugger : IDebugger
     {
@@ -454,6 +272,8 @@ public class DebuggingInfrastructureTests
         {
             FunctionsExited.Add(name);
         }
+
+        public bool ShouldBreakOnFunctionEntry(string functionName) => true;
 
         public void OnError(RuntimeError error, IReadOnlyList<CallFrame> callStack, int threadId)
         {

@@ -52,6 +52,15 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private readonly Stack<LoopContext> _loops = new();
 
+    private readonly List<FinallyInfo> _activeFinally = new();
+
+    private struct FinallyInfo
+    {
+        public List<Stmt> Body;
+        public int SaveSlot;
+        public int HandlerCount;
+    }
+
     /// <summary>Names of captured upvalues, in capture order, for debugger closure scope display.</summary>
     private readonly List<string> _upvalueNames = new();
 
@@ -75,13 +84,15 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         var compiler = new Compiler(null, null);
         foreach (Stmt stmt in statements)
+        {
             compiler.CompileStmt(stmt);
+        }
         // Implicit return null at end of script
         compiler._builder.Emit(OpCode.Null);
         compiler._builder.Emit(OpCode.Return);
-        compiler._builder.LocalCount = compiler._scope.LocalCount;
-        compiler._builder.LocalNames = compiler._scope.GetLocalNames();
-        compiler._builder.LocalIsConst = compiler._scope.GetLocalIsConst();
+        compiler._builder.LocalCount = compiler._scope.PeakLocalCount;
+        compiler._builder.LocalNames = compiler._scope.GetPeakLocalNames();
+        compiler._builder.LocalIsConst = compiler._scope.GetPeakLocalIsConst();
         return compiler._builder.Build();
     }
 
@@ -94,9 +105,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         var compiler = new Compiler(null, null);
         compiler.CompileExpr(expression);
         compiler._builder.Emit(OpCode.Return);
-        compiler._builder.LocalCount = compiler._scope.LocalCount;
-        compiler._builder.LocalNames = compiler._scope.GetLocalNames();
-        compiler._builder.LocalIsConst = compiler._scope.GetLocalIsConst();
+        compiler._builder.LocalCount = compiler._scope.PeakLocalCount;
+        compiler._builder.LocalNames = compiler._scope.GetPeakLocalNames();
+        compiler._builder.LocalIsConst = compiler._scope.GetPeakLocalIsConst();
         return compiler._builder.Build();
     }
 
@@ -124,7 +135,21 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             int slot = _scope.ResolveLocal(name);
             if (slot >= 0)
             {
-                _builder.Emit(isLoad ? OpCode.LoadLocal : OpCode.StoreLocal, (byte)slot);
+                if (!isLoad && _scope.IsLocalConst(slot))
+                {
+                    // Const reassignment detected at compile time — emit a runtime throw.
+                    // VisitAssignExpr emits Dup before calling EmitVariable, so there are
+                    // two copies of the value on the stack: pop both before throwing.
+                    _builder.Emit(OpCode.Pop);
+                    _builder.Emit(OpCode.Pop);
+                    ushort msgIdx = _builder.AddConstant("Assignment to constant variable.");
+                    _builder.Emit(OpCode.Const, msgIdx);
+                    _builder.Emit(OpCode.Throw);
+                }
+                else
+                {
+                    _builder.Emit(isLoad ? OpCode.LoadLocal : OpCode.StoreLocal, (byte)slot);
+                }
             }
             else if (resolvedDistance > 0)
             {
@@ -147,7 +172,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     private byte ResolveUpvalue(string name, int distance)
     {
         if (_enclosing == null)
+        {
             return 0; // Shouldn't happen for a properly resolved upvalue
+        }
 
         int localSlot = _enclosing._scope.ResolveLocal(name);
         if (localSlot >= 0)
@@ -155,7 +182,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             // Captured directly from the enclosing function's locals
             byte idx = _builder.AddUpvalue((byte)localSlot, isLocal: true);
             if (idx == _upvalueNames.Count)
+            {
                 _upvalueNames.Add(name);
+            }
+
             return idx;
         }
 
@@ -165,7 +195,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             byte enclosingUpvalue = _enclosing.ResolveUpvalue(name, distance - 1);
             byte idx = _builder.AddUpvalue(enclosingUpvalue, isLocal: false);
             if (idx == _upvalueNames.Count)
+            {
                 _upvalueNames.Add(name);
+            }
+
             return idx;
         }
 
@@ -182,7 +215,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         for (int i = _scope.LocalCount - 1; i >= 0; i--)
         {
             Local local = _scope.GetLocal(i);
-            if (local.Depth <= targetDepth) break;
+            if (local.Depth <= targetDepth)
+            {
+                break;
+            }
+
             _builder.Emit(OpCode.Pop);
         }
     }
@@ -194,7 +231,29 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         int popCount = _scope.EndScope();
         for (int i = 0; i < popCount; i++)
+        {
             _builder.Emit(OpCode.Pop);
+        }
+    }
+
+    /// <summary>
+    /// Inline-emits all active finally blocks (innermost first) before a
+    /// non-local control transfer (break, continue, return).
+    /// </summary>
+    private void EmitPendingFinally()
+    {
+        for (int i = _activeFinally.Count - 1; i >= 0; i--)
+        {
+            FinallyInfo fi = _activeFinally[i];
+            for (int h = 0; h < fi.HandlerCount; h++)
+            {
+                _builder.Emit(OpCode.TryEnd);
+            }
+            foreach (Stmt s in fi.Body)
+            {
+                CompileStmt(s);
+            }
+        }
     }
 
     /// <summary>
@@ -205,7 +264,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         LoopContext loop = _loops.Pop();
         foreach (int jump in loop.BreakJumps)
+        {
             _builder.PatchJump(jump);
+        }
     }
 
     /// <summary>
@@ -215,7 +276,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     private static void PatchContinueJumps(LoopContext ctx, ChunkBuilder builder)
     {
         foreach (int jump in ctx.ContinueJumps)
+        {
             builder.PatchJump(jump);
+        }
+
         ctx.ContinueJumps.Clear();
     }
 
@@ -238,7 +302,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 break;
             }
         }
-        if (!hasAnyDefault) return;
+        if (!hasAnyDefault)
+        {
+            return;
+        }
 
         // Add the NotProvided sentinel to the constant pool once
         ushort notProvidedIdx = _builder.AddConstant(VirtualMachine.NotProvided);
@@ -246,7 +313,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         for (int i = 0; i < count && i < defaultValues.Count; i++)
         {
             Expr? defaultExpr = defaultValues[i];
-            if (defaultExpr == null) continue;
+            if (defaultExpr == null)
+            {
+                continue;
+            }
 
             // Load the parameter's current value
             _builder.Emit(OpCode.LoadLocal, (byte)i);
@@ -276,7 +346,8 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         List<Expr?> defaultValues,
         BlockStmt body,
         bool isAsync,
-        bool hasRestParam)
+        bool hasRestParam,
+        bool firstParamIsConst = false)
     {
         var fnCompiler = new Compiler(this, name);
         fnCompiler._builder.Arity = parameters.Count;
@@ -288,16 +359,23 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         int minArity = paramCount;
         for (int i = paramCount - 1; i >= 0; i--)
         {
-            if (i < defaultValues.Count && defaultValues[i] != null) minArity--;
-            else break;
+            if (i < defaultValues.Count && defaultValues[i] != null)
+            {
+                minArity--;
+            }
+            else
+            {
+                break;
+            }
         }
         fnCompiler._builder.MinArity = minArity;
 
         fnCompiler._scope.BeginScope();
 
-        foreach (Token param in parameters)
+        for (int j = 0; j < parameters.Count; j++)
         {
-            int paramSlot = fnCompiler._scope.DeclareLocal(param.Lexeme, isConst: false);
+            bool isConst = j == 0 && firstParamIsConst;
+            int paramSlot = fnCompiler._scope.DeclareLocal(parameters[j].Lexeme, isConst: isConst);
             fnCompiler._scope.MarkInitialized(paramSlot);
         }
 
@@ -307,15 +385,17 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         fnCompiler.EmitDefaultPrologue(parameters, defaultValues, hasRestParam);
 
         foreach (Stmt s in body.Statements)
+        {
             fnCompiler.CompileStmt(s);
+        }
 
         // Implicit return null
         fnCompiler._builder.Emit(OpCode.Null);
         fnCompiler._builder.Emit(OpCode.Return);
 
-        fnCompiler._builder.LocalCount = fnCompiler._scope.LocalCount;
-        fnCompiler._builder.LocalNames = fnCompiler._scope.GetLocalNames();
-        fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetLocalIsConst();
+        fnCompiler._builder.LocalCount = fnCompiler._scope.PeakLocalCount;
+        fnCompiler._builder.LocalNames = fnCompiler._scope.GetPeakLocalNames();
+        fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetPeakLocalIsConst();
         fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames.Count > 0 ? fnCompiler._upvalueNames.ToArray() : null;
         Chunk fnChunk = fnCompiler._builder.Build();
 
@@ -351,9 +431,13 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
 
         if (stmt.Initializer != null)
+        {
             CompileExpr(stmt.Initializer);
+        }
         else
+        {
             _builder.Emit(OpCode.Null);
+        }
 
         _scope.MarkInitialized(slot);
         // The initializer value on the stack IS the local — no separate store needed.
@@ -361,7 +445,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         // At top-level, also seed globals so that OP_LOAD_GLOBAL (emitted because
         // the Resolver leaves top-level variables unresolved at distance=-1) can
         // find the initial value.
-        if (_enclosing is null)
+        if (_enclosing is null && _scope.ScopeDepth == 0)
         {
             int resolvedSlot = _scope.ResolveLocal(stmt.Name.Lexeme);
             if (resolvedSlot >= 0)
@@ -385,7 +469,8 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         // At top-level, also seed globals so that OP_LOAD_GLOBAL (emitted because
         // the Resolver leaves top-level variables unresolved at distance=-1) can
-        // find the initial value.
+        // find the initial value. Use InitConstGlobal so the VM marks the name as
+        // immutable and throws on any subsequent StoreGlobal to the same name.
         if (_enclosing is null)
         {
             int resolvedSlot = _scope.ResolveLocal(stmt.Name.Lexeme);
@@ -393,7 +478,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             {
                 _builder.Emit(OpCode.LoadLocal, (byte)resolvedSlot);
                 ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
-                _builder.Emit(OpCode.StoreGlobal, nameIdx);
+                _builder.Emit(OpCode.InitConstGlobal, nameIdx);
             }
         }
 
@@ -405,7 +490,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         _scope.BeginScope();
         foreach (Stmt s in stmt.Statements)
+        {
             CompileStmt(s);
+        }
+
         EmitScopePops();
         return null;
     }
@@ -498,7 +586,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         _scope.BeginScope();
 
         if (stmt.Initializer != null)
+        {
             CompileStmt(stmt.Initializer);
+        }
 
         int loopStart = _builder.CurrentOffset;
 
@@ -532,7 +622,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         _builder.EmitLoop(loopStart);
 
         if (exitJump >= 0)
+        {
             _builder.PatchJump(exitJump);
+        }
 
         PatchBreakJumps();
 
@@ -584,6 +676,16 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         CompileStmt(stmt.Body);
 
+        // Close any upvalues captured from loop-iteration variables before looping back,
+        // ensuring each iteration's closures freeze the current value of the loop variable.
+        // Without this, all closures in a loop share a single open upvalue that reads the
+        // live (ever-changing) stack slot — causing tasks/closures to see wrong values.
+        _builder.Emit(OpCode.CloseUpvalue, (byte)varSlot);
+        if (stmt.IndexName != null)
+        {
+            _builder.Emit(OpCode.CloseUpvalue, (byte)(varSlot - 1)); // index slot is one below varSlot
+        }
+
         _builder.EmitLoop(loopStart);
         _builder.PatchJump(exitJump);
 
@@ -598,8 +700,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         _builder.AddSourceMapping(stmt.Span);
         if (_loops.Count == 0)
+        {
             throw new CompileError("'break' outside of loop.", stmt.Span);
+        }
 
+        EmitPendingFinally();
         EmitScopeCleanup(_loops.Peek().ScopeDepth);
 
         int jump = _builder.EmitJump(OpCode.Jump);
@@ -612,7 +717,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         _builder.AddSourceMapping(stmt.Span);
         if (_loops.Count == 0)
+        {
             throw new CompileError("'continue' outside of loop.", stmt.Span);
+        }
+
+        EmitPendingFinally();
 
         LoopContext loop = _loops.Peek();
         EmitScopeCleanup(loop.ScopeDepth);
@@ -635,9 +744,23 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         _builder.AddSourceMapping(stmt.Span);
         if (stmt.Value != null)
+        {
             CompileExpr(stmt.Value);
+        }
         else
+        {
             _builder.Emit(OpCode.Null);
+        }
+
+        if (_activeFinally.Count > 0)
+        {
+            // Save return value, run finally blocks, then return
+            int saveSlot = _activeFinally[^1].SaveSlot;
+            _builder.Emit(OpCode.StoreLocal, (byte)saveSlot);
+            EmitPendingFinally();
+            _builder.Emit(OpCode.LoadLocal, (byte)saveSlot);
+        }
+
         _builder.Emit(OpCode.Return);
         return null;
     }
@@ -694,10 +817,35 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         for (int i = 0; i < stmt.Methods.Count; i++)
         {
             methodNames[i] = stmt.Methods[i].Name.Lexeme;
+
+            // Prepend a synthetic 'self' parameter so the VM's arity check passes.
+            // CallValue for VMBoundMethod does argc+1 (inserting self), so expected must match.
+            // Only add if not already explicitly declared by the user.
+            List<Token> methodParams;
+            List<Expr?> methodDefaults;
+            bool hasSelfParam = stmt.Methods[i].Parameters.Count > 0
+                && stmt.Methods[i].Parameters[0].Lexeme == "self";
+
+            if (hasSelfParam)
+            {
+                methodParams = stmt.Methods[i].Parameters;
+                methodDefaults = stmt.Methods[i].DefaultValues;
+            }
+            else
+            {
+                methodParams = new List<Token>();
+                methodParams.Add(new Token(TokenType.Identifier, "self", null, stmt.Methods[i].Name.Span));
+                methodParams.AddRange(stmt.Methods[i].Parameters);
+
+                methodDefaults = new List<Expr?>();
+                methodDefaults.Add(null); // self has no default
+                methodDefaults.AddRange(stmt.Methods[i].DefaultValues);
+            }
+
             CompileFunction(
                 stmt.Methods[i].Name.Lexeme,
-                stmt.Methods[i].Parameters,
-                stmt.Methods[i].DefaultValues,
+                methodParams,
+                methodDefaults,
                 stmt.Methods[i].Body,
                 stmt.Methods[i].IsAsync,
                 stmt.Methods[i].HasRestParam);
@@ -705,11 +853,15 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         string[] fields = new string[stmt.Fields.Count];
         for (int i = 0; i < stmt.Fields.Count; i++)
+        {
             fields[i] = stmt.Fields[i].Lexeme;
+        }
 
         string[] interfaceNames = new string[stmt.Interfaces.Count];
         for (int i = 0; i < stmt.Interfaces.Count; i++)
+        {
             interfaceNames[i] = stmt.Interfaces[i].Lexeme;
+        }
 
         var metadata = new StructMetadata(stmt.Name.Lexeme, fields, methodNames, interfaceNames);
         ushort metaIdx = _builder.AddConstant(metadata);
@@ -736,7 +888,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         string[] members = new string[stmt.Members.Count];
         for (int i = 0; i < stmt.Members.Count; i++)
+        {
             members[i] = stmt.Members[i].Lexeme;
+        }
 
         var metadata = new EnumMetadata(stmt.Name.Lexeme, members);
         ushort metaIdx = _builder.AddConstant(metadata);
@@ -773,7 +927,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             InterfaceMethodSignature sig = stmt.Methods[i];
             var paramNames = new List<string>();
             foreach (Token p in sig.Parameters)
+            {
                 paramNames.Add(p.Lexeme);
+            }
 
             var paramTypes = new List<string?>();
             for (int j = 0; j < sig.Parameters.Count; j++)
@@ -804,6 +960,14 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         _builder.AddSourceMapping(stmt.Span);
 
+        if (!(_enclosing is null && _scope.ScopeDepth == 0))
+        {
+            ushort msgIdx = _builder.AddConstant("'extend' blocks must be declared at the top level.");
+            _builder.Emit(OpCode.Const, msgIdx);
+            _builder.Emit(OpCode.Throw);
+            return null;
+        }
+
         string typeName = stmt.TypeName.Lexeme;
         bool isBuiltIn = typeName is "string" or "array" or "dict" or "int" or "float";
 
@@ -811,13 +975,36 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         for (int i = 0; i < stmt.Methods.Count; i++)
         {
             methodNames[i] = stmt.Methods[i].Name.Lexeme;
+
+            List<Token> methodParams;
+            List<Expr?> methodDefaults;
+            bool hasSelfParam = stmt.Methods[i].Parameters.Count > 0
+                && stmt.Methods[i].Parameters[0].Lexeme == "self";
+
+            if (!hasSelfParam)
+            {
+                methodParams = new List<Token>();
+                methodParams.Add(new Token(TokenType.Identifier, "self", null, stmt.Methods[i].Name.Span));
+                methodParams.AddRange(stmt.Methods[i].Parameters);
+
+                methodDefaults = new List<Expr?>();
+                methodDefaults.Add(null); // self has no default
+                methodDefaults.AddRange(stmt.Methods[i].DefaultValues);
+            }
+            else
+            {
+                methodParams = stmt.Methods[i].Parameters;
+                methodDefaults = stmt.Methods[i].DefaultValues;
+            }
+
             CompileFunction(
                 stmt.Methods[i].Name.Lexeme,
-                stmt.Methods[i].Parameters,
-                stmt.Methods[i].DefaultValues,
+                methodParams,
+                methodDefaults,
                 stmt.Methods[i].Body,
                 stmt.Methods[i].IsAsync,
-                stmt.Methods[i].HasRestParam);
+                stmt.Methods[i].HasRestParam,
+                firstParamIsConst: !hasSelfParam);
         }
 
         var metadata = new ExtendMetadata(typeName, methodNames, isBuiltIn);
@@ -837,7 +1024,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         string[] names = new string[stmt.Names.Count];
         for (int i = 0; i < stmt.Names.Count; i++)
+        {
             names[i] = stmt.Names[i].Lexeme;
+        }
 
         var metadata = new ImportMetadata(names);
         ushort metaIdx = _builder.AddConstant(metadata);
@@ -849,6 +1038,12 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             int slot = _scope.DeclareLocal(name.Lexeme, isConst: false);
             _scope.MarkInitialized(slot);
+            if (_enclosing is null && _scope.ScopeDepth == 0)
+            {
+                _builder.Emit(OpCode.LoadLocal, (byte)slot);
+                ushort nameIdx = _builder.AddConstant(name.Lexeme);
+                _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            }
         }
 
         return null;
@@ -868,6 +1063,12 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         int slot = _scope.DeclareLocal(stmt.Alias.Lexeme, isConst: false);
         _scope.MarkInitialized(slot);
+        if (_enclosing is null && _scope.ScopeDepth == 0)
+        {
+            _builder.Emit(OpCode.LoadLocal, (byte)slot);
+            ushort nameIdx = _builder.AddConstant(stmt.Alias.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+        }
 
         return null;
     }
@@ -883,7 +1084,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         string kind = stmt.Kind == DestructureStmt.PatternKind.Array ? "array" : "object";
         string[] names = new string[stmt.Names.Count];
         for (int i = 0; i < stmt.Names.Count; i++)
+        {
             names[i] = stmt.Names[i].Lexeme;
+        }
 
         var metadata = new DestructureMetadata(kind, names, stmt.RestName?.Lexeme, stmt.IsConst);
         ushort metaIdx = _builder.AddConstant(metadata);
@@ -895,6 +1098,13 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             int slot = _scope.DeclareLocal(name.Lexeme, isConst: stmt.IsConst);
             _scope.MarkInitialized(slot);
+
+            if (_enclosing is null && _scope.ScopeDepth == 0)
+            {
+                _builder.Emit(OpCode.LoadLocal, (byte)slot);
+                ushort nameIdx = _builder.AddConstant(name.Lexeme);
+                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, nameIdx);
+            }
         }
 
         // Declare rest name if present
@@ -902,6 +1112,13 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             int restSlot = _scope.DeclareLocal(stmt.RestName.Lexeme, isConst: stmt.IsConst);
             _scope.MarkInitialized(restSlot);
+
+            if (_enclosing is null && _scope.ScopeDepth == 0)
+            {
+                _builder.Emit(OpCode.LoadLocal, (byte)restSlot);
+                ushort restNameIdx = _builder.AddConstant(stmt.RestName.Lexeme);
+                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, restNameIdx);
+            }
         }
 
         return null;
@@ -914,9 +1131,13 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         // Push elevator expression or null for platform default
         if (stmt.Elevator != null)
+        {
             CompileExpr(stmt.Elevator);
+        }
         else
+        {
             _builder.Emit(OpCode.Null);
+        }
 
         _builder.Emit(OpCode.ElevateBegin);
 
@@ -929,7 +1150,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         // --- Body ---
         foreach (Stmt s in stmt.Body.Statements)
+        {
             CompileStmt(s);
+        }
+
         _builder.Emit(OpCode.TryEnd);
 
         // --- Success path: ElevateEnd ---
@@ -956,10 +1180,13 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         bool hasCatch = stmt.CatchBody != null;
         bool hasFinally = stmt.FinallyBody != null;
 
-        // Synthetic local for storing error during finally's error path
+        // Synthetic local for storing error during finally's error path.
+        // Wrapped in BeginScope so it doesn't pollute the enclosing scope's slot count,
+        // which would cause outer catch-variable slot misalignment.
         int finallyErrSlot = -1;
         if (hasFinally)
         {
+            _scope.BeginScope();
             finallyErrSlot = _scope.DeclareLocal("<finally_err>", isConst: false);
             _scope.MarkInitialized(finallyErrSlot);
             _builder.Emit(OpCode.Null); // placeholder value for the local
@@ -975,8 +1202,12 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             int innerCatchJump = _builder.EmitJump(OpCode.TryBegin);
 
             // --- Try body ---
+            _activeFinally.Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 2 });
             foreach (Stmt s in stmt.TryBody.Statements)
+            {
                 CompileStmt(s);
+            }
+
             _builder.Emit(OpCode.TryEnd); // pop inner handler
             int afterCatchJump = _builder.EmitJump(OpCode.Jump); // skip catch
 
@@ -994,9 +1225,16 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 _builder.Emit(OpCode.Pop); // discard error
             }
             foreach (Stmt s in stmt.CatchBody!.Statements)
+            {
                 CompileStmt(s);
+            }
+
             if (stmt.CatchVariable != null)
+            {
                 EmitScopePops();
+            }
+
+            _activeFinally.RemoveAt(_activeFinally.Count - 1);
 
             // --- After catch ---
             _builder.PatchJump(afterCatchJump);
@@ -1004,7 +1242,13 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
             // --- Finally (success path) ---
             foreach (Stmt s in stmt.FinallyBody!.Statements)
+            {
                 CompileStmt(s);
+            }
+
+            // Pop <finally_err> slot from the stack on the success path and end its scope
+            // so the enclosing scope's subsequent DeclareLocal calls use the correct slot.
+            EmitScopePops();
             int endJump = _builder.EmitJump(OpCode.Jump);
 
             // --- Outer catch label (finally error path) ---
@@ -1013,7 +1257,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
             // Run finally body
             foreach (Stmt s in stmt.FinallyBody!.Statements)
+            {
                 CompileStmt(s);
+            }
             // Re-throw saved error
             _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
             _builder.Emit(OpCode.Throw);
@@ -1025,7 +1271,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             int catchJump = _builder.EmitJump(OpCode.TryBegin);
 
             foreach (Stmt s in stmt.TryBody.Statements)
+            {
                 CompileStmt(s);
+            }
+
             _builder.Emit(OpCode.TryEnd);
             int endJump = _builder.EmitJump(OpCode.Jump);
 
@@ -1041,9 +1290,14 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 _builder.Emit(OpCode.Pop);
             }
             foreach (Stmt s in stmt.CatchBody!.Statements)
+            {
                 CompileStmt(s);
+            }
+
             if (stmt.CatchVariable != null)
+            {
                 EmitScopePops();
+            }
 
             _builder.PatchJump(endJump);
         }
@@ -1051,20 +1305,33 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             int errorJump = _builder.EmitJump(OpCode.TryBegin);
 
+            _activeFinally.Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 1 });
             foreach (Stmt s in stmt.TryBody.Statements)
+            {
                 CompileStmt(s);
+            }
+            _activeFinally.RemoveAt(_activeFinally.Count - 1);
+
             _builder.Emit(OpCode.TryEnd);
 
             // Success path: run finally
             foreach (Stmt s in stmt.FinallyBody!.Statements)
+            {
                 CompileStmt(s);
+            }
+
+            // Pop <finally_err> slot from the stack on the success path and end its scope.
+            EmitScopePops();
             int endJump = _builder.EmitJump(OpCode.Jump);
 
             // Error path: store error, run finally, re-throw
             _builder.PatchJump(errorJump);
             _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
             foreach (Stmt s in stmt.FinallyBody!.Statements)
+            {
                 CompileStmt(s);
+            }
+
             _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
             _builder.Emit(OpCode.Throw);
 
@@ -1075,7 +1342,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             int catchJump = _builder.EmitJump(OpCode.TryBegin);
 
             foreach (Stmt s in stmt.TryBody.Statements)
+            {
                 CompileStmt(s);
+            }
+
             _builder.Emit(OpCode.TryEnd);
             int endJump = _builder.EmitJump(OpCode.Jump);
 
@@ -1261,13 +1531,19 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             {
                 _builder.Emit(OpCode.ArgMark);
                 foreach (Expr arg in expr.Arguments)
+                {
                     CompileExpr(arg);
+                }
+
                 _builder.Emit(OpCode.CallSpread);
             }
             else
             {
                 foreach (Expr arg in expr.Arguments)
+                {
                     CompileExpr(arg);
+                }
+
                 _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
             }
             int endJump = _builder.EmitJump(OpCode.Jump);
@@ -1296,13 +1572,19 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             _builder.Emit(OpCode.ArgMark);
             foreach (Expr arg in expr.Arguments)
+            {
                 CompileExpr(arg);
+            }
+
             _builder.Emit(OpCode.CallSpread);
         }
         else
         {
             foreach (Expr arg in expr.Arguments)
+            {
                 CompileExpr(arg);
+            }
+
             _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
         }
         return null;
@@ -1312,7 +1594,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     public object? VisitArrayExpr(ArrayExpr expr)
     {
         foreach (Expr element in expr.Elements)
+        {
             CompileExpr(element);
+        }
+
         _builder.Emit(OpCode.Array, (ushort)expr.Elements.Count);
         return null;
     }
@@ -1413,7 +1698,10 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
     {
         foreach (Expr part in expr.Parts)
+        {
             CompileExpr(part);
+        }
+
         _builder.Emit(OpCode.Interpolate, (ushort)expr.Parts.Count);
         return null;
     }
@@ -1423,7 +1711,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
     {
         _builder.AddSourceMapping(expr.Span);
         foreach (Expr part in expr.Parts)
+        {
             CompileExpr(part);
+        }
 
         var metadata = new CommandMetadata(expr.Parts.Count, expr.IsPassthrough, expr.IsStrict);
         ushort metaIdx = _builder.AddConstant(metadata);
@@ -1451,8 +1741,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         _builder.Emit(OpCode.TryEnd);
         int endJump = _builder.EmitJump(OpCode.Jump);
         _builder.PatchJump(catchJump);
-        _builder.Emit(OpCode.Pop);   // discard the caught error
-        _builder.Emit(OpCode.Null);  // expression result is null on failure
+        // VM already pushed the StashError onto the stack — leave it as the expression result
         _builder.PatchJump(endJump);
         return null;
     }
@@ -1474,12 +1763,14 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         CompileExpr(expr.Subject);
 
         var endJumps = new List<int>();
+        bool hasDefault = false;
 
         foreach (SwitchArm arm in expr.Arms)
         {
             if (arm.IsDiscard)
             {
                 // Default arm — pop subject, evaluate and leave result
+                hasDefault = true;
                 _builder.Emit(OpCode.Pop);
                 CompileExpr(arm.Body);
             }
@@ -1497,8 +1788,18 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             }
         }
 
+        if (!hasDefault)
+        {
+            _builder.Emit(OpCode.Pop);
+            ushort msgIdx = _builder.AddConstant("No matching case in switch expression.");
+            _builder.Emit(OpCode.Const, msgIdx);
+            _builder.Emit(OpCode.Throw);
+        }
+
         foreach (int endJump in endJumps)
+        {
             _builder.PatchJump(endJump);
+        }
 
         return null;
     }
@@ -1512,16 +1813,21 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             // Load the current value
             EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: true);
+            _builder.Emit(OpCode.CheckNumeric);
 
             if (!expr.IsPrefix)
+            {
                 _builder.Emit(OpCode.Dup);  // postfix: preserve old value as expression result
+            }
 
             ushort oneIdx = _builder.AddConstant(1L);
             _builder.Emit(OpCode.Const, oneIdx);
             _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
 
             if (expr.IsPrefix)
+            {
                 _builder.Emit(OpCode.Dup);  // prefix: preserve new value as expression result
+            }
 
             EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: false);
             return null;
@@ -1536,6 +1842,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 CompileExpr(dot.Object);                          // [obj]
                 _builder.Emit(OpCode.Dup);                        // [obj, obj]
                 _builder.Emit(OpCode.GetField, nameIdx);          // [obj, oldVal]
+                _builder.Emit(OpCode.CheckNumeric);
                 ushort oneIdx = _builder.AddConstant(1L);
                 _builder.Emit(OpCode.Const, oneIdx);
                 _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
@@ -1544,63 +1851,61 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             }
             else
             {
-                // Postfix: reserve temp slot BEFORE pushing expression operands
-                int tempSlot = _scope.DeclareLocal("<update_temp>", isConst: false);
-                _scope.MarkInitialized(tempSlot);
-                _builder.Emit(OpCode.Null);                             // reserve slot [null]
-
+                // Postfix: perform mutation first, then derive oldVal from newVal
                 CompileExpr(dot.Object);                                // [..., obj]
                 _builder.Emit(OpCode.Dup);                              // [..., obj, obj]
                 _builder.Emit(OpCode.GetField, nameIdx);                // [..., obj, oldVal]
-                _builder.Emit(OpCode.Dup);                              // [..., obj, oldVal, oldVal]
-                _builder.Emit(OpCode.StoreLocal, (byte)tempSlot);       // [..., obj, oldVal]
+                _builder.Emit(OpCode.CheckNumeric);
                 ushort oneIdx = _builder.AddConstant(1L);
                 _builder.Emit(OpCode.Const, oneIdx);                    // [..., obj, oldVal, 1]
                 _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
                 // [..., obj, newVal]
                 _builder.Emit(OpCode.SetField, nameIdx);                // [..., newVal]
-                _builder.Emit(OpCode.Pop);                              // [...]
-                _builder.Emit(OpCode.LoadLocal, (byte)tempSlot);        // [..., oldVal]
+                // Derive oldVal: reverse the operation
+                _builder.Emit(OpCode.Const, oneIdx);                    // [..., newVal, 1]
+                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Subtract : OpCode.Add);
+                // [..., oldVal]
             }
             return null;
         }
 
         if (expr.Operand is IndexExpr idx)
         {
-            // Declare temp slot upfront so it doesn't overlap with expression operands
-            int tempSlot = _scope.DeclareLocal("<update_temp>", isConst: false);
-            _scope.MarkInitialized(tempSlot);
-            _builder.Emit(OpCode.Null);                               // reserve slot
-
-            // Prepare obj+index for SetIndex (they will be consumed later)
-            CompileExpr(idx.Object);                          // [obj]
-            CompileExpr(idx.Index);                           // [obj, index]
-            // Get current value via a second evaluation
-            CompileExpr(idx.Object);                          // [obj, index, obj2]
-            CompileExpr(idx.Index);                           // [obj, index, obj2, index2]
-            _builder.Emit(OpCode.GetIndex);                   // [obj, index, oldVal]
+            ushort oneIdx = _builder.AddConstant(1L);
 
             if (expr.IsPrefix)
             {
-                ushort oneIdx = _builder.AddConstant(1L);
+                // Prefix: ++arr[i] — stack: [obj, index, oldVal] → SetIndex → [newVal]
+                CompileExpr(idx.Object);                          // [obj]
+                CompileExpr(idx.Index);                           // [obj, index]
+                CompileExpr(idx.Object);                          // [obj, index, obj2]
+                CompileExpr(idx.Index);                           // [obj, index, obj2, index2]
+                _builder.Emit(OpCode.GetIndex);                   // [obj, index, oldVal]
+                _builder.Emit(OpCode.CheckNumeric);
                 _builder.Emit(OpCode.Const, oneIdx);
                 _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
                 // [obj, index, newVal]
-                _builder.Emit(OpCode.Dup);
-                _builder.Emit(OpCode.StoreLocal, (byte)tempSlot);
-                _builder.Emit(OpCode.SetIndex);                         // []
-                _builder.Emit(OpCode.LoadLocal, (byte)tempSlot);        // [newVal]
+                _builder.Emit(OpCode.SetIndex);                   // [newVal]  (SetIndex pops 3, pushes 1)
             }
             else
             {
-                _builder.Emit(OpCode.Dup);
-                _builder.Emit(OpCode.StoreLocal, (byte)tempSlot);       // save oldVal
-                ushort oneIdx = _builder.AddConstant(1L);
+                // Postfix: arr[i]++ — read old value first, then mutate
+                CompileExpr(idx.Object);                          // [obj]
+                CompileExpr(idx.Index);                           // [obj, index]
+                _builder.Emit(OpCode.GetIndex);                   // [oldVal] — this is the result
+
+                // Now perform the mutation by re-evaluating
+                CompileExpr(idx.Object);                          // [oldVal, obj]
+                CompileExpr(idx.Index);                           // [oldVal, obj, index]
+                CompileExpr(idx.Object);                          // [oldVal, obj, index, obj2]
+                CompileExpr(idx.Index);                           // [oldVal, obj, index, obj2, index2]
+                _builder.Emit(OpCode.GetIndex);                   // [oldVal, obj, index, currVal]
+                _builder.Emit(OpCode.CheckNumeric);
                 _builder.Emit(OpCode.Const, oneIdx);
                 _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
-                // [obj, index, newVal]
-                _builder.Emit(OpCode.SetIndex);                         // []
-                _builder.Emit(OpCode.LoadLocal, (byte)tempSlot);        // [oldVal]
+                // [oldVal, obj, index, newVal]
+                _builder.Emit(OpCode.SetIndex);                   // [oldVal, newVal]  (SetIndex pops 3, pushes 1)
+                _builder.Emit(OpCode.Pop);                        // [oldVal] — discard newVal, keep result
             }
             return null;
         }
@@ -1622,8 +1927,14 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         int minArity = paramCount;
         for (int i = paramCount - 1; i >= 0; i--)
         {
-            if (i < expr.DefaultValues.Count && expr.DefaultValues[i] != null) minArity--;
-            else break;
+            if (i < expr.DefaultValues.Count && expr.DefaultValues[i] != null)
+            {
+                minArity--;
+            }
+            else
+            {
+                break;
+            }
         }
         fnCompiler._builder.MinArity = minArity;
 
@@ -1645,14 +1956,17 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         else if (expr.BlockBody != null)
         {
             foreach (Stmt s in expr.BlockBody.Statements)
+            {
                 fnCompiler.CompileStmt(s);
+            }
+
             fnCompiler._builder.Emit(OpCode.Null);
             fnCompiler._builder.Emit(OpCode.Return);
         }
 
-        fnCompiler._builder.LocalCount = fnCompiler._scope.LocalCount;
-        fnCompiler._builder.LocalNames = fnCompiler._scope.GetLocalNames();
-        fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetLocalIsConst();
+        fnCompiler._builder.LocalCount = fnCompiler._scope.PeakLocalCount;
+        fnCompiler._builder.LocalNames = fnCompiler._scope.GetPeakLocalNames();
+        fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetPeakLocalIsConst();
         fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames.Count > 0 ? fnCompiler._upvalueNames.ToArray() : null;
         Chunk lambdaChunk = fnCompiler._builder.Build();
 
@@ -1676,7 +1990,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         CompileExpr(expr.Target);
         // Encode stream (bits 0-1) and append flag (bit 2)
         byte flags = (byte)expr.Stream;
-        if (expr.Append) flags |= 0x04;
+        if (expr.Append)
+        {
+            flags |= 0x04;
+        }
+
         _builder.Emit(OpCode.Redirect, flags);
         return null;
     }
@@ -1687,9 +2005,14 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         CompileExpr(expr.Start);
         CompileExpr(expr.End);
         if (expr.Step != null)
+        {
             CompileExpr(expr.Step);
+        }
         else
+        {
             _builder.Emit(OpCode.Null);  // null step = VM uses default (1)
+        }
+
         _builder.Emit(OpCode.Range);
         return null;
     }
@@ -1704,7 +2027,11 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 ushort keyIdx = _builder.AddConstant(key.Lexeme);
                 _builder.Emit(OpCode.Const, keyIdx);
             }
-            // When key is null the entry is a SpreadExpr — CompileExpr handles the spread
+            else
+            {
+                // Spread entry: push a null marker as the "key" so count*2 stays consistent
+                _builder.Emit(OpCode.Null);
+            }
             CompileExpr(value);
         }
         _builder.Emit(OpCode.Dict, (ushort)expr.Entries.Count);
@@ -1718,14 +2045,26 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         CompileExpr(expr.Left);
         if (expr.TypeName != null)
         {
-            ushort typeIdx = _builder.AddConstant(expr.TypeName.Lexeme);
-            _builder.Emit(OpCode.Is, typeIdx);
+            string name = expr.TypeName.Lexeme;
+            // If the identifier resolves as a local variable, emit a dynamic type check
+            // so that variables holding struct/interface/enum definitions are handled correctly.
+            int localSlot = _scope.ResolveLocal(name);
+            if (localSlot >= 0)
+            {
+                _builder.Emit(OpCode.LoadLocal, (byte)localSlot);
+                _builder.Emit(OpCode.Is, (ushort)0xFFFF);
+            }
+            else
+            {
+                // Built-in or global — emit static type name; VM resolves globals holding type defs.
+                ushort typeIdx = _builder.AddConstant(name);
+                _builder.Emit(OpCode.Is, typeIdx);
+            }
         }
         else if (expr.TypeExpr != null)
         {
-            // Dynamic type check — Phase 3 will implement this properly
             CompileExpr(expr.TypeExpr);
-            _builder.Emit(OpCode.Is, (ushort)0);
+            _builder.Emit(OpCode.Is, (ushort)0xFFFF);  // sentinel: dynamic type check
         }
         return null;
     }
@@ -1776,13 +2115,32 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         // --- Compile body as closure ---
         var bodyCompiler = new Compiler(this, "<retry_body>");
         bodyCompiler._scope.BeginScope();
-        foreach (Stmt s in expr.Body.Statements)
-            bodyCompiler.CompileStmt(s);
-        bodyCompiler._builder.Emit(OpCode.Null);
+        bodyCompiler._builder.Arity = 1;
+        bodyCompiler._builder.MinArity = 1;
+        int bodyAttemptSlot = bodyCompiler._scope.DeclareLocal("attempt", isConst: true);
+        bodyCompiler._scope.MarkInitialized(bodyAttemptSlot);
+        List<Stmt> bodyStmts = expr.Body.Statements;
+        for (int i = 0; i < bodyStmts.Count; i++)
+        {
+            if (i == bodyStmts.Count - 1 && bodyStmts[i] is ExprStmt lastExpr)
+            {
+                bodyCompiler.CompileExpr(lastExpr.Expression);
+            }
+            else
+            {
+                bodyCompiler.CompileStmt(bodyStmts[i]);
+            }
+        }
+
+        if (bodyStmts.Count == 0 || bodyStmts[^1] is not ExprStmt)
+        {
+            bodyCompiler._builder.Emit(OpCode.Null);
+        }
+
         bodyCompiler._builder.Emit(OpCode.Return);
-        bodyCompiler._builder.LocalCount = bodyCompiler._scope.LocalCount;
-        bodyCompiler._builder.LocalNames = bodyCompiler._scope.GetLocalNames();
-        bodyCompiler._builder.LocalIsConst = bodyCompiler._scope.GetLocalIsConst();
+        bodyCompiler._builder.LocalCount = bodyCompiler._scope.PeakLocalCount;
+        bodyCompiler._builder.LocalNames = bodyCompiler._scope.GetPeakLocalNames();
+        bodyCompiler._builder.LocalIsConst = bodyCompiler._scope.GetPeakLocalIsConst();
         bodyCompiler._builder.UpvalueNames = bodyCompiler._upvalueNames.Count > 0 ? bodyCompiler._upvalueNames.ToArray() : null;
         Chunk bodyChunk = bodyCompiler._builder.Build();
         ushort bodyIdx = _builder.AddConstant(bodyChunk);
@@ -1828,12 +2186,15 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 onRetryCompiler._scope.MarkInitialized(errorSlot);
 
                 foreach (Stmt s in onRetry.Body!.Statements)
+                {
                     onRetryCompiler.CompileStmt(s);
+                }
+
                 onRetryCompiler._builder.Emit(OpCode.Null);
                 onRetryCompiler._builder.Emit(OpCode.Return);
-                onRetryCompiler._builder.LocalCount = onRetryCompiler._scope.LocalCount;
-                onRetryCompiler._builder.LocalNames = onRetryCompiler._scope.GetLocalNames();
-                onRetryCompiler._builder.LocalIsConst = onRetryCompiler._scope.GetLocalIsConst();
+                onRetryCompiler._builder.LocalCount = onRetryCompiler._scope.PeakLocalCount;
+                onRetryCompiler._builder.LocalNames = onRetryCompiler._scope.GetPeakLocalNames();
+                onRetryCompiler._builder.LocalIsConst = onRetryCompiler._scope.GetPeakLocalIsConst();
                 onRetryCompiler._builder.UpvalueNames = onRetryCompiler._upvalueNames.Count > 0 ? onRetryCompiler._upvalueNames.ToArray() : null;
                 Chunk onRetryChunk = onRetryCompiler._builder.Build();
                 ushort onRetryIdx = _builder.AddConstant(onRetryChunk);

@@ -22,6 +22,9 @@ public readonly record struct Local(string Name, int Depth, bool IsConst, bool I
 internal sealed class CompilerScope
 {
     private readonly List<Local> _locals = new();
+    private int _peakLocalCount;
+    private readonly Dictionary<int, string> _localNamesBySlot = new();
+    private readonly Dictionary<int, bool> _localConstBySlot = new();
 
     /// <summary>Gets the current block-nesting depth (0 = function-level).</summary>
     public int ScopeDepth { get; private set; }
@@ -69,6 +72,10 @@ internal sealed class CompilerScope
     {
         int slot = _locals.Count;
         _locals.Add(new Local(name, ScopeDepth, isConst, Initialized: false));
+        _localNamesBySlot[slot] = name;
+        _localConstBySlot[slot] = isConst;
+        if (_locals.Count > _peakLocalCount)
+            _peakLocalCount = _locals.Count;
         return slot;
     }
 
@@ -96,7 +103,9 @@ internal sealed class CompilerScope
         for (int i = _locals.Count - 1; i >= 0; i--)
         {
             if (_locals[i].Name == name)
+            {
                 return i;
+            }
         }
 
         return -1;
@@ -117,7 +126,10 @@ internal sealed class CompilerScope
     {
         var names = new string[_locals.Count];
         for (int i = 0; i < _locals.Count; i++)
+        {
             names[i] = _locals[i].Name;
+        }
+
         return names;
     }
 
@@ -126,7 +138,35 @@ internal sealed class CompilerScope
     {
         var flags = new bool[_locals.Count];
         for (int i = 0; i < _locals.Count; i++)
+        {
             flags[i] = _locals[i].IsConst;
+        }
+
+        return flags;
+    }
+
+    /// <summary>Gets the maximum number of locals that were simultaneously alive at any point.</summary>
+    public int PeakLocalCount => _peakLocalCount;
+
+    /// <summary>Returns names for all locals that were ever declared, indexed by slot up to the peak count.</summary>
+    public string[] GetPeakLocalNames()
+    {
+        var names = new string[_peakLocalCount];
+        for (int i = 0; i < _peakLocalCount; i++)
+        {
+            names[i] = _localNamesBySlot.TryGetValue(i, out string? name) ? name : $"local_{i}";
+        }
+        return names;
+    }
+
+    /// <summary>Returns const flags for all locals that were ever declared, indexed by slot up to the peak count.</summary>
+    public bool[] GetPeakLocalIsConst()
+    {
+        var flags = new bool[_peakLocalCount];
+        for (int i = 0; i < _peakLocalCount; i++)
+        {
+            flags[i] = _localConstBySlot.TryGetValue(i, out bool c) && c;
+        }
         return flags;
     }
 }

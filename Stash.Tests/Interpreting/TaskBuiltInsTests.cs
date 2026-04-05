@@ -1,6 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 
@@ -10,58 +11,55 @@ public class TaskBuiltInsTests
 {
     private static object? Run(string source)
     {
-        var lexer = new Lexer(source);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.Interpret(statements);
-
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        return vm.Execute(chunk);
     }
 
     private static string RunCapturingOutput(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new System.IO.StringWriter();
-        interpreter.Output = sw;
-        interpreter.Interpret(statements);
+        vm.Output = sw;
+        vm.Execute(chunk);
         return sw.ToString();
     }
 
     private static void RunExpectingError(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        Assert.Throws<RuntimeError>(() => interpreter.Interpret(statements));
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
     }
 
     private static object? RunWithFile(string source, string filePath)
     {
-        var lexer = new Lexer(source, filePath);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, filePath);
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.CurrentFile = filePath;
-        interpreter.Interpret(statements);
-
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        return vm.Execute(chunk);
     }
 
     private static string RunWithFileCapturingOutput(string source, string filePath)
@@ -69,12 +67,13 @@ public class TaskBuiltInsTests
         var lexer = new Lexer(source, filePath);
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
-        interpreter.CurrentFile = filePath;
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new System.IO.StringWriter();
-        interpreter.Output = sw;
-        interpreter.Interpret(statements);
+        vm.Output = sw;
+        vm.Execute(chunk);
         return sw.ToString();
     }
 

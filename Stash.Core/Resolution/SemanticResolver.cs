@@ -1,4 +1,4 @@
-namespace Stash.Interpreting;
+namespace Stash.Resolution;
 
 using System.Collections.Generic;
 using Stash.Parsing.AST;
@@ -6,12 +6,9 @@ using Stash.Lexing;
 using Stash.Runtime;
 
 /// <summary>Static analysis pass that resolves variable references to their lexical scope distances, enabling O(1) variable lookup at runtime.</summary>
-/// <remarks>Walks the AST before execution, computing the number of scope hops for each variable reference. Results are stored via <see cref="Interpreter.Resolve"/>.</remarks>
-public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
+/// <remarks>Walks the AST before execution, computing the number of scope hops for each variable reference. Results are stored directly on AST nodes via <see cref="Expr.ResolvedDistance"/> and <see cref="Expr.ResolvedSlot"/>.</remarks>
+public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
 {
-    /// <summary>The interpreter to register resolved scope distances into.</summary>
-    private readonly Interpreter _interpreter;
-    /// <summary>Stack of scope dictionaries tracking declared/defined variables at each nesting level.</summary>
     private readonly Stack<ScopeInfo> _scopes = new();
 
     private class ScopeInfo
@@ -20,80 +17,66 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         public int NextSlot;
     }
 
-    /// <summary>Tracks the kind of function currently being resolved.</summary>
     private enum FunctionType
     {
-        /// <summary>Not inside any function.</summary>
         None,
-        /// <summary>Inside a named function.</summary>
         Function,
-        /// <summary>Inside a lambda.</summary>
         Lambda,
-        /// <summary>Inside a struct method.</summary>
         Method
     }
-    /// <summary>Tracks the current function context for validating return statement placement.</summary>
+
     private FunctionType _currentFunction = FunctionType.None;
 
-    /// <summary>Creates a resolver that registers results in the given interpreter.</summary>
-    /// <param name="interpreter">The interpreter instance to receive resolved scope distances.</param>
-    public Resolver(Interpreter interpreter)
+    private SemanticResolver() { }
+
+    /// <summary>Resolves all variable references in the given statements, annotating AST nodes with scope distances and slot indices.</summary>
+    public static void Resolve(List<Stmt> statements)
     {
-        _interpreter = interpreter;
+        var resolver = new SemanticResolver();
+        resolver.ResolveAll(statements);
     }
 
-    /// <summary>Resolves all variable references in the given statements.</summary>
-    public void Resolve(List<Stmt> statements)
+    private void ResolveAll(List<Stmt> statements)
     {
         foreach (var statement in statements)
         {
-            Resolve(statement);
+            ResolveStmt(statement);
         }
     }
 
-    /// <summary>Resolves variable references within a single statement.</summary>
-    private void Resolve(Stmt stmt)
+    private void ResolveStmt(Stmt stmt)
     {
         stmt.Accept(this);
     }
 
-    /// <summary>Resolves variable references within a single expression.</summary>
-    private void Resolve(Expr expr)
+    private void ResolveExpr(Expr expr)
     {
         expr.Accept(this);
     }
 
-    /// <summary>Pushes a new scope onto the scope stack.</summary>
     private void BeginScope()
     {
         _scopes.Push(new ScopeInfo());
     }
 
-    /// <summary>Pops the current scope from the scope stack.</summary>
     private void EndScope()
     {
         _scopes.Pop();
     }
 
-    /// <summary>Declares a variable in the current scope as not yet initialized, assigning it the next slot index.</summary>
     private void Declare(string name)
     {
         if (_scopes.Count == 0)
-        {
             return;
-        }
 
         var scope = _scopes.Peek();
         scope.Variables[name] = (false, scope.NextSlot++);
     }
 
-    /// <summary>Marks a variable in the current scope as fully initialized, preserving its slot index.</summary>
     private void Define(string name)
     {
         if (_scopes.Count == 0)
-        {
             return;
-        }
 
         var scope = _scopes.Peek();
         if (scope.Variables.TryGetValue(name, out var info))
@@ -102,7 +85,6 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         }
     }
 
-    /// <summary>Walks the scope stack to find the distance to a variable's declaration and registers it in the interpreter.</summary>
     private void ResolveLocal(Expr expr, string name)
     {
         int i = 0;
@@ -110,16 +92,15 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             if (scope.Variables.TryGetValue(name, out var info))
             {
-                _interpreter.Resolve(expr, i, info.Slot);
+                expr.ResolvedDistance = i;
+                expr.ResolvedSlot = info.Slot;
                 return;
             }
             i++;
         }
         // Not found in any local scope — must be global.
-        // Leave unresolved; interpreter will fall back to Environment.Get().
     }
 
-    /// <summary>Resolves a function body: creates a scope, declares parameters, and resolves body statements.</summary>
     private int ResolveFunction(List<Token> parameters, List<Expr?> defaultValues, BlockStmt body, FunctionType type)
     {
         FunctionType enclosingFunction = _currentFunction;
@@ -129,7 +110,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             if (defaultVal != null)
             {
-                Resolve(defaultVal);
+                ResolveExpr(defaultVal);
             }
         }
 
@@ -139,7 +120,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
             Declare(param.Lexeme);
             Define(param.Lexeme);
         }
-        Resolve(body.Statements);
+        ResolveAll(body.Statements);
         int localCount = _scopes.Peek().NextSlot;
         EndScope();
 
@@ -149,37 +130,33 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
 
     // --- Statement visitors ---
 
-    /// <inheritdoc />
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         BeginScope();
-        Resolve(stmt.Statements);
+        ResolveAll(stmt.Statements);
         EndScope();
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitVarDeclStmt(VarDeclStmt stmt)
     {
         Declare(stmt.Name.Lexeme);
         if (stmt.Initializer is not null)
         {
-            Resolve(stmt.Initializer);
+            ResolveExpr(stmt.Initializer);
         }
         Define(stmt.Name.Lexeme);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitConstDeclStmt(ConstDeclStmt stmt)
     {
         Declare(stmt.Name.Lexeme);
-        Resolve(stmt.Initializer);
+        ResolveExpr(stmt.Initializer);
         Define(stmt.Name.Lexeme);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitDestructureStmt(DestructureStmt stmt)
     {
         foreach (Token name in stmt.Names)
@@ -190,7 +167,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             Declare(restName.Lexeme);
         }
-        Resolve(stmt.Initializer);
+        ResolveExpr(stmt.Initializer);
         foreach (Token name in stmt.Names)
         {
             Define(name.Lexeme);
@@ -202,7 +179,6 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
         Declare(stmt.Name.Lexeme);
@@ -211,35 +187,31 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitIfStmt(IfStmt stmt)
     {
-        Resolve(stmt.Condition);
-        Resolve(stmt.ThenBranch);
+        ResolveExpr(stmt.Condition);
+        ResolveStmt(stmt.ThenBranch);
         if (stmt.ElseBranch is not null)
         {
-            Resolve(stmt.ElseBranch);
+            ResolveStmt(stmt.ElseBranch);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitWhileStmt(WhileStmt stmt)
     {
-        Resolve(stmt.Condition);
-        Resolve(stmt.Body);
+        ResolveExpr(stmt.Condition);
+        ResolveStmt(stmt.Body);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitDoWhileStmt(DoWhileStmt stmt)
     {
-        Resolve(stmt.Body);
-        Resolve(stmt.Condition);
+        ResolveStmt(stmt.Body);
+        ResolveExpr(stmt.Condition);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitForStmt(ForStmt stmt)
     {
         BeginScope();
@@ -249,21 +221,20 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         }
         if (stmt.Condition is not null)
         {
-            Resolve(stmt.Condition);
+            ResolveExpr(stmt.Condition);
         }
         if (stmt.Increment is not null)
         {
-            Resolve(stmt.Increment);
+            ResolveExpr(stmt.Increment);
         }
-        Resolve(stmt.Body);
+        ResolveStmt(stmt.Body);
         EndScope();
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitForInStmt(ForInStmt stmt)
     {
-        Resolve(stmt.Iterable);
+        ResolveExpr(stmt.Iterable);
         BeginScope();
         if (stmt.IndexName is not null)
         {
@@ -272,41 +243,35 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         }
         Declare(stmt.VariableName.Lexeme);
         Define(stmt.VariableName.Lexeme);
-        Resolve(stmt.Body.Statements);
+        ResolveAll(stmt.Body.Statements);
         EndScope();
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitReturnStmt(ReturnStmt stmt)
     {
         if (stmt.Value is not null)
         {
-            Resolve(stmt.Value);
+            ResolveExpr(stmt.Value);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitThrowStmt(ThrowStmt stmt)
     {
-        Resolve(stmt.Value);
+        ResolveExpr(stmt.Value);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitBreakStmt(BreakStmt stmt) => null;
-    /// <inheritdoc />
     public object? VisitContinueStmt(ContinueStmt stmt) => null;
 
-    /// <inheritdoc />
     public object? VisitExprStmt(ExprStmt stmt)
     {
-        Resolve(stmt.Expression);
+        ResolveExpr(stmt.Expression);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitStructDeclStmt(StructDeclStmt stmt)
     {
         Declare(stmt.Name.Lexeme);
@@ -324,15 +289,8 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitExtendStmt(ExtendStmt stmt)
     {
-        // extend blocks must be declared at the top level (not inside functions, if-blocks, etc.)
-        if (_scopes.Count > 0)
-        {
-            throw new RuntimeError("'extend' blocks must be declared at the top level.", stmt.Span);
-        }
-
         foreach (var method in stmt.Methods)
         {
             BeginScope();
@@ -345,7 +303,6 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt)
     {
         Declare(stmt.Name.Lexeme);
@@ -353,7 +310,6 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
         Declare(stmt.Name.Lexeme);
@@ -361,36 +317,33 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitElevateStmt(ElevateStmt stmt)
     {
         if (stmt.Elevator is not null)
-            Resolve(stmt.Elevator);
-        Resolve(stmt.Body);
+            ResolveExpr(stmt.Elevator);
+        ResolveStmt(stmt.Body);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitTryCatchStmt(TryCatchStmt stmt)
     {
-        Resolve(stmt.TryBody);
+        ResolveStmt(stmt.TryBody);
         if (stmt.CatchBody is not null)
         {
             BeginScope();
             Declare(stmt.CatchVariable!.Lexeme);
             Define(stmt.CatchVariable.Lexeme);
-            Resolve(stmt.CatchBody.Statements);
+            ResolveAll(stmt.CatchBody.Statements);
             EndScope();
         }
         if (stmt.FinallyBody is not null)
-            Resolve(stmt.FinallyBody);
+            ResolveStmt(stmt.FinallyBody);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
-        Resolve(stmt.Path);
+        ResolveExpr(stmt.Path);
         foreach (var name in stmt.Names)
         {
             Declare(name.Lexeme);
@@ -399,10 +352,9 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
-        Resolve(stmt.Path);
+        ResolveExpr(stmt.Path);
         Declare(stmt.Alias.Lexeme);
         Define(stmt.Alias.Lexeme);
         return null;
@@ -410,22 +362,19 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
 
     // --- Expression visitors ---
 
-    /// <inheritdoc />
     public object? VisitIdentifierExpr(IdentifierExpr expr)
     {
         ResolveLocal(expr, expr.Name.Lexeme);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitAssignExpr(AssignExpr expr)
     {
-        Resolve(expr.Value);
+        ResolveExpr(expr.Value);
         ResolveLocal(expr, expr.Name.Lexeme);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitLambdaExpr(LambdaExpr expr)
     {
         FunctionType enclosingFunction = _currentFunction;
@@ -435,7 +384,7 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         {
             if (defaultVal != null)
             {
-                Resolve(defaultVal);
+                ResolveExpr(defaultVal);
             }
         }
 
@@ -447,11 +396,11 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         }
         if (expr.ExpressionBody is not null)
         {
-            Resolve(expr.ExpressionBody);
+            ResolveExpr(expr.ExpressionBody);
         }
         else if (expr.BlockBody is not null)
         {
-            Resolve(expr.BlockBody.Statements);
+            ResolveAll(expr.BlockBody.Statements);
         }
         expr.ResolvedLocalCount = _scopes.Peek().NextSlot;
         EndScope();
@@ -460,15 +409,13 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitBinaryExpr(BinaryExpr expr)
     {
-        Resolve(expr.Left);
-        Resolve(expr.Right);
+        ResolveExpr(expr.Left);
+        ResolveExpr(expr.Right);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitIsExpr(IsExpr expr)
     {
         expr.Left.Accept(this);
@@ -479,18 +426,15 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
-        Resolve(expr.Right);
+        ResolveExpr(expr.Right);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
-        Resolve(expr.Operand);
-        // If the operand is an identifier, resolve it for the write-back
+        ResolveExpr(expr.Operand);
         if (expr.Operand is IdentifierExpr id)
         {
             ResolveLocal(expr, id.Name.Lexeme);
@@ -498,177 +442,157 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitCallExpr(CallExpr expr)
     {
-        Resolve(expr.Callee);
+        ResolveExpr(expr.Callee);
         foreach (var arg in expr.Arguments)
         {
-            Resolve(arg);
+            ResolveExpr(arg);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitArrayExpr(ArrayExpr expr)
     {
         foreach (var element in expr.Elements)
         {
-            Resolve(element);
+            ResolveExpr(element);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitDictLiteralExpr(DictLiteralExpr expr)
     {
         foreach (var (_, value) in expr.Entries)
         {
-            Resolve(value);
+            ResolveExpr(value);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitIndexExpr(IndexExpr expr)
     {
-        Resolve(expr.Object);
-        Resolve(expr.Index);
+        ResolveExpr(expr.Object);
+        ResolveExpr(expr.Index);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitIndexAssignExpr(IndexAssignExpr expr)
     {
-        Resolve(expr.Object);
-        Resolve(expr.Index);
-        Resolve(expr.Value);
+        ResolveExpr(expr.Object);
+        ResolveExpr(expr.Index);
+        ResolveExpr(expr.Value);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitDotExpr(DotExpr expr)
     {
-        Resolve(expr.Object);
+        ResolveExpr(expr.Object);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitDotAssignExpr(DotAssignExpr expr)
     {
-        Resolve(expr.Object);
-        Resolve(expr.Value);
+        ResolveExpr(expr.Object);
+        ResolveExpr(expr.Value);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitStructInitExpr(StructInitExpr expr)
     {
         if (expr.Target is not null)
         {
-            Resolve(expr.Target);
+            ResolveExpr(expr.Target);
         }
         foreach (var (_, value) in expr.FieldValues)
         {
-            Resolve(value);
+            ResolveExpr(value);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitLiteralExpr(LiteralExpr expr) => null;
 
-    /// <inheritdoc />
     public object? VisitGroupingExpr(GroupingExpr expr)
     {
-        Resolve(expr.Expression);
+        ResolveExpr(expr.Expression);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
-        Resolve(expr.Condition);
-        Resolve(expr.ThenBranch);
-        Resolve(expr.ElseBranch);
+        ResolveExpr(expr.Condition);
+        ResolveExpr(expr.ThenBranch);
+        ResolveExpr(expr.ElseBranch);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitRangeExpr(RangeExpr expr)
     {
-        Resolve(expr.Start);
-        Resolve(expr.End);
+        ResolveExpr(expr.Start);
+        ResolveExpr(expr.End);
         if (expr.Step is not null)
         {
-            Resolve(expr.Step);
+            ResolveExpr(expr.Step);
         }
-
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
     {
         foreach (var part in expr.Parts)
         {
-            Resolve(part);
+            ResolveExpr(part);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitCommandExpr(CommandExpr expr)
     {
         foreach (var part in expr.Parts)
         {
-            Resolve(part);
+            ResolveExpr(part);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitPipeExpr(PipeExpr expr)
     {
-        Resolve(expr.Left);
-        Resolve(expr.Right);
+        ResolveExpr(expr.Left);
+        ResolveExpr(expr.Right);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitRedirectExpr(RedirectExpr expr)
     {
-        Resolve(expr.Expression);
-        Resolve(expr.Target);
+        ResolveExpr(expr.Expression);
+        ResolveExpr(expr.Target);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitTryExpr(TryExpr expr)
     {
-        Resolve(expr.Expression);
+        ResolveExpr(expr.Expression);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitAwaitExpr(AwaitExpr expr)
     {
-        Resolve(expr.Expression);
+        ResolveExpr(expr.Expression);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitRetryExpr(RetryExpr expr)
     {
-        Resolve(expr.MaxAttempts);
+        ResolveExpr(expr.MaxAttempts);
         expr.OptionsExpr?.Accept(this);
         if (expr.NamedOptions is not null)
             foreach (var (_, value) in expr.NamedOptions)
-                Resolve(value);
+                ResolveExpr(value);
         if (expr.UntilClause is not null)
-            Resolve(expr.UntilClause);
+            ResolveExpr(expr.UntilClause);
         if (expr.OnRetryClause is { IsReference: true, Reference: not null })
-            Resolve(expr.OnRetryClause.Reference);
+            ResolveExpr(expr.OnRetryClause.Reference);
         else if (expr.OnRetryClause is { Body: not null } onRetry)
         {
             BeginScope();
@@ -683,45 +607,42 @@ public class Resolver : IExprVisitor<object?>, IStmtVisitor<object?>
                 Define(onRetry.ParamError.Lexeme);
             }
             foreach (var stmt in onRetry.Body.Statements)
-                Resolve(stmt);
+                ResolveStmt(stmt);
             EndScope();
         }
         BeginScope();
         Declare("attempt");
         Define("attempt");
         foreach (var stmt in expr.Body.Statements)
-            Resolve(stmt);
+            ResolveStmt(stmt);
         EndScope();
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
-        Resolve(expr.Left);
-        Resolve(expr.Right);
+        ResolveExpr(expr.Left);
+        ResolveExpr(expr.Right);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitSwitchExpr(SwitchExpr expr)
     {
-        Resolve(expr.Subject);
+        ResolveExpr(expr.Subject);
         foreach (var arm in expr.Arms)
         {
             if (arm.Pattern is not null)
             {
-                Resolve(arm.Pattern);
+                ResolveExpr(arm.Pattern);
             }
-            Resolve(arm.Body);
+            ResolveExpr(arm.Body);
         }
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitSpreadExpr(SpreadExpr expr)
     {
-        Resolve(expr.Expression);
+        ResolveExpr(expr.Expression);
         return null;
     }
 }

@@ -1,4 +1,4 @@
-namespace Stash.Interpreting;
+namespace Stash.Common;
 
 using System;
 using System.Collections.Generic;

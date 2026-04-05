@@ -76,7 +76,7 @@ public interface ITestHarness
 
 ### `TapReporter`
 
-`TapReporter` implements `ITestHarness` and emits TAP-compliant output to stdout. It tracks test count and result state to produce the plan line (`1..N`) and individual `ok` / `not ok` lines. Located in `Stash.Interpreter/Testing/`.
+`TapReporter` implements `ITestHarness` and emits TAP-compliant output to stdout. It tracks test count and result state to produce the plan line (`1..N`) and individual `ok` / `not ok` lines. Located in `Stash.Tap/`.
 
 ---
 
@@ -326,12 +326,14 @@ Hooks do **not** leak between sibling `test.describe()` blocks — each block ma
 ### Project Structure
 
 ```
-Stash.Interpreter/
-├── Testing/
+Stash.Core/
+├── Runtime/
 │   ├── ITestHarness.cs        # Interface — 7 callback methods
-│   ├── TapReporter.cs         # TAP output implementation
 │   └── AssertionError.cs      # Structured assertion failure exception
-└── Interpreting/
+Stash.Tap/
+└── TapReporter.cs         # TAP output implementation
+Stash.Stdlib/
+└── BuiltIns/
     └── TestBuiltIns.cs        # test.it(), test.skip(), test.describe(), hooks, assert.*, test.captureOutput()
 ```
 
@@ -339,8 +341,8 @@ The `test.it()`, `test.skip()`, `test.describe()`, lifecycle hooks, and the `ass
 
 ### Integration Points
 
-- **CLI (`Program.cs`)** — The `--test` flag instantiates a `TapReporter` and assigns it to `Interpreter.TestHarness` before script execution.
-- **Interpreter** — Exposes `ITestHarness? TestHarness { get; set; }`. All harness calls are guarded: `TestHarness?.OnTestStart(...)`.
+- **CLI (`Program.cs`)** — The `--test` flag instantiates a `TapReporter` and assigns it to the VM's test harness before script execution.
+- **VM** — Exposes `ITestHarness? TestHarness { get; set; }` via `IInterpreterContext`. All harness calls are guarded: `TestHarness?.OnTestStart(...)`.
 - **`test.it()` built-in** — Catches `RuntimeError` and `AssertionException` inside the test lambda and routes them to `OnTestFail`. Runs `beforeEach`/`afterEach` hooks around the test body. All other exceptions propagate normally.
 - **`test.skip()` built-in** — Calls `OnTestSkip` on the harness without executing the test body.
 - **`test.describe()` built-in** — Pushes hook layers on entry and pops them on exit. Runs `afterAll` hooks in a `finally` block.

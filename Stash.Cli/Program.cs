@@ -24,11 +24,10 @@
 using System;
 using System.Collections.Generic;
 using Stash.Bytecode;
-using Stash.Debugging;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
-using Stash.Interpreting;
+using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
@@ -39,7 +38,7 @@ namespace Stash;
 /// <summary>CLI entry point for the Stash language: REPL, file execution, debug mode, and test runner.</summary>
 public class Program
 {
-    private static Interpreter? _activeInterpreter;
+    private static VirtualMachine? _activeVM;
     /// <summary>Parses CLI arguments and dispatches to the appropriate execution mode.</summary>
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
@@ -56,7 +55,6 @@ public class Program
         bool test = false;
         bool testList = false;
         string? testFilter = null;
-        string? backendArg = null;
         string? scriptPath = null;
         int scriptArgStart = -1;
 
@@ -92,10 +90,6 @@ public class Program
             {
                 testFilter = args[i]["--test-filter=".Length..];
             }
-            else if (args[i].StartsWith("--backend=") && scriptPath is null && commandString is null)
-            {
-                backendArg = args[i]["--backend=".Length..];
-            }
             else if (args[i] == "--" && scriptPath is null && commandString is null)
             {
                 // Everything after -- becomes script args (for stdin piping)
@@ -118,18 +112,17 @@ public class Program
             ? args[scriptArgStart..]
             : Array.Empty<string>();
 
-        ExecutionBackend backend = GetBackend(backendArg);
-
         // Register cleanup handlers for graceful shutdown
         Console.CancelKeyPress += (_, e) =>
         {
-            _activeInterpreter?.CleanupTrackedProcesses();
-            // Don't cancel — let the runtime terminate naturally after cleanup
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
         };
 
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
-            _activeInterpreter?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
         };
 
         // Mode 1: -c command string
@@ -141,7 +134,7 @@ public class Program
                 System.Environment.Exit(64);
                 return;
             }
-            RunSource(commandString, "<command>", scriptArgs, backend);
+            RunSource(commandString, "<command>", scriptArgs);
             return;
         }
 
@@ -155,7 +148,7 @@ public class Program
                 return;
             }
             string source = Console.In.ReadToEnd();
-            RunSource(source, "<stdin>", scriptArgs, backend);
+            RunSource(source, "<stdin>", scriptArgs);
             return;
         }
 
@@ -191,21 +184,20 @@ public class Program
             }
             else
             {
-                RunFile(scriptPath, scriptArgs, backend);
+                RunFile(scriptPath, scriptArgs);
             }
             return;
         }
 
         // Mode 5: Interactive REPL
-        RunRepl(backend);
+        RunRepl();
     }
 
     /// <summary>Executes Stash source code from a string (used by -c and stdin piping).</summary>
     /// <param name="source">The source code to execute.</param>
     /// <param name="sourceName">Diagnostic name for the source (e.g., "&lt;command&gt;" or "&lt;stdin&gt;").</param>
     /// <param name="scriptArgs">Arguments to pass to the script.</param>
-    /// <param name="backend">Execution backend to use.</param>
-    private static void RunSource(string source, string sourceName, string[] scriptArgs, ExecutionBackend backend = ExecutionBackend.Bytecode)
+    private static void RunSource(string source, string sourceName, string[] scriptArgs)
     {
         // Stage 1: Lex
         var lexer = new Lexer(source, sourceName);
@@ -235,69 +227,43 @@ public class Program
             return;
         }
 
-        // Stage 3: Execute
-        if (backend == ExecutionBackend.Bytecode)
+        // Stage 3: Execute via bytecode VM
+        try
         {
-            var interpreter = new Interpreter();
-            _activeInterpreter = interpreter;
-            interpreter.SetScriptArgs(scriptArgs);
-            try
-            {
-                interpreter.ResolveStatements(statements);
-                Chunk chunk = Compiler.Compile(statements);
-                var globals = CreateVMGlobals();
-                var vm = new VirtualMachine(globals);
-                vm.Output = Console.Out;
-                vm.ErrorOutput = Console.Error;
-                vm.Input = Console.In;
-                vm.ScriptArgs = scriptArgs;
-                vm.ModuleLoader = (modulePath, currentFile) =>
-                    LoadModuleForVM(modulePath, currentFile, interpreter);
-                vm.Execute(chunk);
-            }
-            catch (RuntimeError ex)
-            {
-                PrintRuntimeError(ex);
-                System.Environment.Exit(70);
-            }
-            catch (OperationCanceledException)
-            {
-                Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
-                System.Environment.Exit(70);
-            }
-            finally
-            {
-                interpreter.CleanupTrackedProcesses();
-                _activeInterpreter = null;
-            }
+            SemanticResolver.Resolve(statements);
+            Chunk chunk = Compiler.Compile(statements);
+            var globals = CreateVMGlobals();
+            var vm = new VirtualMachine(globals);
+            _activeVM = vm;
+            vm.Output = Console.Out;
+            vm.ErrorOutput = Console.Error;
+            vm.Input = Console.In;
+            vm.ScriptArgs = scriptArgs;
+            vm.ModuleLoader = LoadModuleForVM;
+            vm.Execute(chunk);
         }
-        else
+        catch (RuntimeError ex)
         {
-            var interpreter = new Interpreter();
-            _activeInterpreter = interpreter;
-            interpreter.SetScriptArgs(scriptArgs);
-            try
-            {
-                interpreter.Interpret(statements);
-            }
-            catch (RuntimeError ex)
-            {
-                PrintRuntimeError(ex);
-                System.Environment.Exit(70);
-            }
-            finally
-            {
-                interpreter.CleanupTrackedProcesses();
-                _activeInterpreter = null;
-            }
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
+            System.Environment.Exit(70);
+        }
+        finally
+        {
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
+            _activeVM = null;
         }
     }
 
     /// <summary>Executes a Stash script file.</summary>
     /// <param name="path">Path to the script file.</param>
     /// <param name="scriptArgs">Arguments to pass to the script.</param>
-    /// <param name="backend">Execution backend to use.</param>
-    private static void RunFile(string path, string[] scriptArgs, ExecutionBackend backend = ExecutionBackend.Bytecode)
+    private static void RunFile(string path, string[] scriptArgs)
     {
         if (!System.IO.File.Exists(path))
         {
@@ -336,64 +302,36 @@ public class Program
             return;
         }
 
-        // Stage 3: Execute
-        if (backend == ExecutionBackend.Bytecode)
+        try
         {
-            var interpreter = new Interpreter();
-            _activeInterpreter = interpreter;
-            interpreter.CurrentFile = path;
-            interpreter.SetScriptArgs(scriptArgs);
-            try
-            {
-                interpreter.ResolveStatements(statements);
-                Chunk chunk = Compiler.Compile(statements);
-                var globals = CreateVMGlobals();
-                var vm = new VirtualMachine(globals);
-                vm.CurrentFile = path;
-                vm.Output = Console.Out;
-                vm.ErrorOutput = Console.Error;
-                vm.Input = Console.In;
-                vm.ScriptArgs = scriptArgs;
-                vm.ModuleLoader = (modulePath, currentFile) =>
-                    LoadModuleForVM(modulePath, currentFile, interpreter);
-                vm.Execute(chunk);
-            }
-            catch (RuntimeError ex)
-            {
-                PrintRuntimeError(ex);
-                System.Environment.Exit(70);
-            }
-            catch (OperationCanceledException)
-            {
-                Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
-                System.Environment.Exit(70);
-            }
-            finally
-            {
-                interpreter.CleanupTrackedProcesses();
-                _activeInterpreter = null;
-            }
+            SemanticResolver.Resolve(statements);
+            Chunk chunk = Compiler.Compile(statements);
+            var globals = CreateVMGlobals();
+            var vm = new VirtualMachine(globals);
+            _activeVM = vm;
+            vm.CurrentFile = path;
+            vm.Output = Console.Out;
+            vm.ErrorOutput = Console.Error;
+            vm.Input = Console.In;
+            vm.ScriptArgs = scriptArgs;
+            vm.ModuleLoader = LoadModuleForVM;
+            vm.Execute(chunk);
         }
-        else
+        catch (RuntimeError ex)
         {
-            var interpreter = new Interpreter();
-            _activeInterpreter = interpreter;
-            interpreter.CurrentFile = path;
-            interpreter.SetScriptArgs(scriptArgs);
-            try
-            {
-                interpreter.Interpret(statements);
-            }
-            catch (RuntimeError ex)
-            {
-                PrintRuntimeError(ex);
-                System.Environment.Exit(70);
-            }
-            finally
-            {
-                interpreter.CleanupTrackedProcesses();
-                _activeInterpreter = null;
-            }
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+        }
+        catch (OperationCanceledException)
+        {
+            Console.Error.WriteLine("[runtime error] Script execution was cancelled.");
+            System.Environment.Exit(70);
+        }
+        finally
+        {
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
+            _activeVM = null;
         }
     }
 
@@ -436,20 +374,23 @@ public class Program
             return;
         }
 
-        var interpreter = new Interpreter();
-        _activeInterpreter = interpreter;
-        interpreter.CurrentFile = path;
-        interpreter.SetScriptArgs(scriptArgs);
-
-        var debugger = new CliDebugger();
-        interpreter.Debugger = debugger;
-        debugger.SetCallStack(interpreter.CallStack);
-        debugger.SetInterpreter(interpreter);
-        debugger.Initialize();
+        Console.Error.WriteLine("Warning: --debug CLI mode is not yet supported with the bytecode VM. Running without debugger.");
+        Console.Error.WriteLine("Use the VS Code debugger (DAP) for full debugging support.");
 
         try
         {
-            interpreter.Interpret(statements);
+            SemanticResolver.Resolve(statements);
+            Chunk chunk = Compiler.Compile(statements);
+            var globals = CreateVMGlobals();
+            var vm = new VirtualMachine(globals);
+            _activeVM = vm;
+            vm.CurrentFile = path;
+            vm.Output = Console.Out;
+            vm.ErrorOutput = Console.Error;
+            vm.Input = Console.In;
+            vm.ScriptArgs = scriptArgs;
+            vm.ModuleLoader = LoadModuleForVM;
+            vm.Execute(chunk);
         }
         catch (RuntimeError ex)
         {
@@ -458,10 +399,10 @@ public class Program
         }
         finally
         {
-            interpreter.CleanupTrackedProcesses();
-            _activeInterpreter = null;
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
+            _activeVM = null;
         }
-
         Console.WriteLine("Script execution completed.");
     }
 
@@ -506,33 +447,29 @@ public class Program
             return;
         }
 
-        var interpreter = new Interpreter();
-        _activeInterpreter = interpreter;
-        interpreter.CurrentFile = path;
-        interpreter.SetScriptArgs(scriptArgs);
-
-        // Attach both debugger and test harness
-        var debugger = new CliDebugger();
-        interpreter.Debugger = debugger;
-        debugger.SetCallStack(interpreter.CallStack);
-        debugger.SetInterpreter(interpreter);
-        debugger.Initialize();
+        Console.Error.WriteLine("Warning: --debug CLI mode is not yet supported with the bytecode VM. Running tests without debugger.");
 
         var reporter = new TapReporter();
-        interpreter.TestHarness = reporter;
-
-        if (testFilter is not null)
-        {
-            interpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
-        }
-        if (testList)
-        {
-            interpreter.DiscoveryMode = true;
-        }
 
         try
         {
-            interpreter.Interpret(statements);
+            SemanticResolver.Resolve(statements);
+            Chunk chunk = Compiler.Compile(statements);
+            var globals = CreateVMGlobals();
+            var vm = new VirtualMachine(globals);
+            _activeVM = vm;
+            vm.CurrentFile = path;
+            vm.Output = Console.Out;
+            vm.ErrorOutput = Console.Error;
+            vm.Input = Console.In;
+            vm.ScriptArgs = scriptArgs;
+            vm.ModuleLoader = LoadModuleForVM;
+            vm.TestHarness = reporter;
+            if (testFilter is not null)
+                vm.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            if (testList)
+                vm.DiscoveryMode = true;
+            vm.Execute(chunk);
         }
         catch (RuntimeError ex)
         {
@@ -542,18 +479,16 @@ public class Program
         }
         finally
         {
-            interpreter.CleanupTrackedProcesses();
-            _activeInterpreter = null;
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
+            _activeVM = null;
         }
 
-        // Emit TAP plan and exit with appropriate code
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         Console.WriteLine("Script execution completed.");
 
         if (reporter.FailedCount > 0)
-        {
             System.Environment.Exit(1);
-        }
     }
 
     /// <summary>Executes a test script with TAP harness.</summary>
@@ -600,27 +535,27 @@ public class Program
             return;
         }
 
-        // Stage 3: Interpret with test harness
-        var interpreter = new Interpreter();
-        _activeInterpreter = interpreter;
-        interpreter.CurrentFile = path;
-        interpreter.SetScriptArgs(scriptArgs);
-
         var reporter = new TapReporter();
-        interpreter.TestHarness = reporter;
-
-        if (testFilter is not null)
-        {
-            interpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
-        }
-        if (testList)
-        {
-            interpreter.DiscoveryMode = true;
-        }
 
         try
         {
-            interpreter.Interpret(statements);
+            SemanticResolver.Resolve(statements);
+            Chunk chunk = Compiler.Compile(statements);
+            var globals = CreateVMGlobals();
+            var vm = new VirtualMachine(globals);
+            _activeVM = vm;
+            vm.CurrentFile = path;
+            vm.Output = Console.Out;
+            vm.ErrorOutput = Console.Error;
+            vm.Input = Console.In;
+            vm.ScriptArgs = scriptArgs;
+            vm.ModuleLoader = LoadModuleForVM;
+            vm.TestHarness = reporter;
+            if (testFilter is not null)
+                vm.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
+            if (testList)
+                vm.DiscoveryMode = true;
+            vm.Execute(chunk);
         }
         catch (RuntimeError ex)
         {
@@ -630,8 +565,9 @@ public class Program
         }
         finally
         {
-            interpreter.CleanupTrackedProcesses();
-            _activeInterpreter = null;
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
+            _activeVM = null;
         }
 
         // Emit TAP plan and exit with appropriate code
@@ -644,28 +580,19 @@ public class Program
     }
 
     /// <summary>Starts the interactive REPL.</summary>
-    private static void RunRepl(ExecutionBackend backend = ExecutionBackend.Bytecode)
+    private static void RunRepl()
     {
         Console.WriteLine("Stash v0.5 — Type statements or expressions, or 'exit' to quit.");
 
-        // A single Interpreter instance is reused across all REPL iterations
-        // (for resolution and tree-walk fallback).
-        var interpreter = new Interpreter();
-        _activeInterpreter = interpreter;
         var editor = new LineEditor();
 
-        // For bytecode mode, create a persistent VM with shared globals
-        VirtualMachine? vm = null;
-        if (backend == ExecutionBackend.Bytecode)
-        {
-            var globals = CreateVMGlobals();
-            vm = new VirtualMachine(globals);
-            vm.Output = Console.Out;
-            vm.ErrorOutput = Console.Error;
-            vm.Input = Console.In;
-            vm.ModuleLoader = (modulePath, currentFile) =>
-                LoadModuleForVM(modulePath, currentFile, interpreter);
-        }
+        var globals = CreateVMGlobals();
+        var vm = new VirtualMachine(globals);
+        _activeVM = vm;
+        vm.Output = Console.Out;
+        vm.ErrorOutput = Console.Error;
+        vm.Input = Console.In;
+        vm.ModuleLoader = LoadModuleForVM;
 
         try
         {
@@ -719,16 +646,9 @@ public class Program
 
                     try
                     {
-                        if (backend == ExecutionBackend.Bytecode && vm is not null)
-                        {
-                            interpreter.ResolveStatements(statements);
-                            Chunk chunk = Compiler.Compile(statements);
-                            vm.ExecuteRepl(chunk);
-                        }
-                        else
-                        {
-                            interpreter.Interpret(statements);
-                        }
+                        SemanticResolver.Resolve(statements);
+                        Chunk chunk = Compiler.Compile(statements);
+                        vm.ExecuteRepl(chunk);
                     }
                     catch (RuntimeError ex)
                     {
@@ -753,22 +673,11 @@ public class Program
 
                     try
                     {
-                        if (backend == ExecutionBackend.Bytecode && vm is not null)
+                        Chunk chunk = Compiler.CompileExpression(expr);
+                        object? result = vm.Execute(chunk);
+                        if (result is not null)
                         {
-                            Chunk chunk = Compiler.CompileExpression(expr);
-                            object? result = vm.Execute(chunk);
-                            if (result is not null)
-                            {
-                                Console.WriteLine(interpreter.Stringify(result));
-                            }
-                        }
-                        else
-                        {
-                            object? result = interpreter.Interpret(expr);
-                            if (result is not null)
-                            {
-                                Console.WriteLine(interpreter.Stringify(result));
-                            }
+                            Console.WriteLine(RuntimeValues.Stringify(result));
                         }
                     }
                     catch (RuntimeError ex)
@@ -780,26 +689,10 @@ public class Program
         }
         finally
         {
-            interpreter.CleanupTrackedProcesses();
-            _activeInterpreter = null;
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
+            _activeVM = null;
         }
-    }
-
-    /// <summary>
-    /// Determines the execution backend from CLI argument or STASH_BACKEND environment variable.
-    /// Defaults to Bytecode if neither is set.
-    /// </summary>
-    private static ExecutionBackend GetBackend(string? backendArg)
-    {
-        string? value = backendArg ?? System.Environment.GetEnvironmentVariable("STASH_BACKEND");
-        if (value is null)
-            return ExecutionBackend.Bytecode;
-        return value.ToLowerInvariant() switch
-        {
-            "treewalk" or "tree-walk" or "tw" => ExecutionBackend.TreeWalk,
-            "bytecode" or "vm" or "bc" => ExecutionBackend.Bytecode,
-            _ => ExecutionBackend.Bytecode,
-        };
     }
 
     /// <summary>Creates built-in globals dictionary for the bytecode VM.</summary>
@@ -823,7 +716,7 @@ public class Program
     }
 
     /// <summary>Module loading callback for the bytecode VM.</summary>
-    private static Chunk LoadModuleForVM(string modulePath, string? currentFile, Interpreter interpreter)
+    private static Chunk LoadModuleForVM(string modulePath, string? currentFile)
     {
         string? basePath = currentFile is not null ? System.IO.Path.GetDirectoryName(currentFile) : null;
         string fullPath;
@@ -859,7 +752,7 @@ public class Program
         if (parser.Errors.Count > 0)
             throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", null);
 
-        interpreter.ResolveStatements(stmts);
+        SemanticResolver.Resolve(stmts);
         return Compiler.Compile(stmts);
     }
 

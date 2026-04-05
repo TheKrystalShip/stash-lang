@@ -6,11 +6,13 @@ using System.Reflection;
 using Stash.Dap;
 using Stash.Common;
 using Stash.Debugging;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Lexing;
+using Stash.Parsing;
+using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Models;
-using Environment = Stash.Interpreting.Environment;
 using Variable = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Variable;
 
 public class DebugSessionTests
@@ -488,7 +490,7 @@ public class DebugSessionTests
     {
         // Without an interpreter, the method returns the template unchanged.
         var session = new DebugSession();
-        var env = new Environment();
+        var env = new TestDebugScope();
         var result = InvokeInterpolateLogMessage(session, "Hello World", env);
         Assert.Equal("Hello World", result);
     }
@@ -497,8 +499,8 @@ public class DebugSessionTests
     public void InterpolateLogMessage_WithExpression_Evaluates()
     {
         var session = new DebugSession();
-        var interpreter = new Interpreter();
-        var env = new Environment();
+        var interpreter = new TestExecutor();
+        var env = new TestDebugScope();
         var result = InvokeInterpolateLogMessage(session, "Result: {1 + 1}", env, interpreter);
         Assert.Equal("Result: 2", result);
     }
@@ -507,8 +509,8 @@ public class DebugSessionTests
     public void InterpolateLogMessage_MissingCloseBrace_TreatsAsText()
     {
         var session = new DebugSession();
-        var interpreter = new Interpreter();
-        var env = new Environment();
+        var interpreter = new TestExecutor();
+        var env = new TestDebugScope();
         // {unclosed has no matching } — characters are emitted as-is
         var result = InvokeInterpolateLogMessage(session, "value={unclosed", env, interpreter);
         Assert.Equal("value={unclosed", result);
@@ -522,7 +524,7 @@ public class DebugSessionTests
         var session = new DebugSession();
         session.Disconnect();
         Assert.Throws<OperationCanceledException>(() =>
-            session.OnBeforeExecute(new SourceSpan("test.stash", 1, 1, 1, 10), new Environment(), 1));
+            session.OnBeforeExecute(new SourceSpan("test.stash", 1, 1, 1, 10), new TestDebugScope(), 1));
     }
 
     [Fact]
@@ -532,7 +534,7 @@ public class DebugSessionTests
         var span = new SourceSpan("script.stash", 3, 1, 3, 20);
         // No step mode or pause requested — just records the span and returns.
         // The constructor pre-registers a placeholder ThreadState for the main thread.
-        session.OnBeforeExecute(span, new Environment(), 1);
+        session.OnBeforeExecute(span, new TestDebugScope(), 1);
 
         // PausedAtSpan is now on the per-thread ThreadState stored in _threads[1]
         var threadsField = typeof(DebugSession).GetField("_threads",
@@ -561,7 +563,7 @@ public class DebugSessionTests
     public void SetVariable_InvalidReference_ThrowsInvalidOperation()
     {
         var session = new DebugSession();
-        SetExecutor(session, new Interpreter());
+        SetExecutor(session, new TestExecutor());
         Assert.Throws<InvalidOperationException>(() => session.SetVariable(9999, "x", "42"));
     }
 
@@ -703,5 +705,43 @@ public class DebugSessionTests
         Assert.Single(session.GetLoadedSources());
         session.Disconnect();
         Assert.Empty(session.GetLoadedSources());
+    }
+
+    private class TestExecutor : IDebugExecutor
+    {
+        public IReadOnlyList<Stash.Debugging.CallFrame> CallStack => [];
+        public IDebugScope GlobalScope => new TestDebugScope();
+
+        public (object? Value, string? Error) EvaluateExpression(string expression, IDebugScope scope)
+        {
+            try
+            {
+                var lexer = new Lexer(expression, "<eval>");
+                var tokens = lexer.ScanTokens();
+                var parser = new Parser(tokens);
+                var expr = parser.Parse();
+                var chunk = Compiler.CompileExpression(expr);
+                var vm = new VirtualMachine();
+                return (vm.Execute(chunk), null);
+            }
+            catch (Exception ex)
+            {
+                return (null, ex.Message);
+            }
+        }
+    }
+
+    private class TestDebugScope : IDebugScope
+    {
+        private readonly Dictionary<string, object?> _vars = new();
+        public IDebugScope? EnclosingScope => null;
+        public IEnumerable<KeyValuePair<string, object?>> GetAllBindings() => _vars;
+        public bool Contains(string name) => _vars.ContainsKey(name);
+        public bool TryAssign(string name, object? value)
+        {
+            if (!_vars.ContainsKey(name)) return false;
+            _vars[name] = value;
+            return true;
+        }
     }
 }

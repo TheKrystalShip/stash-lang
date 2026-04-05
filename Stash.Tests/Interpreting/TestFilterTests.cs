@@ -1,6 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 using Stash.Tap;
 
 namespace Stash.Tests.Interpreting;
@@ -10,21 +11,22 @@ public class TestFilterTests
     // Helper that runs with harness AND filter, optionally with a CurrentFile
     private static (TapReporter reporter, string output) RunWithFilter(string source, string[] filter, string? currentFile = null)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         if (currentFile is not null)
         {
-            interpreter.CurrentFile = currentFile;
+            vm.CurrentFile = currentFile;
         }
-
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
-        interpreter.TestHarness = reporter;
-        interpreter.TestFilter = filter;
-        interpreter.Interpret(statements);
+        vm.TestHarness = reporter;
+        vm.TestFilter = filter;
+        vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());
     }
@@ -186,12 +188,14 @@ public class TestFilterTests
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        SemanticResolver.Resolve(statements);
+        var chunk = Compiler.Compile(statements);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
-        interpreter.TestHarness = reporter;
+        vm.TestHarness = reporter;
         // TestFilter is NOT set — should be null by default
-        interpreter.Interpret(statements);
+        vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
 
         Assert.Equal(3, reporter.PassedCount);

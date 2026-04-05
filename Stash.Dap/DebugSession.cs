@@ -10,13 +10,12 @@ using System.Threading;
 using Stash.Bytecode;
 using Stash.Common;
 using Stash.Debugging;
-using Stash.Interpreting;
-using Stash.Interpreting.Types;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
 using Stash.Lexing;
 using Stash.Parsing;
+using Stash.Resolution;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Events;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Models;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Server;
@@ -313,9 +312,8 @@ public class DebugSession : IDebugger
             var parser = new Parser(tokens);
             var stmts = parser.ParseProgram();
 
-            // Resolve using a lightweight Interpreter (for AST annotation only, not execution)
-            var resolverInterpreter = new Interpreter();
-            resolverInterpreter.ResolveStatements(stmts);
+            // Resolve AST for bytecode compilation
+            SemanticResolver.Resolve(stmts);
 
             return Compiler.Compile(stmts);
         };
@@ -360,9 +358,8 @@ public class DebugSession : IDebugger
                     return;
                 }
 
-                // Resolve (using a lightweight Interpreter for AST annotation only)
-                var resolverInterpreter = new Interpreter();
-                resolverInterpreter.ResolveStatements(stmts);
+                // Resolve AST for bytecode compilation
+                SemanticResolver.Resolve(stmts);
 
                 // Compile to bytecode and execute on the VM
                 Chunk chunk = Compiler.Compile(stmts);
@@ -596,7 +593,7 @@ public class DebugSession : IDebugger
                 Line = pausedSpan?.StartLine ?? 0,
                 Column = pausedSpan?.StartColumn ?? 0,
                 EndLine = pausedSpan?.EndLine,
-                EndColumn = pausedSpan?.EndColumn,
+                EndColumn = pausedSpan?.EndColumn + 1,
             });
 
             // Intermediate frames: each shows where the inner function was called from
@@ -612,7 +609,7 @@ public class DebugSession : IDebugger
                     Line = callSite?.StartLine ?? 0,
                     Column = callSite?.StartColumn ?? 0,
                     EndLine = callSite?.EndLine,
-                    EndColumn = callSite?.EndColumn,
+                    EndColumn = callSite?.EndColumn + 1,
                 });
             }
 
@@ -1503,7 +1500,7 @@ public class DebugSession : IDebugger
             Line = span?.StartLine ?? 0,
             Column = span?.StartColumn ?? 0,
             EndLine = span?.EndLine,
-            EndColumn = span?.EndColumn,
+            EndColumn = span?.EndColumn + 1,
         };
     }
 
@@ -1787,9 +1784,9 @@ public class DebugSession : IDebugger
                 variablesReference = AllocateExpansion(name, value);
                 break;
 
-            case UserCallable uc:
+            case VMFunction vmFn:
                 type = "function";
-                displayValue = uc.ToString() ?? "<fn>";
+                displayValue = vmFn.ToString();
                 break;
 
             case StashBoundMethod bm:

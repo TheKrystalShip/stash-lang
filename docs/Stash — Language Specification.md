@@ -47,7 +47,7 @@
 ### Non-Goals (for v1)
 
 - Static typing
-- Compilation to native code or bytecode (tree-walk interpreter first)
+- Compilation to native code or bytecode
 - Class-based OOP with inheritance (lightweight interfaces **are** supported — see [Section 5f](#5f-interfaces))
 - Concurrency primitives
 
@@ -63,7 +63,7 @@
 | Scoping             | Lexical                          | Predictable; standard in modern languages             |
 | Killer feature      | Structs/objects                  | Structured data manipulation missing from Bash        |
 | Implementation lang | C#                               | Leverages existing expertise; strong standard library |
-| Interpreter type    | Tree-walk (v1), bytecode VM (v2) | Simple first, optimize later                          |
+| Interpreter type    | Bytecode VM                      | Compiled AST to opcodes; stack-based dispatch         |
 
 ---
 
@@ -4059,7 +4059,7 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 | **Lexer**       | Reads source text, produces stream of tokens           |
 | **Parser**      | Recursive descent; consumes tokens, produces AST       |
 | **Resolver**    | Post-parse pass; binds variables to scope depth/slot   |
-| **Interpreter** | Tree-walk; visits AST nodes and executes them          |
+| **Interpreter** | Bytecode VM; compiles AST to opcodes and executes via stack-based dispatch |
 | **Environment** | Stores variable bindings; supports lexical scope chain |
 | **REPL**        | Interactive read-eval-print loop                       |
 
@@ -4220,7 +4220,7 @@ The testing infrastructure follows the same architectural pattern — an `ITestH
 
 ### Philosophy
 
-Build correct first, measure, then optimize the hot path. A tree-walk interpreter in C# with zero optimizations is already faster than Bash.
+Build correct first, measure, then optimize the hot path. The bytecode VM compiles AST to opcodes before execution and is already significantly faster than Bash.
 
 ### Where Time Is Spent
 
@@ -4252,7 +4252,7 @@ Execution:       ~80-90%  (runs repeatedly)
 
 #### Tier 3 — Nuclear Option
 
-If the tree-walk interpreter hits a performance wall: **switch to a bytecode VM**. This is a 10-50x speedup and dwarfs all micro-optimizations. The bytecode VM compiles the AST to a flat array of opcodes, and a tight `switch`-dispatch loop executes them. ❌ Not started.
+The bytecode VM compiles the AST to a flat array of opcodes, and a tight `switch`-dispatch loop executes them. ✅ Done.
 
 ### What NOT to Optimize
 

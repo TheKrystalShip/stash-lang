@@ -26,7 +26,10 @@ internal sealed class ExtensionRegistry
     {
         if (_extensions.TryGetValue(typeName, out Dictionary<string, IStashCallable>? methods) &&
             methods.TryGetValue(methodName, out callable))
+        {
             return true;
+        }
+
         callable = null;
         return false;
     }

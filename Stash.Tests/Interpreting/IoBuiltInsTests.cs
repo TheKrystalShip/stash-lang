@@ -1,6 +1,7 @@
 using Stash.Lexing;
 using Stash.Parsing;
-using Stash.Interpreting;
+using Stash.Bytecode;
+using Stash.Resolution;
 
 namespace Stash.Tests.Interpreting;
 
@@ -10,49 +11,50 @@ public class IoBuiltInsTests
 
     private static string CaptureStderr(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new StringWriter();
-        interpreter.ErrorOutput = sw;
-        interpreter.Interpret(statements);
+        vm.ErrorOutput = sw;
+        vm.Execute(chunk);
         return sw.ToString();
     }
 
     private static (string stdout, string stderr) CaptureBoth(string source)
     {
-        var lexer = new Lexer(source);
+        var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var outSw = new StringWriter();
         var errSw = new StringWriter();
-        interpreter.Output = outSw;
-        interpreter.ErrorOutput = errSw;
-        interpreter.Interpret(statements);
+        vm.Output = outSw;
+        vm.ErrorOutput = errSw;
+        vm.Execute(chunk);
         return (outSw.ToString(), errSw.ToString());
     }
 
     private static object? RunReturningValue(string source)
     {
-        var lexer = new Lexer(source);
+        string full = source + "\nreturn result;";
+        var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        var interpreter = new Interpreter();
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
         var sw = new StringWriter();
-        interpreter.Output = sw;
-        interpreter.ErrorOutput = sw;
-        interpreter.Interpret(statements);
-
-        var resultLexer = new Lexer("result");
-        var resultTokens = resultLexer.ScanTokens();
-        var resultParser = new Parser(resultTokens);
-        var resultExpr = resultParser.Parse();
-        return interpreter.Interpret(resultExpr);
+        vm.Output = sw;
+        vm.ErrorOutput = sw;
+        return vm.Execute(chunk);
     }
 
     // ── 1. io.eprintln writes to stderr ──────────────────────────────────────
@@ -150,19 +152,18 @@ public class IoBuiltInsTests
     [Fact]
     public void Confirm_YesReturnsTrue()
     {
-        var interpreter = new Interpreter();
-        var outSw = new System.IO.StringWriter();
-        interpreter.Output = outSw;
-        interpreter.Input = new System.IO.StringReader("y\n");
-
-        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        string src = "let result = io.confirm(\"Continue?\");\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        interpreter.Interpret(statements);
-
-        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
-        var result = interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var outSw = new System.IO.StringWriter();
+        vm.Output = outSw;
+        vm.Input = new System.IO.StringReader("y\n");
+        var result = vm.Execute(chunk);
         Assert.Equal(true, result);
         Assert.Contains("[y/N]", outSw.ToString());
     }
@@ -170,57 +171,54 @@ public class IoBuiltInsTests
     [Fact]
     public void Confirm_NoReturnsFalse()
     {
-        var interpreter = new Interpreter();
-        var outSw = new System.IO.StringWriter();
-        interpreter.Output = outSw;
-        interpreter.Input = new System.IO.StringReader("n\n");
-
-        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        string src = "let result = io.confirm(\"Continue?\");\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        interpreter.Interpret(statements);
-
-        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
-        var result = interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var outSw = new System.IO.StringWriter();
+        vm.Output = outSw;
+        vm.Input = new System.IO.StringReader("n\n");
+        var result = vm.Execute(chunk);
         Assert.Equal(false, result);
     }
 
     [Fact]
     public void Confirm_EmptyInputReturnsFalse()
     {
-        var interpreter = new Interpreter();
-        var outSw = new System.IO.StringWriter();
-        interpreter.Output = outSw;
-        interpreter.Input = new System.IO.StringReader("\n");
-
-        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        string src = "let result = io.confirm(\"Continue?\");\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        interpreter.Interpret(statements);
-
-        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
-        var result = interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var outSw = new System.IO.StringWriter();
+        vm.Output = outSw;
+        vm.Input = new System.IO.StringReader("\n");
+        var result = vm.Execute(chunk);
         Assert.Equal(false, result);
     }
 
     [Fact]
     public void Confirm_YesFullWordReturnsTrue()
     {
-        var interpreter = new Interpreter();
-        var outSw = new System.IO.StringWriter();
-        interpreter.Output = outSw;
-        interpreter.Input = new System.IO.StringReader("yes\n");
-
-        var lexer = new Lexer("let result = io.confirm(\"Continue?\");");
+        string src = "let result = io.confirm(\"Continue?\");\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-        interpreter.Interpret(statements);
-
-        var resultExpr = new Parser(new Lexer("result").ScanTokens()).Parse();
-        var result = interpreter.Interpret(resultExpr);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var outSw = new System.IO.StringWriter();
+        vm.Output = outSw;
+        vm.Input = new System.IO.StringReader("yes\n");
+        var result = vm.Execute(chunk);
         Assert.Equal(true, result);
     }
 }

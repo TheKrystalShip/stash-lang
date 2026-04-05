@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -43,8 +44,13 @@ internal sealed class VMContext : IInterpreterContext
 
     public void EmitExit(int code)
     {
+        CleanupTrackedProcesses();
+        CleanupTrackedWatchers();
         if (EmbeddedMode)
+        {
             throw new Stash.Runtime.ExitException(code);
+        }
+
         System.Environment.Exit(code);
     }
 
@@ -63,7 +69,32 @@ internal sealed class VMContext : IInterpreterContext
     public List<(StashInstance Handle, Process Process)> TrackedProcesses { get; } = new();
     public Dictionary<StashInstance, StashInstance> ProcessWaitCache { get; } = new();
     public Dictionary<StashInstance, List<IStashCallable>> ProcessExitCallbacks { get; } = new();
-    public void CleanupTrackedProcesses() { }
+    public void CleanupTrackedProcesses()
+    {
+        List<(StashInstance Handle, Process Process)> snapshot;
+        snapshot = new List<(StashInstance, Process)>(TrackedProcesses);
+        TrackedProcesses.Clear();
+        ProcessExitCallbacks.Clear();
+
+        foreach (var (_, osProcess) in snapshot)
+        {
+            try
+            {
+                if (!osProcess.HasExited)
+                {
+                    osProcess.Kill(false);
+                    if (!osProcess.WaitForExit(3000))
+                    {
+                        osProcess.Kill(true);
+                    }
+                }
+            }
+            catch { /* Process may have already exited */ }
+
+            try { osProcess.Dispose(); }
+            catch { /* Best-effort disposal */ }
+        }
+    }
 
     // --- ITestContext (stubs for TAP framework) ---
 
@@ -75,17 +106,81 @@ internal sealed class VMContext : IInterpreterContext
     public List<List<IStashCallable>> AfterEachHooks { get; } = new();
     public List<List<IStashCallable>> AfterAllHooks { get; } = new();
 
-    // --- ITemplateContext (default implementations from interface suffice) ---
+    // --- ITemplateContext ---
+
+    object? ITemplateContext.CompileAndRenderTemplate(string template, Runtime.Types.StashDictionary data, string? basePath)
+    {
+        if (Globals is null)
+        {
+            return null;
+        }
+
+        var evaluator = new VMTemplateEvaluator(Globals);
+        var renderer = new Stash.Tpl.TemplateRenderer(evaluator, basePath);
+        return renderer.Render(template, data);
+    }
+
+    object? ITemplateContext.CompileTemplate(string template)
+    {
+        var lexer = new Stash.Tpl.TemplateLexer(template);
+        var tokens = lexer.Scan();
+        var parser = new Stash.Tpl.TemplateParser(tokens);
+        return parser.Parse();
+    }
+
+    object? ITemplateContext.RenderCompiledTemplate(object? compiled, Runtime.Types.StashDictionary data)
+    {
+        if (compiled is not List<Stash.Tpl.TemplateNode> nodes)
+        {
+            throw new RuntimeError("'tpl.render' expects a string or compiled template as the first argument.");
+        }
+
+        if (Globals is null)
+        {
+            return null;
+        }
+
+        var evaluator = new VMTemplateEvaluator(Globals);
+        var renderer = new Stash.Tpl.TemplateRenderer(evaluator);
+        return renderer.Render(nodes, data);
+    }
 
     // --- IFileWatchContext (stubs for Phase 6) ---
 
     public List<(StashInstance Handle, FileSystemWatcher Watcher)> TrackedWatchers { get; } = new();
-    public void CleanupTrackedWatchers() { }
+    public void CleanupTrackedWatchers()
+    {
+        List<(StashInstance Handle, FileSystemWatcher Watcher)> snapshot;
+        snapshot = new List<(StashInstance, FileSystemWatcher)>(TrackedWatchers);
+        TrackedWatchers.Clear();
+
+        foreach (var (_, watcher) in snapshot)
+        {
+            try
+            {
+                watcher.EnableRaisingEvents = false;
+                watcher.Dispose();
+            }
+            catch { /* Best-effort disposal */ }
+        }
+    }
 
     // --- IInterpreterContext ---
 
     public IInterpreterContext Fork(CancellationToken cancellationToken = default)
     {
+        // Upgrade to synchronized writers on first fork to prevent interleaved output
+        // when multiple parallel tasks write to the same underlying writer.
+        if (Output is not SynchronizedTextWriter)
+        {
+            Output = new SynchronizedTextWriter(Output);
+        }
+
+        if (ErrorOutput is not SynchronizedTextWriter)
+        {
+            ErrorOutput = new SynchronizedTextWriter(ErrorOutput);
+        }
+
         return new VMContext(cancellationToken)
         {
             Output = Output,
@@ -99,6 +194,76 @@ internal sealed class VMContext : IInterpreterContext
             EmbeddedMode = EmbeddedMode,
             TestHarness = TestHarness,
             TestFilter = TestFilter,
+            Globals = Globals,
+            ModuleLoader = ModuleLoader,
+            ModuleCache = ModuleCache,
+            ModuleLocks = ModuleLocks,
         };
+    }
+
+    /// <summary>
+    /// Reference to the VM's global variable store. Set by <see cref="VirtualMachine"/> so that
+    /// <see cref="InvokeCallback"/> can create a child VM for <c>VMFunction</c> closures.
+    /// </summary>
+    internal Dictionary<string, object?>? Globals { get; set; }
+
+    /// <summary>Module loading callback, propagated from the parent <see cref="VirtualMachine"/>.</summary>
+    internal Func<string, string?, Chunk>? ModuleLoader { get; set; }
+
+    /// <summary>Shared module cache, propagated from the parent <see cref="VirtualMachine"/>.</summary>
+    internal ConcurrentDictionary<string, Dictionary<string, object?>>? ModuleCache { get; set; }
+
+    /// <summary>Per-module locks for double-checked loading, propagated from the parent <see cref="VirtualMachine"/>.</summary>
+    internal ConcurrentDictionary<string, object>? ModuleLocks { get; set; }
+
+    /// <summary>
+    /// Reference to the active <see cref="VirtualMachine"/> executing on the main thread.
+    /// Used by <see cref="InvokeCallback"/> to execute user lambdas inline on the main thread.
+    /// Null on contexts created for background threads.
+    /// </summary>
+    internal VirtualMachine? ActiveVM { get; set; }
+
+    /// <summary>
+    /// The managed thread ID of the thread that owns this VM context.
+    /// Used by <see cref="InvokeCallback"/> to distinguish same-thread (inline) from
+    /// background-thread (child VM) callback invocations.
+    /// </summary>
+    internal int MainThreadId { get; set; }
+
+    /// <summary>
+    /// Invokes a callable in a child execution context. For <see cref="VMFunction"/> closures
+    /// called from the main VM thread, executes inline on the current VM instance so that
+    /// upvalues, test harness, and all context state are preserved. For background-thread
+    /// calls (e.g. fs.watch), creates a new <see cref="VirtualMachine"/> backed by shared globals.
+    /// </summary>
+    object? IInterpreterContext.InvokeCallback(IStashCallable callable, System.Collections.Generic.List<object?> args)
+    {
+        if (callable is VMFunction vmFn)
+        {
+            // Same-thread call (synchronous): run inline on the active VM so that upvalues,
+            // test harness, CurrentDescribe, hooks, and all other context state are preserved.
+            if (ActiveVM != null && System.Threading.Thread.CurrentThread.ManagedThreadId == MainThreadId)
+            {
+                return ActiveVM.ExecuteVMFunctionInline(vmFn, args.ToArray(), null);
+            }
+
+            // Background-thread call (e.g. fs.watch callback): create an isolated child VM
+            // backed by the same globals dict so the closure executes correctly.
+            if (Globals != null)
+            {
+                var childVm = new VirtualMachine(Globals, CancellationToken);
+                childVm.Output = Output;
+                childVm.ErrorOutput = ErrorOutput;
+                childVm.Input = Input;
+                childVm.CurrentFile = CurrentFile;
+                childVm.ScriptArgs = ScriptArgs;
+                childVm.EmbeddedMode = EmbeddedMode;
+                if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
+                if (ModuleCache != null) childVm._moduleCache = ModuleCache;
+                if (ModuleLocks != null) childVm._moduleLocks = ModuleLocks;
+                return childVm.CallClosure(vmFn, args);
+            }
+        }
+        return callable.Call(Fork(), args);
     }
 }

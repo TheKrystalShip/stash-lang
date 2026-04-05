@@ -253,6 +253,12 @@ public enum OpCode : byte
     ArgMark,        // 79
     /// <summary>Call function with spread args — scans for ArgMark sentinel.</summary>
     CallSpread,     // 80
+    /// <summary>Close open upvalues for locals at or above a given slot (u8 operand: local slot index).</summary>
+    CloseUpvalue,   // 81
+    /// <summary>Pop and store to global by name (u16 constant pool index); also marks the global as const for mutation guards.</summary>
+    InitConstGlobal, // 82
+    /// <summary>Peek at top of stack; throw RuntimeError if not int or float.</summary>
+    CheckNumeric,    // 83
 }
 
 /// <summary>
@@ -311,11 +317,13 @@ public static class OpCodeInfo
         OpCode.ElevateEnd    => 0,
         OpCode.Iterator      => 0,
         OpCode.In            => 0,
-        OpCode.ArgMark      => 0,
-        OpCode.CallSpread   => 0,
+        OpCode.ArgMark       => 0,
+        OpCode.CallSpread    => 0,
+        OpCode.CheckNumeric  => 0,
 
         // 1-byte (u8) operands
         OpCode.LoadLocal     => 1,
+        OpCode.CloseUpvalue  => 1,
         OpCode.StoreLocal    => 1,
         OpCode.LoadUpvalue   => 1,
         OpCode.StoreUpvalue  => 1,
@@ -323,36 +331,37 @@ public static class OpCodeInfo
         OpCode.Redirect      => 1,
 
         // 2-byte (u16/i16) operands
-        OpCode.Destructure   => 2,
-        OpCode.Const         => 2,
-        OpCode.LoadGlobal    => 2,
-        OpCode.StoreGlobal   => 2,
-        OpCode.And           => 2,
-        OpCode.Or            => 2,
-        OpCode.NullCoalesce  => 2,
-        OpCode.Jump          => 2,
-        OpCode.JumpTrue      => 2,
-        OpCode.JumpFalse     => 2,
-        OpCode.Loop          => 2,
-        OpCode.Closure       => 2,
-        OpCode.Array         => 2,
-        OpCode.Dict          => 2,
-        OpCode.GetField      => 2,
-        OpCode.SetField      => 2,
-        OpCode.StructDecl    => 2,
-        OpCode.StructInit    => 2,
-        OpCode.EnumDecl      => 2,
-        OpCode.InterfaceDecl => 2,
-        OpCode.Extend        => 2,
-        OpCode.Is            => 2,
-        OpCode.Interpolate   => 2,
-        OpCode.Command       => 2,
-        OpCode.Import        => 2,
-        OpCode.ImportAs      => 2,
-        OpCode.TryBegin      => 2,
-        OpCode.Switch        => 2,
-        OpCode.Retry         => 2,
-        OpCode.Iterate       => 2,
+        OpCode.InitConstGlobal => 2,
+        OpCode.Destructure     => 2,
+        OpCode.Const           => 2,
+        OpCode.LoadGlobal      => 2,
+        OpCode.StoreGlobal     => 2,
+        OpCode.And             => 2,
+        OpCode.Or              => 2,
+        OpCode.NullCoalesce    => 2,
+        OpCode.Jump            => 2,
+        OpCode.JumpTrue        => 2,
+        OpCode.JumpFalse       => 2,
+        OpCode.Loop            => 2,
+        OpCode.Closure         => 2,
+        OpCode.Array           => 2,
+        OpCode.Dict            => 2,
+        OpCode.GetField        => 2,
+        OpCode.SetField        => 2,
+        OpCode.StructDecl      => 2,
+        OpCode.StructInit      => 2,
+        OpCode.EnumDecl        => 2,
+        OpCode.InterfaceDecl   => 2,
+        OpCode.Extend          => 2,
+        OpCode.Is              => 2,
+        OpCode.Interpolate     => 2,
+        OpCode.Command         => 2,
+        OpCode.Import          => 2,
+        OpCode.ImportAs        => 2,
+        OpCode.TryBegin        => 2,
+        OpCode.Switch          => 2,
+        OpCode.Retry           => 2,
+        OpCode.Iterate         => 2,
 
         _ => throw new System.ArgumentOutOfRangeException(nameof(opCode), opCode, "Unknown opcode."),
     };
