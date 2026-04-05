@@ -21,7 +21,6 @@ using OmniSharp.Extensions.DebugAdapter.Protocol.Server;
 using DapBreakpoint = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Breakpoint;
 using DapThread = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Thread;
 using StashBreakpoint = Stash.Debugging.Breakpoint;
-using StashEnv = Stash.Interpreting.Environment;
 
 /// <summary>
 /// Core bridge between the DAP protocol and the Stash interpreter.
@@ -36,7 +35,7 @@ public class DebugSession : IDebugger
     // ── Core references ───────────────────────────────────────────────────────
 
     private IDebugAdapterServer? _server;
-    private Interpreter? _interpreter;
+    private Interpreter? _treeWalkInterpreter;
 
     // ── Thread registry ───────────────────────────────────────────────────────
 
@@ -104,8 +103,8 @@ public class DebugSession : IDebugger
 
     private sealed class VariableContainer
     {
-        /// <summary>When set, the container holds an Environment scope to enumerate.</summary>
-        public StashEnv? Environment { get; init; }
+        /// <summary>When set, the container holds an IDebugScope to enumerate.</summary>
+        public IDebugScope? Scope { get; init; }
 
         /// <summary>When set, the container holds a complex value to expand (array/dict/instance).</summary>
         public object? Value { get; init; }
@@ -127,14 +126,14 @@ public class DebugSession : IDebugger
     {
         public int Id { get; init; }
         public string Name { get; init; } = "";
-        public Interpreter Interpreter { get; init; } = null!;
+        public IDebugExecutor Executor { get; init; } = null!;
         public ManualResetEventSlim PauseGate { get; } = new(initialState: true);
         public volatile bool IsPaused;
         public volatile bool PauseRequested;
         public StepMode StepMode;
         public int StepDepth;
         public SourceSpan? PausedAtSpan;
-        public StashEnv? PausedEnvironment;
+        public IDebugScope? PausedEnvironment;
         public PauseReason PauseReason;
     }
 
@@ -226,36 +225,36 @@ public class DebugSession : IDebugger
         _workingDirectory = workingDirectory;
         _stopOnEntry = stopOnEntry;
 
-        _interpreter = new Interpreter();
-        _interpreter.Debugger = this;
-        _interpreter.CurrentFile = _scriptPath;
+        _treeWalkInterpreter = new Interpreter();
+        _treeWalkInterpreter.Debugger = this;
+        _treeWalkInterpreter.CurrentFile = _scriptPath;
         if (args is { Length: > 0 })
         {
-            _interpreter.SetScriptArgs(args);
+            _treeWalkInterpreter.SetScriptArgs(args);
         }
 
         // Redirect interpreter output through DAP
-        _interpreter.Output = new DapOutputWriter(this, "stdout");
-        _interpreter.ErrorOutput = new DapOutputWriter(this, "stderr");
+        _treeWalkInterpreter.Output = new DapOutputWriter(this, "stdout");
+        _treeWalkInterpreter.ErrorOutput = new DapOutputWriter(this, "stderr");
 
         // Register main thread in the thread registry
         var mainThread = new ThreadState
         {
             Id = MainThreadId,
             Name = "Main Thread",
-            Interpreter = _interpreter,
+            Executor = _treeWalkInterpreter,
         };
         _threads[MainThreadId] = mainThread;
 
         // Configure test mode if requested
         if (testMode)
         {
-            var reporter = new Stash.Tap.TapReporter(_interpreter.Output);
-            _interpreter.TestHarness = reporter;
+            var reporter = new Stash.Tap.TapReporter(_treeWalkInterpreter.Output);
+            _treeWalkInterpreter.TestHarness = reporter;
 
             if (testFilter is not null)
             {
-                _interpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                _treeWalkInterpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
             }
         }
 
@@ -299,10 +298,10 @@ public class DebugSession : IDebugger
                     return;
                 }
 
-                _interpreter.Interpret(stmts);
+                _treeWalkInterpreter.Interpret(stmts);
 
                 // If running in test mode, emit TAP plan
-                if (_interpreter.TestHarness is Stash.Tap.TapReporter tapReporter)
+                if (_treeWalkInterpreter.TestHarness is Stash.Tap.TapReporter tapReporter)
                 {
                     tapReporter.OnRunComplete(tapReporter.PassedCount, tapReporter.FailedCount, tapReporter.SkippedCount);
                 }
@@ -442,7 +441,7 @@ public class DebugSession : IDebugger
         }
 
         thread.StepMode = StepMode.StepOver;
-        thread.StepDepth = thread.Interpreter?.CallStack.Count ?? 0;
+        thread.StepDepth = thread.Executor?.CallStack.Count ?? 0;
         Resume(thread);
     }
 
@@ -468,7 +467,7 @@ public class DebugSession : IDebugger
             return;
         }
 
-        int depth = thread.Interpreter?.CallStack.Count ?? 0;
+        int depth = thread.Executor?.CallStack.Count ?? 0;
         if (depth == 0)
         {
             Continue(threadId);
@@ -499,13 +498,13 @@ public class DebugSession : IDebugger
             return frames;
         }
 
-        var interpreter = thread.Interpreter;
-        if (interpreter == null)
+        var executor = thread.Executor;
+        if (executor == null)
         {
             return frames; // Placeholder thread — not yet launched
         }
 
-        var callStack = interpreter.CallStack;
+        var callStack = executor.CallStack;
         var pausedSpan = thread.PausedAtSpan;
 
         if (callStack.Count == 0)
@@ -557,7 +556,7 @@ public class DebugSession : IDebugger
     public IReadOnlyList<Scope> GetScopes(int frameId)
     {
         var scopes = new List<Scope>();
-        if (_interpreter == null)
+        if (_treeWalkInterpreter == null)
         {
             return scopes;
         }
@@ -611,7 +610,7 @@ public class DebugSession : IDebugger
                     {
                         userRef = AllocateVariableReference(new VariableContainer
                         {
-                            Environment = chain[i],
+                            Scope = chain[i],
                             ExcludeBuiltIns = true,
                         });
                     }
@@ -632,7 +631,7 @@ public class DebugSession : IDebugger
                     {
                         builtInRef = AllocateVariableReference(new VariableContainer
                         {
-                            Environment = chain[i],
+                            Scope = chain[i],
                             BuiltInsOnly = true,
                         });
                     }
@@ -650,7 +649,7 @@ public class DebugSession : IDebugger
                 long varRef;
                 lock (_variableReferences)
                 {
-                    varRef = AllocateVariableReference(new VariableContainer { Environment = chain[i] });
+                    varRef = AllocateVariableReference(new VariableContainer { Scope = chain[i] });
                 }
 
                 var debugScope = new DebugScope(kind, name, chain[i]);
@@ -686,9 +685,9 @@ public class DebugSession : IDebugger
 
         var variables = new List<Variable>();
 
-        if (container.Environment != null)
+        if (container.Scope != null)
         {
-            foreach (var (varName, value) in container.Environment.GetAllBindings().OrderBy(kv => kv.Key))
+            foreach (var (varName, value) in container.Scope.GetAllBindings().OrderBy(kv => kv.Key))
             {
                 bool isBuiltIn = IsBuiltInBinding(value);
                 if (container.BuiltInsOnly && !isBuiltIn)
@@ -769,23 +768,23 @@ public class DebugSession : IDebugger
     {
         Trace($"Evaluate: {expression}");
 
-        Interpreter? interpreter = null;
-        StashEnv? env = null;
+        IDebugExecutor? executor = null;
+        IDebugScope? scope = null;
 
         if (frameId.HasValue)
         {
-            (interpreter, env) = ResolveContextForFrame(frameId.Value);
+            (executor, scope) = ResolveContextForFrame(frameId.Value);
         }
 
-        interpreter ??= _interpreter;
-        if (interpreter == null)
+        executor ??= _treeWalkInterpreter;
+        if (executor == null)
         {
             return "No interpreter";
         }
 
-        env ??= interpreter.Globals;
+        scope ??= executor.GlobalScope;
 
-        var (value, error) = interpreter.EvaluateString(expression, env);
+        var (value, error) = executor.EvaluateExpression(expression, scope);
         return error != null ? $"Error: {error}" : RuntimeValues.Stringify(value);
     }
 
@@ -796,7 +795,7 @@ public class DebugSession : IDebugger
     /// </summary>
     public Variable SetVariable(int variablesReference, string name, string value)
     {
-        if (_interpreter == null)
+        if (_treeWalkInterpreter == null)
         {
             throw new InvalidOperationException("No interpreter active.");
         }
@@ -812,27 +811,27 @@ public class DebugSession : IDebugger
             throw new InvalidOperationException($"Unknown variable reference: {variablesReference}");
         }
 
-        // Parse and evaluate the new value expression — find the interpreter
-        // that owns this container's environment so task-thread variables resolve correctly.
-        Interpreter? interpreter = _interpreter;
-        StashEnv? env = null;
-        if (container.Environment != null)
+        // Find which executor owns this container's scope so task-thread variables resolve correctly.
+        IDebugExecutor executor = _treeWalkInterpreter;
+        if (container.Scope != null)
         {
             foreach (var thread in _threads.Values)
             {
-                if (thread.PausedEnvironment == container.Environment
-                    || thread.Interpreter.Globals == container.Environment)
+                if (thread.Executor == null) continue;
+
+                if (thread.PausedEnvironment == container.Scope
+                    || thread.Executor.GlobalScope == container.Scope)
                 {
-                    interpreter = thread.Interpreter;
+                    executor = thread.Executor;
                     break;
                 }
 
                 bool found = false;
-                foreach (var frame in thread.Interpreter.CallStack)
+                foreach (var frame in thread.Executor.CallStack)
                 {
-                    if (frame.LocalScope == container.Environment)
+                    if (frame.LocalScope == container.Scope)
                     {
-                        interpreter = thread.Interpreter;
+                        executor = thread.Executor;
                         found = true;
                         break;
                     }
@@ -845,28 +844,31 @@ public class DebugSession : IDebugger
             }
         }
 
-        env = container.Environment ?? interpreter!.Globals;
-        var (newValue, error) = interpreter!.EvaluateString(value, env);
+        var evalScope = container.Scope ?? executor.GlobalScope;
+        var (newValue, error) = executor.EvaluateExpression(value, evalScope);
         if (error != null)
         {
             throw new InvalidOperationException($"Failed to evaluate value: {error}");
         }
 
         // Apply the new value to the appropriate container
-        if (container.Environment != null)
+        if (container.Scope != null)
         {
-            // Environment scope variable
-            if (!container.Environment.Contains(name))
+            // Need concrete Environment for mutation
+            if (container.Scope is not Stash.Interpreting.Environment envScope)
+                throw new InvalidOperationException("Cannot set variable in abstract scope.");
+
+            if (!envScope.Contains(name))
             {
                 throw new InvalidOperationException($"Variable '{name}' not found in scope.");
             }
 
-            if (container.Environment.IsConstant(name))
+            if (envScope.IsConstant(name))
             {
                 throw new InvalidOperationException($"Cannot modify constant '{name}'.");
             }
 
-            container.Environment.Assign(name, newValue);
+            envScope.Assign(name, newValue);
         }
         else if (container.Value is List<object?> list)
         {
@@ -998,7 +1000,7 @@ public class DebugSession : IDebugger
     /// <param name="environment">The active <see cref="StashEnv"/> at the pause point.</param>
     /// <param name="threadId">The ID of the thread executing this statement.</param>
     /// <exception cref="OperationCanceledException">Thrown when the session has been terminated via <see cref="Disconnect"/>.</exception>
-    public void OnBeforeExecute(SourceSpan span, StashEnv environment, int threadId)
+    public void OnBeforeExecute(SourceSpan span, IDebugScope environment, int threadId)
     {
         if (_terminated)
         {
@@ -1034,7 +1036,7 @@ public class DebugSession : IDebugger
             shouldPause = true;
             reason = PauseReason.Step;
         }
-        else if (CheckBreakpointAtSpan(span, environment, thread.Interpreter))
+        else if (CheckBreakpointAtSpan(span, environment, thread.Executor))
         {
             shouldPause = true;
             reason = PauseReason.Breakpoint;
@@ -1065,7 +1067,7 @@ public class DebugSession : IDebugger
     /// <param name="callSite">The <see cref="SourceSpan"/> of the call expression.</param>
     /// <param name="localScope">The newly created local <see cref="StashEnv"/> for the function call.</param>
     /// <param name="threadId">The ID of the thread entering the function.</param>
-    public void OnFunctionEnter(string functionName, SourceSpan callSite, StashEnv localScope, int threadId)
+    public void OnFunctionEnter(string functionName, SourceSpan callSite, IDebugScope localScope, int threadId)
     {
         // Check for function breakpoint hit — snapshot entry under lock
         FunctionBreakpointEntry? entry;
@@ -1087,11 +1089,11 @@ public class DebugSession : IDebugger
             return;
         }
 
-        // Evaluate condition if present — use the thread's own interpreter so
+        // Evaluate condition if present — use the thread's own executor so
         // conditions can see local variables from worker threads.
         if (entry.Condition != null)
         {
-            var (condValue, condError) = thread.Interpreter.EvaluateString(entry.Condition, localScope);
+            var (condValue, condError) = thread.Executor.EvaluateExpression(entry.Condition, localScope);
             if (condError != null || !RuntimeValues.IsTruthy(condValue))
             {
                 return;
@@ -1161,13 +1163,13 @@ public class DebugSession : IDebugger
     /// Called when a task.run() spawns a new child interpreter.
     /// Registers the thread for multi-threaded debugging.
     /// </summary>
-    public void OnThreadStarted(int threadId, string name, Interpreter interpreter)
+    public void OnThreadStarted(int threadId, string name, IDebugExecutor executor)
     {
         var state = new ThreadState
         {
             Id = threadId,
             Name = name,
-            Interpreter = interpreter,
+            Executor = executor,
         };
         _threads[threadId] = state;
         Trace($"Thread started: {threadId} ({name})");
@@ -1437,34 +1439,35 @@ public class DebugSession : IDebugger
     /// <summary>
     /// Resolves both the <see cref="Interpreter"/> and the active <see cref="StashEnv"/> for a given DAP frame ID.
     /// </summary>
-    private (Interpreter? Interpreter, StashEnv? Environment) ResolveContextForFrame(int frameId)
+    private (IDebugExecutor? Executor, IDebugScope? Scope) ResolveContextForFrame(int frameId)
     {
         foreach (var thread in _threads.Values)
         {
-            var interpreter = thread.Interpreter;
-            var callStack = interpreter.CallStack;
+            var executor = thread.Executor;
+            if (executor == null) continue;
+            var callStack = executor.CallStack;
 
             if (callStack.Count == 0 && frameId == 0)
             {
-                return (interpreter, thread.PausedEnvironment ?? interpreter.Globals);
+                return (executor, thread.PausedEnvironment ?? executor.GlobalScope);
             }
 
             if (callStack.Count > 0 && callStack[callStack.Count - 1].Id == frameId)
             {
-                return (interpreter, thread.PausedEnvironment ?? callStack[callStack.Count - 1].LocalScope);
+                return (executor, thread.PausedEnvironment ?? callStack[callStack.Count - 1].LocalScope);
             }
 
             for (int i = callStack.Count - 2; i >= 0; i--)
             {
                 if (callStack[i].Id == frameId)
                 {
-                    return (interpreter, callStack[i].LocalScope);
+                    return (executor, callStack[i].LocalScope);
                 }
             }
 
             if (frameId == 0 && callStack.Count > 0)
             {
-                return (interpreter, interpreter.Globals);
+                return (executor, executor.GlobalScope);
             }
         }
 
@@ -1475,17 +1478,18 @@ public class DebugSession : IDebugger
     /// Resolves the active <see cref="StashEnv"/> for a given DAP frame ID.
     /// Searches all active threads for the matching frame.
     /// </summary>
-    private StashEnv? ResolveEnvironmentForFrame(int frameId)
+    private IDebugScope? ResolveEnvironmentForFrame(int frameId)
     {
         foreach (var thread in _threads.Values)
         {
-            var interpreter = thread.Interpreter;
-            var callStack = interpreter.CallStack;
+            var executor = thread.Executor;
+            if (executor == null) continue;
+            var callStack = executor.CallStack;
 
             // Global/script scope when no functions are on the stack
             if (callStack.Count == 0 && frameId == 0)
             {
-                return thread.PausedEnvironment ?? interpreter.Globals;
+                return thread.PausedEnvironment ?? executor.GlobalScope;
             }
 
             // Top frame — use the active (innermost) paused environment
@@ -1506,7 +1510,7 @@ public class DebugSession : IDebugger
             // Synthetic script frame at the bottom
             if (frameId == 0 && callStack.Count > 0)
             {
-                return interpreter.Globals;
+                return executor.GlobalScope;
             }
         }
 
@@ -1518,7 +1522,7 @@ public class DebugSession : IDebugger
     /// Handles conditions, hit counts, and logpoints.
     /// Returns true only if execution should pause.
     /// </summary>
-    private bool CheckBreakpointAtSpan(SourceSpan span, StashEnv environment, Interpreter? interpreter)
+    private bool CheckBreakpointAtSpan(SourceSpan span, IDebugScope environment, IDebugExecutor? executor)
     {
         if (span.File == null)
         {
@@ -1547,9 +1551,9 @@ public class DebugSession : IDebugger
         }
 
         // Evaluate condition expression if present
-        if (hit.Condition != null && interpreter != null)
+        if (hit.Condition != null && executor != null)
         {
-            var (condValue, condError) = interpreter.EvaluateString(hit.Condition, environment);
+            var (condValue, condError) = executor.EvaluateExpression(hit.Condition, environment);
             if (condError != null || !RuntimeValues.IsTruthy(condValue))
             {
                 return false;
@@ -1566,7 +1570,7 @@ public class DebugSession : IDebugger
         // Logpoint: interpolate the message and send as output — do NOT pause
         if (hit.IsLogpoint)
         {
-            var msg = InterpolateLogMessage(hit.LogMessage!, environment, interpreter);
+            var msg = InterpolateLogMessage(hit.LogMessage!, environment, executor);
             SendOutput("console", msg + "\n");
             return false;
         }
@@ -1627,9 +1631,9 @@ public class DebugSession : IDebugger
     /// <summary>
     /// Replaces <c>{expression}</c> placeholders in a logpoint template with evaluated values.
     /// </summary>
-    private string InterpolateLogMessage(string template, StashEnv environment, Interpreter? interpreter)
+    private string InterpolateLogMessage(string template, IDebugScope environment, IDebugExecutor? executor)
     {
-        if (interpreter == null)
+        if (executor == null)
         {
             return template;
         }
@@ -1644,7 +1648,7 @@ public class DebugSession : IDebugger
                 if (end > i)
                 {
                     var expr = template[(i + 1)..end];
-                    var (value, error) = interpreter.EvaluateString(expr, environment);
+                    var (value, error) = executor.EvaluateExpression(expr, environment);
                     sb.Append(error != null ? $"{{error: {error}}}" : RuntimeValues.Stringify(value));
                     i = end + 1;
                     continue;
@@ -1784,12 +1788,12 @@ public class DebugSession : IDebugger
     /// </summary>
     private bool ShouldStopForStep(ThreadState thread)
     {
-        if (thread.Interpreter == null)
+        if (thread.Executor == null)
         {
             return false;
         }
 
-        int depth = thread.Interpreter.CallStack.Count;
+        int depth = thread.Executor.CallStack.Count;
         switch (thread.StepMode)
         {
             case StepMode.StepIn:

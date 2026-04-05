@@ -7,9 +7,11 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Stash.Common;
+using Stash.Debugging;
 using Stash.Interpreting;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using DebugCallFrame = Stash.Debugging.CallFrame;
 
 namespace Stash.Bytecode;
 
@@ -44,6 +46,11 @@ public sealed class VirtualMachine
     private Func<string, string?, Chunk>? _moduleLoader;
     private Dictionary<string, Dictionary<string, object?>> _moduleCache = new(StringComparer.OrdinalIgnoreCase);
     private readonly HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
+
+    // ── Debugger Integration ──
+    private IDebugger? _debugger;
+    private readonly List<DebugCallFrame> _debugCallStack = new();
+    private int _debugThreadId = 1;
 
     public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
     {
@@ -80,6 +87,30 @@ public sealed class VirtualMachine
         set => _moduleLoader = value;
     }
 
+    /// <summary>Debugger hook interface. Set before Execute to enable debugging.</summary>
+    public IDebugger? Debugger
+    {
+        get => _debugger;
+        set
+        {
+            _debugger = value;
+            _context.Debugger = value;
+        }
+    }
+
+    /// <summary>Thread ID for debug hooks. Defaults to 1 (main thread).</summary>
+    public int DebugThreadId
+    {
+        get => _debugThreadId;
+        set => _debugThreadId = value;
+    }
+
+    /// <summary>Current call stack depth (for stepping).</summary>
+    internal int FrameCount => _frameCount;
+
+    /// <summary>The debug call stack — populated only when a debugger is attached.</summary>
+    internal IReadOnlyList<DebugCallFrame> DebugCallStack => _debugCallStack;
+
     /// <summary>Execute a compiled chunk and return the result.</summary>
     public object? Execute(Chunk chunk)
     {
@@ -87,7 +118,11 @@ public sealed class VirtualMachine
         _frameCount = 0;
         _exceptionHandlers.Clear();
         _openUpvalues.Clear();
+        _debugCallStack.Clear();
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
+
+        if (_debugger is not null)
+            return RunDebug();
         return Run();
     }
 
@@ -221,12 +256,74 @@ public sealed class VirtualMachine
         }
     }
 
+    private object? RunDebug()
+    {
+        IDebugger debugger = _debugger!;
+
+        while (true)
+        {
+            try
+            {
+                return RunInner(0);
+            }
+            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
+            {
+                ExceptionHandler handler = _exceptionHandlers[^1];
+                _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
+                CloseUpvalues(handler.StackLevel);
+                _frameCount = handler.FrameIndex + 1;
+                _sp = handler.StackLevel;
+                Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
+                _frames[_frameCount - 1].IP = handler.CatchIP;
+            }
+            catch (RuntimeError ex)
+            {
+                // Uncaught error — notify debugger
+                if (debugger.ShouldBreakOnException(ex))
+                {
+                    SourceSpan? span = (_frameCount > 0) ? GetCurrentSpan(ref _frames[_frameCount - 1]) : null;
+                    if (span is not null)
+                    {
+                        IDebugScope scope = (_frameCount > 0)
+                            ? BuildFrameScope(ref _frames[_frameCount - 1])
+                            : BuildGlobalScope();
+                        debugger.OnBeforeExecute(span, scope, _debugThreadId);
+                    }
+                }
+                debugger.OnError(ex, _debugCallStack, _debugThreadId);
+                throw;
+            }
+        }
+    }
+
     private object? RunInner(int targetFrameCount = 0)
     {
+        IDebugger? debugger = _debugger;
+        int lastDebugLine = -1;
+
         while (true)
         {
             ref CallFrame frame = ref _frames[_frameCount - 1];
             byte instruction = frame.Chunk.Code[frame.IP++];
+
+            // ── Debug hook: check for breakpoints/stepping at statement boundaries ──
+            if (debugger is not null)
+            {
+                SourceSpan? span = frame.Chunk.SourceMap.GetSpan(frame.IP - 1);
+                if (span is not null)
+                {
+                    int curLine = span.StartLine;
+                    if (curLine != lastDebugLine || debugger.IsPauseRequested)
+                    {
+                        lastDebugLine = curLine;
+                        _context.CurrentSpan = span;
+                        IDebugScope scope = BuildFrameScope(ref frame);
+                        debugger.OnBeforeExecute(span, scope, _debugThreadId);
+                        // Re-acquire frame ref after debugger pause
+                        frame = ref _frames[_frameCount - 1];
+                    }
+                }
+            }
 
             switch ((OpCode)instruction)
             {
@@ -526,6 +623,8 @@ public sealed class VirtualMachine
                     frame.IP -= offset;
                     if (_ct.IsCancellationRequested)
                         throw new OperationCanceledException(_ct);
+                    if (debugger is not null && debugger.IsPauseRequested)
+                        lastDebugLine = -1; // Force debug check on next iteration
                     break;
                 }
 
@@ -536,7 +635,26 @@ public sealed class VirtualMachine
                     // Save span before potential frame array resize
                     SourceSpan? callSpan = GetCurrentSpan(ref frame);
                     object? callee = _stack[_sp - argc - 1];
+                    int prevFrameCount = _frameCount;
                     CallValue(callee, argc, callSpan);
+
+                    // Debug: track function entry for VM function calls
+                    if (debugger is not null && _frameCount > prevFrameCount)
+                    {
+                        ref CallFrame newFrame = ref _frames[_frameCount - 1];
+                        IDebugScope scope = BuildFrameScope(ref newFrame);
+                        string funcName = newFrame.FunctionName ?? "<anonymous>";
+
+                        _debugCallStack.Add(new DebugCallFrame
+                        {
+                            FunctionName = funcName,
+                            CallSite = callSpan!,
+                            LocalScope = scope,
+                        });
+
+                        if (debugger.ShouldBreakOnFunctionEntry(funcName))
+                            debugger.OnFunctionEnter(funcName, callSpan!, scope, _debugThreadId);
+                    }
                     break;
                 }
 
@@ -544,6 +662,15 @@ public sealed class VirtualMachine
                 {
                     object? result = Pop();
                     int baseSlot = _frames[_frameCount - 1].BaseSlot;
+
+                    // Debug: track function exit
+                    if (debugger is not null && _debugCallStack.Count > 0)
+                    {
+                        string funcName = _frames[_frameCount - 1].FunctionName ?? "<anonymous>";
+                        _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
+                        debugger.OnFunctionExit(funcName, _debugThreadId);
+                    }
+
                     CloseUpvalues(baseSlot);
                     _frameCount--;
                     if (_frameCount == 0)
@@ -1865,6 +1992,9 @@ public sealed class VirtualMachine
     /// </summary>
     private object? RunUntilFrame(int targetFrameCount)
     {
+        if (_debugger is not null)
+            return RunUntilFrameDebug(targetFrameCount);
+
         while (true)
         {
             try
@@ -1880,6 +2010,45 @@ public sealed class VirtualMachine
                 _sp = handler.StackLevel;
                 Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
+            }
+        }
+    }
+
+    private object? RunUntilFrameDebug(int targetFrameCount)
+    {
+        IDebugger debugger = _debugger!;
+
+        while (true)
+        {
+            try
+            {
+                return RunInner(targetFrameCount);
+            }
+            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
+            {
+                ExceptionHandler handler = _exceptionHandlers[^1];
+                _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
+                CloseUpvalues(handler.StackLevel);
+                _frameCount = handler.FrameIndex + 1;
+                _sp = handler.StackLevel;
+                Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
+                _frames[_frameCount - 1].IP = handler.CatchIP;
+            }
+            catch (RuntimeError ex)
+            {
+                if (debugger.ShouldBreakOnException(ex))
+                {
+                    SourceSpan? span = (_frameCount > 0) ? GetCurrentSpan(ref _frames[_frameCount - 1]) : null;
+                    if (span is not null)
+                    {
+                        IDebugScope scope = (_frameCount > 0)
+                            ? BuildFrameScope(ref _frames[_frameCount - 1])
+                            : BuildGlobalScope();
+                        debugger.OnBeforeExecute(span, scope, _debugThreadId);
+                    }
+                }
+                debugger.OnError(ex, _debugCallStack, _debugThreadId);
+                throw;
             }
         }
     }
@@ -1976,6 +2145,44 @@ public sealed class VirtualMachine
         {
             throw new RuntimeError($"Command execution failed: {ex.Message}", span);
         }
+    }
+
+    // ------------------------------------------------------------------
+    // Debugger scope helpers
+    // ------------------------------------------------------------------
+
+    /// <summary>
+    /// Builds an <see cref="IDebugScope"/> from a VM call frame for debugger inspection.
+    /// Creates a snapshot of locals — safe for the debugger to inspect while paused.
+    /// </summary>
+    private IDebugScope BuildFrameScope(ref CallFrame frame)
+    {
+        Chunk chunk = frame.Chunk;
+        string[]? names = chunk.LocalNames;
+        int localCount = chunk.LocalCount;
+        int baseSlot = frame.BaseSlot;
+
+        var bindings = new KeyValuePair<string, object?>[localCount];
+        for (int i = 0; i < localCount; i++)
+        {
+            string name = names is not null && i < names.Length ? names[i] : $"local_{i}";
+            object? value = (baseSlot + i < _sp) ? _stack[baseSlot + i] : null;
+            bindings[i] = new KeyValuePair<string, object?>(name, value);
+        }
+
+        return new VMDebugScope(bindings, BuildGlobalScope());
+    }
+
+    /// <summary>
+    /// Builds an <see cref="IDebugScope"/> wrapping the global variables.
+    /// </summary>
+    private IDebugScope BuildGlobalScope()
+    {
+        var bindings = new KeyValuePair<string, object?>[_globals.Count];
+        int idx = 0;
+        foreach (var kvp in _globals)
+            bindings[idx++] = kvp;
+        return new VMDebugScope(bindings, null);
     }
 
     // ------------------------------------------------------------------

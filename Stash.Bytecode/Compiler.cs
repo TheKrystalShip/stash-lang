@@ -77,6 +77,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         compiler._builder.Emit(OpCode.Null);
         compiler._builder.Emit(OpCode.Return);
         compiler._builder.LocalCount = compiler._scope.LocalCount;
+        compiler._builder.LocalNames = compiler._scope.GetLocalNames();
         return compiler._builder.Build();
     }
 
@@ -288,6 +289,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         fnCompiler._builder.Emit(OpCode.Return);
 
         fnCompiler._builder.LocalCount = fnCompiler._scope.LocalCount;
+        fnCompiler._builder.LocalNames = fnCompiler._scope.GetLocalNames();
         Chunk fnChunk = fnCompiler._builder.Build();
 
         // Add chunk to constant pool and emit OP_CLOSURE
@@ -1558,6 +1560,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         }
 
         fnCompiler._builder.LocalCount = fnCompiler._scope.LocalCount;
+        fnCompiler._builder.LocalNames = fnCompiler._scope.GetLocalNames();
         Chunk lambdaChunk = fnCompiler._builder.Build();
 
         ushort chunkIdx = _builder.AddConstant(lambdaChunk);
@@ -1685,6 +1688,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         bodyCompiler._builder.Emit(OpCode.Null);
         bodyCompiler._builder.Emit(OpCode.Return);
         bodyCompiler._builder.LocalCount = bodyCompiler._scope.LocalCount;
+        bodyCompiler._builder.LocalNames = bodyCompiler._scope.GetLocalNames();
         Chunk bodyChunk = bodyCompiler._builder.Build();
         ushort bodyIdx = _builder.AddConstant(bodyChunk);
         _builder.Emit(OpCode.Closure, bodyIdx);
@@ -1733,6 +1737,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 onRetryCompiler._builder.Emit(OpCode.Null);
                 onRetryCompiler._builder.Emit(OpCode.Return);
                 onRetryCompiler._builder.LocalCount = onRetryCompiler._scope.LocalCount;
+                onRetryCompiler._builder.LocalNames = onRetryCompiler._scope.GetLocalNames();
                 Chunk onRetryChunk = onRetryCompiler._builder.Build();
                 ushort onRetryIdx = _builder.AddConstant(onRetryChunk);
                 _builder.Emit(OpCode.Closure, onRetryIdx);

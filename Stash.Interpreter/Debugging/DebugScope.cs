@@ -1,7 +1,5 @@
 namespace Stash.Debugging;
 
-using StashEnv = Stash.Interpreting.Environment;
-
 /// <summary>
 /// Classifies the role of a scope in the debugger's scope-chain view.
 /// </summary>
@@ -33,14 +31,14 @@ public enum ScopeKind
 /// <para>
 /// A list of <see cref="DebugScope"/> objects is produced for each <see cref="CallFrame"/>
 /// by walking the frame's <see cref="CallFrame.LocalScope"/> chain and classifying each
-/// <see cref="Stash.Interpreting.Environment">Environment</see> tier as
+/// <see cref="IDebugScope"/> tier as
 /// <see cref="ScopeKind.Local"/>, <see cref="ScopeKind.Closure"/>, or
 /// <see cref="ScopeKind.Global"/>.
 /// </para>
 /// <para>
 /// This corresponds to the DAP <c>Scope</c> type returned in <c>scopes</c> responses.
 /// Each scope's variables are enumerated via
-/// <see cref="Stash.Interpreting.Environment.GetAllBindings"/>.
+/// <see cref="IDebugScope.GetAllBindings"/>.
 /// </para>
 /// </remarks>
 public class DebugScope
@@ -57,19 +55,19 @@ public class DebugScope
     public string Name { get; }
 
     /// <summary>
-    /// Gets the <see cref="Stash.Interpreting.Environment">Environment</see> that backs
+    /// Gets the <see cref="IDebugScope"/> that backs
     /// this scope and holds its variable bindings.
     /// </summary>
-    public StashEnv Environment { get; }
+    public IDebugScope Scope { get; }
 
     /// <summary>
     /// Gets the number of variables currently bound in this scope.
     /// </summary>
     /// <remarks>
-    /// Computed by enumerating <see cref="Stash.Interpreting.Environment.GetAllBindings"/>
-    /// on demand; the value reflects the live state of the environment.
+    /// Computed by enumerating <see cref="IDebugScope.GetAllBindings"/>
+    /// on demand; the value reflects the live state of the scope.
     /// </remarks>
-    public int VariableCount => System.Linq.Enumerable.Count(Environment.GetAllBindings());
+    public int VariableCount => System.Linq.Enumerable.Count(Scope.GetAllBindings());
 
     /// <summary>
     /// Initialises a new <see cref="DebugScope"/> with the specified classification,
@@ -77,14 +75,13 @@ public class DebugScope
     /// </summary>
     /// <param name="kind">The <see cref="ScopeKind"/> that classifies this scope.</param>
     /// <param name="name">The display name shown in the debugger Variables pane.</param>
-    /// <param name="environment">
-    /// The <see cref="Stash.Interpreting.Environment">Environment</see> whose bindings
-    /// this scope exposes.
+    /// <param name="scope">
+    /// The <see cref="IDebugScope"/> whose bindings this scope exposes.
     /// </param>
-    public DebugScope(ScopeKind kind, string name, StashEnv environment)
+    public DebugScope(ScopeKind kind, string name, IDebugScope scope)
     {
         Kind = kind;
         Name = name;
-        Environment = environment;
+        Scope = scope;
     }
 }

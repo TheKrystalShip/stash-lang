@@ -35,7 +35,7 @@ internal sealed class VMContext : IInterpreterContext
     public TextWriter ErrorOutput { get; set; } = Console.Error;
     public TextReader Input { get; set; } = Console.In;
     public CancellationToken CancellationToken => _ct;
-    public object? Debugger => null;
+    public object? Debugger { get; set; }
 
     // --- Elevation Context ---
     public bool ElevationActive { get; set; }
@@ -88,6 +88,7 @@ internal sealed class VMContext : IInterpreterContext
             ScriptArgs = ScriptArgs,
             ElevationActive = ElevationActive,
             ElevationCommand = ElevationCommand,
+            Debugger = Debugger,
         };
     }
 }

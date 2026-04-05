@@ -304,7 +304,7 @@ public class DapHandlerTests
     {
         var session = new DebugSession();
         // Need to set interpreter for the SetVariable path
-        var field = typeof(DebugSession).GetField("_interpreter",
+        var field = typeof(DebugSession).GetField("_treeWalkInterpreter",
             System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance)!;
         field.SetValue(session, new Stash.Interpreting.Interpreter());
 

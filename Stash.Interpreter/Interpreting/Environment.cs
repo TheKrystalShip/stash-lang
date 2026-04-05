@@ -2,6 +2,7 @@ namespace Stash.Interpreting;
 
 using System.Collections.Concurrent;
 using System.Collections.Generic;
+using Stash.Debugging;
 using Stash.Runtime;
 
 /// <summary>
@@ -9,7 +10,7 @@ using Stash.Runtime;
 /// reference to an enclosing (parent) environment, forming a scope chain.
 /// Global scopes use dictionary storage; local scopes use slot-based arrays for performance.
 /// </summary>
-public class Environment
+public class Environment : IDebugScope
 {
     /// <summary>Dictionary storage for the global scope. Null for local scopes. Uses ConcurrentDictionary for thread safety when globals are shared across parallel tasks.</summary>
     private readonly ConcurrentDictionary<string, object?>? _values;
@@ -29,6 +30,8 @@ public class Environment
     /// The enclosing (parent) scope, or <c>null</c> for the global scope.
     /// </summary>
     public Environment? Enclosing { get; }
+
+    IDebugScope? IDebugScope.EnclosingScope => Enclosing;
 
     /// <summary>
     /// Creates a new global environment (no enclosing scope). Uses dictionary storage.

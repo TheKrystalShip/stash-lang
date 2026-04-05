@@ -39,6 +39,12 @@ public class Chunk
     /// <summary>Whether the last parameter is a rest parameter (variadic).</summary>
     public bool HasRestParam { get; }
 
+    /// <summary>
+    /// Local variable names for debugger inspection. Index = slot number.
+    /// Null when debugging info is not needed (e.g., release builds).
+    /// </summary>
+    public string[]? LocalNames { get; }
+
     public Chunk(
         byte[] code,
         object?[] constants,
@@ -49,7 +55,8 @@ public class Chunk
         UpvalueDescriptor[] upvalues,
         string? name,
         bool isAsync,
-        bool hasRestParam)
+        bool hasRestParam,
+        string[]? localNames = null)
     {
         Code = code;
         Constants = constants;
@@ -61,5 +68,6 @@ public class Chunk
         Name = name;
         IsAsync = isAsync;
         HasRestParam = hasRestParam;
+        LocalNames = localNames;
     }
 }

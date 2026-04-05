@@ -22,6 +22,7 @@ public class ChunkBuilder
     public int LocalCount { get; set; }
     public bool IsAsync { get; set; }
     public bool HasRestParam { get; set; }
+    public string[]? LocalNames { get; set; }
 
     /// <summary>Current bytecode offset (next byte to be written).</summary>
     public int CurrentOffset => _code.Count;
@@ -188,7 +189,8 @@ public class ChunkBuilder
             upvalues: _upvalues.ToArray(),
             name: Name,
             isAsync: IsAsync,
-            hasRestParam: HasRestParam
+            hasRestParam: HasRestParam,
+            localNames: LocalNames
         );
     }
 }

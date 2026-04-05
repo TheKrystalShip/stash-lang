@@ -60,7 +60,7 @@ using Stash.Stdlib;
 /// string. This matches the Stash spec's type coercion rules for the <c>+</c> operator.
 /// </para>
 /// </remarks>
-public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>, IInterpreterContext, ITemplateEvaluator
+public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>, IInterpreterContext, ITemplateEvaluator, IDebugExecutor
 {
     /// <summary>The global scope environment containing built-in functions and top-level declarations.</summary>
     private readonly Environment _globals;
@@ -657,6 +657,22 @@ public partial class Interpreter : IExprVisitor<object?>, IStmtVisitor<object?>,
         {
             return (null, e.Message);
         }
+    }
+
+    // ── IDebugExecutor ──────────────────────────────────────────────────────
+
+    IReadOnlyList<Stash.Debugging.CallFrame> IDebugExecutor.CallStack => CallStack;
+    IDebugScope IDebugExecutor.GlobalScope => Globals;
+
+    (object? Value, string? Error) IDebugExecutor.EvaluateExpression(string expression, IDebugScope scope)
+    {
+        if (scope is Environment env)
+            return EvaluateString(expression, env);
+        // Fallback: build Environment from IDebugScope bindings
+        var tempEnv = new Environment(Globals, 16);
+        foreach (var (name, value) in scope.GetAllBindings())
+            tempEnv.Define(name, value);
+        return EvaluateString(expression, tempEnv);
     }
 
     /// <summary>Registers all built-in function namespaces into the global environment, respecting capability flags.</summary>

@@ -2,7 +2,6 @@ namespace Stash.Debugging;
 
 using System.Threading;
 using Stash.Common;
-using StashEnv = Stash.Interpreting.Environment;
 
 /// <summary>
 /// Represents a single frame in the call stack during debugging.
@@ -31,7 +30,7 @@ public class CallFrame
     /// <summary>
     /// Gets the local scope for this frame.
     /// </summary>
-    public StashEnv LocalScope { get; init; } = null!;
+    public IDebugScope LocalScope { get; init; } = null!;
 
     /// <summary>
     /// Gets the source location where the function is defined (its declaration site).

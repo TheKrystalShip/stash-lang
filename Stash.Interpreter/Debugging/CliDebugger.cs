@@ -4,8 +4,8 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Common;
-using StashEnv = Stash.Interpreting.Environment;
 using Stash.Interpreting;
+using StashEnvironment = Stash.Interpreting.Environment;
 using Stash.Runtime;
 using Stash.Interpreting.Types;
 using Stash.Runtime.Types;
@@ -83,10 +83,10 @@ public class CliDebugger : IDebugger
     /// </summary>
     private SourceSpan? _currentSpan;
     /// <summary>
-    /// The <see cref="Stash.Interpreting.Environment">Environment</see> (scope chain)
+    /// The <see cref="IDebugScope"/> (scope chain)
     /// active at the most recently executed statement.
     /// </summary>
-    private StashEnv? _currentEnv;
+    private IDebugScope? _currentEnv;
     /// <summary>
     /// The live call stack, kept current by the <see cref="Interpreter"/> via
     /// <see cref="SetCallStack"/>.
@@ -115,7 +115,7 @@ public class CliDebugger : IDebugger
     }
 
     /// <inheritdoc />
-    public void OnBeforeExecute(SourceSpan span, StashEnv env, int threadId)
+    public void OnBeforeExecute(SourceSpan span, IDebugScope env, int threadId)
     {
         _currentSpan = span;
         _currentEnv = env;
@@ -130,9 +130,10 @@ public class CliDebugger : IDebugger
                 bp.IncrementHitCount();
 
                 // Check condition if present
-                if (bp.Condition is not null && _interpreter is not null)
+                if (bp.Condition is not null && _interpreter is not null
+                    && _currentEnv is StashEnvironment condEnv)
                 {
-                    var (value, error) = _interpreter.EvaluateString(bp.Condition, env);
+                    var (value, error) = _interpreter.EvaluateString(bp.Condition, condEnv);
                     if (error is not null || !RuntimeValues.IsTruthy(value))
                     {
                         continue;
@@ -186,7 +187,7 @@ public class CliDebugger : IDebugger
     }
 
     /// <inheritdoc />
-    public void OnFunctionEnter(string name, SourceSpan callSite, StashEnv env, int threadId)
+    public void OnFunctionEnter(string name, SourceSpan callSite, IDebugScope env, int threadId)
     {
         _currentDepth++;
     }
@@ -553,7 +554,9 @@ public class CliDebugger : IDebugger
             return;
         }
 
-        if (_currentEnv.TryGet(varName, out object? value) || TryGetFromChain(varName, out value))
+        var currentEnv = _currentEnv as StashEnvironment;
+        object? value = null;
+        if (currentEnv != null && (currentEnv.TryGet(varName, out value) || TryGetFromChain(varName, out value)))
         {
             Console.WriteLine($"  {varName} = {FormatValue(value)}");
         }
@@ -562,7 +565,12 @@ public class CliDebugger : IDebugger
             // Fall back to walking the scope chain via Get
             try
             {
-                value = _currentEnv.Get(varName);
+                if (currentEnv == null)
+                {
+                    Console.WriteLine($"  Undefined variable '{varName}'.");
+                    return;
+                }
+                value = currentEnv.Get(varName);
                 Console.WriteLine($"  {varName} = {FormatValue(value)}");
             }
             catch (RuntimeError)
@@ -589,7 +597,7 @@ public class CliDebugger : IDebugger
     {
         foreach (var scope in _currentEnv!.GetScopeChain())
         {
-            if (scope.TryGet(name, out value))
+            if (scope is StashEnvironment env && env.TryGet(name, out value))
             {
                 return true;
             }
@@ -626,7 +634,12 @@ public class CliDebugger : IDebugger
         }
 
         string expression = fullInput.Substring(spaceIdx + 1).Trim();
-        var (result, error) = _interpreter.EvaluateString(expression, _currentEnv);
+        if (_currentEnv is not StashEnvironment evalEnv)
+        {
+            Console.WriteLine("  Expression evaluation unavailable in this scope.");
+            return;
+        }
+        var (result, error) = _interpreter.EvaluateString(expression, evalEnv);
 
         if (error is not null)
         {
@@ -658,12 +671,12 @@ public class CliDebugger : IDebugger
         int depth = 0;
         foreach (var scope in _currentEnv.GetScopeChain())
         {
-            string kind = scope.Enclosing is null ? "Global" : (depth == 0 ? "Local" : "Closure");
+            string kind = scope.EnclosingScope is null ? "Global" : (depth == 0 ? "Local" : "Closure");
             var bindings = scope.GetAllBindings().ToList();
             Console.WriteLine($"  [{kind}] ({bindings.Count} variables)");
             foreach (var (name, value) in bindings)
             {
-                string constMark = scope.IsConstant(name) ? " (const)" : "";
+                string constMark = (scope is StashEnvironment envScope && envScope.IsConstant(name)) ? " (const)" : "";
                 Console.WriteLine($"    {name}{constMark} = {FormatValue(value)}");
             }
             depth++;
@@ -695,7 +708,7 @@ public class CliDebugger : IDebugger
 
         foreach (var (name, value) in bindings)
         {
-            string constMark = _currentEnv.IsConstant(name) ? " (const)" : "";
+            string constMark = (_currentEnv is StashEnvironment envScope && envScope.IsConstant(name)) ? " (const)" : "";
             Console.WriteLine($"  {name}{constMark} = {FormatValue(value)}");
         }
     }

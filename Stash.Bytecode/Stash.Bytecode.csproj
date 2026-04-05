@@ -12,6 +12,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Stash.Tests" />
+    <InternalsVisibleTo Include="StashDap" />
   </ItemGroup>
 
   <ItemGroup>

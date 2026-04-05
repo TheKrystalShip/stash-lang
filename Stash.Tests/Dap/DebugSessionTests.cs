@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Reflection;
 using Stash.Dap;
 using Stash.Common;
+using Stash.Debugging;
 using Stash.Interpreting;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -30,16 +31,16 @@ public class DebugSessionTests
         return (Variable)method.Invoke(session, new object?[] { name, value })!;
     }
 
-    private static string InvokeInterpolateLogMessage(DebugSession session, string template, Environment env, Interpreter? interpreter = null)
+    private static string InvokeInterpolateLogMessage(DebugSession session, string template, IDebugScope env, IDebugExecutor? executor = null)
     {
         var method = typeof(DebugSession).GetMethod("InterpolateLogMessage",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-        return (string)method.Invoke(session, new object?[] { template, env, interpreter })!;
+        return (string)method.Invoke(session, new object?[] { template, env, executor })!;
     }
 
     private static void SetInterpreter(DebugSession session, Interpreter interpreter)
     {
-        var field = typeof(DebugSession).GetField("_interpreter",
+        var field = typeof(DebugSession).GetField("_treeWalkInterpreter",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
         field.SetValue(session, interpreter);
     }

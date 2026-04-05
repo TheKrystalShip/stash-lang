@@ -111,4 +111,13 @@ internal sealed class CompilerScope
     /// <summary>Returns the <see cref="Local"/> record at the given stack slot index.</summary>
     /// <param name="slot">The stack slot index.</param>
     public Local GetLocal(int slot) => _locals[slot];
+
+    /// <summary>Returns the names of all currently tracked locals, indexed by slot.</summary>
+    public string[] GetLocalNames()
+    {
+        var names = new string[_locals.Count];
+        for (int i = 0; i < _locals.Count; i++)
+            names[i] = _locals[i].Name;
+        return names;
+    }
 }
