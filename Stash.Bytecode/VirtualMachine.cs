@@ -29,6 +29,9 @@ public sealed class VirtualMachine
     /// </summary>
     public static readonly object NotProvided = new();
 
+    /// <summary>Sentinel value pushed by OP_ArgMark to delimit spread call arguments.</summary>
+    private static readonly object _argSentinel = new object();
+
     private object?[] _stack;
     private int _sp; // stack pointer: index of next free slot
 
@@ -133,6 +136,20 @@ public sealed class VirtualMachine
     {
         get => _context.ScriptArgs;
         set => _context.ScriptArgs = value;
+    }
+
+    /// <summary>TAP test harness for test-mode execution.</summary>
+    public Stash.Runtime.ITestHarness? TestHarness
+    {
+        get => _context.TestHarness;
+        set => _context.TestHarness = value;
+    }
+
+    /// <summary>Filter patterns for selective test execution.</summary>
+    public string[]? TestFilter
+    {
+        get => _context.TestFilter;
+        set => _context.TestFilter = value;
     }
 
     /// <summary>Current call stack depth (for stepping).</summary>
@@ -337,6 +354,7 @@ public sealed class VirtualMachine
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
+                while (_debugCallStack.Count > handler.FrameIndex) _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
                 _sp = handler.StackLevel;
                 Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
@@ -364,7 +382,12 @@ public sealed class VirtualMachine
     private object? RunInner(int targetFrameCount = 0)
     {
         IDebugger? debugger = _debugger;
-        int lastDebugLine = -1;
+        // Per-frame last-debug-line tracking prevents re-triggering a breakpoint
+        // at line N in a caller frame after returning from a callee that also ended
+        // at line N (or any different line), which would otherwise happen because the
+        // single lastDebugLine variable crosses frame boundaries.
+        int[] lastDebugLinePerFrame = new int[DefaultFrameDepth];
+        Array.Fill(lastDebugLinePerFrame, -1);
 
         while (true)
         {
@@ -378,9 +401,12 @@ public sealed class VirtualMachine
                 if (span is not null)
                 {
                     int curLine = span.StartLine;
-                    if (curLine != lastDebugLine || debugger.IsPauseRequested)
+                    int frameIdx = _frameCount - 1;
+                    if (frameIdx >= lastDebugLinePerFrame.Length)
+                        Array.Resize(ref lastDebugLinePerFrame, _frames.Length);
+                    if (curLine != lastDebugLinePerFrame[frameIdx] || debugger.IsPauseRequested)
                     {
-                        lastDebugLine = curLine;
+                        lastDebugLinePerFrame[frameIdx] = curLine;
                         _context.CurrentSpan = span;
                         IDebugScope scope = BuildFrameScope(ref frame);
                         debugger.OnBeforeExecute(span, scope, _debugThreadId);
@@ -691,7 +717,7 @@ public sealed class VirtualMachine
                     if (StepLimit > 0 && ++StepCount >= StepLimit)
                         throw new Stash.Runtime.StepLimitExceededException(StepLimit);
                     if (debugger is not null && debugger.IsPauseRequested)
-                        lastDebugLine = -1; // Force debug check on next iteration
+                        lastDebugLinePerFrame[_frameCount - 1] = -1; // Force debug check on next iteration
                     break;
                 }
 
@@ -709,6 +735,64 @@ public sealed class VirtualMachine
                         throw new Stash.Runtime.StepLimitExceededException(StepLimit);
 
                     // Debug: track function entry for VM function calls
+                    if (debugger is not null && _frameCount > prevFrameCount)
+                    {
+                        ref CallFrame newFrame = ref _frames[_frameCount - 1];
+                        IDebugScope scope = BuildFrameScope(ref newFrame);
+                        string funcName = newFrame.FunctionName ?? "<anonymous>";
+
+                        _debugCallStack.Add(new DebugCallFrame
+                        {
+                            FunctionName = funcName,
+                            CallSite = callSpan!,
+                            LocalScope = scope,
+                        });
+
+                        if (debugger.ShouldBreakOnFunctionEntry(funcName))
+                            debugger.OnFunctionEnter(funcName, callSpan!, scope, _debugThreadId);
+                    }
+                    break;
+                }
+
+                case OpCode.ArgMark:
+                {
+                    Push(_argSentinel);
+                    break;
+                }
+
+                case OpCode.CallSpread:
+                {
+                    // Scan backward from stack top to find ArgSentinel
+                    int argc = 0;
+                    int sentinelIdx = -1;
+                    for (int i = _sp - 1; i >= 0; i--)
+                    {
+                        if (ReferenceEquals(_stack[i], _argSentinel))
+                        {
+                            sentinelIdx = i;
+                            break;
+                        }
+                        argc++;
+                    }
+
+                    if (sentinelIdx < 0)
+                        throw new RuntimeError("Internal error: ArgMark sentinel not found.", GetCurrentSpan(ref frame));
+
+                    // Callee is right below the sentinel
+                    object? callee = _stack[sentinelIdx - 1];
+                    SourceSpan? callSpan = GetCurrentSpan(ref frame);
+
+                    // Remove sentinel by shifting args down by 1
+                    Array.Copy(_stack, sentinelIdx + 1, _stack, sentinelIdx, argc);
+                    _sp--;
+
+                    int prevFrameCount = _frameCount;
+                    CallValue(callee, argc, callSpan);
+
+                    if (StepLimit > 0 && ++StepCount >= StepLimit)
+                        throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+
+                    // Debug: track function entry (same as OP_CALL)
                     if (debugger is not null && _frameCount > prevFrameCount)
                     {
                         ref CallFrame newFrame = ref _frames[_frameCount - 1];
@@ -2100,6 +2184,7 @@ public sealed class VirtualMachine
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
+                while (_debugCallStack.Count > handler.FrameIndex) _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
                 _sp = handler.StackLevel;
                 Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
@@ -2223,36 +2308,47 @@ public sealed class VirtualMachine
 
     /// <summary>
     /// Builds an <see cref="IDebugScope"/> from a VM call frame for debugger inspection.
-    /// Creates a snapshot of locals — safe for the debugger to inspect while paused.
+    /// Creates a live-stack scope — reads and writes go directly to the VM's value stack.
     /// </summary>
     private IDebugScope BuildFrameScope(ref CallFrame frame)
     {
-        Chunk chunk = frame.Chunk;
-        string[]? names = chunk.LocalNames;
-        int localCount = chunk.LocalCount;
-        int baseSlot = frame.BaseSlot;
+        // At the top-level (no function calls on the debug call stack), top-level
+        // variables are accessed via LoadGlobal/StoreGlobal and live in _globals.
+        // The local stack slots are only set at declaration time and go stale
+        // immediately after the first assignment through StoreGlobal.  Returning the
+        // global scope directly gives the debugger accurate, up-to-date values.
+        if (_debugCallStack.Count == 0)
+            return BuildGlobalScope();
 
-        var bindings = new KeyValuePair<string, object?>[localCount];
-        for (int i = 0; i < localCount; i++)
+        Chunk chunk = frame.Chunk;
+        IDebugScope enclosing = BuildGlobalScope();
+
+        // If present, insert a closure scope between local and global
+        if (frame.Upvalues is not null && frame.Upvalues.Length > 0)
         {
-            string name = names is not null && i < names.Length ? names[i] : $"local_{i}";
-            object? value = (baseSlot + i < _sp) ? _stack[baseSlot + i] : null;
-            bindings[i] = new KeyValuePair<string, object?>(name, value);
+            string[]? upvalueNames = chunk.UpvalueNames;
+            var closureBindings = new KeyValuePair<string, object?>[frame.Upvalues.Length];
+            for (int i = 0; i < frame.Upvalues.Length; i++)
+            {
+                string name = upvalueNames is not null && i < upvalueNames.Length
+                    ? upvalueNames[i] : $"upvalue_{i}";
+                object? value = frame.Upvalues[i].Value;
+                closureBindings[i] = new KeyValuePair<string, object?>(name, value);
+            }
+            enclosing = new VMDebugScope(closureBindings, enclosing);
         }
 
-        return new VMDebugScope(bindings, BuildGlobalScope());
+        return new VMDebugScope(
+            _stack, frame.BaseSlot, chunk.LocalCount,
+            chunk.LocalNames, chunk.LocalIsConst, enclosing);
     }
 
     /// <summary>
     /// Builds an <see cref="IDebugScope"/> wrapping the global variables.
     /// </summary>
-    private IDebugScope BuildGlobalScope()
+    internal IDebugScope BuildGlobalScope()
     {
-        var bindings = new KeyValuePair<string, object?>[_globals.Count];
-        int idx = 0;
-        foreach (var kvp in _globals)
-            bindings[idx++] = kvp;
-        return new VMDebugScope(bindings, null);
+        return new VMDebugScope(_globals, null);
     }
 
     // ------------------------------------------------------------------
@@ -2306,6 +2402,15 @@ public sealed class VirtualMachine
             moduleVM._context.Output = _context.Output;
             moduleVM._context.ErrorOutput = _context.ErrorOutput;
             moduleVM._context.Input = _context.Input;
+            moduleVM.Debugger = _debugger;
+            moduleVM._debugThreadId = _debugThreadId;
+            moduleVM.EmbeddedMode = EmbeddedMode;
+            moduleVM.ScriptArgs = ScriptArgs;
+            moduleVM.TestHarness = TestHarness;
+            moduleVM.TestFilter = TestFilter;
+
+            // Notify debugger of newly loaded source
+            _debugger?.OnSourceLoaded(resolvedPath);
 
             moduleVM.Execute(moduleChunk);
 

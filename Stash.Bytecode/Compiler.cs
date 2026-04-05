@@ -52,6 +52,9 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
     private readonly Stack<LoopContext> _loops = new();
 
+    /// <summary>Names of captured upvalues, in capture order, for debugger closure scope display.</summary>
+    private readonly List<string> _upvalueNames = new();
+
     // ---- Construction ----
 
     private Compiler(Compiler? enclosing, string? name)
@@ -78,6 +81,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         compiler._builder.Emit(OpCode.Return);
         compiler._builder.LocalCount = compiler._scope.LocalCount;
         compiler._builder.LocalNames = compiler._scope.GetLocalNames();
+        compiler._builder.LocalIsConst = compiler._scope.GetLocalIsConst();
         return compiler._builder.Build();
     }
 
@@ -92,6 +96,7 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         compiler._builder.Emit(OpCode.Return);
         compiler._builder.LocalCount = compiler._scope.LocalCount;
         compiler._builder.LocalNames = compiler._scope.GetLocalNames();
+        compiler._builder.LocalIsConst = compiler._scope.GetLocalIsConst();
         return compiler._builder.Build();
     }
 
@@ -148,14 +153,20 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         if (localSlot >= 0)
         {
             // Captured directly from the enclosing function's locals
-            return _builder.AddUpvalue((byte)localSlot, isLocal: true);
+            byte idx = _builder.AddUpvalue((byte)localSlot, isLocal: true);
+            if (idx == _upvalueNames.Count)
+                _upvalueNames.Add(name);
+            return idx;
         }
 
         if (distance > 1 && _enclosing._enclosing != null)
         {
             // Transitively captured through the enclosing function's own upvalue chain
             byte enclosingUpvalue = _enclosing.ResolveUpvalue(name, distance - 1);
-            return _builder.AddUpvalue(enclosingUpvalue, isLocal: false);
+            byte idx = _builder.AddUpvalue(enclosingUpvalue, isLocal: false);
+            if (idx == _upvalueNames.Count)
+                _upvalueNames.Add(name);
+            return idx;
         }
 
         return 0;
@@ -304,6 +315,8 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         fnCompiler._builder.LocalCount = fnCompiler._scope.LocalCount;
         fnCompiler._builder.LocalNames = fnCompiler._scope.GetLocalNames();
+        fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetLocalIsConst();
+        fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames.Count > 0 ? fnCompiler._upvalueNames.ToArray() : null;
         Chunk fnChunk = fnCompiler._builder.Build();
 
         // Add chunk to constant pool and emit OP_CLOSURE
@@ -1234,9 +1247,29 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
             int nullJump = _builder.EmitJump(OpCode.JumpTrue);
 
             // Callee is not null — compile and execute call
+            bool hasSpreadOpt = false;
             foreach (Expr arg in expr.Arguments)
-                CompileExpr(arg);
-            _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
+            {
+                if (arg is SpreadExpr)
+                {
+                    hasSpreadOpt = true;
+                    break;
+                }
+            }
+
+            if (hasSpreadOpt)
+            {
+                _builder.Emit(OpCode.ArgMark);
+                foreach (Expr arg in expr.Arguments)
+                    CompileExpr(arg);
+                _builder.Emit(OpCode.CallSpread);
+            }
+            else
+            {
+                foreach (Expr arg in expr.Arguments)
+                    CompileExpr(arg);
+                _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
+            }
             int endJump = _builder.EmitJump(OpCode.Jump);
 
             // Callee was null — pop callee, push null as result
@@ -1249,22 +1282,29 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         }
 
         // Non-optional: compile args, emit call
-        int spreadCount = 0;
+        bool hasSpread = false;
         foreach (Expr arg in expr.Arguments)
         {
-            if (arg is SpreadExpr spread)
+            if (arg is SpreadExpr)
             {
-                // Compile the spread expression — defer full spread support to Phase 5
-                CompileExpr(spread.Expression);
-                spreadCount++;
-            }
-            else
-            {
-                CompileExpr(arg);
+                hasSpread = true;
+                break;
             }
         }
 
-        _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
+        if (hasSpread)
+        {
+            _builder.Emit(OpCode.ArgMark);
+            foreach (Expr arg in expr.Arguments)
+                CompileExpr(arg);
+            _builder.Emit(OpCode.CallSpread);
+        }
+        else
+        {
+            foreach (Expr arg in expr.Arguments)
+                CompileExpr(arg);
+            _builder.Emit(OpCode.Call, (byte)expr.Arguments.Count);
+        }
         return null;
     }
 
@@ -1612,6 +1652,8 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 
         fnCompiler._builder.LocalCount = fnCompiler._scope.LocalCount;
         fnCompiler._builder.LocalNames = fnCompiler._scope.GetLocalNames();
+        fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetLocalIsConst();
+        fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames.Count > 0 ? fnCompiler._upvalueNames.ToArray() : null;
         Chunk lambdaChunk = fnCompiler._builder.Build();
 
         ushort chunkIdx = _builder.AddConstant(lambdaChunk);
@@ -1740,6 +1782,8 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
         bodyCompiler._builder.Emit(OpCode.Return);
         bodyCompiler._builder.LocalCount = bodyCompiler._scope.LocalCount;
         bodyCompiler._builder.LocalNames = bodyCompiler._scope.GetLocalNames();
+        bodyCompiler._builder.LocalIsConst = bodyCompiler._scope.GetLocalIsConst();
+        bodyCompiler._builder.UpvalueNames = bodyCompiler._upvalueNames.Count > 0 ? bodyCompiler._upvalueNames.ToArray() : null;
         Chunk bodyChunk = bodyCompiler._builder.Build();
         ushort bodyIdx = _builder.AddConstant(bodyChunk);
         _builder.Emit(OpCode.Closure, bodyIdx);
@@ -1789,6 +1833,8 @@ public sealed class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
                 onRetryCompiler._builder.Emit(OpCode.Return);
                 onRetryCompiler._builder.LocalCount = onRetryCompiler._scope.LocalCount;
                 onRetryCompiler._builder.LocalNames = onRetryCompiler._scope.GetLocalNames();
+                onRetryCompiler._builder.LocalIsConst = onRetryCompiler._scope.GetLocalIsConst();
+                onRetryCompiler._builder.UpvalueNames = onRetryCompiler._upvalueNames.Count > 0 ? onRetryCompiler._upvalueNames.ToArray() : null;
                 Chunk onRetryChunk = onRetryCompiler._builder.Build();
                 ushort onRetryIdx = _builder.AddConstant(onRetryChunk);
                 _builder.Emit(OpCode.Closure, onRetryIdx);

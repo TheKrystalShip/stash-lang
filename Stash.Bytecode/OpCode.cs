@@ -249,6 +249,10 @@ public enum OpCode : byte
     Iterate,        // 77
     /// <summary>Check if value is in collection (containment check).</summary>
     In,             // 78
+    /// <summary>Push argument sentinel marker for spread calls.</summary>
+    ArgMark,        // 79
+    /// <summary>Call function with spread args — scans for ArgMark sentinel.</summary>
+    CallSpread,     // 80
 }
 
 /// <summary>
@@ -307,6 +311,8 @@ public static class OpCodeInfo
         OpCode.ElevateEnd    => 0,
         OpCode.Iterator      => 0,
         OpCode.In            => 0,
+        OpCode.ArgMark      => 0,
+        OpCode.CallSpread   => 0,
 
         // 1-byte (u8) operands
         OpCode.LoadLocal     => 1,

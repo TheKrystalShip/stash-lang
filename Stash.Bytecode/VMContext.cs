@@ -96,6 +96,9 @@ internal sealed class VMContext : IInterpreterContext
             ElevationActive = ElevationActive,
             ElevationCommand = ElevationCommand,
             Debugger = Debugger,
+            EmbeddedMode = EmbeddedMode,
+            TestHarness = TestHarness,
+            TestFilter = TestFilter,
         };
     }
 }

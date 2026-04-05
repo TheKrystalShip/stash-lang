@@ -3142,6 +3142,107 @@ public class VirtualMachineTests
         Assert.Throws<RuntimeError>(() => Execute(source));
     }
 
+    // =========================================================================
+    // 34. Spread in Function Call Args
+    // =========================================================================
+
+    [Fact]
+    public void SpreadCall_SimpleArray_PassesExpandedArgs()
+    {
+        object? result = Execute("""
+            let add = null;
+            add = (a, b) => a + b;
+            let args = null;
+            args = [1, 2];
+            return add(...args);
+            """);
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void SpreadCall_MixedArgs_CorrectOrder()
+    {
+        // Verify order-sensitivity: a*1000 + b*100 + c*10 + d = 1234 only if a=1,b=2,c=3,d=4
+        object? result = Execute("""
+            let f = null;
+            f = (a, b, c, d) => a * 1000 + b * 100 + c * 10 + d;
+            let mid = null;
+            mid = [2, 3];
+            return f(1, ...mid, 4);
+            """);
+        Assert.Equal(1234L, result);
+    }
+
+    [Fact]
+    public void SpreadCall_EmptyArray_PassesNoExtraArgs()
+    {
+        object? result = Execute("""
+            let f = null;
+            f = (a) => a;
+            let empty = null;
+            empty = [];
+            return f(...empty, 42);
+            """);
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void SpreadCall_MultipleSpread_CombinesAll()
+    {
+        object? result = Execute("""
+            let f = null;
+            f = (a, b, c, d) => a + b + c + d;
+            let x = null;
+            x = [1, 2];
+            let y = null;
+            y = [3, 4];
+            return f(...x, ...y);
+            """);
+        Assert.Equal(10L, result);
+    }
+
+    [Fact]
+    public void SpreadCall_WithRestParam_CollectsCorrectly()
+    {
+        // f(...[10, 20, 30]) -> first=10, rest=[20,30]; verify first is consumed and rest has correct items
+        object? result = Execute("""
+            let f = null;
+            f = (first, ...rest) => rest[0] + rest[1];
+            let args = null;
+            args = [10, 20, 30];
+            return f(...args);
+            """);
+        Assert.Equal(50L, result);
+    }
+
+    [Fact]
+    public void SpreadCall_NestedCalls_WorkCorrectly()
+    {
+        // mul(3, 4) = 12, add(12, 1) = 13
+        object? result = Execute("""
+            let add = null;
+            add = (a, b) => a + b;
+            let mul = null;
+            mul = (a, b) => a * b;
+            let args = null;
+            args = [3, 4];
+            return add(mul(...args), 1);
+            """);
+        Assert.Equal(13L, result);
+    }
+
+    [Fact]
+    public void SpreadCall_OptionalChain_NullCallee_ReturnsNull()
+    {
+        object? result = Execute("""
+            let f = null;
+            let args = null;
+            args = [1, 2];
+            return f?.(...args);
+            """);
+        Assert.Null(result);
+    }
+
     /// <summary>Test helper: an IStashCallable wrapping a delegate.</summary>
     private class TestCallable : IStashCallable
     {

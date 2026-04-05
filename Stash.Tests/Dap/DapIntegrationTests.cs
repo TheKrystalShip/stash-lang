@@ -506,9 +506,9 @@ public class DapIntegrationTests
     [Fact]
     public void Integration_ExceptionBreakpoint_PausesOnError()
     {
-        // `return` at top-level causes a RuntimeError which routes through OnError.
+        // Accessing a field on null causes a RuntimeError which routes through OnError.
         // With _breakOnAllExceptions = true, the session pauses before propagating.
-        var path = CreateTempScript("let x = 1;\nreturn \"bad\";\n");
+        var path = CreateTempScript("let x = 1;\nlet y = null;\ny.field;\n");
         try
         {
             var session = new DebugSession();

@@ -1,53 +1,77 @@
 namespace Stash.Dap;
 
+using System;
 using System.Collections.Generic;
+using System.Linq;
+using System.Threading;
 using Stash.Bytecode;
-using Stash.Interpreting;
+using Stash.Debugging;
+using Stash.Lexing;
+using Stash.Parsing;
+using Stash.Runtime;
 using DebugCallFrame = Stash.Debugging.CallFrame;
 
 /// <summary>
 /// Adapts a <see cref="VirtualMachine"/> to the <see cref="IDebugExecutor"/> interface
-/// expected by <see cref="DebugSession"/>. Uses a tree-walk <see cref="Interpreter"/>
-/// for watch expression evaluation (Phase 7 fallback — full VM eval deferred to Phase 8+).
+/// expected by <see cref="DebugSession"/>. Uses VM-native bytecode compilation and
+/// execution for watch expression evaluation — no tree-walk interpreter dependency.
 /// </summary>
-internal sealed class VMDebugAdapter : Stash.Debugging.IDebugExecutor
+internal sealed class VMDebugAdapter : IDebugExecutor
 {
     private readonly VirtualMachine _vm;
-    private readonly Interpreter _evalInterpreter;
 
-    public VMDebugAdapter(VirtualMachine vm, Environment globals)
+    public VMDebugAdapter(VirtualMachine vm)
     {
         _vm = vm;
-        _evalInterpreter = new Interpreter();
-        // The eval interpreter shares the same global bindings for consistent results.
-        // Copy global bindings that the VM has into the interpreter's global environment.
-        foreach (var kvp in vm.Globals)
-            _evalInterpreter.Globals.Define(kvp.Key, kvp.Value);
     }
 
     public IReadOnlyList<DebugCallFrame> CallStack => _vm.DebugCallStack;
 
-    public Stash.Debugging.IDebugScope GlobalScope
+    public IDebugScope GlobalScope => _vm.BuildGlobalScope();
+
+    public (object? Value, string? Error) EvaluateExpression(string expression, IDebugScope scope)
     {
-        get
+        try
         {
-            // Build a snapshot of VM globals as an IDebugScope
-            var bindings = new KeyValuePair<string, object?>[_vm.Globals.Count];
-            int idx = 0;
-            foreach (var kvp in _vm.Globals)
-                bindings[idx++] = kvp;
-            return new VMDebugScope(bindings, null);
+            // 1. Lex
+            var lexer = new Lexer(expression);
+            var tokens = lexer.ScanTokens();
+            if (lexer.Errors.Count > 0)
+                return (null, lexer.Errors[0]);
+
+            // 2. Parse as expression
+            var parser = new Parser(tokens);
+            var expr = parser.Parse();
+            if (parser.Errors.Count > 0)
+                return (null, parser.Errors[0]);
+
+            // 3. Compile (no resolver — unresolved variables become OP_LOAD_GLOBAL)
+            Chunk chunk = Compiler.CompileExpression(expr);
+
+            // 4. Seed temp VM with scope bindings (outermost first so innermost shadows)
+            var tempGlobals = new Dictionary<string, object?>();
+            var chain = scope.GetScopeChain().ToList();
+            for (int i = chain.Count - 1; i >= 0; i--)
+            {
+                foreach (var (name, value) in chain[i].GetAllBindings())
+                    tempGlobals[name] = value;
+            }
+
+            // 5. Execute in isolated VM (no debugger attached to avoid recursion)
+            var tempVm = new VirtualMachine(tempGlobals, CancellationToken.None);
+            tempVm.Output = _vm.Output;
+            tempVm.ErrorOutput = _vm.ErrorOutput;
+            tempVm.EmbeddedMode = true;
+            object? result = tempVm.Execute(chunk);
+            return (result, null);
         }
-    }
-
-    public (object? Value, string? Error) EvaluateExpression(string expression, Stash.Debugging.IDebugScope scope)
-    {
-        // Build a tree-walk Environment from the IDebugScope for the eval interpreter.
-        // The scope's bindings become locals in a temporary environment layered over globals.
-        var env = new Environment(_evalInterpreter.Globals, 16);
-        foreach (var (name, value) in scope.GetAllBindings())
-            env.Define(name, value);
-
-        return _evalInterpreter.EvaluateString(expression, env);
+        catch (RuntimeError ex)
+        {
+            return (null, ex.Message);
+        }
+        catch (Exception ex)
+        {
+            return (null, ex.Message);
+        }
     }
 }

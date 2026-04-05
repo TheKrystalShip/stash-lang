@@ -7,12 +7,14 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using Stash.Bytecode;
 using Stash.Common;
 using Stash.Debugging;
 using Stash.Interpreting;
 using Stash.Interpreting.Types;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib;
 using Stash.Lexing;
 using Stash.Parsing;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Events;
@@ -21,6 +23,7 @@ using OmniSharp.Extensions.DebugAdapter.Protocol.Server;
 using DapBreakpoint = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Breakpoint;
 using DapThread = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Thread;
 using StashBreakpoint = Stash.Debugging.Breakpoint;
+using CallFrame = Stash.Debugging.CallFrame;
 
 /// <summary>
 /// Core bridge between the DAP protocol and the Stash interpreter.
@@ -35,7 +38,8 @@ public class DebugSession : IDebugger
     // ── Core references ───────────────────────────────────────────────────────
 
     private IDebugAdapterServer? _server;
-    private Interpreter? _treeWalkInterpreter;
+    private VirtualMachine? _vm;
+    private IDebugExecutor? _executor;
 
     // ── Thread registry ───────────────────────────────────────────────────────
 
@@ -225,38 +229,96 @@ public class DebugSession : IDebugger
         _workingDirectory = workingDirectory;
         _stopOnEntry = stopOnEntry;
 
-        _treeWalkInterpreter = new Interpreter();
-        _treeWalkInterpreter.Debugger = this;
-        _treeWalkInterpreter.CurrentFile = _scriptPath;
+        // ── Create bytecode VM with populated globals ──
+
+        var vmGlobals = new Dictionary<string, object?>();
+
+        // Register global functions (full capabilities for DAP)
+        var globalDef = StdlibDefinitions.GetGlobals(StashCapabilities.All);
+        foreach (var (name, fn) in globalDef.RuntimeFunctions)
+            vmGlobals[name] = fn;
+
+        // Register namespace definitions
+        foreach (var nsDef in StdlibDefinitions.Namespaces)
+            vmGlobals[nsDef.Name] = nsDef.Namespace;
+
+        // Register built-in types for retry blocks
+        vmGlobals["Backoff"] = new StashEnum("Backoff", new List<string> { "Fixed", "Linear", "Exponential" });
+        vmGlobals["RetryOptions"] = new StashStruct("RetryOptions",
+            new List<string> { "delay", "backoff", "maxDelay", "jitter", "timeout", "on" },
+            new Dictionary<string, IStashCallable>());
+
+        _vm = new VirtualMachine(vmGlobals);
+        _vm.Debugger = this;
+        _vm.CurrentFile = _scriptPath;
+        _vm.EmbeddedMode = true;
+
         if (args is { Length: > 0 })
         {
-            _treeWalkInterpreter.SetScriptArgs(args);
+            _vm.ScriptArgs = args;
         }
 
-        // Redirect interpreter output through DAP
-        _treeWalkInterpreter.Output = new DapOutputWriter(this, "stdout");
-        _treeWalkInterpreter.ErrorOutput = new DapOutputWriter(this, "stderr");
+        // Redirect VM output through DAP
+        _vm.Output = new DapOutputWriter(this, "stdout");
+        _vm.ErrorOutput = new DapOutputWriter(this, "stderr");
 
-        // Register main thread in the thread registry
+        // Create the debug executor adapter
+        _executor = new VMDebugAdapter(_vm);
+
+        // Register main thread with the VM executor
         var mainThread = new ThreadState
         {
             Id = MainThreadId,
             Name = "Main Thread",
-            Executor = _treeWalkInterpreter,
+            Executor = _executor,
         };
         _threads[MainThreadId] = mainThread;
 
         // Configure test mode if requested
         if (testMode)
         {
-            var reporter = new Stash.Tap.TapReporter(_treeWalkInterpreter.Output);
-            _treeWalkInterpreter.TestHarness = reporter;
+            var reporter = new Stash.Tap.TapReporter(_vm.Output);
+            _vm.TestHarness = reporter;
 
             if (testFilter is not null)
             {
-                _treeWalkInterpreter.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
+                _vm.TestFilter = testFilter.Split(';', StringSplitOptions.RemoveEmptyEntries);
             }
         }
+
+        // Set up module loader — uses a resolver-only Interpreter for AST annotation
+        _vm.ModuleLoader = (modulePath, currentFile) =>
+        {
+            string fullPath;
+            if (Path.IsPathRooted(modulePath))
+            {
+                fullPath = modulePath;
+            }
+            else if (currentFile is not null)
+            {
+                string dir = Path.GetDirectoryName(currentFile) ?? ".";
+                fullPath = Path.GetFullPath(Path.Combine(dir, modulePath));
+            }
+            else
+            {
+                fullPath = Path.GetFullPath(modulePath);
+            }
+
+            if (!fullPath.EndsWith(".stash", StringComparison.OrdinalIgnoreCase))
+                fullPath += ".stash";
+
+            string source = File.ReadAllText(fullPath);
+            var lexer = new Lexer(source, fullPath);
+            var tokens = lexer.ScanTokens();
+            var parser = new Parser(tokens);
+            var stmts = parser.ParseProgram();
+
+            // Resolve using a lightweight Interpreter (for AST annotation only, not execution)
+            var resolverInterpreter = new Interpreter();
+            resolverInterpreter.ResolveStatements(stmts);
+
+            return Compiler.Compile(stmts);
+        };
 
         _interpreterThread = new System.Threading.Thread(() =>
         {
@@ -298,10 +360,20 @@ public class DebugSession : IDebugger
                     return;
                 }
 
-                _treeWalkInterpreter.Interpret(stmts);
+                // Resolve (using a lightweight Interpreter for AST annotation only)
+                var resolverInterpreter = new Interpreter();
+                resolverInterpreter.ResolveStatements(stmts);
+
+                // Compile to bytecode and execute on the VM
+                Chunk chunk = Compiler.Compile(stmts);
+
+                // Notify debugger of main script source
+                OnSourceLoaded(_scriptPath!);
+
+                _vm!.Execute(chunk);
 
                 // If running in test mode, emit TAP plan
-                if (_treeWalkInterpreter.TestHarness is Stash.Tap.TapReporter tapReporter)
+                if (_vm.TestHarness is Stash.Tap.TapReporter tapReporter)
                 {
                     tapReporter.OnRunComplete(tapReporter.PassedCount, tapReporter.FailedCount, tapReporter.SkippedCount);
                 }
@@ -556,7 +628,7 @@ public class DebugSession : IDebugger
     public IReadOnlyList<Scope> GetScopes(int frameId)
     {
         var scopes = new List<Scope>();
-        if (_treeWalkInterpreter == null)
+        if (_executor == null)
         {
             return scopes;
         }
@@ -776,7 +848,7 @@ public class DebugSession : IDebugger
             (executor, scope) = ResolveContextForFrame(frameId.Value);
         }
 
-        executor ??= _treeWalkInterpreter;
+        executor ??= _executor;
         if (executor == null)
         {
             return "No interpreter";
@@ -795,7 +867,7 @@ public class DebugSession : IDebugger
     /// </summary>
     public Variable SetVariable(int variablesReference, string name, string value)
     {
-        if (_treeWalkInterpreter == null)
+        if (_executor == null)
         {
             throw new InvalidOperationException("No interpreter active.");
         }
@@ -812,7 +884,7 @@ public class DebugSession : IDebugger
         }
 
         // Find which executor owns this container's scope so task-thread variables resolve correctly.
-        IDebugExecutor executor = _treeWalkInterpreter;
+        IDebugExecutor executor = _executor!;
         if (container.Scope != null)
         {
             foreach (var thread in _threads.Values)
@@ -854,21 +926,20 @@ public class DebugSession : IDebugger
         // Apply the new value to the appropriate container
         if (container.Scope != null)
         {
-            // Need concrete Environment for mutation
-            if (container.Scope is not Stash.Interpreting.Environment envScope)
-                throw new InvalidOperationException("Cannot set variable in abstract scope.");
-
-            if (!envScope.Contains(name))
+            if (!container.Scope.Contains(name))
             {
                 throw new InvalidOperationException($"Variable '{name}' not found in scope.");
             }
 
-            if (envScope.IsConstant(name))
+            if (container.Scope.IsConstant(name))
             {
                 throw new InvalidOperationException($"Cannot modify constant '{name}'.");
             }
 
-            envScope.Assign(name, newValue);
+            if (!container.Scope.TryAssign(name, newValue))
+            {
+                throw new InvalidOperationException($"Cannot set variable '{name}' in this scope.");
+            }
         }
         else if (container.Value is List<object?> list)
         {

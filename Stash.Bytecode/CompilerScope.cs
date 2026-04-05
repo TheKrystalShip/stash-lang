@@ -120,4 +120,13 @@ internal sealed class CompilerScope
             names[i] = _locals[i].Name;
         return names;
     }
+
+    /// <summary>Returns the const flags of all currently tracked locals, indexed by slot.</summary>
+    public bool[] GetLocalIsConst()
+    {
+        var flags = new bool[_locals.Count];
+        for (int i = 0; i < _locals.Count; i++)
+            flags[i] = _locals[i].IsConst;
+        return flags;
+    }
 }

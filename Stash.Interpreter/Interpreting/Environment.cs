@@ -33,6 +33,23 @@ public class Environment : IDebugScope
 
     IDebugScope? IDebugScope.EnclosingScope => Enclosing;
 
+    bool IDebugScope.Contains(string name) => Contains(name);
+    bool IDebugScope.IsConstant(string name) => IsConstant(name);
+
+    /// <summary>IDebugScope mutation support — wraps existing Assign logic.</summary>
+    bool IDebugScope.TryAssign(string name, object? value)
+    {
+        try
+        {
+            Assign(name, value);
+            return true;
+        }
+        catch (RuntimeError)
+        {
+            return false;
+        }
+    }
+
     /// <summary>
     /// Creates a new global environment (no enclosing scope). Uses dictionary storage.
     /// </summary>

@@ -45,6 +45,18 @@ public class Chunk
     /// </summary>
     public string[]? LocalNames { get; }
 
+    /// <summary>
+    /// Per-local constness flags for debugger mutation guards. Index = slot number.
+    /// Null when debugging info is not needed.
+    /// </summary>
+    public bool[]? LocalIsConst { get; }
+
+    /// <summary>
+    /// Upvalue variable names for debugger closure scope display. Index = upvalue index.
+    /// Null when debugging info is not needed.
+    /// </summary>
+    public string[]? UpvalueNames { get; }
+
     public Chunk(
         byte[] code,
         object?[] constants,
@@ -56,7 +68,9 @@ public class Chunk
         string? name,
         bool isAsync,
         bool hasRestParam,
-        string[]? localNames = null)
+        string[]? localNames = null,
+        bool[]? localIsConst = null,
+        string[]? upvalueNames = null)
     {
         Code = code;
         Constants = constants;
@@ -69,5 +83,7 @@ public class Chunk
         IsAsync = isAsync;
         HasRestParam = hasRestParam;
         LocalNames = localNames;
+        LocalIsConst = localIsConst;
+        UpvalueNames = upvalueNames;
     }
 }

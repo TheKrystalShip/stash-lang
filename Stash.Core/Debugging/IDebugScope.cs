@@ -24,4 +24,13 @@ public interface IDebugScope
             current = current.EnclosingScope;
         }
     }
+
+    /// <summary>Returns true if this scope contains a variable with the given name.</summary>
+    bool Contains(string name) => false;
+
+    /// <summary>Returns true if the named variable is a constant that cannot be reassigned.</summary>
+    bool IsConstant(string name) => false;
+
+    /// <summary>Attempts to assign a new value to the named variable. Returns true on success.</summary>
+    bool TryAssign(string name, object? value) => false;
 }

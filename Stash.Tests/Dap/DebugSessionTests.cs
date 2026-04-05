@@ -38,11 +38,11 @@ public class DebugSessionTests
         return (string)method.Invoke(session, new object?[] { template, env, executor })!;
     }
 
-    private static void SetInterpreter(DebugSession session, Interpreter interpreter)
+    private static void SetExecutor(DebugSession session, IDebugExecutor executor)
     {
-        var field = typeof(DebugSession).GetField("_treeWalkInterpreter",
+        var field = typeof(DebugSession).GetField("_executor",
             BindingFlags.NonPublic | BindingFlags.Instance)!;
-        field.SetValue(session, interpreter);
+        field.SetValue(session, executor);
     }
 
     // ── 1. SetBreakpoints Tests ───────────────────────────────────────────────
@@ -498,7 +498,6 @@ public class DebugSessionTests
     {
         var session = new DebugSession();
         var interpreter = new Interpreter();
-        SetInterpreter(session, interpreter);
         var env = new Environment();
         var result = InvokeInterpolateLogMessage(session, "Result: {1 + 1}", env, interpreter);
         Assert.Equal("Result: 2", result);
@@ -509,7 +508,6 @@ public class DebugSessionTests
     {
         var session = new DebugSession();
         var interpreter = new Interpreter();
-        SetInterpreter(session, interpreter);
         var env = new Environment();
         // {unclosed has no matching } — characters are emitted as-is
         var result = InvokeInterpolateLogMessage(session, "value={unclosed", env, interpreter);
@@ -563,7 +561,7 @@ public class DebugSessionTests
     public void SetVariable_InvalidReference_ThrowsInvalidOperation()
     {
         var session = new DebugSession();
-        SetInterpreter(session, new Interpreter());
+        SetExecutor(session, new Interpreter());
         Assert.Throws<InvalidOperationException>(() => session.SetVariable(9999, "x", "42"));
     }
 
