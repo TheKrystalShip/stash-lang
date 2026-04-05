@@ -32,7 +32,7 @@ public sealed class VirtualMachine
     /// <summary>Sentinel value pushed by OP_ArgMark to delimit spread call arguments.</summary>
     private static readonly object _argSentinel = new object();
 
-    private object?[] _stack;
+    private StashValue[] _stack;
     private int _sp; // stack pointer: index of next free slot
 
     private CallFrame[] _frames;
@@ -57,7 +57,7 @@ public sealed class VirtualMachine
 
     public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
     {
-        _stack = new object?[DefaultStackSize];
+        _stack = new StashValue[DefaultStackSize];
         _frames = new CallFrame[DefaultFrameDepth];
         _globals = globals ?? new Dictionary<string, object?>();
         _openUpvalues = new List<Upvalue>();
@@ -201,7 +201,7 @@ public sealed class VirtualMachine
             {
                 string? name = chunk.LocalNames[i];
                 if (!string.IsNullOrEmpty(name) && name[0] != '<')
-                    _globals[name] = _stack[i];
+                    _globals[name] = _stack[i].ToObject();
             }
         }
 
@@ -225,7 +225,7 @@ public sealed class VirtualMachine
     // ---- Stack Operations ----
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void Push(object? value)
+    private void Push(StashValue value)
     {
         if (_sp >= _stack.Length)
             GrowStack();
@@ -240,10 +240,10 @@ public sealed class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private object? Pop() => _stack[--_sp];
+    private StashValue Pop() => _stack[--_sp];
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private object? Peek() => _stack[_sp - 1];
+    private ref StashValue Peek() => ref _stack[_sp - 1];
 
     // ---- Instruction Helpers ----
 
@@ -330,7 +330,7 @@ public sealed class VirtualMachine
                 _sp = handler.StackLevel;
 
                 // Push a StashError value for the catch block to consume
-                Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
+                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
 
                 // Resume execution at the catch handler's bytecode offset
                 _frames[_frameCount - 1].IP = handler.CatchIP;
@@ -356,7 +356,7 @@ public sealed class VirtualMachine
                 _frameCount = handler.FrameIndex + 1;
                 while (_debugCallStack.Count > handler.FrameIndex) _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
                 _sp = handler.StackLevel;
-                Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
+                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
             }
             catch (RuntimeError ex)
@@ -427,15 +427,15 @@ public sealed class VirtualMachine
                 }
 
                 case OpCode.Null:
-                    Push(null);
+                    Push(StashValue.Null);
                     break;
 
                 case OpCode.True:
-                    Push(true);
+                    Push(StashValue.True);
                     break;
 
                 case OpCode.False:
-                    Push(false);
+                    Push(StashValue.False);
                     break;
 
                 // ==================== Stack Manipulation ====================
@@ -465,18 +465,18 @@ public sealed class VirtualMachine
                 case OpCode.LoadGlobal:
                 {
                     ushort nameIdx = ReadU16(ref frame);
-                    string name = (string)frame.Chunk.Constants[nameIdx]!;
+                    string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
                     if (!_globals.TryGetValue(name, out object? value))
                         throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
-                    Push(value);
+                    Push(StashValue.FromObject(value));
                     break;
                 }
 
                 case OpCode.StoreGlobal:
                 {
                     ushort nameIdx = ReadU16(ref frame);
-                    string name = (string)frame.Chunk.Constants[nameIdx]!;
-                    _globals[name] = Pop();
+                    string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
+                    _globals[name] = Pop().ToObject();
                     break;
                 }
 
@@ -497,10 +497,10 @@ public sealed class VirtualMachine
                 // ==================== Arithmetic ====================
                 case OpCode.Add:
                 {
-                    object? b = Pop();
-                    object? a = Pop();
-                    if (a is long la && b is long lb)
-                        Push(la + lb);
+                    StashValue b = Pop();
+                    StashValue a = Pop();
+                    if (a.IsInt && b.IsInt)
+                        Push(StashValue.FromInt(a.AsInt + b.AsInt));
                     else
                         Push(RuntimeOps.Add(a, b, GetCurrentSpan(ref frame)));
                     break;
@@ -508,10 +508,10 @@ public sealed class VirtualMachine
 
                 case OpCode.Subtract:
                 {
-                    object? b = Pop();
-                    object? a = Pop();
-                    if (a is long la && b is long lb)
-                        Push(la - lb);
+                    StashValue b = Pop();
+                    StashValue a = Pop();
+                    if (a.IsInt && b.IsInt)
+                        Push(StashValue.FromInt(a.AsInt - b.AsInt));
                     else
                         Push(RuntimeOps.Subtract(a, b, GetCurrentSpan(ref frame)));
                     break;
@@ -519,10 +519,10 @@ public sealed class VirtualMachine
 
                 case OpCode.Multiply:
                 {
-                    object? b = Pop();
-                    object? a = Pop();
-                    if (a is long la && b is long lb)
-                        Push(la * lb);
+                    StashValue b = Pop();
+                    StashValue a = Pop();
+                    if (a.IsInt && b.IsInt)
+                        Push(StashValue.FromInt(a.AsInt * b.AsInt));
                     else
                         Push(RuntimeOps.Multiply(a, b, GetCurrentSpan(ref frame)));
                     break;
@@ -530,25 +530,25 @@ public sealed class VirtualMachine
 
                 case OpCode.Divide:
                 {
-                    object? b = Pop();
-                    object? a = Pop();
+                    StashValue b = Pop();
+                    StashValue a = Pop();
                     Push(RuntimeOps.Divide(a, b, GetCurrentSpan(ref frame)));
                     break;
                 }
 
                 case OpCode.Modulo:
                 {
-                    object? b = Pop();
-                    object? a = Pop();
+                    StashValue b = Pop();
+                    StashValue a = Pop();
                     Push(RuntimeOps.Modulo(a, b, GetCurrentSpan(ref frame)));
                     break;
                 }
 
                 case OpCode.Negate:
                 {
-                    object? val = Pop();
-                    if (val is long l)
-                        Push(-l);
+                    StashValue val = Pop();
+                    if (val.IsInt)
+                        Push(StashValue.FromInt(-val.AsInt));
                     else
                         Push(RuntimeOps.Negate(val, GetCurrentSpan(ref frame)));
                     break;
@@ -557,9 +557,9 @@ public sealed class VirtualMachine
                 // ==================== Bitwise ====================
                 case OpCode.BitAnd:
                 {
-                    object? b = Pop(), a = Pop();
-                    if (a is long la && b is long lb)
-                        Push(la & lb);
+                    StashValue b = Pop(), a = Pop();
+                    if (a.IsInt && b.IsInt)
+                        Push(StashValue.FromInt(a.AsInt & b.AsInt));
                     else
                         Push(RuntimeOps.BitAnd(a, b, GetCurrentSpan(ref frame)));
                     break;
@@ -567,9 +567,9 @@ public sealed class VirtualMachine
 
                 case OpCode.BitOr:
                 {
-                    object? b = Pop(), a = Pop();
-                    if (a is long la && b is long lb)
-                        Push(la | lb);
+                    StashValue b = Pop(), a = Pop();
+                    if (a.IsInt && b.IsInt)
+                        Push(StashValue.FromInt(a.AsInt | b.AsInt));
                     else
                         Push(RuntimeOps.BitOr(a, b, GetCurrentSpan(ref frame)));
                     break;
@@ -577,9 +577,9 @@ public sealed class VirtualMachine
 
                 case OpCode.BitXor:
                 {
-                    object? b = Pop(), a = Pop();
-                    if (a is long la && b is long lb)
-                        Push(la ^ lb);
+                    StashValue b = Pop(), a = Pop();
+                    if (a.IsInt && b.IsInt)
+                        Push(StashValue.FromInt(a.AsInt ^ b.AsInt));
                     else
                         Push(RuntimeOps.BitXor(a, b, GetCurrentSpan(ref frame)));
                     break;
@@ -591,14 +591,14 @@ public sealed class VirtualMachine
 
                 case OpCode.ShiftLeft:
                 {
-                    object? b = Pop(), a = Pop();
+                    StashValue b = Pop(), a = Pop();
                     Push(RuntimeOps.ShiftLeft(a, b, GetCurrentSpan(ref frame)));
                     break;
                 }
 
                 case OpCode.ShiftRight:
                 {
-                    object? b = Pop(), a = Pop();
+                    StashValue b = Pop(), a = Pop();
                     Push(RuntimeOps.ShiftRight(a, b, GetCurrentSpan(ref frame)));
                     break;
                 }
@@ -606,49 +606,49 @@ public sealed class VirtualMachine
                 // ==================== Comparison ====================
                 case OpCode.Equal:
                 {
-                    object? b = Pop(), a = Pop();
-                    Push(RuntimeOps.IsEqual(a, b));
+                    StashValue b = Pop(), a = Pop();
+                    Push(StashValue.FromBool(RuntimeOps.IsEqual(a, b)));
                     break;
                 }
 
                 case OpCode.NotEqual:
                 {
-                    object? b = Pop(), a = Pop();
-                    Push(!RuntimeOps.IsEqual(a, b));
+                    StashValue b = Pop(), a = Pop();
+                    Push(StashValue.FromBool(!RuntimeOps.IsEqual(a, b)));
                     break;
                 }
 
                 case OpCode.LessThan:
                 {
-                    object? b = Pop(), a = Pop();
-                    Push(RuntimeOps.LessThan(a, b, GetCurrentSpan(ref frame)));
+                    StashValue b = Pop(), a = Pop();
+                    Push(StashValue.FromBool(RuntimeOps.LessThan(a, b, GetCurrentSpan(ref frame))));
                     break;
                 }
 
                 case OpCode.LessEqual:
                 {
-                    object? b = Pop(), a = Pop();
-                    Push(RuntimeOps.LessEqual(a, b, GetCurrentSpan(ref frame)));
+                    StashValue b = Pop(), a = Pop();
+                    Push(StashValue.FromBool(RuntimeOps.LessEqual(a, b, GetCurrentSpan(ref frame))));
                     break;
                 }
 
                 case OpCode.GreaterThan:
                 {
-                    object? b = Pop(), a = Pop();
-                    Push(RuntimeOps.GreaterThan(a, b, GetCurrentSpan(ref frame)));
+                    StashValue b = Pop(), a = Pop();
+                    Push(StashValue.FromBool(RuntimeOps.GreaterThan(a, b, GetCurrentSpan(ref frame))));
                     break;
                 }
 
                 case OpCode.GreaterEqual:
                 {
-                    object? b = Pop(), a = Pop();
-                    Push(RuntimeOps.GreaterEqual(a, b, GetCurrentSpan(ref frame)));
+                    StashValue b = Pop(), a = Pop();
+                    Push(StashValue.FromBool(RuntimeOps.GreaterEqual(a, b, GetCurrentSpan(ref frame))));
                     break;
                 }
 
                 // ==================== Logic ====================
                 case OpCode.Not:
-                    Push(RuntimeOps.IsFalsy(Pop()));
+                    Push(StashValue.FromBool(RuntimeOps.IsFalsy(Pop())));
                     break;
 
                 case OpCode.And:
@@ -677,7 +677,7 @@ public sealed class VirtualMachine
                 {
                     // If top is non-null, keep it and jump; else pop null and eval right
                     short offset = ReadI16(ref frame);
-                    if (Peek() is not null)
+                    if (!Peek().IsNull)
                         frame.IP += offset;
                     else
                         _sp--; // pop null, continue to right operand
@@ -727,7 +727,7 @@ public sealed class VirtualMachine
                     byte argc = ReadByte(ref frame);
                     // Save span before potential frame array resize
                     SourceSpan? callSpan = GetCurrentSpan(ref frame);
-                    object? callee = _stack[_sp - argc - 1];
+                    object? callee = _stack[_sp - argc - 1].AsObj;  // Callees are always Obj-tagged
                     int prevFrameCount = _frameCount;
                     CallValue(callee, argc, callSpan);
 
@@ -756,7 +756,7 @@ public sealed class VirtualMachine
 
                 case OpCode.ArgMark:
                 {
-                    Push(_argSentinel);
+                    Push(StashValue.FromObj(_argSentinel));
                     break;
                 }
 
@@ -767,7 +767,7 @@ public sealed class VirtualMachine
                     int sentinelIdx = -1;
                     for (int i = _sp - 1; i >= 0; i--)
                     {
-                        if (ReferenceEquals(_stack[i], _argSentinel))
+                        if (ReferenceEquals(_stack[i].AsObj, _argSentinel))
                         {
                             sentinelIdx = i;
                             break;
@@ -779,7 +779,7 @@ public sealed class VirtualMachine
                         throw new RuntimeError("Internal error: ArgMark sentinel not found.", GetCurrentSpan(ref frame));
 
                     // Callee is right below the sentinel
-                    object? callee = _stack[sentinelIdx - 1];
+                    object? callee = _stack[sentinelIdx - 1].AsObj;
                     SourceSpan? callSpan = GetCurrentSpan(ref frame);
 
                     // Remove sentinel by shifting args down by 1
@@ -814,7 +814,7 @@ public sealed class VirtualMachine
 
                 case OpCode.Return:
                 {
-                    object? result = Pop();
+                    StashValue result = Pop();
                     int baseSlot = _frames[_frameCount - 1].BaseSlot;
 
                     // Debug: track function exit
@@ -830,19 +830,19 @@ public sealed class VirtualMachine
                     if (_frameCount == 0)
                     {
                         _sp = 0;
-                        return result;
+                        return result.ToObject();
                     }
                     _sp = baseSlot - 1; // discard function stack window + callee slot
                     Push(result);
                     if (_frameCount <= targetFrameCount)
-                        return result;
+                        return result.ToObject();
                     break;
                 }
 
                 case OpCode.Closure:
                 {
                     ushort chunkIdx = ReadU16(ref frame);
-                    Chunk fnChunk = (Chunk)frame.Chunk.Constants[chunkIdx]!;
+                    Chunk fnChunk = (Chunk)frame.Chunk.Constants[chunkIdx].AsObj!;
                     var upvalues = new Upvalue[fnChunk.Upvalues.Length];
                     for (int i = 0; i < fnChunk.Upvalues.Length; i++)
                     {
@@ -853,7 +853,7 @@ public sealed class VirtualMachine
                         else
                             upvalues[i] = frame.Upvalues![index];
                     }
-                    Push(new VMFunction(fnChunk, upvalues));
+                    Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues)));
                     break;
                 }
 
@@ -864,9 +864,9 @@ public sealed class VirtualMachine
                     var list = new List<object?>(count);
                     int start = _sp - count;
                     for (int i = start; i < _sp; i++)
-                        list.Add(_stack[i]);
+                        list.Add(_stack[i].ToObject());
                     _sp = start;
-                    Push(list);
+                    Push(StashValue.FromObj(list));
                     break;
                 }
 
@@ -876,35 +876,33 @@ public sealed class VirtualMachine
                     var dict = new StashDictionary();
                     int start = _sp - (count * 2);
                     for (int i = start; i < _sp; i += 2)
-                        dict.Set(_stack[i]!, _stack[i + 1]);
+                        dict.Set(_stack[i].ToObject()!, _stack[i + 1].ToObject());
                     _sp = start;
-                    Push(dict);
+                    Push(StashValue.FromObj(dict));
                     break;
                 }
 
                 case OpCode.Range:
                 {
-                    object? step = Pop();
-                    object? end = Pop();
-                    object? start = Pop();
-                    long s = start is long ls
-                        ? ls
+                    StashValue step = Pop();
+                    StashValue end = Pop();
+                    StashValue start = Pop();
+                    long s = start.IsInt ? start.AsInt
                         : throw new RuntimeError("Range start must be an integer.", GetCurrentSpan(ref frame));
-                    long e = end is long le
-                        ? le
+                    long e = end.IsInt ? end.AsInt
                         : throw new RuntimeError("Range end must be an integer.", GetCurrentSpan(ref frame));
-                    long st = step is long lst ? lst : (s <= e ? 1L : -1L);
-                    Push(new StashRange(s, e, st));
+                    long st = step.IsInt ? step.AsInt : (s <= e ? 1L : -1L);
+                    Push(StashValue.FromObj(new StashRange(s, e, st)));
                     break;
                 }
 
                 case OpCode.Spread:
                 {
-                    object? iterable = Pop();
+                    object? iterable = Pop().ToObject();
                     if (iterable is List<object?> spreadList)
                     {
                         foreach (object? item in spreadList)
-                            Push(item);
+                            Push(StashValue.FromObject(item));
                     }
                     else
                     {
@@ -917,42 +915,42 @@ public sealed class VirtualMachine
                 case OpCode.GetField:
                 {
                     ushort nameIdx = ReadU16(ref frame);
-                    string fieldName = (string)frame.Chunk.Constants[nameIdx]!;
+                    string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? obj = Pop();
-                    Push(GetFieldValue(obj, fieldName, span));
+                    object? obj = Pop().ToObject();
+                    Push(StashValue.FromObject(GetFieldValue(obj, fieldName, span)));
                     break;
                 }
 
                 case OpCode.SetField:
                 {
                     ushort nameIdx = ReadU16(ref frame);
-                    string fieldName = (string)frame.Chunk.Constants[nameIdx]!;
+                    string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? value = Pop();
-                    object? obj = Pop();
+                    object? value = Pop().ToObject();
+                    object? obj = Pop().ToObject();
                     SetFieldValue(obj, fieldName, value, span);
-                    Push(value);
+                    Push(StashValue.FromObject(value));
                     break;
                 }
 
                 case OpCode.GetIndex:
                 {
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? index = Pop();
-                    object? obj = Pop();
-                    Push(GetIndexValue(obj, index, span));
+                    object? index = Pop().ToObject();
+                    object? obj = Pop().ToObject();
+                    Push(StashValue.FromObject(GetIndexValue(obj, index, span)));
                     break;
                 }
 
                 case OpCode.SetIndex:
                 {
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? value = Pop();
-                    object? index = Pop();
-                    object? obj = Pop();
+                    object? value = Pop().ToObject();
+                    object? index = Pop().ToObject();
+                    object? obj = Pop().ToObject();
                     SetIndexValue(obj, index, value, span);
-                    Push(value);
+                    Push(StashValue.FromObject(value));
                     break;
                 }
 
@@ -965,11 +963,11 @@ public sealed class VirtualMachine
                     int pairStart = _sp - (fieldCount * 2);
                     for (int i = pairStart; i < _sp; i += 2)
                     {
-                        string fname = (string)_stack[i]!;
-                        providedFields[fname] = _stack[i + 1];
+                        string fname = (string)_stack[i].AsObj!;
+                        providedFields[fname] = _stack[i + 1].ToObject();
                     }
                     _sp = pairStart;
-                    object? structDef = Pop();
+                    object? structDef = Pop().ToObject();
                     if (structDef is StashStruct ss)
                     {
                         // Initialize all declared fields to null, then override with provided values
@@ -984,7 +982,7 @@ public sealed class VirtualMachine
                             allFields[kvp.Key] = kvp.Value;
                         }
 
-                        Push(new StashInstance(ss.Name, ss, allFields));
+                        Push(StashValue.FromObj(new StashInstance(ss.Name, ss, allFields)));
                     }
                     else
                         throw new RuntimeError("Not a struct type.", span);
@@ -997,7 +995,7 @@ public sealed class VirtualMachine
                     ushort count = ReadU16(ref frame);
                     string result = RuntimeOps.Interpolate(_stack, _sp, count);
                     _sp -= count;
-                    Push(result);
+                    Push(StashValue.FromObj(result));
                     break;
                 }
 
@@ -1005,9 +1003,9 @@ public sealed class VirtualMachine
                 case OpCode.Is:
                 {
                     ushort typeIdx = ReadU16(ref frame);
-                    string typeName = (string)frame.Chunk.Constants[typeIdx]!;
-                    object? value = Pop();
-                    Push(CheckIsType(value, typeName));
+                    string typeName = (string)frame.Chunk.Constants[typeIdx].AsObj!;
+                    object? value = Pop().ToObject();
+                    Push(StashValue.FromBool(CheckIsType(value, typeName)));
                     break;
                 }
 
@@ -1015,13 +1013,13 @@ public sealed class VirtualMachine
                 {
                     ushort metaIdx = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    var metadata = (StructMetadata)frame.Chunk.Constants[metaIdx]!;
+                    var metadata = (StructMetadata)frame.Chunk.Constants[metaIdx].AsObj!;
 
                     // Pop method closures from stack (pushed in order, so pop in reverse)
                     var methods = new Dictionary<string, IStashCallable>(metadata.MethodNames.Length);
                     for (int i = metadata.MethodNames.Length - 1; i >= 0; i--)
                     {
-                        object? methodObj = Pop();
+                        object? methodObj = Pop().ToObject();
                         if (methodObj is VMFunction vmFunc)
                             methods[metadata.MethodNames[i]] = vmFunc;
                         else
@@ -1056,30 +1054,30 @@ public sealed class VirtualMachine
                         structDef.Interfaces.Add(iface);
                     }
 
-                    Push(structDef);
+                    Push(StashValue.FromObj(structDef));
                     break;
                 }
 
                 case OpCode.EnumDecl:
                 {
                     ushort metaIdx = ReadU16(ref frame);
-                    var metadata = (EnumMetadata)frame.Chunk.Constants[metaIdx]!;
+                    var metadata = (EnumMetadata)frame.Chunk.Constants[metaIdx].AsObj!;
 
                     var members = new List<string>(metadata.Members);
                     var enumDef = new StashEnum(metadata.Name, members);
-                    Push(enumDef);
+                    Push(StashValue.FromObj(enumDef));
                     break;
                 }
 
                 case OpCode.InterfaceDecl:
                 {
                     ushort metaIdx = ReadU16(ref frame);
-                    var metadata = (InterfaceMetadata)frame.Chunk.Constants[metaIdx]!;
+                    var metadata = (InterfaceMetadata)frame.Chunk.Constants[metaIdx].AsObj!;
 
                     var requiredFields = new List<InterfaceField>(metadata.Fields);
                     var requiredMethods = new List<InterfaceMethod>(metadata.Methods);
                     var interfaceDef = new StashInterface(metadata.Name, requiredFields, requiredMethods);
-                    Push(interfaceDef);
+                    Push(StashValue.FromObj(interfaceDef));
                     break;
                 }
 
@@ -1087,13 +1085,13 @@ public sealed class VirtualMachine
                 {
                     ushort metaIdx = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    var metadata = (ExtendMetadata)frame.Chunk.Constants[metaIdx]!;
+                    var metadata = (ExtendMetadata)frame.Chunk.Constants[metaIdx].AsObj!;
 
                     // Pop method closures (pushed in order, so pop in reverse)
                     var methodFuncs = new IStashCallable[metadata.MethodNames.Length];
                     for (int i = metadata.MethodNames.Length - 1; i >= 0; i--)
                     {
-                        object? methodObj = Pop();
+                        object? methodObj = Pop().ToObject();
                         if (methodObj is not VMFunction vmFunc)
                             throw new RuntimeError($"Expected function for extension method '{metadata.MethodNames[i]}'.", span);
                         methodFuncs[i] = vmFunc;
@@ -1123,7 +1121,7 @@ public sealed class VirtualMachine
                 // ==================== Error Handling ====================
                 case OpCode.Throw:
                 {
-                    object? errorVal = Pop();
+                    object? errorVal = Pop().ToObject();
                     SourceSpan? span = GetCurrentSpan(ref frame);
                     if (errorVal is StashError se)
                         throw new RuntimeError(se.Message, span, se.Type);
@@ -1165,8 +1163,8 @@ public sealed class VirtualMachine
                 case OpCode.Iterator:
                 {
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? iterable = Pop();
-                    Push(CreateIterator(iterable, span));
+                    object? iterable = Pop().ToObject();
+                    Push(StashValue.FromObj(CreateIterator(iterable, span)));
                     break;
                 }
 
@@ -1181,7 +1179,7 @@ public sealed class VirtualMachine
                     int iterSlot = -1;
                     for (int i = _sp - 1; i >= Math.Max(frame.BaseSlot, _sp - 4); i--)
                     {
-                        if (_stack[i] is StashIterator found)
+                        if (_stack[i].AsObj is StashIterator found)
                         {
                             iter = found;
                             iterSlot = i;
@@ -1197,14 +1195,14 @@ public sealed class VirtualMachine
                     }
                     else
                     {
-                        Push(iter.Current);
+                        Push(StashValue.FromObject(iter.Current));
                         // Update index variable if present.
                         // Layout: [iter @ iterSlot][indexVar @ iterSlot+1][loopVar] = 3 locals
                         //         [iter @ iterSlot][loopVar]                         = 2 locals
                         // After Push, _sp increased by 1; forInLocals = (_sp - 1) - iterSlot
                         int forInLocals = (_sp - 1) - iterSlot;
                         if (forInLocals == 3)
-                            _stack[iterSlot + 1] = (long)iter.Index;
+                            _stack[iterSlot + 1] = StashValue.FromInt(iter.Index);
                     }
                     break;
                 }
@@ -1212,11 +1210,11 @@ public sealed class VirtualMachine
                 // ==================== Async ====================
                 case OpCode.Await:
                 {
-                    object? future = Pop();
+                    object? future = Pop().ToObject();
                     if (future is StashFuture sf)
-                        Push(sf.GetResult());
+                        Push(StashValue.FromObject(sf.GetResult()));
                     else
-                        Push(future); // non-future values pass through
+                        Push(StashValue.FromObject(future)); // non-future values pass through
                     break;
                 }
 
@@ -1224,8 +1222,8 @@ public sealed class VirtualMachine
                 case OpCode.Power:
                 {
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? right = Pop();
-                    object? left = Pop();
+                    StashValue right = Pop();
+                    StashValue left = Pop();
                     Push(RuntimeOps.Power(left, right, span));
                     break;
                 }
@@ -1234,9 +1232,9 @@ public sealed class VirtualMachine
                 case OpCode.In:
                 {
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? right = Pop();
-                    object? left = Pop();
-                    Push(RuntimeOps.Contains(left, right, span));
+                    StashValue right = Pop();
+                    StashValue left = Pop();
+                    Push(StashValue.FromBool(RuntimeOps.Contains(left, right, span)));
                     break;
                 }
 
@@ -1245,7 +1243,7 @@ public sealed class VirtualMachine
                 {
                     ushort metaCmdIdx = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    var cmdMetadata = (CommandMetadata)frame.Chunk.Constants[metaCmdIdx]!;
+                    var cmdMetadata = (CommandMetadata)frame.Chunk.Constants[metaCmdIdx].AsObj!;
 
                     var sb = new StringBuilder();
                     int partStart = _sp - cmdMetadata.PartCount;
@@ -1291,12 +1289,12 @@ public sealed class VirtualMachine
                                 }
                             };
                         }
-                        Push(new StashInstance("CommandResult", new Dictionary<string, object?>
+                        Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, object?>
                         {
                             ["stdout"] = "",
                             ["stderr"] = "",
                             ["exitCode"] = (long)exitCode
-                        }) { StringifyField = "stdout" });
+                        }) { StringifyField = "stdout" }));
                     }
                     else
                     {
@@ -1316,12 +1314,12 @@ public sealed class VirtualMachine
                                 }
                             };
                         }
-                        Push(new StashInstance("CommandResult", new Dictionary<string, object?>
+                        Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, object?>
                         {
                             ["stdout"] = stdout,
                             ["stderr"] = stderr,
                             ["exitCode"] = (long)exitCode
-                        }) { StringifyField = "stdout" });
+                        }) { StringifyField = "stdout" }));
                     }
                     break;
                 }
@@ -1331,7 +1329,7 @@ public sealed class VirtualMachine
                     // Both sides have already been executed. Return the right result, which
                     // carries the final exit code per pipeline semantics.
                     // True streaming pipes are a future enhancement (Phase 7+).
-                    object? rightResult = Pop();
+                    StashValue rightResult = Pop();
                     _sp--; // discard left result
                     Push(rightResult);
                     break;
@@ -1341,8 +1339,8 @@ public sealed class VirtualMachine
                 {
                     byte flags = ReadByte(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    object? target = Pop();
-                    object? cmdResult = Pop();
+                    object? target = Pop().ToObject();
+                    object? cmdResult = Pop().ToObject();
 
                     string filePath = target is string fp
                         ? fp
@@ -1383,7 +1381,7 @@ public sealed class VirtualMachine
                         ["stderr"] = (stream == 1 || stream == 2) ? "" : stderr,
                         ["exitCode"] = cmdResult is StashInstance ri2 ? ri2.GetField("exitCode", span) : 0L
                     };
-                    Push(new StashInstance("CommandResult", newFields) { StringifyField = "stdout" });
+                    Push(StashValue.FromObj(new StashInstance("CommandResult", newFields) { StringifyField = "stdout" }));
                     break;
                 }
 
@@ -1392,10 +1390,10 @@ public sealed class VirtualMachine
                 {
                     ushort metaImportIdx = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    var importMeta = (ImportMetadata)frame.Chunk.Constants[metaImportIdx]!;
+                    var importMeta = (ImportMetadata)frame.Chunk.Constants[metaImportIdx].AsObj!;
 
-                    object? pathObj = Pop();
-                    string modulePath = pathObj is string mp
+                    StashValue pathVal = Pop();
+                    string modulePath = pathVal.AsObj is string mp
                         ? mp
                         : throw new RuntimeError("Module path must be a string.", span);
 
@@ -1404,7 +1402,7 @@ public sealed class VirtualMachine
                     foreach (string importName in importMeta.Names)
                     {
                         if (moduleEnv.TryGetValue(importName, out object? importedValue))
-                            Push(importedValue);
+                            Push(StashValue.FromObject(importedValue));
                         else
                             throw new RuntimeError($"Module does not export '{importName}'.", span);
                     }
@@ -1415,10 +1413,10 @@ public sealed class VirtualMachine
                 {
                     ushort metaImportAsIdx = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    var importAsMeta = (ImportAsMetadata)frame.Chunk.Constants[metaImportAsIdx]!;
+                    var importAsMeta = (ImportAsMetadata)frame.Chunk.Constants[metaImportAsIdx].AsObj!;
 
-                    object? pathObj = Pop();
-                    string modulePath = pathObj is string mp
+                    StashValue pathVal = Pop();
+                    string modulePath = pathVal.AsObj is string mp
                         ? mp
                         : throw new RuntimeError("Module path must be a string.", span);
 
@@ -1432,7 +1430,7 @@ public sealed class VirtualMachine
                         ns.Define(kvp.Key, kvp.Value);
                     }
                     ns.Freeze();
-                    Push(ns);
+                    Push(StashValue.FromObj(ns));
                     break;
                 }
 
@@ -1441,9 +1439,9 @@ public sealed class VirtualMachine
                 {
                     ushort metaDestructIdx = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    var destructMeta = (DestructureMetadata)frame.Chunk.Constants[metaDestructIdx]!;
+                    var destructMeta = (DestructureMetadata)frame.Chunk.Constants[metaDestructIdx].AsObj!;
 
-                    object? initializer = Pop();
+                    object? initializer = Pop().ToObject();
 
                     if (destructMeta.Kind == "array")
                     {
@@ -1451,14 +1449,14 @@ public sealed class VirtualMachine
                             throw new RuntimeError("Array destructuring requires an array value.", span);
 
                         for (int i = 0; i < destructMeta.Names.Length; i++)
-                            Push(i < list.Count ? list[i] : null);
+                            Push(StashValue.FromObject(i < list.Count ? list[i] : null));
 
                         if (destructMeta.RestName != null)
                         {
                             var rest = new List<object?>();
                             for (int i = destructMeta.Names.Length; i < list.Count; i++)
                                 rest.Add(list[i]);
-                            Push(rest);
+                            Push(StashValue.FromObj(rest));
                         }
                     }
                     else
@@ -1467,7 +1465,7 @@ public sealed class VirtualMachine
                         {
                             var usedNames = new HashSet<string>(destructMeta.Names);
                             foreach (string dname in destructMeta.Names)
-                                Push(destructInst.GetField(dname, span));
+                                Push(StashValue.FromObject(destructInst.GetField(dname, span)));
 
                             if (destructMeta.RestName != null)
                             {
@@ -1477,14 +1475,14 @@ public sealed class VirtualMachine
                                     if (!usedNames.Contains(kvp.Key))
                                         rest.Set(kvp.Key, kvp.Value);
                                 }
-                                Push(rest);
+                                Push(StashValue.FromObj(rest));
                             }
                         }
                         else if (initializer is StashDictionary destructDict)
                         {
                             var usedNames = new HashSet<string>(destructMeta.Names);
                             foreach (string dname in destructMeta.Names)
-                                Push(destructDict.Has(dname) ? destructDict.Get(dname) : null);
+                                Push(StashValue.FromObject(destructDict.Has(dname) ? destructDict.Get(dname) : null));
 
                             if (destructMeta.RestName != null)
                             {
@@ -1495,7 +1493,7 @@ public sealed class VirtualMachine
                                     if (k is string ks && !usedNames.Contains(ks))
                                         rest.Set(ks, destructDict.Get(ks));
                                 }
-                                Push(rest);
+                                Push(StashValue.FromObj(rest));
                             }
                         }
                         else
@@ -1510,12 +1508,12 @@ public sealed class VirtualMachine
                 // ==================== Elevation ====================
                 case OpCode.ElevateBegin:
                 {
-                    object? elevator = Pop();
+                    object? elevator = Pop().ToObject();
                     _context.ElevationActive = true;
                     if (elevator is string elevStr)
                         _context.ElevationCommand = elevStr;
                     else if (elevator != null)
-                        _context.ElevationCommand = RuntimeOps.Stringify(elevator);
+                        _context.ElevationCommand = RuntimeOps.Stringify(StashValue.FromObject(elevator));
                     else
                         _context.ElevationCommand = OperatingSystem.IsWindows() ? "gsudo" : "sudo";
                     break;
@@ -1533,14 +1531,14 @@ public sealed class VirtualMachine
                 {
                     ushort metaRetryIdx = ReadU16(ref frame);
                     SourceSpan? span = GetCurrentSpan(ref frame);
-                    var retryMeta = (RetryMetadata)frame.Chunk.Constants[metaRetryIdx]!;
+                    var retryMeta = (RetryMetadata)frame.Chunk.Constants[metaRetryIdx].AsObj!;
 
                     // Pop closures in reverse order of emission (onRetry first, then until, then body)
                     VMFunction? onRetryVmFn = null;
                     IStashCallable? onRetryCb = null;
                     if (retryMeta.HasOnRetryClause)
                     {
-                        object? obj = Pop();
+                        object? obj = Pop().ToObject();
                         if (obj is VMFunction f1) onRetryVmFn = f1;
                         else if (obj is IStashCallable c1) onRetryCb = c1;
                     }
@@ -1549,12 +1547,12 @@ public sealed class VirtualMachine
                     IStashCallable? untilCb = null;
                     if (retryMeta.HasUntilClause)
                     {
-                        object? obj = Pop();
+                        object? obj = Pop().ToObject();
                         if (obj is VMFunction f2) untilVmFn = f2;
                         else if (obj is IStashCallable c2) untilCb = c2;
                     }
 
-                    object? bodyObj = Pop();
+                    object? bodyObj = Pop().ToObject();
                     VMFunction bodyVmFn = bodyObj as VMFunction
                         ?? throw new RuntimeError("Retry body must be a function.", span);
 
@@ -1562,7 +1560,7 @@ public sealed class VirtualMachine
                     long retryDelayMs = 0;
                     if (retryMeta.OptionCount == -1)
                     {
-                        object? optStruct = Pop();
+                        object? optStruct = Pop().ToObject();
                         if (optStruct is StashInstance oi)
                         {
                             if (oi.GetFields().TryGetValue("delay", out object? dv))
@@ -1577,8 +1575,8 @@ public sealed class VirtualMachine
                         int pairStart = _sp - retryMeta.OptionCount * 2;
                         for (int oi = 0; oi < retryMeta.OptionCount; oi++)
                         {
-                            string optKey = (string)_stack[pairStart + oi * 2]!;
-                            object? optVal = _stack[pairStart + oi * 2 + 1];
+                            string optKey = (string)_stack[pairStart + oi * 2].AsObj!;
+                            object? optVal = _stack[pairStart + oi * 2 + 1].ToObject();
                             if (optKey == "delay")
                             {
                                 if (optVal is long dl) retryDelayMs = dl;
@@ -1588,7 +1586,7 @@ public sealed class VirtualMachine
                         _sp = pairStart;
                     }
 
-                    object? maxAttemptsObj = Pop();
+                    object? maxAttemptsObj = Pop().ToObject();
                     long maxAttempts = maxAttemptsObj is long ma ? ma : 3L;
 
                     // Execute retry loop
@@ -1634,20 +1632,20 @@ public sealed class VirtualMachine
                             {
                                 object? pred = ExecuteVMFunctionInline(untilVmFn,
                                     new object?[] { retryLastResult, attempt }, span);
-                                if (RuntimeOps.IsFalsy(pred))
+                                if (RuntimeOps.IsFalsy(StashValue.FromObject(pred)))
                                     success = false;
                             }
                             else if (untilCb != null)
                             {
                                 object? pred = untilCb.Call(_context,
                                     new List<object?> { retryLastResult, attempt });
-                                if (RuntimeOps.IsFalsy(pred))
+                                if (RuntimeOps.IsFalsy(StashValue.FromObject(pred)))
                                     success = false;
                             }
 
                             if (success)
                             {
-                                Push(retryLastResult);
+                                Push(StashValue.FromObject(retryLastResult));
                                 goto retryDone;
                             }
                             // Until predicate failed — treat as a retry-worthy failure
@@ -1720,7 +1718,7 @@ public sealed class VirtualMachine
                 if (provided < nonRestCount)
                 {
                     for (int i = provided; i < nonRestCount; i++)
-                        Push(NotProvided);
+                        Push(StashValue.FromObj(NotProvided));
                     provided = nonRestCount;
                 }
 
@@ -1729,9 +1727,9 @@ public sealed class VirtualMachine
                 var restList = new List<object?>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
-                    restList.Add(_stack[i]);
+                    restList.Add(_stack[i].ToObject());
                 _sp = restStart;
-                Push(restList);
+                Push(StashValue.FromObj(restList));
                 provided = expected;
             }
             else
@@ -1751,7 +1749,7 @@ public sealed class VirtualMachine
                 if (provided < expected)
                 {
                     for (int i = provided; i < expected; i++)
-                        Push(NotProvided);
+                        Push(StashValue.FromObj(NotProvided));
                 }
             }
 
@@ -1769,10 +1767,10 @@ public sealed class VirtualMachine
             // This preserves the callee slot so OP_RETURN (_sp = baseSlot - 1) correctly
             // discards the frame + callee.
             int shiftStart = _sp - argc; // first arg position
-            Push(null!);                 // grow stack + increment _sp
+            Push(StashValue.Null);        // grow stack + increment _sp
             for (int i = _sp - 2; i >= shiftStart; i--)
                 _stack[i + 1] = _stack[i];
-            _stack[shiftStart] = bound.Instance; // insert self after callee
+            _stack[shiftStart] = StashValue.FromObj(bound.Instance); // insert self after callee
 
             int provided = argc + 1; // user args + self
             int expected = fnChunk.Arity;
@@ -1788,7 +1786,7 @@ public sealed class VirtualMachine
                 if (provided < nonRestCount)
                 {
                     for (int i = provided; i < nonRestCount; i++)
-                        Push(NotProvided);
+                        Push(StashValue.FromObj(NotProvided));
                     provided = nonRestCount;
                 }
 
@@ -1796,9 +1794,9 @@ public sealed class VirtualMachine
                 var restList = new List<object?>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
-                    restList.Add(_stack[i]);
+                    restList.Add(_stack[i].ToObject());
                 _sp = restStart;
-                Push(restList);
+                Push(StashValue.FromObj(restList));
                 provided = expected;
             }
             else
@@ -1814,7 +1812,7 @@ public sealed class VirtualMachine
                 if (provided < expected)
                 {
                     for (int i = provided; i < expected; i++)
-                        Push(NotProvided);
+                        Push(StashValue.FromObj(NotProvided));
                 }
             }
 
@@ -1830,10 +1828,10 @@ public sealed class VirtualMachine
 
             // Same shift approach as VMBoundMethod — preserve callee slot for OP_RETURN.
             int shiftStart = _sp - argc;
-            Push(null!);
+            Push(StashValue.Null);
             for (int i = _sp - 2; i >= shiftStart; i--)
                 _stack[i + 1] = _stack[i];
-            _stack[shiftStart] = extBound.Receiver;
+            _stack[shiftStart] = StashValue.FromObject(extBound.Receiver);
 
             int provided = argc + 1; // user args + self
             int expected = fnChunk.Arity;
@@ -1849,7 +1847,7 @@ public sealed class VirtualMachine
                 if (provided < nonRestCount)
                 {
                     for (int i = provided; i < nonRestCount; i++)
-                        Push(NotProvided);
+                        Push(StashValue.FromObj(NotProvided));
                     provided = nonRestCount;
                 }
 
@@ -1857,9 +1855,9 @@ public sealed class VirtualMachine
                 var restList = new List<object?>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
-                    restList.Add(_stack[i]);
+                    restList.Add(_stack[i].ToObject());
                 _sp = restStart;
-                Push(restList);
+                Push(StashValue.FromObj(restList));
                 provided = expected;
             }
             else
@@ -1875,7 +1873,7 @@ public sealed class VirtualMachine
                 if (provided < expected)
                 {
                     for (int i = provided; i < expected; i++)
-                        Push(NotProvided);
+                        Push(StashValue.FromObj(NotProvided));
                 }
             }
 
@@ -1904,7 +1902,7 @@ public sealed class VirtualMachine
             var args = new List<object?>(argc);
             int argStart = _sp - argc;
             for (int i = argStart; i < _sp; i++)
-                args.Add(_stack[i]);
+                args.Add(_stack[i].ToObject());
             _sp = argStart - 1; // pop args + callee slot
 
             object? result;
@@ -1921,7 +1919,7 @@ public sealed class VirtualMachine
             {
                 throw new RuntimeError($"Built-in function error: {ex.Message}", callSpan);
             }
-            Push(result);
+            Push(StashValue.FromObject(result));
             return;
         }
 
@@ -2162,7 +2160,7 @@ public sealed class VirtualMachine
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
                 _sp = handler.StackLevel;
-                Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
+                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
             }
         }
@@ -2186,7 +2184,7 @@ public sealed class VirtualMachine
                 _frameCount = handler.FrameIndex + 1;
                 while (_debugCallStack.Count > handler.FrameIndex) _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
                 _sp = handler.StackLevel;
-                Push(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError"));
+                Push(StashValue.FromObj(new StashError(ex.Message, ex.ErrorType ?? "RuntimeError")));
                 _frames[_frameCount - 1].IP = handler.CatchIP;
             }
             catch (RuntimeError ex)
@@ -2214,9 +2212,9 @@ public sealed class VirtualMachine
     /// </summary>
     private object? ExecuteVMFunctionInline(VMFunction fn, object?[] args, SourceSpan? span)
     {
-        Push(fn); // callee slot
+        Push(StashValue.FromObj(fn)); // callee slot
         foreach (object? arg in args)
-            Push(arg);
+            Push(StashValue.FromObject(arg));
         int targetFrameCount = _frameCount; // before CallValue pushes the new frame
         CallValue(fn, args.Length, span);
         return RunUntilFrame(targetFrameCount);
@@ -2332,7 +2330,7 @@ public sealed class VirtualMachine
             {
                 string name = upvalueNames is not null && i < upvalueNames.Length
                     ? upvalueNames[i] : $"upvalue_{i}";
-                object? value = frame.Upvalues[i].Value;
+                object? value = frame.Upvalues[i].Value.ToObject();
                 closureBindings[i] = new KeyValuePair<string, object?>(name, value);
             }
             enclosing = new VMDebugScope(closureBindings, enclosing);

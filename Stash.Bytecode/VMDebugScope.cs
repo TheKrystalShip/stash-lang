@@ -19,7 +19,7 @@ internal sealed class VMDebugScope : IDebugScope
     private readonly KeyValuePair<string, object?>[]? _bindings;
 
     // ── Live-stack mode ──
-    private readonly object?[]? _stack;
+    private readonly StashValue[]? _stack;
     private readonly int _baseSlot;
     private readonly string[]? _names;
     private readonly bool[]? _isConst;
@@ -38,7 +38,7 @@ internal sealed class VMDebugScope : IDebugScope
     }
 
     /// <summary>Live-stack constructor (reads/writes VM stack slots directly).</summary>
-    public VMDebugScope(object?[] stack, int baseSlot, int localCount,
+    public VMDebugScope(StashValue[] stack, int baseSlot, int localCount,
                         string[]? names, bool[]? isConst, IDebugScope? enclosing)
     {
         _stack = stack;
@@ -67,7 +67,7 @@ internal sealed class VMDebugScope : IDebugScope
             for (int i = 0; i < _localCount; i++)
             {
                 string name = _names is not null && i < _names.Length ? _names[i] : $"local_{i}";
-                object? value = (_baseSlot + i < _stack.Length) ? _stack[_baseSlot + i] : null;
+                object? value = (_baseSlot + i < _stack.Length) ? _stack[_baseSlot + i].ToObject() : null;
                 result[i] = new KeyValuePair<string, object?>(name, value);
             }
             return result;
@@ -130,7 +130,7 @@ internal sealed class VMDebugScope : IDebugScope
             {
                 if (_names[i] == name)
                 {
-                    _stack[_baseSlot + i] = value;
+                    _stack[_baseSlot + i] = StashValue.FromObject(value);
                     return true;
                 }
             }

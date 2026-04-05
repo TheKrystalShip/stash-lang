@@ -11,7 +11,7 @@ namespace Stash.Bytecode;
 public class ChunkBuilder
 {
     private readonly List<byte> _code = new();
-    private readonly List<object?> _constants = new();
+    private readonly List<StashValue> _constants = new();
     private readonly List<SourceMapEntry> _sourceMapEntries = new();
     private readonly List<UpvalueDescriptor> _upvalues = new();
 
@@ -114,19 +114,30 @@ public class ChunkBuilder
     // ---- Constant Pool ----
 
     /// <summary>
-    /// Add a constant to the pool and return its index.
-    /// Deduplicates long, double, bool, null, and string constants.
-    /// Nested Chunks are never deduplicated (each is unique).
+    /// Add a StashValue constant to the pool and return its index.
+    /// Deduplicates by tag and value.
     /// </summary>
-    public ushort AddConstant(object? value)
+    public ushort AddConstant(StashValue value)
     {
-        // Deduplicate simple value types
-        if (value is null or bool or long or double or string)
+        // Deduplicate primitives and strings
+        if (value.Tag != StashValueTag.Obj || value.AsObj is string)
         {
             for (int i = 0; i < _constants.Count; i++)
             {
-                if (Equals(_constants[i], value))
-                    return (ushort)i;
+                StashValue existing = _constants[i];
+                if (existing.Tag == value.Tag)
+                {
+                    bool match = value.Tag switch
+                    {
+                        StashValueTag.Null => true,
+                        StashValueTag.Bool => existing.AsBool == value.AsBool,
+                        StashValueTag.Int => existing.AsInt == value.AsInt,
+                        StashValueTag.Float => existing.AsFloat == value.AsFloat,
+                        StashValueTag.Obj => object.Equals(existing.AsObj, value.AsObj),
+                        _ => false,
+                    };
+                    if (match) return (ushort)i;
+                }
             }
         }
 
@@ -137,6 +148,21 @@ public class ChunkBuilder
         _constants.Add(value);
         return (ushort)index;
     }
+
+    /// <summary>Add a long integer constant.</summary>
+    public ushort AddConstant(long value) => AddConstant(StashValue.FromInt(value));
+
+    /// <summary>Add a double constant.</summary>
+    public ushort AddConstant(double value) => AddConstant(StashValue.FromFloat(value));
+
+    /// <summary>Add a string constant.</summary>
+    public ushort AddConstant(string value) => AddConstant(StashValue.FromObj(value));
+
+    /// <summary>Add a compiled chunk (function body) constant.</summary>
+    public ushort AddConstant(Chunk value) => AddConstant(StashValue.FromObj(value));
+
+    /// <summary>Add an arbitrary object constant (for metadata, etc.).</summary>
+    public ushort AddConstant(object value) => AddConstant(StashValue.FromObject(value));
 
     // ---- Source Map ----
 

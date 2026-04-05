@@ -10,8 +10,8 @@ namespace Stash.Bytecode;
 /// </summary>
 internal sealed class Upvalue
 {
-    private object?[] _stack;
-    private object? _closed;
+    private StashValue[] _stack;
+    private StashValue _closed;
 
     /// <summary>The stack index this upvalue references while open.</summary>
     public int StackIndex { get; }
@@ -19,7 +19,7 @@ internal sealed class Upvalue
     /// <summary>Whether this upvalue still points to a live stack slot.</summary>
     public bool IsOpen { get; private set; }
 
-    public Upvalue(object?[] stack, int stackIndex)
+    public Upvalue(StashValue[] stack, int stackIndex)
     {
         _stack = stack;
         StackIndex = stackIndex;
@@ -27,7 +27,7 @@ internal sealed class Upvalue
     }
 
     /// <summary>Gets or sets the captured value.</summary>
-    public object? Value
+    public StashValue Value
     {
         get => IsOpen ? _stack[StackIndex] : _closed;
         set
@@ -54,7 +54,7 @@ internal sealed class Upvalue
     /// Updates the stack array reference after the VM resizes the stack.
     /// Only affects open upvalues — closed upvalues store their value internally.
     /// </summary>
-    internal void UpdateStack(object?[] newStack)
+    internal void UpdateStack(StashValue[] newStack)
     {
         if (IsOpen)
             _stack = newStack;

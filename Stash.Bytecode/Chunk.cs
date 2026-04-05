@@ -13,7 +13,7 @@ public class Chunk
     /// Constant pool — stores numbers, strings, and nested Chunks referenced by OP_CONST
     /// and other instructions that take a constant pool index.
     /// </summary>
-    public object?[] Constants { get; }
+    public StashValue[] Constants { get; }
 
     /// <summary>Bytecode offset → source location mappings for debugging and error reporting.</summary>
     public SourceMap SourceMap { get; }
@@ -59,7 +59,7 @@ public class Chunk
 
     public Chunk(
         byte[] code,
-        object?[] constants,
+        StashValue[] constants,
         SourceMap sourceMap,
         int arity,
         int minArity,

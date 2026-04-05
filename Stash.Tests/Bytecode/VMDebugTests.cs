@@ -257,7 +257,7 @@ return func(3, 4);
 ";
         Chunk chunk = CompileSource(source);
         // The function chunk should be in the constant pool
-        var fnChunks = chunk.Constants.OfType<Chunk>().ToList();
+        var fnChunks = chunk.Constants.Where(c => c.IsObj && c.AsObj is Chunk).Select(c => (Chunk)c.AsObj!).ToList();
         Assert.True(fnChunks.Count >= 1, "Expected at least one nested Chunk in constants");
 
         // The function chunk should have parameter and local names

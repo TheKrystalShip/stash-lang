@@ -76,7 +76,7 @@ public static class Disassembler
                     case OpCode.Const:
                         if (operand < chunk.Constants.Length)
                         {
-                            object? value = chunk.Constants[operand];
+                            StashValue value = chunk.Constants[operand];
                             sb.Append($"    ; {FormatConstant(value)}");
                         }
                         break;
@@ -86,7 +86,7 @@ public static class Disassembler
                     case OpCode.GetField:
                     case OpCode.SetField:
                     case OpCode.Is:
-                        if (operand < chunk.Constants.Length && chunk.Constants[operand] is string s)
+                        if (operand < chunk.Constants.Length && chunk.Constants[operand].AsObj is string s)
                             sb.Append($"    ; {s}");
                         break;
 
@@ -112,7 +112,7 @@ public static class Disassembler
                     }
 
                     case OpCode.Closure:
-                        if (operand < chunk.Constants.Length && chunk.Constants[operand] is Chunk fn)
+                        if (operand < chunk.Constants.Length && chunk.Constants[operand].AsObj is Chunk fn)
                         {
                             string fnName = fn.Name ?? "<lambda>";
                             sb.Append($"    ; {fnName}");
@@ -123,7 +123,7 @@ public static class Disassembler
                 sb.AppendLine();
 
                 // For Closure, also print upvalue descriptors that follow inline
-                if (opCode == OpCode.Closure && operand < chunk.Constants.Length && chunk.Constants[operand] is Chunk closureFn)
+                if (opCode == OpCode.Closure && operand < chunk.Constants.Length && chunk.Constants[operand].AsObj is Chunk closureFn)
                 {
                     int nextOffset = offset + 3;
                     for (int i = 0; i < closureFn.Upvalues.Length; i++)
@@ -145,15 +145,15 @@ public static class Disassembler
         }
     }
 
-    private static string FormatConstant(object? value) => value switch
+    private static string FormatConstant(StashValue value) => value.Tag switch
     {
-        null => "null",
-        bool b => b ? "true" : "false",
-        long l => l.ToString(),
-        double d => d.ToString("G"),
-        string s => $"\"{EscapeString(s)}\"",
-        Chunk c => $"<fn {c.Name ?? "<lambda>"}>",
-        _ => value.ToString() ?? "??",
+        StashValueTag.Null => "null",
+        StashValueTag.Bool => value.AsBool ? "true" : "false",
+        StashValueTag.Int => value.AsInt.ToString(),
+        StashValueTag.Float => value.AsFloat.ToString("G"),
+        StashValueTag.Obj when value.AsObj is string s => $"\"{EscapeString(s)}\"",
+        StashValueTag.Obj when value.AsObj is Chunk c => $"<fn {c.Name ?? "<lambda>"}>",
+        _ => value.ToString(),
     };
 
     private static string EscapeString(string s) =>

@@ -165,17 +165,17 @@ public class ChunkBuilderTests
 
         Chunk chunk = builder.Build();
         Assert.Equal(3, chunk.Constants.Length);
-        Assert.Equal(1L, chunk.Constants[0]);
-        Assert.Equal(2L, chunk.Constants[1]);
-        Assert.Equal("hello", chunk.Constants[2]);
+        Assert.Equal(1L, chunk.Constants[0].AsInt);
+        Assert.Equal(2L, chunk.Constants[1].AsInt);
+        Assert.Equal("hello", (string)chunk.Constants[2].AsObj!);
     }
 
     [Fact]
     public void AddConstant_Null_Deduplicates()
     {
         var builder = new ChunkBuilder();
-        ushort idx1 = builder.AddConstant(null);
-        ushort idx2 = builder.AddConstant(null);
+        ushort idx1 = builder.AddConstant(StashValue.Null);
+        ushort idx2 = builder.AddConstant(StashValue.Null);
         Assert.Equal(idx1, idx2);
     }
 
@@ -183,9 +183,9 @@ public class ChunkBuilderTests
     public void AddConstant_Bool_Deduplicates()
     {
         var builder = new ChunkBuilder();
-        ushort idx1 = builder.AddConstant(true);
-        ushort idx2 = builder.AddConstant(true);
-        ushort idx3 = builder.AddConstant(false);
+        ushort idx1 = builder.AddConstant(StashValue.True);
+        ushort idx2 = builder.AddConstant(StashValue.True);
+        ushort idx3 = builder.AddConstant(StashValue.False);
 
         Assert.Equal(idx1, idx2);
         Assert.NotEqual(idx1, idx3);

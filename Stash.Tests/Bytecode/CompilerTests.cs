@@ -350,8 +350,8 @@ public class CompilerTests
         // Top-level variables are global; use a function body to get LoadLocal
         Chunk chunk = CompileSource("fn foo() { let x = 42; x; }");
         Chunk? fnChunk = null;
-        foreach (object? c in chunk.Constants)
-            if (c is Chunk fc) { fnChunk = fc; break; }
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
         Assert.NotNull(fnChunk);
         Assert.Contains("LoadLocal", Disassembler.Disassemble(fnChunk));
     }
@@ -362,8 +362,8 @@ public class CompilerTests
         // Top-level variables are global; use a function body to get StoreLocal
         Chunk chunk = CompileSource("fn foo() { let x = 1; x = 2; }");
         Chunk? fnChunk = null;
-        foreach (object? c in chunk.Constants)
-            if (c is Chunk fc) { fnChunk = fc; break; }
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
         Assert.Contains("StoreLocal", fnDisasm);
@@ -507,9 +507,9 @@ public class CompilerTests
     {
         Chunk chunk = CompileSource("fn add(a, b) { return a + b; }");
         Chunk? fnChunk = null;
-        foreach (object? constant in chunk.Constants)
+        foreach (StashValue constant in chunk.Constants)
         {
-            if (constant is Chunk c)
+            if (constant.AsObj is Chunk c)
             {
                 fnChunk = c;
                 break;
@@ -525,9 +525,9 @@ public class CompilerTests
     {
         Chunk chunk = CompileSource("fn add(a, b) { return a + b; }");
         Chunk? fnChunk = null;
-        foreach (object? constant in chunk.Constants)
+        foreach (StashValue constant in chunk.Constants)
         {
-            if (constant is Chunk c) { fnChunk = c; break; }
+            if (constant.AsObj is Chunk c) { fnChunk = c; break; }
         }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
@@ -570,9 +570,9 @@ public class CompilerTests
     {
         Chunk chunk = CompileSource("let f = (x) => x + 1;");
         Chunk? lambdaChunk = null;
-        foreach (object? constant in chunk.Constants)
+        foreach (StashValue constant in chunk.Constants)
         {
-            if (constant is Chunk c) { lambdaChunk = c; break; }
+            if (constant.AsObj is Chunk c) { lambdaChunk = c; break; }
         }
         Assert.NotNull(lambdaChunk);
         string lambdaDisasm = Disassembler.Disassemble(lambdaChunk);
@@ -641,8 +641,8 @@ public class CompilerTests
         // Top-level variables are global; use a function body to get StoreLocal
         Chunk chunk = CompileSource("fn foo() { let x = 0; ++x; }");
         Chunk? fnChunk = null;
-        foreach (object? c in chunk.Constants)
-            if (c is Chunk fc) { fnChunk = fc; break; }
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
         Assert.Contains("Add", fnDisasm);
@@ -690,8 +690,8 @@ public class CompilerTests
     {
         Chunk chunk = CompileSource("fn foo() { throw \"error\"; } foo();");
         Chunk? fnChunk = null;
-        foreach (object? c in chunk.Constants)
-            if (c is Chunk fn) { fnChunk = fn; break; }
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk fn) { fnChunk = fn; break; }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
         Assert.Contains("Throw", fnDisasm);
@@ -860,8 +860,8 @@ public class CompilerTests
             fn sub(a, b) { return a - b; }
             """);
         int fnCount = 0;
-        foreach (object? c in chunk.Constants)
-            if (c is Chunk) fnCount++;
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk) fnCount++;
         Assert.Equal(2, fnCount);
     }
 
@@ -881,8 +881,8 @@ public class CompilerTests
             }
             """);
         Chunk? fnChunk = null;
-        foreach (object? c in chunk.Constants)
-            if (c is Chunk fc) { fnChunk = fc; break; }
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
         // The StoreLocal for the loop variable and the LoadLocal for reading it
@@ -906,8 +906,8 @@ public class CompilerTests
         // break inside for-in must clean up the iterator, index, and loop locals
         Chunk chunk = CompileSource("fn foo() { for (let x in [1, 2, 3]) { break; } }");
         Chunk? fnChunk = null;
-        foreach (object? c in chunk.Constants)
-            if (c is Chunk fc) { fnChunk = fc; break; }
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
         Assert.Contains("Iterator", fnDisasm);
