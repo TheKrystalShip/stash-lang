@@ -1,13 +1,13 @@
 # Stash Language — Project Guidelines
 
-Stash is a cross-platform scripting language for system administration. The interpreter is .NET-based and compiles to native binaries for Linux, macOS, and Windows. It combines C-style syntax with first-class shell command execution (`$(...)` syntax), built-in data structures (structs, enums, dictionaries), and 26 namespaces of standard library functions. Language features and standard library additions must work across all three platforms.
+Stash is a cross-platform scripting language for system administration. The interpreter is .NET-based and compiles to native binaries for Linux, macOS, and Windows. It combines C-style syntax with first-class shell command execution (`$(...)` syntax), built-in data structures (structs, enums, dictionaries), and 24 namespaces of standard library functions. Language features and standard library additions must work across all three platforms.
 
 ## Architecture
 
 ```
 Stash.Core          → Lexer (two-pointer scanner), Parser (recursive-descent), 46 AST node types
 Stash.Stdlib        → Built-in metadata registry, model records, single source of truth for all namespaces
-Stash.Bytecode      → Bytecode VM (compiler + stack-based VM), 26 built-in namespaces
+Stash.Bytecode      → Bytecode VM (compiler + stack-based VM), 24 built-in namespaces
 Stash.Analysis      → Static analysis engine, resolvers, visitors for diagnostics and tooling
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol (OmniSharp — NOT AOT, requires reflection)
@@ -56,7 +56,7 @@ Detailed docs live in `docs/` — link to these instead of duplicating content:
 | Topic                         | File                                         |
 | ----------------------------- | -------------------------------------------- |
 | Full language spec            | `docs/Stash — Language Specification.md`     |
-| All 26 namespaces + functions | `docs/Stash — Standard Library Reference.md` |
+| All 24 namespaces + functions | `docs/Stash — Standard Library Reference.md` |
 | LSP features & architecture   | `docs/LSP — Language Server Protocol.md`     |
 | DAP features & architecture   | `docs/DAP — Debug Adapter Protocol.md`       |
 | TAP test framework            | `docs/TAP — Testing Infrastructure.md`       |

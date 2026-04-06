@@ -2,6 +2,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -17,7 +18,7 @@ public class IoBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var sw = new StringWriter();
         vm.ErrorOutput = sw;
         vm.Execute(chunk);
@@ -32,7 +33,7 @@ public class IoBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var outSw = new StringWriter();
         var errSw = new StringWriter();
         vm.Output = outSw;
@@ -50,7 +51,7 @@ public class IoBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var sw = new StringWriter();
         vm.Output = sw;
         vm.ErrorOutput = sw;
@@ -159,7 +160,7 @@ public class IoBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var outSw = new System.IO.StringWriter();
         vm.Output = outSw;
         vm.Input = new System.IO.StringReader("y\n");
@@ -178,7 +179,7 @@ public class IoBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var outSw = new System.IO.StringWriter();
         vm.Output = outSw;
         vm.Input = new System.IO.StringReader("n\n");
@@ -196,7 +197,7 @@ public class IoBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var outSw = new System.IO.StringWriter();
         vm.Output = outSw;
         vm.Input = new System.IO.StringReader("\n");
@@ -214,7 +215,7 @@ public class IoBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var outSw = new System.IO.StringWriter();
         vm.Output = outSw;
         vm.Input = new System.IO.StringReader("yes\n");

@@ -1962,7 +1962,7 @@ try {
     $!(systemctl restart nginx)
 } catch (e) {
     if (e.exitCode == 3) {
-        log.warn("Service not found")
+        io.eprintln("Service not found")
     } else {
         throw e
     }
@@ -2694,7 +2694,7 @@ try {
     let handle = fs.open("/tmp/data.lock");
     doWork(handle);
 } catch (e) {
-    log.error("Work failed: " + e.message);
+    io.eprintln("Work failed: " + e.message);
 } finally {
     fs.delete("/tmp/data.lock");  // ALWAYS runs
 }
@@ -2757,7 +2757,7 @@ Rethrow a caught error to add context or re-signal it:
 try {
     riskyOperation();
 } catch (e) {
-    log.error("Failed: " + e.message);
+    io.eprintln("Failed: " + e.message);
     throw e;  // re-throws the original error
 }
 ```

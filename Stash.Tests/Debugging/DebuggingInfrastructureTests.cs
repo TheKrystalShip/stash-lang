@@ -6,6 +6,7 @@ using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing;
 using CallFrame = Stash.Debugging.CallFrame;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Debugging;
 
@@ -179,7 +180,7 @@ public class DebuggingInfrastructureTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.Debugger = debugger;
         vm.Execute(chunk);
 
@@ -198,7 +199,7 @@ public class DebuggingInfrastructureTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.Debugger = debugger;
         vm.Execute(chunk);
 
@@ -216,7 +217,7 @@ public class DebuggingInfrastructureTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.Debugger = debugger;
 
         Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
@@ -226,7 +227,7 @@ public class DebuggingInfrastructureTests
     [Fact]
     public void VM_ExposesGlobals()
     {
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         Assert.NotNull(vm.Globals);
         Assert.True(vm.Globals.ContainsKey("typeof"));
     }

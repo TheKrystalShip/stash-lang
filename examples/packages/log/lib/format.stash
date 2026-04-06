@@ -1,0 +1,22 @@
+import "types.stash" as types;
+
+/// Map LogLevel enum values to display strings.
+
+fn _level_name(level) -> string {
+  return level switch {
+    types.LogLevel.DEBUG => "DEBUG",
+    types.LogLevel.INFO => "INFO",
+    types.LogLevel.WARN => "WARN",
+    types.LogLevel.ERROR => "ERROR",
+    _ => "UNKNOWN"
+  };
+}
+
+/// Apply the format template to a LogEntry.
+fn apply(template, entry) -> string {
+  let result = template;
+  result = str.replace(result, "{time}", entry.timestamp);
+  result = str.replace(result, "{level}", _level_name(entry.level));
+  result = str.replace(result, "{msg}", entry.message);
+  return result;
+}

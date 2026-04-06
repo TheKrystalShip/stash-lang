@@ -1,0 +1,13 @@
+{
+  "name": "@stash/store",
+  "version": "1.0.0",
+  "description": "Process-scoped in-memory key-value store for Stash — singleton state with prefix scoping",
+  "author": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "index.stash",
+  "repository": "https://github.com/TheKrystalShip/stash-lang",
+  "keywords": ["store", "kv", "key-value", "state", "cache", "memory"],
+  "stash": ">=1.0.0",
+  "files": ["lib/", "index.stash", "README.md", "LICENSE"],
+  "private": false
+}

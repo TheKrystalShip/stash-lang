@@ -5,6 +5,7 @@ using Stash.Resolution;
 using Stash.Runtime;
 using AssertionError = Stash.Runtime.AssertionError;
 using Stash.Tap;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -20,7 +21,7 @@ public class TestBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.Execute(chunk);
     }
 
@@ -33,7 +34,7 @@ public class TestBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return vm.Execute(chunk);
     }
 
@@ -45,7 +46,7 @@ public class TestBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
         vm.TestHarness = reporter;
@@ -62,7 +63,7 @@ public class TestBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
         vm.TestHarness = reporter;
@@ -497,7 +498,7 @@ public class TestBuiltInsTests
         var statements = parser.ParseProgram();
         SemanticResolver.Resolve(statements);
         var chunk = Compiler.Compile(statements);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var originalWriter = new StringWriter();
         vm.Output = originalWriter;
 
@@ -529,7 +530,7 @@ public class TestBuiltInsTests
     [Fact]
     public void InterpreterOutput_DefaultsToConsoleOut()
     {
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         Assert.Same(Console.Out, vm.Output);
         Assert.Same(Console.Error, vm.ErrorOutput);
     }
@@ -544,7 +545,7 @@ public class TestBuiltInsTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var sw = new StringWriter();
         vm.Output = sw;
         vm.Execute(chunk);

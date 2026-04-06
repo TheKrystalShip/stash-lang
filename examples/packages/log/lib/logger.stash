@@ -1,0 +1,88 @@
+import { LogLevel, LogEntry } from "types.stash";
+import "format.stash" as fmt;
+
+/// Module-scoped state — singleton via import cache.
+let _level = LogLevel.INFO;
+let _format = "[{time}] [{level}] {msg}";
+let _file_path = null;
+
+/// Internal level ordering for comparison.
+let _level_order = [
+  LogLevel.DEBUG,
+  LogLevel.INFO,
+  LogLevel.WARN,
+  LogLevel.ERROR,
+  LogLevel.OFF
+];
+
+/// Check if a message at the given level should be emitted.
+fn _should_log(msg_level) -> bool {
+  let msg_idx = arr.indexOf(_level_order, msg_level);
+  let cur_idx = arr.indexOf(_level_order, _level);
+  return msg_idx >= cur_idx;
+}
+
+/// Write a formatted log message to the configured output.
+fn _write(level, msg) {
+  if (!_should_log(level)) {
+    return;
+  }
+
+  let entry = LogEntry {
+    level: level,
+    message: msg,
+    timestamp: time.iso()
+  };
+
+  let formatted = fmt.apply(_format, entry);
+
+  if (_file_path != null) {
+    fs.appendFile(_file_path, formatted + "\n");
+  } else {
+    io.eprintln(formatted);
+  }
+}
+
+/// Log a message at DEBUG level.
+fn debug(msg) {
+  _write(LogLevel.DEBUG, conv.toStr(msg));
+}
+
+/// Log a message at INFO level.
+fn info(msg) {
+  _write(LogLevel.INFO, conv.toStr(msg));
+}
+
+/// Log a message at WARN level.
+fn warn(msg) {
+  _write(LogLevel.WARN, conv.toStr(msg));
+}
+
+/// Log a message at ERROR level.
+fn error(msg) {
+  _write(LogLevel.ERROR, conv.toStr(msg));
+}
+
+/// Set the minimum log level. Messages below this level are silently discarded.
+fn setLevel(level) {
+  if (arr.indexOf(_level_order, level) == -1) {
+    throw "log.setLevel: level must be a LogLevel enum value";
+  }
+  _level = level;
+}
+
+/// Set the log message format template. Supports {time}, {level}, {msg} placeholders.
+fn setFormat(template) {
+  _format = template;
+}
+
+/// Redirect all subsequent log output to the specified file (append mode).
+/// Pass null to revert to stderr.
+fn toFile(path) {
+  _file_path = path;
+}
+
+/// Returns the current minimum log level.
+fn getLevel() -> LogLevel {
+  return _level;
+}

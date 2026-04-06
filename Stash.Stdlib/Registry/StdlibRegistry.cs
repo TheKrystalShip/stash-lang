@@ -27,7 +27,10 @@ public static partial class StdlibRegistry
         StdlibDefinitions.Namespaces.SelectMany(d => d.Constants).ToArray();
 
     public static IReadOnlyList<BuiltInFunction> Functions { get; } =
-        StdlibDefinitions.GetGlobals(Stash.Runtime.StashCapabilities.All).Metadata.ToArray();
+        StdlibDefinitions.GetGlobalNamespace(Stash.Runtime.StashCapabilities.All)
+            .Functions
+            .Select(f => new BuiltInFunction(f.Name, f.Parameters, f.ReturnType, f.Documentation))
+            .ToArray();
 
     // ── Known names (union of all symbol names — suppresses "not defined" warnings) ──
 

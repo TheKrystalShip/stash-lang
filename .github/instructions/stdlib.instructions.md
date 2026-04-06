@@ -1,13 +1,13 @@
 ---
-description: "Use when: adding, modifying, or debugging built-in namespace functions (arr, dict, str, math, time, json, fs, path, env, sys, http, crypto, io, conv, process, log, term, store, encoding, ini, config, args, tpl, test/assert), working in BuiltIns/ files, or updating the Standard Library Reference docs."
+description: "Use when: adding, modifying, or debugging built-in namespace functions (arr, dict, str, math, time, json, fs, path, env, sys, http, crypto, io, conv, process, term, encoding, ini, config, args, tpl, test/assert), working in BuiltIns/ files, or updating the Standard Library Reference docs."
 applyTo: "Stash.Stdlib/BuiltIns/**"
 ---
 
 # Standard Library Guidelines
 
-The Stash standard library comprises 26 namespaces with ~280+ functions, each in its own file under `Stash.Stdlib/BuiltIns/`. See `docs/Stash — Standard Library Reference.md` for the complete API reference.
+The Stash standard library comprises 24 namespaces with ~280+ functions, each in its own file under `Stash.Stdlib/BuiltIns/`. See `docs/Stash — Standard Library Reference.md` for the complete API reference.
 
-## All 26 Namespaces
+## All 24 Namespaces
 
 | Namespace       | File                  | Scope                                                                                                                    |
 | --------------- | --------------------- | ------------------------------------------------------------------------------------------------------------------------ |
@@ -32,8 +32,6 @@ The Stash standard library comprises 26 namespaces with ~280+ functions, each in
 | **encoding**    | `EncodingBuiltIns.cs` | `base64Encode`, `base64Decode`, `urlEncode`, `urlDecode`, `hexEncode`, `hexDecode`                                       |
 | **term**        | `TermBuiltIns.cs`     | `color`, `bold`, `style`, `strip`, `table`, `clear`, etc. + color constants                                              |
 | **sys**         | `SysBuiltIns.cs`      | `cpuCount`, `diskUsage`, `uptime`, `loadAvg`, `networkInterfaces`, etc.                                                  |
-| **log**         | `LogBuiltIns.cs`      | `debug`, `info`, `warn`, `error`, `setLevel`, `setFormat`, etc.                                                          |
-| **store**       | `StoreBuiltIns.cs`    | `set`, `get`, `has`, `keys`, `values`, `size`, `scope`, `all`, etc.                                                      |
 | **tpl**         | `TplBuiltIns.cs`      | `render`, `renderFile`, `compile` (see TPL instructions)                                                                 |
 | **test/assert** | `TestBuiltIns.cs`     | `test`, `describe`, `skip`, `assert.*` (see TAP instructions)                                                            |
 
@@ -76,7 +74,7 @@ Some namespaces are only registered when their capability is enabled. Use `b.Req
 
 | Gate        | Namespaces                                                                                                                          |
 | ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
-| Always      | io, conv, arr, dict, str, math, time, json, ini, config, path, tpl, store, crypto, encoding, term, sys, log, test, yaml, toml, task |
+| Always      | io, conv, arr, dict, str, math, time, json, ini, config, path, tpl, crypto, encoding, term, sys, test, yaml, toml, task |
 | Environment | env                                                                                                                                 |
 | Process     | process, args                                                                                                                       |
 | FileSystem  | fs, pkg                                                                                                                             |

@@ -2,6 +2,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -16,7 +17,7 @@ public class ArgsNamespaceTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.ScriptArgs = scriptArgs;
         return vm.Execute(chunk);
     }

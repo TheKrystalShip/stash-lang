@@ -52,7 +52,7 @@ public class NamespaceBuilder
         string? returnType = null, bool isVariadic = false, string? documentation = null)
     {
         int arity = isVariadic ? -1 : parameters.Length;
-        string qualifiedName = $"{_name}.{name}";
+        string qualifiedName = string.IsNullOrEmpty(_name) ? name : $"{_name}.{name}";
         _namespace.Define(name, new Runtime.BuiltInFunction(qualifiedName, arity, body));
         _functions.Add(new NamespaceFunction(_name, name, parameters, returnType, isVariadic, documentation));
         return this;

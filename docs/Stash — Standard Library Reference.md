@@ -33,17 +33,15 @@
 17. [`http` — HTTP Requests](#http--http-requests)
 18. [`process` — Process Management](#process--process-management)
 19. [`tpl` — Templating](#tpl--templating)
-20. [`store` — In-Memory Store](#store--in-memory-store)
-21. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-22. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-23. [`term` — Terminal Formatting](#term--terminal-formatting)
-24. [`sys` — System Information](#sys--system-information)
-25. [`task` — Parallel Tasks](#task--parallel-tasks)
-26. [`net` — Networking](#net--networking)
-27. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-28. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-29. [`log` — Logging](#log--logging)
-30. [Argument Parsing](#argument-parsing)
+20. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+21. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+22. [`term` — Terminal Formatting](#term--terminal-formatting)
+23. [`sys` — System Information](#sys--system-information)
+24. [`task` — Parallel Tasks](#task--parallel-tasks)
+25. [`net` — Networking](#net--networking)
+26. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+27. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+28. [Argument Parsing](#argument-parsing)
 
 ---
 
@@ -1575,90 +1573,6 @@ let r1 = tpl.render(compiled, data);
 
 ---
 
-## `store` — In-Memory Store
-
-A process-scoped in-memory key-value store. The store acts as a centralized data hub — any module or script running in the same interpreter shares the same store instance. Values persist for the lifetime of the process.
-
-Keys must be strings. Values can be any Stash type (strings, numbers, booleans, arrays, dicts, structs, functions, null).
-
-| Function              | Description                                                 |
-| --------------------- | ----------------------------------------------------------- |
-| `store.set(key, val)` | Set a key-value pair (overwrites if key exists)             |
-| `store.get(key)`      | Get the value for a key, or `null` if not found             |
-| `store.has(key)`      | Return `true` if the key exists                             |
-| `store.remove(key)`   | Remove a key; returns `true` if found                       |
-| `store.keys()`        | Return an array of all keys                                 |
-| `store.values()`      | Return an array of all values                               |
-| `store.size()`        | Return the number of entries                                |
-| `store.all()`         | Return a dictionary copy of all entries                     |
-| `store.scope(prefix)` | Return a dictionary of entries whose keys start with prefix |
-| `store.clear()`       | Remove all entries                                          |
-
-### Centralized Configuration
-
-```stash
-// config.stash — shared configuration module
-store.set("app.name", "MyApp");
-store.set("app.version", "1.0.0");
-store.set("app.debug", false);
-store.set("db.host", "localhost");
-store.set("db.port", 5432);
-```
-
-```stash
-// main.stash — reads config set by another module
-import "config.stash";
-
-io.println(store.get("app.name"));     // "MyApp"
-io.println(store.get("app.version"));  // "1.0.0"
-```
-
-### Scoped Retrieval
-
-Use `store.scope()` to retrieve groups of related entries by key prefix:
-
-```stash
-store.set("server.host", "10.0.0.1");
-store.set("server.port", 8080);
-store.set("server.name", "web-01");
-store.set("db.host", "10.0.0.2");
-
-let serverConfig = store.scope("server.");
-// dict with: { "server.host": "10.0.0.1", "server.port": 8080, "server.name": "web-01" }
-
-dict.forEach(serverConfig, (key, val) => {
-    io.println(key + " = " + val);
-});
-```
-
-### Shared State Across Modules
-
-Because modules are cached per-interpreter, the store provides a natural way to share state without passing data through function arguments:
-
-```stash
-// counter.stash
-fn increment(name) {
-    let current = store.get(name) ?? 0;
-    store.set(name, current + 1);
-}
-
-fn getCount(name) {
-    return store.get(name) ?? 0;
-}
-```
-
-```stash
-// app.stash
-import { increment, getCount } from "counter.stash";
-
-increment("requests");
-increment("requests");
-increment("requests");
-io.println(getCount("requests"));  // 3
-```
-
----
-
 ## Argument Parsing
 
 Stash provides the **`args.parse()`** function for declarative CLI argument parsing. Instead of manually parsing `args.list()`, scripts pass a **dict spec** describing expected flags, options, positional arguments, and subcommands, then call `args.parse()` to get a dict of parsed values. The interpreter handles parsing, validation, type coercion, and help generation automatically.
@@ -1922,70 +1836,6 @@ $(cmd);
 - `"Option '--name' has type 'list' but value is not an array."`
 - `"Option '--name' has type 'map' but value is not a dictionary."`
 - `"Option '--name' has type 'csv' but value is not an array."`
-
----
-
-## `log` — Logging
-
-The `log` namespace provides structured logging with configurable levels, format strings, and file output. By default, log messages are written to standard error.
-
-### Log Levels
-
-Messages are filtered by the current log level. Setting a level suppresses all messages below it:
-
-| Level   | Priority | Description                    |
-| ------- | -------- | ------------------------------ |
-| `debug` | 0        | Detailed debugging information |
-| `info`  | 1        | General informational messages |
-| `warn`  | 2        | Warning conditions             |
-| `error` | 3        | Error conditions               |
-
-The default level is `"info"`, meaning `debug` messages are suppressed.
-
-### Functions
-
-| Function              | Description                                                      |
-| --------------------- | ---------------------------------------------------------------- |
-| `log.debug(msg)`      | Log a debug-level message (suppressed unless level is `debug`)   |
-| `log.info(msg)`       | Log an info-level message                                        |
-| `log.warn(msg)`       | Log a warning-level message                                      |
-| `log.error(msg)`      | Log an error-level message (always output)                       |
-| `log.setLevel(level)` | Set minimum log level (`"debug"`, `"info"`, `"warn"`, `"error"`) |
-| `log.setFormat(fmt)`  | Set log message format string                                    |
-| `log.toFile(path)`    | Redirect log output to a file (pass `null` to revert to stderr)  |
-
-### Format String
-
-The default format is `"[{time}] [{level}] {msg}"`. Available placeholders:
-
-| Placeholder | Description                             |
-| ----------- | --------------------------------------- |
-| `{time}`    | Current timestamp in ISO 8601 format    |
-| `{level}`   | Uppercase log level (DEBUG, INFO, etc.) |
-| `{msg}`     | The log message                         |
-
-### Examples
-
-```stash
-// Basic logging
-log.info("Application started");
-log.warn("Disk space low");
-log.error("Connection failed");
-
-// Debug messages (suppressed by default)
-log.setLevel("debug");
-log.debug("Entering function parse()");
-
-// Custom format
-log.setFormat("{level}: {msg}");
-log.info("Server ready");   // "INFO: Server ready"
-
-// Log to file
-log.toFile("/var/log/myapp.log");
-log.info("This goes to the file");
-log.toFile(null);  // revert to stderr
-log.info("Back to stderr");
-```
 
 ---
 
@@ -2964,7 +2814,7 @@ let results = task.awaitAll(tasks);
 
 These are shared across tasks but are effectively immutable:
 
-- **Built-in namespaces:** All 26 namespaces (`io`, `arr`, `str`, etc.) are frozen after registration. Safe to call from any task.
+- **Built-in namespaces:** All 24 namespaces (`io`, `arr`, `str`, etc.) are frozen after registration. Safe to call from any task.
 - **Global scope reference:** The global (outermost) environment is shared by reference for access to global functions and constants. This is safe for reads.
 - **Struct and enum definitions:** Type definitions are immutable once created.
 

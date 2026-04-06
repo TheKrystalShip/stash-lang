@@ -83,7 +83,7 @@ The playground uses the Monaco editor (the same editor that powers VS Code) with
 The Monarch tokenizer provides accurate highlighting for all Stash syntax:
 
 - **Keywords** — `let`, `const`, `fn`, `struct`, `enum`, `if`, `else`, `for`, `while`, `return`, `match`, etc.
-- **Namespaces** — All 26 built-in namespaces (`arr`, `dict`, `str`, `math`, `time`, `json`, `fs`, `http`, etc.)
+- **Namespaces** — All 24 built-in namespaces (`arr`, `dict`, `str`, `math`, `time`, `json`, `fs`, `http`, etc.)
 - **Types** — `int`, `float`, `string`, `bool`, `array`, `dict`, `Error`
 - **Strings** — Regular strings, interpolated strings (`"Hello, ${name}!"`), and triple-quoted strings
 - **Comments** — Single-line (`//`) and block comments (`/* */`)

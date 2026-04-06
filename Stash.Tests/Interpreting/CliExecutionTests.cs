@@ -3,6 +3,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -21,7 +22,7 @@ public class CliExecutionTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.ScriptArgs = scriptArgs;
         vm.CurrentFile = sourceName;
         return vm.Execute(chunk);
@@ -127,7 +128,7 @@ public class CliExecutionTests
         var statements = parser.ParseProgram();
         SemanticResolver.Resolve(statements);
         var chunk = Compiler.Compile(statements);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.ScriptArgs = [];
         var ex = Record.Exception(() => { vm.Execute(chunk); });
         Assert.Null(ex);

@@ -11,14 +11,15 @@ public record NamespaceFunction(
     bool IsVariadic = false,
     string? Documentation = null)
 {
-    public string QualifiedName => $"{Namespace}.{Name}";
+    public string QualifiedName => string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
 
     public string Detail
     {
         get
         {
             var paramParts = Parameters.Select(p => p.Type != null ? $"{p.Name}: {p.Type}" : p.Name);
-            string sig = $"fn {Namespace}.{Name}({string.Join(", ", paramParts)})";
+            string prefix = string.IsNullOrEmpty(Namespace) ? Name : $"{Namespace}.{Name}";
+            string sig = $"fn {prefix}({string.Join(", ", paramParts)})";
             return ReturnType != null ? $"{sig} -> {ReturnType}" : sig;
         }
     }

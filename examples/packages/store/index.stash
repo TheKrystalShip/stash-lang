@@ -1,0 +1,12 @@
+/// @stash/store — Process-scoped in-memory key-value store for Stash.
+///
+/// Import the whole package:
+///   import "@stash/store" as store;
+///   store.kv.set("user.name", "admin");
+///   store.kv.get("user.name");
+///
+/// Or import individual functions:
+///   import { set, get, has, scope } from "@stash/store/lib/store.stash";
+
+import "lib/types.stash" as types;
+import "lib/store.stash" as kv;

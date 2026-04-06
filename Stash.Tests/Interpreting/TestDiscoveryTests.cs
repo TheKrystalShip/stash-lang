@@ -3,6 +3,7 @@ using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Tap;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -17,7 +18,7 @@ public class TestDiscoveryTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         if (currentFile is not null)
         {
             vm.CurrentFile = currentFile;
@@ -41,7 +42,7 @@ public class TestDiscoveryTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         if (currentFile is not null)
         {
             vm.CurrentFile = currentFile;
@@ -232,7 +233,7 @@ public class TestDiscoveryTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.CurrentFile = "test.stash";
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
@@ -252,21 +253,21 @@ public class TestDiscoveryTests
     [Fact]
     public void TestFilter_DefaultsToNull()
     {
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         Assert.Null(vm.TestFilter);
     }
 
     [Fact]
     public void DiscoveryMode_DefaultsToFalse()
     {
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         Assert.False(vm.DiscoveryMode);
     }
 
     [Fact]
     public void TestFilter_CanBeSetAndRead()
     {
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.TestFilter = new[] { "filter1", "filter2" };
         Assert.Equal(new[] { "filter1", "filter2" }, vm.TestFilter);
     }
@@ -274,7 +275,7 @@ public class TestDiscoveryTests
     [Fact]
     public void DiscoveryMode_CanBeSetAndRead()
     {
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.DiscoveryMode = true;
         Assert.True(vm.DiscoveryMode);
     }

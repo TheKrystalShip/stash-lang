@@ -4,6 +4,7 @@ using Stash.Parsing;
 using Stash.Resolution;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -16,7 +17,7 @@ public class InterpreterTests
         var parser = new Parser(tokens);
         var expr = parser.Parse();
         var chunk = Compiler.CompileExpression(expr);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return vm.Execute(chunk);
     }
 
@@ -613,7 +614,7 @@ public class InterpreterTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return vm.Execute(chunk);
     }
 
@@ -625,7 +626,7 @@ public class InterpreterTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
     }
 
@@ -3045,7 +3046,7 @@ public class InterpreterTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.CurrentFile = filePath;
         vm.ModuleLoader = (modulePath, _) => LoadModuleChunk(modulePath);
         return vm.Execute(chunk);
@@ -3059,7 +3060,7 @@ public class InterpreterTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.CurrentFile = filePath;
         vm.ModuleLoader = (modulePath, _) => LoadModuleChunk(modulePath);
         return Assert.Throws<RuntimeError>(() => vm.Execute(chunk));

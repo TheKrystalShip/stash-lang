@@ -4,6 +4,7 @@ using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Tpl;
 using Stash.Runtime;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -20,7 +21,7 @@ public class TemplateTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return vm.Execute(chunk);
     }
 

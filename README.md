@@ -67,9 +67,9 @@ try {
   let data = fs.readFile("/etc/app.conf");
   let config = json.parse(data);
 } catch (e) {
-  log.error("Config failed: " + e.message);
+  io.eprintln("Config failed: " + e.message);
 } finally {
-  log.info("Config loading complete");
+  io.println("Config loading complete");
 }
 ```
 

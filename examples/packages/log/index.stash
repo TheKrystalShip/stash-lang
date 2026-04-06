@@ -1,0 +1,14 @@
+/// @stash/log — Structured, level-filtered logging for Stash.
+///
+/// Import the whole package:
+///   import "@stash/log" as log;
+///   log.logger.info("Server started");
+///   log.logger.setLevel(log.types.LogLevel.DEBUG);
+///
+/// Or import individual modules:
+///   import { info, warn, error, setLevel } from "@stash/log/lib/logger.stash";
+///   import { LogLevel } from "@stash/log/lib/types.stash";
+
+import "lib/types.stash" as types;
+import "lib/logger.stash" as logger;
+import "lib/format.stash" as format;

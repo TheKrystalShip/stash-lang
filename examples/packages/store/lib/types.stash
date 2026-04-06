@@ -1,0 +1,6 @@
+/// Represents a snapshot of the store's contents.
+struct StoreSnapshot {
+    size,
+    keys,
+    entries
+}

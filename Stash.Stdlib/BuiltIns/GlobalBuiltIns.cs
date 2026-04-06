@@ -3,6 +3,7 @@ namespace Stash.Stdlib.BuiltIns;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
+using Stash.Stdlib.Models;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -11,11 +12,11 @@ using static Stash.Stdlib.Registration.P;
 /// </summary>
 public static class GlobalBuiltIns
 {
-    public static GlobalDefinition Define(StashCapabilities capabilities)
+    public static NamespaceDefinition Define(StashCapabilities capabilities)
     {
-        var gb = new GlobalBuilder();
+        var b = new NamespaceBuilder("");
 
-        gb.Function("typeof", [Param("value")], (_, args) =>
+        b.Function("typeof", [Param("value")], (_, args) =>
         {
             object? val = args[0];
 
@@ -46,7 +47,7 @@ public static class GlobalBuiltIns
             };
         }, returnType: "string");
 
-        gb.Function("semver", [Param("value", "string")], (_, args) =>
+        b.Function("semver", [Param("value", "string")], (_, args) =>
         {
             string str = Args.String(args, 0, "semver");
 
@@ -59,7 +60,7 @@ public static class GlobalBuiltIns
             throw new RuntimeError(detail, null);
         }, returnType: "semver", documentation: "Parses a string into a semver value.");
 
-        gb.Function("nameof", [Param("value")], (_, args) =>
+        b.Function("nameof", [Param("value")], (_, args) =>
         {
             object? val = args[0];
 
@@ -81,13 +82,13 @@ public static class GlobalBuiltIns
                 StashRange => "range",
                 StashFuture => "Future",
                 StashNamespace => "namespace",
-                BuiltInFunction bf => bf.Name,
+                Runtime.BuiltInFunction bf => bf.Name,
                 IStashCallable c => c.Name ?? "function",
                 _ => "unknown"
             };
         }, returnType: "string");
 
-        gb.Function("len", [Param("value")], (_, args) =>
+        b.Function("len", [Param("value")], (_, args) =>
         {
             object? val = args[0];
             if (val is string s)
@@ -108,12 +109,12 @@ public static class GlobalBuiltIns
             throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
         }, returnType: "int");
 
-        gb.Function("lastError", [], (ctx, args) =>
+        b.Function("lastError", [], (ctx, args) =>
         {
             return ctx.LastError;
         }, returnType: "Error");
 
-        gb.Function("range", [Param("start_or_end", "int"), Param("end", "int"), Param("step", "int")], (_, args) =>
+        b.Function("range", [Param("start_or_end", "int"), Param("end", "int"), Param("step", "int")], (_, args) =>
         {
             Args.Count(args, 1, 3, "range");
             long start, end, step;
@@ -157,11 +158,11 @@ public static class GlobalBuiltIns
                 }
             }
             return result;
-        }, returnType: "array", arity: -1);
+        }, returnType: "array", isVariadic: true);
 
         if (capabilities.HasFlag(StashCapabilities.Process))
         {
-            gb.Function("exit", [Param("code", "int")], (ctx, args) =>
+            b.Function("exit", [Param("code", "int")], (ctx, args) =>
             {
                 var code = Args.Long(args, 0, "exit");
                 ctx.EmitExit((int)code);
@@ -169,7 +170,7 @@ public static class GlobalBuiltIns
             });
         }
 
-        gb.Function("hash", [Param("value")], (_, args) =>
+        b.Function("hash", [Param("value")], (_, args) =>
         {
             if (args[0] is null)
             {
@@ -179,6 +180,19 @@ public static class GlobalBuiltIns
             return (long)args[0]!.GetHashCode();
         }, returnType: "int");
 
-        return gb.Build();
+        // Enums
+        b.Enum("Backoff", ["Fixed", "Linear", "Exponential"]);
+
+        // Struct definitions
+        b.Struct("RetryOptions", [
+            new ("delay", "duration"),
+            new ("backoff", "Backoff"),
+            new ("maxDelay", "duration"),
+            new ("jitter", "duration"),
+            new ("timeout", "duration"),
+            new ("on", "Error"),
+        ]);
+
+        return b.Build();
     }
 }

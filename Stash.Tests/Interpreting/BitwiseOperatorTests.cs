@@ -4,6 +4,7 @@ using Stash.Parsing.AST;
 using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -16,7 +17,7 @@ public class BitwiseOperatorTests
         var parser = new Parser(tokens);
         var expr = parser.Parse();
         var chunk = Compiler.CompileExpression(expr);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return vm.Execute(chunk);
     }
 
@@ -29,7 +30,7 @@ public class BitwiseOperatorTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return vm.Execute(chunk);
     }
 

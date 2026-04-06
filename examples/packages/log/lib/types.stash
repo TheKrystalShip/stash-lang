@@ -1,0 +1,15 @@
+/// The severity levels for log filtering.
+enum LogLevel {
+  DEBUG,
+  INFO,
+  WARN,
+  ERROR,
+  OFF
+}
+
+/// Represents a single log entry before formatting.
+struct LogEntry {
+  level,
+  message,
+  timestamp
+}

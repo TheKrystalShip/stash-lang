@@ -3,6 +3,7 @@ using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Tap;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -17,7 +18,7 @@ public class TestFilterTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         if (currentFile is not null)
         {
             vm.CurrentFile = currentFile;
@@ -190,7 +191,7 @@ public class TestFilterTests
         var statements = parser.ParseProgram();
         SemanticResolver.Resolve(statements);
         var chunk = Compiler.Compile(statements);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         var sw = new StringWriter();
         var reporter = new TapReporter(sw);
         vm.TestHarness = reporter;

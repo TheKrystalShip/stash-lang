@@ -3,6 +3,7 @@ using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
@@ -17,7 +18,7 @@ public class ArgsBuildTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         return vm.Execute(chunk);
     }
 
@@ -30,7 +31,7 @@ public class ArgsBuildTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.ScriptArgs = scriptArgs;
         return vm.Execute(chunk);
     }
@@ -43,7 +44,7 @@ public class ArgsBuildTests
         var stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(TestVM.CreateGlobals());
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
     }
 

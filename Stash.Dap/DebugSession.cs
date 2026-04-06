@@ -230,22 +230,7 @@ public class DebugSession : IDebugger
 
         // ── Create bytecode VM with populated globals ──
 
-        var vmGlobals = new Dictionary<string, object?>();
-
-        // Register global functions (full capabilities for DAP)
-        var globalDef = StdlibDefinitions.GetGlobals(StashCapabilities.All);
-        foreach (var (name, fn) in globalDef.RuntimeFunctions)
-            vmGlobals[name] = fn;
-
-        // Register namespace definitions
-        foreach (var nsDef in StdlibDefinitions.Namespaces)
-            vmGlobals[nsDef.Name] = nsDef.Namespace;
-
-        // Register built-in types for retry blocks
-        vmGlobals["Backoff"] = new StashEnum("Backoff", new List<string> { "Fixed", "Linear", "Exponential" });
-        vmGlobals["RetryOptions"] = new StashStruct("RetryOptions",
-            new List<string> { "delay", "backoff", "maxDelay", "jitter", "timeout", "on" },
-            new Dictionary<string, IStashCallable>());
+        var vmGlobals = StdlibDefinitions.CreateVMGlobals(StashCapabilities.All);
 
         _vm = new VirtualMachine(vmGlobals);
         _vm.Debugger = this;

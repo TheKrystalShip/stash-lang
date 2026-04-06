@@ -1,0 +1,13 @@
+{
+  "name": "@stash/log",
+  "version": "1.0.0",
+  "description": "Structured, level-filtered logging for Stash — configurable format, level filtering, and file output",
+  "author": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "index.stash",
+  "repository": "https://github.com/TheKrystalShip/stash-lang",
+  "keywords": ["log", "logging", "debug", "structured", "levels", "sysadmin"],
+  "stash": ">=1.0.0",
+  "files": ["lib/", "index.stash", "README.md", "LICENSE"],
+  "private": false
+}

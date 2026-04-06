@@ -1,0 +1,80 @@
+import { StoreSnapshot } from "types.stash";
+
+/// Module-scoped state — singleton via import cache.
+let _data = { };
+
+/// Store a value under the given key. Returns null.
+fn set(key, value) {
+  dict.set(_data, key, value);
+}
+
+/// Retrieve the value for a key, or null if not found.
+fn get(key) {
+  if (dict.has(_data, key)) {
+    return dict.get(_data, key);
+  }
+  return null;
+}
+
+/// Returns true if the key exists in the store.
+fn has(key) -> bool {
+  return dict.has(_data, key);
+}
+
+/// Remove a key from the store. Returns true if it existed.
+fn remove(key) -> bool {
+  if (!dict.has(_data, key)) {
+    return false;
+  }
+  dict.remove(_data, key);
+  return true;
+}
+
+/// Returns an array of all keys in the store.
+fn keys() -> array {
+  return dict.keys(_data);
+}
+
+/// Returns an array of all values in the store.
+fn values() -> array {
+  return dict.values(_data);
+}
+
+/// Returns the number of entries in the store.
+fn size() -> int {
+  return len(_data);
+}
+
+/// Remove all entries from the store.
+fn clear() {
+  dict.clear(_data);
+}
+
+/// Returns all key-value pairs as a dictionary (shallow copy).
+fn all() -> dict {
+  return dict.merge({ }, _data);
+}
+
+/// Returns a dictionary of all entries whose keys start with the given prefix.
+fn scope(prefix) -> dict {
+  let result = { };
+  let all_keys = dict.keys(_data);
+
+  for (let i = 0; i < len(all_keys); i++) {
+    let k = all_keys[i];
+    if (str.startsWith(k, prefix)) {
+      dict.set(result, k, dict.get(_data, k));
+    }
+  }
+
+  return result;
+}
+
+/// Returns a snapshot of the store's current state.
+fn snapshot() -> StoreSnapshot {
+  return StoreSnapshot {
+    size: size(),
+    keys: keys(),
+    entries: all()
+  };
+}

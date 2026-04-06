@@ -698,21 +698,7 @@ public class Program
     /// <summary>Creates built-in globals dictionary for the bytecode VM.</summary>
     private static Dictionary<string, object?> CreateVMGlobals()
     {
-        var globals = new Dictionary<string, object?>();
-
-        var globalDef = StdlibDefinitions.GetGlobals(StashCapabilities.All);
-        foreach (var (name, fn) in globalDef.RuntimeFunctions)
-            globals[name] = fn;
-
-        foreach (var nsDef in StdlibDefinitions.Namespaces)
-            globals[nsDef.Name] = nsDef.Namespace;
-
-        globals["Backoff"] = new StashEnum("Backoff", new List<string> { "Fixed", "Linear", "Exponential" });
-        globals["RetryOptions"] = new StashStruct("RetryOptions",
-            new List<string> { "delay", "backoff", "maxDelay", "jitter", "timeout", "on" },
-            new Dictionary<string, IStashCallable>());
-
-        return globals;
+        return StdlibDefinitions.CreateVMGlobals(StashCapabilities.All);
     }
 
     /// <summary>Module loading callback for the bytecode VM.</summary>

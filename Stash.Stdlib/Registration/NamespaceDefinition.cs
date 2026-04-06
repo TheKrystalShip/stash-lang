@@ -16,12 +16,7 @@ public record NamespaceDefinition(
     IReadOnlyList<NamespaceConstant> Constants,
     IReadOnlyList<BuiltInStruct> Structs,
     IReadOnlyList<BuiltInEnum> Enums,
-    StashCapabilities RequiredCapability = StashCapabilities.None);
-
-/// <summary>
-/// A complete global functions definition combining runtime implementations with metadata.
-/// Produced by <see cref="GlobalBuilder"/>.
-/// </summary>
-public record GlobalDefinition(
-    IReadOnlyList<Models.BuiltInFunction> Metadata,
-    IReadOnlyDictionary<string, Runtime.BuiltInFunction> RuntimeFunctions);
+    StashCapabilities RequiredCapability = StashCapabilities.None)
+{
+    public bool IsGlobal => string.IsNullOrEmpty(Name);
+}

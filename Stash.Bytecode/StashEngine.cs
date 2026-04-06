@@ -134,40 +134,17 @@ public class StashEngine
             return _vm;
         }
 
-        var vmGlobals = new Dictionary<string, object?>();
+        var vmGlobals = StdlibDefinitions.CreateVMGlobals(_capabilities);
 
-        // Register global functions (capability-filtered)
-        var globalDef = StdlibDefinitions.GetGlobals(_capabilities);
-        foreach (var (name, fn) in globalDef.RuntimeFunctions)
+        _vm = new VirtualMachine(vmGlobals, _cancellationToken)
         {
-            vmGlobals[name] = fn;
-        }
-
-        // Register namespace definitions, filtering by capabilities
-        foreach (var nsDef in StdlibDefinitions.Namespaces)
-        {
-            if (nsDef.RequiredCapability != StashCapabilities.None &&
-                !_capabilities.HasFlag(nsDef.RequiredCapability))
-            {
-                continue;
-            }
-
-            vmGlobals[nsDef.Name] = nsDef.Namespace;
-        }
-
-        // Register built-in types for retry blocks
-        vmGlobals["Backoff"] = new StashEnum("Backoff", new List<string> { "Fixed", "Linear", "Exponential" });
-        vmGlobals["RetryOptions"] = new StashStruct("RetryOptions",
-            new List<string> { "delay", "backoff", "maxDelay", "jitter", "timeout", "on" },
-            new Dictionary<string, IStashCallable>());
-
-        _vm = new VirtualMachine(vmGlobals, _cancellationToken);
-        _vm.Output = _output;
-        _vm.ErrorOutput = _errorOutput;
-        _vm.Input = _input;
-        _vm.StepLimit = _stepLimit;
-        _vm.EmbeddedMode = true;
-        _vm.ModuleLoader = LoadModuleForVM;
+            Output = _output,
+            ErrorOutput = _errorOutput,
+            Input = _input,
+            StepLimit = _stepLimit,
+            EmbeddedMode = true,
+            ModuleLoader = LoadModuleForVM
+        };
         return _vm;
     }
 
