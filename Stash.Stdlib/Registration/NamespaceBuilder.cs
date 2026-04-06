@@ -90,13 +90,16 @@ public class NamespaceBuilder
     }
 
     /// <summary>
-    /// Registers metadata for a built-in enum type produced by this namespace.
+    /// Registers a built-in enum type produced by this namespace.
+    /// The enum is both added to the LSP/Analysis metadata list and defined as a runtime
+    /// value in the namespace so that <c>EnumName.Member</c> works in Stash.
     /// </summary>
     public NamespaceBuilder Enum(string name, string[] members)
     {
         if (_enums.Any(e => e.Name == name))
             throw new ArgumentException($"Enum '{name}' is already registered in namespace '{_name}'.", nameof(name));
         _enums.Add(new BuiltInEnum(name, members, _name));
+        _namespace.Define(name, new StashEnum(name, members.ToList()));
         return this;
     }
 

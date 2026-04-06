@@ -37,16 +37,9 @@ public static class SysBuiltIns
     /// <param name="globals">The global <see cref="Stash.Interpreting.Environment"/> to register functions in.</param>
     public static NamespaceDefinition Define()
     {
-        var signalEnum = new StashEnum("Signal", new List<string>
-        {
-            "SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGUSR1", "SIGUSR2"
-        });
-
         var ns = new NamespaceBuilder("sys");
 
         // sys.Signal — Enum of trappable POSIX signals
-        ns.Constant("Signal", signalEnum, "enum", "sys.Signal",
-            documentation: "Enum of trappable POSIX signals.\nMembers: SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGUSR1, SIGUSR2");
         ns.Enum("Signal", ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGUSR1", "SIGUSR2"]);
 
         // sys.cpuCount() — Returns the number of logical CPU processors available to the current process.

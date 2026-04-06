@@ -347,6 +347,13 @@ public class RetryExprTests : StashTestBase
     }
 
     [Fact]
+    public void Retry_RetryOptionsStruct_Accessible()
+    {
+        var result = Run("let result = typeof(RetryOptions);");
+        Assert.Equal("struct", result);
+    }
+
+    [Fact]
     public void Retry_WithDelay_Parses()
     {
         var result = Run("let result = retry (1, delay: 0s) { return 42; };");

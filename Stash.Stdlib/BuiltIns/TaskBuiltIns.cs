@@ -30,7 +30,6 @@ public static class TaskBuiltIns
         ns.Function("awaitAny", [Param("tasks", "array")], AwaitAny);
         ns.Function("status",   [Param("task", "Future")], (ctx, args) => Status(ctx, args, taskStatusEnum));
         ns.Function("cancel",   [Param("task", "Future")], Cancel);
-        ns.Constant("Status", taskStatusEnum, "enum", "task.Status");
         ns.Function("all",     [Param("tasks", "array")], All);
         ns.Function("race",    [Param("tasks", "array")], Race);
         ns.Function("resolve", [Param("value")], TaskResolve);
