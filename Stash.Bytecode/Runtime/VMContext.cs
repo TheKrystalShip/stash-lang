@@ -25,7 +25,7 @@ internal sealed class VMContext : IInterpreterContext
         _ct = ct;
     }
 
-    // --- IExecutionContext ---
+    // --- Execution Context ---
 
     public object? LastError { get; set; }
     public bool EmbeddedMode { get; set; }
@@ -64,7 +64,7 @@ internal sealed class VMContext : IInterpreterContext
         return path;
     }
 
-    // --- IProcessContext (stubs for Phase 6) ---
+    // --- Process Tracking ---
 
     public List<(StashInstance Handle, Process Process)> TrackedProcesses { get; } = new();
     public Dictionary<StashInstance, StashInstance> ProcessWaitCache { get; } = new();
@@ -96,7 +96,7 @@ internal sealed class VMContext : IInterpreterContext
         }
     }
 
-    // --- ITestContext (stubs for TAP framework) ---
+    // --- Test Context ---
 
     public ITestHarness? TestHarness { get; set; }
     public string? CurrentDescribe { get; set; }
@@ -145,7 +145,7 @@ internal sealed class VMContext : IInterpreterContext
         return renderer.Render(nodes, data);
     }
 
-    // --- IFileWatchContext (stubs for Phase 6) ---
+    // --- File Watch Context ---
 
     public List<(StashInstance Handle, FileSystemWatcher Watcher)> TrackedWatchers { get; } = new();
     public void CleanupTrackedWatchers()
@@ -167,6 +167,12 @@ internal sealed class VMContext : IInterpreterContext
 
     // --- IInterpreterContext ---
 
+    /// <summary>
+    /// Creates a child context for async/parallel execution.
+    /// Shared (by reference): <see cref="Output"/>, <see cref="ErrorOutput"/>, <see cref="Input"/>, <see cref="Globals"/>, <see cref="ModuleCache"/>, <see cref="ModuleLocks"/>, <see cref="ModuleLoader"/>, <see cref="TestHarness"/>.
+    /// Copied (by value): <see cref="CurrentFile"/>, <see cref="ScriptArgs"/>, <see cref="ElevationActive"/>, <see cref="ElevationCommand"/>, <see cref="EmbeddedMode"/>.
+    /// Writers are upgraded to <see cref="SynchronizedTextWriter"/> on first fork to prevent interleaved output.
+    /// </summary>
     public IInterpreterContext Fork(CancellationToken cancellationToken = default)
     {
         // Upgrade to synchronized writers on first fork to prevent interleaved output
@@ -258,9 +264,21 @@ internal sealed class VMContext : IInterpreterContext
                 childVm.CurrentFile = CurrentFile;
                 childVm.ScriptArgs = ScriptArgs;
                 childVm.EmbeddedMode = EmbeddedMode;
-                if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
-                if (ModuleCache != null) childVm._moduleCache = ModuleCache;
-                if (ModuleLocks != null) childVm._moduleLocks = ModuleLocks;
+                if (ModuleLoader != null)
+                {
+                    childVm.ModuleLoader = ModuleLoader;
+                }
+
+                if (ModuleCache != null)
+                {
+                    childVm.ModuleCache = ModuleCache;
+                }
+
+                if (ModuleLocks != null)
+                {
+                    childVm.ModuleLocks = ModuleLocks;
+                }
+
                 return childVm.CallClosure(vmFn, args);
             }
         }

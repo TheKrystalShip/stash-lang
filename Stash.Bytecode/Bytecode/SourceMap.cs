@@ -31,6 +31,13 @@ public class SourceMap
     public SourceMap(SourceMapEntry[] entries)
     {
         _entries = entries;
+#if DEBUG
+        for (int i = 1; i < _entries.Length; i++)
+        {
+            System.Diagnostics.Debug.Assert(_entries[i].BytecodeOffset >= _entries[i - 1].BytecodeOffset,
+                "SourceMap entries must be sorted by offset");
+        }
+#endif
     }
 
     /// <summary>Number of entries in this source map.</summary>

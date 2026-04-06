@@ -26,7 +26,9 @@ internal sealed class VMFunction : IStashCallable
     }
 
     /// <summary>
-    /// Not used — the bytecode VM handles VMFunction calls directly in CallValue.
+    /// Not supported. VMFunction instances are executed directly by the bytecode VM
+    /// via <see cref="VirtualMachine.CallValue"/>. This method exists because 
+    /// <see cref="IStashCallable"/> is used for type checks in StashEngine and stdlib functions.
     /// </summary>
     public object? Call(IInterpreterContext context, List<object?> arguments) =>
         throw new System.NotSupportedException("VMFunction must be executed by the bytecode VM.");

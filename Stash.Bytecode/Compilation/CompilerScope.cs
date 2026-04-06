@@ -23,6 +23,10 @@ internal sealed class CompilerScope
 {
     private readonly List<Local> _locals = new();
     private int _peakLocalCount;
+    // These two dicts duplicate data from _locals but they are intentionally kept:
+    // EndScope() removes entries from _locals when variables go out of scope, but
+    // GetPeakLocalNames() / GetPeakLocalIsConst() must return metadata for ALL slots
+    // up to the peak count — including slots whose locals have already been popped.
     private readonly Dictionary<int, string> _localNamesBySlot = new();
     private readonly Dictionary<int, bool> _localConstBySlot = new();
 
@@ -75,7 +79,10 @@ internal sealed class CompilerScope
         _localNamesBySlot[slot] = name;
         _localConstBySlot[slot] = isConst;
         if (_locals.Count > _peakLocalCount)
+        {
             _peakLocalCount = _locals.Count;
+        }
+
         return slot;
     }
 

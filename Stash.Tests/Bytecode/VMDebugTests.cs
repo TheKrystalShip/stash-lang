@@ -432,7 +432,7 @@ return test();
             new("name", "hello"),
             new("flag", true),
         };
-        var scope = new VMDebugScope(bindings, null);
+        var scope = VMDebugScope.FromSnapshot(bindings, null);
 
         var result = scope.GetAllBindings().ToDictionary(kv => kv.Key, kv => kv.Value);
         Assert.Equal(42L, result["x"]);
@@ -443,8 +443,8 @@ return test();
     [Fact]
     public void VMDebugScope_ScopeChain_Works()
     {
-        var global = new VMDebugScope(Array.Empty<KeyValuePair<string, object?>>(), null);
-        IDebugScope local = new VMDebugScope(
+        var global = VMDebugScope.FromSnapshot(Array.Empty<KeyValuePair<string, object?>>(), null);
+        IDebugScope local = VMDebugScope.FromSnapshot(
             new[] { new KeyValuePair<string, object?>("x", 1L) },
             global);
 

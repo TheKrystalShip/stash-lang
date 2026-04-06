@@ -30,16 +30,14 @@ internal sealed class VMDebugScope : IDebugScope
 
     private readonly IDebugScope? _enclosing;
 
-    /// <summary>Snapshot constructor (immutable bindings).</summary>
-    public VMDebugScope(KeyValuePair<string, object?>[] bindings, IDebugScope? enclosing)
+    private VMDebugScope(KeyValuePair<string, object?>[] bindings, IDebugScope? enclosing)
     {
         _bindings = bindings;
         _enclosing = enclosing;
     }
 
-    /// <summary>Live-stack constructor (reads/writes VM stack slots directly).</summary>
-    public VMDebugScope(StashValue[] stack, int baseSlot, int localCount,
-                        string[]? names, bool[]? isConst, IDebugScope? enclosing)
+    private VMDebugScope(StashValue[] stack, int baseSlot, int localCount,
+                         string[]? names, bool[]? isConst, IDebugScope? enclosing)
     {
         _stack = stack;
         _baseSlot = baseSlot;
@@ -49,12 +47,24 @@ internal sealed class VMDebugScope : IDebugScope
         _enclosing = enclosing;
     }
 
-    /// <summary>Dictionary constructor (reads/writes VM globals dictionary).</summary>
-    public VMDebugScope(Dictionary<string, object?> globals, IDebugScope? enclosing)
+    private VMDebugScope(Dictionary<string, object?> globals, IDebugScope? enclosing)
     {
         _globals = globals;
         _enclosing = enclosing;
     }
+
+    /// <summary>Creates a snapshot scope from an immutable key/value array (used for closure upvalues).</summary>
+    public static VMDebugScope FromSnapshot(KeyValuePair<string, object?>[] bindings, IDebugScope? enclosing) =>
+        new(bindings, enclosing);
+
+    /// <summary>Creates a live-stack scope that reads/writes VM stack slots directly (used for frame locals).</summary>
+    public static VMDebugScope FromStack(StashValue[] stack, int baseSlot, int localCount,
+                                         string[]? names, bool[]? isConst, IDebugScope? enclosing) =>
+        new(stack, baseSlot, localCount, names, isConst, enclosing);
+
+    /// <summary>Creates a dictionary scope that reads/writes the VM globals dictionary.</summary>
+    public static VMDebugScope FromGlobals(Dictionary<string, object?> globals, IDebugScope? enclosing) =>
+        new(globals, enclosing);
 
     public IEnumerable<KeyValuePair<string, object?>> GetAllBindings()
     {

@@ -172,53 +172,8 @@ public class StashEngine
     }
 
     /// <summary>Module loading callback for the bytecode VM.</summary>
-    private Chunk LoadModuleForVM(string modulePath, string? currentFile)
-    {
-        string? basePath = currentFile is not null ? Path.GetDirectoryName(currentFile) : null;
-        string fullPath;
-
-        if (Path.IsPathRooted(modulePath))
-        {
-            fullPath = modulePath;
-        }
-        else if (basePath is not null)
-        {
-            fullPath = Path.GetFullPath(Path.Combine(basePath, modulePath));
-        }
-        else
-        {
-            fullPath = Path.GetFullPath(modulePath);
-        }
-
-        string? resolvedPath = ModuleResolver.ResolveFilePath(fullPath);
-        if (resolvedPath is null && basePath is not null && ModuleResolver.IsBareSpecifier(modulePath))
-        {
-            resolvedPath = ModuleResolver.ResolvePackageImport(modulePath, basePath);
-        }
-
-        if (resolvedPath is null)
-        {
-            throw new RuntimeError($"Cannot find module '{modulePath}'.", null);
-        }
-
-        string source = File.ReadAllText(resolvedPath);
-        var lexer = new Lexer(source, resolvedPath);
-        var tokens = lexer.ScanTokens();
-        if (lexer.Errors.Count > 0)
-        {
-            throw new RuntimeError($"Lex errors in module '{resolvedPath}': {lexer.Errors[0]}", null);
-        }
-
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        if (parser.Errors.Count > 0)
-        {
-            throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", null);
-        }
-
-        SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts);
-    }
+    private Chunk LoadModuleForVM(string modulePath, string? currentFile) =>
+        StashCompilationPipeline.LoadModule(modulePath, currentFile);
 
     /// <summary>
     /// Executes Stash source code as statements (e.g., variable declarations, function
@@ -450,89 +405,32 @@ public class StashEngine
     /// <summary>
     /// Converts a Stash runtime value to its string representation.
     /// </summary>
-    public string Stringify(object? value) => RuntimeValues.Stringify(value);
+    public string Stringify(object? value) => StashTypeConverter.Stringify(value);
 
     /// <summary>
     /// Converts a Stash dictionary to a .NET dictionary.
     /// Keys are converted to strings via <see cref="Stringify"/>.
     /// </summary>
-    public Dictionary<string, object?> ToDictionary(object? value)
-    {
-        if (value is not StashDictionary dict)
-        {
-            throw new ArgumentException($"Expected a Stash dictionary, got {value?.GetType().Name ?? "null"}.");
-        }
-
-        var result = new Dictionary<string, object?>();
-        foreach (var entry in dict.RawEntries())
-        {
-            result[RuntimeValues.Stringify(entry.Key)] = entry.Value;
-        }
-        return result;
-    }
+    public Dictionary<string, object?> ToDictionary(object? value) => StashTypeConverter.ToDictionary(value);
 
     /// <summary>
     /// Converts a Stash struct instance to a .NET dictionary of field name → value.
     /// </summary>
-    public Dictionary<string, object?> ToFieldDictionary(object? value)
-    {
-        if (value is not StashInstance instance)
-        {
-            throw new ArgumentException($"Expected a Stash struct instance, got {value?.GetType().Name ?? "null"}.");
-        }
-
-        return new Dictionary<string, object?>(instance.GetFields());
-    }
+    public Dictionary<string, object?> ToFieldDictionary(object? value) => StashTypeConverter.ToFieldDictionary(value);
 
     /// <summary>
     /// Converts a Stash array to a .NET list.
     /// </summary>
-    public List<object?> ToList(object? value)
-    {
-        if (value is not List<object?> list)
-        {
-            throw new ArgumentException($"Expected a Stash array, got {value?.GetType().Name ?? "null"}.");
-        }
-
-        return new List<object?>(list);
-    }
+    public List<object?> ToList(object? value) => StashTypeConverter.ToList(value);
 
     /// <summary>
     /// Creates a Stash dictionary from a .NET dictionary.
     /// </summary>
-    public StashDictionary CreateDictionary(IDictionary<string, object?> values)
-    {
-        var dict = new StashDictionary();
-        foreach (var kvp in values)
-        {
-            dict.Set(kvp.Key, kvp.Value);
-        }
-        return dict;
-    }
+    public StashDictionary CreateDictionary(IDictionary<string, object?> values) => StashTypeConverter.CreateDictionary(values);
 
     /// <summary>Lexes and parses Stash source code into a list of statements, collecting any errors.</summary>
-    /// <param name="source">The Stash source code to parse.</param>
-    /// <returns>A tuple of parsed statements and any lex/parse error messages.</returns>
-    private (List<Stmt> Statements, List<string> Errors) ParseStatements(string source)
-    {
-        var lexer = new Lexer(source);
-        var tokens = lexer.ScanTokens();
-
-        if (lexer.Errors.Count > 0)
-        {
-            return ([], lexer.Errors);
-        }
-
-        var parser = new Parser(tokens);
-        var statements = parser.ParseProgram();
-
-        if (parser.Errors.Count > 0)
-        {
-            return ([], parser.Errors);
-        }
-
-        return (statements, []);
-    }
+    private (List<Stmt> Statements, List<string> Errors) ParseStatements(string source) =>
+        StashCompilationPipeline.ParseStatements(source);
 }
 
 /// <summary>

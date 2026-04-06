@@ -1,5 +1,6 @@
 namespace Stash.Bytecode;
 
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics.CodeAnalysis;
 using Stash.Runtime;
@@ -9,22 +10,17 @@ using Stash.Runtime;
 /// </summary>
 internal sealed class ExtensionRegistry
 {
-    private readonly Dictionary<string, Dictionary<string, IStashCallable>> _extensions = new();
+    private readonly ConcurrentDictionary<string, Dictionary<string, IStashCallable>> _methods = new();
 
     public void Register(string typeName, string methodName, IStashCallable callable)
     {
-        if (!_extensions.TryGetValue(typeName, out Dictionary<string, IStashCallable>? methods))
-        {
-            methods = new Dictionary<string, IStashCallable>();
-            _extensions[typeName] = methods;
-        }
+        var methods = _methods.GetOrAdd(typeName, _ => new Dictionary<string, IStashCallable>());
         methods[methodName] = callable;
     }
 
-    public bool TryGetMethod(string typeName, string methodName,
-                             [NotNullWhen(true)] out IStashCallable? callable)
+    public bool TryGetMethod(string typeName, string methodName, [NotNullWhen(true)] out IStashCallable? callable)
     {
-        if (_extensions.TryGetValue(typeName, out Dictionary<string, IStashCallable>? methods) &&
+        if (_methods.TryGetValue(typeName, out Dictionary<string, IStashCallable>? methods) &&
             methods.TryGetValue(methodName, out callable))
         {
             return true;

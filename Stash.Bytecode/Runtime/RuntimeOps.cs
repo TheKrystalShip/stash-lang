@@ -422,182 +422,53 @@ internal static class RuntimeOps
     }
 
     // --- Comparison ---
-    // Returns a comparison result for ordered comparisons.
     // Supports: long, double (with promotion), IpAddress, Duration, ByteSize, SemVer
 
     public static bool LessThan(StashValue left, StashValue right, SourceSpan? span)
-    {
-        if (left.IsInt && right.IsInt)
-        {
-            return left.AsInt < right.AsInt;
-        }
-
-        if (left.IsNumeric && right.IsNumeric)
-        {
-            return ToDouble(left) < ToDouble(right);
-        }
-
-        object? lObj = left.IsObj ? left.AsObj : null;
-        object? rObj = right.IsObj ? right.AsObj : null;
-        if (lObj is StashIpAddress ipL && rObj is StashIpAddress ipR)
-        {
-            return ipL.CompareTo(ipR) < 0;
-        }
-
-        if (lObj is StashDuration durL && rObj is StashDuration durR)
-        {
-            return durL.CompareTo(durR) < 0;
-        }
-
-        if (lObj is StashByteSize bsL && rObj is StashByteSize bsR)
-        {
-            return bsL.CompareTo(bsR) < 0;
-        }
-
-        if (lObj is StashSemVer svL && rObj is StashSemVer svR)
-        {
-            return svL.CompareTo(svR) < 0;
-        }
-
-        if (lObj is StashSemVer || rObj is StashSemVer)
-        {
-            throw new RuntimeError("Semver can only be compared to another semver.", span);
-        }
-
-        if (lObj is StashDuration or StashByteSize || rObj is StashDuration or StashByteSize)
-        {
-            throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", span);
-        }
-
-        throw new RuntimeError("Operands must be two numbers or two IP addresses.", span);
-    }
+        => Compare(left, right, span) < 0;
 
     public static bool LessEqual(StashValue left, StashValue right, SourceSpan? span)
-    {
-        if (left.IsInt && right.IsInt)
-        {
-            return left.AsInt <= right.AsInt;
-        }
-
-        if (left.IsNumeric && right.IsNumeric)
-        {
-            return ToDouble(left) <= ToDouble(right);
-        }
-
-        object? lObj = left.IsObj ? left.AsObj : null;
-        object? rObj = right.IsObj ? right.AsObj : null;
-        if (lObj is StashIpAddress ipL && rObj is StashIpAddress ipR)
-        {
-            return ipL.CompareTo(ipR) <= 0;
-        }
-
-        if (lObj is StashDuration durL && rObj is StashDuration durR)
-        {
-            return durL.CompareTo(durR) <= 0;
-        }
-
-        if (lObj is StashByteSize bsL && rObj is StashByteSize bsR)
-        {
-            return bsL.CompareTo(bsR) <= 0;
-        }
-
-        if (lObj is StashSemVer svL && rObj is StashSemVer svR)
-        {
-            return svL.CompareTo(svR) <= 0;
-        }
-
-        if (lObj is StashSemVer || rObj is StashSemVer)
-        {
-            throw new RuntimeError("Semver can only be compared to another semver.", span);
-        }
-
-        if (lObj is StashDuration or StashByteSize || rObj is StashDuration or StashByteSize)
-        {
-            throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", span);
-        }
-
-        throw new RuntimeError("Operands must be two numbers or two IP addresses.", span);
-    }
+        => Compare(left, right, span) <= 0;
 
     public static bool GreaterThan(StashValue left, StashValue right, SourceSpan? span)
-    {
-        if (left.IsInt && right.IsInt)
-        {
-            return left.AsInt > right.AsInt;
-        }
-
-        if (left.IsNumeric && right.IsNumeric)
-        {
-            return ToDouble(left) > ToDouble(right);
-        }
-
-        object? lObj = left.IsObj ? left.AsObj : null;
-        object? rObj = right.IsObj ? right.AsObj : null;
-        if (lObj is StashIpAddress ipL && rObj is StashIpAddress ipR)
-        {
-            return ipL.CompareTo(ipR) > 0;
-        }
-
-        if (lObj is StashDuration durL && rObj is StashDuration durR)
-        {
-            return durL.CompareTo(durR) > 0;
-        }
-
-        if (lObj is StashByteSize bsL && rObj is StashByteSize bsR)
-        {
-            return bsL.CompareTo(bsR) > 0;
-        }
-
-        if (lObj is StashSemVer svL && rObj is StashSemVer svR)
-        {
-            return svL.CompareTo(svR) > 0;
-        }
-
-        if (lObj is StashSemVer || rObj is StashSemVer)
-        {
-            throw new RuntimeError("Semver can only be compared to another semver.", span);
-        }
-
-        if (lObj is StashDuration or StashByteSize || rObj is StashDuration or StashByteSize)
-        {
-            throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", span);
-        }
-
-        throw new RuntimeError("Operands must be two numbers or two IP addresses.", span);
-    }
+        => Compare(left, right, span) > 0;
 
     public static bool GreaterEqual(StashValue left, StashValue right, SourceSpan? span)
+        => Compare(left, right, span) >= 0;
+
+    private static int Compare(StashValue left, StashValue right, SourceSpan? span)
     {
         if (left.IsInt && right.IsInt)
         {
-            return left.AsInt >= right.AsInt;
+            return left.AsInt.CompareTo(right.AsInt);
         }
 
         if (left.IsNumeric && right.IsNumeric)
         {
-            return ToDouble(left) >= ToDouble(right);
+            return ToDouble(left).CompareTo(ToDouble(right));
         }
 
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
+
         if (lObj is StashIpAddress ipL && rObj is StashIpAddress ipR)
         {
-            return ipL.CompareTo(ipR) >= 0;
+            return ipL.CompareTo(ipR);
         }
 
         if (lObj is StashDuration durL && rObj is StashDuration durR)
         {
-            return durL.CompareTo(durR) >= 0;
+            return durL.CompareTo(durR);
         }
 
         if (lObj is StashByteSize bsL && rObj is StashByteSize bsR)
         {
-            return bsL.CompareTo(bsR) >= 0;
+            return bsL.CompareTo(bsR);
         }
 
         if (lObj is StashSemVer svL && rObj is StashSemVer svR)
         {
-            return svL.CompareTo(svR) >= 0;
+            return svL.CompareTo(svR);
         }
 
         if (lObj is StashSemVer || rObj is StashSemVer)
