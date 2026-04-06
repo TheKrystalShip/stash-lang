@@ -817,8 +817,8 @@ public class DebugSession : IDebugger
         return variables;
     }
 
-    /// <summary>Evaluates an expression in the context of the given frame and returns the result string.</summary>
-    public string Evaluate(string expression, int? frameId)
+    /// <summary>Evaluates an expression in the context of the given frame and returns a formatted variable.</summary>
+    public Variable Evaluate(string expression, int? frameId)
     {
         Trace($"Evaluate: {expression}");
 
@@ -833,13 +833,18 @@ public class DebugSession : IDebugger
         executor ??= _executor;
         if (executor == null)
         {
-            return "No interpreter";
+            return new Variable { Name = expression, Value = "No interpreter", VariablesReference = 0 };
         }
 
         scope ??= executor.GlobalScope;
 
         var (value, error) = executor.EvaluateExpression(expression, scope);
-        return error != null ? $"Error: {error}" : RuntimeValues.Stringify(value);
+        if (error != null)
+        {
+            return new Variable { Name = expression, Value = $"Error: {error}", VariablesReference = 0 };
+        }
+
+        return FormatVariable(expression, value);
     }
 
     /// <summary>

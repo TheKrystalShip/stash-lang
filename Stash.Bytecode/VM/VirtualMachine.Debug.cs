@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Stash.Common;
 using Stash.Debugging;
@@ -92,8 +93,9 @@ public sealed partial class VirtualMachine
             enclosing = VMDebugScope.FromSnapshot(closureBindings, enclosing);
         }
 
+        int activeLocalCount = Math.Min(chunk.LocalCount, Math.Max(0, _sp - frame.BaseSlot));
         return VMDebugScope.FromStack(
-            _stack, frame.BaseSlot, chunk.LocalCount,
+            _stack, frame.BaseSlot, activeLocalCount,
             chunk.LocalNames, chunk.LocalIsConst, enclosing);
     }
 

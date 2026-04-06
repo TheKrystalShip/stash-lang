@@ -344,7 +344,7 @@ public class DapIntegrationTests
             var frameId = (int)frames[0].Id;
 
             var result = session.Evaluate("x + y", frameId);
-            Assert.Equal("30", result);
+            Assert.Equal("30", result.Value);
 
             session.Continue();
             WaitForTermination(session);

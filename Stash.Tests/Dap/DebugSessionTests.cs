@@ -322,7 +322,7 @@ public class DebugSessionTests
     {
         var session = new DebugSession();
         var result = session.Evaluate("1 + 1", null);
-        Assert.Equal("No interpreter", result);
+        Assert.Equal("No interpreter", result.Value);
     }
 
     // ── 9. Disconnect Tests ───────────────────────────────────────────────────
