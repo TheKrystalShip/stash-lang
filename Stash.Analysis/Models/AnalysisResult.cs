@@ -89,12 +89,14 @@ public class AnalysisResult
 
             // Check: preceded by { or , (skip trivia tokens)
             bool precededByBraceOrComma = false;
+            int precedingTokenIdx = -1;
             for (int j = i - 1; j >= 0; j--)
             {
                 var prev = Tokens[j].Type;
                 if (prev is TokenType.LeftBrace or TokenType.Comma)
                 {
                     precededByBraceOrComma = true;
+                    precedingTokenIdx = j;
                     break;
                 }
                 // Skip trivia (comments, etc.)
@@ -134,9 +136,51 @@ public class AnalysisResult
                 return false;
             }
 
-            // Exclude struct init fields: if this identifier resolves to a Field symbol, it's a struct init
-            var def = Symbols.FindDefinition(token.Lexeme, line, column);
-            return def == null || def.Kind != SymbolKind.Field;
+            // Exclude struct init fields by checking the syntactic context.
+            // In `StructName { field: value }`, the `{` is preceded by an Identifier (struct name).
+            // In `{ key: value }`, the `{` is preceded by `=`, `(`, `,`, or similar.
+            int braceIdx;
+            if (Tokens[precedingTokenIdx].Type == TokenType.LeftBrace)
+            {
+                braceIdx = precedingTokenIdx;
+            }
+            else
+            {
+                // Preceded by comma — walk back to find the opening brace
+                braceIdx = -1;
+                int depth = 0;
+                for (int k = precedingTokenIdx - 1; k >= 0; k--)
+                {
+                    if (Tokens[k].Type == TokenType.RightBrace) depth++;
+                    else if (Tokens[k].Type == TokenType.LeftBrace)
+                    {
+                        if (depth == 0) { braceIdx = k; break; }
+                        depth--;
+                    }
+                }
+            }
+
+            if (braceIdx > 0)
+            {
+                for (int k = braceIdx - 1; k >= 0; k--)
+                {
+                    var prev = Tokens[k].Type;
+                    if (prev is TokenType.SingleLineComment or TokenType.BlockComment or TokenType.DocComment or TokenType.Shebang)
+                    {
+                        continue;
+                    }
+
+                    if (prev == TokenType.Identifier)
+                    {
+                        // StructName { field: value } — struct init field, not a dict key
+                        return false;
+                    }
+
+                    break;
+                }
+            }
+
+            return true;
         }
 
         return false;
