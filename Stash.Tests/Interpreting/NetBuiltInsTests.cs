@@ -8,22 +8,11 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class NetBuiltInsTests
+public class NetBuiltInsTests : StashTestBase
 {
-    private static object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
 
-    private static void RunExpectingError(string source)
+
+    private static new void RunExpectingError(string source)
     {
         var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();

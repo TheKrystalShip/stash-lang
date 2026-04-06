@@ -4,10 +4,6 @@ using System.Linq;
 using Stash.Bytecode;
 using Stash.Common;
 using Stash.Debugging;
-using Stash.Resolution;
-using Stash.Lexing;
-using Stash.Parsing;
-using Stash.Parsing.AST;
 using Stash.Runtime;
 using DebugCallFrame = Stash.Debugging.CallFrame;
 
@@ -18,19 +14,9 @@ namespace Stash.Tests.Bytecode;
 /// Verifies that the VM correctly calls IDebugger hooks and provides
 /// accurate source location, variable, and call stack information.
 /// </summary>
-public class VMDebugTests
+public class VMDebugTests : BytecodeTestBase
 {
     // ── Test infrastructure ──
-
-    private static Chunk CompileSource(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        List<Token> tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        List<Stmt> stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts);
-    }
 
     private static (object? Result, TestDebugger Debugger) ExecuteWithDebugger(string source)
     {

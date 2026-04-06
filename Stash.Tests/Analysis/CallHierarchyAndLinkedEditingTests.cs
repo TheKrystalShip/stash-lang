@@ -1,22 +1,10 @@
 using Stash.Common;
-using Stash.Lexing;
-using Stash.Parsing;
 using Stash.Analysis;
 
 namespace Stash.Tests.Analysis;
 
-public class CallHierarchyAndLinkedEditingTests
+public class CallHierarchyAndLinkedEditingTests : AnalysisTestBase
 {
-    private static ScopeTree Analyze(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        return collector.Collect(stmts);
-    }
-
     private static bool IsInsideSpan(SourceSpan? span, SourceSpan target)
     {
         if (span == null)

@@ -1,4 +1,3 @@
-using System.Collections.Generic;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -7,18 +6,8 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Analysis;
 
-public class UfcsLspTests
+public class UfcsLspTests : AnalysisTestBase
 {
-    private static ScopeTree Analyze(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        return collector.Collect(stmts);
-    }
-
     private static (ScopeTree tree, List<Stmt> stmts) AnalyzeWithInference(string source)
     {
         var lexer = new Lexer(source, "<test>");

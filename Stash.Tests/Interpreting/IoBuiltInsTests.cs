@@ -6,24 +6,9 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class IoBuiltInsTests
+public class IoBuiltInsTests : StashTestBase
 {
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private static string CaptureStderr(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        var sw = new StringWriter();
-        vm.ErrorOutput = sw;
-        vm.Execute(chunk);
-        return sw.ToString();
-    }
 
     private static (string stdout, string stderr) CaptureBoth(string source)
     {
@@ -63,7 +48,7 @@ public class IoBuiltInsTests
     [Fact]
     public void Eprintln_WritesToStderr()
     {
-        var stderr = CaptureStderr("io.eprintln(\"hello\");");
+        var stderr = RunCapturingStderr("io.eprintln(\"hello\");");
         Assert.Equal("hello" + System.Environment.NewLine, stderr);
     }
 
@@ -72,7 +57,7 @@ public class IoBuiltInsTests
     [Fact]
     public void Eprint_WritesToStderr()
     {
-        var stderr = CaptureStderr("io.eprint(\"hello\");");
+        var stderr = RunCapturingStderr("io.eprint(\"hello\");");
         Assert.Equal("hello", stderr);
     }
 
@@ -99,7 +84,7 @@ public class IoBuiltInsTests
     [Fact]
     public void Eprintln_StringifiesValue()
     {
-        var stderr = CaptureStderr("io.eprintln(42);");
+        var stderr = RunCapturingStderr("io.eprintln(42);");
         Assert.Equal("42" + System.Environment.NewLine, stderr);
     }
 
@@ -108,7 +93,7 @@ public class IoBuiltInsTests
     [Fact]
     public void Eprint_StringifiesValue()
     {
-        var stderr = CaptureStderr("io.eprint(true);");
+        var stderr = RunCapturingStderr("io.eprint(true);");
         Assert.Equal("true", stderr);
     }
 
@@ -117,7 +102,7 @@ public class IoBuiltInsTests
     [Fact]
     public void Eprintln_NullValue()
     {
-        var stderr = CaptureStderr("io.eprintln(null);");
+        var stderr = RunCapturingStderr("io.eprintln(null);");
         Assert.Equal("null" + System.Environment.NewLine, stderr);
     }
 
@@ -126,7 +111,7 @@ public class IoBuiltInsTests
     [Fact]
     public void Eprintln_MultipleCallsAppend()
     {
-        var stderr = CaptureStderr("io.eprintln(\"first\"); io.eprintln(\"second\");");
+        var stderr = RunCapturingStderr("io.eprintln(\"first\"); io.eprintln(\"second\");");
         Assert.Equal("first" + System.Environment.NewLine + "second" + System.Environment.NewLine, stderr);
     }
 

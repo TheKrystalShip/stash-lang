@@ -7,22 +7,8 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class DictArgParseTests
+public class DictArgParseTests : StashTestBase
 {
-    private static object? RunWithArgs(string source, string[] scriptArgs)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        vm.ScriptArgs = scriptArgs;
-        return vm.Execute(chunk);
-    }
-
     private static void RunWithArgsExpectingError(string source, string[] scriptArgs)
     {
         var lexer = new Lexer(source, "<test>");

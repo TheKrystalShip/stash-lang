@@ -7,7 +7,7 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class TestDiscoveryTests
+public class TestDiscoveryTests : StashTestBase
 {
     // Helper for discovery mode
     private static (TapReporter reporter, string output) RunDiscovery(string source, string? currentFile = null)
@@ -28,29 +28,6 @@ public class TestDiscoveryTests
         var reporter = new TapReporter(sw);
         vm.TestHarness = reporter;
         vm.DiscoveryMode = true;
-        vm.Execute(chunk);
-        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
-        return (reporter, sw.ToString());
-    }
-
-    // Helper for running with harness and optional file
-    private static (TapReporter reporter, string output) RunWithHarness(string source, string? currentFile = null)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        if (currentFile is not null)
-        {
-            vm.CurrentFile = currentFile;
-        }
-
-        var sw = new StringWriter();
-        var reporter = new TapReporter(sw);
-        vm.TestHarness = reporter;
         vm.Execute(chunk);
         reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
         return (reporter, sw.ToString());

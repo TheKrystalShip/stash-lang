@@ -9,51 +9,9 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class TestBuiltInsTests
+public class TestBuiltInsTests : StashTestBase
 {
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private static void RunStatements(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        vm.Execute(chunk);
-    }
-
-    private static object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
-    private static (TapReporter reporter, string output) RunWithHarness(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        var sw = new StringWriter();
-        var reporter = new TapReporter(sw);
-        vm.TestHarness = reporter;
-        vm.Execute(chunk);
-        reporter.OnRunComplete(reporter.PassedCount, reporter.FailedCount, reporter.SkippedCount);
-        return (reporter, sw.ToString());
-    }
 
     private static (TapReporter reporter, string output, VirtualMachine vm) RunWithHarnessAndVM(string source)
     {

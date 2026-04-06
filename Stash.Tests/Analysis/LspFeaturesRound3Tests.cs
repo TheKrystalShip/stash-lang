@@ -6,34 +6,8 @@ using Stash.Analysis;
 
 namespace Stash.Tests.Analysis;
 
-public class LspFeaturesRound3Tests
+public class LspFeaturesRound3Tests : AnalysisTestBase
 {
-    private static ScopeTree Analyze(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector { IncludeBuiltIns = false };
-        return collector.Collect(stmts);
-    }
-
-    private static AnalysisResult FullAnalyze(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        var tree = collector.Collect(stmts);
-        var validator = new SemanticValidator(tree);
-        var diagnostics = validator.Validate(stmts);
-        return new AnalysisResult(tokens, stmts,
-            new List<string>(), new List<string>(),
-            new List<DiagnosticError>(), new List<DiagnosticError>(),
-            tree, diagnostics);
-    }
-
     // ──────────────────────────────────────────────────────────
     // 1. Structured Diagnostics Tests
     // ──────────────────────────────────────────────────────────

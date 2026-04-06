@@ -1,71 +1,17 @@
-using Stash.Lexing;
-using Stash.Parsing;
-using Stash.Bytecode;
-using Stash.Resolution;
-using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class FsWatchBuiltInsTests : IDisposable
+public class FsWatchBuiltInsTests : TempDirectoryFixture
 {
-    private readonly string _testDir;
-
-    public FsWatchBuiltInsTests()
-    {
-        _testDir = Path.Combine(Path.GetTempPath(), "stash_fswatch_test_" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_testDir);
-    }
-
-    public void Dispose()
-    {
-        try { Directory.Delete(_testDir, true); } catch { }
-    }
-
-    private void Execute(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        vm.Execute(chunk);
-    }
-
-    private object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
-    private void RunExpectingError(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-    }
+    public FsWatchBuiltInsTests() : base("stash_fswatch_test") { }
 
     // ── Happy path ───────────────────────────────────────────────────────────
 
     [Fact]
     public void Watch_FileModified_CallbackFires()
     {
-        var filePath = Path.Combine(_testDir, "watch_modified.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_modified.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
@@ -86,7 +32,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_DirectoryFileCreated_CallbackFires()
     {
-        var dir = Path.Combine(_testDir, "watch_created_dir").Replace("\\", "/");
+        var dir = Path.Combine(TestDir, "watch_created_dir").Replace("\\", "/");
         Directory.CreateDirectory(dir);
         var newFile = $"{dir}/newfile.txt";
 
@@ -109,7 +55,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_DirectoryFileDeleted_CallbackFires()
     {
-        var dir = Path.Combine(_testDir, "watch_deleted_dir").Replace("\\", "/");
+        var dir = Path.Combine(TestDir, "watch_deleted_dir").Replace("\\", "/");
         Directory.CreateDirectory(dir);
         var target = $"{dir}/todelete.txt";
         File.WriteAllText(target, "data");
@@ -131,7 +77,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_DirectoryFileRenamed_CallbackFires()
     {
-        var dir = Path.Combine(_testDir, "watch_renamed_dir").Replace("\\", "/");
+        var dir = Path.Combine(TestDir, "watch_renamed_dir").Replace("\\", "/");
         Directory.CreateDirectory(dir);
         var oldFile = $"{dir}/before.txt";
         var newFile = $"{dir}/after.txt";
@@ -170,7 +116,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_WithFilter_OnlyMatchingFilesTriggger()
     {
-        var dir = Path.Combine(_testDir, "watch_filter_dir").Replace("\\", "/");
+        var dir = Path.Combine(TestDir, "watch_filter_dir").Replace("\\", "/");
         Directory.CreateDirectory(dir);
         var match = $"{dir}/match.txt";
         var noMatch = $"{dir}/nomatch.log";
@@ -196,7 +142,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_Recursive_SubdirChangesDetected()
     {
-        var dir = Path.Combine(_testDir, "watch_recursive_dir").Replace("\\", "/");
+        var dir = Path.Combine(TestDir, "watch_recursive_dir").Replace("\\", "/");
         var subdir = $"{dir}/sub";
         Directory.CreateDirectory(subdir);
         var deepFile = $"{subdir}/deep.txt";
@@ -218,7 +164,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Unwatch_StopsCallbacks()
     {
-        var filePath = Path.Combine(_testDir, "watch_stopped.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_stopped.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
@@ -240,18 +186,18 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_NonExistentPath_ThrowsError()
     {
-        var missing = Path.Combine(_testDir, "does_not_exist").Replace("\\", "/");
+        var missing = Path.Combine(TestDir, "does_not_exist").Replace("\\", "/");
         RunExpectingError($$"""fs.watch("{{missing}}", (event) => {});""");
     }
 
     [Fact]
     public void Unwatch_InvalidHandle_NoOp()
     {
-        var filePath = Path.Combine(_testDir, "unwatch_invalid.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "unwatch_invalid.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "data");
 
         // Watcher handle becomes invalid (inactive) after unwatch. Re-calling must be a no-op.
-        Execute($$"""
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {});
             fs.unwatch(w);
             fs.unwatch(w);
@@ -261,10 +207,10 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Unwatch_Double_NoOp()
     {
-        var filePath = Path.Combine(_testDir, "unwatch_double.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "unwatch_double.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "data");
 
-        Execute($$"""
+        RunStatements($$"""
             let w = fs.watch("{{filePath}}", (event) => {});
             fs.unwatch(w);
             fs.unwatch(w);
@@ -274,7 +220,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_CallbackError_WatcherContinues()
     {
-        var filePath = Path.Combine(_testDir, "watch_cb_error.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_cb_error.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
@@ -300,7 +246,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_SamePathTwice_BothFire()
     {
-        var filePath = Path.Combine(_testDir, "watch_two.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_two.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
@@ -326,7 +272,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_DefaultOptions_Works()
     {
-        var filePath = Path.Combine(_testDir, "watch_default.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_default.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
@@ -346,7 +292,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_RecursiveFalse_SubdirIgnored()
     {
-        var dir = Path.Combine(_testDir, "watch_nonrecursive").Replace("\\", "/");
+        var dir = Path.Combine(TestDir, "watch_nonrecursive").Replace("\\", "/");
         var subdir = $"{dir}/sub";
         Directory.CreateDirectory(subdir);
         var ignoredFile = $"{subdir}/ignored.txt";
@@ -370,7 +316,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_DebouncedRapidWrites_SingleCallback()
     {
-        var filePath = Path.Combine(_testDir, "watch_debounce.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_debounce.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""
@@ -394,7 +340,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_DebounceZero_AllEventsRaw()
     {
-        var subDir = Path.Combine(_testDir, "watch_nodebounce").Replace("\\", "/");
+        var subDir = Path.Combine(TestDir, "watch_nodebounce").Replace("\\", "/");
         Directory.CreateDirectory(subDir);
 
         var result = Run($$"""
@@ -420,7 +366,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_ValueTypeNotShared_ForkSemantics()
     {
-        var filePath = Path.Combine(_testDir, "watch_fork.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_fork.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         // Callbacks run with the original closure, so parent-scope variables are accessible.
@@ -442,7 +388,7 @@ public class FsWatchBuiltInsTests : IDisposable
     [Fact]
     public void Watch_ReferenceTypeShared_DictMutation()
     {
-        var filePath = Path.Combine(_testDir, "watch_shared.txt").Replace("\\", "/");
+        var filePath = Path.Combine(TestDir, "watch_shared.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
         var result = Run($$"""

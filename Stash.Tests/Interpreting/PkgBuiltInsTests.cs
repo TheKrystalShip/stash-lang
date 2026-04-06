@@ -1,41 +1,9 @@
-using Stash.Lexing;
-using Stash.Parsing;
-using Stash.Bytecode;
-using Stash.Resolution;
 using Stash.Runtime.Types;
-using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class PkgBuiltInsTests
+public class PkgBuiltInsTests : StashTestBase
 {
-    private static object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
-    private static object? RunWithFile(string source, string currentFile)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        vm.CurrentFile = currentFile;
-        return vm.Execute(chunk);
-    }
-
     private static string MakeTempDir()
     {
         string tmpDir = Path.Combine(Path.GetTempPath(), "stash_test_" + Guid.NewGuid().ToString("N"));

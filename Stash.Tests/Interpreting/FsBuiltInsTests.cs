@@ -1,71 +1,17 @@
-using Stash.Bytecode;
-using Stash.Lexing;
-using Stash.Parsing;
-using Stash.Resolution;
-using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class FsBuiltInsTests : IDisposable
+public class FsBuiltInsTests : TempDirectoryFixture
 {
-    private readonly string _testDir;
-
-    public FsBuiltInsTests()
-    {
-        _testDir = Path.Combine(Path.GetTempPath(), "stash_fs_test_" + Guid.NewGuid().ToString("N")[..8]);
-        Directory.CreateDirectory(_testDir);
-    }
-
-    public void Dispose()
-    {
-        try { Directory.Delete(_testDir, true); } catch { }
-    }
-
-    private void Execute(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        vm.Execute(chunk);
-    }
-
-    private object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
-    private void RunExpectingError(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-    }
+    public FsBuiltInsTests() : base("stash_fs_test") { }
 
     // ── fs.createFile ───────────────────────────────────────────────────────
 
     [Fact]
     public void CreateFile_CreatesNewFile()
     {
-        var filePath = Path.Combine(_testDir, "create_new.txt");
+        var filePath = Path.Combine(TestDir, "create_new.txt");
         Assert.False(File.Exists(filePath));
 
         var result = Run($"fs.createFile(\"{filePath}\"); let result = fs.exists(\"{filePath}\");");
@@ -76,12 +22,12 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void CreateFile_UpdatesTimestamp()
     {
-        var filePath = Path.Combine(_testDir, "create_ts.txt");
+        var filePath = Path.Combine(TestDir, "create_ts.txt");
         File.WriteAllText(filePath, "old");
         var pastTime = DateTime.UtcNow.AddSeconds(-60);
         File.SetLastWriteTimeUtc(filePath, pastTime);
 
-        Execute($"fs.createFile(\"{filePath}\");");
+        RunStatements($"fs.createFile(\"{filePath}\");");
 
         var newTime = File.GetLastWriteTimeUtc(filePath);
         Assert.True(newTime > pastTime.AddSeconds(30));
@@ -90,7 +36,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void CreateFile_ReturnsNull()
     {
-        var filePath = Path.Combine(_testDir, "create_null.txt");
+        var filePath = Path.Combine(TestDir, "create_null.txt");
         var result = Run($"let result = fs.createFile(\"{filePath}\");");
         Assert.Null(result);
     }
@@ -104,7 +50,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void CreateFile_ExistingFileDoesNotThrow()
     {
-        var filePath = Path.Combine(_testDir, "create_existing.txt");
+        var filePath = Path.Combine(TestDir, "create_existing.txt");
         File.WriteAllText(filePath, "content");
 
         // Should not throw — just updates the timestamp
@@ -115,8 +61,8 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void CreateFile_CreatesEmptyFile()
     {
-        var filePath = Path.Combine(_testDir, "create_empty.txt");
-        Execute($"fs.createFile(\"{filePath}\");");
+        var filePath = Path.Combine(TestDir, "create_empty.txt");
+        RunStatements($"fs.createFile(\"{filePath}\");");
 
         Assert.True(File.Exists(filePath));
         Assert.Equal(0, new FileInfo(filePath).Length);
@@ -129,11 +75,11 @@ public class FsBuiltInsTests : IDisposable
     {
         try
         {
-            var targetPath = Path.Combine(_testDir, "symlink_target.txt");
-            var linkPath = Path.Combine(_testDir, "symlink_link.txt");
+            var targetPath = Path.Combine(TestDir, "symlink_target.txt");
+            var linkPath = Path.Combine(TestDir, "symlink_link.txt");
             File.WriteAllText(targetPath, "symlink content");
 
-            Execute($"fs.symlink(\"{targetPath}\", \"{linkPath}\");");
+            RunStatements($"fs.symlink(\"{targetPath}\", \"{linkPath}\");");
 
             Assert.True(File.Exists(linkPath));
             var linkInfo = new FileInfo(linkPath);
@@ -149,8 +95,8 @@ public class FsBuiltInsTests : IDisposable
     {
         try
         {
-            var targetPath = Path.Combine(_testDir, "sym_target2.txt");
-            var linkPath = Path.Combine(_testDir, "sym_link2.txt");
+            var targetPath = Path.Combine(TestDir, "sym_target2.txt");
+            var linkPath = Path.Combine(TestDir, "sym_link2.txt");
             File.WriteAllText(targetPath, "data");
 
             var result = Run($"fs.symlink(\"{targetPath}\", \"{linkPath}\"); let result = fs.isSymlink(\"{linkPath}\");");
@@ -163,13 +109,13 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Symlink_NonStringTargetThrows()
     {
-        RunExpectingError($"fs.symlink(123, \"{Path.Combine(_testDir, "link.txt")}\");");
+        RunExpectingError($"fs.symlink(123, \"{Path.Combine(TestDir, "link.txt")}\");");
     }
 
     [Fact]
     public void Symlink_NonStringPathThrows()
     {
-        var targetPath = Path.Combine(_testDir, "sym_target3.txt");
+        var targetPath = Path.Combine(TestDir, "sym_target3.txt");
         File.WriteAllText(targetPath, "data");
         RunExpectingError($"fs.symlink(\"{targetPath}\", 99);");
     }
@@ -179,8 +125,8 @@ public class FsBuiltInsTests : IDisposable
     {
         try
         {
-            var targetPath = Path.Combine(_testDir, "sym_null_target.txt");
-            var linkPath = Path.Combine(_testDir, "sym_null_link.txt");
+            var targetPath = Path.Combine(TestDir, "sym_null_target.txt");
+            var linkPath = Path.Combine(TestDir, "sym_null_link.txt");
             File.WriteAllText(targetPath, "data");
 
             var result = Run($"let result = fs.symlink(\"{targetPath}\", \"{linkPath}\");");
@@ -195,7 +141,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Stat_ReturnsDict()
     {
-        var filePath = Path.Combine(_testDir, "stat_file.txt");
+        var filePath = Path.Combine(TestDir, "stat_file.txt");
         File.WriteAllText(filePath, "hello world");
 
         var result = Run($"let result = fs.stat(\"{filePath}\");");
@@ -205,7 +151,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Stat_FileProperties()
     {
-        var filePath = Path.Combine(_testDir, "stat_props.txt");
+        var filePath = Path.Combine(TestDir, "stat_props.txt");
         File.WriteAllText(filePath, "hello world"); // 11 bytes
 
         var isFile = Run($"let result = dict.get(fs.stat(\"{filePath}\"), \"isFile\");");
@@ -222,7 +168,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Stat_DirProperties()
     {
-        var dirPath = Path.Combine(_testDir, "stat_subdir");
+        var dirPath = Path.Combine(TestDir, "stat_subdir");
         Directory.CreateDirectory(dirPath);
 
         var isFile = Run($"let result = dict.get(fs.stat(\"{dirPath}\"), \"isFile\");");
@@ -235,7 +181,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Stat_HasModifiedTime()
     {
-        var filePath = Path.Combine(_testDir, "stat_mtime.txt");
+        var filePath = Path.Combine(TestDir, "stat_mtime.txt");
         File.WriteAllText(filePath, "content");
 
         var modified = Run($"let result = dict.get(fs.stat(\"{filePath}\"), \"modified\");");
@@ -246,7 +192,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Stat_HasCreatedTime()
     {
-        var filePath = Path.Combine(_testDir, "stat_ctime.txt");
+        var filePath = Path.Combine(TestDir, "stat_ctime.txt");
         File.WriteAllText(filePath, "content");
 
         var created = Run($"let result = dict.get(fs.stat(\"{filePath}\"), \"created\");");
@@ -257,7 +203,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Stat_NonexistentPathThrows()
     {
-        var missing = Path.Combine(_testDir, "does_not_exist.txt");
+        var missing = Path.Combine(TestDir, "does_not_exist.txt");
         RunExpectingError($"fs.stat(\"{missing}\");");
     }
 
@@ -270,7 +216,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void Stat_NameMatchesFileName()
     {
-        var filePath = Path.Combine(_testDir, "myspecialfile.txt");
+        var filePath = Path.Combine(TestDir, "myspecialfile.txt");
         File.WriteAllText(filePath, "data");
 
         var name = Run($"let result = dict.get(fs.stat(\"{filePath}\"), \"name\");");
@@ -282,7 +228,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void GetPermissions_ReturnsFilePermissionsStruct()
     {
-        var filePath = Path.Combine(_testDir, "perm_struct.txt");
+        var filePath = Path.Combine(TestDir, "perm_struct.txt");
         File.WriteAllText(filePath, "data");
 
         var result = Run($"let result = fs.getPermissions(\"{filePath}\");");
@@ -297,7 +243,7 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var filePath = Path.Combine(_testDir, "perm_755.txt");
+        var filePath = Path.Combine(TestDir, "perm_755.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
@@ -321,7 +267,7 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var filePath = Path.Combine(_testDir, "perm_750.txt");
+        var filePath = Path.Combine(TestDir, "perm_750.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
@@ -344,7 +290,7 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var filePath = Path.Combine(_testDir, "perm_754.txt");
+        var filePath = Path.Combine(TestDir, "perm_754.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
@@ -368,7 +314,7 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var filePath = Path.Combine(_testDir, "perm_444.txt");
+        var filePath = Path.Combine(TestDir, "perm_444.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
             System.IO.UnixFileMode.UserRead |
@@ -382,7 +328,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void GetPermissions_NonexistentPathThrows()
     {
-        var missing = Path.Combine(_testDir, "no_such_file.txt");
+        var missing = Path.Combine(TestDir, "no_such_file.txt");
         RunExpectingError($"fs.getPermissions(\"{missing}\");");
     }
 
@@ -400,7 +346,7 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var dirPath = Path.Combine(_testDir, "perm_dir");
+        var dirPath = Path.Combine(TestDir, "perm_dir");
         Directory.CreateDirectory(dirPath);
         System.IO.File.SetUnixFileMode(dirPath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
@@ -425,8 +371,8 @@ public class FsBuiltInsTests : IDisposable
         }
 
         // Source file has 755 — get the struct and apply it to the target.
-        var srcPath = Path.Combine(_testDir, "setperm_src_all.txt");
-        var dstPath = Path.Combine(_testDir, "setperm_dst_all.txt");
+        var srcPath = Path.Combine(TestDir, "setperm_src_all.txt");
+        var dstPath = Path.Combine(TestDir, "setperm_dst_all.txt");
         File.WriteAllText(srcPath, "data");
         File.WriteAllText(dstPath, "data");
         System.IO.File.SetUnixFileMode(srcPath,
@@ -437,7 +383,7 @@ public class FsBuiltInsTests : IDisposable
         System.IO.File.SetUnixFileMode(dstPath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite);
 
-        Execute($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
+        RunStatements($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
 
         var read    = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.read;");
         var write   = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.write;");
@@ -457,8 +403,8 @@ public class FsBuiltInsTests : IDisposable
         }
 
         // Source file has 444 (no write). Apply its permissions to a writable target.
-        var srcPath = Path.Combine(_testDir, "setperm_src_nowrite.txt");
-        var dstPath = Path.Combine(_testDir, "setperm_dst_nowrite.txt");
+        var srcPath = Path.Combine(TestDir, "setperm_src_nowrite.txt");
+        var dstPath = Path.Combine(TestDir, "setperm_dst_nowrite.txt");
         File.WriteAllText(srcPath, "data");
         File.WriteAllText(dstPath, "data");
         System.IO.File.SetUnixFileMode(srcPath,
@@ -466,7 +412,7 @@ public class FsBuiltInsTests : IDisposable
             System.IO.UnixFileMode.GroupRead |
             System.IO.UnixFileMode.OtherRead);
 
-        Execute($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
+        RunStatements($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
 
         var write = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.write;");
         Assert.Equal(false, write);
@@ -475,8 +421,8 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetPermissions_ReturnsNull()
     {
-        var srcPath = Path.Combine(_testDir, "setperm_src_null.txt");
-        var dstPath = Path.Combine(_testDir, "setperm_dst_null.txt");
+        var srcPath = Path.Combine(TestDir, "setperm_src_null.txt");
+        var dstPath = Path.Combine(TestDir, "setperm_dst_null.txt");
         File.WriteAllText(srcPath, "data");
         File.WriteAllText(dstPath, "data");
 
@@ -487,8 +433,8 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetPermissions_NonexistentPathThrows()
     {
-        var srcPath = Path.Combine(_testDir, "setperm_src_missing.txt");
-        var missing = Path.Combine(_testDir, "setperm_dst_missing.txt");
+        var srcPath = Path.Combine(TestDir, "setperm_src_missing.txt");
+        var missing = Path.Combine(TestDir, "setperm_dst_missing.txt");
         File.WriteAllText(srcPath, "data");
 
         RunExpectingError($"fs.setPermissions(\"{missing}\", fs.getPermissions(\"{srcPath}\"));");
@@ -497,7 +443,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetPermissions_NonStringPathThrows()
     {
-        var srcPath = Path.Combine(_testDir, "setperm_nonstringpath.txt");
+        var srcPath = Path.Combine(TestDir, "setperm_nonstringpath.txt");
         File.WriteAllText(srcPath, "data");
 
         RunExpectingError($"fs.setPermissions(42, fs.getPermissions(\"{srcPath}\"));");
@@ -506,7 +452,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetPermissions_NonStructThrows()
     {
-        var filePath = Path.Combine(_testDir, "setperm_badtype.txt");
+        var filePath = Path.Combine(TestDir, "setperm_badtype.txt");
         File.WriteAllText(filePath, "data");
         RunExpectingError($"fs.setPermissions(\"{filePath}\", \"not-a-struct\");");
     }
@@ -520,15 +466,15 @@ public class FsBuiltInsTests : IDisposable
         }
 
         // Set known permissions on src via SetUnixFileMode, copy to dst, verify dst matches.
-        var srcPath = Path.Combine(_testDir, "setperm_src_rt.txt");
-        var dstPath = Path.Combine(_testDir, "setperm_dst_rt.txt");
+        var srcPath = Path.Combine(TestDir, "setperm_src_rt.txt");
+        var dstPath = Path.Combine(TestDir, "setperm_dst_rt.txt");
         File.WriteAllText(srcPath, "data");
         File.WriteAllText(dstPath, "data");
         System.IO.File.SetUnixFileMode(srcPath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
             System.IO.UnixFileMode.GroupRead);
 
-        Execute($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
+        RunStatements($"fs.setPermissions(\"{dstPath}\", fs.getPermissions(\"{srcPath}\"));");
 
         var ownerRead    = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.read;");
         var ownerWrite   = Run($"let result = fs.getPermissions(\"{dstPath}\").owner.write;");
@@ -548,10 +494,10 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetReadOnly_MakesFileReadOnly()
     {
-        var filePath = Path.Combine(_testDir, "setro_true.txt");
+        var filePath = Path.Combine(TestDir, "setro_true.txt");
         File.WriteAllText(filePath, "data");
 
-        Execute($"fs.setReadOnly(\"{filePath}\", true);");
+        RunStatements($"fs.setReadOnly(\"{filePath}\", true);");
 
         var write = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
         Assert.Equal(false, write);
@@ -565,14 +511,14 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var filePath = Path.Combine(_testDir, "setro_false.txt");
+        var filePath = Path.Combine(TestDir, "setro_false.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
             System.IO.UnixFileMode.UserRead |
             System.IO.UnixFileMode.GroupRead |
             System.IO.UnixFileMode.OtherRead);
 
-        Execute($"fs.setReadOnly(\"{filePath}\", false);");
+        RunStatements($"fs.setReadOnly(\"{filePath}\", false);");
 
         var write = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
         Assert.Equal(true, write);
@@ -581,7 +527,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetReadOnly_ReturnsNull()
     {
-        var filePath = Path.Combine(_testDir, "setro_null.txt");
+        var filePath = Path.Combine(TestDir, "setro_null.txt");
         File.WriteAllText(filePath, "data");
 
         var result = Run($"let result = fs.setReadOnly(\"{filePath}\", true);");
@@ -591,21 +537,21 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetReadOnly_NonexistentPathThrows()
     {
-        var missing = Path.Combine(_testDir, "setro_missing.txt");
+        var missing = Path.Combine(TestDir, "setro_missing.txt");
         RunExpectingError($"fs.setReadOnly(\"{missing}\", true);");
     }
 
     [Fact]
     public void SetReadOnly_RoundTrip()
     {
-        var filePath = Path.Combine(_testDir, "setro_roundtrip.txt");
+        var filePath = Path.Combine(TestDir, "setro_roundtrip.txt");
         File.WriteAllText(filePath, "data");
 
-        Execute($"fs.setReadOnly(\"{filePath}\", true);");
+        RunStatements($"fs.setReadOnly(\"{filePath}\", true);");
         var writeAfterRO = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
         Assert.Equal(false, writeAfterRO);
 
-        Execute($"fs.setReadOnly(\"{filePath}\", false);");
+        RunStatements($"fs.setReadOnly(\"{filePath}\", false);");
         var writeAfterRW = Run($"let result = fs.getPermissions(\"{filePath}\").owner.write;");
         Assert.Equal(true, writeAfterRW);
     }
@@ -620,12 +566,12 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var filePath = Path.Combine(_testDir, "setexec_true.txt");
+        var filePath = Path.Combine(TestDir, "setexec_true.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite);
 
-        Execute($"fs.setExecutable(\"{filePath}\", true);");
+        RunStatements($"fs.setExecutable(\"{filePath}\", true);");
 
         var execute = Run($"let result = fs.getPermissions(\"{filePath}\").owner.execute;");
         Assert.Equal(true, execute);
@@ -639,14 +585,14 @@ public class FsBuiltInsTests : IDisposable
             return;
         }
 
-        var filePath = Path.Combine(_testDir, "setexec_false.txt");
+        var filePath = Path.Combine(TestDir, "setexec_false.txt");
         File.WriteAllText(filePath, "data");
         System.IO.File.SetUnixFileMode(filePath,
             System.IO.UnixFileMode.UserRead | System.IO.UnixFileMode.UserWrite | System.IO.UnixFileMode.UserExecute |
             System.IO.UnixFileMode.GroupRead | System.IO.UnixFileMode.GroupExecute |
             System.IO.UnixFileMode.OtherRead | System.IO.UnixFileMode.OtherExecute);
 
-        Execute($"fs.setExecutable(\"{filePath}\", false);");
+        RunStatements($"fs.setExecutable(\"{filePath}\", false);");
 
         var ownerExec = Run($"let result = fs.getPermissions(\"{filePath}\").owner.execute;");
         var groupExec = Run($"let result = fs.getPermissions(\"{filePath}\").group.execute;");
@@ -660,7 +606,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetExecutable_ReturnsNull()
     {
-        var filePath = Path.Combine(_testDir, "setexec_null.txt");
+        var filePath = Path.Combine(TestDir, "setexec_null.txt");
         File.WriteAllText(filePath, "data");
 
         var result = Run($"let result = fs.setExecutable(\"{filePath}\", true);");
@@ -670,7 +616,7 @@ public class FsBuiltInsTests : IDisposable
     [Fact]
     public void SetExecutable_NonexistentPathThrows()
     {
-        var missing = Path.Combine(_testDir, "setexec_missing.txt");
+        var missing = Path.Combine(TestDir, "setexec_missing.txt");
         RunExpectingError($"fs.setExecutable(\"{missing}\", true);");
     }
 }

@@ -8,19 +8,8 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class InterpreterTests
+public class InterpreterTests : StashTestBase
 {
-    private static object? Eval(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var expr = parser.Parse();
-        var chunk = Compiler.CompileExpression(expr);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
     // 1. Integer literals
     [Fact]
     public void IntegerLiteral_ReturnsLong()

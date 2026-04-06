@@ -8,7 +8,7 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class DictLiteralTests
+public class DictLiteralTests : StashTestBase
 {
     private static Expr ParseExpr(string source)
     {
@@ -18,22 +18,9 @@ public class DictLiteralTests
         return parser.Parse();
     }
 
-    private static object? Eval(string source)
+    private new static object? Eval(string source)
     {
         string full = "return " + source + ";";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
-    private static object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
         var lexer = new Lexer(full, "<test>");
         var tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);

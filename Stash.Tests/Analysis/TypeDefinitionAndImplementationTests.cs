@@ -5,18 +5,8 @@ using Stash.Analysis;
 
 namespace Stash.Tests.Analysis;
 
-public class TypeDefinitionAndImplementationTests
+public class TypeDefinitionAndImplementationTests : AnalysisTestBase
 {
-    private static ScopeTree Analyze(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        return collector.Collect(stmts);
-    }
-
     private static (ScopeTree Tree, System.Collections.Generic.List<Stmt> Stmts) AnalyzeWithStmts(string source)
     {
         var lexer = new Lexer(source, "<test>");

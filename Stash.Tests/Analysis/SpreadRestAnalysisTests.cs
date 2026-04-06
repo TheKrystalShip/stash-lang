@@ -1,23 +1,9 @@
-using Stash.Lexing;
-using Stash.Parsing;
 using Stash.Analysis;
 
 namespace Stash.Tests.Analysis;
 
-public class SpreadRestAnalysisTests
+public class SpreadRestAnalysisTests : AnalysisTestBase
 {
-    private static List<SemanticDiagnostic> Validate(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        var scopeTree = collector.Collect(stmts);
-        var validator = new SemanticValidator(scopeTree);
-        return validator.Validate(stmts);
-    }
-
     // === Type Mismatch Tests (SA0501) ===
 
     // Test 51: Spreading int in array context

@@ -7,7 +7,7 @@ using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class CliExecutionTests
+public class CliExecutionTests : StashTestBase
 {
     // =========================================================================
     // Pipeline helpers (mirror RunSource() in Program.cs)

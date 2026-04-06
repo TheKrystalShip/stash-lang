@@ -1,38 +1,7 @@
-using Stash.Lexing;
-using Stash.Parsing;
-using Stash.Bytecode;
-using Stash.Resolution;
-using Stash.Runtime;
-using Stash.Stdlib;
-
 namespace Stash.Tests.Interpreting;
 
-public class SftpBuiltInsTests
+public class SftpBuiltInsTests : StashTestBase
 {
-    private static void RunExpectingError(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-    }
-
-    private static RuntimeError RunCapturingError(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-    }
-
     // sftp.connect
     [Fact]
     public void Connect_NonDictThrows()

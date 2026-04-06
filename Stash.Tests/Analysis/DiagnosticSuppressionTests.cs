@@ -5,21 +5,9 @@ using Stash.Common;
 
 namespace Stash.Tests.Analysis;
 
-public class DiagnosticSuppressionTests
+public class DiagnosticSuppressionTests : AnalysisTestBase
 {
     // ── Helpers ──────────────────────────────────────────────────────────────
-
-    private static List<SemanticDiagnostic> Validate(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        var scopeTree = collector.Collect(stmts);
-        var validator = new SemanticValidator(scopeTree);
-        return validator.Validate(stmts);
-    }
 
     private static List<SemanticDiagnostic> ValidateWithSuppression(string source)
     {

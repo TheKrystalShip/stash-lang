@@ -1,21 +1,9 @@
-using Stash.Lexing;
-using Stash.Parsing;
 using Stash.Analysis;
 
 namespace Stash.Tests.Analysis;
 
-public class ScopeTreeTests
+public class ScopeTreeTests : AnalysisTestBase
 {
-    private static ScopeTree Analyze(string source, bool includeBuiltIns = false)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector { IncludeBuiltIns = includeBuiltIns };
-        return collector.Collect(stmts);
-    }
-
     [Fact]
     public void GlobalScope_ContainsTopLevelDeclarations()
     {

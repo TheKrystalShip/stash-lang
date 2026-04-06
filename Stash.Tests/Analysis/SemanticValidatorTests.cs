@@ -1,23 +1,12 @@
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Analysis;
+using Stash.Stdlib;
 
 namespace Stash.Tests.Analysis;
 
-public class SemanticValidatorTests
+public class SemanticValidatorTests : AnalysisTestBase
 {
-    private static List<SemanticDiagnostic> Validate(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        var scopeTree = collector.Collect(stmts);
-        var validator = new SemanticValidator(scopeTree);
-        return validator.Validate(stmts);
-    }
-
     [Fact]
     public void BreakOutsideLoop_ReportsError()
     {

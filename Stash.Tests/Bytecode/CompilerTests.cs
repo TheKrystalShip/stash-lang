@@ -1,28 +1,9 @@
 using Stash.Bytecode;
-using Stash.Resolution;
-using Stash.Lexing;
-using Stash.Parsing;
-using Stash.Parsing.AST;
 
 namespace Stash.Tests.Bytecode;
 
-public class CompilerTests
+public class CompilerTests : BytecodeTestBase
 {
-    /// <summary>
-    /// Lex → Parse → Resolve → Compile a source string into a Chunk.
-    /// </summary>
-    private static Chunk CompileSource(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        List<Token> tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        List<Stmt> stmts = parser.ParseProgram();
-
-        SemanticResolver.Resolve(stmts);
-
-        return Compiler.Compile(stmts);
-    }
-
     /// <summary>
     /// Compile source and return the disassembly string.
     /// </summary>

@@ -1,28 +1,11 @@
 using Stash.Lexing;
-using Stash.Parsing;
-using Stash.Parsing.AST;
-using Stash.Bytecode;
-using Stash.Resolution;
-using Stash.Runtime;
 using Stash.Runtime.Types;
-using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class IpAddressTests
+public class IpAddressTests : StashTestBase
 {
-    private static object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
+
 
     // ── Lexer: Token scanning ────────────────────────────────────────
 

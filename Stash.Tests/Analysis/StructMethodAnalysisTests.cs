@@ -1,33 +1,9 @@
-using Stash.Lexing;
-using Stash.Parsing;
 using Stash.Analysis;
 
 namespace Stash.Tests.Analysis;
 
-public class StructMethodAnalysisTests
+public class StructMethodAnalysisTests : AnalysisTestBase
 {
-    private static ScopeTree Analyze(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        return collector.Collect(stmts);
-    }
-
-    private static List<SemanticDiagnostic> Validate(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        var collector = new SymbolCollector();
-        var scopeTree = collector.Collect(stmts);
-        var validator = new SemanticValidator(scopeTree);
-        return validator.Validate(stmts);
-    }
-
     [Fact]
     public void Method_AppearsAsMethodSymbol()
     {

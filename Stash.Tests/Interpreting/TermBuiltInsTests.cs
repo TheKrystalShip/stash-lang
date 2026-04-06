@@ -2,38 +2,12 @@ using Stash.Bytecode;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Resolution;
-using Stash.Runtime;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class TermBuiltInsTests
+public class TermBuiltInsTests : StashTestBase
 {
-    private static object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
-    private static void RunExpectingError(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-    }
-
     // ── term.color ────────────────────────────────────────────────────────────
 
     [Fact]

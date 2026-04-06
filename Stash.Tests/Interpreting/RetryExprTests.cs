@@ -1,15 +1,11 @@
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
-using Stash.Bytecode;
-using Stash.Resolution;
-using Stash.Runtime;
 using Stash.Analysis;
-using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
 
-public class RetryExprTests
+public class RetryExprTests : StashTestBase
 {
     private static List<Token> Scan(string source) => new Lexer(source).ScanTokens();
 
@@ -23,46 +19,6 @@ public class RetryExprTests
 
     private static string Format(string source) =>
         new StashFormatter(2, useTabs: false).Format(source);
-
-    private static object? Run(string source)
-    {
-        string full = source + "\nreturn result;";
-        var lexer = new Lexer(full, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
-    }
-
-    private static RuntimeError RunExpectingError(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
-    }
-
-    private static string RunCapturingOutput(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        var tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        var stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        var chunk = Compiler.Compile(stmts);
-        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        var sw = new System.IO.StringWriter();
-        vm.Output = sw;
-        vm.Execute(chunk);
-        return sw.ToString();
-    }
 
     // ===== 1. Lexer Tests =====
 
@@ -182,7 +138,7 @@ public class RetryExprTests
     [Fact]
     public void Retry_AllAttemptsExhausted_ThrowsLastError()
     {
-        var err = RunExpectingError("retry (3) { throw \"always fails\"; }");
+        var err = RunCapturingError("retry (3) { throw \"always fails\"; }");
         Assert.Equal("always fails", err.Message);
     }
 
@@ -203,21 +159,21 @@ public class RetryExprTests
     [Fact]
     public void Retry_MaxAttempts0_ThrowsRetryExhaustedError()
     {
-        var err = RunExpectingError("retry (0) { return 42; }");
+        var err = RunCapturingError("retry (0) { return 42; }");
         Assert.Equal("RetryExhaustedError", err.ErrorType);
     }
 
     [Fact]
     public void Retry_NegativeAttempts_ThrowsImmediately()
     {
-        var err = RunExpectingError("retry (-1) { return 42; }");
+        var err = RunCapturingError("retry (-1) { return 42; }");
         Assert.Contains("non-negative", err.Message);
     }
 
     [Fact]
     public void Retry_NonIntegerAttempts_ThrowsError()
     {
-        var err = RunExpectingError("retry (\"three\") { return 42; }");
+        var err = RunCapturingError("retry (\"three\") { return 42; }");
         Assert.Contains("integer", err.Message);
     }
 
@@ -265,7 +221,7 @@ public class RetryExprTests
     [Fact]
     public void Retry_Until_ExhaustedThrowsRetryExhaustedError()
     {
-        var err = RunExpectingError("retry (3) until (r) => false { return 42; }");
+        var err = RunCapturingError("retry (3) until (r) => false { return 42; }");
         Assert.Equal("RetryExhaustedError", err.ErrorType);
         Assert.Contains("exhausted", err.Message);
     }
@@ -467,7 +423,7 @@ public class RetryExprTests
     [Fact]
     public void Retry_OnFilter_PropagatesNonMatchingType()
     {
-        var err = RunExpectingError("""
+        var err = RunCapturingError("""
             retry (3, on: ["NetworkError"]) {
                 throw { type: "AuthError", message: "unauthorized" };
             }

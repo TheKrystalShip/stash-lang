@@ -22,25 +22,8 @@ namespace Stash.Tests.Bytecode;
 ///   - ForIn loops need a surrounding lambda so the loop variable gets ResolvedDistance = 0
 ///     (local), pointing at the stack slot pushed by OP_ITERATE.
 /// </summary>
-public class VirtualMachineTests
+public class VirtualMachineTests : BytecodeTestBase
 {
-    private static Chunk CompileSource(string source)
-    {
-        var lexer = new Lexer(source, "<test>");
-        List<Token> tokens = lexer.ScanTokens();
-        var parser = new Parser(tokens);
-        List<Stmt> stmts = parser.ParseProgram();
-        SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts);
-    }
-
-    private static object? Execute(string source)
-    {
-        Chunk chunk = CompileSource(source);
-        var vm = new VirtualMachine();
-        return vm.Execute(chunk);
-    }
-
     // =========================================================================
     // 1. Literals
     // =========================================================================
