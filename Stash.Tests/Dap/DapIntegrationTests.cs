@@ -896,7 +896,39 @@ public class DapIntegrationTests
         }
     }
 
-    // ── 25. Multiple Function Breakpoints ─────────────────────────────────────
+    // ── 25. Set Variable — Const Global Cannot Be Modified ────────────────────
+
+    [Fact]
+    public void Integration_SetVariable_ConstGlobal_ThrowsOnMutation()
+    {
+        var path = CreateTempScript("const x = 42;\nlet y = x + 1;\n");
+        try
+        {
+            var session = new DebugSession();
+            session.SetBreakpoints(path, new[] { new SourceBreakpoint { Line = 2 } });
+            session.Launch(path, null, false, null);
+            session.ConfigurationDone();
+
+            WaitForPause(session);
+
+            var frames = session.GetStackTrace();
+            var frameId = (int)frames[0].Id;
+            var scopes = session.GetScopes(frameId);
+
+            var ex = Assert.Throws<InvalidOperationException>(() =>
+                session.SetVariable((int)scopes[0].VariablesReference, "x", "100"));
+            Assert.Contains("constant", ex.Message, StringComparison.OrdinalIgnoreCase);
+
+            session.Continue();
+            WaitForTermination(session);
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
+    // ── 26. Multiple Function Breakpoints ─────────────────────────────────────
 
     [Fact]
     public void Integration_MultipleFunctionBreakpoints_HitsEach()

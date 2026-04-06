@@ -102,7 +102,7 @@ public sealed partial class VirtualMachine
     /// </summary>
     internal IDebugScope BuildGlobalScope()
     {
-        return VMDebugScope.FromGlobals(_globals, null);
+        return VMDebugScope.FromGlobals(_globals, _constGlobals, null);
     }
 
 

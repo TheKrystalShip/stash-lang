@@ -27,6 +27,7 @@ internal sealed class VMDebugScope : IDebugScope
 
     // ── Dictionary mode ──
     private readonly Dictionary<string, object?>? _globals;
+    private readonly HashSet<string>? _constGlobals;
 
     private readonly IDebugScope? _enclosing;
 
@@ -47,9 +48,10 @@ internal sealed class VMDebugScope : IDebugScope
         _enclosing = enclosing;
     }
 
-    private VMDebugScope(Dictionary<string, object?> globals, IDebugScope? enclosing)
+    private VMDebugScope(Dictionary<string, object?> globals, HashSet<string>? constGlobals, IDebugScope? enclosing)
     {
         _globals = globals;
+        _constGlobals = constGlobals;
         _enclosing = enclosing;
     }
 
@@ -63,8 +65,8 @@ internal sealed class VMDebugScope : IDebugScope
         new(stack, baseSlot, localCount, names, isConst, enclosing);
 
     /// <summary>Creates a dictionary scope that reads/writes the VM globals dictionary.</summary>
-    public static VMDebugScope FromGlobals(Dictionary<string, object?> globals, IDebugScope? enclosing) =>
-        new(globals, enclosing);
+    public static VMDebugScope FromGlobals(Dictionary<string, object?> globals, HashSet<string>? constGlobals, IDebugScope? enclosing) =>
+        new(globals, constGlobals, enclosing);
 
     public IEnumerable<KeyValuePair<string, object?>> GetAllBindings()
     {
@@ -141,6 +143,12 @@ internal sealed class VMDebugScope : IDebugScope
                 }
             }
         }
+
+        if (_constGlobals is not null)
+        {
+            return _constGlobals.Contains(name);
+        }
+
         return false;
     }
 
