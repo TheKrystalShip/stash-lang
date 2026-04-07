@@ -30,5 +30,13 @@ public class BuiltInBoundMethod : IStashCallable
         return _function.Call(context, newArgs);
     }
 
+    public StashValue CallDirect(IInterpreterContext context, ReadOnlySpan<StashValue> arguments)
+    {
+        StashValue[] newArgs = new StashValue[arguments.Length + 1];
+        newArgs[0] = StashValue.FromObject(_receiver);
+        arguments.CopyTo(newArgs.AsSpan(1));
+        return _function.CallDirect(context, newArgs);
+    }
+
     public override string ToString() => $"<bound method {_function.Name}>";
 }

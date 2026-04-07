@@ -62,7 +62,6 @@ public sealed partial class VirtualMachine
     private int _debugThreadId = 1;
     private int[]? _lastDebugLinePerFrame;
     private int _loopCheckCounter;
-    private List<object?>? _callArgList;
 
     public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
     {

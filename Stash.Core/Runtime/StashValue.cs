@@ -1,7 +1,7 @@
 using System;
 using System.Runtime.CompilerServices;
 
-namespace Stash.Bytecode;
+namespace Stash.Runtime;
 
 public readonly struct StashValue
 {

@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -16,17 +17,20 @@ public static class GlobalBuiltIns
     {
         var b = new NamespaceBuilder("");
 
-        b.Function("typeof", [Param("value")], (_, args) =>
+        b.Function("typeof", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            object? val = args[0];
+            StashValue val = args[0];
 
-            return val switch
+            if (val.IsNull) return StashValue.FromObj("null");
+            if (val.IsInt) return StashValue.FromObj("int");
+            if (val.IsFloat) return StashValue.FromObj("float");
+            if (val.IsBool) return StashValue.FromObj("bool");
+
+            object? obj = val.AsObj;
+            return StashValue.FromObj(obj switch
             {
                 null => "null",
-                long => "int",
-                double => "float",
                 string => "string",
-                bool => "bool",
                 List<object?> => "array",
                 StashError => "Error",
                 StashInstance => "struct",
@@ -43,8 +47,8 @@ public static class GlobalBuiltIns
                 StashIpAddress => "ip",
                 StashSemVer => "semver",
                 IStashCallable => "function",
-                _ => val.GetType().Name.Contains("BoundMethod") ? "function" : "unknown"
-            };
+                _ => obj.GetType().Name.Contains("BoundMethod") ? "function" : "unknown"
+            });
         }, returnType: "string");
 
         b.Function("semver", [Param("value", "string")], (_, args) =>
@@ -60,17 +64,20 @@ public static class GlobalBuiltIns
             throw new RuntimeError(detail, null);
         }, returnType: "semver", documentation: "Parses a string into a semver value.");
 
-        b.Function("nameof", [Param("value")], (_, args) =>
+        b.Function("nameof", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            object? val = args[0];
+            StashValue val = args[0];
 
-            return val switch
+            if (val.IsNull) return StashValue.FromObj("null");
+            if (val.IsInt) return StashValue.FromObj("int");
+            if (val.IsFloat) return StashValue.FromObj("float");
+            if (val.IsBool) return StashValue.FromObj("bool");
+
+            object? obj = val.AsObj;
+            return StashValue.FromObj(obj switch
             {
                 null => "null",
-                long => "int",
-                double => "float",
                 string => "string",
-                bool => "bool",
                 List<object?> => "array",
                 StashError => "Error",
                 StashInstance inst => inst.TypeName,
@@ -85,27 +92,19 @@ public static class GlobalBuiltIns
                 Runtime.BuiltInFunction bf => bf.Name,
                 IStashCallable c => c.Name ?? "function",
                 _ => "unknown"
-            };
+            });
         }, returnType: "string");
 
-        b.Function("len", [Param("value")], (_, args) =>
+        b.Function("len", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            object? val = args[0];
-            if (val is string s)
+            StashValue val = args[0];
+            if (val.IsObj)
             {
-                return (long)s.Length;
+                object? obj = val.AsObj;
+                if (obj is string s) return StashValue.FromInt((long)s.Length);
+                if (obj is List<object?> list) return StashValue.FromInt((long)list.Count);
+                if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
             }
-
-            if (val is List<object?> list)
-            {
-                return (long)list.Count;
-            }
-
-            if (val is StashDictionary dict)
-            {
-                return (long)dict.Count;
-            }
-
             throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
         }, returnType: "int");
 
@@ -170,14 +169,10 @@ public static class GlobalBuiltIns
             });
         }
 
-        b.Function("hash", [Param("value")], (_, args) =>
+        b.Function("hash", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            if (args[0] is null)
-            {
-                return 0L;
-            }
-
-            return (long)args[0]!.GetHashCode();
+            if (args[0].IsNull) return StashValue.FromInt(0L);
+            return StashValue.FromInt((long)args[0].ToObject()!.GetHashCode());
         }, returnType: "int");
 
         // Enums

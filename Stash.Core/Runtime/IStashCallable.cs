@@ -1,5 +1,6 @@
 namespace Stash.Runtime;
 
+using System;
 using System.Collections.Generic;
 using Stash.Common;
 
@@ -39,4 +40,16 @@ public interface IStashCallable
     /// The source location where this callable is defined, or null for built-ins.
     /// </summary>
     SourceSpan? DefinitionSpan => null;
+
+    /// <summary>
+    /// Zero-allocation call path for the bytecode VM.  
+    /// Args are borrowed directly from the VM stack — do not store the span.
+    /// </summary>
+    StashValue CallDirect(IInterpreterContext context, ReadOnlySpan<StashValue> arguments)
+    {
+        var list = new List<object?>(arguments.Length);
+        foreach (StashValue sv in arguments)
+            list.Add(sv.ToObject());
+        return StashValue.FromObject(Call(context, list));
+    }
 }

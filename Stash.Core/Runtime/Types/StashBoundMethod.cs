@@ -1,5 +1,6 @@
 namespace Stash.Runtime.Types;
 
+using System;
 using System.Collections.Generic;
 using Stash.Common;
 
@@ -32,6 +33,14 @@ public class StashBoundMethod : IStashCallable
     public object? Call(IInterpreterContext context, List<object?> arguments)
     {
         return _method.CallWithSelf(context, _instance, arguments);
+    }
+
+    public StashValue CallDirect(IInterpreterContext context, ReadOnlySpan<StashValue> arguments)
+    {
+        var list = new List<object?>(arguments.Length);
+        foreach (StashValue sv in arguments)
+            list.Add(sv.ToObject());
+        return StashValue.FromObject(Call(context, list));
     }
 
     public override string ToString() => $"<method {_method}>";

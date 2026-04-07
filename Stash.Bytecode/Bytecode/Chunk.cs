@@ -1,3 +1,5 @@
+using Stash.Runtime;
+
 namespace Stash.Bytecode;
 
 /// <summary>

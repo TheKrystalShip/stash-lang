@@ -1,6 +1,7 @@
 using System;
 using System.Text;
 using Stash.Common;
+using Stash.Runtime;
 
 namespace Stash.Bytecode;
 

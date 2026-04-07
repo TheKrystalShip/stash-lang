@@ -3,6 +3,7 @@ using System.Buffers;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Stash.Common;
+using Stash.Runtime;
 
 namespace Stash.Bytecode;
 

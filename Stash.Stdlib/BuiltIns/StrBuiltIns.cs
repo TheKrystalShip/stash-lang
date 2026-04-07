@@ -41,10 +41,10 @@ public static class StrBuiltIns
         // str.upper(s) — Returns a copy of s with all characters converted to uppercase
         // using invariant culture rules.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("upper", [Param("s", "string")], (_, args) =>
+        ns.Function("upper", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.upper");
-            return s.ToUpperInvariant();
+            string s = SvArgs.String(args, 0, "str.upper");
+            return StashValue.FromObj(s.ToUpperInvariant());
         },
             returnType: "string",
             documentation: "Returns the string converted to uppercase.\n@param s The string\n@return Uppercase string");
@@ -52,40 +52,40 @@ public static class StrBuiltIns
         // str.lower(s) — Returns a copy of s with all characters converted to lowercase
         // using invariant culture rules.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("lower", [Param("s", "string")], (_, args) =>
+        ns.Function("lower", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.lower");
-            return s.ToLowerInvariant();
+            string s = SvArgs.String(args, 0, "str.lower");
+            return StashValue.FromObj(s.ToLowerInvariant());
         },
             returnType: "string",
             documentation: "Returns the string converted to lowercase.\n@param s The string\n@return Lowercase string");
 
         // str.trim(s) — Returns a copy of s with leading and trailing whitespace removed.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("trim", [Param("s", "string")], (_, args) =>
+        ns.Function("trim", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.trim");
-            return s.Trim();
+            string s = SvArgs.String(args, 0, "str.trim");
+            return StashValue.FromObj(s.Trim());
         },
             returnType: "string",
             documentation: "Returns the string with leading and trailing whitespace removed.\n@param s The string\n@return Trimmed string");
 
         // str.trimStart(s) — Returns a copy of s with leading whitespace removed.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("trimStart", [Param("s", "string")], (_, args) =>
+        ns.Function("trimStart", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.trimStart");
-            return s.TrimStart();
+            string s = SvArgs.String(args, 0, "str.trimStart");
+            return StashValue.FromObj(s.TrimStart());
         },
             returnType: "string",
             documentation: "Returns the string with leading whitespace removed.\n@param s The string\n@return Left-trimmed string");
 
         // str.trimEnd(s) — Returns a copy of s with trailing whitespace removed.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("trimEnd", [Param("s", "string")], (_, args) =>
+        ns.Function("trimEnd", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.trimEnd");
-            return s.TrimEnd();
+            string s = SvArgs.String(args, 0, "str.trimEnd");
+            return StashValue.FromObj(s.TrimEnd());
         },
             returnType: "string",
             documentation: "Returns the string with trailing whitespace removed.\n@param s The string\n@return Right-trimmed string");
@@ -93,11 +93,11 @@ public static class StrBuiltIns
         // str.contains(s, substring) — Returns true if s contains substring using ordinal
         // (case-sensitive) comparison, false otherwise.
         // Throws RuntimeError if either argument is not a string.
-        ns.Function("contains", [Param("s", "string"), Param("substring", "string")], (_, args) =>
+        ns.Function("contains", [Param("s", "string"), Param("substring", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.contains");
-            var sub = Args.String(args, 1, "str.contains");
-            return s.Contains(sub, StringComparison.Ordinal);
+            string s = SvArgs.String(args, 0, "str.contains");
+            string sub = SvArgs.String(args, 1, "str.contains");
+            return StashValue.FromBool(s.Contains(sub, StringComparison.Ordinal));
         },
             returnType: "bool",
             documentation: "Returns true if the string contains the substring (case-sensitive).\n@param s The string\n@param substring The substring to search for\n@return true if found");
@@ -105,11 +105,11 @@ public static class StrBuiltIns
         // str.startsWith(s, prefix) — Returns true if s begins with prefix using ordinal
         // comparison, false otherwise.
         // Throws RuntimeError if either argument is not a string.
-        ns.Function("startsWith", [Param("s", "string"), Param("prefix", "string")], (_, args) =>
+        ns.Function("startsWith", [Param("s", "string"), Param("prefix", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.startsWith");
-            var prefix = Args.String(args, 1, "str.startsWith");
-            return s.StartsWith(prefix, StringComparison.Ordinal);
+            string s = SvArgs.String(args, 0, "str.startsWith");
+            string prefix = SvArgs.String(args, 1, "str.startsWith");
+            return StashValue.FromBool(s.StartsWith(prefix, StringComparison.Ordinal));
         },
             returnType: "bool",
             documentation: "Returns true if the string starts with the prefix (case-sensitive).\n@param s The string\n@param prefix The prefix\n@return true if starts with prefix");
@@ -117,11 +117,11 @@ public static class StrBuiltIns
         // str.endsWith(s, suffix) — Returns true if s ends with suffix using ordinal
         // comparison, false otherwise.
         // Throws RuntimeError if either argument is not a string.
-        ns.Function("endsWith", [Param("s", "string"), Param("suffix", "string")], (_, args) =>
+        ns.Function("endsWith", [Param("s", "string"), Param("suffix", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.endsWith");
-            var suffix = Args.String(args, 1, "str.endsWith");
-            return s.EndsWith(suffix, StringComparison.Ordinal);
+            string s = SvArgs.String(args, 0, "str.endsWith");
+            string suffix = SvArgs.String(args, 1, "str.endsWith");
+            return StashValue.FromBool(s.EndsWith(suffix, StringComparison.Ordinal));
         },
             returnType: "bool",
             documentation: "Returns true if the string ends with the suffix (case-sensitive).\n@param s The string\n@param suffix The suffix\n@return true if ends with suffix");
@@ -129,11 +129,11 @@ public static class StrBuiltIns
         // str.indexOf(s, substring) — Returns the zero-based index of the first occurrence of
         // substring in s using ordinal comparison, or -1 if not found.
         // Throws RuntimeError if either argument is not a string.
-        ns.Function("indexOf", [Param("s", "string"), Param("substring", "string")], (_, args) =>
+        ns.Function("indexOf", [Param("s", "string"), Param("substring", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.indexOf");
-            var sub = Args.String(args, 1, "str.indexOf");
-            return (long)s.IndexOf(sub, StringComparison.Ordinal);
+            string s = SvArgs.String(args, 0, "str.indexOf");
+            string sub = SvArgs.String(args, 1, "str.indexOf");
+            return StashValue.FromInt((long)s.IndexOf(sub, StringComparison.Ordinal));
         },
             returnType: "int",
             documentation: "Returns the index of the first occurrence of substring, or -1 if not found.\n@param s The string\n@param substring The substring\n@return Zero-based index or -1");
@@ -141,11 +141,11 @@ public static class StrBuiltIns
         // str.lastIndexOf(s, substring) — Returns the zero-based index of the last occurrence
         // of substring in s using ordinal comparison, or -1 if not found.
         // Throws RuntimeError if either argument is not a string.
-        ns.Function("lastIndexOf", [Param("s", "string"), Param("substring", "string")], (_, args) =>
+        ns.Function("lastIndexOf", [Param("s", "string"), Param("substring", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.lastIndexOf");
-            var sub = Args.String(args, 1, "str.lastIndexOf");
-            return (long)s.LastIndexOf(sub, StringComparison.Ordinal);
+            string s = SvArgs.String(args, 0, "str.lastIndexOf");
+            string sub = SvArgs.String(args, 1, "str.lastIndexOf");
+            return StashValue.FromInt((long)s.LastIndexOf(sub, StringComparison.Ordinal));
         },
             returnType: "int",
             documentation: "Returns the index of the last occurrence of substring, or -1 if not found.\n@param s The string\n@param substring The substring\n@return Zero-based index or -1");

@@ -1,5 +1,6 @@
 using Stash.Bytecode;
 using Stash.Common;
+using Stash.Runtime;
 
 namespace Stash.Tests.Bytecode;
 

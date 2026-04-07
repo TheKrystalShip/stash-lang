@@ -273,37 +273,25 @@ public sealed partial class VirtualMachine
                 }
             }
 
-            // Reuse a pooled list to avoid 1 allocation per built-in call.
-            // _callArgList is null while a call is in flight, so recursive
-            // calls (e.g. arr.map → callback → str.len) allocate a new list.
-            List<object?> args = _callArgList ?? new List<object?>(argc);
-            _callArgList = null;
-            args.Clear();
             int argStart = _sp - argc;
-            for (int i = argStart; i < _sp; i++)
-            {
-                args.Add(_stack[i].ToObject());
-            }
+
+            // Pass a span directly into the VM stack — zero allocation, zero copying
+            ReadOnlySpan<StashValue> argSpan = _stack.AsSpan(argStart, argc);
 
             _sp = argStart - 1; // pop args + callee slot
 
-            object? result;
+            StashValue result;
             try
             {
-                // Only set CurrentSpan when an explicit span was provided; otherwise
-                // the lazy getter on _context.CurrentSpan computes it on demand (error paths only).
                 if (callSpan is not null) _context.CurrentSpan = callSpan;
-                result = callable.Call(_context, args);
+                result = callable.CallDirect(_context, argSpan);
             }
             catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
             {
                 throw new RuntimeError($"Built-in function error: {ex.Message}",
                     callSpan ?? _context.CurrentSpan);
             }
-            // Return list to pool and clear references to avoid holding objects alive.
-            args.Clear();
-            _callArgList = args;
-            Push(StashValue.FromObject(result));
+            Push(result);
             return;
         }
 

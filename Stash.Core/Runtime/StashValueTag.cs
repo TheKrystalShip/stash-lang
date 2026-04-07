@@ -1,4 +1,4 @@
-namespace Stash.Bytecode;
+namespace Stash.Runtime;
 
 /// <summary>
 /// Discriminator tag for the <see cref="StashValue"/> tagged union.
