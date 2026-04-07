@@ -80,7 +80,7 @@ public sealed partial class VirtualMachine
                 SourceSpan? span = frame.Chunk.SourceMap.GetSpan(frame.IP - 1);
                 if (span is not null)
                 {
-                    int curLine = span.StartLine;
+                    int curLine = span.Value.StartLine;
                     int frameIdx = _frameCount - 1;
                     if (frameIdx >= lastDebugLinePerFrame.Length)
                     {
@@ -92,7 +92,7 @@ public sealed partial class VirtualMachine
                         lastDebugLinePerFrame[frameIdx] = curLine;
                         _context.CurrentSpan = span;
                         IDebugScope scope = BuildFrameScope(ref frame);
-                        debugger.OnBeforeExecute(span, scope, _debugThreadId);
+                        debugger.OnBeforeExecute(span.Value, scope, _debugThreadId);
                         // Re-acquire frame ref after debugger pause
                         frame = ref _frames[_frameCount - 1];
                     }

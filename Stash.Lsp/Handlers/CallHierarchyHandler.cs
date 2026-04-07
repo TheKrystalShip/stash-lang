@@ -314,7 +314,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
             }
 
             // Prefer the smallest enclosing function (innermost)
-            int size = (span.EndLine - span.StartLine) * 10000 + (span.EndColumn - span.StartColumn);
+            int size = (span.Value.EndLine - span.Value.StartLine) * 10000 + (span.Value.EndColumn - span.Value.StartColumn);
             if (size < bestSize)
             {
                 bestSize = size;
@@ -338,17 +338,17 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
             return false;
         }
 
-        if (line < span.StartLine || line > span.EndLine)
+        if (line < span.Value.StartLine || line > span.Value.EndLine)
         {
             return false;
         }
 
-        if (line == span.StartLine && col < span.StartColumn)
+        if (line == span.Value.StartLine && col < span.Value.StartColumn)
         {
             return false;
         }
 
-        if (line == span.EndLine && col > span.EndColumn)
+        if (line == span.Value.EndLine && col > span.Value.EndColumn)
         {
             return false;
         }

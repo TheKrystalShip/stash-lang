@@ -34,7 +34,7 @@ public class Lexer
     private readonly string _file;
 
     /// <summary>Accumulates tokens as they are recognized during scanning.</summary>
-    private readonly List<Token> _tokens = new();
+    private readonly List<Token> _tokens;
 
     /// <summary>Accumulates human-readable error messages encountered during scanning.</summary>
     private readonly List<string> _errors = new();
@@ -77,7 +77,7 @@ public class Lexer
     /// as a static field shared across all <see cref="Lexer"/> instances.
     /// </remarks>
     private static readonly FrozenDictionary<string, TokenType> _keywords =
-        new Dictionary<string, TokenType>
+        new Dictionary<string, TokenType>(32)
         {
             ["let"] = TokenType.Let,
             ["const"] = TokenType.Const,
@@ -118,6 +118,62 @@ public class Lexer
     private static readonly FrozenDictionary<string, TokenType>.AlternateLookup<ReadOnlySpan<char>> _keywordLookup =
         _keywords.GetAlternateLookup<ReadOnlySpan<char>>();
 
+    /// <summary>Pre-allocated lexeme strings for fixed-width operators and punctuation, keyed by TokenType.</summary>
+    private static readonly FrozenDictionary<TokenType, string> _staticLexemes = new Dictionary<TokenType, string>(50)
+    {
+        [TokenType.LeftParen] = "(",
+        [TokenType.RightParen] = ")",
+        [TokenType.LeftBrace] = "{",
+        [TokenType.RightBrace] = "}",
+        [TokenType.LeftBracket] = "[",
+        [TokenType.RightBracket] = "]",
+        [TokenType.Comma] = ",",
+        [TokenType.Dot] = ".",
+        [TokenType.DotDot] = "..",
+        [TokenType.DotDotDot] = "...",
+        [TokenType.Semicolon] = ";",
+        [TokenType.Colon] = ":",
+        [TokenType.Percent] = "%",
+        [TokenType.PercentEqual] = "%=",
+        [TokenType.Plus] = "+",
+        [TokenType.PlusPlus] = "++",
+        [TokenType.PlusEqual] = "+=",
+        [TokenType.Minus] = "-",
+        [TokenType.MinusMinus] = "--",
+        [TokenType.MinusEqual] = "-=",
+        [TokenType.Arrow] = "->",
+        [TokenType.FatArrow] = "=>",
+        [TokenType.Star] = "*",
+        [TokenType.StarEqual] = "*=",
+        [TokenType.Slash] = "/",
+        [TokenType.SlashEqual] = "/=",
+        [TokenType.Bang] = "!",
+        [TokenType.BangEqual] = "!=",
+        [TokenType.Equal] = "=",
+        [TokenType.EqualEqual] = "==",
+        [TokenType.Less] = "<",
+        [TokenType.LessEqual] = "<=",
+        [TokenType.LessLess] = "<<",
+        [TokenType.LessLessEqual] = "<<=",
+        [TokenType.Greater] = ">",
+        [TokenType.GreaterEqual] = ">=",
+        [TokenType.GreaterGreater] = ">>",
+        [TokenType.GreaterGreaterEqual] = ">>=",
+        [TokenType.Ampersand] = "&",
+        [TokenType.AmpersandEqual] = "&=",
+        [TokenType.AmpersandAmpersand] = "&&",
+        [TokenType.Pipe] = "|",
+        [TokenType.PipeEqual] = "|=",
+        [TokenType.PipePipe] = "||",
+        [TokenType.Caret] = "^",
+        [TokenType.CaretEqual] = "^=",
+        [TokenType.Tilde] = "~",
+        [TokenType.QuestionMark] = "?",
+        [TokenType.QuestionQuestion] = "??",
+        [TokenType.QuestionQuestionEqual] = "??=",
+        [TokenType.QuestionDot] = "?.",
+    }.ToFrozenDictionary();
+
     /// <summary>
     /// Gets the list of error messages accumulated during scanning.
     /// </summary>
@@ -148,6 +204,7 @@ public class Lexer
         _line = startLine;
         _column = startColumn;
         _preserveTrivia = preserveTrivia;
+        _tokens = new List<Token>(source.Length / 4);
     }
 
     /// <summary>
@@ -164,6 +221,11 @@ public class Lexer
 
         while (!IsAtEnd)
         {
+            // Fast-skip whitespace without entering ScanToken
+            char c = _source[_current];
+            if (c == ' ' || c == '\t' || c == '\r') { _current++; _column++; continue; }
+            if (c == '\n') { _current++; _line++; _column = 1; continue; }
+
             _start = _current;
             _startLine = _line;
             _startColumn = _column;
@@ -675,42 +737,33 @@ public class Lexer
     /// </remarks>
     private void ScanString()
     {
-        // Check if this regular string contains ${...} interpolation markers.
-        // If so, delegate to ScanInterpolatedString instead.
-        int scanAhead = _current;
-        while (scanAhead < _source.Length && _source[scanAhead] != '"')
-        {
-            if (_source[scanAhead] == '\\' && scanAhead + 1 < _source.Length)
-            {
-                scanAhead += 2; // skip escape sequence
-            }
-            else if (_source[scanAhead] == '$' && scanAhead + 1 < _source.Length && _source[scanAhead + 1] == '{')
-            {
-                // Contains ${...} — scan as interpolated string
-                ScanInterpolatedString(prefixed: false);
-                return;
-            }
-            else
-            {
-                scanAhead++;
-            }
-        }
-
-        // No interpolation found — scan as a plain string.
         var sb = new StringBuilder();
+
         while (!IsAtEnd && _source[_current] != '"')
         {
-            if (_source[_current] == '\n')
+            char c = _source[_current];
+
+            if (c == '\n')
             {
                 _line++;
                 _column = 1;
-                sb.Append(_source[_current]);
+                sb.Append(c);
                 _current++;
+                continue;
             }
-            else if (_source[_current] == '\\')
+
+            // Check for interpolation marker ${
+            if (c == '$' && _current + 1 < _source.Length && _source[_current + 1] == '{')
+            {
+                ScanInterpolatedStringFromPrefix(sb.ToString());
+                return;
+            }
+
+            if (c == '\\')
             {
                 _current++;
                 _column++;
+
                 if (IsAtEnd)
                 {
                     _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated string.");
@@ -719,6 +772,7 @@ public class Lexer
                         "Unterminated string."));
                     return;
                 }
+
                 char escaped = _source[_current];
                 _current++;
                 _column++;
@@ -730,6 +784,7 @@ public class Lexer
                     case 't': sb.Append('\t'); break;
                     case 'r': sb.Append('\r'); break;
                     case '0': sb.Append('\0'); break;
+                    case '$': sb.Append('$'); break;
                     default:
                         _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
                         _structuredErrors.Add(new DiagnosticError(
@@ -738,13 +793,12 @@ public class Lexer
                         sb.Append(escaped);
                         break;
                 }
+                continue;
             }
-            else
-            {
-                sb.Append(_source[_current]);
-                _current++;
-                _column++;
-            }
+
+            sb.Append(c);
+            _current++;
+            _column++;
         }
 
         if (IsAtEnd)
@@ -1275,6 +1329,102 @@ public class Lexer
         {
             parts.Add(textSegment.ToString());
         }
+
+        // Consume the closing "
+        _current++;
+        _column++;
+
+        string lexeme = _source[_start.._current];
+        AddToken(TokenType.InterpolatedString, parts, lexeme);
+    }
+
+    /// <summary>
+    /// Scans an interpolated string starting from a prefix text that was already scanned
+    /// by <see cref="ScanString"/>. The current position must be at the <c>$</c> of a
+    /// <c>${</c> marker. Emits an <see cref="TokenType.InterpolatedString"/> token.
+    /// </summary>
+    private void ScanInterpolatedStringFromPrefix(string prefix)
+    {
+        var parts = new List<object>(); // string or List<Token>
+        if (prefix.Length > 0)
+            parts.Add(prefix);
+
+        var textSegment = new StringBuilder();
+
+        while (!IsAtEnd && _source[_current] != '"')
+        {
+            if (_source[_current] == '\n')
+            {
+                _line++;
+                _column = 1;
+                textSegment.Append(_source[_current]);
+                _current++;
+            }
+            else if (_source[_current] == '\\')
+            {
+                _current++;
+                _column++;
+                if (IsAtEnd)
+                {
+                    _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated interpolated string.");
+                    _structuredErrors.Add(new DiagnosticError(
+                        new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                        "Unterminated interpolated string."));
+                    return;
+                }
+                char escaped = _source[_current];
+                _current++;
+                _column++;
+                switch (escaped)
+                {
+                    case '\\': textSegment.Append('\\'); break;
+                    case '"': textSegment.Append('"'); break;
+                    case 'n': textSegment.Append('\n'); break;
+                    case 't': textSegment.Append('\t'); break;
+                    case 'r': textSegment.Append('\r'); break;
+                    case '0': textSegment.Append('\0'); break;
+                    case '{': textSegment.Append('{'); break;
+                    case '$': textSegment.Append('$'); break;
+                    default:
+                        _errors.Add($"[{_file} {_line}:{_column - 1}] Invalid escape sequence '\\{escaped}'.");
+                        _structuredErrors.Add(new DiagnosticError(
+                            new SourceSpan(_file, _line, _column - 1, _line, _column - 1),
+                            $"Invalid escape sequence '\\{escaped}'."));
+                        textSegment.Append(escaped);
+                        break;
+                }
+            }
+            else if (_source[_current] == '$' && _current + 1 < _source.Length && _source[_current + 1] == '{')
+            {
+                if (textSegment.Length > 0)
+                {
+                    parts.Add(textSegment.ToString());
+                    textSegment.Clear();
+                }
+                _current += 2; // consume '${'
+                _column += 2;
+                ScanInterpolatedExpression(parts);
+            }
+            else
+            {
+                textSegment.Append(_source[_current]);
+                _current++;
+                _column++;
+            }
+        }
+
+        if (IsAtEnd)
+        {
+            _errors.Add($"[{_file} {_startLine}:{_startColumn}] Unterminated interpolated string.");
+            _structuredErrors.Add(new DiagnosticError(
+                new SourceSpan(_file, _startLine, _startColumn, _startLine, _startColumn),
+                "Unterminated interpolated string."));
+            return;
+        }
+
+        // Add any trailing text segment
+        if (textSegment.Length > 0)
+            parts.Add(textSegment.ToString());
 
         // Consume the closing "
         _current++;
@@ -2509,7 +2659,7 @@ public class Lexer
     /// <param name="type">The <see cref="TokenType"/> of the token to emit.</param>
     private void AddToken(TokenType type)
     {
-        string lexeme = _source[_start.._current];
+        string lexeme = _staticLexemes.TryGetValue(type, out string? s) ? s : _source[_start.._current];
         _tokens.Add(new Token(type, lexeme, null,
             new SourceSpan(_file, _startLine, _startColumn, _line, _column - 1)));
     }

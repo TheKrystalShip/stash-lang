@@ -170,13 +170,13 @@ public sealed partial class VirtualMachine
             _debugCallStack.Add(new Stash.Debugging.CallFrame
             {
                 FunctionName = funcName,
-                CallSite = callSpan!,
+                CallSite = callSpan,
                 LocalScope = scope,
             });
 
             if (debugger.ShouldBreakOnFunctionEntry(funcName))
             {
-                debugger.OnFunctionEnter(funcName, callSpan!, scope, _debugThreadId);
+                debugger.OnFunctionEnter(funcName, callSpan!.Value, scope, _debugThreadId);
             }
         }
     }

@@ -785,11 +785,11 @@ public class Program
     /// <param name="ex">The runtime error to report.</param>
     private static void PrintRuntimeError(RuntimeError ex)
     {
-        if (ex.Span is not null)
+        if (ex.Span is { } span)
         {
-            string location = string.IsNullOrEmpty(ex.Span.File)
-                ? $"{ex.Span.StartLine}:{ex.Span.StartColumn}"
-                : $"{ex.Span.File}:{ex.Span.StartLine}:{ex.Span.StartColumn}";
+            string location = string.IsNullOrEmpty(span.File)
+                ? $"{span.StartLine}:{span.StartColumn}"
+                : $"{span.File}:{span.StartLine}:{span.StartColumn}";
             Console.Error.WriteLine($"[runtime error at {location}] {ex.Message}");
         }
         else

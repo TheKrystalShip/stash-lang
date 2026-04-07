@@ -57,9 +57,9 @@ public class TapReporter : ITestHarness
         if (span is not null)
         {
             _output.WriteLine("  at:");
-            _output.WriteLine($"    file: {span.File}");
-            _output.WriteLine($"    line: {span.StartLine}");
-            _output.WriteLine($"    column: {span.StartColumn}");
+            _output.WriteLine($"    file: {span.Value.File}");
+            _output.WriteLine($"    line: {span.Value.StartLine}");
+            _output.WriteLine($"    column: {span.Value.StartColumn}");
         }
         _output.WriteLine("  ...");
     }

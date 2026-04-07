@@ -25,7 +25,7 @@ public class CallFrame
     /// <summary>
     /// Gets the source location where this function was called.
     /// </summary>
-    public SourceSpan CallSite { get; init; } = null!;
+    public SourceSpan? CallSite { get; init; }
 
     /// <summary>
     /// Gets the local scope for this frame.

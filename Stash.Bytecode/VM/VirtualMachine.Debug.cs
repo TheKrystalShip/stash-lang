@@ -50,7 +50,7 @@ public sealed partial class VirtualMachine
                         IDebugScope scope = (_frameCount > 0)
                             ? BuildFrameScope(ref _frames[_frameCount - 1])
                             : BuildGlobalScope();
-                        debugger.OnBeforeExecute(span, scope, _debugThreadId);
+                        debugger.OnBeforeExecute(span.Value, scope, _debugThreadId);
                     }
                 }
                 debugger.OnError(ex, _debugCallStack, _debugThreadId);
@@ -146,7 +146,7 @@ public sealed partial class VirtualMachine
                         IDebugScope scope = (_frameCount > 0)
                             ? BuildFrameScope(ref _frames[_frameCount - 1])
                             : BuildGlobalScope();
-                        debugger.OnBeforeExecute(span, scope, _debugThreadId);
+                        debugger.OnBeforeExecute(span.Value, scope, _debugThreadId);
                     }
                 }
                 debugger.OnError(ex, _debugCallStack, _debugThreadId);

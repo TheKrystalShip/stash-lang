@@ -145,54 +145,42 @@ public class Parser
     {
         try
         {
-            if (Match(TokenType.Let))
+            switch (Peek().Type)
             {
-                return VarDeclaration();
+                case TokenType.Let:
+                    Advance();
+                    return VarDeclaration();
+                case TokenType.Const:
+                    Advance();
+                    return ConstDeclaration();
+                case TokenType.Async:
+                {
+                    Advance();
+                    Token asyncToken = Previous();
+                    Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
+                    return FnDeclaration(isAsync: true, asyncToken: asyncToken);
+                }
+                case TokenType.Fn:
+                    Advance();
+                    return FnDeclaration();
+                case TokenType.Struct:
+                    Advance();
+                    return StructDeclaration();
+                case TokenType.Enum:
+                    Advance();
+                    return EnumDeclaration();
+                case TokenType.Interface:
+                    Advance();
+                    return InterfaceDeclaration();
+                case TokenType.Extend:
+                    Advance();
+                    return ExtendDeclaration();
+                case TokenType.Import:
+                    Advance();
+                    return ImportDeclaration();
+                default:
+                    return Statement();
             }
-
-            if (Match(TokenType.Const))
-            {
-                return ConstDeclaration();
-            }
-
-            if (Match(TokenType.Async))
-            {
-                Token asyncToken = Previous();
-                Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
-                return FnDeclaration(isAsync: true, asyncToken: asyncToken);
-            }
-
-            if (Match(TokenType.Fn))
-            {
-                return FnDeclaration();
-            }
-
-            if (Match(TokenType.Struct))
-            {
-                return StructDeclaration();
-            }
-
-            if (Match(TokenType.Enum))
-            {
-                return EnumDeclaration();
-            }
-
-            if (Match(TokenType.Interface))
-            {
-                return InterfaceDeclaration();
-            }
-
-            if (Match(TokenType.Extend))
-            {
-                return ExtendDeclaration();
-            }
-
-            if (Match(TokenType.Import))
-            {
-                return ImportDeclaration();
-            }
-
-            return Statement();
         }
         catch (ParseError)
         {
@@ -689,71 +677,53 @@ public class Parser
     /// <returns>The parsed <see cref="Stmt"/>.</returns>
     private Stmt Statement()
     {
-        if (Match(TokenType.If))
+        switch (Peek().Type)
         {
-            return IfStatement();
+            case TokenType.If:
+                Advance();
+                return IfStatement();
+            case TokenType.While:
+                Advance();
+                return WhileStatement();
+            case TokenType.Do:
+                Advance();
+                return DoWhileStatement();
+            case TokenType.For:
+                Advance();
+                return ForStatement();
+            case TokenType.Return:
+                Advance();
+                return ReturnStatement();
+            case TokenType.Throw:
+                Advance();
+                return ThrowStatement();
+            case TokenType.Break:
+                Advance();
+                return BreakStatement();
+            case TokenType.Continue:
+                Advance();
+                return ContinueStatement();
+            case TokenType.Elevate:
+                Advance();
+                return ElevateStatement();
+            case TokenType.Try:
+                if (_tokens[_current + 1].Type == TokenType.LeftBrace)
+                {
+                    Advance();
+                    return TryCatchStatement();
+                }
+                return ExpressionStatement();
+            case TokenType.LeftBrace:
+                return ParseBlock();
+            case TokenType.Retry:
+            {
+                Expr expr = Expression();
+                Match(TokenType.Semicolon);
+                return new ExprStmt(expr, expr.Span);
+            }
+            default:
+                return ExpressionStatement();
         }
-
-        if (Match(TokenType.While))
-        {
-            return WhileStatement();
-        }
-
-        if (Match(TokenType.Do))
-        {
-            return DoWhileStatement();
-        }
-
-        if (Match(TokenType.For))
-        {
-            return ForStatement();
-        }
-
-        if (Match(TokenType.Return))
-        {
-            return ReturnStatement();
-        }
-
-        if (Match(TokenType.Throw))
-        {
-            return ThrowStatement();
-        }
-
-        if (Match(TokenType.Break))
-        {
-            return BreakStatement();
-        }
-
-        if (Match(TokenType.Continue))
-        {
-            return ContinueStatement();
-        }
-
-        if (Match(TokenType.Elevate))
-        {
-            return ElevateStatement();
-        }
-
-        if (Check(TokenType.Try) && _tokens[_current + 1].Type == TokenType.LeftBrace)
-        {
-            Advance();
-            return TryCatchStatement();
-        }
-
-        if (Check(TokenType.LeftBrace))
-        {
-            return ParseBlock();
-        }
-
-        // retry (n) { ... } — block-bodied expression doesn't require semicolon
-        if (Check(TokenType.Retry))
-        {
-            Expr expr = Expression();
-            Match(TokenType.Semicolon); // Optional semicolon
-            return new ExprStmt(expr, expr.Span);
-        }
-
-        return ExpressionStatement();
     }
 
     /// <summary>
@@ -1134,11 +1104,9 @@ public class Parser
             Error(equals, "Invalid assignment target.");
         }
 
-        if (Match(TokenType.PlusEqual, TokenType.MinusEqual, TokenType.StarEqual,
-                  TokenType.SlashEqual, TokenType.PercentEqual, TokenType.QuestionQuestionEqual,
-                  TokenType.AmpersandEqual, TokenType.PipeEqual, TokenType.CaretEqual,
-                  TokenType.LessLessEqual, TokenType.GreaterGreaterEqual))
+        if (IsCompoundAssignment())
         {
+            Advance();
             Token op = Previous();
             Expr value = Assignment();
 
@@ -2189,6 +2157,13 @@ public class Parser
     {
         int saved = _current;
 
+        // Cheap early-out: if next token can't start a parameter list, bail immediately
+        TokenType next = Peek().Type;
+        if (next is not (TokenType.RightParen or TokenType.Identifier or TokenType.DotDotDot))
+        {
+            return false;
+        }
+
         try
         {
             // () => ...
@@ -2395,11 +2370,9 @@ public class Parser
             }
             else if (part is List<Token> innerTokens)
             {
-                // Add an EOF token so the nested parser can detect end of input.
-                var tokensWithEof = new List<Token>(innerTokens);
-                tokensWithEof.Add(new Token(TokenType.Eof, "", null, token.Span));
+                innerTokens.Add(new Token(TokenType.Eof, "", null, token.Span));
 
-                var innerParser = new Parser(tokensWithEof);
+                var innerParser = new Parser(innerTokens);
                 Expr expr = innerParser.Parse();
 
                 if (innerParser.Errors.Count > 0)
@@ -2438,10 +2411,9 @@ public class Parser
             }
             else if (part is List<Token> innerTokens)
             {
-                var tokensWithEof = new List<Token>(innerTokens);
-                tokensWithEof.Add(new Token(TokenType.Eof, "", null, token.Span));
+                innerTokens.Add(new Token(TokenType.Eof, "", null, token.Span));
 
-                var innerParser = new Parser(tokensWithEof);
+                var innerParser = new Parser(innerTokens);
                 Expr expr = innerParser.Parse();
 
                 if (innerParser.Errors.Count > 0)
@@ -2538,6 +2510,15 @@ public class Parser
         }
 
         return false;
+    }
+
+    private bool IsCompoundAssignment()
+    {
+        return Peek().Type is
+            TokenType.PlusEqual or TokenType.MinusEqual or TokenType.StarEqual or
+            TokenType.SlashEqual or TokenType.PercentEqual or TokenType.QuestionQuestionEqual or
+            TokenType.AmpersandEqual or TokenType.PipeEqual or TokenType.CaretEqual or
+            TokenType.LessLessEqual or TokenType.GreaterGreaterEqual;
     }
 
     /// <summary>

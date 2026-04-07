@@ -23,7 +23,7 @@ public class DisassemblerTests
 
         SourceSpan? result = map.GetSpan(0);
         Assert.NotNull(result);
-        Assert.Equal(1, result!.StartLine);
+        Assert.Equal(1, result!.Value.StartLine);
     }
 
     [Fact]
@@ -35,7 +35,7 @@ public class DisassemblerTests
         // Offset 5 is after the entry at 0, so it returns the entry at 0
         SourceSpan? result = map.GetSpan(5);
         Assert.NotNull(result);
-        Assert.Equal(1, result!.StartLine);
+        Assert.Equal(1, result!.Value.StartLine);
     }
 
     [Fact]

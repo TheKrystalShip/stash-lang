@@ -24,7 +24,7 @@ namespace Stash.Common;
 /// <param name="EndColumn">
 /// The 1-based column number where the span ends (inclusive).
 /// </param>
-public record SourceSpan(
+public readonly record struct SourceSpan(
     string File,
     int StartLine,
     int StartColumn,

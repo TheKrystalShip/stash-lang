@@ -12,17 +12,17 @@ public class CallHierarchyAndLinkedEditingTests : AnalysisTestBase
             return false;
         }
 
-        if (target.StartLine < span.StartLine || target.EndLine > span.EndLine)
+        if (target.StartLine < span.Value.StartLine || target.EndLine > span.Value.EndLine)
         {
             return false;
         }
 
-        if (target.StartLine == span.StartLine && target.StartColumn < span.StartColumn)
+        if (target.StartLine == span.Value.StartLine && target.StartColumn < span.Value.StartColumn)
         {
             return false;
         }
 
-        if (target.EndLine == span.EndLine && target.EndColumn > span.EndColumn)
+        if (target.EndLine == span.Value.EndLine && target.EndColumn > span.Value.EndColumn)
         {
             return false;
         }

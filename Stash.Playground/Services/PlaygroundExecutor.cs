@@ -94,8 +94,8 @@ public sealed class PlaygroundExecutor
         catch (RuntimeError ex)
         {
             sw.Stop();
-            string errorMsg = ex.Span is not null
-                ? $"[Line {ex.Span.StartLine}:{ex.Span.StartColumn}] {ex.Message}"
+            string errorMsg = ex.Span is { } spanVal
+                ? $"[Line {spanVal.StartLine}:{spanVal.StartColumn}] {ex.Message}"
                 : ex.Message;
 
             return new PlaygroundResult

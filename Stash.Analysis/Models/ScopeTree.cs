@@ -219,7 +219,7 @@ public class ScopeTree
                     foreach (var childScope in GlobalScope.Children)
                     {
                         if (childScope.Kind == ScopeKind.Function &&
-                            ContainsSpan(sym.FullSpan, childScope.Span))
+                            ContainsSpan(sym.FullSpan.Value, childScope.Span))
                         {
                             childSymbols.AddRange(childScope.Symbols.Where(s =>
                                 s.Kind == SymbolKind.Parameter && s.ParentName == sym.Name));
