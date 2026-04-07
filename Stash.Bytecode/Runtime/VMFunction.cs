@@ -19,6 +19,13 @@ internal sealed class VMFunction : IStashCallable
     public int Arity => Chunk.Arity;
     public int MinArity => Chunk.MinArity;
 
+    /// <summary>
+    /// The globals dictionary of the module where this function was defined.
+    /// Used by <c>LoadGlobal</c> to resolve module-level definitions (enums, functions, etc.)
+    /// when the function is called from a different module's VM.
+    /// </summary>
+    public Dictionary<string, object?>? ModuleGlobals { get; set; }
+
     public VMFunction(Chunk chunk, Upvalue[] upvalues)
     {
         Chunk = chunk;

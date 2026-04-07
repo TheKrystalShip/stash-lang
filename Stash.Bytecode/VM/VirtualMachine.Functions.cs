@@ -84,11 +84,11 @@ public sealed partial class VirtualMachine
 
             if (fnChunk.IsAsync)
             {
-                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, fn.Upvalues, baseSlot, callSpan)));
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, fn.Upvalues, baseSlot, callSpan, fn.ModuleGlobals)));
                 return;
             }
 
-            PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name);
+            PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name, fn.ModuleGlobals);
             return;
         }
 
@@ -167,11 +167,11 @@ public sealed partial class VirtualMachine
 
             if (fnChunk.IsAsync)
             {
-                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, boundFn.Upvalues, baseSlot, callSpan)));
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, boundFn.Upvalues, baseSlot, callSpan, boundFn.ModuleGlobals)));
                 return;
             }
 
-            PushFrame(fnChunk, baseSlot, boundFn.Upvalues, fnChunk.Name);
+            PushFrame(fnChunk, baseSlot, boundFn.Upvalues, fnChunk.Name, boundFn.ModuleGlobals);
             return;
         }
 
@@ -248,11 +248,11 @@ public sealed partial class VirtualMachine
 
             if (fnChunk.IsAsync)
             {
-                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, extFn.Upvalues, baseSlot, callSpan)));
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, extFn.Upvalues, baseSlot, callSpan, extFn.ModuleGlobals)));
                 return;
             }
 
-            PushFrame(fnChunk, baseSlot, extFn.Upvalues, fnChunk.Name);
+            PushFrame(fnChunk, baseSlot, extFn.Upvalues, fnChunk.Name, extFn.ModuleGlobals);
             return;
         }
 
@@ -451,7 +451,7 @@ public sealed partial class VirtualMachine
                 upvalues[i] = frame.Upvalues![index];
             }
         }
-        Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues)));
+        Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues) { ModuleGlobals = _globals }));
     }
 
 }

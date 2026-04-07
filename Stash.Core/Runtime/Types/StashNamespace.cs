@@ -11,6 +11,7 @@ using Stash.Common;
 public class StashNamespace
 {
     public string Name { get; }
+    public bool IsBuiltIn { get; init; }
     private Dictionary<string, object?>? _mutableMembers = new();
     private FrozenDictionary<string, object?>? _frozenMembers;
 

@@ -77,7 +77,8 @@ public sealed partial class VirtualMachine
             string typeName = (string)frame.Chunk.Constants[typeIdx].AsObj!;
             object? value = Pop().ToObject();
             // Check globals for a variable holding a type definition (e.g. `let t = Foo; x is t`)
-            if (_globals.TryGetValue(typeName, out object? globalType) &&
+            Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
+            if (globals.TryGetValue(typeName, out object? globalType) &&
                 globalType is StashStruct or StashEnum or StashInterface)
             {
                 bool r = globalType switch
@@ -122,9 +123,10 @@ public sealed partial class VirtualMachine
         var structDef = new StashStruct(metadata.Name, fieldList, methods);
 
         // Resolve and validate interfaces
+        Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
         foreach (string ifaceName in metadata.InterfaceNames)
         {
-            if (!_globals.TryGetValue(ifaceName, out object? resolved) || resolved is not StashInterface iface)
+            if (!globals.TryGetValue(ifaceName, out object? resolved) || resolved is not StashInterface iface)
             {
                 throw new RuntimeError($"'{ifaceName}' is not an interface.", span);
             }
@@ -219,7 +221,8 @@ public sealed partial class VirtualMachine
         }
         else
         {
-            if (!_globals.TryGetValue(metadata.TypeName, out object? resolved) || resolved is not StashStruct structDef)
+            Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
+            if (!globals.TryGetValue(metadata.TypeName, out object? resolved) || resolved is not StashStruct structDef)
             {
                 throw new RuntimeError($"Cannot extend '{metadata.TypeName}': not a known type.", span);
             }

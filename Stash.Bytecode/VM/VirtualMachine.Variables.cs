@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
@@ -14,7 +15,8 @@ public sealed partial class VirtualMachine
     {
         ushort nameIdx = ReadU16(ref frame);
         string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        if (!_globals.TryGetValue(name, out object? value))
+        Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
+        if (!globals.TryGetValue(name, out object? value))
         {
             throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
         }
@@ -32,7 +34,8 @@ public sealed partial class VirtualMachine
             throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
         }
 
-        _globals[name] = Pop().ToObject();
+        Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
+        globals[name] = Pop().ToObject();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

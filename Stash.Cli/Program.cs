@@ -787,7 +787,10 @@ public class Program
     {
         if (ex.Span is not null)
         {
-            Console.Error.WriteLine($"[runtime error at {ex.Span.StartLine}:{ex.Span.StartColumn}] {ex.Message}");
+            string location = string.IsNullOrEmpty(ex.Span.File)
+                ? $"{ex.Span.StartLine}:{ex.Span.StartColumn}"
+                : $"{ex.Span.File}:{ex.Span.StartLine}:{ex.Span.StartColumn}";
+            Console.Error.WriteLine($"[runtime error at {location}] {ex.Message}");
         }
         else
         {

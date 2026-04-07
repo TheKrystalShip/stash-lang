@@ -250,7 +250,7 @@ public sealed partial class VirtualMachine
 
     // ---- Frame Management ----
 
-    private void PushFrame(Chunk chunk, int baseSlot, Upvalue[]? upvalues, string? name)
+    private void PushFrame(Chunk chunk, int baseSlot, Upvalue[]? upvalues, string? name, Dictionary<string, object?>? moduleGlobals = null)
     {
         if (_frameCount >= _frames.Length)
         {
@@ -263,6 +263,7 @@ public sealed partial class VirtualMachine
         frame.BaseSlot = baseSlot;
         frame.Upvalues = upvalues;
         frame.FunctionName = name;
+        frame.ModuleGlobals = moduleGlobals;
     }
 
     // ---- Stack Operations ----

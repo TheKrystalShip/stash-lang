@@ -1,5 +1,7 @@
 namespace Stash.Bytecode;
 
+using System.Collections.Generic;
+
 /// <summary>
 /// Represents an active function invocation on the VM's call stack.
 /// Stored in a flat array — mutated via <c>ref</c> access.
@@ -23,4 +25,10 @@ internal struct CallFrame
 
     /// <summary>Function name for stack traces and error reporting.</summary>
     public string? FunctionName;
+
+    /// <summary>
+    /// The module globals for the function being executed, or <c>null</c> to use the VM's own globals.
+    /// Set when calling an imported function that carries module-scoped definitions.
+    /// </summary>
+    public Dictionary<string, object?>? ModuleGlobals;
 }

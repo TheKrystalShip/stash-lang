@@ -3124,6 +3124,313 @@ public class VirtualMachineTests : BytecodeTestBase
         Assert.Throws<RuntimeError>(() => Execute(source));
     }
 
+    [Fact]
+    public void Import_FunctionAccessingModuleEnum_Works()
+    {
+        string moduleSource = """
+            enum Color {
+                Red,
+                Green
+            }
+            fn getColorName(c) {
+                return c switch { Color.Red => "red", Color.Green => "green", _ => "?" };
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as ns;
+                return ns.getColorName(ns.Color.Red);
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal("red", result);
+    }
+
+    [Fact]
+    public void ImportAs_FunctionAccessingModuleGlobal_Works()
+    {
+        string moduleSource = """
+            let prefix = null;
+            prefix = ">>";
+            fn format(s) {
+                return prefix + s;
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as mod;
+                return mod.format("hello");
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal(">>hello", result);
+    }
+
+    [Fact]
+    public void Import_NestedFunctionCallWithModuleGlobal_Works()
+    {
+        string moduleSource = """
+            let multiplier = null;
+            multiplier = 10;
+            fn double(x) {
+                return x * 2;
+            }
+            fn compute(x) {
+                return double(x) * multiplier;
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as mod;
+                return mod.compute(3);
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal(60L, result);
+    }
+
+    [Fact]
+    public void ImportAs_ModuleEnumPassedAsArgAndUsedInSwitch_Works()
+    {
+        string moduleSource = """
+            enum Level {
+                Low,
+                High
+            }
+            fn describe(lvl) {
+                return lvl switch { Level.Low => "low", Level.High => "high", _ => "?" };
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as m;
+                return m.describe(m.Level.High);
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal("high", result);
+    }
+
+    [Fact]
+    public void ImportAs_FunctionUsingIsOnModuleEnum_Works()
+    {
+        string moduleSource = """
+            enum Status {
+                Active,
+                Inactive
+            }
+            fn checkStatus(val) {
+                return val is Status;
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as mod;
+                return mod.checkStatus(mod.Status.Active);
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Import_FunctionUsingIsOnModuleStruct_Works()
+    {
+        string moduleSource = """
+            struct Point {
+                x,
+                y
+            }
+            fn isPoint(val) {
+                return val is Point;
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as ns;
+                return ns.isPoint(ns.Point { x: 1, y: 2 });
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void ImportAs_StructImplementsModuleInterface_Works()
+    {
+        // struct Doc declared INSIDE an imported function body:
+        // pre-fix ExecuteStructDecl used _globals (main VM's empty dict) so Printable was not found.
+        // post-fix it uses frame.ModuleGlobals ?? _globals = moduleGlobals, which has Printable.
+        string moduleSource = """
+            interface Printable {
+                fn toString(self)
+            }
+            fn makeDoc(n) {
+                struct Doc : Printable {
+                    name,
+                    fn toString(self) {
+                        return self.name;
+                    }
+                }
+                return Doc { name: n };
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as lib;
+                return lib.makeDoc("readme").toString();
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal("readme", result);
+    }
+
+    [Fact]
+    public void ImportAs_ExtendModuleStruct_Works()
+    {
+        string moduleSource = """
+            struct Counter {
+                value
+            }
+            extend Counter {
+                fn increment(self) {
+                    self.value = self.value + 1;
+                    return self;
+                }
+            }
+            """;
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as m;
+                let c = null;
+                c = m.Counter { value: 5 };
+                return c.increment().value;
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal(6L, result);
+    }
+
+    [Fact]
+    public void ImportAs_UserNamespaceReExport_Preserved()
+    {
+        string helperSource = "let greeting = null; greeting = \"hello\";";
+        Chunk helperChunk = CompileSource(helperSource);
+
+        string utilsSource = """
+            let getHelper = null;
+            getHelper = () => { import "helper" as h; return h; };
+            let helper = null;
+            helper = getHelper();
+            """;
+        Chunk utilsChunk = CompileSource(utilsSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "utils" as utils;
+                return utils.helper.greeting;
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) =>
+        {
+            if (path.Contains("helper")) return helperChunk;
+            if (path.Contains("utils")) return utilsChunk;
+            throw new RuntimeError($"Unknown module: {path}", null);
+        };
+        object? result = vm.Execute(mainChunk);
+        Assert.Equal("hello", result);
+    }
+
+    [Fact]
+    public void ImportAs_StillFiltersBuiltInNamespaces()
+    {
+        string moduleSource = "let value = null; value = 42;";
+        Chunk moduleChunk = CompileSource(moduleSource);
+
+        string mainSource = """
+            let func = null;
+            func = () => {
+                import "mymod" as mod;
+                return mod.io;
+            };
+            return func();
+            """;
+        Chunk mainChunk = CompileSource(mainSource);
+
+        var vm = new VirtualMachine();
+        vm.ModuleLoader = (path, currentFile) => moduleChunk;
+        Assert.Throws<RuntimeError>(() => vm.Execute(mainChunk));
+    }
+
     // =========================================================================
     // 34. Spread in Function Call Args
     // =========================================================================

@@ -23,7 +23,7 @@ public sealed partial class VirtualMachine
     /// been applied by <see cref="CallValue"/>; <paramref name="baseSlot"/> points to the first
     /// argument on the current stack.
     /// </summary>
-    private StashFuture SpawnAsyncFunction(Chunk fnChunk, Upvalue[] upvalues, int baseSlot, SourceSpan? callSpan)
+    private StashFuture SpawnAsyncFunction(Chunk fnChunk, Upvalue[] upvalues, int baseSlot, SourceSpan? callSpan, Dictionary<string, object?>? moduleGlobals = null)
     {
         // Snapshot the fully-prepared arguments (rest-collected, defaults applied).
         int arity = fnChunk.Arity;
@@ -75,14 +75,14 @@ public sealed partial class VirtualMachine
             childVM._context.Input = capturedInput;
 
             // Replicate the call-frame layout: callee slot + prepared args, then run.
-            childVM.Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues)));
+            childVM.Push(StashValue.FromObj(new VMFunction(fnChunk, upvalues) { ModuleGlobals = moduleGlobals }));
             for (int i = 0; i < arity; i++)
             {
                 childVM.Push(StashValue.FromObject(capturedArgs[i]));
             }
 
             int childBase = childVM._sp - arity;
-            childVM.PushFrame(fnChunk, childBase, upvalues, fnChunk.Name);
+            childVM.PushFrame(fnChunk, childBase, upvalues, fnChunk.Name, moduleGlobals);
             return childVM.Run();
         }, cts.Token);
 

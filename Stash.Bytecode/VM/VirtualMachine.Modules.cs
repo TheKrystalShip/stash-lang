@@ -338,7 +338,7 @@ public sealed partial class VirtualMachine
         var ns = new StashNamespace(importAsMeta.AliasName);
         foreach (KeyValuePair<string, object?> kvp in moduleEnv)
         {
-            if (kvp.Value is StashNamespace)
+            if (kvp.Value is StashNamespace sn && sn.IsBuiltIn)
             {
                 continue; // skip inherited built-in namespaces
             }

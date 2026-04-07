@@ -25,7 +25,7 @@ public class NamespaceBuilder
     public NamespaceBuilder(string name)
     {
         _name = name;
-        _namespace = new StashNamespace(name);
+        _namespace = new StashNamespace(name) { IsBuiltIn = true };
     }
 
     /// <summary>
