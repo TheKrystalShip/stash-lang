@@ -365,7 +365,7 @@ See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 ## Performance
 
-Stash uses a **bytecode VM** as its sole execution engine. The table below compares the VM against the retired tree-walk interpreter and other languages to show its performance characteristics.
+Stash uses a **bytecode VM** as its execution engine. The table below compares the VM against other languages to show its performance characteristics.
 
 **What each benchmark tests**
 
@@ -379,19 +379,15 @@ Stash uses a **bytecode VM** as its sole execution engine. The table below compa
 
 **Results**
 
-| Benchmark                 | Stash (VM) | Stash (TW) |      Bash | Python | Node.js |   Ruby |   Perl |    Lua |
-| ------------------------- | ---------: | ---------: | --------: | -----: | ------: | -----: | -----: | -----: |
-| **Algorithms**            |     539 ms |   1,835 ms | 10,736 ms |  77 ms |    7 ms |  52 ms | 209 ms |  33 ms |
-| **Function Calls**        |     246 ms |   1,872 ms |  3,539 ms |  71 ms |    3 ms |  17 ms | 101 ms |  14 ms |
-| **Expression Throughput** |     659 ms |   1,194 ms |  4,987 ms | 160 ms |   14 ms | 190 ms | 131 ms |  84 ms |
-| **Built-in Functions**    |     778 ms |     764 ms | 23,395 ms | 290 ms |   28 ms | 351 ms | 339 ms | 205 ms |
-| **Scope Lookup**          |     261 ms |   1,470 ms |  3,237 ms |  97 ms |    4 ms | 135 ms | 278 ms |  59 ms |
+| Benchmark                 |  Stash |      Bash | Python | Node.js |   Ruby |   Perl |    Lua |
+| ------------------------- | -----: | --------: | -----: | ------: | -----: | -----: | -----: |
+| **Algorithms**            | 539 ms | 10,400 ms |  86 ms |    7 ms |  57 ms | 208 ms |  33 ms |
+| **Function Calls**        | 270 ms |  3,710 ms |  77 ms |    4 ms |  17 ms | 101 ms |  14 ms |
+| **Expression Throughput** | 495 ms |  4,980 ms | 174 ms |   14 ms | 190 ms | 132 ms |  83 ms |
+| **Built-in Functions**    | 856 ms | 23,321 ms | 288 ms |   27 ms | 351 ms | 340 ms | 208 ms |
+| **Scope Lookup**          | 264 ms |  3,272 ms | 104 ms |    4 ms | 135 ms | 264 ms |  59 ms |
 
 > Measured on the same machine, same workload, identical algorithms and iteration counts across all languages. Median of 3 runs.
->
-> **Stash (VM)** is the bytecode VM — a stack-based virtual machine that compiles the AST to bytecode before execution. **Stash (TW)** benchmark figures are from the retired tree-walk interpreter, included for historical reference. The VM is **1.8–7.6× faster** than the tree-walk interpreter across all benchmarks.
->
-> Node.js uses V8's JIT compiler, compiling hot paths to native machine code. Lua uses a register-based bytecode VM. Python 3, Ruby, and Perl compile to stack-based bytecode before interpreting. Stash's bytecode VM and Bash are the only pure interpreters in this comparison — yet Stash outperforms Bash **4–30×** on every workload while providing structured data types, modules, and a full standard library that Bash lacks.
 >
 > Full benchmark scripts in [`benchmarks/`](benchmarks/).
 

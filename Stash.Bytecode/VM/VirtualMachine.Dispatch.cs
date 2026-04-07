@@ -66,8 +66,11 @@ public sealed partial class VirtualMachine
         // at line N in a caller frame after returning from a callee that also ended
         // at line N (or any different line), which would otherwise happen because the
         // single lastDebugLine variable crosses frame boundaries.
-        int[] lastDebugLinePerFrame = new int[DefaultFrameDepth];
-        Array.Fill(lastDebugLinePerFrame, -1);
+        if (debugger is not null && _lastDebugLinePerFrame is null)
+        {
+            _lastDebugLinePerFrame = new int[DefaultFrameDepth];
+            _lastDebugLinePerFrame.AsSpan().Fill(-1);
+        }
 
         while (true)
         {
@@ -82,14 +85,16 @@ public sealed partial class VirtualMachine
                 {
                     int curLine = span.Value.StartLine;
                     int frameIdx = _frameCount - 1;
-                    if (frameIdx >= lastDebugLinePerFrame.Length)
+                    if (frameIdx >= _lastDebugLinePerFrame!.Length)
                     {
-                        Array.Resize(ref lastDebugLinePerFrame, _frames.Length);
+                        int oldLen = _lastDebugLinePerFrame.Length;
+                        Array.Resize(ref _lastDebugLinePerFrame, _frames.Length);
+                        _lastDebugLinePerFrame.AsSpan(oldLen).Fill(-1);
                     }
 
-                    if (curLine != lastDebugLinePerFrame[frameIdx] || debugger.IsPauseRequested)
+                    if (curLine != _lastDebugLinePerFrame[frameIdx] || debugger.IsPauseRequested)
                     {
-                        lastDebugLinePerFrame[frameIdx] = curLine;
+                        _lastDebugLinePerFrame[frameIdx] = curLine;
                         _context.CurrentSpan = span;
                         IDebugScope scope = BuildFrameScope(ref frame);
                         debugger.OnBeforeExecute(span.Value, scope, _debugThreadId);
@@ -159,7 +164,7 @@ public sealed partial class VirtualMachine
                     ExecuteLoop(ref frame);
                     if (debugger is not null && debugger.IsPauseRequested)
                     {
-                        lastDebugLinePerFrame[_frameCount - 1] = -1;
+                        _lastDebugLinePerFrame![_frameCount - 1] = -1;
                     }
 
                     break;

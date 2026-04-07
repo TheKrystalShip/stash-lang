@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.CompilerServices;
-using System.Text;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -20,16 +19,18 @@ public sealed partial class VirtualMachine
         SourceSpan? span = GetCurrentSpan(ref frame);
         var cmdMetadata = (CommandMetadata)frame.Chunk.Constants[metaCmdIdx].AsObj!;
 
-        var sb = new StringBuilder();
+        Span<char> stackBuf = stackalloc char[256];
+        var vsb = new ValueStringBuilder(stackBuf);
         int partStart = _sp - cmdMetadata.PartCount;
         for (int i = partStart; i < _sp; i++)
         {
-            sb.Append(RuntimeOps.Stringify(_stack[i]));
+            vsb.Append(RuntimeOps.Stringify(_stack[i]));
         }
 
         _sp = partStart;
 
-        string command = _context.ExpandTilde(sb.ToString().Trim());
+        string command = _context.ExpandTilde(vsb.AsSpan().Trim().ToString());
+        vsb.Dispose();
         if (string.IsNullOrEmpty(command))
         {
             throw new RuntimeError("Command cannot be empty.", span);

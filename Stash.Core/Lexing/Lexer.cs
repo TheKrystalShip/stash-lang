@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Frozen;
-using System.Text;
 using Stash.Common;
 using Stash.Runtime.Types;
 
@@ -737,7 +736,8 @@ public class Lexer
     /// </remarks>
     private void ScanString()
     {
-        var sb = new StringBuilder();
+        Span<char> sbBuf = stackalloc char[256];
+        using var sb = new ValueStringBuilder(sbBuf);
 
         while (!IsAtEnd && _source[_current] != '"')
         {
@@ -871,7 +871,8 @@ public class Lexer
         }
 
         // Plain triple-quoted string
-        var sb = new StringBuilder();
+        Span<char> sbBuf = stackalloc char[256];
+        using var sb = new ValueStringBuilder(sbBuf);
         while (!IsAtEnd)
         {
             if (_current + 2 < _source.Length && _source[_current] == '"' && _source[_current + 1] == '"' && _source[_current + 2] == '"')
@@ -948,7 +949,8 @@ public class Lexer
     private void ScanTripleQuotedInterpolated(bool prefixed)
     {
         var parts = new List<object>();
-        var textSegment = new StringBuilder();
+        Span<char> textSegmentBuf = stackalloc char[256];
+        using var textSegment = new ValueStringBuilder(textSegmentBuf);
 
         while (!IsAtEnd)
         {
@@ -1090,7 +1092,8 @@ public class Lexer
             return text;
         }
 
-        var sb = new StringBuilder();
+        Span<char> sbBuf = stackalloc char[256];
+        using var sb = new ValueStringBuilder(sbBuf);
         for (int i = 0; i < lines.Length; i++)
         {
             string line = lines[i];
@@ -1110,7 +1113,8 @@ public class Lexer
     /// <returns>A new list with indentation-stripped string segments.</returns>
     private static List<object> StripCommonIndentParts(List<object> parts)
     {
-        var fullText = new StringBuilder();
+        Span<char> fullTextBuf = stackalloc char[256];
+        using var fullText = new ValueStringBuilder(fullTextBuf);
         foreach (var part in parts)
         {
             if (part is string text)
@@ -1170,6 +1174,8 @@ public class Lexer
         bool atLineStart = true;
         int indentRemaining = minIndent;
 
+        Span<char> sbBuf = stackalloc char[256];
+        using var sb = new ValueStringBuilder(sbBuf);
         for (int partIdx = 0; partIdx < parts.Count; partIdx++)
         {
             if (parts[partIdx] is string text)
@@ -1179,7 +1185,7 @@ public class Lexer
                     text = text[..^1];
                 }
 
-                var sb = new StringBuilder();
+                sb.Clear();
                 foreach (char c in text)
                 {
                     if (c == '\n')
@@ -1238,7 +1244,8 @@ public class Lexer
     private void ScanInterpolatedString(bool prefixed)
     {
         var parts = new List<object>(); // string or List<Token>
-        var textSegment = new StringBuilder();
+        Span<char> textSegmentBuf = stackalloc char[256];
+        using var textSegment = new ValueStringBuilder(textSegmentBuf);
 
         while (!IsAtEnd && _source[_current] != '"')
         {
@@ -1349,7 +1356,8 @@ public class Lexer
         if (prefix.Length > 0)
             parts.Add(prefix);
 
-        var textSegment = new StringBuilder();
+        Span<char> textSegmentBuf = stackalloc char[256];
+        using var textSegment = new ValueStringBuilder(textSegmentBuf);
 
         while (!IsAtEnd && _source[_current] != '"')
         {
@@ -1445,7 +1453,8 @@ public class Lexer
     private void ScanCommandLiteral(bool passthrough = false, bool strict = false)
     {
         var parts = new List<object>(); // string or List<Token>
-        var textSegment = new StringBuilder();
+        Span<char> textSegmentBuf = stackalloc char[256];
+        using var textSegment = new ValueStringBuilder(textSegmentBuf);
         int depth = 1;
 
         bool hasInlinePipes = false;
@@ -2031,22 +2040,16 @@ public class Lexer
         }
 
         string lexeme = _source[_start.._current];
-        string digits = lexeme[2..].Replace("_", "");
-        try
-        {
-            ulong unsigned = Convert.ToUInt64(digits, 16);
-            if (unsigned > (ulong)long.MaxValue)
-            {
-                ReportNumberError($"Integer literal '{lexeme}' is too large.");
-                return;
-            }
-            long value = (long)unsigned;
-            AddToken(TokenType.IntegerLiteral, value, lexeme);
-        }
-        catch (OverflowException)
+        ReadOnlySpan<char> raw = _source.AsSpan(_start + 2, _current - _start - 2);
+        Span<char> digitBuf = stackalloc char[raw.Length];
+        int digitLen = CopyDigitsSkippingUnderscores(raw, digitBuf);
+        if (!TryParseHexSpan(digitBuf[..digitLen], out ulong unsigned) || unsigned > (ulong)long.MaxValue)
         {
             ReportNumberError($"Integer literal '{lexeme}' is too large.");
+            return;
         }
+        long value = (long)unsigned;
+        AddToken(TokenType.IntegerLiteral, value, lexeme);
     }
 
     private void ScanOctalLiteral()
@@ -2102,22 +2105,16 @@ public class Lexer
         }
 
         string lexeme = _source[_start.._current];
-        string digits = lexeme[2..].Replace("_", "");
-        try
-        {
-            ulong unsigned = Convert.ToUInt64(digits, 8);
-            if (unsigned > (ulong)long.MaxValue)
-            {
-                ReportNumberError($"Integer literal '{lexeme}' is too large.");
-                return;
-            }
-            long value = (long)unsigned;
-            AddToken(TokenType.IntegerLiteral, value, lexeme);
-        }
-        catch (OverflowException)
+        ReadOnlySpan<char> raw = _source.AsSpan(_start + 2, _current - _start - 2);
+        Span<char> digitBuf = stackalloc char[raw.Length];
+        int digitLen = CopyDigitsSkippingUnderscores(raw, digitBuf);
+        if (!TryParseOctalSpan(digitBuf[..digitLen], out ulong unsigned) || unsigned > (ulong)long.MaxValue)
         {
             ReportNumberError($"Integer literal '{lexeme}' is too large.");
+            return;
         }
+        long value = (long)unsigned;
+        AddToken(TokenType.IntegerLiteral, value, lexeme);
     }
 
     private void ScanBinaryLiteral()
@@ -2173,22 +2170,16 @@ public class Lexer
         }
 
         string lexeme = _source[_start.._current];
-        string digits = lexeme[2..].Replace("_", "");
-        try
-        {
-            ulong unsigned = Convert.ToUInt64(digits, 2);
-            if (unsigned > (ulong)long.MaxValue)
-            {
-                ReportNumberError($"Integer literal '{lexeme}' is too large.");
-                return;
-            }
-            long value = (long)unsigned;
-            AddToken(TokenType.IntegerLiteral, value, lexeme);
-        }
-        catch (OverflowException)
+        ReadOnlySpan<char> raw = _source.AsSpan(_start + 2, _current - _start - 2);
+        Span<char> digitBuf = stackalloc char[raw.Length];
+        int digitLen = CopyDigitsSkippingUnderscores(raw, digitBuf);
+        if (!TryParseBinarySpan(digitBuf[..digitLen], out ulong unsigned) || unsigned > (ulong)long.MaxValue)
         {
             ReportNumberError($"Integer literal '{lexeme}' is too large.");
+            return;
         }
+        long value = (long)unsigned;
+        AddToken(TokenType.IntegerLiteral, value, lexeme);
     }
 
     private void ScanDecimalNumber()
@@ -2283,8 +2274,10 @@ public class Lexer
                 }
 
                 string floatLexeme = _source[_start.._current];
-                string floatStr = floatLexeme.Replace("_", "");
-                if (double.TryParse(floatStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double floatValue))
+                ReadOnlySpan<char> rawFloat = _source.AsSpan(_start, _current - _start);
+                Span<char> floatBuf = stackalloc char[rawFloat.Length];
+                int floatLen = CopyDigitsSkippingUnderscores(rawFloat, floatBuf);
+                if (double.TryParse(floatBuf[..floatLen], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double floatValue))
                 {
                     if (TryScanUnitSuffix(floatValue)) return;
                     AddToken(TokenType.FloatLiteral, floatValue, floatLexeme);
@@ -2298,8 +2291,10 @@ public class Lexer
         }
 
         string lexeme = _source[_start.._current];
-        string intStr = lexeme.Replace("_", "");
-        if (long.TryParse(intStr, System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
+        ReadOnlySpan<char> rawInt = _source.AsSpan(_start, _current - _start);
+        Span<char> intBuf = stackalloc char[rawInt.Length];
+        int intLen = CopyDigitsSkippingUnderscores(rawInt, intBuf);
+        if (long.TryParse(intBuf[..intLen], System.Globalization.NumberStyles.None, System.Globalization.CultureInfo.InvariantCulture, out long value))
         {
             if (TryScanUnitSuffix(value)) return;
             AddToken(TokenType.IntegerLiteral, value, lexeme);
@@ -2308,6 +2303,73 @@ public class Lexer
         {
             ReportNumberError($"Integer literal '{lexeme}' is too large.");
         }
+    }
+
+    /// <summary>Copies digits from <paramref name="source"/> into <paramref name="destination"/>, skipping underscores.</summary>
+    /// <returns>The number of characters written to <paramref name="destination"/>.</returns>
+    private static int CopyDigitsSkippingUnderscores(ReadOnlySpan<char> source, Span<char> destination)
+    {
+        int len = 0;
+        foreach (char c in source)
+        {
+            if (c != '_')
+                destination[len++] = c;
+        }
+        return len;
+    }
+
+    /// <summary>Parses a hexadecimal number from a span of hex digits (no prefix, no underscores).</summary>
+    private static bool TryParseHexSpan(ReadOnlySpan<char> digits, out ulong result)
+    {
+        result = 0;
+        foreach (char c in digits)
+        {
+            uint digit;
+            if (c >= '0' && c <= '9') digit = (uint)(c - '0');
+            else if (c >= 'a' && c <= 'f') digit = (uint)(c - 'a' + 10);
+            else if (c >= 'A' && c <= 'F') digit = (uint)(c - 'A' + 10);
+            else return false;
+
+            if (result > (ulong.MaxValue >> 4))
+                return false;
+
+            result = (result << 4) | digit;
+        }
+        return digits.Length > 0;
+    }
+
+    /// <summary>Parses an octal number from a span of octal digits (no prefix, no underscores).</summary>
+    private static bool TryParseOctalSpan(ReadOnlySpan<char> digits, out ulong result)
+    {
+        result = 0;
+        foreach (char c in digits)
+        {
+            uint digit = (uint)(c - '0');
+            if (digit > 7) return false;
+
+            if (result > (ulong.MaxValue >> 3))
+                return false;
+
+            result = (result << 3) | digit;
+        }
+        return digits.Length > 0;
+    }
+
+    /// <summary>Parses a binary number from a span of binary digits (no prefix, no underscores).</summary>
+    private static bool TryParseBinarySpan(ReadOnlySpan<char> digits, out ulong result)
+    {
+        result = 0;
+        foreach (char c in digits)
+        {
+            uint digit = (uint)(c - '0');
+            if (digit > 1) return false;
+
+            if (result > (ulong.MaxValue >> 1))
+                return false;
+
+            result = (result << 1) | digit;
+        }
+        return digits.Length > 0;
     }
 
     // ── Duration / ByteSize suffix scanning ──────────────────────────────────

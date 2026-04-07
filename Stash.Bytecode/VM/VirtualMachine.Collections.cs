@@ -402,37 +402,33 @@ public sealed partial class VirtualMachine
     {
         ushort nameIdx = ReadU16(ref frame);
         string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        SourceSpan? span = GetCurrentSpan(ref frame);
         object? obj = Pop().ToObject();
-        Push(StashValue.FromObject(GetFieldValue(obj, fieldName, span)));
+        Push(StashValue.FromObject(GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame))));
     }
 
     private void ExecuteSetField(ref CallFrame frame)
     {
         ushort nameIdx = ReadU16(ref frame);
         string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        SourceSpan? span = GetCurrentSpan(ref frame);
         object? value = Pop().ToObject();
         object? obj = Pop().ToObject();
-        SetFieldValue(obj, fieldName, value, span);
+        SetFieldValue(obj, fieldName, value, GetCurrentSpan(ref frame));
         Push(StashValue.FromObject(value));
     }
 
     private void ExecuteGetIndex(ref CallFrame frame)
     {
-        SourceSpan? span = GetCurrentSpan(ref frame);
         object? index = Pop().ToObject();
         object? obj = Pop().ToObject();
-        Push(StashValue.FromObject(GetIndexValue(obj, index, span)));
+        Push(StashValue.FromObject(GetIndexValue(obj, index, GetCurrentSpan(ref frame))));
     }
 
     private void ExecuteSetIndex(ref CallFrame frame)
     {
-        SourceSpan? span = GetCurrentSpan(ref frame);
         object? value = Pop().ToObject();
         object? index = Pop().ToObject();
         object? obj = Pop().ToObject();
-        SetIndexValue(obj, index, value, span);
+        SetIndexValue(obj, index, value, GetCurrentSpan(ref frame));
         Push(StashValue.FromObject(value));
     }
 }

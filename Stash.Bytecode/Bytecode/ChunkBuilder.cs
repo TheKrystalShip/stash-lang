@@ -1,5 +1,7 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Stash.Common;
 
 namespace Stash.Bytecode;
@@ -10,8 +12,10 @@ namespace Stash.Bytecode;
 /// </summary>
 public class ChunkBuilder
 {
-    private readonly List<byte> _code = new();
+    private byte[] _code = ArrayPool<byte>.Shared.Rent(256);
+    private int _codeCount;
     private readonly List<StashValue> _constants = new();
+    private readonly Dictionary<StashValue, ushort> _constantIndex = new(StashValueComparer.Instance);
     private readonly List<SourceMapEntry> _sourceMapEntries = new();
     private readonly List<UpvalueDescriptor> _upvalues = new();
 
@@ -27,35 +31,55 @@ public class ChunkBuilder
     public string[]? UpvalueNames { get; set; }
 
     /// <summary>Current bytecode offset (next byte to be written).</summary>
-    public int CurrentOffset => _code.Count;
+    public int CurrentOffset => _codeCount;
 
     // ---- Emit Methods ----
 
     /// <summary>Emit a single opcode with no operands.</summary>
     public void Emit(OpCode opCode)
     {
-        _code.Add((byte)opCode);
+        EnsureCodeCapacity(1);
+        _code[_codeCount++] = (byte)opCode;
     }
 
     /// <summary>Emit an opcode followed by a single u8 operand.</summary>
     public void Emit(OpCode opCode, byte operand)
     {
-        _code.Add((byte)opCode);
-        _code.Add(operand);
+        EnsureCodeCapacity(2);
+        _code[_codeCount++] = (byte)opCode;
+        _code[_codeCount++] = operand;
     }
 
     /// <summary>Emit an opcode followed by a u16 operand (big-endian).</summary>
     public void Emit(OpCode opCode, ushort operand)
     {
-        _code.Add((byte)opCode);
-        _code.Add((byte)(operand >> 8));
-        _code.Add((byte)(operand & 0xFF));
+        EnsureCodeCapacity(3);
+        _code[_codeCount++] = (byte)opCode;
+        _code[_codeCount++] = (byte)(operand >> 8);
+        _code[_codeCount++] = (byte)(operand & 0xFF);
     }
 
     /// <summary>Emit a raw byte (for inline upvalue descriptors after OP_CLOSURE).</summary>
     public void EmitByte(byte value)
     {
-        _code.Add(value);
+        EnsureCodeCapacity(1);
+        _code[_codeCount++] = value;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void EnsureCodeCapacity(int needed)
+    {
+        if (_codeCount + needed > _code.Length)
+            GrowCode();
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void GrowCode()
+    {
+        byte[] newBuf = ArrayPool<byte>.Shared.Rent(_code.Length * 2);
+        _code.AsSpan(0, _codeCount).CopyTo(newBuf);
+        ArrayPool<byte>.Shared.Return(_code);
+        _code = newBuf;
     }
 
     // ---- Jump Patching ----
@@ -66,10 +90,11 @@ public class ChunkBuilder
     /// </summary>
     public int EmitJump(OpCode opCode)
     {
-        _code.Add((byte)opCode);
-        int patchOffset = _code.Count;
-        _code.Add(0xFF); // placeholder high byte
-        _code.Add(0xFF); // placeholder low byte
+        EnsureCodeCapacity(3);
+        _code[_codeCount++] = (byte)opCode;
+        int patchOffset = _codeCount;
+        _code[_codeCount++] = 0xFF; // placeholder high byte
+        _code[_codeCount++] = 0xFF; // placeholder low byte
         return patchOffset;
     }
 
@@ -79,9 +104,9 @@ public class ChunkBuilder
     /// </summary>
     public void PatchJump(int patchOffset)
     {
-        // The jump target is _code.Count (where we are now).
+        // The jump target is _codeCount (where we are now).
         // The offset is relative to the position right after the 2-byte operand.
-        int jumpTarget = _code.Count;
+        int jumpTarget = _codeCount;
         int jumpFrom = patchOffset + 2; // after the 2-byte operand
         int offset = jumpTarget - jumpFrom;
 
@@ -102,17 +127,18 @@ public class ChunkBuilder
     /// </summary>
     public void EmitLoop(int loopStart)
     {
-        _code.Add((byte)OpCode.Loop);
+        EnsureCodeCapacity(3);
+        _code[_codeCount++] = (byte)OpCode.Loop;
         // The offset is from the position right after this instruction's operand
         // back to loopStart.
-        int offset = (_code.Count + 2) - loopStart;
+        int offset = (_codeCount + 2) - loopStart;
         if (offset > ushort.MaxValue)
         {
             throw new InvalidOperationException($"Loop body too large: {offset} bytes.");
         }
 
-        _code.Add((byte)(offset >> 8));
-        _code.Add((byte)(offset & 0xFF));
+        _code[_codeCount++] = (byte)(offset >> 8);
+        _code[_codeCount++] = (byte)(offset & 0xFF);
     }
 
     // ---- Constant Pool ----
@@ -123,29 +149,11 @@ public class ChunkBuilder
     /// </summary>
     public ushort AddConstant(StashValue value)
     {
-        // Deduplicate primitives and strings
+        // Deduplicate primitives and strings via dictionary lookup (O(1) vs O(n))
         if (value.Tag != StashValueTag.Obj || value.AsObj is string)
         {
-            for (int i = 0; i < _constants.Count; i++)
-            {
-                StashValue existing = _constants[i];
-                if (existing.Tag == value.Tag)
-                {
-                    bool match = value.Tag switch
-                    {
-                        StashValueTag.Null => true,
-                        StashValueTag.Bool => existing.AsBool == value.AsBool,
-                        StashValueTag.Int => existing.AsInt == value.AsInt,
-                        StashValueTag.Float => existing.AsFloat == value.AsFloat,
-                        StashValueTag.Obj => object.Equals(existing.AsObj, value.AsObj),
-                        _ => false,
-                    };
-                    if (match)
-                    {
-                        return (ushort)i;
-                    }
-                }
-            }
+            if (_constantIndex.TryGetValue(value, out ushort existing))
+                return existing;
         }
 
         if (_constants.Count > ushort.MaxValue)
@@ -153,9 +161,13 @@ public class ChunkBuilder
             throw new InvalidOperationException("Constant pool overflow (max 65536 entries).");
         }
 
-        int index = _constants.Count;
+        ushort index = (ushort)_constants.Count;
         _constants.Add(value);
-        return (ushort)index;
+
+        if (value.Tag != StashValueTag.Obj || value.AsObj is string)
+            _constantIndex[value] = index;
+
+        return index;
     }
 
     /// <summary>Add a long integer constant.</summary>
@@ -178,7 +190,7 @@ public class ChunkBuilder
     /// <summary>Record a source mapping from the current bytecode offset to a source span.</summary>
     public void AddSourceMapping(SourceSpan span)
     {
-        _sourceMapEntries.Add(new SourceMapEntry(_code.Count, span));
+        _sourceMapEntries.Add(new SourceMapEntry(_codeCount, span));
     }
 
     /// <summary>Record a source mapping at a specific bytecode offset.</summary>
@@ -220,8 +232,12 @@ public class ChunkBuilder
     /// </summary>
     public Chunk Build()
     {
+        byte[] code = _code.AsSpan(0, _codeCount).ToArray();
+        ArrayPool<byte>.Shared.Return(_code);
+        _code = null!; // prevent reuse after Build
+
         return new Chunk(
-            code: _code.ToArray(),
+            code: code,
             constants: _constants.ToArray(),
             sourceMap: new SourceMap(_sourceMapEntries.ToArray()),
             arity: Arity,
@@ -235,5 +251,34 @@ public class ChunkBuilder
             localIsConst: LocalIsConst,
             upvalueNames: UpvalueNames
         );
+    }
+
+    private sealed class StashValueComparer : IEqualityComparer<StashValue>
+    {
+        public static readonly StashValueComparer Instance = new();
+
+        public bool Equals(StashValue x, StashValue y)
+        {
+            if (x.Tag != y.Tag) return false;
+            return x.Tag switch
+            {
+                StashValueTag.Null => true,
+                StashValueTag.Bool => x.AsBool == y.AsBool,
+                StashValueTag.Int => x.AsInt == y.AsInt,
+                StashValueTag.Float => x.AsFloat == y.AsFloat,
+                StashValueTag.Obj => object.Equals(x.AsObj, y.AsObj),
+                _ => false,
+            };
+        }
+
+        public int GetHashCode(StashValue v) => v.Tag switch
+        {
+            StashValueTag.Null => 0,
+            StashValueTag.Bool => v.AsBool ? 1 : 0,
+            StashValueTag.Int => v.AsInt.GetHashCode(),
+            StashValueTag.Float => v.AsFloat.GetHashCode(),
+            StashValueTag.Obj => v.AsObj?.GetHashCode() ?? 0,
+            _ => 0,
+        };
     }
 }

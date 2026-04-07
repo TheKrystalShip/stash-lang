@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using System.Text;
 using Stash.Common;
 using Stash.Runtime;
@@ -16,18 +17,52 @@ internal static class RuntimeOps
 {
     // --- Truthiness ---
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    public static bool IsFalsy(StashValue value) => !RuntimeValues.IsTruthy(value.ToObject());
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsFalsy(StashValue value) => value.Tag switch
+    {
+        StashValueTag.Null => true,
+        StashValueTag.Bool => !value.AsBool,
+        StashValueTag.Int => value.AsInt == 0,
+        StashValueTag.Float => value.AsFloat == 0.0,
+        StashValueTag.Obj => value.AsObj switch
+        {
+            null => true,
+            string s => s.Length == 0,
+            StashError => true,
+            _ => false,
+        },
+        _ => true,
+    };
 
     // --- Equality ---
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    public static bool IsEqual(StashValue left, StashValue right) => RuntimeValues.IsEqual(left.ToObject(), right.ToObject());
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static bool IsEqual(StashValue left, StashValue right)
+    {
+        if (left.Tag != right.Tag) return false;
+        return left.Tag switch
+        {
+            StashValueTag.Null => true,
+            StashValueTag.Bool => left.AsBool == right.AsBool,
+            StashValueTag.Int => left.AsInt == right.AsInt,
+            StashValueTag.Float => left.AsFloat == right.AsFloat,
+            StashValueTag.Obj => RuntimeValues.IsEqual(left.AsObj, right.AsObj),
+            _ => false,
+        };
+    }
 
     // --- Stringify ---
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    public static string Stringify(StashValue value) => RuntimeValues.Stringify(value.ToObject());
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static string Stringify(StashValue value) => value.Tag switch
+    {
+        StashValueTag.Null => "null",
+        StashValueTag.Bool => value.AsBool ? "true" : "false",
+        StashValueTag.Int => value.AsInt.ToString(),
+        StashValueTag.Float => value.AsFloat.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        StashValueTag.Obj => value.AsObj is string s ? s : RuntimeValues.Stringify(value.AsObj),
+        _ => "null",
+    };
 
     // --- Arithmetic ---
 
@@ -46,9 +81,17 @@ internal static class RuntimeOps
         // String concatenation — if either side is a string
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
-        if (lObj is string || rObj is string)
+        if (lObj is string ls && rObj is string rs)
         {
-            return StashValue.FromObj(Stringify(left) + Stringify(right));
+            return StashValue.FromObj(string.Concat(ls, rs));
+        }
+        if (lObj is string ls2)
+        {
+            return StashValue.FromObj(string.Concat(ls2, Stringify(right)));
+        }
+        if (rObj is string rs2)
+        {
+            return StashValue.FromObj(string.Concat(Stringify(left), rs2));
         }
         // IP address + offset
         if (lObj is StashIpAddress ipL && right.IsInt)
@@ -133,7 +176,7 @@ internal static class RuntimeOps
                 throw new RuntimeError("String repeat count must be non-negative.", span);
             }
 
-            return StashValue.FromObj(right.AsInt == 0 ? "" : string.Concat(Enumerable.Repeat(ls, (int)right.AsInt)));
+            return StashValue.FromObj(RepeatString(ls, (int)right.AsInt));
         }
         if (left.IsInt && rObj is string rs)
         {
@@ -142,7 +185,7 @@ internal static class RuntimeOps
                 throw new RuntimeError("String repeat count must be non-negative.", span);
             }
 
-            return StashValue.FromObj(left.AsInt == 0 ? "" : string.Concat(Enumerable.Repeat(rs, (int)left.AsInt)));
+            return StashValue.FromObj(RepeatString(rs, (int)left.AsInt));
         }
         // Numeric
         if (left.IsInt && right.IsInt)
@@ -488,14 +531,41 @@ internal static class RuntimeOps
 
     public static string Interpolate(StashValue[] stack, int sp, int count)
     {
-        var sb = new StringBuilder();
+        if (count == 1)
+        {
+            return RuntimeValues.Stringify(stack[sp - 1].ToObject());
+        }
+
+        Span<char> stackBuf = stackalloc char[256];
+        var vsb = new ValueStringBuilder(stackBuf);
+
         int start = sp - count;
         for (int i = start; i < sp; i++)
         {
-            sb.Append(RuntimeValues.Stringify(stack[i].ToObject()));
+            vsb.Append(RuntimeValues.Stringify(stack[i].ToObject()));
         }
 
-        return sb.ToString();
+        string result = vsb.ToString();
+        vsb.Dispose();
+        return result;
+    }
+
+    // --- String Repeat ---
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private static string RepeatString(string s, int count)
+    {
+        if (count == 0 || s.Length == 0) return count == 0 ? "" : s;
+        if (count == 1) return s;
+
+        return string.Create(checked(s.Length * count), (s, count), static (span, state) =>
+        {
+            ReadOnlySpan<char> src = state.s;
+            for (int i = 0; i < state.count; i++)
+            {
+                src.CopyTo(span[(i * src.Length)..]);
+            }
+        });
     }
 
     // --- Helpers ---

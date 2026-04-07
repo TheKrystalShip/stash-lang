@@ -30,7 +30,19 @@ internal sealed class VMContext : IInterpreterContext
     public object? LastError { get; set; }
     public bool EmbeddedMode { get; set; }
     public string? CurrentFile { get; set; }
-    public SourceSpan? CurrentSpan { get; set; }
+
+    // Lazy span: set by the VM before each built-in call so built-ins can report
+    // their call-site location without an eager O(log n) binary search on the success path.
+    internal SourceMap? _callSourceMap;
+    internal int _callIP;
+    internal SourceSpan? _currentSpan;
+
+    public SourceSpan? CurrentSpan
+    {
+        get => _currentSpan ?? _callSourceMap?.GetSpan(_callIP);
+        set => _currentSpan = value;
+    }
+
     public string[]? ScriptArgs { get; set; }
     public TextWriter Output { get; set; } = Console.Out;
     public TextWriter ErrorOutput { get; set; } = Console.Error;

@@ -119,7 +119,7 @@ public sealed partial class VirtualMachine
                 int minRequired = Math.Min(minArity, nonRestCount);
                 if (provided < minRequired)
                 {
-                    throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan);
+                    throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan ?? _context.CurrentSpan);
                 }
 
                 if (provided < nonRestCount)
@@ -151,7 +151,7 @@ public sealed partial class VirtualMachine
                     string expectedStr = minArity == expected
                         ? $"{expected - 1}"
                         : $"{minArity - 1} to {expected - 1}";
-                    throw new RuntimeError($"Expected {expectedStr} arguments but got {argc}.", callSpan);
+                    throw new RuntimeError($"Expected {expectedStr} arguments but got {argc}.", callSpan ?? _context.CurrentSpan);
                 }
 
                 if (provided < expected)
@@ -167,7 +167,7 @@ public sealed partial class VirtualMachine
 
             if (fnChunk.IsAsync)
             {
-                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, boundFn.Upvalues, baseSlot, callSpan, boundFn.ModuleGlobals)));
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, boundFn.Upvalues, baseSlot, callSpan ?? _context.CurrentSpan, boundFn.ModuleGlobals)));
                 return;
             }
 
@@ -200,7 +200,7 @@ public sealed partial class VirtualMachine
                 int minRequired = Math.Min(minArity, nonRestCount);
                 if (provided < minRequired)
                 {
-                    throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan);
+                    throw new RuntimeError($"Expected at least {minRequired - 1} arguments but got {argc}.", callSpan ?? _context.CurrentSpan);
                 }
 
                 if (provided < nonRestCount)
@@ -232,7 +232,7 @@ public sealed partial class VirtualMachine
                     string expectedStr = minArity == expected
                         ? $"{expected - 1}"
                         : $"{minArity - 1} to {expected - 1}";
-                    throw new RuntimeError($"Expected {expectedStr} arguments but got {argc}.", callSpan);
+                    throw new RuntimeError($"Expected {expectedStr} arguments but got {argc}.", callSpan ?? _context.CurrentSpan);
                 }
 
                 if (provided < expected)
@@ -248,7 +248,7 @@ public sealed partial class VirtualMachine
 
             if (fnChunk.IsAsync)
             {
-                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, extFn.Upvalues, baseSlot, callSpan, extFn.ModuleGlobals)));
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, extFn.Upvalues, baseSlot, callSpan ?? _context.CurrentSpan, extFn.ModuleGlobals)));
                 return;
             }
 
@@ -269,11 +269,16 @@ public sealed partial class VirtualMachine
                         : $"{minArity} to {callable.Arity}";
                     throw new RuntimeError(
                         $"Expected {expectedStr} arguments but got {argc}.",
-                        callSpan);
+                        callSpan ?? _context.CurrentSpan);
                 }
             }
 
-            var args = new List<object?>(argc);
+            // Reuse a pooled list to avoid 1 allocation per built-in call.
+            // _callArgList is null while a call is in flight, so recursive
+            // calls (e.g. arr.map → callback → str.len) allocate a new list.
+            List<object?> args = _callArgList ?? new List<object?>(argc);
+            _callArgList = null;
+            args.Clear();
             int argStart = _sp - argc;
             for (int i = argStart; i < _sp; i++)
             {
@@ -285,28 +290,26 @@ public sealed partial class VirtualMachine
             object? result;
             try
             {
-                _context.CurrentSpan = callSpan;
+                // Only set CurrentSpan when an explicit span was provided; otherwise
+                // the lazy getter on _context.CurrentSpan computes it on demand (error paths only).
+                if (callSpan is not null) _context.CurrentSpan = callSpan;
                 result = callable.Call(_context, args);
             }
-            catch (RuntimeError)
+            catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
             {
-                throw;
+                throw new RuntimeError($"Built-in function error: {ex.Message}",
+                    callSpan ?? _context.CurrentSpan);
             }
-            catch (Stash.Tpl.TemplateException)
-            {
-                throw;
-            }
-            catch (Exception ex)
-            {
-                throw new RuntimeError($"Built-in function error: {ex.Message}", callSpan);
-            }
+            // Return list to pool and clear references to avoid holding objects alive.
+            args.Clear();
+            _callArgList = args;
             Push(StashValue.FromObject(result));
             return;
         }
 
         throw new RuntimeError(
             $"Can only call functions. Got {RuntimeValues.Stringify(callee)}.",
-            callSpan);
+            callSpan ?? _context.CurrentSpan);
     }
 
     /// <summary>
@@ -401,11 +404,93 @@ public sealed partial class VirtualMachine
     private void ExecuteCall(ref CallFrame frame, IDebugger? debugger)
     {
         byte argc = ReadByte(ref frame);
-        // Save span before potential frame array resize
-        SourceSpan? callSpan = GetCurrentSpan(ref frame);
+        // Save caller context before frame may be invalidated by PushFrame.
+        // Avoid the O(log n) binary search — only compute span when actually needed.
+        int callerIP = frame.IP - 1;
+        SourceMap callerSourceMap = frame.Chunk.SourceMap;
         object? callee = _stack[_sp - argc - 1].AsObj;  // Callees are always Obj-tagged
         int prevFrameCount = _frameCount;
-        CallValue(callee, argc, callSpan);
+
+        // Fast path: VMFunction calls skip span lookup on the success path
+        if (callee is VMFunction fn)
+        {
+            Chunk fnChunk = fn.Chunk;
+            int provided = argc;
+            int expected = fnChunk.Arity;
+            int minArity = fnChunk.MinArity;
+
+            if (fnChunk.HasRestParam)
+            {
+                int nonRestCount = expected - 1;
+                int minRequired = Math.Min(minArity, nonRestCount);
+                if (provided < minRequired)
+                {
+                    throw new RuntimeError(
+                        $"Expected at least {minRequired} arguments but got {provided}.",
+                        callerSourceMap.GetSpan(callerIP));
+                }
+
+                if (provided < nonRestCount)
+                {
+                    for (int i = provided; i < nonRestCount; i++)
+                    {
+                        Push(StashValue.FromObj(NotProvided));
+                    }
+                    provided = nonRestCount;
+                }
+
+                int restCount = Math.Max(0, provided - nonRestCount);
+                var restList = new List<object?>(restCount);
+                int restStart = _sp - restCount;
+                for (int i = restStart; i < _sp; i++)
+                {
+                    restList.Add(_stack[i].ToObject());
+                }
+                _sp = restStart;
+                Push(StashValue.FromObj(restList));
+                provided = expected;
+            }
+            else
+            {
+                if (provided < minArity || provided > expected)
+                {
+                    string expectedStr = minArity == expected
+                        ? $"{expected}"
+                        : $"{minArity} to {expected}";
+                    throw new RuntimeError(
+                        $"Expected {expectedStr} arguments but got {provided}.",
+                        callerSourceMap.GetSpan(callerIP));
+                }
+
+                if (provided < expected)
+                {
+                    for (int i = provided; i < expected; i++)
+                    {
+                        Push(StashValue.FromObj(NotProvided));
+                    }
+                }
+            }
+
+            int baseSlot = _sp - expected;
+
+            if (fnChunk.IsAsync)
+            {
+                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, fn.Upvalues, baseSlot, callerSourceMap.GetSpan(callerIP), fn.ModuleGlobals)));
+            }
+            else
+            {
+                PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name, fn.ModuleGlobals);
+            }
+        }
+        else
+        {
+            // Lazy path: save call-site context on _context so built-ins can access
+            // it via CurrentSpan's lazy getter instead of paying O(log n) GetSpan() upfront.
+            _context._callSourceMap = callerSourceMap;
+            _context._callIP = callerIP;
+            _context._currentSpan = null; // reset so lazy getter activates
+            CallValue(callee, argc, null);
+        }
 
         if (StepLimit > 0 && ++StepCount >= StepLimit)
         {
@@ -415,6 +500,7 @@ public sealed partial class VirtualMachine
         // Debug: track function entry for VM function calls
         if (debugger is not null && _frameCount > prevFrameCount)
         {
+            SourceSpan? callSpan = callerSourceMap.GetSpan(callerIP);
             ref CallFrame newFrame = ref _frames[_frameCount - 1];
             IDebugScope scope = BuildFrameScope(ref newFrame);
             string funcName = newFrame.FunctionName ?? "<anonymous>";

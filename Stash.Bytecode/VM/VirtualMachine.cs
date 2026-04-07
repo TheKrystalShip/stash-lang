@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -59,6 +60,9 @@ public sealed partial class VirtualMachine
     private IDebugger? _debugger;
     private readonly List<DebugCallFrame> _debugCallStack = new();
     private int _debugThreadId = 1;
+    private int[]? _lastDebugLinePerFrame;
+    private int _loopCheckCounter;
+    private List<object?>? _callArgList;
 
     public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
     {
@@ -254,7 +258,14 @@ public sealed partial class VirtualMachine
     {
         if (_frameCount >= _frames.Length)
         {
-            Array.Resize(ref _frames, _frames.Length * 2);
+            int newSize = _frames.Length * 2;
+            CallFrame[] newFrames = ArrayPool<CallFrame>.Shared.Rent(newSize);
+            _frames.AsSpan(0, _frameCount).CopyTo(newFrames);
+
+            if (_frames.Length > 0)
+                ArrayPool<CallFrame>.Shared.Return(_frames, clearArray: true);
+
+            _frames = newFrames;
         }
 
         ref CallFrame frame = ref _frames[_frameCount++];
@@ -281,7 +292,14 @@ public sealed partial class VirtualMachine
 
     private void GrowStack()
     {
-        Array.Resize(ref _stack, _stack.Length * 2);
+        int newSize = _stack.Length * 2;
+        StashValue[] newStack = ArrayPool<StashValue>.Shared.Rent(newSize);
+        _stack.AsSpan(0, _sp).CopyTo(newStack);
+
+        if (_stack.Length > 0)
+            ArrayPool<StashValue>.Shared.Return(_stack, clearArray: true);
+
+        _stack = newStack;
         foreach (Upvalue uv in _openUpvalues)
         {
             uv.UpdateStack(_stack);

@@ -384,14 +384,21 @@ public sealed partial class VirtualMachine
     {
         ushort offset = ReadU16(ref frame);
         frame.IP -= offset;
-        if (_ct.IsCancellationRequested)
+        if ((++_loopCheckCounter & 0xFF) == 0)
         {
-            throw new OperationCanceledException(_ct);
-        }
+            if (_ct.IsCancellationRequested)
+            {
+                throw new OperationCanceledException(_ct);
+            }
 
-        if (StepLimit > 0 && ++StepCount >= StepLimit)
-        {
-            throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+            if (StepLimit > 0)
+            {
+                StepCount += 256;
+                if (StepCount >= StepLimit)
+                {
+                    throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+                }
+            }
         }
     }
 
