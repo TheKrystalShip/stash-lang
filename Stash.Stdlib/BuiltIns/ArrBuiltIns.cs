@@ -29,187 +29,147 @@ public static class ArrBuiltIns
     {
         var ns = new NamespaceBuilder("arr");
 
-        ns.Function("push", [Param("array", "array"), Param("value")], (_, args) =>
+        ns.Function("push", [Param("array", "array"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.push");
-            list.Add(args[1]);
-            return null;
+            SvArgs.StashList(args, 0, "arr.push").Add(args[1]);
+            return StashValue.Null;
         });
 
-        ns.Function("pop", [Param("array", "array")], (_, args) =>
+        ns.Function("pop", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.pop");
+            var list = SvArgs.StashList(args, 0, "arr.pop");
             if (list.Count == 0)
-            {
                 throw new RuntimeError("Cannot pop from an empty array.");
-            }
-
             var last = list[list.Count - 1];
             list.RemoveAt(list.Count - 1);
             return last;
         });
 
-        ns.Function("peek", [Param("array", "array")], (_, args) =>
+        ns.Function("peek", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.peek");
+            var list = SvArgs.StashList(args, 0, "arr.peek");
             if (list.Count == 0)
-            {
                 throw new RuntimeError("Cannot peek an empty array.");
-            }
-
             return list[list.Count - 1];
         });
 
-        ns.Function("insert", [Param("array", "array"), Param("index", "int"), Param("value")], (_, args) =>
+        ns.Function("insert", [Param("array", "array"), Param("index", "int"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.insert");
-            var idx = Args.Long(args, 1, "arr.insert");
+            var list = SvArgs.StashList(args, 0, "arr.insert");
+            var idx = SvArgs.Long(args, 1, "arr.insert");
             if (idx < 0 || idx > list.Count)
-            {
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.");
-            }
-
             list.Insert((int)idx, args[2]);
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("removeAt", [Param("array", "array"), Param("index", "int")], (_, args) =>
+        ns.Function("removeAt", [Param("array", "array"), Param("index", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.removeAt");
-            var idx = Args.Long(args, 1, "arr.removeAt");
+            var list = SvArgs.StashList(args, 0, "arr.removeAt");
+            var idx = SvArgs.Long(args, 1, "arr.removeAt");
             if (idx < 0 || idx >= list.Count)
-            {
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.removeAt'.");
-            }
-
             var removed = list[(int)idx];
             list.RemoveAt((int)idx);
             return removed;
         });
 
-        ns.Function("remove", [Param("array", "array"), Param("value")], (_, args) =>
+        ns.Function("remove", [Param("array", "array"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.remove");
+            var list = SvArgs.StashList(args, 0, "arr.remove");
+            var value = args[1].ToObject();
             for (int i = 0; i < list.Count; i++)
             {
-                if (RuntimeValues.IsEqual(list[i], args[1]))
+                if (RuntimeValues.IsEqual(list[i].ToObject(), value))
                 {
                     list.RemoveAt(i);
-                    return true;
+                    return StashValue.True;
                 }
             }
-            return false;
+            return StashValue.False;
         });
 
-        ns.Function("clear", [Param("array", "array")], (_, args) =>
+        ns.Function("clear", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.clear");
-            list.Clear();
-            return null;
+            SvArgs.StashList(args, 0, "arr.clear").Clear();
+            return StashValue.Null;
         });
 
-        ns.Function("contains", [Param("array", "array"), Param("value")], (_, args) =>
+        ns.Function("contains", [Param("array", "array"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.contains");
+            var list = SvArgs.StashList(args, 0, "arr.contains");
+            var value = args[1].ToObject();
             foreach (var item in list)
             {
-                if (RuntimeValues.IsEqual(item, args[1]))
-                {
-                    return true;
-                }
+                if (RuntimeValues.IsEqual(item.ToObject(), value))
+                    return StashValue.True;
             }
-            return false;
+            return StashValue.False;
         });
 
-        ns.Function("indexOf", [Param("array", "array"), Param("value")], (_, args) =>
+        ns.Function("indexOf", [Param("array", "array"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.indexOf");
+            var list = SvArgs.StashList(args, 0, "arr.indexOf");
+            var value = args[1].ToObject();
             for (int i = 0; i < list.Count; i++)
             {
-                if (RuntimeValues.IsEqual(list[i], args[1]))
-                {
-                    return (long)i;
-                }
+                if (RuntimeValues.IsEqual(list[i].ToObject(), value))
+                    return StashValue.FromInt((long)i);
             }
-            return -1L;
+            return StashValue.FromInt(-1L);
         });
 
-        ns.Function("slice", [Param("array", "array"), Param("start", "int"), Param("end", "int")], (_, args) =>
+        ns.Function("slice", [Param("array", "array"), Param("start", "int"), Param("end", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.slice");
-            var start = Args.Long(args, 1, "arr.slice");
-            var end = Args.Long(args, 2, "arr.slice");
+            var list = SvArgs.StashList(args, 0, "arr.slice");
+            var start = SvArgs.Long(args, 1, "arr.slice");
+            var end = SvArgs.Long(args, 2, "arr.slice");
             int s = (int)Math.Max(0, Math.Min(start, list.Count));
             int e = (int)Math.Max(0, Math.Min(end, list.Count));
-            if (e < s)
-            {
-                e = s;
-            }
-
-            return list.GetRange(s, e - s);
+            if (e < s) e = s;
+            return StashValue.FromObj(list.GetRange(s, e - s));
         });
 
-        ns.Function("concat", [Param("a", "array"), Param("b", "array")], (_, args) =>
+        ns.Function("concat", [Param("a", "array"), Param("b", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list1 = Args.List(args, 0, "arr.concat");
-            var list2 = Args.List(args, 1, "arr.concat");
-            var result = new List<object?>(list1);
+            var list1 = SvArgs.StashList(args, 0, "arr.concat");
+            var list2 = SvArgs.StashList(args, 1, "arr.concat");
+            var result = new List<StashValue>(list1.Count + list2.Count);
+            result.AddRange(list1);
             result.AddRange(list2);
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("join", [Param("array", "array"), Param("separator", "string")], (_, args) =>
+        ns.Function("join", [Param("array", "array"), Param("separator", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.join");
-            var sep = Args.String(args, 1, "arr.join");
+            var list = SvArgs.StashList(args, 0, "arr.join");
+            var sep = SvArgs.String(args, 1, "arr.join");
             var parts = new string[list.Count];
             for (int i = 0; i < list.Count; i++)
-            {
-                parts[i] = RuntimeValues.Stringify(list[i]);
-            }
-
-            return string.Join(sep, parts);
+                parts[i] = RuntimeValues.Stringify(list[i].ToObject());
+            return StashValue.FromObj(string.Join(sep, parts));
         });
 
-        ns.Function("reverse", [Param("array", "array")], (_, args) =>
+        ns.Function("reverse", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.reverse");
-            list.Reverse();
-            return null;
+            SvArgs.StashList(args, 0, "arr.reverse").Reverse();
+            return StashValue.Null;
         });
 
-        ns.Function("sort", [Param("array", "array")], (_, args) =>
+        ns.Function("sort", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.sort");
+            var list = SvArgs.StashList(args, 0, "arr.sort");
             try
             {
                 list.Sort((a, b) =>
                 {
-                    if (a is long la && b is long lb)
-                    {
-                        return la.CompareTo(lb);
-                    }
-
-                    if (a is double da && b is double db)
-                    {
-                        return da.CompareTo(db);
-                    }
-
-                    if (a is long la2 && b is double db2)
-                    {
-                        return ((double)la2).CompareTo(db2);
-                    }
-
-                    if (a is double da2 && b is long lb2)
-                    {
-                        return da2.CompareTo((double)lb2);
-                    }
-
-                    if (a is string sa && b is string sb)
-                    {
-                        return string.Compare(sa, sb, StringComparison.Ordinal);
-                    }
-
+                    var ao = a.ToObject();
+                    var bo = b.ToObject();
+                    if (ao is long la && bo is long lb) return la.CompareTo(lb);
+                    if (ao is double da && bo is double db) return da.CompareTo(db);
+                    if (ao is long la2 && bo is double db2) return ((double)la2).CompareTo(db2);
+                    if (ao is double da2 && bo is long lb2) return da2.CompareTo((double)lb2);
+                    if (ao is string sa && bo is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
                     throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.");
                 });
             }
@@ -217,209 +177,215 @@ public static class ArrBuiltIns
             {
                 throw re;
             }
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("map", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("map", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.map");
-            var fn = Args.Callable(args, 1, "arr.map");
-            var result = new List<object?>();
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.map");
+            var fn = SvArgs.Callable(args, 1, "arr.map");
+            var result = new List<StashValue>(list.Count);
+            foreach (StashValue item in list)
             {
-                result.Add(ctx.InvokeCallback(fn, new List<object?> { item }));
+                StashValue mapped = ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
+                result.Add(mapped);
             }
-
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("filter", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("filter", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.filter");
-            var fn = Args.Callable(args, 1, "arr.filter");
-            var result = new List<object?>();
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.filter");
+            var fn = SvArgs.Callable(args, 1, "arr.filter");
+            var result = new List<StashValue>(list.Count);
+            foreach (StashValue item in list)
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
                 {
                     result.Add(item);
                 }
             }
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("forEach", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("forEach", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.forEach");
-            var fn = Args.Callable(args, 1, "arr.forEach");
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.forEach");
+            var fn = SvArgs.Callable(args, 1, "arr.forEach");
+            foreach (StashValue item in list)
             {
-                ctx.InvokeCallback(fn, new List<object?> { item });
+                ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
             }
-
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("parMap", [Param("array", "array"), Param("fn", "function")], ParMap, isVariadic: true);
-        ns.Function("parFilter", [Param("array", "array"), Param("fn", "function")], ParFilter, isVariadic: true);
-        ns.Function("parForEach", [Param("array", "array"), Param("fn", "function")], ParForEach, isVariadic: true);
-
-        ns.Function("find", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("parMap", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.find");
-            var fn = Args.Callable(args, 1, "arr.find");
-            foreach (var item in list)
+            var list = new System.Collections.Generic.List<StashValue>(args.Length);
+            foreach (StashValue sv in args) list.Add(sv);
+            return StashValue.FromObject(ParMap(ctx, list));
+        }, isVariadic: true);
+        ns.Function("parFilter", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            var list = new System.Collections.Generic.List<StashValue>(args.Length);
+            foreach (StashValue sv in args) list.Add(sv);
+            return StashValue.FromObject(ParFilter(ctx, list));
+        }, isVariadic: true);
+        ns.Function("parForEach", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            var list = new System.Collections.Generic.List<StashValue>(args.Length);
+            foreach (StashValue sv in args) list.Add(sv);
+            return StashValue.FromObject(ParForEach(ctx, list));
+        }, isVariadic: true);
+
+        ns.Function("find", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            var list = SvArgs.StashList(args, 0, "arr.find");
+            var fn = SvArgs.Callable(args, 1, "arr.find");
+            foreach (StashValue item in list)
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
                 {
                     return item;
                 }
             }
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("reduce", [Param("array", "array"), Param("fn", "function"), Param("initial")], (ctx, args) =>
+        ns.Function("reduce", [Param("array", "array"), Param("fn", "function"), Param("initial")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.reduce");
-            var fn = Args.Callable(args, 1, "arr.reduce");
-            var accumulator = args[2];
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.reduce");
+            var fn = SvArgs.Callable(args, 1, "arr.reduce");
+            StashValue accumulator = args[2];
+            foreach (StashValue item in list)
             {
-                accumulator = ctx.InvokeCallback(fn, new List<object?> { accumulator, item });
+                accumulator = ctx.InvokeCallbackDirect(fn, new StashValue[] { accumulator, item });
             }
-
             return accumulator;
         });
 
-        ns.Function("unique", [Param("array", "array")], (_, args) =>
+        ns.Function("unique", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.unique");
-            var result = new List<object?>();
+            var list = SvArgs.StashList(args, 0, "arr.unique");
+            var result = new List<StashValue>();
             foreach (var item in list)
             {
                 bool found = false;
                 foreach (var existing in result)
                 {
-                    if (RuntimeValues.IsEqual(item, existing))
+                    if (RuntimeValues.IsEqual(item.ToObject(), existing.ToObject()))
                     {
                         found = true;
                         break;
                     }
                 }
-                if (!found)
-                {
-                    result.Add(item);
-                }
+                if (!found) result.Add(item);
             }
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("any", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("any", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.any");
-            var fn = Args.Callable(args, 1, "arr.any");
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.any");
+            var fn = SvArgs.Callable(args, 1, "arr.any");
+            foreach (StashValue item in list)
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
                 {
-                    return true;
+                    return StashValue.True;
                 }
             }
-            return false;
+            return StashValue.False;
         });
 
-        ns.Function("every", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("every", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.every");
-            var fn = Args.Callable(args, 1, "arr.every");
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.every");
+            var fn = SvArgs.Callable(args, 1, "arr.every");
+            foreach (StashValue item in list)
             {
-                if (!RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
+                if (!RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
                 {
-                    return false;
+                    return StashValue.False;
                 }
             }
-            return true;
+            return StashValue.True;
         });
 
-        ns.Function("flat", [Param("array", "array")], (_, args) =>
+        ns.Function("flat", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.flat");
-            var result = new List<object?>();
+            var list = SvArgs.StashList(args, 0, "arr.flat");
+            var result = new List<StashValue>();
             foreach (var item in list)
             {
-                if (item is List<object?> inner)
-                {
+                if (item.AsObj is List<StashValue> inner)
                     result.AddRange(inner);
-                }
                 else
-                {
                     result.Add(item);
-                }
             }
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("flatMap", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("flatMap", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.flatMap");
-            var fn = Args.Callable(args, 1, "arr.flatMap");
-            var result = new List<object?>();
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.flatMap");
+            var fn = SvArgs.Callable(args, 1, "arr.flatMap");
+            var result = new List<StashValue>();
+            foreach (StashValue item in list)
             {
-                var mapped = ctx.InvokeCallback(fn, new List<object?> { item });
-                if (mapped is List<object?> inner)
+                StashValue mapped = ctx.InvokeCallbackDirect(fn, new StashValue[] { item });
+                if (mapped.ToObject() is List<StashValue> svInner)
                 {
-                    result.AddRange(inner);
+                    result.AddRange(svInner);
                 }
                 else
                 {
                     result.Add(mapped);
                 }
             }
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("findIndex", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("findIndex", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.findIndex");
-            var fn = Args.Callable(args, 1, "arr.findIndex");
+            var list = SvArgs.StashList(args, 0, "arr.findIndex");
+            var fn = SvArgs.Callable(args, 1, "arr.findIndex");
             for (int i = 0; i < list.Count; i++)
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { list[i] })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { list[i] }).ToObject()))
                 {
-                    return (long)i;
+                    return StashValue.FromInt(i);
                 }
             }
-            return -1L;
+            return StashValue.FromInt(-1);
         });
 
-        ns.Function("count", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("count", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.count");
-            var fn = Args.Callable(args, 1, "arr.count");
+            var list = SvArgs.StashList(args, 0, "arr.count");
+            var fn = SvArgs.Callable(args, 1, "arr.count");
             long count = 0;
-            foreach (var item in list)
+            foreach (StashValue item in list)
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
                 {
                     count++;
                 }
             }
-            return count;
+            return StashValue.FromInt(count);
         });
 
-        ns.Function("sortBy", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("sortBy", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.sortBy");
-            var fn = Args.Callable(args, 1, "arr.sortBy");
-            var sorted = new List<object?>(list);
+            var list = SvArgs.StashList(args, 0, "arr.sortBy");
+            var fn = SvArgs.Callable(args, 1, "arr.sortBy");
+            var sorted = new List<StashValue>(list);
             try
             {
                 sorted.Sort((a, b) =>
                 {
-                    var ka = ctx.InvokeCallback(fn, new List<object?> { a });
-                    var kb = ctx.InvokeCallback(fn, new List<object?> { b });
+                    var ka = ctx.InvokeCallbackDirect(fn, new StashValue[] { a }).ToObject();
+                    var kb = ctx.InvokeCallbackDirect(fn, new StashValue[] { b }).ToObject();
                     return CompareValues(ka, kb);
                 });
             }
@@ -427,177 +393,144 @@ public static class ArrBuiltIns
             {
                 throw re;
             }
-            return sorted;
+            return StashValue.FromObj(sorted);
         });
 
-        ns.Function("groupBy", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("groupBy", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.groupBy");
-            var fn = Args.Callable(args, 1, "arr.groupBy");
+            var list = SvArgs.StashList(args, 0, "arr.groupBy");
+            var fn = SvArgs.Callable(args, 1, "arr.groupBy");
             var result = new StashDictionary();
-            foreach (var item in list)
+            foreach (StashValue item in list)
             {
-                var key = RuntimeValues.Stringify(ctx.InvokeCallback(fn, new List<object?> { item }));
+                var key = RuntimeValues.Stringify(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject());
                 var existing = result.Get(key);
-                if (existing is List<object?> group)
+                if (existing.AsObj is List<StashValue> svGroup)
                 {
-                    group.Add(item);
+                    svGroup.Add(item);
                 }
                 else
                 {
-                    result.Set(key, new List<object?> { item });
+                    result.Set(key, StashValue.FromObj(new List<StashValue> { item }));
                 }
             }
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("sum", [Param("array", "array")], (_, args) =>
+        ns.Function("sum", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.sum");
+            var list = SvArgs.StashList(args, 0, "arr.sum");
             long longTotal = 0;
             double doubleTotal = 0;
             bool hasFloat = false;
             foreach (var item in list)
             {
-                if (item is long l)
-                {
-                    longTotal += l;
-                }
-                else if (item is double d) { doubleTotal += d; hasFloat = true; }
-                else
-                {
-                    throw new RuntimeError("'arr.sum' requires all elements to be numbers.");
-                }
+                var v = item.ToObject();
+                if (v is long l) longTotal += l;
+                else if (v is double d) { doubleTotal += d; hasFloat = true; }
+                else throw new RuntimeError("'arr.sum' requires all elements to be numbers.");
             }
-            return hasFloat ? (object?)(doubleTotal + longTotal) : (object?)longTotal;
+            return hasFloat ? StashValue.FromFloat(doubleTotal + longTotal) : StashValue.FromInt(longTotal);
         });
 
-        ns.Function("min", [Param("array", "array")], (_, args) =>
+        ns.Function("min", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.min");
+            var list = SvArgs.StashList(args, 0, "arr.min");
             if (list.Count == 0)
-            {
                 throw new RuntimeError("'arr.min' requires a non-empty array.");
-            }
-
             double min = double.MaxValue;
             bool hasFloat = false;
             foreach (var item in list)
             {
-                if (item is long l)
-                {
-                    if (l < min)
-                    {
-                        min = l;
-                    }
-                }
-                else if (item is double d) { if (d < min) { min = d; } hasFloat = true; }
-                else
-                {
-                    throw new RuntimeError("'arr.min' requires all elements to be numbers.");
-                }
+                var v = item.ToObject();
+                if (v is long l) { if (l < min) min = l; }
+                else if (v is double d) { if (d < min) min = d; hasFloat = true; }
+                else throw new RuntimeError("'arr.min' requires all elements to be numbers.");
             }
-            return hasFloat ? min : (object)(long)min;
+            return hasFloat ? StashValue.FromFloat(min) : StashValue.FromInt((long)min);
         });
 
-        ns.Function("max", [Param("array", "array")], (_, args) =>
+        ns.Function("max", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.max");
+            var list = SvArgs.StashList(args, 0, "arr.max");
             if (list.Count == 0)
-            {
                 throw new RuntimeError("'arr.max' requires a non-empty array.");
-            }
-
             double max = double.MinValue;
             bool hasFloat = false;
             foreach (var item in list)
             {
-                if (item is long l)
-                {
-                    if (l > max)
-                    {
-                        max = l;
-                    }
-                }
-                else if (item is double d) { if (d > max) { max = d; } hasFloat = true; }
-                else
-                {
-                    throw new RuntimeError("'arr.max' requires all elements to be numbers.");
-                }
+                var v = item.ToObject();
+                if (v is long l) { if (l > max) max = l; }
+                else if (v is double d) { if (d > max) max = d; hasFloat = true; }
+                else throw new RuntimeError("'arr.max' requires all elements to be numbers.");
             }
-            return hasFloat ? max : (object)(long)max;
+            return hasFloat ? StashValue.FromFloat(max) : StashValue.FromInt((long)max);
         });
 
         // ── Additional array utilities ───────────────────────────────────
-        ns.Function("zip", [Param("a", "array"), Param("b", "array")], (_, args) =>
+        ns.Function("zip", [Param("a", "array"), Param("b", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var a = Args.List(args, 0, "arr.zip");
-            var list2 = Args.List(args, 1, "arr.zip");
-            int len = Math.Min(a.Count, list2.Count);
-            var result = new List<object?>(len);
+            var a = SvArgs.StashList(args, 0, "arr.zip");
+            var b = SvArgs.StashList(args, 1, "arr.zip");
+            int len = Math.Min(a.Count, b.Count);
+            var result = new List<StashValue>(len);
             for (int i = 0; i < len; i++)
-            {
-                result.Add(new List<object?> { a[i], list2[i] });
-            }
-
-            return result;
+                result.Add(StashValue.FromObj(new List<StashValue> { a[i], b[i] }));
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("chunk", [Param("array", "array"), Param("size", "int")], (_, args) =>
+        ns.Function("chunk", [Param("array", "array"), Param("size", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.chunk");
-            var size = Args.Long(args, 1, "arr.chunk");
+            var list = SvArgs.StashList(args, 0, "arr.chunk");
+            var size = SvArgs.Long(args, 1, "arr.chunk");
             if (size <= 0)
-            {
                 throw new RuntimeError("'arr.chunk' size must be > 0.");
-            }
-
-            var result = new List<object?>();
+            var result = new List<StashValue>();
             for (int i = 0; i < list.Count; i += (int)size)
             {
                 int chunkSize = Math.Min((int)size, list.Count - i);
-                result.Add(list.GetRange(i, chunkSize));
+                result.Add(StashValue.FromObj(list.GetRange(i, chunkSize)));
             }
-            return result;
+            return StashValue.FromObj(result);
         });
 
-        ns.Function("shuffle", [Param("array", "array")], (_, args) =>
+        ns.Function("shuffle", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.shuffle");
+            var list = SvArgs.StashList(args, 0, "arr.shuffle");
             var rng = new Random();
             for (int i = list.Count - 1; i > 0; i--)
             {
                 int j = rng.Next(i + 1);
                 (list[i], list[j]) = (list[j], list[i]);
             }
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("take", [Param("array", "array"), Param("n", "int")], (_, args) =>
+        ns.Function("take", [Param("array", "array"), Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.take");
-            var n = Args.Long(args, 1, "arr.take");
+            var list = SvArgs.StashList(args, 0, "arr.take");
+            var n = SvArgs.Long(args, 1, "arr.take");
             int count = (int)Math.Max(0, Math.Min(n, list.Count));
-            return list.GetRange(0, count);
+            return StashValue.FromObj(list.GetRange(0, count));
         });
 
-        ns.Function("drop", [Param("array", "array"), Param("n", "int")], (_, args) =>
+        ns.Function("drop", [Param("array", "array"), Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.drop");
-            var n = Args.Long(args, 1, "arr.drop");
+            var list = SvArgs.StashList(args, 0, "arr.drop");
+            var n = SvArgs.Long(args, 1, "arr.drop");
             int skip = (int)Math.Max(0, Math.Min(n, list.Count));
-            return list.GetRange(skip, list.Count - skip);
+            return StashValue.FromObj(list.GetRange(skip, list.Count - skip));
         });
 
-        ns.Function("partition", [Param("array", "array"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("partition", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = Args.List(args, 0, "arr.partition");
-            var fn = Args.Callable(args, 1, "arr.partition");
-            var matching = new List<object?>();
-            var nonMatching = new List<object?>();
-            foreach (var item in list)
+            var list = SvArgs.StashList(args, 0, "arr.partition");
+            var fn = SvArgs.Callable(args, 1, "arr.partition");
+            var matching = new List<StashValue>();
+            var nonMatching = new List<StashValue>();
+            foreach (StashValue item in list)
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { item })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject()))
                 {
                     matching.Add(item);
                 }
@@ -606,22 +539,25 @@ public static class ArrBuiltIns
                     nonMatching.Add(item);
                 }
             }
-            return new List<object?> { matching, nonMatching };
+            return StashValue.FromObj(new List<StashValue> { StashValue.FromObj(matching), StashValue.FromObj(nonMatching) });
         });
 
         return ns.Build();
     }
 
-    private static object? ParMap(IInterpreterContext ctx, List<object?> args)
+    private static object? ParMap(IInterpreterContext ctx, List<StashValue> args)
     {
-        if (args.Count < 2 || args[0] is not List<object?> list || args[1] is not IStashCallable callable)
+        if (args.Count < 2 || args[1].ToObject() is not IStashCallable callable)
         {
             throw new RuntimeError("arr.parMap() expects (array, function, [maxConcurrency]).");
         }
+        List<StashValue> list;
+        if (args[0].ToObject() is List<StashValue> l1) list = l1;
+        else throw new RuntimeError("arr.parMap() expects (array, function, [maxConcurrency]).");
 
         int maxConcurrency = ParseMaxConcurrency(args, "arr.parMap");
         int count = list.Count;
-        var results = new object?[count];
+        var results = new StashValue[count];
         var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
 
         var options = new ParallelOptions { MaxDegreeOfParallelism = maxConcurrency };
@@ -631,7 +567,7 @@ public static class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                results[i] = child.InvokeCallback(callable, new List<object?> { list[i] });
+                results[i] = child.InvokeCallbackDirect(callable, new StashValue[] { list[i] });
             }
             catch (Exception ex)
             {
@@ -654,15 +590,18 @@ public static class ArrBuiltIns
             throw new RuntimeError($"arr.parMap() failed: {first.Message}");
         }
 
-        return new List<object?>(results);
+        return new List<StashValue>(results);
     }
 
-    private static object? ParFilter(IInterpreterContext ctx, List<object?> args)
+    private static object? ParFilter(IInterpreterContext ctx, List<StashValue> args)
     {
-        if (args.Count < 2 || args[0] is not List<object?> list || args[1] is not IStashCallable callable)
+        if (args.Count < 2 || args[1].ToObject() is not IStashCallable callable)
         {
             throw new RuntimeError("arr.parFilter() expects (array, function, [maxConcurrency]).");
         }
+        List<StashValue> list;
+        if (args[0].ToObject() is List<StashValue> l1) list = l1;
+        else throw new RuntimeError("arr.parFilter() expects (array, function, [maxConcurrency]).");
 
         int maxConcurrency = ParseMaxConcurrency(args, "arr.parFilter");
         int count = list.Count;
@@ -676,8 +615,8 @@ public static class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                object? result = child.InvokeCallback(callable, new List<object?> { list[i] });
-                keep[i] = RuntimeValues.IsTruthy(result);
+                StashValue result = child.InvokeCallbackDirect(callable, new StashValue[] { list[i] });
+                keep[i] = RuntimeValues.IsTruthy(result.ToObject());
             }
             catch (Exception ex)
             {
@@ -700,7 +639,7 @@ public static class ArrBuiltIns
             throw new RuntimeError($"arr.parFilter() failed: {first.Message}");
         }
 
-        var filtered = new List<object?>();
+        var filtered = new List<StashValue>();
         for (int i = 0; i < count; i++)
         {
             if (keep[i])
@@ -711,12 +650,15 @@ public static class ArrBuiltIns
         return filtered;
     }
 
-    private static object? ParForEach(IInterpreterContext ctx, List<object?> args)
+    private static object? ParForEach(IInterpreterContext ctx, List<StashValue> args)
     {
-        if (args.Count < 2 || args[0] is not List<object?> list || args[1] is not IStashCallable callable)
+        if (args.Count < 2 || args[1].ToObject() is not IStashCallable callable)
         {
             throw new RuntimeError("arr.parForEach() expects (array, function, [maxConcurrency]).");
         }
+        List<StashValue> list;
+        if (args[0].ToObject() is List<StashValue> l1) list = l1;
+        else throw new RuntimeError("arr.parForEach() expects (array, function, [maxConcurrency]).");
 
         int maxConcurrency = ParseMaxConcurrency(args, "arr.parForEach");
         var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
@@ -728,7 +670,7 @@ public static class ArrBuiltIns
             try
             {
                 child = ctx.ForkParallel(ctx.CancellationToken);
-                child.InvokeCallback(callable, new List<object?> { list[i] });
+                child.InvokeCallbackDirect(callable, new StashValue[] { list[i] });
             }
             catch (Exception ex)
             {
@@ -754,14 +696,14 @@ public static class ArrBuiltIns
         return null;
     }
 
-    private static int ParseMaxConcurrency(List<object?> args, string fnName)
+    private static int ParseMaxConcurrency(List<StashValue> args, string fnName)
     {
-        if (args.Count < 3 || args[2] is null)
+        if (args.Count < 3 || args[2].IsNull)
         {
             return -1; // -1 means unlimited (use all available cores)
         }
 
-        if (args[2] is long n)
+        if (args[2].ToObject() is long n)
         {
             if (n < 1)
             {

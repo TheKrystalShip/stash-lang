@@ -23,7 +23,7 @@ public sealed partial class VirtualMachine
     /// been applied by <see cref="CallValue"/>; <paramref name="baseSlot"/> points to the first
     /// argument on the current stack.
     /// </summary>
-    private StashFuture SpawnAsyncFunction(Chunk fnChunk, Upvalue[] upvalues, int baseSlot, SourceSpan? callSpan, Dictionary<string, object?>? moduleGlobals = null)
+    private StashFuture SpawnAsyncFunction(Chunk fnChunk, Upvalue[] upvalues, int baseSlot, SourceSpan? callSpan, Dictionary<string, StashValue>? moduleGlobals = null)
     {
         // Snapshot the fully-prepared arguments (rest-collected, defaults applied).
         int arity = fnChunk.Arity;
@@ -47,7 +47,7 @@ public sealed partial class VirtualMachine
         }
 
         // Snapshot everything the child VM needs — capture before Task.Run to avoid races.
-        var capturedGlobals = new Dictionary<string, object?>(_globals);
+        var capturedGlobals = new Dictionary<string, StashValue>(_globals);
         var capturedModuleLoader = _moduleLoader;
         var capturedModuleCache = ModuleCache;
         var capturedImportStack = _importStack;
@@ -115,15 +115,15 @@ public sealed partial class VirtualMachine
         SourceSpan? callSpan = GetCurrentSpan(ref frame);
 
         // Expand SpreadMarkers: collect all args, expanding spreads
-        var expandedArgs = new List<object?>(rawArgc);
+        var expandedArgs = new List<StashValue>(rawArgc);
         for (int i = sentinelIdx + 1; i < _sp; i++)
         {
-            object? argVal = _stack[i].ToObject();
-            if (argVal is SpreadMarker sm)
+            StashValue argVal = _stack[i];
+            if (argVal.IsObj && argVal.AsObj is SpreadMarker sm)
             {
-                if (sm.Items is List<object?> spreadList)
+                if (sm.Items is List<StashValue> svSpreadList)
                 {
-                    expandedArgs.AddRange(spreadList);
+                    expandedArgs.AddRange(svSpreadList);
                 }
                 else
                 {
@@ -148,7 +148,7 @@ public sealed partial class VirtualMachine
         }
         for (int i = 0; i < expandedArgc; i++)
         {
-            _stack[sentinelIdx + i] = StashValue.FromObject(expandedArgs[i]);
+            _stack[sentinelIdx + i] = expandedArgs[i];
         }
         _sp = sentinelIdx + expandedArgc;
 

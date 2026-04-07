@@ -39,26 +39,6 @@ public class NamespaceBuilder
     }
 
     /// <summary>
-    /// Defines a function with both metadata and implementation in a single call.
-    /// </summary>
-    /// <param name="name">The function name (without namespace prefix).</param>
-    /// <param name="parameters">Parameter metadata for LSP/Analysis.</param>
-    /// <param name="body">The C# implementation delegate.</param>
-    /// <param name="returnType">Optional return type string for documentation.</param>
-    /// <param name="isVariadic">Whether the function accepts variable arguments.</param>
-    /// <param name="documentation">Optional documentation string with @param/@return tags.</param>
-    public NamespaceBuilder Function(string name, BuiltInParam[] parameters,
-        Func<IInterpreterContext, List<object?>, object?> body,
-        string? returnType = null, bool isVariadic = false, string? documentation = null)
-    {
-        int arity = isVariadic ? -1 : parameters.Length;
-        string qualifiedName = string.IsNullOrEmpty(_name) ? name : $"{_name}.{name}";
-        _namespace.Define(name, new Runtime.BuiltInFunction(qualifiedName, arity, body));
-        _functions.Add(new NamespaceFunction(_name, name, parameters, returnType, isVariadic, documentation));
-        return this;
-    }
-
-    /// <summary>
     /// Defines a function using the zero-allocation StashValue-native call path.
     /// </summary>
     public NamespaceBuilder Function(string name, BuiltInParam[] parameters,

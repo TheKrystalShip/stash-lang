@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Text;
@@ -19,14 +20,14 @@ public static class JsonBuiltIns
         var ns = new NamespaceBuilder("json");
 
         // json.parse(string) — Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).
-        ns.Function("parse", [Param("str", "string")], (_, args) =>
+        ns.Function("parse", [Param("str", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "json.parse");
+            var s = SvArgs.String(args, 0, "json.parse");
 
             try
             {
                 using var doc = JsonDocument.Parse(s);
-                return ConvertElement(doc.RootElement);
+                return StashValue.FromObject(ConvertElement(doc.RootElement));
             }
             catch (JsonException e)
             {
@@ -36,34 +37,34 @@ public static class JsonBuiltIns
             documentation: "Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).\n@param str The JSON string to parse\n@return The parsed value");
 
         // json.stringify(value) — Serializes a Stash value to a compact JSON string.
-        ns.Function("stringify", [Param("value")], (_, args) =>
+        ns.Function("stringify", [Param("value")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return StringifyValue(args[0]);
+            return StashValue.FromObj(StringifyValue(args[0].ToObject()));
         },
             returnType: "string",
             documentation: "Converts a Stash value to a compact JSON string.\n@param value The value to serialize\n@return The JSON string representation");
 
         // json.pretty(value) — Serializes a Stash value to an indented, human-readable JSON string.
-        ns.Function("pretty", [Param("value")], (_, args) =>
+        ns.Function("pretty", [Param("value")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return PrettyValue(args[0], 0);
+            return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0));
         },
             returnType: "string",
             documentation: "Converts a Stash value to a formatted JSON string with indentation.\n@param value The value to serialize\n@return The pretty-printed JSON string");
 
         // json.valid(string) — Returns true if the given string is valid JSON, false otherwise.
-        ns.Function("valid", [Param("text", "string")], (_, args) =>
+        ns.Function("valid", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "json.valid");
+            var s = SvArgs.String(args, 0, "json.valid");
 
             try
             {
                 using var doc = System.Text.Json.JsonDocument.Parse(s);
-                return true;
+                return StashValue.True;
             }
             catch (System.Text.Json.JsonException)
             {
-                return false;
+                return StashValue.False;
             }
         },
             returnType: "bool",
@@ -90,15 +91,15 @@ public static class JsonBuiltIns
         };
     }
 
-    /// <summary>Converts a JSON array element to a <c>List&lt;object?&gt;</c>.</summary>
+    /// <summary>Converts a JSON array element to a <c>List&lt;StashValue&gt;</c>.</summary>
     /// <param name="element">The JSON array element to convert.</param>
     /// <returns>A list of converted Stash values.</returns>
-    private static List<object?> ConvertArray(JsonElement element)
+    private static List<StashValue> ConvertArray(JsonElement element)
     {
-        var list = new List<object?>();
+        var list = new List<StashValue>();
         foreach (var item in element.EnumerateArray())
         {
-            list.Add(ConvertElement(item));
+            list.Add(StashValue.FromObject(ConvertElement(item)));
         }
 
         return list;
@@ -112,7 +113,7 @@ public static class JsonBuiltIns
         var dict = new StashDictionary();
         foreach (var prop in element.EnumerateObject())
         {
-            dict.Set(prop.Name, ConvertElement(prop.Value));
+            dict.Set(prop.Name, StashValue.FromObject(ConvertElement(prop.Value)));
         }
 
         return dict;
@@ -130,7 +131,7 @@ public static class JsonBuiltIns
             long l => l.ToString(CultureInfo.InvariantCulture),
             double d => d.ToString("G", CultureInfo.InvariantCulture),
             string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
-            List<object?> arr => StringifyArray(arr),
+            List<StashValue> arr => StringifyArray(arr),
             StashDictionary dict => StringifyDict(dict),
             StashInstance inst => StringifyInstance(inst),
             _ => throw new RuntimeError($"json.stringify: cannot serialize value of type {value.GetType().Name}.")
@@ -140,7 +141,7 @@ public static class JsonBuiltIns
     /// <summary>Serializes a Stash array to a compact JSON array string.</summary>
     /// <param name="arr">The array to serialize.</param>
     /// <returns>A compact JSON array string.</returns>
-    private static string StringifyArray(List<object?> arr)
+    private static string StringifyArray(List<StashValue> arr)
     {
         var sb = new StringBuilder("[");
         for (int i = 0; i < arr.Count; i++)
@@ -150,7 +151,7 @@ public static class JsonBuiltIns
                 sb.Append(',');
             }
 
-            sb.Append(StringifyValue(arr[i]));
+            sb.Append(StringifyValue(arr[i].ToObject()));
         }
         sb.Append(']');
         return sb.ToString();
@@ -162,7 +163,7 @@ public static class JsonBuiltIns
     private static string StringifyDict(StashDictionary dict)
     {
         var sb = new StringBuilder("{");
-        var keys = dict.Keys();
+        var keys = dict.RawKeys();
         for (int i = 0; i < keys.Count; i++)
         {
             if (i > 0)
@@ -170,8 +171,8 @@ public static class JsonBuiltIns
                 sb.Append(',');
             }
 
-            string keyStr = StringifyKey(keys[i]!);
-            object? val = dict.Get(keys[i]!);
+            string keyStr = StringifyKey(keys[i]);
+            object? val = dict.Get(keys[i]).ToObject();
             sb.Append(keyStr);
             sb.Append(':');
             sb.Append(StringifyValue(val));
@@ -197,7 +198,7 @@ public static class JsonBuiltIns
             first = false;
             sb.Append(JsonSerializer.Serialize(kvp.Key, StashJsonContext.Default.String));
             sb.Append(':');
-            sb.Append(StringifyValue(kvp.Value));
+            sb.Append(StringifyValue(kvp.Value.ToObject()));
         }
         sb.Append('}');
         return sb.ToString();
@@ -231,7 +232,7 @@ public static class JsonBuiltIns
             long l => l.ToString(CultureInfo.InvariantCulture),
             double d => d.ToString("G", CultureInfo.InvariantCulture),
             string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
-            List<object?> arr => PrettyArray(arr, indent),
+            List<StashValue> arr => PrettyArray(arr, indent),
             StashDictionary dict => PrettyDict(dict, indent),
             StashInstance inst => PrettyInstance(inst, indent),
             _ => throw new RuntimeError($"json.pretty: cannot serialize value of type {value.GetType().Name}.")
@@ -242,7 +243,7 @@ public static class JsonBuiltIns
     /// <param name="arr">The array to pretty-print.</param>
     /// <param name="indent">The current indentation level.</param>
     /// <returns>A pretty-printed JSON array string.</returns>
-    private static string PrettyArray(List<object?> arr, int indent)
+    private static string PrettyArray(List<StashValue> arr, int indent)
     {
         if (arr.Count == 0)
         {
@@ -255,7 +256,7 @@ public static class JsonBuiltIns
         for (int i = 0; i < arr.Count; i++)
         {
             sb.Append(innerIndent);
-            sb.Append(PrettyValue(arr[i], indent + 1));
+            sb.Append(PrettyValue(arr[i].ToObject(), indent + 1));
             if (i < arr.Count - 1)
             {
                 sb.Append(',');
@@ -274,7 +275,7 @@ public static class JsonBuiltIns
     /// <returns>A pretty-printed JSON object string.</returns>
     private static string PrettyDict(StashDictionary dict, int indent)
     {
-        var keys = dict.Keys();
+        var keys = dict.RawKeys();
         if (keys.Count == 0)
         {
             return "{}";
@@ -292,8 +293,8 @@ public static class JsonBuiltIns
             }
 
             first = false;
-            string keyStr = StringifyKey(key!);
-            object? val = dict.Get(key!);
+            string keyStr = StringifyKey(key);
+            object? val = dict.Get(key).ToObject();
             sb.Append(innerIndent);
             sb.Append(keyStr);
             sb.Append(": ");
@@ -332,7 +333,7 @@ public static class JsonBuiltIns
             sb.Append(innerIndent);
             sb.Append(JsonSerializer.Serialize(kvp.Key, StashJsonContext.Default.String));
             sb.Append(": ");
-            sb.Append(PrettyValue(kvp.Value, indent + 1));
+            sb.Append(PrettyValue(kvp.Value.ToObject(), indent + 1));
         }
         sb.Append('\n');
         sb.Append(closingIndent);

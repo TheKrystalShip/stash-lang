@@ -43,26 +43,26 @@ public static class SysBuiltIns
         ns.Enum("Signal", ["SIGHUP", "SIGINT", "SIGQUIT", "SIGTERM", "SIGUSR1", "SIGUSR2"]);
 
         // sys.cpuCount() — Returns the number of logical CPU processors available to the current process.
-        ns.Function("cpuCount", [], (_, _) =>
+        ns.Function("cpuCount", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
             {
-                return (long)Environment.ProcessorCount;
+                return StashValue.FromInt((long)Environment.ProcessorCount);
             },
             returnType: "int",
             documentation: "Returns the number of logical CPU processors available.\n@return CPU count"
         );
 
         // sys.totalMemory() — Returns the total available memory in bytes as reported by the GC memory info.
-        ns.Function("totalMemory", [], (_, _) =>
+        ns.Function("totalMemory", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
             {
                 var gcInfo = GC.GetGCMemoryInfo();
-                return gcInfo.TotalAvailableMemoryBytes;
+                return StashValue.FromInt(gcInfo.TotalAvailableMemoryBytes);
             },
             returnType: "int",
             documentation: "Returns the total available system memory in bytes.\n@return Total memory in bytes"
         );
 
         // sys.freeMemory() — Returns the available free memory in bytes. On Linux reads /proc/meminfo; falls back to GC info.
-        ns.Function("freeMemory", [], (_, _) =>
+        ns.Function("freeMemory", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
             {
                 if (OperatingSystem.IsLinux())
                 {
@@ -76,7 +76,7 @@ public static class SysBuiltIns
                                 var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                                 if (parts.Length >= 2 && long.TryParse(parts[1], out var kb))
                                 {
-                                    return kb * 1024L;
+                                    return StashValue.FromInt(kb * 1024L);
                                 }
                             }
                         }
@@ -84,16 +84,16 @@ public static class SysBuiltIns
                     catch { }
                 }
 
-                return GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+                return StashValue.FromInt(GC.GetGCMemoryInfo().TotalAvailableMemoryBytes);
             },
             returnType: "int",
             documentation: "Returns the amount of free system memory in bytes.\n@return Free memory in bytes"
         );
 
         // sys.uptime() — Returns the system uptime in seconds (as a float) since process start via Environment.TickCount64.
-        ns.Function("uptime", [], (_, _) =>
+        ns.Function("uptime", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
             {
-                return Environment.TickCount64 / 1000.0;
+                return StashValue.FromFloat(Environment.TickCount64 / 1000.0);
             },
             returnType: "float",
             documentation: "Returns the system uptime in seconds.\n@return Uptime in seconds"
@@ -101,7 +101,7 @@ public static class SysBuiltIns
 
         // sys.loadAvg() — Returns a 3-element array of 1-, 5-, and 15-minute load averages.
         //   On Linux reads /proc/loadavg; returns [0.0, 0.0, 0.0] on non-Linux platforms.
-        ns.Function("loadAvg", [], (_, _) =>
+        ns.Function("loadAvg", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
             {
                 if (OperatingSystem.IsLinux())
                 {
@@ -114,13 +114,13 @@ public static class SysBuiltIns
                             && double.TryParse(parts[1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var five)
                             && double.TryParse(parts[2], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var fifteen))
                         {
-                            return new List<object?> { one, five, fifteen };
+                            return StashValue.FromObj(new List<StashValue> { StashValue.FromFloat(one), StashValue.FromFloat(five), StashValue.FromFloat(fifteen) });
                         }
                     }
                     catch { }
                 }
 
-                return new List<object?> { 0.0, 0.0, 0.0 };
+                return StashValue.FromObj(new List<StashValue> { StashValue.FromFloat(0.0), StashValue.FromFloat(0.0), StashValue.FromFloat(0.0) });
             },
             returnType: "array",
             documentation: "Returns an array of 1-, 5-, and 15-minute load averages. Returns [0,0,0] on non-Linux.\n@return Array of three load average floats"
@@ -128,20 +128,16 @@ public static class SysBuiltIns
 
         // sys.diskUsage([path]) — Returns a dict with "total", "used", and "free" bytes for the drive containing 'path'.
         //   Defaults to the root drive ("/") if no path is provided.
-        ns.Function("diskUsage", [Param("path", "string")], (_, args) =>
+        ns.Function("diskUsage", [Param("path", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
             {
                 string path;
-                if (args.Count == 0)
+                if (args.Length == 0)
                 {
                     path = OperatingSystem.IsWindows() ? "C:\\" : "/";
                 }
-                else if (args[0] is string s)
-                {
-                    path = s;
-                }
                 else
                 {
-                    throw new RuntimeError("Argument to 'sys.diskUsage' must be a string.");
+                    path = SvArgs.String(args, 0, "sys.diskUsage");
                 }
 
                 System.IO.DriveInfo drive;
@@ -161,10 +157,10 @@ public static class SysBuiltIns
                 }
 
                 var dict = new StashDictionary();
-                dict.Set("total", drive.TotalSize);
-                dict.Set("used", drive.TotalSize - drive.AvailableFreeSpace);
-                dict.Set("free", drive.AvailableFreeSpace);
-                return dict;
+                dict.Set("total", StashValue.FromInt(drive.TotalSize));
+                dict.Set("used", StashValue.FromInt(drive.TotalSize - drive.AvailableFreeSpace));
+                dict.Set("free", StashValue.FromInt(drive.AvailableFreeSpace));
+                return StashValue.FromObj(dict);
             },
             returnType: "dict",
             isVariadic: true,
@@ -172,77 +168,75 @@ public static class SysBuiltIns
         );
 
         // sys.pid() — Returns the process ID (PID) of the current process as an integer.
-        ns.Function("pid", [], (_, _) =>
-            {
-                return (long)Environment.ProcessId;
-            },
+        ns.Function("pid", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
+            StashValue.FromInt((long)Environment.ProcessId),
+
             returnType: "int",
             documentation: "Returns the current process ID.\n@return The PID as an integer"
         );
 
         // sys.tempDir() — Returns the path to the system's temporary directory (trailing separator stripped).
-        ns.Function("tempDir", [], (_, _) =>
-            {
-                return System.IO.Path.GetTempPath().TrimEnd(System.IO.Path.DirectorySeparatorChar);
-            },
+        ns.Function("tempDir", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
+            StashValue.FromObj(System.IO.Path.GetTempPath().TrimEnd(System.IO.Path.DirectorySeparatorChar)),
+
             returnType: "string",
             documentation: "Returns the path to the system's temporary directory.\n@return The temp directory path"
         );
 
         // sys.networkInterfaces() — Returns an array of dicts describing each network interface.
         //   Each dict has: "name" (string), "type" (string), "status" (string), "addresses" (array of IP strings).
-        ns.Function("networkInterfaces", [], (_, _) =>
+        ns.Function("networkInterfaces", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
             {
                 var interfaces = NetworkInterface.GetAllNetworkInterfaces();
-                var result = new List<object?>();
+                var result = new List<StashValue>();
                 foreach (var ni in interfaces)
                 {
                     var dict = new StashDictionary();
-                    dict.Set("name", ni.Name);
-                    dict.Set("type", ni.NetworkInterfaceType.ToString());
-                    dict.Set("status", ni.OperationalStatus.ToString());
+                    dict.Set("name", StashValue.FromObj(ni.Name));
+                    dict.Set("type", StashValue.FromObj(ni.NetworkInterfaceType.ToString()));
+                    dict.Set("status", StashValue.FromObj(ni.OperationalStatus.ToString()));
 
-                    var addresses = new List<object?>();
+                    var addresses = new List<StashValue>();
                     foreach (var addr in ni.GetIPProperties().UnicastAddresses)
                     {
-                        addresses.Add(addr.Address.ToString());
+                        addresses.Add(StashValue.FromObj(addr.Address.ToString()));
                     }
-                    dict.Set("addresses", addresses);
-                    result.Add(dict);
+                    dict.Set("addresses", StashValue.FromObj(addresses));
+                    result.Add(StashValue.FromObj(dict));
                 }
-                return result;
+                return StashValue.FromObj(result);
             },
             returnType: "array",
             documentation: "Returns an array of objects describing each network interface.\n@return Array of interface dictionaries"
         );
 
         // sys.which(name) — Searches the system PATH for an executable with the given name.
-        ns.Function("which", [Param("name", "string")], (_, args) =>
+        ns.Function("which", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
             {
-                string name = Args.String(args, 0, "sys.which");
+                string name = SvArgs.String(args, 0, "sys.which");
 
                 if (string.IsNullOrWhiteSpace(name))
-                    return null;
+                    return StashValue.Null;
 
                 // If it's already an absolute/rooted path, check directly
                 if (Path.IsPathRooted(name))
                 {
                     if (File.Exists(name) && IsExecutable(name))
-                        return Path.GetFullPath(name);
-                    return null;
+                        return StashValue.FromObj(Path.GetFullPath(name));
+                    return StashValue.Null;
                 }
 
                 // Names with path separators are not bare command names — match POSIX which behavior
                 if (name.Contains(Path.DirectorySeparatorChar) || name.Contains(Path.AltDirectorySeparatorChar))
                 {
                     if (File.Exists(name) && IsExecutable(name))
-                        return Path.GetFullPath(name);
-                    return null;
+                        return StashValue.FromObj(Path.GetFullPath(name));
+                    return StashValue.Null;
                 }
 
                 string? pathEnv = System.Environment.GetEnvironmentVariable("PATH");
                 if (string.IsNullOrEmpty(pathEnv))
-                    return null;
+                    return StashValue.Null;
 
                 string[] dirs = pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
 
@@ -264,21 +258,21 @@ public static class SysBuiltIns
                     {
                         string candidate = Path.Combine(dir, name + ext);
                         if (File.Exists(candidate) && IsExecutable(candidate))
-                            return Path.GetFullPath(candidate);
+                            return StashValue.FromObj(Path.GetFullPath(candidate));
                     }
                 }
 
-                return null;
+                return StashValue.Null;
             },
             returnType: "string",
             documentation: "Searches the system PATH for an executable with the given name.\nReturns the full path to the executable, or null if not found.\nOn Windows, also searches PATHEXT extensions (.exe, .cmd, .bat, etc.).\n\n@param name The command name to search for\n@return Full path to the executable, or null"
         );
 
         // sys.onSignal(signal, handler) — Registers a callback for the given POSIX signal.
-        ns.Function("onSignal", [Param("signal", "Signal"), Param("handler", "function")], (ctx, args) =>
+        ns.Function("onSignal", [Param("signal", "Signal"), Param("handler", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
-                var signal = Args.EnumValue(args, 0, "Signal", "sys.onSignal");
-                var handler = Args.Callable(args, 1, "sys.onSignal");
+                var signal = SvArgs.EnumValue(args, 0, "Signal", "sys.onSignal");
+                var handler = SvArgs.Callable(args, 1, "sys.onSignal");
 
                 string name = signal.MemberName;
 
@@ -295,7 +289,7 @@ public static class SysBuiltIns
                     {
                         // Signal not supported on this platform — store handler but no registration
                         _signalHandlers[name] = (ctx, handler, null);
-                        return null;
+                        return StashValue.Null;
                     }
 
                     PosixSignalRegistration? registration = null;
@@ -308,7 +302,7 @@ public static class SysBuiltIns
                             {
                                 try
                                 {
-                                    entry.Context.InvokeCallback(entry.Handler, new List<object?>());
+                                    entry.Context.InvokeCallbackDirect(entry.Handler, ReadOnlySpan<StashValue>.Empty);
                                 }
                                 catch
                                 {
@@ -324,16 +318,16 @@ public static class SysBuiltIns
 
                     _signalHandlers[name] = (ctx, handler, registration);
                 }
-                return null;
+                return StashValue.Null;
             },
             returnType: "null",
             documentation: "Registers a callback function to be invoked when the specified signal is received.\nReplaces any existing handler for that signal.\nOn Windows, only SIGHUP, SIGINT, SIGQUIT, and SIGTERM are supported; SIGUSR1/SIGUSR2 are no-ops.\n\n@param signal A sys.Signal enum value (e.g., sys.Signal.SIGTERM)\n@param handler A function to invoke when the signal is received"
         );
 
         // sys.offSignal(signal) — Removes a previously registered signal handler.
-        ns.Function("offSignal", [Param("signal", "Signal")], (_, args) =>
+        ns.Function("offSignal", [Param("signal", "Signal")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
             {
-                var signal = Args.EnumValue(args, 0, "Signal", "sys.offSignal");
+                var signal = SvArgs.EnumValue(args, 0, "Signal", "sys.offSignal");
 
                 lock (_signalLock)
                 {
@@ -343,7 +337,7 @@ public static class SysBuiltIns
                     }
                 }
 
-                return null;
+                return StashValue.Null;
             },
             returnType: "null",
             documentation: "Removes a previously registered signal handler.\nIf no handler was registered for the signal, this is a no-op.\n\n@param signal A sys.Signal enum value (e.g., sys.Signal.SIGTERM)"

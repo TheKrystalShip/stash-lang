@@ -1,9 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 
 namespace Stash.Runtime;
 
-public readonly struct StashValue
+public readonly struct StashValue : IEquatable<StashValue>
 {
     public readonly StashValueTag Tag;
     private readonly long _data;
@@ -112,4 +113,31 @@ public readonly struct StashValue
             _                   => "??",
         };
     }
+
+    public bool Equals(StashValue other)
+    {
+        if (Tag != other.Tag) return false;
+        return Tag switch
+        {
+            StashValueTag.Null => true,
+            StashValueTag.Bool or StashValueTag.Int => _data == other._data,
+            StashValueTag.Float => _data == other._data, // bit-level: NaN equals itself for collection ops
+            StashValueTag.Obj => object.Equals(_obj, other._obj),
+            _ => false,
+        };
+    }
+
+    public override bool Equals(object? obj) => obj is StashValue other && Equals(other);
+
+    public override int GetHashCode() => Tag switch
+    {
+        StashValueTag.Null => 0,
+        StashValueTag.Bool or StashValueTag.Int => HashCode.Combine(Tag, _data),
+        StashValueTag.Float => HashCode.Combine(Tag, _data),
+        StashValueTag.Obj => HashCode.Combine(Tag, _obj is not null ? _obj.GetHashCode() : 0),
+        _ => 0,
+    };
+
+    public static bool operator ==(StashValue left, StashValue right) => left.Equals(right);
+    public static bool operator !=(StashValue left, StashValue right) => !left.Equals(right);
 }

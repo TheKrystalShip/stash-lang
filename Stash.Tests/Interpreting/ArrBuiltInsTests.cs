@@ -97,8 +97,8 @@ let result = arr.groupBy([1, 2, 3, 4, 5], (x) => {
 });
 ");
         var dict = Assert.IsType<StashDictionary>(result);
-        var even = Assert.IsType<List<object?>>(dict.Get("even"));
-        var odd  = Assert.IsType<List<object?>>(dict.Get("odd"));
+        var even = Assert.IsType<List<object?>>(dict.Get("even").ToObject());
+        var odd  = Assert.IsType<List<object?>>(dict.Get("odd").ToObject());
         Assert.Equal(2, even.Count);
         Assert.Contains(2L, even);
         Assert.Contains(4L, even);
@@ -116,9 +116,9 @@ let words = [""hi"", ""hello"", ""hey"", ""howdy""];
 let result = arr.groupBy(words, (x) => conv.toStr(len(x)));
 ");
         var dict = Assert.IsType<StashDictionary>(result);
-        var twoChars = Assert.IsType<List<object?>>(dict.Get("2"));
+        var twoChars = Assert.IsType<List<object?>>(dict.Get("2").ToObject());
         Assert.Contains("hi", twoChars);
-        var fiveChars = Assert.IsType<List<object?>>(dict.Get("5"));
+        var fiveChars = Assert.IsType<List<object?>>(dict.Get("5").ToObject());
         Assert.Contains("hello", fiveChars);
         Assert.Contains("howdy", fiveChars);
     }
@@ -136,7 +136,7 @@ let result = arr.groupBy(words, (x) => conv.toStr(len(x)));
     {
         var result = Run(@"let result = arr.groupBy([1, 2, 3], (x) => ""all"");");
         var dict = Assert.IsType<StashDictionary>(result);
-        var all = Assert.IsType<List<object?>>(dict.Get("all"));
+        var all = Assert.IsType<List<object?>>(dict.Get("all").ToObject());
         Assert.Equal(3, all.Count);
     }
 

@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -25,13 +26,13 @@ public static class ConfigBuiltIns
         var ns = new NamespaceBuilder("config");
 
         // config.read(path, format?) — Reads a config file from disk and parses it. Format is auto-detected from extension if omitted. Supports "json" and "ini".
-        ns.Function("read", [Param("path", "string"), Param("format", "string")], (_, args) =>
+        ns.Function("read", [Param("path", "string"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 1, 2, "config.read");
-            var path = Args.String(args, 0, "config.read");
+            if (args.Length < 1 || args.Length > 2) throw new RuntimeError("'config.read' expects 1 or 2 arguments.");
+            var path = SvArgs.String(args, 0, "config.read");
 
-            var format = args.Count == 2
-                ? args[1] as string ?? throw new RuntimeError("Second argument to 'config.read' must be a string (format).")
+            var format = args.Length == 2
+                ? SvArgs.String(args, 1, "config.read")
                 : DetectFormat(path);
 
             string text;
@@ -44,23 +45,23 @@ public static class ConfigBuiltIns
                 throw new RuntimeError("config.read: " + e.Message);
             }
 
-            return ParseByFormat(text, format, "config.read");
+            return StashValue.FromObject(ParseByFormat(text, format, "config.read"));
         },
             returnType: "dict",
             isVariadic: true,
             documentation: "Reads and parses a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param format Optional format: 'json', 'ini', 'yaml', 'toml'\n@return Parsed dictionary");
 
         // config.write(path, data, format?) — Serializes data and writes it to a config file. Format is auto-detected from extension if omitted. Supports "json" and "ini".
-        ns.Function("write", [Param("path", "string"), Param("data", "any"), Param("format", "string")], (_, args) =>
+        ns.Function("write", [Param("path", "string"), Param("data", "any"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 2, 3, "config.write");
-            var path = Args.String(args, 0, "config.write");
+            if (args.Length < 2 || args.Length > 3) throw new RuntimeError("'config.write' expects 2 or 3 arguments.");
+            var path = SvArgs.String(args, 0, "config.write");
 
-            var format = args.Count == 3
-                ? args[2] as string ?? throw new RuntimeError("Third argument to 'config.write' must be a string (format).")
+            var format = args.Length == 3
+                ? SvArgs.String(args, 2, "config.write")
                 : DetectFormat(path);
 
-            var text = StringifyByFormat(args[1], format, "config.write");
+            var text = StringifyByFormat(args[1].ToObject(), format, "config.write");
 
             try
             {
@@ -71,29 +72,29 @@ public static class ConfigBuiltIns
                 throw new RuntimeError("config.write: " + e.Message);
             }
 
-            return null;
+            return StashValue.Null;
         },
             returnType: "void",
             isVariadic: true,
             documentation: "Serializes data and writes it to a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param data The data to write\n@param format Optional format: 'json', 'ini', 'yaml', 'toml'");
 
         // config.parse(text, format) — Parses a config string in the given format ("json" or "ini"). Returns a dict.
-        ns.Function("parse", [Param("text", "string"), Param("format", "string")], (_, args) =>
+        ns.Function("parse", [Param("text", "string"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var text = Args.String(args, 0, "config.parse");
-            var format = Args.String(args, 1, "config.parse");
+            var text = SvArgs.String(args, 0, "config.parse");
+            var format = SvArgs.String(args, 1, "config.parse");
 
-            return ParseByFormat(text, format, "config.parse");
+            return StashValue.FromObject(ParseByFormat(text, format, "config.parse"));
         },
             returnType: "dict",
             documentation: "Parses a config string in the given format.\n@param text The config text\n@param format The format: 'json', 'ini', 'yaml', 'toml'\n@return Parsed dictionary");
 
         // config.stringify(data, format) — Serializes a Stash value to the given config format string ("json" or "ini"). Returns a string.
-        ns.Function("stringify", [Param("data", "any"), Param("format", "string")], (_, args) =>
+        ns.Function("stringify", [Param("data", "any"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var format = Args.String(args, 1, "config.stringify");
+            var format = SvArgs.String(args, 1, "config.stringify");
 
-            return StringifyByFormat(args[0], format, "config.stringify");
+            return StashValue.FromObj(StringifyByFormat(args[0].ToObject(), format, "config.stringify"));
         },
             returnType: "string",
             documentation: "Serializes a value to the given config format.\n@param data The value to serialize\n@param format The format: 'json', 'ini', 'yaml', 'toml'\n@return Config string");
@@ -190,15 +191,15 @@ public static class ConfigBuiltIns
         };
     }
 
-    /// <summary>Converts a JSON array element to a <c>List&lt;object?&gt;</c>.</summary>
+    /// <summary>Converts a JSON array element to a <c>List&lt;StashValue&gt;</c>.</summary>
     /// <param name="element">The JSON array element to convert.</param>
     /// <returns>A list of converted Stash values.</returns>
-    private static List<object?> ConvertJsonArray(JsonElement element)
+    private static List<StashValue> ConvertJsonArray(JsonElement element)
     {
-        var list = new List<object?>();
+        var list = new List<StashValue>();
         foreach (var item in element.EnumerateArray())
         {
-            list.Add(ConvertJsonElement(item));
+            list.Add(StashValue.FromObject(ConvertJsonElement(item)));
         }
 
         return list;
@@ -212,7 +213,7 @@ public static class ConfigBuiltIns
         var dict = new StashDictionary();
         foreach (var prop in element.EnumerateObject())
         {
-            dict.Set(prop.Name, ConvertJsonElement(prop.Value));
+            dict.Set(prop.Name, StashValue.FromObject(ConvertJsonElement(prop.Value)));
         }
 
         return dict;
@@ -231,7 +232,7 @@ public static class ConfigBuiltIns
             long l => l.ToString(CultureInfo.InvariantCulture),
             double d => d.ToString("G", CultureInfo.InvariantCulture),
             string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
-            List<object?> arr => PrettyArray(arr, indent),
+            List<StashValue> arr => PrettyArray(arr, indent),
             StashDictionary dict => PrettyDict(dict, indent),
             StashInstance inst => PrettyInstance(inst, indent),
             _ => throw new RuntimeError($"config.stringify: cannot serialize value of type {value.GetType().Name}.")
@@ -242,7 +243,7 @@ public static class ConfigBuiltIns
     /// <param name="arr">The array to pretty-print.</param>
     /// <param name="indent">The current indentation level.</param>
     /// <returns>A pretty-printed JSON array string.</returns>
-    private static string PrettyArray(List<object?> arr, int indent)
+    private static string PrettyArray(List<StashValue> arr, int indent)
     {
         if (arr.Count == 0)
         {
@@ -255,7 +256,7 @@ public static class ConfigBuiltIns
         for (int i = 0; i < arr.Count; i++)
         {
             sb.Append(innerIndent);
-            sb.Append(PrettyValue(arr[i], indent + 1));
+            sb.Append(PrettyValue(arr[i].ToObject(), indent + 1));
             if (i < arr.Count - 1)
             {
                 sb.Append(',');
@@ -274,7 +275,7 @@ public static class ConfigBuiltIns
     /// <returns>A pretty-printed JSON object string.</returns>
     private static string PrettyDict(StashDictionary dict, int indent)
     {
-        var keys = dict.Keys();
+        var keys = dict.RawKeys();
         if (keys.Count == 0)
         {
             return "{}";
@@ -292,8 +293,8 @@ public static class ConfigBuiltIns
             }
 
             first = false;
-            string keyStr = PrettyKey(key!);
-            object? val = dict.Get(key!);
+            string keyStr = PrettyKey(key);
+            object? val = dict.Get(key).ToObject();
             sb.Append(innerIndent);
             sb.Append(keyStr);
             sb.Append(": ");
@@ -332,7 +333,7 @@ public static class ConfigBuiltIns
             sb.Append(innerIndent);
             sb.Append(JsonSerializer.Serialize(kvp.Key, StashJsonContext.Default.String));
             sb.Append(": ");
-            sb.Append(PrettyValue(kvp.Value, indent + 1));
+            sb.Append(PrettyValue(kvp.Value.ToObject(), indent + 1));
         }
         sb.Append('\n');
         sb.Append(closingIndent);

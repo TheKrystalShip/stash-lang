@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.Collections.Generic;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -36,9 +37,9 @@ public static class DictBuiltIns
         var ns = new NamespaceBuilder("dict");
 
         // dict.new() — Creates and returns a new empty dictionary.
-        ns.Function("new", [], (_, _) =>
+        ns.Function("new", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            return new StashDictionary();
+            return StashValue.FromObj(new StashDictionary());
         },
             returnType: "dict",
             documentation: "Creates and returns a new empty dictionary.\n@return An empty dictionary");
@@ -46,11 +47,10 @@ public static class DictBuiltIns
         // dict.get(dict, key) — Returns the value associated with key in dict, or null
         // if the key does not exist.
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
-        ns.Function("get", [Param("dict", "dict"), Param("key", "any")], (_, args) =>
+        ns.Function("get", [Param("dict", "dict"), Param("key", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.get");
-
-            var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
+            var d = SvArgs.Dict(args, 0, "dict.get");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.");
             return d.Get(key);
         },
             returnType: "any",
@@ -59,25 +59,23 @@ public static class DictBuiltIns
         // dict.set(dict, key, value) — Sets the given key to value in dict in place.
         // Creates the key if it does not already exist. Returns null.
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
-        ns.Function("set", [Param("dict", "dict"), Param("key", "any"), Param("value", "any")], (_, args) =>
+        ns.Function("set", [Param("dict", "dict"), Param("key", "any"), Param("value", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.set");
-
-            var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
+            var d = SvArgs.Dict(args, 0, "dict.set");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.");
             d.Set(key, args[2]);
-            return null;
+            return StashValue.Null;
         },
             returnType: "void",
             documentation: "Sets a key-value pair in the dictionary. Modifies in place.\n@param dict The dictionary\n@param key The key\n@param value The value to set");
 
         // dict.has(dict, key) — Returns true if dict contains key, false otherwise.
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
-        ns.Function("has", [Param("dict", "dict"), Param("key", "any")], (_, args) =>
+        ns.Function("has", [Param("dict", "dict"), Param("key", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.has");
-
-            var key = (args[1] ?? throw new RuntimeError("Dictionary key cannot be null.")) ?? throw new RuntimeError("Dictionary key cannot be null.");
-            return d.Has(key);
+            var d = SvArgs.Dict(args, 0, "dict.has");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.");
+            return StashValue.FromBool(d.Has(key));
         },
             returnType: "bool",
             documentation: "Returns true if the dictionary contains the key.\n@param dict The dictionary\n@param key The key to check\n@return true if the key exists");
@@ -85,57 +83,51 @@ public static class DictBuiltIns
         // dict.remove(dict, key) — Removes key from dict in place.
         // Returns true if the key was found and removed, false if it did not exist.
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
-        ns.Function("remove", [Param("dict", "dict"), Param("key", "any")], (_, args) =>
+        ns.Function("remove", [Param("dict", "dict"), Param("key", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.remove");
-
-            var key = args[1] ?? throw new RuntimeError("Dictionary key cannot be null.");
-            return d.Remove(key);
+            var d = SvArgs.Dict(args, 0, "dict.remove");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.");
+            return StashValue.FromBool(d.Remove(key));
         },
             returnType: "bool",
             documentation: "Removes a key from the dictionary. Returns true if it existed.\n@param dict The dictionary\n@param key The key to remove\n@return true if the key was removed");
 
         // dict.clear(dict) — Removes all entries from dict in place. Returns null.
         // Throws RuntimeError if the first argument is not a dictionary.
-        ns.Function("clear", [Param("dict", "dict")], (_, args) =>
+        ns.Function("clear", [Param("dict", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.clear");
-
-            d.Clear();
-            return null;
+            SvArgs.Dict(args, 0, "dict.clear").Clear();
+            return StashValue.Null;
         },
             returnType: "void",
             documentation: "Removes all entries from the dictionary.\n@param dict The dictionary to clear");
 
         // dict.keys(dict) — Returns an array of all keys in dict (in insertion order).
         // Throws RuntimeError if the first argument is not a dictionary.
-        ns.Function("keys", [Param("dict", "dict")], (_, args) =>
+        ns.Function("keys", [Param("dict", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.keys");
-
-            return d.Keys();
+            var d = SvArgs.Dict(args, 0, "dict.keys");
+            return StashValue.FromObj(d.Keys());
         },
             returnType: "array",
             documentation: "Returns an array of all keys in the dictionary.\n@param dict The dictionary\n@return Array of keys");
 
         // dict.values(dict) — Returns an array of all values in dict (in insertion order).
         // Throws RuntimeError if the first argument is not a dictionary.
-        ns.Function("values", [Param("dict", "dict")], (_, args) =>
+        ns.Function("values", [Param("dict", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.values");
-
-            return d.Values();
+            var d = SvArgs.Dict(args, 0, "dict.values");
+            return StashValue.FromObj(d.Values());
         },
             returnType: "array",
             documentation: "Returns an array of all values in the dictionary.\n@param dict The dictionary\n@return Array of values");
 
         // dict.size(dict) — Returns the number of entries in dict as an integer.
         // Throws RuntimeError if the first argument is not a dictionary.
-        ns.Function("size", [Param("dict", "dict")], (_, args) =>
+        ns.Function("size", [Param("dict", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.size");
-
-            return (long)d.Count;
+            var d = SvArgs.Dict(args, 0, "dict.size");
+            return StashValue.FromInt((long)d.Count);
         },
             returnType: "int",
             documentation: "Returns the number of entries in the dictionary.\n@param dict The dictionary\n@return Entry count");
@@ -143,11 +135,10 @@ public static class DictBuiltIns
         // dict.pairs(dict) — Returns an array of [key, value] pairs for each entry in dict
         // (in insertion order).
         // Throws RuntimeError if the first argument is not a dictionary.
-        ns.Function("pairs", [Param("dict", "dict")], (_, args) =>
+        ns.Function("pairs", [Param("dict", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.pairs");
-
-            return d.Pairs();
+            var d = SvArgs.Dict(args, 0, "dict.pairs");
+            return StashValue.FromObj(d.Pairs());
         },
             returnType: "array",
             documentation: "Returns an array of [key, value] pairs for each entry.\n@param dict The dictionary\n@return Array of [key, value] pairs");
@@ -155,16 +146,16 @@ public static class DictBuiltIns
         // dict.forEach(dict, fn) — Calls fn(key, value) for each entry in dict.
         // Return values of fn are discarded. Returns null.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
-        ns.Function("forEach", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
+        ns.Function("forEach", [Param("dict", "dict"), Param("fn", "fn")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.forEach");
-            var fn = Args.Callable(args, 1, "dict.forEach");
+            var d = SvArgs.Dict(args, 0, "dict.forEach");
+            var fn = SvArgs.Callable(args, 1, "dict.forEach");
 
             foreach (var entry in d.RawEntries())
             {
-                ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value });
+                ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value });
             }
-            return null;
+            return StashValue.Null;
         },
             returnType: "void",
             documentation: "Calls fn(key, value) for each entry. Returns null.\n@param dict The dictionary\n@param fn The callback function");
@@ -173,21 +164,16 @@ public static class DictBuiltIns
         // dict1 followed by all entries from dict2. Keys in dict2 overwrite keys in dict1.
         // Does not modify either input dictionary.
         // Throws RuntimeError if either argument is not a dictionary.
-        ns.Function("merge", [Param("dict1", "dict"), Param("dict2", "dict")], (_, args) =>
+        ns.Function("merge", [Param("dict1", "dict"), Param("dict2", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d1 = Args.Dict(args, 0, "dict.merge");
-            var d2 = Args.Dict(args, 1, "dict.merge");
-
+            var d1 = SvArgs.Dict(args, 0, "dict.merge");
+            var d2 = SvArgs.Dict(args, 1, "dict.merge");
             var result = new StashDictionary();
             foreach (var entry in d1.RawEntries())
-            {
                 result.Set(entry.Key, entry.Value);
-            }
             foreach (var entry in d2.RawEntries())
-            {
                 result.Set(entry.Key, entry.Value);
-            }
-            return result;
+            return StashValue.FromObj(result);
         },
             returnType: "dict",
             documentation: "Returns a new dictionary merging dict1 and dict2. dict2 keys take precedence.\n@param dict1 The base dictionary\n@param dict2 The overriding dictionary\n@return Merged dictionary");
@@ -195,17 +181,17 @@ public static class DictBuiltIns
         // dict.map(dict, fn) — Returns a new dictionary where each value is the result of
         // calling fn(key, value) for the corresponding entry in dict. Keys are preserved.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
-        ns.Function("map", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
+        ns.Function("map", [Param("dict", "dict"), Param("fn", "fn")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.map");
-            var fn = Args.Callable(args, 1, "dict.map");
+            var d = SvArgs.Dict(args, 0, "dict.map");
+            var fn = SvArgs.Callable(args, 1, "dict.map");
 
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
             {
-                result.Set(entry.Key, ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value }));
+                result.Set(entry.Key, ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }));
             }
-            return result;
+            return StashValue.FromObj(result);
         },
             returnType: "dict",
             documentation: "Returns a new dictionary with each value transformed by fn(key, value).\n@param dict The dictionary\n@param fn The mapping function\n@return Transformed dictionary");
@@ -213,21 +199,21 @@ public static class DictBuiltIns
         // dict.filter(dict, fn) — Returns a new dictionary containing only the entries for
         // which fn(key, value) returns a truthy value. Does not modify the original dictionary.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
-        ns.Function("filter", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
+        ns.Function("filter", [Param("dict", "dict"), Param("fn", "fn")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.filter");
-            var fn = Args.Callable(args, 1, "dict.filter");
+            var d = SvArgs.Dict(args, 0, "dict.filter");
+            var fn = SvArgs.Callable(args, 1, "dict.filter");
 
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
             {
-                var keep = ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value });
-                if (RuntimeValues.IsTruthy(keep))
+                var keep = ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value });
+                if (RuntimeValues.IsTruthy(keep.ToObject()))
                 {
                     result.Set(entry.Key, entry.Value);
                 }
             }
-            return result;
+            return StashValue.FromObj(result);
         },
             returnType: "dict",
             documentation: "Returns a new dictionary with only entries where fn(key, value) is truthy.\n@param dict The dictionary\n@param fn The filter function\n@return Filtered dictionary");
@@ -237,22 +223,28 @@ public static class DictBuiltIns
         // dict.fromPairs(pairs) — Constructs a new dictionary from an array of [key, value]
         // pairs. Each element must be a 2-element array. Keys cannot be null.
         // Throws RuntimeError if the argument is not an array, or any element is not a valid pair.
-        ns.Function("fromPairs", [Param("pairs", "array")], (_, args) =>
+        ns.Function("fromPairs", [Param("pairs", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var pairs = Args.List(args, 0, "dict.fromPairs");
-
+            var pairs = SvArgs.StashList(args, 0, "dict.fromPairs");
             var result = new StashDictionary();
-            foreach (var pair in pairs)
+            foreach (var pairSv in pairs)
             {
-                if (pair is not List<object?> p || p.Count != 2)
+                object? key;
+                StashValue val;
+                var pairObj = pairSv.AsObj;
+                if (pairObj is List<StashValue> svp && svp.Count == 2)
+                {
+                    key = svp[0].ToObject();
+                    val = svp[1];
+                }
+                else
                 {
                     throw new RuntimeError("'dict.fromPairs' requires each element to be a [key, value] pair.");
                 }
-
-                var key = p[0] ?? throw new RuntimeError("Dictionary key cannot be null in 'dict.fromPairs'.");
-                result.Set(key, p[1]);
+                if (key is null) throw new RuntimeError("Dictionary key cannot be null in 'dict.fromPairs'.");
+                result.Set(key, val);
             }
-            return result;
+            return StashValue.FromObj(result);
         },
             returnType: "dict",
             documentation: "Constructs a dictionary from an array of [key, value] pairs.\n@param pairs Array of [key, value] pairs\n@return New dictionary");
@@ -260,20 +252,18 @@ public static class DictBuiltIns
         // dict.pick(dict, keys) — Returns a new dictionary containing only the entries whose
         // keys appear in the keys array. Missing keys are silently ignored.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not an array.
-        ns.Function("pick", [Param("dict", "dict"), Param("keys", "array")], (_, args) =>
+        ns.Function("pick", [Param("dict", "dict"), Param("keys", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.pick");
-            var keys = Args.List(args, 1, "dict.pick");
-
+            var d = SvArgs.Dict(args, 0, "dict.pick");
+            var keys = SvArgs.StashList(args, 1, "dict.pick");
             var result = new StashDictionary();
-            foreach (var key in keys)
+            foreach (var keySv in keys)
             {
+                var key = keySv.ToObject();
                 if (key != null && d.Has(key))
-                {
                     result.Set(key, d.Get(key));
-                }
             }
-            return result;
+            return StashValue.FromObj(result);
         },
             returnType: "dict",
             documentation: "Returns a new dictionary with only the specified keys.\n@param dict The source dictionary\n@param keys Array of keys to include\n@return New dictionary with picked keys");
@@ -281,29 +271,26 @@ public static class DictBuiltIns
         // dict.omit(dict, keys) — Returns a new dictionary containing all entries from dict
         // except those whose keys appear in the keys array.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not an array.
-        ns.Function("omit", [Param("dict", "dict"), Param("keys", "array")], (_, args) =>
+        ns.Function("omit", [Param("dict", "dict"), Param("keys", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.omit");
-            var keysToOmit = Args.List(args, 1, "dict.omit");
-
+            var d = SvArgs.Dict(args, 0, "dict.omit");
+            var keysToOmit = SvArgs.StashList(args, 1, "dict.omit");
             var result = new StashDictionary();
             foreach (var entry in d.RawEntries())
             {
                 bool omit = false;
-                foreach (var key in keysToOmit)
+                foreach (var keySv in keysToOmit)
                 {
-                    if (key != null && RuntimeValues.IsEqual(entry.Key, key))
+                    var k = keySv.ToObject();
+                    if (k != null && RuntimeValues.IsEqual(entry.Key, k))
                     {
                         omit = true;
                         break;
                     }
                 }
-                if (!omit)
-                {
-                    result.Set(entry.Key, entry.Value);
-                }
+                if (!omit) result.Set(entry.Key, entry.Value);
             }
-            return result;
+            return StashValue.FromObj(result);
         },
             returnType: "dict",
             documentation: "Returns a new dictionary excluding the specified keys.\n@param dict The source dictionary\n@param keys Array of keys to omit\n@return New dictionary without omitted keys");
@@ -312,23 +299,16 @@ public static class DictBuiltIns
         // dict, where dict entries take precedence over defaults for overlapping keys.
         // Entries in defaults not present in dict are included in the result.
         // Throws RuntimeError if either argument is not a dictionary.
-        ns.Function("defaults", [Param("dict", "dict"), Param("defaults", "dict")], (_, args) =>
+        ns.Function("defaults", [Param("dict", "dict"), Param("defaults", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.defaults");
-            var defaults = Args.Dict(args, 1, "dict.defaults");
-
+            var d = SvArgs.Dict(args, 0, "dict.defaults");
+            var defaults = SvArgs.Dict(args, 1, "dict.defaults");
             var result = new StashDictionary();
             foreach (var entry in defaults.RawEntries())
-            {
                 result.Set(entry.Key, entry.Value);
-            }
-
             foreach (var entry in d.RawEntries())
-            {
                 result.Set(entry.Key, entry.Value);
-            }
-
-            return result;
+            return StashValue.FromObj(result);
         },
             returnType: "dict",
             documentation: "Returns a new dictionary merging defaults with dict. Dict values take precedence.\n@param dict The priority dictionary\n@param defaults The defaults dictionary\n@return Merged dictionary");
@@ -336,19 +316,19 @@ public static class DictBuiltIns
         // dict.any(dict, fn) — Returns true if fn(key, value) returns a truthy value for at
         // least one entry in dict, false otherwise. Short-circuits on the first truthy result.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
-        ns.Function("any", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
+        ns.Function("any", [Param("dict", "dict"), Param("fn", "fn")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.any");
-            var fn = Args.Callable(args, 1, "dict.any");
+            var d = SvArgs.Dict(args, 0, "dict.any");
+            var fn = SvArgs.Callable(args, 1, "dict.any");
 
             foreach (var entry in d.RawEntries())
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
                 {
-                    return true;
+                    return StashValue.True;
                 }
             }
-            return false;
+            return StashValue.False;
         },
             returnType: "bool",
             documentation: "Returns true if fn(key, value) returns truthy for at least one entry.\n@param dict The dictionary\n@param fn The predicate function\n@return true if any entry matches");
@@ -356,19 +336,19 @@ public static class DictBuiltIns
         // dict.every(dict, fn) — Returns true if fn(key, value) returns a truthy value for
         // every entry in dict, false otherwise. Short-circuits on the first falsy result.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
-        ns.Function("every", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
+        ns.Function("every", [Param("dict", "dict"), Param("fn", "fn")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.every");
-            var fn = Args.Callable(args, 1, "dict.every");
+            var d = SvArgs.Dict(args, 0, "dict.every");
+            var fn = SvArgs.Callable(args, 1, "dict.every");
 
             foreach (var entry in d.RawEntries())
             {
-                if (!RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value })))
+                if (!RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
                 {
-                    return false;
+                    return StashValue.False;
                 }
             }
-            return true;
+            return StashValue.True;
         },
             returnType: "bool",
             documentation: "Returns true if fn(key, value) returns truthy for every entry.\n@param dict The dictionary\n@param fn The predicate function\n@return true if all entries match");
@@ -376,19 +356,23 @@ public static class DictBuiltIns
         // dict.find(dict, fn) — Returns the first [key, value] pair for which fn(key, value)
         // returns a truthy value, or null if no such entry exists.
         // Throws RuntimeError if the first argument is not a dictionary or the second is not a function.
-        ns.Function("find", [Param("dict", "dict"), Param("fn", "fn")], (ctx, args) =>
+        ns.Function("find", [Param("dict", "dict"), Param("fn", "fn")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var d = Args.Dict(args, 0, "dict.find");
-            var fn = Args.Callable(args, 1, "dict.find");
+            var d = SvArgs.Dict(args, 0, "dict.find");
+            var fn = SvArgs.Callable(args, 1, "dict.find");
 
             foreach (var entry in d.RawEntries())
             {
-                if (RuntimeValues.IsTruthy(ctx.InvokeCallback(fn, new List<object?> { entry.Key, entry.Value })))
+                if (RuntimeValues.IsTruthy(ctx.InvokeCallbackDirect(fn, new StashValue[] { StashValue.FromObject(entry.Key), entry.Value }).ToObject()))
                 {
-                    return new List<object?> { entry.Key, entry.Value };
+                    return StashValue.FromObj(new List<StashValue>
+                    {
+                        StashValue.FromObject(entry.Key),
+                        entry.Value,
+                    });
                 }
             }
-            return null;
+            return StashValue.Null;
         },
             returnType: "array",
             documentation: "Returns the first [key, value] pair for which fn(key, value) is truthy, or null.\n@param dict The dictionary\n@param fn The predicate function\n@return [key, value] pair or null");

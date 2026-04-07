@@ -13,8 +13,8 @@ public class DictBuiltInsTests : StashTestBase
             let result = dict.fromPairs([[""a"", 1], [""b"", 2]]);
         ");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal(1L, d.Get("a"));
-        Assert.Equal(2L, d.Get("b"));
+        Assert.Equal(1L, d.Get("a").ToObject());
+        Assert.Equal(2L, d.Get("b").ToObject());
     }
 
     [Fact]
@@ -48,8 +48,8 @@ public class DictBuiltInsTests : StashTestBase
         ");
         var picked = Assert.IsType<StashDictionary>(result);
         Assert.Equal(2, picked.Count);
-        Assert.Equal(1L, picked.Get("a"));
-        Assert.Equal(3L, picked.Get("c"));
+        Assert.Equal(1L, picked.Get("a").ToObject());
+        Assert.Equal(3L, picked.Get("c").ToObject());
     }
 
     [Fact]
@@ -61,7 +61,7 @@ public class DictBuiltInsTests : StashTestBase
         ");
         var picked = Assert.IsType<StashDictionary>(result);
         Assert.Equal(1, picked.Count);
-        Assert.Equal(1L, picked.Get("a"));
+        Assert.Equal(1L, picked.Get("a").ToObject());
     }
 
     [Fact]
@@ -81,8 +81,8 @@ public class DictBuiltInsTests : StashTestBase
         ");
         var omitted = Assert.IsType<StashDictionary>(result);
         Assert.Equal(2, omitted.Count);
-        Assert.Equal(1L, omitted.Get("a"));
-        Assert.Equal(3L, omitted.Get("c"));
+        Assert.Equal(1L, omitted.Get("a").ToObject());
+        Assert.Equal(3L, omitted.Get("c").ToObject());
     }
 
     [Fact]
@@ -113,9 +113,9 @@ public class DictBuiltInsTests : StashTestBase
             let result = dict.defaults(d, defaults);
         ");
         var merged = Assert.IsType<StashDictionary>(result);
-        Assert.Equal(1L, merged.Get("a")); // original value preserved
-        Assert.Equal(2L, merged.Get("b")); // filled from defaults
-        Assert.Equal(3L, merged.Get("c")); // filled from defaults
+        Assert.Equal(1L, merged.Get("a").ToObject()); // original value preserved
+        Assert.Equal(2L, merged.Get("b").ToObject()); // filled from defaults
+        Assert.Equal(3L, merged.Get("c").ToObject()); // filled from defaults
     }
 
     [Fact]
@@ -127,7 +127,7 @@ public class DictBuiltInsTests : StashTestBase
             let result = dict.defaults(d, defaults);
         ");
         var merged = Assert.IsType<StashDictionary>(result);
-        Assert.Equal(42L, merged.Get("x"));
+        Assert.Equal(42L, merged.Get("x").ToObject());
     }
 
     [Fact]

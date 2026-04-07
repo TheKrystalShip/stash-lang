@@ -16,9 +16,9 @@ using Stash.Runtime;
 /// </summary>
 internal sealed class VMTemplateEvaluator : ITemplateEvaluator
 {
-    private readonly Dictionary<string, object?> _vmGlobals;
+    private readonly Dictionary<string, StashValue> _vmGlobals;
 
-    internal VMTemplateEvaluator(Dictionary<string, object?> vmGlobals)
+    internal VMTemplateEvaluator(Dictionary<string, StashValue> vmGlobals)
     {
         _vmGlobals = vmGlobals;
     }
@@ -32,9 +32,9 @@ internal sealed class VMTemplateEvaluator : ITemplateEvaluator
     {
         internal readonly Dictionary<string, object?> Locals = new();
         internal readonly TemplateScope? Parent;
-        internal readonly Dictionary<string, object?> Globals;
+        internal readonly Dictionary<string, StashValue> Globals;
 
-        internal TemplateScope(Dictionary<string, object?> globals, TemplateScope? parent = null)
+        internal TemplateScope(Dictionary<string, StashValue> globals, TemplateScope? parent = null)
         {
             Globals = globals;
             Parent = parent;
@@ -44,19 +44,19 @@ internal sealed class VMTemplateEvaluator : ITemplateEvaluator
         /// Flattens the full scope chain into a single dictionary.
         /// Inner scopes take precedence over outer scopes, which take precedence over globals.
         /// </summary>
-        internal Dictionary<string, object?> Flatten()
+        internal Dictionary<string, StashValue> Flatten()
         {
-            var result = new Dictionary<string, object?>(Globals);
+            var result = new Dictionary<string, StashValue>(Globals);
             ApplyLocals(result);
             return result;
         }
 
-        private void ApplyLocals(Dictionary<string, object?> target)
+        private void ApplyLocals(Dictionary<string, StashValue> target)
         {
             Parent?.ApplyLocals(target);
             foreach (var (k, v) in Locals)
             {
-                target[k] = v;
+                target[k] = StashValue.FromObject(v);
             }
         }
     }

@@ -761,18 +761,18 @@ public class DebugSession : IDebugger
         {
             switch (container.Value)
             {
-                case List<object?> list:
-                    for (int i = 0; i < list.Count; i++)
+                case List<StashValue> svList:
+                    for (int i = 0; i < svList.Count; i++)
                     {
-                        variables.Add(FormatVariable($"[{i}]", list[i]));
+                        variables.Add(FormatVariable($"[{i}]", svList[i].ToObject()));
                     }
 
                     break;
 
                 case StashDictionary dict:
-                    foreach (var key in dict.Keys())
+                    foreach (var key in dict.RawKeys())
                     {
-                        variables.Add(FormatVariable(RuntimeValues.Stringify(key), dict.Get(key!)));
+                        variables.Add(FormatVariable(RuntimeValues.Stringify(key), dict.Get(key).ToObject()));
                     }
 
                     break;
@@ -780,7 +780,7 @@ public class DebugSession : IDebugger
                 case StashInstance instance:
                     foreach (var (fieldName, fieldValue) in instance.GetFields())
                     {
-                        variables.Add(FormatVariable(fieldName, fieldValue));
+                        variables.Add(FormatVariable(fieldName, fieldValue.ToObject()));
                     }
 
                     if (instance.Struct?.Methods is { Count: > 0 } methods)
@@ -928,28 +928,27 @@ public class DebugSession : IDebugger
                 throw new InvalidOperationException($"Cannot set variable '{name}' in this scope.");
             }
         }
-        else if (container.Value is List<object?> list)
+        else if (container.Value is List<StashValue> svList)
         {
-            // Array element — name is like "[0]", "[1]", etc.
             var indexStr = name.TrimStart('[').TrimEnd(']');
-            if (!int.TryParse(indexStr, out var index) || index < 0 || index >= list.Count)
+            if (!int.TryParse(indexStr, out var index) || index < 0 || index >= svList.Count)
             {
                 throw new InvalidOperationException($"Invalid array index: {name}");
             }
 
-            list[index] = newValue;
+            svList[index] = StashValue.FromObject(newValue);
         }
         else if (container.Value is StashDictionary dict)
         {
             // Dictionary entry — name is the key
-            dict.Set(name, newValue);
+            dict.Set(name, StashValue.FromObject(newValue));
         }
         else if (container.Value is StashInstance instance)
         {
             // Struct field
             try
             {
-                instance.SetField(name, newValue, null);
+                instance.SetField(name, StashValue.FromObject(newValue), null);
             }
             catch (RuntimeError ex)
             {
@@ -1756,9 +1755,9 @@ public class DebugSession : IDebugger
                 displayValue = $"\"{s}\"";
                 break;
 
-            case List<object?> list:
+            case List<StashValue> svList:
                 type = "array";
-                displayValue = $"array[{list.Count}]";
+                displayValue = $"array[{svList.Count}]";
                 variablesReference = AllocateExpansion(name, value);
                 break;
 

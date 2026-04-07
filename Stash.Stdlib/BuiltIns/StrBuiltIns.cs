@@ -153,33 +153,22 @@ public static class StrBuiltIns
         // str.substring(s, start[, end]) — Returns the portion of s from index start (inclusive)
         // to end (exclusive). When end is omitted, returns the remainder of the string from start.
         // Indices must be within [0, len(s)]. Throws RuntimeError on out-of-range or wrong types.
-        ns.Function("substring", [Param("s", "string"), Param("start", "int"), Param("end", "int")], (_, args) =>
+        ns.Function("substring", [Param("s", "string"), Param("start", "int"), Param("end", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            if (args.Count < 2 || args.Count > 3)
-            {
+            if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("'str.substring' requires 2 or 3 arguments.");
-            }
-
-            var s = Args.String(args, 0, "str.substring");
-            var start = Args.Long(args, 1, "str.substring");
-
+            var s = SvArgs.String(args, 0, "str.substring");
+            var start = SvArgs.Long(args, 1, "str.substring");
             if (start < 0 || start > s.Length)
-            {
                 throw new RuntimeError($"'str.substring' start index {start} is out of range for string of length {s.Length}.");
-            }
-
-            if (args.Count == 3)
+            if (args.Length == 3)
             {
-                var end = Args.Long(args, 2, "str.substring");
-
+                var end = SvArgs.Long(args, 2, "str.substring");
                 if (end < start || end > s.Length)
-                {
                     throw new RuntimeError($"'str.substring' end index {end} is out of range.");
-                }
-
-                return s.Substring((int)start, (int)(end - start));
+                return StashValue.FromObj(s.Substring((int)start, (int)(end - start)));
             }
-            return s.Substring((int)start);
+            return StashValue.FromObj(s.Substring((int)start));
         },
             returnType: "string",
             isVariadic: true,
@@ -188,18 +177,14 @@ public static class StrBuiltIns
         // str.replace(s, old, new) — Returns a copy of s with the first occurrence of old
         // replaced by new using ordinal comparison. Returns s unchanged if old is not found.
         // Throws RuntimeError if any argument is not a string.
-        ns.Function("replace", [Param("s", "string"), Param("old", "string"), Param("new", "string")], (_, args) =>
+        ns.Function("replace", [Param("s", "string"), Param("old", "string"), Param("new", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.replace");
-            var oldStr = Args.String(args, 1, "str.replace");
-            var newStr = Args.String(args, 2, "str.replace");
+            var s = SvArgs.String(args, 0, "str.replace");
+            var oldStr = SvArgs.String(args, 1, "str.replace");
+            var newStr = SvArgs.String(args, 2, "str.replace");
             int idx = s.IndexOf(oldStr, StringComparison.Ordinal);
-            if (idx < 0)
-            {
-                return s;
-            }
-
-            return s.Substring(0, idx) + newStr + s.Substring(idx + oldStr.Length);
+            if (idx < 0) return StashValue.FromObj(s);
+            return StashValue.FromObj(s.Substring(0, idx) + newStr + s.Substring(idx + oldStr.Length));
         },
             returnType: "string",
             documentation: "Returns the string with the first occurrence of old replaced by new.\n@param s The string\n@param old The substring to replace\n@param new The replacement\n@return Modified string");
@@ -207,12 +192,12 @@ public static class StrBuiltIns
         // str.replaceAll(s, old, new) — Returns a copy of s with all occurrences of old
         // replaced by new using ordinal comparison.
         // Throws RuntimeError if any argument is not a string.
-        ns.Function("replaceAll", [Param("s", "string"), Param("old", "string"), Param("new", "string")], (_, args) =>
+        ns.Function("replaceAll", [Param("s", "string"), Param("old", "string"), Param("new", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.replaceAll");
-            var oldStr = Args.String(args, 1, "str.replaceAll");
-            var newStr = Args.String(args, 2, "str.replaceAll");
-            return s.Replace(oldStr, newStr, StringComparison.Ordinal);
+            var s = SvArgs.String(args, 0, "str.replaceAll");
+            var oldStr = SvArgs.String(args, 1, "str.replaceAll");
+            var newStr = SvArgs.String(args, 2, "str.replaceAll");
+            return StashValue.FromObj(s.Replace(oldStr, newStr, StringComparison.Ordinal));
         },
             returnType: "string",
             documentation: "Returns the string with all occurrences of old replaced by new.\n@param s The string\n@param old The substring to replace\n@param new The replacement\n@return Modified string");
@@ -220,39 +205,38 @@ public static class StrBuiltIns
         // str.split(s, delimiter) — Splits s into an array of substrings around each
         // occurrence of delimiter. Empty substrings are preserved.
         // Throws RuntimeError if either argument is not a string.
-        ns.Function("split", [Param("s", "string"), Param("delimiter", "string")], (_, args) =>
+        ns.Function("split", [Param("s", "string"), Param("delimiter", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.split");
-            var delimiter = Args.String(args, 1, "str.split");
+            var s = SvArgs.String(args, 0, "str.split");
+            var delimiter = SvArgs.String(args, 1, "str.split");
             var parts = s.Split(new[] { delimiter }, StringSplitOptions.None);
-            return parts.Select(p => (object?)p).ToList();
+            var result = new List<StashValue>(parts.Length);
+            foreach (var p in parts)
+                result.Add(StashValue.FromObj(p));
+            return StashValue.FromObj(result);
         },
             returnType: "array",
             documentation: "Splits the string by delimiter. Returns an array of strings.\n@param s The string\n@param delimiter The delimiter\n@return Array of substrings");
 
         // str.repeat(s, count) — Returns s repeated count times. Count must be >= 0.
         // Throws RuntimeError if s is not a string, count is not a non-negative integer.
-        ns.Function("repeat", [Param("s", "string"), Param("count", "int")], (_, args) =>
+        ns.Function("repeat", [Param("s", "string"), Param("count", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.repeat");
-            var count = Args.Long(args, 1, "str.repeat");
-
+            var s = SvArgs.String(args, 0, "str.repeat");
+            var count = SvArgs.Long(args, 1, "str.repeat");
             if (count < 0)
-            {
                 throw new RuntimeError("'str.repeat' count must be >= 0.");
-            }
-
-            return string.Concat(Enumerable.Repeat(s, (int)count));
+            return StashValue.FromObj(string.Concat(Enumerable.Repeat(s, (int)count)));
         },
             returnType: "string",
             documentation: "Returns the string repeated count times.\n@param s The string\n@param count Number of repetitions (>= 0)\n@return Repeated string");
 
         // str.reverse(s) — Returns a new string with the characters of s in reverse order.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("reverse", [Param("s", "string")], (_, args) =>
+        ns.Function("reverse", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.reverse");
-            return new string(s.Reverse().ToArray());
+            var s = SvArgs.String(args, 0, "str.reverse");
+            return StashValue.FromObj(new string(s.Reverse().ToArray()));
         },
             returnType: "string",
             documentation: "Returns the string with characters in reverse order.\n@param s The string\n@return Reversed string");
@@ -260,10 +244,13 @@ public static class StrBuiltIns
         // str.chars(s) — Returns an array of single-character strings, one for each
         // character in s.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("chars", [Param("s", "string")], (_, args) =>
+        ns.Function("chars", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.chars");
-            return s.Select(c => (object?)c.ToString()).ToList();
+            var s = SvArgs.String(args, 0, "str.chars");
+            var result = new List<StashValue>(s.Length);
+            foreach (var c in s)
+                result.Add(StashValue.FromObj(c.ToString()));
+            return StashValue.FromObj(result);
         },
             returnType: "array",
             documentation: "Returns an array of single-character strings from the string.\n@param s The string\n@return Array of characters");
@@ -271,8 +258,22 @@ public static class StrBuiltIns
         // str.padStart(s, width[, padChar]) — Returns s left-padded with padChar (default " ")
         // to at least width characters. If s is already >= width, returns s unchanged.
         // Throws RuntimeError on invalid argument types.
-        ns.Function("padStart", [Param("s", "string"), Param("width", "int"), Param("padChar", "string")], (_, args) =>
-            RuntimeValues.PadString("str.padStart", args, padLeft: true),
+        ns.Function("padStart", [Param("s", "string"), Param("width", "int"), Param("padChar", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.padStart' requires 2 or 3 arguments.");
+            var s = SvArgs.String(args, 0, "str.padStart");
+            var length = SvArgs.Long(args, 1, "str.padStart");
+            char fillChar = ' ';
+            if (args.Length == 3)
+            {
+                var fill = SvArgs.String(args, 2, "str.padStart");
+                if (fill.Length != 1)
+                    throw new RuntimeError("Third argument to 'str.padStart' must be a single-character string.");
+                fillChar = fill[0];
+            }
+            return StashValue.FromObj(s.PadLeft((int)length, fillChar));
+        },
             returnType: "string",
             isVariadic: true,
             documentation: "Left-pads the string with padChar to at least width characters.\n@param s The string\n@param width Target width\n@param padChar Optional pad character (default ' ')\n@return Padded string");
@@ -280,70 +281,84 @@ public static class StrBuiltIns
         // str.padEnd(s, width[, padChar]) — Returns s right-padded with padChar (default " ")
         // to at least width characters. If s is already >= width, returns s unchanged.
         // Throws RuntimeError on invalid argument types.
-        ns.Function("padEnd", [Param("s", "string"), Param("width", "int"), Param("padChar", "string")], (_, args) =>
-            RuntimeValues.PadString("str.padEnd", args, padLeft: false),
+        ns.Function("padEnd", [Param("s", "string"), Param("width", "int"), Param("padChar", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.padEnd' requires 2 or 3 arguments.");
+            var s = SvArgs.String(args, 0, "str.padEnd");
+            var length = SvArgs.Long(args, 1, "str.padEnd");
+            char fillChar = ' ';
+            if (args.Length == 3)
+            {
+                var fill = SvArgs.String(args, 2, "str.padEnd");
+                if (fill.Length != 1)
+                    throw new RuntimeError("Third argument to 'str.padEnd' must be a single-character string.");
+                fillChar = fill[0];
+            }
+            return StashValue.FromObj(s.PadRight((int)length, fillChar));
+        },
             returnType: "string",
             isVariadic: true,
             documentation: "Right-pads the string with padChar to at least width characters.\n@param s The string\n@param width Target width\n@param padChar Optional pad character (default ' ')\n@return Padded string");
 
         // str.isDigit(s) — Returns true if s is non-empty and every character is a decimal digit.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("isDigit", [Param("s", "string")], (_, args) =>
+        ns.Function("isDigit", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.isDigit");
-            return s.Length > 0 && s.All(char.IsDigit);
+            var s = SvArgs.String(args, 0, "str.isDigit");
+            return StashValue.FromBool(s.Length > 0 && s.All(char.IsDigit));
         },
             returnType: "bool",
             documentation: "Returns true if the string is non-empty and all characters are decimal digits.\n@param s The string\n@return true if all digits");
 
         // str.isAlpha(s) — Returns true if s is non-empty and every character is a letter.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("isAlpha", [Param("s", "string")], (_, args) =>
+        ns.Function("isAlpha", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.isAlpha");
-            return s.Length > 0 && s.All(char.IsLetter);
+            var s = SvArgs.String(args, 0, "str.isAlpha");
+            return StashValue.FromBool(s.Length > 0 && s.All(char.IsLetter));
         },
             returnType: "bool",
             documentation: "Returns true if the string is non-empty and all characters are letters.\n@param s The string\n@return true if all letters");
 
         // str.isAlphaNum(s) — Returns true if s is non-empty and every character is a letter
         // or decimal digit. Throws RuntimeError if the argument is not a string.
-        ns.Function("isAlphaNum", [Param("s", "string")], (_, args) =>
+        ns.Function("isAlphaNum", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.isAlphaNum");
-            return s.Length > 0 && s.All(char.IsLetterOrDigit);
+            var s = SvArgs.String(args, 0, "str.isAlphaNum");
+            return StashValue.FromBool(s.Length > 0 && s.All(char.IsLetterOrDigit));
         },
             returnType: "bool",
             documentation: "Returns true if the string is non-empty and all characters are letters or digits.\n@param s The string\n@return true if all alphanumeric");
 
         // str.isUpper(s) — Returns true if s contains at least one letter and all letters are
         // uppercase. Non-letter characters are ignored. Throws RuntimeError if not a string.
-        ns.Function("isUpper", [Param("s", "string")], (_, args) =>
+        ns.Function("isUpper", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.isUpper");
+            var s = SvArgs.String(args, 0, "str.isUpper");
             var letters = s.Where(char.IsLetter).ToList();
-            return letters.Count > 0 && letters.All(char.IsUpper);
+            return StashValue.FromBool(letters.Count > 0 && letters.All(char.IsUpper));
         },
             returnType: "bool",
             documentation: "Returns true if the string has letters and all are uppercase.\n@param s The string\n@return true if all uppercase letters");
 
         // str.isLower(s) — Returns true if s contains at least one letter and all letters are
         // lowercase. Non-letter characters are ignored. Throws RuntimeError if not a string.
-        ns.Function("isLower", [Param("s", "string")], (_, args) =>
+        ns.Function("isLower", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.isLower");
+            var s = SvArgs.String(args, 0, "str.isLower");
             var letters = s.Where(char.IsLetter).ToList();
-            return letters.Count > 0 && letters.All(char.IsLower);
+            return StashValue.FromBool(letters.Count > 0 && letters.All(char.IsLower));
         },
             returnType: "bool",
             documentation: "Returns true if the string has letters and all are lowercase.\n@param s The string\n@return true if all lowercase letters");
 
         // str.isEmpty(s) — Returns true if s is empty or contains only whitespace characters.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("isEmpty", [Param("s", "string")], (_, args) =>
+        ns.Function("isEmpty", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.isEmpty");
-            return string.IsNullOrWhiteSpace(s);
+            var s = SvArgs.String(args, 0, "str.isEmpty");
+            return StashValue.FromBool(string.IsNullOrWhiteSpace(s));
         },
             returnType: "bool",
             documentation: "Returns true if the string is empty or contains only whitespace.\n@param s The string\n@return true if empty or whitespace");
@@ -352,15 +367,15 @@ public static class StrBuiltIns
         // or null if no match is found. Uses a 5-second timeout.
         // Throws RuntimeError if either argument is not a string, the pattern is invalid,
         // or the match times out.
-        ns.Function("match", [Param("s", "string"), Param("pattern", "string")], (_, args) =>
+        ns.Function("match", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.match");
-            var pattern = Args.String(args, 1, "str.match");
+            var s = SvArgs.String(args, 0, "str.match");
+            var pattern = SvArgs.String(args, 1, "str.match");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
                 var m = regex.Match(s);
-                return m.Success ? m.Value : null;
+                return m.Success ? StashValue.FromObj(m.Value) : StashValue.Null;
             }
             catch (RegexMatchTimeoutException)
             {
@@ -378,21 +393,18 @@ public static class StrBuiltIns
         // regex pattern. Returns an empty array if no matches are found. Uses a 5-second timeout.
         // Throws RuntimeError if either argument is not a string, the pattern is invalid,
         // or the match times out.
-        ns.Function("matchAll", [Param("s", "string"), Param("pattern", "string")], (_, args) =>
+        ns.Function("matchAll", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.matchAll");
-            var pattern = Args.String(args, 1, "str.matchAll");
+            var s = SvArgs.String(args, 0, "str.matchAll");
+            var pattern = SvArgs.String(args, 1, "str.matchAll");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
                 var matches = regex.Matches(s);
-                var result = new List<object?>();
+                var result = new List<StashValue>(matches.Count);
                 foreach (Match m in matches)
-                {
-                    result.Add(m.Value);
-                }
-
-                return result;
+                    result.Add(StashValue.FromObj(m.Value));
+                return StashValue.FromObj(result);
             }
             catch (RegexMatchTimeoutException)
             {
@@ -410,14 +422,14 @@ public static class StrBuiltIns
         // pattern, false otherwise. Uses a 5-second timeout.
         // Throws RuntimeError if either argument is not a string, the pattern is invalid,
         // or the match times out.
-        ns.Function("isMatch", [Param("s", "string"), Param("pattern", "string")], (_, args) =>
+        ns.Function("isMatch", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.isMatch");
-            var pattern = Args.String(args, 1, "str.isMatch");
+            var s = SvArgs.String(args, 0, "str.isMatch");
+            var pattern = SvArgs.String(args, 1, "str.isMatch");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
-                return regex.IsMatch(s);
+                return StashValue.FromBool(regex.IsMatch(s));
             }
             catch (RegexMatchTimeoutException)
             {
@@ -435,15 +447,15 @@ public static class StrBuiltIns
         // the regex pattern replaced by replacement. Supports backreference syntax in replacement.
         // Uses a 5-second timeout. Throws RuntimeError if any argument is not a string, the
         // pattern is invalid, or the match times out.
-        ns.Function("replaceRegex", [Param("s", "string"), Param("pattern", "string"), Param("replacement", "string")], (_, args) =>
+        ns.Function("replaceRegex", [Param("s", "string"), Param("pattern", "string"), Param("replacement", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.replaceRegex");
-            var pattern = Args.String(args, 1, "str.replaceRegex");
-            var replacement = Args.String(args, 2, "str.replaceRegex");
+            var s = SvArgs.String(args, 0, "str.replaceRegex");
+            var pattern = SvArgs.String(args, 1, "str.replaceRegex");
+            var replacement = SvArgs.String(args, 2, "str.replaceRegex");
             try
             {
                 var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
-                return regex.Replace(s, replacement);
+                return StashValue.FromObj(regex.Replace(s, replacement));
             }
             catch (RegexMatchTimeoutException)
             {
@@ -460,15 +472,12 @@ public static class StrBuiltIns
         // str.count(s, substring) — Returns the number of non-overlapping occurrences of
         // substring in s using ordinal comparison. Substring must not be empty.
         // Throws RuntimeError if either argument is not a string or if substring is empty.
-        ns.Function("count", [Param("s", "string"), Param("substring", "string")], (_, args) =>
+        ns.Function("count", [Param("s", "string"), Param("substring", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.count");
-            var sub = Args.String(args, 1, "str.count");
+            var s = SvArgs.String(args, 0, "str.count");
+            var sub = SvArgs.String(args, 1, "str.count");
             if (sub.Length == 0)
-            {
                 throw new RuntimeError("'str.count' substring must not be empty.");
-            }
-
             long count = 0;
             int idx = 0;
             while ((idx = s.IndexOf(sub, idx, StringComparison.Ordinal)) >= 0)
@@ -476,7 +485,7 @@ public static class StrBuiltIns
                 count++;
                 idx += sub.Length;
             }
-            return count;
+            return StashValue.FromInt(count);
         },
             returnType: "int",
             documentation: "Returns the count of non-overlapping occurrences of substring.\n@param s The string\n@param substring The substring to count\n@return Count of occurrences");
@@ -485,14 +494,12 @@ public static class StrBuiltIns
         // placeholders in template with the stringified values of the corresponding extra arguments.
         // At least 1 argument (the template) is required. Throws RuntimeError if the template
         // is not a string, a placeholder index is out of range, or the regex times out.
-        ns.Function("format", [Param("template", "string"), Param("args", "any")], (_, args) =>
+        ns.Function("format", [Param("template", "string"), Param("args", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            if (args.Count < 1)
-            {
+            if (args.Length < 1)
                 throw new RuntimeError("'str.format' requires at least 1 argument.");
-            }
-
-            var template = Args.String(args, 0, "str.format");
+            var template = SvArgs.String(args, 0, "str.format");
+            var argsArray = args.ToArray();
             try
             {
                 var placeholderRegex = new Regex(@"\{(\d+)\}", RegexOptions.None, TimeSpan.FromSeconds(5));
@@ -501,19 +508,16 @@ public static class StrBuiltIns
                 {
                     int index = int.Parse(m.Groups[1].Value);
                     int argIndex = index + 1;
-                    if (argIndex >= args.Count)
+                    if (argIndex >= argsArray.Length)
                     {
-                        error = $"'str.format' placeholder {{{index}}} is out of range (only {args.Count - 1} substitution argument(s) provided).";
+                        error = $"'str.format' placeholder {{{index}}} is out of range (only {argsArray.Length - 1} substitution argument(s) provided).";
                         return m.Value;
                     }
-                    return RuntimeValues.Stringify(args[argIndex]);
+                    return RuntimeValues.Stringify(argsArray[argIndex].ToObject());
                 });
                 if (error != null)
-                {
                     throw new RuntimeError(error);
-                }
-
-                return result;
+                return StashValue.FromObj(result);
             }
             catch (RegexMatchTimeoutException)
             {
@@ -529,15 +533,11 @@ public static class StrBuiltIns
         // str.capitalize(s) — Returns a copy of s with the first character uppercased and the
         // remainder lowercased. Returns s unchanged if it is empty.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("capitalize", [Param("s", "string")], (_, args) =>
+        ns.Function("capitalize", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.capitalize");
-            if (s.Length == 0)
-            {
-                return s;
-            }
-
-            return char.ToUpperInvariant(s[0]) + s.Substring(1).ToLowerInvariant();
+            var s = SvArgs.String(args, 0, "str.capitalize");
+            if (s.Length == 0) return StashValue.FromObj(s);
+            return StashValue.FromObj(char.ToUpperInvariant(s[0]) + s.Substring(1).ToLowerInvariant());
         },
             returnType: "string",
             documentation: "Returns the string with first character uppercase and the rest lowercase.\n@param s The string\n@return Capitalized string");
@@ -545,55 +545,53 @@ public static class StrBuiltIns
         // str.title(s) — Returns a copy of s in title case: the first letter of each
         // whitespace-delimited word is uppercased and the remaining letters are lowercased.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("title", [Param("s", "string")], (_, args) =>
+        ns.Function("title", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.title");
-            if (s.Length == 0)
-            {
-                return s;
-            }
-
+            var s = SvArgs.String(args, 0, "str.title");
+            if (s.Length == 0) return StashValue.FromObj(s);
             var chars = s.ToCharArray();
             bool capitalizeNext = true;
             for (int i = 0; i < chars.Length; i++)
             {
                 if (char.IsWhiteSpace(chars[i]))
-                {
                     capitalizeNext = true;
-                }
                 else if (capitalizeNext)
                 {
                     chars[i] = char.ToUpperInvariant(chars[i]);
                     capitalizeNext = false;
                 }
                 else
-                {
                     chars[i] = char.ToLowerInvariant(chars[i]);
-                }
             }
-            return new string(chars);
+            return StashValue.FromObj(new string(chars));
         },
             returnType: "string",
             documentation: "Returns the string in title case (first letter of each word capitalized).\n@param s The string\n@return Title-cased string");
 
         // str.lines(s) — Splits s into an array of lines on "\r\n", "\n", or "\r" boundaries.
         // Empty lines are preserved. Throws RuntimeError if the argument is not a string.
-        ns.Function("lines", [Param("s", "string")], (_, args) =>
+        ns.Function("lines", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.lines");
+            var s = SvArgs.String(args, 0, "str.lines");
             var lines = s.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
-            return lines.Select(l => (object?)l).ToList();
+            var result = new List<StashValue>(lines.Length);
+            foreach (var l in lines)
+                result.Add(StashValue.FromObj(l));
+            return StashValue.FromObj(result);
         },
             returnType: "array",
             documentation: "Splits the string into lines. Preserves empty lines.\n@param s The string\n@return Array of lines");
 
         // str.words(s) — Splits s into an array of words by whitespace, discarding empty
         // entries. Throws RuntimeError if the argument is not a string.
-        ns.Function("words", [Param("s", "string")], (_, args) =>
+        ns.Function("words", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.words");
+            var s = SvArgs.String(args, 0, "str.words");
             var words = s.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
-            return words.Select(w => (object?)w).ToList();
+            var result = new List<StashValue>(words.Length);
+            foreach (var w in words)
+                result.Add(StashValue.FromObj(w));
+            return StashValue.FromObj(result);
         },
             returnType: "array",
             documentation: "Splits the string into words by whitespace.\n@param s The string\n@return Array of words");
@@ -602,34 +600,19 @@ public static class StrBuiltIns
         // If s is longer than maxLen, the suffix (default "...") is appended to the cut string.
         // The total result length may be less than maxLen if suffix is longer than maxLen.
         // Throws RuntimeError on wrong types or if maxLen < 0.
-        ns.Function("truncate", [Param("s", "string"), Param("maxLen", "int"), Param("suffix", "string")], (_, args) =>
+        ns.Function("truncate", [Param("s", "string"), Param("maxLen", "int"), Param("suffix", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            if (args.Count < 2 || args.Count > 3)
-            {
+            if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("'str.truncate' requires 2 or 3 arguments.");
-            }
-
-            var s = Args.String(args, 0, "str.truncate");
-            var maxLen = Args.Long(args, 1, "str.truncate");
-
+            var s = SvArgs.String(args, 0, "str.truncate");
+            var maxLen = SvArgs.Long(args, 1, "str.truncate");
             if (maxLen < 0)
-            {
                 throw new RuntimeError("'str.truncate' maxLen must be >= 0.");
-            }
-
-            string suffix = args.Count == 3 && args[2] is string sfx ? sfx : "...";
-            if (s.Length <= (int)maxLen)
-            {
-                return s;
-            }
-
+            string suffix = args.Length == 3 ? SvArgs.String(args, 2, "str.truncate") : "...";
+            if (s.Length <= (int)maxLen) return StashValue.FromObj(s);
             int cutLen = (int)maxLen - suffix.Length;
-            if (cutLen < 0)
-            {
-                cutLen = 0;
-            }
-
-            return s.Substring(0, cutLen) + suffix;
+            if (cutLen < 0) cutLen = 0;
+            return StashValue.FromObj(s.Substring(0, cutLen) + suffix);
         },
             returnType: "string",
             isVariadic: true,
@@ -639,14 +622,14 @@ public static class StrBuiltIns
         // characters removed, spaces and hyphens collapsed to a single hyphen, and leading
         // and trailing hyphens stripped.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("slug", [Param("s", "string")], (_, args) =>
+        ns.Function("slug", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.slug");
+            var s = SvArgs.String(args, 0, "str.slug");
             var slug = s.ToLowerInvariant();
             slug = Regex.Replace(slug, @"[^a-z0-9\s-]", "");
             slug = Regex.Replace(slug, @"[\s-]+", "-");
             slug = slug.Trim('-');
-            return slug;
+            return StashValue.FromObj(slug);
         },
             returnType: "string",
             documentation: "Returns a URL-friendly slug: lowercase, hyphens for non-alphanumeric chars.\n@param s The string\n@return URL slug");
@@ -655,25 +638,17 @@ public static class StrBuiltIns
         // characters. Newlines already present in s are preserved as paragraph breaks.
         // Width must be > 0. Throws RuntimeError if s is not a string or width is not a
         // positive integer.
-        ns.Function("wrap", [Param("s", "string"), Param("width", "int")], (_, args) =>
+        ns.Function("wrap", [Param("s", "string"), Param("width", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "str.wrap");
-            var width = Args.Long(args, 1, "str.wrap");
-
+            var s = SvArgs.String(args, 0, "str.wrap");
+            var width = SvArgs.Long(args, 1, "str.wrap");
             if (width <= 0)
-            {
                 throw new RuntimeError("'str.wrap' width must be > 0.");
-            }
-
             var result = new System.Text.StringBuilder();
             int w = (int)width;
             foreach (var paragraph in s.Split('\n'))
             {
-                if (result.Length > 0)
-                {
-                    result.Append('\n');
-                }
-
+                if (result.Length > 0) result.Append('\n');
                 var paragraphWords = paragraph.Split(' ');
                 int lineLen = 0;
                 bool firstWord = true;
@@ -691,7 +666,7 @@ public static class StrBuiltIns
                     firstWord = false;
                 }
             }
-            return result.ToString();
+            return StashValue.FromObj(result.ToString());
         },
             returnType: "string",
             documentation: "Wraps the string at word boundaries so no line exceeds width characters.\n@param s The string\n@param width Maximum line width\n@return Wrapped string");

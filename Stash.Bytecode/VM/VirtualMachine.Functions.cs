@@ -46,11 +46,11 @@ public sealed partial class VirtualMachine
 
                 // Collect rest args into a list
                 int restCount = Math.Max(0, provided - nonRestCount);
-                var restList = new List<object?>(restCount);
+                var restList = new List<StashValue>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
                 {
-                    restList.Add(_stack[i].ToObject());
+                    restList.Add(_stack[i]);
                 }
 
                 _sp = restStart;
@@ -133,11 +133,11 @@ public sealed partial class VirtualMachine
                 }
 
                 int restCount = Math.Max(0, provided - nonRestCount);
-                var restList = new List<object?>(restCount);
+                var restList = new List<StashValue>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
                 {
-                    restList.Add(_stack[i].ToObject());
+                    restList.Add(_stack[i]);
                 }
 
                 _sp = restStart;
@@ -214,11 +214,11 @@ public sealed partial class VirtualMachine
                 }
 
                 int restCount = Math.Max(0, provided - nonRestCount);
-                var restList = new List<object?>(restCount);
+                var restList = new List<StashValue>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
                 {
-                    restList.Add(_stack[i].ToObject());
+                    restList.Add(_stack[i]);
                 }
 
                 _sp = restStart;
@@ -301,34 +301,27 @@ public sealed partial class VirtualMachine
     }
 
     /// <summary>
-    /// Calls a <see cref="VMFunction"/> closure inline on the same VM instance and
-    /// returns its result. Safe to call from within the dispatch loop (e.g. OP_RETRY)
-    /// and from built-in function callbacks (e.g. arr.map, test.it).
-    /// The stack pointer is saved and restored after the call so that repeated calls
-    /// (such as sort comparisons) do not leave stale values on the stack.
+    /// StashValue-native overload. Calls a <see cref="VMFunction"/> closure inline on the
+    /// same VM instance, pushing StashValue args directly without boxing.
     /// </summary>
-    internal object? ExecuteVMFunctionInline(VMFunction fn, object?[] args, SourceSpan? span)
+    internal StashValue ExecuteVMFunctionInlineDirect(VMFunction fn, ReadOnlySpan<StashValue> args, SourceSpan? span)
     {
         int savedSp = _sp;
         int savedFrameCount = _frameCount;
         Push(StashValue.FromObj(fn)); // callee slot
-        foreach (object? arg in args)
+        foreach (StashValue arg in args)
         {
-            Push(StashValue.FromObject(arg));
+            Push(arg);
         }
 
         CallValue(fn, args.Length, span);
         try
         {
-            return RunUntilFrame(savedFrameCount);
+            object? result = RunUntilFrame(savedFrameCount);
+            return StashValue.FromObject(result);
         }
         finally
         {
-            // CRITICAL: always restore the VM's stack pointer (and frame count on error),
-            // both for repeated calls (e.g. sort comparisons) and exception paths.
-            // Without this, RuntimeErrors that propagate through here and are caught by a
-            // built-in wrapper (e.g. assert.throws) leave the VM with a stale _sp,
-            // corrupting any subsequent stack operations.
             if (_frameCount > savedFrameCount)
             {
                 CloseUpvalues(savedSp);
@@ -339,11 +332,10 @@ public sealed partial class VirtualMachine
     }
 
     /// <summary>
-    /// Calls a <see cref="VMFunction"/> closure on this VM instance with a fresh execution state.
-    /// Used by <see cref="VMContext.InvokeCallback"/> to execute user lambdas from background threads
-    /// (e.g. fs.watch callbacks) on a dedicated child VM backed by shared globals.
+    /// StashValue-native overload. Calls a <see cref="VMFunction"/> closure on this VM instance
+    /// with a fresh execution state. Used for background-thread callbacks.
     /// </summary>
-    internal object? CallClosure(VMFunction fn, System.Collections.Generic.List<object?> args)
+    internal StashValue CallClosureDirect(VMFunction fn, ReadOnlySpan<StashValue> args)
     {
         _sp = 0;
         _frameCount = 0;
@@ -351,13 +343,14 @@ public sealed partial class VirtualMachine
         _exceptionHandlers.Clear();
         _openUpvalues.Clear();
         Push(StashValue.FromObj(fn));
-        foreach (object? arg in args)
+        foreach (StashValue arg in args)
         {
-            Push(StashValue.FromObject(arg));
+            Push(arg);
         }
 
-        CallValue(fn, args.Count, null);
-        return Run();
+        CallValue(fn, args.Length, null);
+        object? result = Run();
+        return StashValue.FromObject(result);
     }
 
     private bool ExecuteReturn(ref CallFrame frame, int targetFrameCount, IDebugger? debugger, out object? result)
@@ -428,11 +421,11 @@ public sealed partial class VirtualMachine
                 }
 
                 int restCount = Math.Max(0, provided - nonRestCount);
-                var restList = new List<object?>(restCount);
+                var restList = new List<StashValue>(restCount);
                 int restStart = _sp - restCount;
                 for (int i = restStart; i < _sp; i++)
                 {
-                    restList.Add(_stack[i].ToObject());
+                    restList.Add(_stack[i]);
                 }
                 _sp = restStart;
                 Push(StashValue.FromObj(restList));
@@ -470,13 +463,45 @@ public sealed partial class VirtualMachine
                 PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name, fn.ModuleGlobals);
             }
         }
-        else
+        else if (callee is BuiltInFunction builtIn)
         {
-            // Lazy path: save call-site context on _context so built-ins can access
-            // it via CurrentSpan's lazy getter instead of paying O(log n) GetSpan() upfront.
+            // Fast path: built-in function — skip CallValue dispatch chain
             _context._callSourceMap = callerSourceMap;
             _context._callIP = callerIP;
-            _context._currentSpan = null; // reset so lazy getter activates
+            _context._currentSpan = null;
+
+            if (builtIn.Arity != -1)
+            {
+                if (argc != builtIn.Arity)
+                {
+                    throw new RuntimeError(
+                        $"Expected {builtIn.Arity} arguments but got {argc}.",
+                        _context.CurrentSpan);
+                }
+            }
+
+            int argStart = _sp - argc;
+            ReadOnlySpan<StashValue> argSpan = _stack.AsSpan(argStart, argc);
+            _sp = argStart - 1; // pop args + callee slot
+
+            StashValue result;
+            try
+            {
+                result = builtIn.CallDirect(_context, argSpan);
+            }
+            catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
+            {
+                throw new RuntimeError($"Built-in function error: {ex.Message}",
+                    _context.CurrentSpan);
+            }
+            Push(result);
+        }
+        else
+        {
+            // Remaining cases: VMBoundMethod, VMExtensionBoundMethod, lambdas, etc.
+            _context._callSourceMap = callerSourceMap;
+            _context._callIP = callerIP;
+            _context._currentSpan = null;
             CallValue(callee, argc, null);
         }
 

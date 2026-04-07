@@ -27,7 +27,7 @@ internal sealed class VMDebugScope : IDebugScope
     private readonly int _localCount;
 
     // ── Dictionary mode ──
-    private readonly Dictionary<string, object?>? _globals;
+    private readonly Dictionary<string, StashValue>? _globals;
     private readonly HashSet<string>? _constGlobals;
 
     private readonly IDebugScope? _enclosing;
@@ -49,7 +49,7 @@ internal sealed class VMDebugScope : IDebugScope
         _enclosing = enclosing;
     }
 
-    private VMDebugScope(Dictionary<string, object?> globals, HashSet<string>? constGlobals, IDebugScope? enclosing)
+    private VMDebugScope(Dictionary<string, StashValue> globals, HashSet<string>? constGlobals, IDebugScope? enclosing)
     {
         _globals = globals;
         _constGlobals = constGlobals;
@@ -66,7 +66,7 @@ internal sealed class VMDebugScope : IDebugScope
         new(stack, baseSlot, localCount, names, isConst, enclosing);
 
     /// <summary>Creates a dictionary scope that reads/writes the VM globals dictionary.</summary>
-    public static VMDebugScope FromGlobals(Dictionary<string, object?> globals, HashSet<string>? constGlobals, IDebugScope? enclosing) =>
+    public static VMDebugScope FromGlobals(Dictionary<string, StashValue> globals, HashSet<string>? constGlobals, IDebugScope? enclosing) =>
         new(globals, constGlobals, enclosing);
 
     public IEnumerable<KeyValuePair<string, object?>> GetAllBindings()
@@ -90,7 +90,7 @@ internal sealed class VMDebugScope : IDebugScope
 
         if (_globals is not null)
         {
-            return _globals;
+            return _globals.Select(kvp => new KeyValuePair<string, object?>(kvp.Key, kvp.Value.ToObject()));
         }
 
         return Enumerable.Empty<KeyValuePair<string, object?>>();
@@ -170,7 +170,7 @@ internal sealed class VMDebugScope : IDebugScope
 
         if (_globals is not null && _globals.ContainsKey(name))
         {
-            _globals[name] = value;
+            _globals[name] = StashValue.FromObject(value);
             return true;
         }
 

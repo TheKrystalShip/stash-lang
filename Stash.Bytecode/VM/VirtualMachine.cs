@@ -42,7 +42,7 @@ public sealed partial class VirtualMachine
     private CallFrame[] _frames;
     private int _frameCount;
 
-    private readonly Dictionary<string, object?> _globals;
+    private readonly Dictionary<string, StashValue> _globals;
     private readonly HashSet<string> _constGlobals = new(StringComparer.Ordinal);
     private readonly List<Upvalue> _openUpvalues;
     private readonly CancellationToken _ct;
@@ -52,7 +52,7 @@ public sealed partial class VirtualMachine
     private readonly ExtensionRegistry _extensionRegistry = new();
 
     private Func<string, string?, Chunk>? _moduleLoader;
-    internal ConcurrentDictionary<string, Dictionary<string, object?>> ModuleCache = new(StringComparer.OrdinalIgnoreCase);
+    internal ConcurrentDictionary<string, Dictionary<string, StashValue>> ModuleCache = new(StringComparer.OrdinalIgnoreCase);
     private HashSet<string> _importStack = new(StringComparer.OrdinalIgnoreCase);
     internal ConcurrentDictionary<string, object> ModuleLocks = new(StringComparer.OrdinalIgnoreCase);
 
@@ -63,11 +63,11 @@ public sealed partial class VirtualMachine
     private int[]? _lastDebugLinePerFrame;
     private int _loopCheckCounter;
 
-    public VirtualMachine(Dictionary<string, object?>? globals = null, CancellationToken ct = default)
+    public VirtualMachine(Dictionary<string, StashValue>? globals = null, CancellationToken ct = default)
     {
         _stack = new StashValue[DefaultStackSize];
         _frames = new CallFrame[DefaultFrameDepth];
-        _globals = globals ?? new Dictionary<string, object?>();
+        _globals = globals ?? new Dictionary<string, StashValue>();
         _openUpvalues = new List<Upvalue>();
         _ct = ct;
         _context = new VMContext(ct)
@@ -81,7 +81,7 @@ public sealed partial class VirtualMachine
     }
 
     /// <summary>The global variable store. Populate before Execute for built-in namespaces.</summary>
-    public Dictionary<string, object?> Globals => _globals;
+    public Dictionary<string, StashValue> Globals => _globals;
 
     /// <summary>Standard output stream for built-in functions. Defaults to Console.Out.</summary>
     public TextWriter Output { get => _context.Output; set => _context.Output = value; }
@@ -243,7 +243,7 @@ public sealed partial class VirtualMachine
                 string? name = chunk.LocalNames[i];
                 if (!string.IsNullOrEmpty(name) && name[0] != '<')
                 {
-                    _globals[name] = _stack[i].ToObject();
+                    _globals[name] = _stack[i];
                 }
             }
         }
@@ -253,7 +253,7 @@ public sealed partial class VirtualMachine
 
     // ---- Frame Management ----
 
-    private void PushFrame(Chunk chunk, int baseSlot, Upvalue[]? upvalues, string? name, Dictionary<string, object?>? moduleGlobals = null)
+    private void PushFrame(Chunk chunk, int baseSlot, Upvalue[]? upvalues, string? name, Dictionary<string, StashValue>? moduleGlobals = null)
     {
         if (_frameCount >= _frames.Length)
         {

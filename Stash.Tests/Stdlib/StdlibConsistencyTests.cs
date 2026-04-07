@@ -11,7 +11,7 @@ using RuntimeBuiltInFunction = Stash.Runtime.BuiltInFunction;
 public class StdlibConsistencyTests
 {
     private static Dictionary<string, object?> CreateGlobals(StashCapabilities caps = StashCapabilities.All)
-        => StdlibDefinitions.CreateVMGlobals(caps);
+        => StdlibDefinitions.CreateVMGlobals(caps).ToDictionary(kvp => kvp.Key, kvp => kvp.Value.ToObject());
 
     [Fact]
     public void GlobalFunctions_RegistryEntries_HaveRuntimeImplementation()

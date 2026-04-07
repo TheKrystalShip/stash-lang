@@ -49,12 +49,12 @@ internal sealed class VMDebugAdapter : IDebugExecutor
             Chunk chunk = Compiler.CompileExpression(expr);
 
             // 4. Seed temp VM with scope bindings (outermost first so innermost shadows)
-            var tempGlobals = new Dictionary<string, object?>();
+            var tempGlobals = new Dictionary<string, StashValue>();
             var chain = scope.GetScopeChain().ToList();
             for (int i = chain.Count - 1; i >= 0; i--)
             {
                 foreach (var (name, value) in chain[i].GetAllBindings())
-                    tempGlobals[name] = value;
+                    tempGlobals[name] = StashValue.FromObject(value);
             }
 
             // 5. Execute in isolated VM (no debugger attached to avoid recursion)

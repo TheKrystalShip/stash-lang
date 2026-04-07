@@ -1,34 +1,35 @@
 using System.Collections.Generic;
+using Stash.Runtime;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Wraps an <see cref="IEnumerator{T}"/> with a current-element index counter.
+/// Wraps an IEnumerator&lt;StashValue&gt; with a current-element index counter.
 /// Used internally by the VM to execute for-in loops.
 /// </summary>
 internal sealed class StashIterator
 {
-    private readonly IEnumerator<object?> _inner;
+    private readonly IEnumerator<StashValue> _enumerator;
 
     public int Index { get; private set; } = -1;
 
     /// <summary>When non-null, this iterator is iterating over a dict's keys; the dict is stored here for value lookup.</summary>
     public StashDictionary? Dictionary { get; }
 
-    public StashIterator(IEnumerator<object?> inner) => _inner = inner;
+    public StashIterator(IEnumerator<StashValue> enumerator) => _enumerator = enumerator;
 
-    public StashIterator(IEnumerator<object?> inner, StashDictionary dict)
+    public StashIterator(IEnumerator<StashValue> enumerator, StashDictionary dict)
     {
-        _inner = inner;
+        _enumerator = enumerator;
         Dictionary = dict;
     }
 
     public bool MoveNext()
     {
         Index++;
-        return _inner.MoveNext();
+        return _enumerator.MoveNext();
     }
 
-    public object? Current => _inner.Current;
+    public StashValue Current => _enumerator.Current;
 }

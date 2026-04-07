@@ -31,7 +31,7 @@ public static class GlobalBuiltIns
             {
                 null => "null",
                 string => "string",
-                List<object?> => "array",
+                List<StashValue> => "array",
                 StashError => "Error",
                 StashInstance => "struct",
                 StashStruct => "struct",
@@ -51,13 +51,13 @@ public static class GlobalBuiltIns
             });
         }, returnType: "string");
 
-        b.Function("semver", [Param("value", "string")], (_, args) =>
+        b.Function("semver", [Param("value", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            string str = Args.String(args, 0, "semver");
+            string str = SvArgs.String(args, 0, "semver");
 
             if (StashSemVer.TryParse(str, out StashSemVer? result))
             {
-                return result;
+                return StashValue.FromObj(result!);
             }
 
             string detail = StashSemVer.ValidateFormat(str) ?? $"Invalid semantic version '{str}'.";
@@ -78,7 +78,7 @@ public static class GlobalBuiltIns
             {
                 null => "null",
                 string => "string",
-                List<object?> => "array",
+                List<StashValue> => "array",
                 StashError => "Error",
                 StashInstance inst => inst.TypeName,
                 StashStruct s => s.Name,
@@ -102,37 +102,37 @@ public static class GlobalBuiltIns
             {
                 object? obj = val.AsObj;
                 if (obj is string s) return StashValue.FromInt((long)s.Length);
-                if (obj is List<object?> list) return StashValue.FromInt((long)list.Count);
+                if (obj is List<StashValue> svList) return StashValue.FromInt((long)svList.Count);
                 if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
             }
             throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
         }, returnType: "int");
 
-        b.Function("lastError", [], (ctx, args) =>
+        b.Function("lastError", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            return ctx.LastError;
+            return ctx.LastError is not null ? StashValue.FromObj(ctx.LastError) : StashValue.Null;
         }, returnType: "Error");
 
-        b.Function("range", [Param("start_or_end", "int"), Param("end", "int"), Param("step", "int")], (_, args) =>
+        b.Function("range", [Param("start_or_end", "int"), Param("end", "int"), Param("step", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 1, 3, "range");
+            if (args.Length < 1 || args.Length > 3) throw new RuntimeError("'range' expects 1 to 3 arguments.");
             long start, end, step;
-            if (args.Count == 1)
+            if (args.Length == 1)
             {
-                var e = Args.Long(args, 0, "range");
+                var e = SvArgs.Long(args, 0, "range");
                 start = 0; end = e; step = 1;
             }
-            else if (args.Count == 2)
+            else if (args.Length == 2)
             {
-                var s = Args.Long(args, 0, "range");
-                var e = Args.Long(args, 1, "range");
+                var s = SvArgs.Long(args, 0, "range");
+                var e = SvArgs.Long(args, 1, "range");
                 start = s; end = e; step = 1;
             }
             else
             {
-                var s = Args.Long(args, 0, "range");
-                var e = Args.Long(args, 1, "range");
-                var st = Args.Long(args, 2, "range");
+                var s = SvArgs.Long(args, 0, "range");
+                var e = SvArgs.Long(args, 1, "range");
+                var st = SvArgs.Long(args, 2, "range");
                 if (st == 0)
                 {
                     throw new RuntimeError("'range' step cannot be zero.");
@@ -141,31 +141,31 @@ public static class GlobalBuiltIns
                 start = s; end = e; step = st;
             }
 
-            var result = new List<object?>();
+            var result = new List<StashValue>();
             if (step > 0)
             {
                 for (long i = start; i < end; i += step)
                 {
-                    result.Add(i);
+                    result.Add(StashValue.FromInt(i));
                 }
             }
             else
             {
                 for (long i = start; i > end; i += step)
                 {
-                    result.Add(i);
+                    result.Add(StashValue.FromInt(i));
                 }
             }
-            return result;
+            return StashValue.FromObj(result);
         }, returnType: "array", isVariadic: true);
 
         if (capabilities.HasFlag(StashCapabilities.Process))
         {
-            b.Function("exit", [Param("code", "int")], (ctx, args) =>
+            b.Function("exit", [Param("code", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
-                var code = Args.Long(args, 0, "exit");
+                var code = SvArgs.Long(args, 0, "exit");
                 ctx.EmitExit((int)code);
-                return null;
+                return StashValue.Null;
             });
         }
 

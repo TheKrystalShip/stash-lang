@@ -11,18 +11,10 @@ public sealed class BuiltInFunction : IStashCallable
 {
     public delegate StashValue DirectHandler(IInterpreterContext context, ReadOnlySpan<StashValue> args);
 
-    private readonly Func<IInterpreterContext, List<object?>, object?>? _legacyBody;
-    private readonly DirectHandler? _directBody;
+    private readonly DirectHandler _directBody;
 
     public int Arity { get; }
     public string Name { get; }
-
-    public BuiltInFunction(string name, int arity, Func<IInterpreterContext, List<object?>, object?> body)
-    {
-        Name = name;
-        Arity = arity;
-        _legacyBody = body;
-    }
 
     public BuiltInFunction(string name, int arity, DirectHandler body)
     {
@@ -33,10 +25,7 @@ public sealed class BuiltInFunction : IStashCallable
 
     public object? Call(IInterpreterContext context, List<object?> arguments)
     {
-        if (_legacyBody is not null)
-            return _legacyBody(context, arguments);
-
-        // Direct-only path: convert List<object?> → StashValue[] and call through
+        // Bridge legacy callers through the direct path
         StashValue[] svArgs = new StashValue[arguments.Count];
         for (int i = 0; i < arguments.Count; i++)
             svArgs[i] = StashValue.FromObject(arguments[i]);
@@ -45,13 +34,7 @@ public sealed class BuiltInFunction : IStashCallable
 
     public StashValue CallDirect(IInterpreterContext context, ReadOnlySpan<StashValue> arguments)
     {
-        if (_directBody is not null)
-            return _directBody(context, arguments);
-
-        var list = new List<object?>(arguments.Length);
-        foreach (StashValue sv in arguments)
-            list.Add(sv.ToObject());
-        return StashValue.FromObject(_legacyBody!(context, list));
+        return _directBody(context, arguments);
     }
 
     public override string ToString() => $"<built-in fn {Name}>";

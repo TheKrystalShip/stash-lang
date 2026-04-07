@@ -45,10 +45,10 @@ public static class SvArgs
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static List<object?> List(ReadOnlySpan<StashValue> args, int index, string funcName)
+    public static List<StashValue> StashList(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
         StashValue v = args[index];
-        if (v.IsObj && v.AsObj is List<object?> l) return l;
+        if (v.IsObj && v.AsObj is List<StashValue> l) return l;
         throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an array.");
     }
 

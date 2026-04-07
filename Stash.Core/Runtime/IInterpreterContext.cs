@@ -1,5 +1,6 @@
 namespace Stash.Runtime;
 
+using System;
 using System.Threading;
 
 /// <summary>
@@ -32,6 +33,19 @@ public interface IInterpreterContext : IExecutionContext, IProcessContext, ITest
     /// The default implementation forks the context and calls <see cref="IStashCallable.Call"/>.
     /// The bytecode VM overrides this to execute <c>VMFunction</c> closures on a child VM instance.
     /// </summary>
-    object? InvokeCallback(IStashCallable callable, System.Collections.Generic.List<object?> args) =>
-        callable.Call(Fork(), args);
+    object? InvokeCallback(IStashCallable callable, System.Collections.Generic.List<object?> args)
+    {
+        StashValue[] svArgs = new StashValue[args.Count];
+        for (int i = 0; i < args.Count; i++)
+            svArgs[i] = StashValue.FromObject(args[i]);
+        return InvokeCallbackDirect(callable, svArgs).ToObject();
+    }
+
+    /// <summary>
+    /// StashValue-native callback invocation. Eliminates List&lt;object?&gt; allocation
+    /// and boxing/unboxing. Built-ins should prefer this over InvokeCallback.
+    /// Default implementation bridges to the legacy InvokeCallback path.
+    /// </summary>
+    StashValue InvokeCallbackDirect(IStashCallable callable, ReadOnlySpan<StashValue> args) =>
+        callable.CallDirect(Fork(), args);
 }

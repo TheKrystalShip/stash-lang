@@ -223,13 +223,13 @@ internal sealed class VMContext : IInterpreterContext
     /// Reference to the VM's global variable store. Set by <see cref="VirtualMachine"/> so that
     /// <see cref="InvokeCallback"/> can create a child VM for <c>VMFunction</c> closures.
     /// </summary>
-    internal Dictionary<string, object?>? Globals { get; set; }
+    internal Dictionary<string, StashValue>? Globals { get; set; }
 
     /// <summary>Module loading callback, propagated from the parent <see cref="VirtualMachine"/>.</summary>
     internal Func<string, string?, Chunk>? ModuleLoader { get; set; }
 
     /// <summary>Shared module cache, propagated from the parent <see cref="VirtualMachine"/>.</summary>
-    internal ConcurrentDictionary<string, Dictionary<string, object?>>? ModuleCache { get; set; }
+    internal ConcurrentDictionary<string, Dictionary<string, StashValue>>? ModuleCache { get; set; }
 
     /// <summary>Per-module locks for double-checked loading, propagated from the parent <see cref="VirtualMachine"/>.</summary>
     internal ConcurrentDictionary<string, object>? ModuleLocks { get; set; }
@@ -248,25 +248,15 @@ internal sealed class VMContext : IInterpreterContext
     /// </summary>
     internal int MainThreadId { get; set; }
 
-    /// <summary>
-    /// Invokes a callable in a child execution context. For <see cref="VMFunction"/> closures
-    /// called from the main VM thread, executes inline on the current VM instance so that
-    /// upvalues, test harness, and all context state are preserved. For background-thread
-    /// calls (e.g. fs.watch), creates a new <see cref="VirtualMachine"/> backed by shared globals.
-    /// </summary>
-    object? IInterpreterContext.InvokeCallback(IStashCallable callable, System.Collections.Generic.List<object?> args)
+    StashValue IInterpreterContext.InvokeCallbackDirect(IStashCallable callable, System.ReadOnlySpan<StashValue> args)
     {
         if (callable is VMFunction vmFn)
         {
-            // Same-thread call (synchronous): run inline on the active VM so that upvalues,
-            // test harness, CurrentDescribe, hooks, and all other context state are preserved.
             if (ActiveVM != null && System.Threading.Thread.CurrentThread.ManagedThreadId == MainThreadId)
             {
-                return ActiveVM.ExecuteVMFunctionInline(vmFn, args.ToArray(), null);
+                return ActiveVM.ExecuteVMFunctionInlineDirect(vmFn, args, null);
             }
 
-            // Background-thread call (e.g. fs.watch callback): create an isolated child VM
-            // backed by the same globals dict so the closure executes correctly.
             if (Globals != null)
             {
                 var childVm = new VirtualMachine(Globals, CancellationToken);
@@ -276,24 +266,14 @@ internal sealed class VMContext : IInterpreterContext
                 childVm.CurrentFile = CurrentFile;
                 childVm.ScriptArgs = ScriptArgs;
                 childVm.EmbeddedMode = EmbeddedMode;
-                if (ModuleLoader != null)
-                {
-                    childVm.ModuleLoader = ModuleLoader;
-                }
+                if (ModuleLoader != null) childVm.ModuleLoader = ModuleLoader;
+                if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
+                if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;
 
-                if (ModuleCache != null)
-                {
-                    childVm.ModuleCache = ModuleCache;
-                }
-
-                if (ModuleLocks != null)
-                {
-                    childVm.ModuleLocks = ModuleLocks;
-                }
-
-                return childVm.CallClosure(vmFn, args);
+                StashValue[] argsCopy = args.ToArray();
+                return childVm.CallClosureDirect(vmFn, argsCopy);
             }
         }
-        return callable.Call(Fork(), args);
+        return callable.CallDirect(Fork(), args);
     }
 }

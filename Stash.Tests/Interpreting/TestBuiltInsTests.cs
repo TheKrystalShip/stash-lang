@@ -810,7 +810,7 @@ public class TestBuiltInsTests : StashTestBase
             """);
 
         Assert.Equal(1, reporter.FailedCount);
-        var cleaned = vm.Globals["cleaned"];
+        var cleaned = vm.Globals["cleaned"].ToObject();
         Assert.Equal(true, cleaned);
     }
 }

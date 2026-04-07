@@ -48,10 +48,10 @@ public static class TermBuiltIns
 
         // term.color(text, color) — Wraps 'text' in ANSI escape codes to display it in the specified foreground color.
         //   'color' must be one of the term color constants (e.g. term.RED) or their string equivalents.
-        ns.Function("color", [Param("text", "string"), Param("color", "string")], (_, args) =>
+        ns.Function("color", [Param("text", "string"), Param("color", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var text = Args.String(args, 0, "term.color");
-            var color = Args.String(args, 1, "term.color");
+            var text = SvArgs.String(args, 0, "term.color");
+            var color = SvArgs.String(args, 1, "term.color");
             string code = color.ToLowerInvariant() switch
             {
                 "black" => "30",
@@ -65,58 +65,58 @@ public static class TermBuiltIns
                 "gray" or "grey" => "90",
                 _ => throw new RuntimeError($"Unknown color '{color}'. Use term color constants: term.BLACK, term.RED, term.GREEN, term.YELLOW, term.BLUE, term.MAGENTA, term.CYAN, term.WHITE, term.GRAY.")
             };
-            return $"\x1b[{code}m{text}\x1b[0m";
+            return StashValue.FromObj($"\x1b[{code}m{text}\x1b[0m");
         }, returnType: "string");
 
         // term.bold(text) — Wraps 'text' in ANSI bold escape codes. Returns the styled string.
-        ns.Function("bold", [Param("text", "string")], (_, args) =>
+        ns.Function("bold", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var text = Args.String(args, 0, "term.bold");
-            return $"\x1b[1m{text}\x1b[0m";
+            var text = SvArgs.String(args, 0, "term.bold");
+            return StashValue.FromObj($"\x1b[1m{text}\x1b[0m");
         }, returnType: "string");
 
         // term.dim(text) — Wraps 'text' in ANSI dim (faint) escape codes. Returns the styled string.
-        ns.Function("dim", [Param("text", "string")], (_, args) =>
+        ns.Function("dim", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var text = Args.String(args, 0, "term.dim");
-            return $"\x1b[2m{text}\x1b[0m";
+            var text = SvArgs.String(args, 0, "term.dim");
+            return StashValue.FromObj($"\x1b[2m{text}\x1b[0m");
         }, returnType: "string");
 
         // term.underline(text) — Wraps 'text' in ANSI underline escape codes. Returns the styled string.
-        ns.Function("underline", [Param("text", "string")], (_, args) =>
+        ns.Function("underline", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var text = Args.String(args, 0, "term.underline");
-            return $"\x1b[4m{text}\x1b[0m";
+            var text = SvArgs.String(args, 0, "term.underline");
+            return StashValue.FromObj($"\x1b[4m{text}\x1b[0m");
         }, returnType: "string");
 
         // term.style(text, opts) — Applies multiple styles to 'text' using an options dict.
         //   Supported keys: "bold" (bool), "dim" (bool), "underline" (bool), "color" (string).
         //   Returns the ANSI-styled string, or 'text' unchanged if no options are set.
-        ns.Function("style", [Param("text", "string"), Param("opts", "dict")], (_, args) =>
+        ns.Function("style", [Param("text", "string"), Param("opts", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var text = Args.String(args, 0, "term.style");
-            var opts = Args.Dict(args, 1, "term.style");
+            var text = SvArgs.String(args, 0, "term.style");
+            var opts = SvArgs.Dict(args, 1, "term.style");
             var codes = new List<string>();
 
-            var boldVal = opts.Get("bold");
+            var boldVal = opts.Get("bold").ToObject();
             if (boldVal is true)
             {
                 codes.Add("1");
             }
 
-            var dimVal = opts.Get("dim");
+            var dimVal = opts.Get("dim").ToObject();
             if (dimVal is true)
             {
                 codes.Add("2");
             }
 
-            var underlineVal = opts.Get("underline");
+            var underlineVal = opts.Get("underline").ToObject();
             if (underlineVal is true)
             {
                 codes.Add("4");
             }
 
-            var colorVal = opts.Get("color");
+            var colorVal = opts.Get("color").ToObject();
             if (colorVal is string color)
             {
                 string colorCode = color.ToLowerInvariant() switch
@@ -137,71 +137,74 @@ public static class TermBuiltIns
 
             if (codes.Count == 0)
             {
-                return text;
+                return StashValue.FromObj(text);
             }
 
-            return $"\x1b[{string.Join(";", codes)}m{text}\x1b[0m";
+            return StashValue.FromObj($"\x1b[{string.Join(";", codes)}m{text}\x1b[0m");
         }, returnType: "string");
 
         // term.strip(text) — Removes all ANSI escape sequences from 'text'. Returns the plain string.
-        ns.Function("strip", [Param("text", "string")], (_, args) =>
+        ns.Function("strip", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var text = Args.String(args, 0, "term.strip");
-            return Regex.Replace(text, @"\x1b\[[0-9;]*m", "");
+            var text = SvArgs.String(args, 0, "term.strip");
+            return StashValue.FromObj(Regex.Replace(text, @"\x1b\[[0-9;]*m", ""));
         }, returnType: "string");
 
         // term.width() — Returns the current terminal column width. Falls back to 80 if unavailable.
-        ns.Function("width", [], (_, _) =>
+        ns.Function("width", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
         {
-            try { return (long)Console.WindowWidth; }
-            catch { return 80L; }
+            try { return StashValue.FromInt((long)Console.WindowWidth); }
+            catch { return StashValue.FromInt(80L); }
         }, returnType: "int");
 
         // term.isInteractive() — Returns true if stdin is connected to an interactive terminal (not redirected).
-        ns.Function("isInteractive", [], (_, _) =>
+        ns.Function("isInteractive", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
         {
-            try { return !Console.IsInputRedirected; }
-            catch { return (object?)false; }
+            try { return StashValue.FromBool(!Console.IsInputRedirected); }
+            catch { return StashValue.False; }
         }, returnType: "bool");
 
         // term.clear() — Clears the terminal screen using ANSI escape sequences. Returns null.
-        ns.Function("clear", [], (ctx, _) =>
+        ns.Function("clear", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
         {
             ctx.Output.Write("\x1b[2J\x1b[H");
-            return null;
+            return StashValue.Null;
         });
 
         // term.table(rows [, headers]) — Formats a two-dimensional array as an ASCII table string.
         //   Optional 'headers' array is rendered as a separate header row with a divider line.
-        ns.Function("table", [Param("rows", "array"), Param("headers", "array")], (_, args) =>
+        ns.Function("table", [Param("rows", "array"), Param("headers", "array")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 1, 2, "term.table");
-            var rows = Args.List(args, 0, "term.table");
-            List<object?>? headers = null;
-            if (args.Count == 2 && args[1] is List<object?> h)
+            if (args.Length < 1 || args.Length > 2) throw new RuntimeError("'term.table' expects 1 or 2 arguments.");
+            var rows = SvArgs.StashList(args, 0, "term.table");
+            List<StashValue>? headers = null;
+            if (args.Length == 2)
             {
-                headers = h;
+                var headersObj = args[1].ToObject();
+                if (headersObj is List<StashValue> h) headers = h;
             }
 
             var allRows = new List<string[]>();
             if (headers != null)
             {
-                allRows.Add(headers.Select(x => RuntimeValues.Stringify(x)).ToArray());
+                allRows.Add(headers.Select(x => RuntimeValues.Stringify(x.ToObject())).ToArray());
             }
 
-            foreach (var row in rows)
+            foreach (StashValue row in rows)
             {
-                if (row is not List<object?> cols)
+                if (row.ToObject() is List<StashValue> cols)
+                {
+                    allRows.Add(cols.Select(c => RuntimeValues.Stringify(c.ToObject())).ToArray());
+                }
+                else
                 {
                     throw new RuntimeError("Each row in 'term.table' must be an array.");
                 }
-
-                allRows.Add(cols.Select(c => RuntimeValues.Stringify(c)).ToArray());
             }
 
             if (allRows.Count == 0)
             {
-                return "";
+                return StashValue.FromObj("");
             }
 
             int colCount = allRows.Max(r => r.Length);
@@ -240,7 +243,7 @@ public static class TermBuiltIns
             }
             sb.Append(separator);
 
-            return sb.ToString();
+            return StashValue.FromObj(sb.ToString());
         }, returnType: "string", isVariadic: true);
 
         return ns.Build();

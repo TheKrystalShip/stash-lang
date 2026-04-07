@@ -32,24 +32,24 @@ public class NetBuiltInsTests : StashTestBase
         var result = Run("let result = net.subnetInfo(@192.168.1.100/24);");
         var info = Assert.IsType<StashInstance>(result);
 
-        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null));
+        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null).ToObject());
         Assert.Equal("192.168.1.0/24", network.ToString());
 
-        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null));
+        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null).ToObject());
         Assert.Equal("192.168.1.255", broadcast.ToString());
 
-        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null));
+        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null).ToObject());
         Assert.Equal("255.255.255.0", mask.ToString());
 
-        var wildcard = Assert.IsType<StashIpAddress>(info.GetField("wildcard", null));
+        var wildcard = Assert.IsType<StashIpAddress>(info.GetField("wildcard", null).ToObject());
         Assert.Equal("0.0.0.255", wildcard.ToString());
 
-        Assert.Equal(254L, info.GetField("hostCount", null));
+        Assert.Equal(254L, info.GetField("hostCount", null).ToObject());
 
-        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null));
+        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null).ToObject());
         Assert.Equal("192.168.1.1", firstHost.ToString());
 
-        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null));
+        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null).ToObject());
         Assert.Equal("192.168.1.254", lastHost.ToString());
     }
 
@@ -59,24 +59,24 @@ public class NetBuiltInsTests : StashTestBase
         var result = Run("let result = net.subnetInfo(@10.0.0.0/8);");
         var info = Assert.IsType<StashInstance>(result);
 
-        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null));
+        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null).ToObject());
         Assert.Equal("10.0.0.0/8", network.ToString());
 
-        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null));
+        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null).ToObject());
         Assert.Equal("10.255.255.255", broadcast.ToString());
 
-        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null));
+        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null).ToObject());
         Assert.Equal("255.0.0.0", mask.ToString());
 
-        var wildcard = Assert.IsType<StashIpAddress>(info.GetField("wildcard", null));
+        var wildcard = Assert.IsType<StashIpAddress>(info.GetField("wildcard", null).ToObject());
         Assert.Equal("0.255.255.255", wildcard.ToString());
 
-        Assert.Equal(16777214L, info.GetField("hostCount", null));
+        Assert.Equal(16777214L, info.GetField("hostCount", null).ToObject());
 
-        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null));
+        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null).ToObject());
         Assert.Equal("10.0.0.1", firstHost.ToString());
 
-        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null));
+        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null).ToObject());
         Assert.Equal("10.255.255.254", lastHost.ToString());
     }
 
@@ -86,24 +86,24 @@ public class NetBuiltInsTests : StashTestBase
         var result = Run("let result = net.subnetInfo(@192.168.1.1/32);");
         var info = Assert.IsType<StashInstance>(result);
 
-        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null));
+        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null).ToObject());
         Assert.Equal("192.168.1.1/32", network.ToString());
 
-        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null));
+        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null).ToObject());
         Assert.Equal("192.168.1.1", broadcast.ToString());
 
-        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null));
+        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null).ToObject());
         Assert.Equal("255.255.255.255", mask.ToString());
 
-        var wildcard = Assert.IsType<StashIpAddress>(info.GetField("wildcard", null));
+        var wildcard = Assert.IsType<StashIpAddress>(info.GetField("wildcard", null).ToObject());
         Assert.Equal("0.0.0.0", wildcard.ToString());
 
-        Assert.Equal(1L, info.GetField("hostCount", null));
+        Assert.Equal(1L, info.GetField("hostCount", null).ToObject());
 
-        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null));
+        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null).ToObject());
         Assert.Equal("192.168.1.1", firstHost.ToString());
 
-        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null));
+        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null).ToObject());
         Assert.Equal("192.168.1.1", lastHost.ToString());
     }
 
@@ -113,12 +113,12 @@ public class NetBuiltInsTests : StashTestBase
         var result = Run("let result = net.subnetInfo(@10.0.0.0/31);");
         var info = Assert.IsType<StashInstance>(result);
 
-        Assert.Equal(2L, info.GetField("hostCount", null));
+        Assert.Equal(2L, info.GetField("hostCount", null).ToObject());
 
-        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null));
+        var firstHost = Assert.IsType<StashIpAddress>(info.GetField("firstHost", null).ToObject());
         Assert.Equal("10.0.0.0", firstHost.ToString());
 
-        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null));
+        var lastHost = Assert.IsType<StashIpAddress>(info.GetField("lastHost", null).ToObject());
         Assert.Equal("10.0.0.1", lastHost.ToString());
     }
 
@@ -128,16 +128,16 @@ public class NetBuiltInsTests : StashTestBase
         var result = Run("let result = net.subnetInfo(@172.16.5.4/16);");
         var info = Assert.IsType<StashInstance>(result);
 
-        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null));
+        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null).ToObject());
         Assert.Equal("172.16.0.0/16", network.ToString());
 
-        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null));
+        var broadcast = Assert.IsType<StashIpAddress>(info.GetField("broadcast", null).ToObject());
         Assert.Equal("172.16.255.255", broadcast.ToString());
 
-        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null));
+        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null).ToObject());
         Assert.Equal("255.255.0.0", mask.ToString());
 
-        Assert.Equal(65534L, info.GetField("hostCount", null));
+        Assert.Equal(65534L, info.GetField("hostCount", null).ToObject());
     }
 
     [Fact]
@@ -152,13 +152,13 @@ public class NetBuiltInsTests : StashTestBase
         var result = Run("let result = net.subnetInfo(@fe80::1/64);");
         var info = Assert.IsType<StashInstance>(result);
 
-        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null));
+        var network = Assert.IsType<StashIpAddress>(info.GetField("network", null).ToObject());
         Assert.Equal("fe80::/64", network.ToString());
 
-        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null));
+        var mask = Assert.IsType<StashIpAddress>(info.GetField("mask", null).ToObject());
         Assert.Equal("ffff:ffff:ffff:ffff::", mask.ToString());
 
-        Assert.Equal(long.MaxValue, info.GetField("hostCount", null));
+        Assert.Equal(long.MaxValue, info.GetField("hostCount", null).ToObject());
     }
 
     // ── net.mask ──────────────────────────────────────────────────────────────

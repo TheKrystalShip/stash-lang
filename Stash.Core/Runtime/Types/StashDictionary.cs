@@ -2,6 +2,7 @@ namespace Stash.Runtime.Types;
 
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Runtime;
 
 /// <summary>
 /// Represents a dictionary — an unordered collection of key-value pairs.
@@ -9,19 +10,19 @@ using System.Linq;
 /// </summary>
 public class StashDictionary
 {
-    private readonly Dictionary<object, object?> _entries = new();
+    private readonly Dictionary<object, StashValue> _entries = new();
 
     public int Count => _entries.Count;
 
-    public void Set(object key, object? value)
+    public void Set(object key, StashValue value)
     {
         ValidateKey(key);
         _entries[key] = value;
     }
 
-    public object? Get(object key)
+    public StashValue Get(object key)
     {
-        return _entries.TryGetValue(key, out var value) ? value : null;
+        return _entries.TryGetValue(key, out var value) ? value : StashValue.Null;
     }
 
     public bool Has(object key)
@@ -39,9 +40,20 @@ public class StashDictionary
         _entries.Clear();
     }
 
-    public List<object?> Keys()
+    public List<StashValue> Keys()
     {
-        var keys = new List<object?>();
+        var keys = new List<StashValue>(_entries.Count);
+        foreach (var key in _entries.Keys)
+        {
+            keys.Add(StashValue.FromObject(key));
+        }
+        return keys;
+    }
+
+    /// <summary>Returns dict keys as raw objects for internal use (dict lookups, serialization).</summary>
+    public List<object> RawKeys()
+    {
+        var keys = new List<object>(_entries.Count);
         foreach (var key in _entries.Keys)
         {
             keys.Add(key);
@@ -49,9 +61,9 @@ public class StashDictionary
         return keys;
     }
 
-    public List<object?> Values()
+    public List<StashValue> Values()
     {
-        var values = new List<object?>();
+        var values = new List<StashValue>(_entries.Count);
         foreach (var value in _entries.Values)
         {
             values.Add(value);
@@ -59,23 +71,23 @@ public class StashDictionary
         return values;
     }
 
-    public List<object?> Pairs()
+    public List<StashValue> Pairs()
     {
-        var pairs = new List<object?>();
+        var pairs = new List<StashValue>(_entries.Count);
         foreach (var kvp in _entries)
         {
-            var fields = new Dictionary<string, object?> { { "key", kvp.Key }, { "value", kvp.Value } };
-            pairs.Add(new StashInstance("Pair", fields));
+            var fields = new Dictionary<string, StashValue> { { "key", StashValue.FromObject(kvp.Key) }, { "value", kvp.Value } };
+            pairs.Add(StashValue.FromObj(new StashInstance("Pair", fields)));
         }
         return pairs;
     }
 
-    public IEnumerable<KeyValuePair<object, object?>> RawEntries()
+    public IEnumerable<KeyValuePair<object, StashValue>> RawEntries()
     {
         return _entries.ToList();
     }
 
-    public IEnumerable<KeyValuePair<object, object?>> GetAllEntries()
+    public IEnumerable<KeyValuePair<object, StashValue>> GetAllEntries()
     {
         return _entries.ToList();
     }

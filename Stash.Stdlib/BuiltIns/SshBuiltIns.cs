@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -50,25 +51,25 @@ public static class SshBuiltIns
         // Options dict: host (string, required), port (int, default 22), username (string, required),
         // password (string), privateKey (string path), passphrase (string).
         // Returns an SshConnection struct.
-        ns.Function("connect", [Param("options", "dict")], (ctx, args) =>
+        ns.Function("connect", [Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var options = Args.Dict(args, 0, "ssh.connect");
+            var options = SvArgs.Dict(args, 0, "ssh.connect");
 
-            var host = options.Get("host") as string
+            var host = options.Get("host").ToObject() as string
                 ?? throw new RuntimeError("ssh.connect: 'host' is required and must be a string.");
-            var username = options.Get("username") as string
+            var username = options.Get("username").ToObject() as string
                 ?? throw new RuntimeError("ssh.connect: 'username' is required and must be a string.");
 
             int port = 22;
-            var portVal = options.Get("port");
+            var portVal = options.Get("port").ToObject();
             if (portVal is long p)
             {
                 port = (int)p;
             }
 
-            var password = options.Get("password") as string;
-            var privateKeyPath = options.Get("privateKey") as string;
-            var passphrase = options.Get("passphrase") as string;
+            var password = options.Get("password").ToObject() as string;
+            var privateKeyPath = options.Get("privateKey").ToObject() as string;
+            var passphrase = options.Get("passphrase").ToObject() as string;
 
             if (password is null && privateKeyPath is null)
             {
@@ -93,14 +94,14 @@ public static class SshBuiltIns
 
                 client.Connect();
 
-                var instance = new StashInstance("SshConnection", new Dictionary<string, object?>
+                var instance = new StashInstance("SshConnection", new Dictionary<string, StashValue>
                 {
-                    ["host"] = host,
-                    ["port"] = (long)port,
-                    ["username"] = username
+                    ["host"] = StashValue.FromObj(host),
+                    ["port"] = StashValue.FromInt((long)port),
+                    ["username"] = StashValue.FromObj(username)
                 });
                 _clients.Add(instance, client);
-                return instance;
+                return StashValue.FromObj(instance);
             }
             catch (SshAuthenticationException e)
             {
@@ -126,15 +127,15 @@ public static class SshBuiltIns
 
         // ssh.exec(conn, command) — Executes a command on the remote host.
         // Returns a CommandResult struct with stdout, stderr, and exitCode.
-        ns.Function("exec", [Param("conn", "SshConnection"), Param("command", "string")], (_, args) =>
+        ns.Function("exec", [Param("conn", "SshConnection"), Param("command", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            SshClient client = GetClient(args[0], "ssh.exec");
-            var command = Args.String(args, 1, "ssh.exec");
+            SshClient client = GetClient(args[0].ToObject(), "ssh.exec");
+            var command = SvArgs.String(args, 1, "ssh.exec");
 
             try
             {
                 SshCommand cmd = client.RunCommand(command);
-                return RuntimeValues.CreateCommandResult(cmd.Result ?? "", cmd.Error ?? "", (long)(cmd.ExitStatus ?? -1));
+                return StashValue.FromObj(RuntimeValues.CreateCommandResult(cmd.Result ?? "", cmd.Error ?? "", (long)(cmd.ExitStatus ?? -1)));
             }
             catch (SshException e)
             {
@@ -144,25 +145,25 @@ public static class SshBuiltIns
 
         // ssh.execAll(conn, commands) — Executes an array of commands sequentially.
         // Returns an array of CommandResult structs.
-        ns.Function("execAll", [Param("conn", "SshConnection"), Param("commands", "array")], (_, args) =>
+        ns.Function("execAll", [Param("conn", "SshConnection"), Param("commands", "array")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            SshClient client = GetClient(args[0], "ssh.execAll");
-            var commands = Args.List(args, 1, "ssh.execAll");
+            SshClient client = GetClient(args[0].ToObject(), "ssh.execAll");
+            var commands = SvArgs.StashList(args, 1, "ssh.execAll");
 
             try
             {
-                var results = new List<object?>();
-                foreach (object? item in commands)
+                var results = new List<StashValue>();
+                foreach (StashValue item in commands)
                 {
-                    if (item is not string cmd)
+                    if (item.ToObject() is not string cmd)
                     {
                         throw new RuntimeError("ssh.execAll: all commands must be strings.");
                     }
 
                     SshCommand sshCmd = client.RunCommand(cmd);
-                    results.Add(RuntimeValues.CreateCommandResult(sshCmd.Result ?? "", sshCmd.Error ?? "", (long)(sshCmd.ExitStatus ?? -1)));
+                    results.Add(StashValue.FromObj(RuntimeValues.CreateCommandResult(sshCmd.Result ?? "", sshCmd.Error ?? "", (long)(sshCmd.ExitStatus ?? -1))));
                 }
-                return results;
+                return StashValue.FromObj(results);
             }
             catch (SshException e)
             {
@@ -173,18 +174,18 @@ public static class SshBuiltIns
         // ssh.shell(conn, commands) — Runs commands through an interactive shell stream.
         // Useful for commands requiring a TTY or stateful sessions (sudo, etc.).
         // Returns the combined shell output as a string.
-        ns.Function("shell", [Param("conn", "SshConnection"), Param("commands", "array")], (_, args) =>
+        ns.Function("shell", [Param("conn", "SshConnection"), Param("commands", "array")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            SshClient client = GetClient(args[0], "ssh.shell");
-            var commands = Args.List(args, 1, "ssh.shell");
+            SshClient client = GetClient(args[0].ToObject(), "ssh.shell");
+            var commands = SvArgs.StashList(args, 1, "ssh.shell");
 
             try
             {
                 using ShellStream stream = client.CreateShellStream("xterm", 80, 24, 800, 600, 4096);
 
-                foreach (object? item in commands)
+                foreach (StashValue item in commands)
                 {
-                    if (item is not string cmd)
+                    if (item.ToObject() is not string cmd)
                     {
                         throw new RuntimeError("ssh.shell: all commands must be strings.");
                     }
@@ -194,7 +195,7 @@ public static class SshBuiltIns
 
                 // Allow time for commands to execute and output to arrive
                 Thread.Sleep(500);
-                return stream.Read();
+                return StashValue.FromObj(stream.Read());
             }
             catch (SshException e)
             {
@@ -203,9 +204,9 @@ public static class SshBuiltIns
         });
 
         // ssh.close(conn) — Disconnects and disposes the SSH connection.
-        ns.Function("close", [Param("conn", "SshConnection")], (_, args) =>
+        ns.Function("close", [Param("conn", "SshConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            SshClient client = GetClient(args[0], "ssh.close");
+            SshClient client = GetClient(args[0].ToObject(), "ssh.close");
 
             try
             {
@@ -220,35 +221,35 @@ public static class SshBuiltIns
                 throw new RuntimeError($"ssh.close: {e.Message}");
             }
 
-            return null;
+            return StashValue.Null;
         });
 
         // ssh.isConnected(conn) — Returns true if the SSH connection is still active.
-        ns.Function("isConnected", [Param("conn", "SshConnection")], (_, args) =>
+        ns.Function("isConnected", [Param("conn", "SshConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            SshClient client = GetClient(args[0], "ssh.isConnected");
-            return client.IsConnected;
+            SshClient client = GetClient(args[0].ToObject(), "ssh.isConnected");
+            return StashValue.FromBool(client.IsConnected);
         });
 
         // ssh.tunnel(conn, options) — Creates a local port forward (SSH tunnel).
         // Options dict: localPort (int, default 0 for auto), remoteHost (string, required), remotePort (int, required).
         // Returns an SshTunnel struct with localPort, remoteHost, and remotePort.
-        ns.Function("tunnel", [Param("conn", "SshConnection"), Param("options", "dict")], (_, args) =>
+        ns.Function("tunnel", [Param("conn", "SshConnection"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            SshClient client = GetClient(args[0], "ssh.tunnel");
-            var options = Args.Dict(args, 1, "ssh.tunnel");
+            SshClient client = GetClient(args[0].ToObject(), "ssh.tunnel");
+            var options = SvArgs.Dict(args, 1, "ssh.tunnel");
 
-            var remoteHost = options.Get("remoteHost") as string
+            var remoteHost = options.Get("remoteHost").ToObject() as string
                 ?? throw new RuntimeError("ssh.tunnel: 'remoteHost' is required and must be a string.");
 
-            var remotePortVal = options.Get("remotePort");
+            var remotePortVal = options.Get("remotePort").ToObject();
             if (remotePortVal is not long remotePort)
             {
                 throw new RuntimeError("ssh.tunnel: 'remotePort' is required and must be an integer.");
             }
 
             uint localPort = 0;
-            var localPortVal = options.Get("localPort");
+            var localPortVal = options.Get("localPort").ToObject();
             if (localPortVal is long lp)
             {
                 localPort = (uint)lp;
@@ -260,15 +261,15 @@ public static class SshBuiltIns
                 client.AddForwardedPort(forward);
                 forward.Start();
 
-                var instance = new StashInstance("SshTunnel", new Dictionary<string, object?>
+                var instance = new StashInstance("SshTunnel", new Dictionary<string, StashValue>
                 {
-                    ["localPort"] = (long)forward.BoundPort,
-                    ["remoteHost"] = remoteHost,
-                    ["remotePort"] = remotePort
+                    ["localPort"] = StashValue.FromInt((long)forward.BoundPort),
+                    ["remoteHost"] = StashValue.FromObj(remoteHost),
+                    ["remotePort"] = StashValue.FromInt(remotePort)
                 });
                 _tunnels.Add(instance, forward);
                 _tunnelClients.Add(instance, client);
-                return instance;
+                return StashValue.FromObj(instance);
             }
             catch (SshException e)
             {
@@ -277,9 +278,9 @@ public static class SshBuiltIns
         });
 
         // ssh.closeTunnel(tunnel) — Closes an SSH tunnel (port forward).
-        ns.Function("closeTunnel", [Param("tunnel", "SshTunnel")], (_, args) =>
+        ns.Function("closeTunnel", [Param("tunnel", "SshTunnel")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var inst = Args.Instance(args, 0, "SshTunnel", "ssh.closeTunnel");
+            var inst = SvArgs.Instance(args, 0, "SshTunnel", "ssh.closeTunnel");
 
             if (!_tunnels.TryGetValue(inst, out ForwardedPortLocal? forward))
             {
@@ -301,7 +302,7 @@ public static class SshBuiltIns
                 throw new RuntimeError($"ssh.closeTunnel: {e.Message}");
             }
 
-            return null;
+            return StashValue.Null;
         });
 
         ns.Struct("SshConnection", [

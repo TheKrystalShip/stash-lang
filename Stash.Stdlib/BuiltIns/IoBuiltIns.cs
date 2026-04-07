@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using Stash.Runtime;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
@@ -13,71 +14,72 @@ public static class IoBuiltIns
     {
         var ns = new NamespaceBuilder("io");
 
-        ns.Function("println", [Param("value")], (ctx, args) =>
+        ns.Function("println", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            if (args.Count > 1)
+            if (args.Length > 1)
             {
                 throw new RuntimeError("'io.println' expects 0 or 1 arguments.");
             }
 
-            string text = args.Count == 1 ? RuntimeValues.Stringify(args[0]) : "";
+            string text = args.Length == 1 ? RuntimeValues.Stringify(args[0].ToObject()) : "";
             ctx.Output.WriteLine(text);
             ctx.NotifyOutput("stdout", text + "\n");
-            return null;
+            return StashValue.Null;
         }, isVariadic: true);
 
-        ns.Function("print", [Param("value")], (ctx, args) =>
+        ns.Function("print", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            string text = RuntimeValues.Stringify(args[0]);
+            string text = RuntimeValues.Stringify(args[0].ToObject());
             ctx.Output.Write(text);
             ctx.NotifyOutput("stdout", text);
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("eprintln", [Param("value")], (ctx, args) =>
+        ns.Function("eprintln", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            string text = RuntimeValues.Stringify(args[0]);
+            string text = RuntimeValues.Stringify(args[0].ToObject());
             ctx.ErrorOutput.WriteLine(text);
             ctx.NotifyOutput("stderr", text + "\n");
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("eprint", [Param("value")], (ctx, args) =>
+        ns.Function("eprint", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            string text = RuntimeValues.Stringify(args[0]);
+            string text = RuntimeValues.Stringify(args[0].ToObject());
             ctx.ErrorOutput.Write(text);
             ctx.NotifyOutput("stderr", text);
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("readLine", [Param("prompt", "string")], (ctx, args) =>
+        ns.Function("readLine", [Param("prompt", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            if (args.Count > 1)
+            if (args.Length > 1)
             {
                 throw new RuntimeError("'io.readLine' expects 0 or 1 arguments.");
             }
 
-            if (args.Count == 1)
+            if (args.Length == 1)
             {
-                string prompt = RuntimeValues.Stringify(args[0]);
+                string prompt = RuntimeValues.Stringify(args[0].ToObject());
                 ctx.Output.Write(prompt);
             }
-            return ctx.Input.ReadLine();
+            var result = ctx.Input.ReadLine();
+            return result is null ? StashValue.Null : StashValue.FromObj(result);
         }, returnType: "string", isVariadic: true);
 
-        ns.Function("confirm", [Param("prompt", "string")], (ctx, args) =>
+        ns.Function("confirm", [Param("prompt", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            string prompt = RuntimeValues.Stringify(args[0]);
+            string prompt = RuntimeValues.Stringify(args[0].ToObject());
             ctx.Output.Write(prompt + " [y/N] ");
             ctx.Output.Flush();
             string? response = ctx.Input.ReadLine();
             if (response == null)
             {
-                return false;
+                return StashValue.FromBool(false);
             }
 
             response = response.Trim().ToLowerInvariant();
-            return response == "y" || response == "yes";
+            return StashValue.FromBool(response == "y" || response == "yes");
         }, returnType: "bool");
 
         return ns.Build();

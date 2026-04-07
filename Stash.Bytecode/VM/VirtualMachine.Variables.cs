@@ -15,13 +15,13 @@ public sealed partial class VirtualMachine
     {
         ushort nameIdx = ReadU16(ref frame);
         string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
-        if (!globals.TryGetValue(name, out object? value))
+        Dictionary<string, StashValue> globals = frame.ModuleGlobals ?? _globals;
+        if (!globals.TryGetValue(name, out StashValue value))
         {
             throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
         }
 
-        Push(StashValue.FromObject(value));
+        Push(value);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -34,8 +34,8 @@ public sealed partial class VirtualMachine
             throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
         }
 
-        Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
-        globals[name] = Pop().ToObject();
+        Dictionary<string, StashValue> globals = frame.ModuleGlobals ?? _globals;
+        globals[name] = Pop();
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -43,7 +43,7 @@ public sealed partial class VirtualMachine
     {
         ushort nameIdx = ReadU16(ref frame);
         string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        _globals[name] = Pop().ToObject();
+        _globals[name] = Pop();
         _constGlobals.Add(name);
     }
 

@@ -3,6 +3,7 @@ namespace Stash.Runtime.Types;
 using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 
 /// <summary>
@@ -12,8 +13,8 @@ public class StashNamespace
 {
     public string Name { get; }
     public bool IsBuiltIn { get; init; }
-    private Dictionary<string, object?>? _mutableMembers = new();
-    private FrozenDictionary<string, object?>? _frozenMembers;
+    private Dictionary<string, StashValue>? _mutableMembers = new();
+    private FrozenDictionary<string, StashValue>? _frozenMembers;
 
     public StashNamespace(string name)
     {
@@ -26,7 +27,7 @@ public class StashNamespace
         {
             throw new InvalidOperationException($"Namespace '{Name}' is frozen and cannot be modified.");
         }
-        _mutableMembers[name] = value;
+        _mutableMembers[name] = StashValue.FromObject(value);
     }
 
     public void Freeze()
@@ -48,16 +49,19 @@ public class StashNamespace
         return _mutableMembers!.ContainsKey(name);
     }
 
-    public object? GetMember(string name, SourceSpan? span)
+    /// <summary>
+    /// Returns the member as a StashValue directly — zero-allocation hot path.
+    /// </summary>
+    public StashValue GetMemberValue(string name, SourceSpan? span)
     {
         if (_frozenMembers is not null)
         {
-            if (_frozenMembers.TryGetValue(name, out var frozenValue))
+            if (_frozenMembers.TryGetValue(name, out StashValue frozenValue))
             {
                 return frozenValue;
             }
         }
-        else if (_mutableMembers!.TryGetValue(name, out var value))
+        else if (_mutableMembers!.TryGetValue(name, out StashValue value))
         {
             return value;
         }
@@ -65,14 +69,25 @@ public class StashNamespace
         throw new RuntimeError($"Namespace '{Name}' has no member '{name}'.", span);
     }
 
+    public object? GetMember(string name, SourceSpan? span)
+    {
+        return GetMemberValue(name, span).ToObject();
+    }
+
+    /// <summary>
+    /// Returns all members as StashValues — avoids FromObject round-trip.
+    /// </summary>
+    public IReadOnlyDictionary<string, StashValue> GetAllMemberValues()
+    {
+        if (_frozenMembers is not null) return _frozenMembers;
+        return _mutableMembers!;
+    }
+
     public IReadOnlyDictionary<string, object?> GetAllMembers()
     {
         if (_frozenMembers is not null)
-        {
-            return _frozenMembers;
-        }
-
-        return _mutableMembers!;
+            return _frozenMembers.ToDictionary(kv => kv.Key, kv => (object?)kv.Value.ToObject());
+        return _mutableMembers!.ToDictionary(kv => kv.Key, kv => (object?)kv.Value.ToObject());
     }
 
     public override string ToString() => $"<namespace {Name}>";

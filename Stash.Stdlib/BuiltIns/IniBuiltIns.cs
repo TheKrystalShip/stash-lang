@@ -19,13 +19,13 @@ public static class IniBuiltIns
         var ns = new NamespaceBuilder("ini");
 
         // ini.parse(string) — Parses an INI-format string into a dict. Section headers become nested dicts.
-        ns.Function("parse", [Param("text", "string")], (_, args) =>
+        ns.Function("parse", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "ini.parse");
+            var s = SvArgs.String(args, 0, "ini.parse");
 
             try
             {
-                return ParseIni(s);
+                return StashValue.FromObj(ParseIni(s));
             }
             catch (Exception e) when (e is not RuntimeError)
             {
@@ -36,11 +36,11 @@ public static class IniBuiltIns
             documentation: "Parses INI-formatted text into a dictionary. Sections become nested dictionaries.\n@param text The INI text to parse\n@return A dictionary representing the INI structure");
 
         // ini.stringify(dict) — Serializes a dict to an INI-format string. Nested dicts become section headers.
-        ns.Function("stringify", [Param("data", "dict")], (_, args) =>
+        ns.Function("stringify", [Param("data", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var dict = Args.Dict(args, 0, "ini.stringify");
+            var dict = SvArgs.Dict(args, 0, "ini.stringify");
 
-            return StringifyIni(dict);
+            return StashValue.FromObj(StringifyIni(dict));
         },
             returnType: "string",
             documentation: "Converts a dictionary to INI-formatted text.\n@param data The dictionary to serialize\n@return The INI text representation");
@@ -82,7 +82,7 @@ public static class IniBuiltIns
                 }
 
                 var sectionDict = new StashDictionary();
-                root.Set(sectionName, sectionDict);
+                root.Set(sectionName, StashValue.FromObj(sectionDict));
                 currentSection = sectionDict;
                 continue;
             }
@@ -104,7 +104,7 @@ public static class IniBuiltIns
 
             var value = CoerceValue(rawValue);
             var target = currentSection ?? root;
-            target.Set(key, value);
+            target.Set(key, StashValue.FromObject(value));
         }
 
         return root;
@@ -155,12 +155,12 @@ public static class IniBuiltIns
         var sb = new StringBuilder();
 
         // Collect global (non-section) keys and section keys separately
-        var globals = new List<KeyValuePair<object, object?>>();
-        var sections = new List<KeyValuePair<object, object?>>();
+        var globals = new List<KeyValuePair<object, StashValue>>();
+        var sections = new List<KeyValuePair<object, StashValue>>();
 
         foreach (var kvp in dict.RawEntries())
         {
-            if (kvp.Value is StashDictionary)
+            if (kvp.Value.AsObj is StashDictionary)
             {
                 sections.Add(kvp);
             }
@@ -174,7 +174,7 @@ public static class IniBuiltIns
         foreach (var kvp in globals)
         {
             var key = kvp.Key.ToString()!;
-            var val = FormatValue(kvp.Value);
+            var val = FormatValue(kvp.Value.ToObject());
             sb.AppendLine($"{key} = {val}");
         }
 
@@ -182,7 +182,7 @@ public static class IniBuiltIns
         foreach (var kvp in sections)
         {
             var sectionName = kvp.Key.ToString()!;
-            var sectionDict = (StashDictionary)kvp.Value!;
+            var sectionDict = (StashDictionary)kvp.Value.AsObj!;
 
             if (sb.Length > 0)
             {
@@ -194,13 +194,13 @@ public static class IniBuiltIns
             foreach (var entry in sectionDict.RawEntries())
             {
                 // Skip nested dicts — INI is flat
-                if (entry.Value is StashDictionary)
+                if (entry.Value.AsObj is StashDictionary)
                 {
                     continue;
                 }
 
                 var key = entry.Key.ToString()!;
-                var val = FormatValue(entry.Value);
+                var val = FormatValue(entry.Value.ToObject());
                 sb.AppendLine($"{key} = {val}");
             }
         }

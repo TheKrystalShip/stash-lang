@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.Text;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -16,42 +17,43 @@ public static class EnvBuiltIns
         var ns = new NamespaceBuilder("env");
         ns.RequiresCapability(StashCapabilities.Environment);
 
-        ns.Function("get", [Param("name", "string")], (_, args) =>
+        ns.Function("get", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "env.get");
+            var name = SvArgs.String(args, 0, "env.get");
 
-            return System.Environment.GetEnvironmentVariable(name);
+            var value = System.Environment.GetEnvironmentVariable(name);
+            return value is null ? StashValue.Null : StashValue.FromObj(value);
         });
 
-        ns.Function("set", [Param("name", "string"), Param("value", "string")], (_, args) =>
+        ns.Function("set", [Param("name", "string"), Param("value", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "env.set");
-            var value = Args.String(args, 1, "env.set");
+            var name = SvArgs.String(args, 0, "env.set");
+            var value = SvArgs.String(args, 1, "env.set");
 
             System.Environment.SetEnvironmentVariable(name, value);
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("has", [Param("name", "string")], (_, args) =>
+        ns.Function("has", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "env.has");
+            var name = SvArgs.String(args, 0, "env.has");
 
-            return (bool)(System.Environment.GetEnvironmentVariable(name) != null);
+            return StashValue.FromBool(System.Environment.GetEnvironmentVariable(name) != null);
         });
 
-        ns.Function("all", [], (_, args) =>
+        ns.Function("all", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             var dict = new StashDictionary();
             foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
             {
-                dict.Set(entry.Key.ToString()!, entry.Value?.ToString());
+                dict.Set(entry.Key.ToString()!, StashValue.FromObject(entry.Value?.ToString()));
             }
-            return dict;
+            return StashValue.FromObj(dict);
         });
 
-        ns.Function("withPrefix", [Param("prefix", "string")], (_, args) =>
+        ns.Function("withPrefix", [Param("prefix", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var prefix = Args.String(args, 0, "env.withPrefix");
+            var prefix = SvArgs.String(args, 0, "env.withPrefix");
 
             var dict = new StashDictionary();
             foreach (System.Collections.DictionaryEntry entry in System.Environment.GetEnvironmentVariables())
@@ -59,73 +61,74 @@ public static class EnvBuiltIns
                 var key = entry.Key.ToString()!;
                 if (key.StartsWith(prefix, System.StringComparison.Ordinal))
                 {
-                    dict.Set(key, entry.Value?.ToString());
+                    dict.Set(key, StashValue.FromObject(entry.Value?.ToString()));
                 }
             }
-            return dict;
+            return StashValue.FromObj(dict);
         });
 
-        ns.Function("remove", [Param("name", "string")], (_, args) =>
+        ns.Function("remove", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "env.remove");
+            var name = SvArgs.String(args, 0, "env.remove");
 
             System.Environment.SetEnvironmentVariable(name, null);
-            return null;
+            return StashValue.Null;
         });
 
-        ns.Function("cwd", [], (_, args) =>
+        ns.Function("cwd", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return System.Environment.CurrentDirectory;
+            return StashValue.FromObj(System.Environment.CurrentDirectory);
         });
 
-        ns.Function("home", [], (_, args) =>
+        ns.Function("home", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+            return StashValue.FromObj(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile));
         });
 
-        ns.Function("hostname", [], (_, args) =>
+        ns.Function("hostname", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return System.Environment.MachineName;
+            return StashValue.FromObj(System.Environment.MachineName);
         });
 
-        ns.Function("user", [], (_, args) =>
+        ns.Function("user", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return System.Environment.UserName;
+            return StashValue.FromObj(System.Environment.UserName);
         });
 
-        ns.Function("os", [], (_, args) =>
+        ns.Function("os", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Linux))
             {
-                return "linux";
+                return StashValue.FromObj("linux");
             }
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
             {
-                return "macos";
+                return StashValue.FromObj("macos");
             }
 
             if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.Windows))
             {
-                return "windows";
+                return StashValue.FromObj("windows");
             }
 
-            return "unknown";
+            return StashValue.FromObj("unknown");
         });
 
-        ns.Function("arch", [], (_, args) =>
+        ns.Function("arch", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant();
+            return StashValue.FromObj(System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant());
         });
 
-        ns.Function("loadFile", [Param("path", "string"), Param("prefix", "string?")], (ctx, args) =>
+        ns.Function("loadFile", [Param("path", "string"), Param("prefix", "string?")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 1, 2, "env.loadFile");
-            var filePath = Args.String(args, 0, "env.loadFile");
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'env.loadFile' expects 1 or 2 arguments.");
+            var filePath = SvArgs.String(args, 0, "env.loadFile");
             var prefix = "";
-            if (args.Count == 2)
+            if (args.Length == 2)
             {
-                prefix = Args.String(args, 1, "env.loadFile");
+                prefix = SvArgs.String(args, 1, "env.loadFile");
             }
 
             filePath = ctx.ExpandTilde(filePath);
@@ -177,12 +180,12 @@ public static class EnvBuiltIns
                 count++;
             }
 
-            return count;
+            return StashValue.FromInt(count);
         }, isVariadic: true);
 
-        ns.Function("saveFile", [Param("path", "string")], (ctx, args) =>
+        ns.Function("saveFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var filePath = Args.String(args, 0, "env.saveFile");
+            var filePath = SvArgs.String(args, 0, "env.saveFile");
 
             filePath = ctx.ExpandTilde(filePath);
 
@@ -220,7 +223,7 @@ public static class EnvBuiltIns
                 throw new RuntimeError("env.saveFile: " + e.Message);
             }
 
-            return null;
+            return StashValue.Null;
         });
 
         return ns.Build();

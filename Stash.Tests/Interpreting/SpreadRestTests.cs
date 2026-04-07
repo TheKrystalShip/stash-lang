@@ -259,8 +259,8 @@ public class SpreadRestTests : StashTestBase
         var result = Run("let d = { a: 1 }; let result = { ...d, b: 2 };");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(2, dict.Count);
-        Assert.Equal(1L, dict.Get("a"));
-        Assert.Equal(2L, dict.Get("b"));
+        Assert.Equal(1L, dict.Get("a").ToObject());
+        Assert.Equal(2L, dict.Get("b").ToObject());
     }
 
     [Fact]
@@ -269,7 +269,7 @@ public class SpreadRestTests : StashTestBase
         var result = Run("let result = { ...{ a: 1 }, ...{ a: 2 } };");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(1, dict.Count);
-        Assert.Equal(2L, dict.Get("a"));
+        Assert.Equal(2L, dict.Get("a").ToObject());
     }
 
     [Fact]
@@ -278,7 +278,7 @@ public class SpreadRestTests : StashTestBase
         var result = Run("let result = { ...{ a: 1 }, a: 2 };");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(1, dict.Count);
-        Assert.Equal(2L, dict.Get("a"));
+        Assert.Equal(2L, dict.Get("a").ToObject());
     }
 
     [Fact]
@@ -287,7 +287,7 @@ public class SpreadRestTests : StashTestBase
         var result = Run("let result = { a: 1, ...{ a: 2 } };");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(1, dict.Count);
-        Assert.Equal(2L, dict.Get("a"));
+        Assert.Equal(2L, dict.Get("a").ToObject());
     }
 
     [Fact]
@@ -296,7 +296,7 @@ public class SpreadRestTests : StashTestBase
         var result = Run("let e = {}; let result = { ...e, k: \"v\" };");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(1, dict.Count);
-        Assert.Equal("v", dict.Get("k"));
+        Assert.Equal("v", dict.Get("k").ToObject());
     }
 
     [Fact]
@@ -305,8 +305,8 @@ public class SpreadRestTests : StashTestBase
         var result = Run("struct S { x } let s = S { x: 1 }; let result = { ...s, y: 2 };");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(2, dict.Count);
-        Assert.Equal(1L, dict.Get("x"));
-        Assert.Equal(2L, dict.Get("y"));
+        Assert.Equal(1L, dict.Get("x").ToObject());
+        Assert.Equal(2L, dict.Get("y").ToObject());
     }
 
     [Fact]
@@ -393,8 +393,8 @@ public class SpreadRestTests : StashTestBase
         var result = Run("let d = { a: 1, b: 2, c: 3 }; let { a, ...rest } = d; let result = rest;");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(2, dict.Count);
-        Assert.Equal(2L, dict.Get("b"));
-        Assert.Equal(3L, dict.Get("c"));
+        Assert.Equal(2L, dict.Get("b").ToObject());
+        Assert.Equal(3L, dict.Get("c").ToObject());
     }
 
     [Fact]
@@ -411,8 +411,8 @@ public class SpreadRestTests : StashTestBase
         var result = Run("let d = { x: 1, y: 2 }; let { ...all } = d; let result = all;");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(2, dict.Count);
-        Assert.Equal(1L, dict.Get("x"));
-        Assert.Equal(2L, dict.Get("y"));
+        Assert.Equal(1L, dict.Get("x").ToObject());
+        Assert.Equal(2L, dict.Get("y").ToObject());
     }
 
     [Fact]
@@ -421,7 +421,7 @@ public class SpreadRestTests : StashTestBase
         var result = Run("struct S { x, y } let s = S { x: 1, y: 2 }; let { x, ...r } = s; let result = r;");
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.Equal(1, dict.Count);
-        Assert.Equal(2L, dict.Get("y"));
+        Assert.Equal(2L, dict.Get("y").ToObject());
     }
 
     [Fact]

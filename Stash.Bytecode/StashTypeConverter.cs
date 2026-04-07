@@ -27,7 +27,7 @@ public static class StashTypeConverter
         var result = new Dictionary<string, object?>();
         foreach (var entry in dict.RawEntries())
         {
-            result[RuntimeValues.Stringify(entry.Key)] = entry.Value;
+            result[RuntimeValues.Stringify(entry.Key)] = entry.Value.ToObject();
         }
         return result;
     }
@@ -40,18 +40,22 @@ public static class StashTypeConverter
             throw new ArgumentException($"Expected a Stash struct instance, got {value?.GetType().Name ?? "null"}.");
         }
 
-        return new Dictionary<string, object?>(instance.GetFields());
+        var result = new Dictionary<string, object?>(instance.GetFields().Count);
+        foreach (var kvp in instance.GetFields())
+        {
+            result[kvp.Key] = kvp.Value.ToObject();
+        }
+        return result;
     }
 
     /// <summary>Converts a Stash array to a .NET list.</summary>
-    public static List<object?> ToList(object? value)
+    public static List<StashValue> ToList(object? value)
     {
-        if (value is not List<object?> list)
+        if (value is List<StashValue> svList)
         {
-            throw new ArgumentException($"Expected a Stash array, got {value?.GetType().Name ?? "null"}.");
+            return new List<StashValue>(svList);
         }
-
-        return new List<object?>(list);
+        throw new ArgumentException($"Expected a Stash array, got {value?.GetType().Name ?? "null"}.");
     }
 
     /// <summary>Creates a Stash dictionary from a .NET dictionary.</summary>
@@ -60,7 +64,7 @@ public static class StashTypeConverter
         var dict = new StashDictionary();
         foreach (var kvp in values)
         {
-            dict.Set(kvp.Key, kvp.Value);
+            dict.Set(kvp.Key, StashValue.FromObject(kvp.Value));
         }
         return dict;
     }

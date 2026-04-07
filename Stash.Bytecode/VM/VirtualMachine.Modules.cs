@@ -16,7 +16,7 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed partial class VirtualMachine
 {
-    private Dictionary<string, object?> LoadModule(string modulePath, SourceSpan? span)
+    private Dictionary<string, StashValue> LoadModule(string modulePath, SourceSpan? span)
     {
         // Use the context's current file, or fall back to the span's source file
         // (populated when source is compiled with a real file path, e.g. via RunWithFile).
@@ -58,7 +58,7 @@ public sealed partial class VirtualMachine
             resolvedPath += ".stash";
         }
 
-        if (ModuleCache.TryGetValue(resolvedPath, out Dictionary<string, object?>? cached))
+        if (ModuleCache.TryGetValue(resolvedPath, out Dictionary<string, StashValue>? cached))
         {
             return cached;
         }
@@ -67,7 +67,7 @@ public sealed partial class VirtualMachine
         lock (moduleLock)
         {
             // Double-check after acquiring lock
-            if (ModuleCache.TryGetValue(resolvedPath, out Dictionary<string, object?>? cached2))
+            if (ModuleCache.TryGetValue(resolvedPath, out Dictionary<string, StashValue>? cached2))
             {
                 return cached2;
             }
@@ -114,7 +114,7 @@ public sealed partial class VirtualMachine
                     throw new RuntimeError($"Cannot find module '{modulePath}'.", span);
                 }
 
-                var moduleGlobals = new Dictionary<string, object?>(_globals);
+                var moduleGlobals = new Dictionary<string, StashValue>(_globals);
                 var moduleVM = new VirtualMachine(moduleGlobals, _ct)
                 {
                     _moduleLoader = _moduleLoader,
@@ -307,13 +307,13 @@ public sealed partial class VirtualMachine
             ? mp
             : throw new RuntimeError("Module path must be a string.", span);
 
-        Dictionary<string, object?> moduleEnv = LoadModule(modulePath, span);
+        Dictionary<string, StashValue> moduleEnv = LoadModule(modulePath, span);
 
         foreach (string importName in importMeta.Names)
         {
-            if (moduleEnv.TryGetValue(importName, out object? importedValue))
+            if (moduleEnv.TryGetValue(importName, out StashValue importedValue))
             {
-                Push(StashValue.FromObject(importedValue));
+                Push(importedValue);
             }
             else
             {
@@ -333,17 +333,18 @@ public sealed partial class VirtualMachine
             ? mp
             : throw new RuntimeError("Module path must be a string.", span);
 
-        Dictionary<string, object?> moduleEnv = LoadModule(modulePath, span);
+        Dictionary<string, StashValue> moduleEnv = LoadModule(modulePath, span);
 
         var ns = new StashNamespace(importAsMeta.AliasName);
-        foreach (KeyValuePair<string, object?> kvp in moduleEnv)
+        foreach (KeyValuePair<string, StashValue> kvp in moduleEnv)
         {
-            if (kvp.Value is StashNamespace sn && sn.IsBuiltIn)
+            object? val = kvp.Value.ToObject();
+            if (val is StashNamespace sn && sn.IsBuiltIn)
             {
                 continue; // skip inherited built-in namespaces
             }
 
-            ns.Define(kvp.Key, kvp.Value);
+            ns.Define(kvp.Key, val);
         }
         ns.Freeze();
         Push(StashValue.FromObj(ns));

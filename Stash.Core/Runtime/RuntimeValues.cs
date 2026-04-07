@@ -103,17 +103,16 @@ public static class RuntimeValues
             return ns.ToString();
         }
 
-        if (value is List<object?> list)
+        if (value is List<StashValue> svList)
         {
             var elements = new StringBuilder("[");
-            for (int i = 0; i < list.Count; i++)
+            for (int i = 0; i < svList.Count; i++)
             {
                 if (i > 0)
                 {
                     elements.Append(", ");
                 }
-
-                elements.Append(Stringify(list[i]));
+                elements.Append(Stringify(svList[i].ToObject()));
             }
             elements.Append(']');
             return elements.ToString();
@@ -123,7 +122,7 @@ public static class RuntimeValues
         {
             var sb = new StringBuilder("{");
             bool first = true;
-            foreach (var key in dict.Keys())
+            foreach (StashValue key in dict.Keys())
             {
                 if (!first)
                 {
@@ -131,9 +130,10 @@ public static class RuntimeValues
                 }
 
                 first = false;
-                sb.Append(Stringify(key));
+                object? rawKey = key.ToObject();
+                sb.Append(Stringify(rawKey));
                 sb.Append(": ");
-                sb.Append(Stringify(dict.Get(key!)));
+                sb.Append(Stringify(dict.Get(rawKey!).ToObject()));
             }
             sb.Append('}');
             return sb.ToString();
@@ -217,21 +217,32 @@ public static class RuntimeValues
     }
 
     /// <summary>
+    /// Converts a string into an enumerable of StashValues (single-character strings).
+    /// </summary>
+    public static IEnumerable<StashValue> StringToStashValues(string str)
+    {
+        foreach (char c in str)
+        {
+            yield return StashValue.FromObj(c.ToString());
+        }
+    }
+
+    /// <summary>
     /// Implements string padding (padStart / padEnd).
     /// </summary>
-    public static string PadString(string funcName, List<object?> args, bool padLeft)
+    public static string PadString(string funcName, List<StashValue> args, bool padLeft)
     {
         if (args.Count < 2 || args.Count > 3)
         {
             throw new RuntimeError($"'{funcName}' requires 2 or 3 arguments.");
         }
 
-        if (args[0] is not string s)
+        if (args[0].ToObject() is not string s)
         {
             throw new RuntimeError($"First argument to '{funcName}' must be a string.");
         }
 
-        if (args[1] is not long length)
+        if (args[1].ToObject() is not long length)
         {
             throw new RuntimeError($"Second argument to '{funcName}' must be an integer.");
         }
@@ -239,7 +250,7 @@ public static class RuntimeValues
         char fillChar = ' ';
         if (args.Count == 3)
         {
-            if (args[2] is not string fill || fill.Length != 1)
+            if (args[2].ToObject() is not string fill || fill.Length != 1)
             {
                 throw new RuntimeError($"Third argument to '{funcName}' must be a single-character string.");
             }
@@ -254,11 +265,11 @@ public static class RuntimeValues
     /// </summary>
     public static StashInstance CreateCommandResult(string stdout, string stderr, long exitCode)
     {
-        return new StashInstance("CommandResult", new Dictionary<string, object?>
+        return new StashInstance("CommandResult", new Dictionary<string, StashValue>
         {
-            ["stdout"] = stdout,
-            ["stderr"] = stderr,
-            ["exitCode"] = exitCode
+            ["stdout"] = StashValue.FromObj(stdout),
+            ["stderr"] = StashValue.FromObj(stderr),
+            ["exitCode"] = StashValue.FromInt(exitCode)
         }) { StringifyField = "stdout" };
     }
 
@@ -288,7 +299,7 @@ public static class RuntimeValues
             BuiltInFunction => value,       // Stateless delegate wrapper
 
             // Mutable collections — deep clone
-            List<object?> list => DeepCopyList(list),
+            List<StashValue> svList => DeepCopyStashList(svList),
             StashDictionary dict => DeepCopyDictionary(dict),
             StashInstance instance => DeepCopyInstance(instance),
 
@@ -303,12 +314,13 @@ public static class RuntimeValues
         };
     }
 
-    private static List<object?> DeepCopyList(List<object?> list)
+    private static List<StashValue> DeepCopyStashList(List<StashValue> list)
     {
-        var copy = new List<object?>(list.Count);
+        var copy = new List<StashValue>(list.Count);
         for (int i = 0; i < list.Count; i++)
         {
-            copy.Add(DeepCopy(list[i]));
+            object? deepCopied = DeepCopy(list[i].ToObject());
+            copy.Add(StashValue.FromObject(deepCopied));
         }
         return copy;
     }
@@ -318,17 +330,17 @@ public static class RuntimeValues
         var copy = new StashDictionary();
         foreach (var (key, val) in dict.GetAllEntries())
         {
-            copy.Set(key, DeepCopy(val));
+            copy.Set(key, StashValue.FromObject(DeepCopy(val.ToObject())));
         }
         return copy;
     }
 
     private static StashInstance DeepCopyInstance(StashInstance instance)
     {
-        var fieldsCopy = new Dictionary<string, object?>();
+        var fieldsCopy = new Dictionary<string, StashValue>();
         foreach (var (name, val) in instance.GetAllFields())
         {
-            fieldsCopy[name] = DeepCopy(val);
+            fieldsCopy[name] = StashValue.FromObject(DeepCopy(val.ToObject()));
         }
         return new StashInstance(instance.TypeName, fieldsCopy, instance.Struct);
     }

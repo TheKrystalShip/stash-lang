@@ -696,7 +696,7 @@ public class Program
     }
 
     /// <summary>Creates built-in globals dictionary for the bytecode VM.</summary>
-    private static Dictionary<string, object?> CreateVMGlobals()
+    private static Dictionary<string, StashValue> CreateVMGlobals()
     {
         return StdlibDefinitions.CreateVMGlobals(StashCapabilities.All);
     }

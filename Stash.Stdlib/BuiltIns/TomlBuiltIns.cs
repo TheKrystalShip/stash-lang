@@ -8,6 +8,7 @@ using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
+using System;
 
 /// <summary>
 /// Registers the <c>toml</c> namespace built-in functions for TOML serialization and deserialization.
@@ -37,19 +38,19 @@ public static class TomlBuiltIns
         var ns = new NamespaceBuilder("toml");
 
         // toml.parse(string) — Parses a TOML string into a Stash dict.
-        ns.Function("parse", [Param("text", "string")], (_, args) =>
+        ns.Function("parse", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "toml.parse");
+            var s = SvArgs.String(args, 0, "toml.parse");
 
             try
             {
                 var table = TomlSerializer.Deserialize<TomlTable>(s);
                 if (table is null)
                 {
-                    return new StashDictionary();
+                    return StashValue.FromObj(new StashDictionary());
                 }
 
-                return ConvertTable(table);
+                return StashValue.FromObj(ConvertTable(table));
             }
             catch (TomlException e)
             {
@@ -60,14 +61,14 @@ public static class TomlBuiltIns
             documentation: "Parses a TOML string into a Stash dictionary.\n@param text The TOML string\n@return Parsed dictionary");
 
         // toml.stringify(dict) — Serializes a Stash dict to a TOML string.
-        ns.Function("stringify", [Param("data", "dict")], (_, args) =>
+        ns.Function("stringify", [Param("data", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var dict = Args.Dict(args, 0, "toml.stringify");
+            var dict = SvArgs.Dict(args, 0, "toml.stringify");
 
             try
             {
                 var table = ConvertDictToTomlTable(dict);
-                return TomlSerializer.Serialize<TomlTable>(table);
+                return StashValue.FromObj(TomlSerializer.Serialize<TomlTable>(table));
             }
             catch (TomlException e)
             {
@@ -78,18 +79,18 @@ public static class TomlBuiltIns
             documentation: "Serializes a Stash dictionary to a TOML string.\n@param data The dictionary to serialize\n@return TOML string");
 
         // toml.valid(string) — Returns true if the string is valid TOML, false otherwise.
-        ns.Function("valid", [Param("text", "string")], (_, args) =>
+        ns.Function("valid", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "toml.valid");
+            var s = SvArgs.String(args, 0, "toml.valid");
 
             try
             {
                 TomlSerializer.Deserialize<TomlTable>(s);
-                return (object?)true;
+                return StashValue.True;
             }
             catch (TomlException)
             {
-                return (object?)false;
+                return StashValue.False;
             }
         },
             returnType: "bool",
@@ -129,7 +130,7 @@ public static class TomlBuiltIns
         var dict = new StashDictionary();
         foreach (var kvp in table)
         {
-            dict.Set(kvp.Key, ConvertValue(kvp.Value));
+            dict.Set(kvp.Key, StashValue.FromObject(ConvertValue(kvp.Value)));
         }
 
         return dict;
@@ -157,29 +158,29 @@ public static class TomlBuiltIns
         };
     }
 
-    /// <summary>Converts a <see cref="TomlArray"/> to a <c>List&lt;object?&gt;</c>.</summary>
+    /// <summary>Converts a <see cref="TomlArray"/> to a <c>List&lt;StashValue&gt;</c>.</summary>
     /// <param name="array">The TOML array to convert.</param>
     /// <returns>A list of converted Stash values.</returns>
-    private static List<object?> ConvertArray(TomlArray array)
+    private static List<StashValue> ConvertArray(TomlArray array)
     {
-        var list = new List<object?>();
+        var list = new List<StashValue>();
         foreach (var item in array)
         {
-            list.Add(ConvertValue(item));
+            list.Add(StashValue.FromObject(ConvertValue(item)));
         }
 
         return list;
     }
 
-    /// <summary>Converts a <see cref="TomlTableArray"/> to a <c>List&lt;object?&gt;</c> of <see cref="StashDictionary"/> instances.</summary>
+    /// <summary>Converts a <see cref="TomlTableArray"/> to a <c>List&lt;StashValue&gt;</c> of <see cref="StashDictionary"/> instances.</summary>
     /// <param name="tableArray">The TOML table array to convert.</param>
     /// <returns>A list of <see cref="StashDictionary"/> values, one per TOML table.</returns>
-    private static List<object?> ConvertTableArray(TomlTableArray tableArray)
+    private static List<StashValue> ConvertTableArray(TomlTableArray tableArray)
     {
-        var list = new List<object?>();
+        var list = new List<StashValue>();
         foreach (var table in tableArray)
         {
-            list.Add(ConvertTable(table));
+            list.Add(StashValue.FromObject(ConvertTable(table)));
         }
 
         return list;
@@ -193,13 +194,13 @@ public static class TomlBuiltIns
         var table = new TomlTable();
         foreach (var kvp in dict.RawEntries())
         {
-            if (kvp.Value is null)
+            if (kvp.Value.IsNull)
             {
                 continue;
             }
 
             string key = kvp.Key.ToString()!;
-            object? converted = ConvertStashValue(kvp.Value);
+            object? converted = ConvertStashValue(kvp.Value.ToObject());
             if (converted is not null)
             {
                 table[key] = converted;
@@ -217,12 +218,7 @@ public static class TomlBuiltIns
         var table = new TomlTable();
         foreach (var kvp in inst.GetFields())
         {
-            if (kvp.Value is null)
-            {
-                continue;
-            }
-
-            object? converted = ConvertStashValue(kvp.Value);
+            object? converted = ConvertStashValue(kvp.Value.ToObject());
             if (converted is not null)
             {
                 table[kvp.Key] = converted;
@@ -242,7 +238,7 @@ public static class TomlBuiltIns
             null => null,
             StashDictionary dict => ConvertDictToTomlTable(dict),
             StashInstance inst => ConvertInstanceToTomlTable(inst),
-            List<object?> list => ConvertListToToml(list),
+            List<StashValue> list => ConvertListToToml(list),
             long l => l,
             double d => d,
             string s => s,
@@ -252,13 +248,13 @@ public static class TomlBuiltIns
     }
 
     /// <summary>
-    /// Converts a <c>List&lt;object?&gt;</c> to either a <see cref="TomlTableArray"/> if every
+    /// Converts a <c>List&lt;StashValue&gt;</c> to either a <see cref="TomlTableArray"/> if every
     /// non-null element is a dict or struct instance, or a <see cref="TomlArray"/> otherwise.
     /// Null elements are silently omitted.
     /// </summary>
     /// <param name="list">The Stash list to convert.</param>
     /// <returns>A <see cref="TomlTableArray"/> or <see cref="TomlArray"/>.</returns>
-    private static object ConvertListToToml(List<object?> list)
+    private static object ConvertListToToml(List<StashValue> list)
     {
         if (list.Count == 0)
         {
@@ -266,14 +262,15 @@ public static class TomlBuiltIns
         }
 
         bool allTables = true;
-        foreach (var item in list)
+        foreach (StashValue item in list)
         {
-            if (item is null)
+            var obj = item.ToObject();
+            if (obj is null)
             {
                 continue;
             }
 
-            if (item is not StashDictionary && item is not StashInstance)
+            if (obj is not StashDictionary && obj is not StashInstance)
             {
                 allTables = false;
                 break;
@@ -283,18 +280,19 @@ public static class TomlBuiltIns
         if (allTables)
         {
             var tableArray = new TomlTableArray();
-            foreach (var item in list)
+            foreach (StashValue item in list)
             {
-                if (item is null)
+                var obj = item.ToObject();
+                if (obj is null)
                 {
                     continue;
                 }
 
-                if (item is StashDictionary dict)
+                if (obj is StashDictionary dict)
                 {
                     tableArray.Add(ConvertDictToTomlTable(dict));
                 }
-                else if (item is StashInstance inst)
+                else if (obj is StashInstance inst)
                 {
                     tableArray.Add(ConvertInstanceToTomlTable(inst));
                 }
@@ -305,14 +303,15 @@ public static class TomlBuiltIns
         else
         {
             var tomlArray = new TomlArray();
-            foreach (var item in list)
+            foreach (StashValue item in list)
             {
-                if (item is null)
+                var obj = item.ToObject();
+                if (obj is null)
                 {
                     continue;
                 }
 
-                var converted = ConvertStashValue(item);
+                var converted = ConvertStashValue(obj);
                 if (converted is not null)
                 {
                     tomlArray.Add(converted);

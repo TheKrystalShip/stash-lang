@@ -32,15 +32,15 @@ public static class YamlBuiltIns
         var ns = new NamespaceBuilder("yaml");
 
         // yaml.parse(string) — Parses a YAML string into a Stash value (dict, array, string, number, bool, or null).
-        ns.Function("parse", [Param("text", "string")], (_, args) =>
+        ns.Function("parse", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "yaml.parse");
+            var s = SvArgs.String(args, 0, "yaml.parse");
 
             try
             {
                 var opts = new YamlSerializerOptions();
                 object? raw = YamlSerializer.Deserialize<object>(s, opts);
-                return ConvertFromYaml(raw);
+                return StashValue.FromObject(ConvertFromYaml(raw));
             }
             catch (Exception e) when (e is not RuntimeError)
             {
@@ -51,13 +51,13 @@ public static class YamlBuiltIns
             documentation: "Parses a YAML string into a Stash value (dict, array, or scalar).\n@param text The YAML string\n@return Parsed value");
 
         // yaml.stringify(value) — Serializes a Stash value to a YAML string.
-        ns.Function("stringify", [Param("value", "any")], (_, args) =>
+        ns.Function("stringify", [Param("value", "any")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             try
             {
-                object? native = ConvertToYaml(args[0]);
+                object? native = ConvertToYaml(args[0].ToObject());
                 var opts = new YamlSerializerOptions();
-                return YamlSerializer.Serialize(native, native?.GetType() ?? typeof(object), opts);
+                return StashValue.FromObj(YamlSerializer.Serialize(native, native?.GetType() ?? typeof(object), opts));
             }
             catch (SharpYaml.YamlException e)
             {
@@ -68,19 +68,19 @@ public static class YamlBuiltIns
             documentation: "Serializes a Stash value to a YAML string.\n@param value The value to serialize\n@return YAML string");
 
         // yaml.valid(string) — Returns true if the given string is valid YAML, false otherwise.
-        ns.Function("valid", [Param("text", "string")], (_, args) =>
+        ns.Function("valid", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "yaml.valid");
+            var s = SvArgs.String(args, 0, "yaml.valid");
 
             try
             {
                 var opts = new YamlSerializerOptions();
                 YamlSerializer.Deserialize<object>(s, opts);
-                return (object?)true;
+                return StashValue.True;
             }
             catch (SharpYaml.YamlException)
             {
-                return (object?)false;
+                return StashValue.False;
             }
         },
             returnType: "bool",
@@ -140,21 +140,21 @@ public static class YamlBuiltIns
         var dict = new StashDictionary();
         foreach (var kvp in map)
         {
-            dict.Set(kvp.Key, ConvertFromYaml(kvp.Value));
+            dict.Set(kvp.Key, StashValue.FromObject(ConvertFromYaml(kvp.Value)));
         }
 
         return dict;
     }
 
-    /// <summary>Converts a SharpYaml sequence (<c>List&lt;object&gt;</c>) to a <c>List&lt;object?&gt;</c>.</summary>
+    /// <summary>Converts a SharpYaml sequence (<c>List&lt;object&gt;</c>) to a <c>List&lt;StashValue&gt;</c>.</summary>
     /// <param name="list">The raw sequence list from SharpYaml deserialization.</param>
     /// <returns>A list of recursively converted Stash values.</returns>
-    private static List<object?> ConvertSequence(List<object> list)
+    private static List<StashValue> ConvertSequence(List<object> list)
     {
-        var result = new List<object?>(list.Count);
+        var result = new List<StashValue>(list.Count);
         foreach (object item in list)
         {
-            result.Add(ConvertFromYaml(item));
+            result.Add(StashValue.FromObject(ConvertFromYaml(item)));
         }
 
         return result;
@@ -175,7 +175,7 @@ public static class YamlBuiltIns
             long l => l,
             double d => d,
             string s => s,
-            List<object?> list => ConvertListToYaml(list),
+            List<StashValue> list => ConvertListToYaml(list),
             StashDictionary dict => ConvertDictToYaml(dict),
             StashInstance inst => ConvertInstanceToYaml(inst),
             _ => throw new RuntimeError($"yaml.stringify: cannot serialize value of type {value.GetType().Name}.")
@@ -185,12 +185,12 @@ public static class YamlBuiltIns
     /// <summary>Converts a Stash array to a <c>List&lt;object?&gt;</c> with recursively converted elements.</summary>
     /// <param name="list">The Stash array to convert.</param>
     /// <returns>A list of plain .NET values.</returns>
-    private static List<object?> ConvertListToYaml(List<object?> list)
+    private static List<object?> ConvertListToYaml(List<StashValue> list)
     {
         var result = new List<object?>(list.Count);
-        foreach (object? item in list)
+        foreach (StashValue item in list)
         {
-            result.Add(ConvertToYaml(item));
+            result.Add(ConvertToYaml(item.ToObject()));
         }
 
         return result;
@@ -205,7 +205,7 @@ public static class YamlBuiltIns
         foreach (var entry in dict.RawEntries())
         {
             string keyStr = entry.Key?.ToString() ?? "null";
-            result[keyStr] = ConvertToYaml(entry.Value);
+            result[keyStr] = ConvertToYaml(entry.Value.ToObject());
         }
 
         return result;
@@ -219,7 +219,7 @@ public static class YamlBuiltIns
         var result = new Dictionary<string, object?>();
         foreach (var kvp in inst.GetFields())
         {
-            result[kvp.Key] = ConvertToYaml(kvp.Value);
+            result[kvp.Key] = ConvertToYaml(kvp.Value.ToObject());
         }
 
         return result;

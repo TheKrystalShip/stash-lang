@@ -24,7 +24,7 @@ internal sealed class VMFunction : IStashCallable
     /// Used by <c>LoadGlobal</c> to resolve module-level definitions (enums, functions, etc.)
     /// when the function is called from a different module's VM.
     /// </summary>
-    public Dictionary<string, object?>? ModuleGlobals { get; set; }
+    public Dictionary<string, StashValue>? ModuleGlobals { get; set; }
 
     public VMFunction(Chunk chunk, Upvalue[] upvalues)
     {

@@ -604,7 +604,7 @@ public class InterpreterTests : StashTestBase
         SemanticResolver.Resolve(stmts);
         var chunk = Compiler.Compile(stmts);
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        return vm.Execute(chunk);
+        return Normalize(vm.Execute(chunk));
     }
 
     private static void RunExpectingError(string source)
@@ -3038,7 +3038,7 @@ public class InterpreterTests : StashTestBase
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
         vm.CurrentFile = filePath;
         vm.ModuleLoader = (modulePath, _) => LoadModuleChunk(modulePath);
-        return vm.Execute(chunk);
+        return Normalize(vm.Execute(chunk));
     }
 
     private static RuntimeError RunExpectingErrorWithFile(string source, string filePath)

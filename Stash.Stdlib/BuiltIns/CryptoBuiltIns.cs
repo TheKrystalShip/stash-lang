@@ -15,53 +15,53 @@ public static class CryptoBuiltIns
     {
         var ns = new NamespaceBuilder("crypto");
 
-        ns.Function("md5", [Param("data", "string")], (_, args) =>
+        ns.Function("md5", [Param("data", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "crypto.md5");
+            var s = SvArgs.String(args, 0, "crypto.md5");
 
-            return HashToHex(MD5.HashData(Encoding.UTF8.GetBytes(s)));
+            return StashValue.FromObj(HashToHex(MD5.HashData(Encoding.UTF8.GetBytes(s))));
         },
             returnType: "string",
             documentation: "Computes the MD5 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string");
 
         // crypto.sha1(input) — Returns the SHA-1 hash of the input string as a lowercase hex string.
-        ns.Function("sha1", [Param("data", "string")], (_, args) =>
+        ns.Function("sha1", [Param("data", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
             {
-                var s = Args.String(args, 0, "crypto.sha1");
+                var s = SvArgs.String(args, 0, "crypto.sha1");
 
-                return HashToHex(SHA1.HashData(Encoding.UTF8.GetBytes(s)));
+                return StashValue.FromObj(HashToHex(SHA1.HashData(Encoding.UTF8.GetBytes(s))));
             },
             returnType: "string",
             documentation: "Computes the SHA-1 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string"
         );
 
         // crypto.sha256(input) — Returns the SHA-256 hash of the input string as a lowercase hex string.
-        ns.Function("sha256", [Param("data", "string")], (_, args) =>
+        ns.Function("sha256", [Param("data", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "crypto.sha256");
+            var s = SvArgs.String(args, 0, "crypto.sha256");
 
-            return HashToHex(SHA256.HashData(Encoding.UTF8.GetBytes(s)));
+            return StashValue.FromObj(HashToHex(SHA256.HashData(Encoding.UTF8.GetBytes(s))));
         },
             returnType: "string",
             documentation: "Computes the SHA-256 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string");
 
         // crypto.sha512(input) — Returns the SHA-512 hash of the input string as a lowercase hex string.
-        ns.Function("sha512", [Param("data", "string")], (_, args) =>
+        ns.Function("sha512", [Param("data", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var s = Args.String(args, 0, "crypto.sha512");
+            var s = SvArgs.String(args, 0, "crypto.sha512");
 
-            return HashToHex(SHA512.HashData(Encoding.UTF8.GetBytes(s)));
+            return StashValue.FromObj(HashToHex(SHA512.HashData(Encoding.UTF8.GetBytes(s))));
         },
             returnType: "string",
             documentation: "Computes the SHA-512 hash of a string.\n@param data The string to hash\n@return The hash as a lowercase hexadecimal string");
 
         // crypto.hmac(algo, key, data) — Computes the HMAC of 'data' using 'key' with the specified algorithm.
         //   'algo' must be one of: "md5", "sha1", "sha256", "sha512". Returns a lowercase hex string.
-        ns.Function("hmac", [Param("algo", "string"), Param("key", "string"), Param("data", "string")], (_, args) =>
+        ns.Function("hmac", [Param("algo", "string"), Param("key", "string"), Param("data", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var algo = Args.String(args, 0, "crypto.hmac");
-            var key = Args.String(args, 1, "crypto.hmac");
-            var data = Args.String(args, 2, "crypto.hmac");
+            var algo = SvArgs.String(args, 0, "crypto.hmac");
+            var key = SvArgs.String(args, 1, "crypto.hmac");
+            var data = SvArgs.String(args, 2, "crypto.hmac");
 
             var keyBytes = Encoding.UTF8.GetBytes(key);
             var dataBytes = Encoding.UTF8.GetBytes(data);
@@ -76,22 +76,22 @@ public static class CryptoBuiltIns
             };
             byte[] hash = hmac.ComputeHash(dataBytes);
 
-            return HashToHex(hash);
+            return StashValue.FromObj(HashToHex(hash));
         },
             returnType: "string",
             documentation: "Computes an HMAC signature using the specified algorithm.\n@param algo The hash algorithm: \"md5\", \"sha1\", \"sha256\", or \"sha512\"\n@param key The secret key\n@param data The data to sign\n@return The HMAC as a lowercase hexadecimal string");
 
         // crypto.hashFile(path [, algo]) — Hashes the contents of a file using the specified algorithm (default: "sha256").
         //   Returns the hash as a lowercase hex string.
-        ns.Function("hashFile", [Param("path", "string"), Param("algo", "string")], (_, args) =>
+        ns.Function("hashFile", [Param("path", "string"), Param("algo", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 1, 2, "crypto.hashFile");
-            var path = Args.String(args, 0, "crypto.hashFile");
+            if (args.Length < 1 || args.Length > 2) throw new RuntimeError("'crypto.hashFile' expects 1 or 2 arguments.");
+            var path = SvArgs.String(args, 0, "crypto.hashFile");
 
             var algo = "sha256";
-            if (args.Count == 2)
+            if (args.Length == 2)
             {
-                algo = Args.String(args, 1, "crypto.hashFile");
+                algo = SvArgs.String(args, 1, "crypto.hashFile");
             }
 
             byte[] fileBytes;
@@ -108,24 +108,24 @@ public static class CryptoBuiltIns
                 throw new RuntimeError($"Error reading file '{path}': {ex.Message}");
             }
 
-            return HashToHex(ComputeHash(algo, fileBytes));
+            return StashValue.FromObj(HashToHex(ComputeHash(algo, fileBytes)));
         },
             returnType: "string",
             isVariadic: true,
             documentation: "Computes the hash of a file's contents.\n@param path The file path to hash\n@param algo Optional hash algorithm (default: \"sha256\"). One of \"md5\", \"sha1\", \"sha256\", \"sha512\"\n@return The hash as a lowercase hexadecimal string");
 
         // crypto.uuid() — Generates and returns a new random UUID (version 4) as a lowercase hyphenated string.
-        ns.Function("uuid", [], (_, _) =>
+        ns.Function("uuid", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
         {
-            return Guid.NewGuid().ToString();
+            return StashValue.FromObj(Guid.NewGuid().ToString());
         },
             returnType: "string",
             documentation: "Generates a random UUID v4 string.\n@return A UUID string in standard format (e.g., \"550e8400-e29b-41d4-a716-446655440000\")");
 
         // crypto.randomBytes(n) — Generates 'n' cryptographically secure random bytes and returns them as a lowercase hex string.
-        ns.Function("randomBytes", [Param("n", "int")], (_, args) =>
+        ns.Function("randomBytes", [Param("n", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var n = Args.Long(args, 0, "crypto.randomBytes");
+            var n = SvArgs.Long(args, 0, "crypto.randomBytes");
 
             if (n <= 0)
             {
@@ -138,7 +138,7 @@ public static class CryptoBuiltIns
             }
 
             var bytes = RandomNumberGenerator.GetBytes((int)n);
-            return HashToHex(bytes);
+            return StashValue.FromObj(HashToHex(bytes));
         },
             returnType: "string",
             documentation: "Generates cryptographically secure random bytes.\n@param n The number of random bytes to generate (must be > 0)\n@return The random bytes as a lowercase hexadecimal string");

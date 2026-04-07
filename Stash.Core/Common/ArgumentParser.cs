@@ -9,6 +9,12 @@ using Stash.Runtime.Types;
 /// <summary>Parses command-line arguments against a dict specification, producing a dict with all parsed values.</summary>
 public sealed class ArgumentParser
 {
+    private static List<StashValue>? AsObjectList(object? value)
+    {
+        if (value is List<StashValue> svList) return svList;
+        return null;
+    }
+
     /// <summary>The raw command-line arguments to parse.</summary>
     private readonly string[] _scriptArgs;
 
@@ -31,12 +37,12 @@ public sealed class ArgumentParser
             throw new RuntimeError("Argument to 'args.parse' must be a dict.");
         }
 
-        string? scriptName = spec.Has("name") ? spec.Get("name") as string : null;
-        string? version = spec.Has("version") ? spec.Get("version") as string : null;
-        var flagsSpec = spec.Has("flags") ? spec.Get("flags") as StashDictionary : null;
-        var optionsSpec = spec.Has("options") ? spec.Get("options") as StashDictionary : null;
-        var commandsSpec = spec.Has("commands") ? spec.Get("commands") as StashDictionary : null;
-        var positionalsSpec = spec.Has("positionals") ? spec.Get("positionals") as List<object?> : null;
+        string? scriptName = spec.Has("name") ? spec.Get("name").ToObject() as string : null;
+        string? version = spec.Has("version") ? spec.Get("version").ToObject() as string : null;
+        var flagsSpec = spec.Has("flags") ? spec.Get("flags").ToObject() as StashDictionary : null;
+        var optionsSpec = spec.Has("options") ? spec.Get("options").ToObject() as StashDictionary : null;
+        var commandsSpec = spec.Has("commands") ? spec.Get("commands").ToObject() as StashDictionary : null;
+        var positionalsSpec = spec.Has("positionals") ? AsObjectList(spec.Get("positionals").ToObject()) : null;
 
         var result = new StashDictionary();
 
@@ -45,7 +51,7 @@ public sealed class ArgumentParser
         {
             foreach (var entry in flagsSpec.RawEntries())
             {
-                result.Set((string)entry.Key, false);
+                result.Set((string)entry.Key, StashValue.False);
             }
         }
 
@@ -54,37 +60,37 @@ public sealed class ArgumentParser
         {
             foreach (var entry in optionsSpec.RawEntries())
             {
-                var props = entry.Value as StashDictionary;
-                object? defaultVal = props is not null && props.Has("default") ? props.Get("default") : null;
-                result.Set((string)entry.Key, defaultVal);
+                var props = entry.Value.ToObject() as StashDictionary;
+                object? defaultVal = props is not null && props.Has("default") ? props.Get("default").ToObject() : null;
+                result.Set((string)entry.Key, StashValue.FromObject(defaultVal));
             }
         }
 
         // Initialize all positionals with defaults
         if (positionalsSpec is not null)
         {
-            foreach (var item in positionalsSpec)
+            foreach (StashValue item in positionalsSpec)
             {
-                if (item is not StashDictionary posDict)
+                if (item.ToObject() is not StashDictionary posDict)
                 {
                     continue;
                 }
 
-                string? posName = posDict.Has("name") ? posDict.Get("name") as string : null;
+                string? posName = posDict.Has("name") ? posDict.Get("name").ToObject() as string : null;
                 if (posName is null)
                 {
                     continue;
                 }
 
-                object? defaultVal = posDict.Has("default") ? posDict.Get("default") : null;
-                result.Set(posName, defaultVal);
+                object? defaultVal = posDict.Has("default") ? posDict.Get("default").ToObject() : null;
+                result.Set(posName, StashValue.FromObject(defaultVal));
             }
         }
 
         // Initialize command to null
         if (commandsSpec is not null && commandsSpec.Count > 0)
         {
-            result.Set("command", null);
+            result.Set("command", StashValue.Null);
         }
 
         // Initialize subcommand containers
@@ -94,56 +100,56 @@ public sealed class ArgumentParser
             {
                 string cmdName = (string)entry.Key;
                 var cmdResult = new StashDictionary();
-                var cmdProps = entry.Value as StashDictionary;
+                var cmdProps = entry.Value.ToObject() as StashDictionary;
 
                 if (cmdProps is not null)
                 {
                     // Initialize sub-flags
-                    var subFlags = cmdProps.Has("flags") ? cmdProps.Get("flags") as StashDictionary : null;
+                    var subFlags = cmdProps.Has("flags") ? cmdProps.Get("flags").ToObject() as StashDictionary : null;
                     if (subFlags is not null)
                     {
                         foreach (var sf in subFlags.RawEntries())
                         {
-                            cmdResult.Set((string)sf.Key, false);
+                            cmdResult.Set((string)sf.Key, StashValue.False);
                         }
                     }
 
                     // Initialize sub-options with defaults
-                    var subOpts = cmdProps.Has("options") ? cmdProps.Get("options") as StashDictionary : null;
+                    var subOpts = cmdProps.Has("options") ? cmdProps.Get("options").ToObject() as StashDictionary : null;
                     if (subOpts is not null)
                     {
                         foreach (var so in subOpts.RawEntries())
                         {
-                            var soProps = so.Value as StashDictionary;
-                            object? def = soProps is not null && soProps.Has("default") ? soProps.Get("default") : null;
-                            cmdResult.Set((string)so.Key, def);
+                            var soProps = so.Value.ToObject() as StashDictionary;
+                            object? def = soProps is not null && soProps.Has("default") ? soProps.Get("default").ToObject() : null;
+                            cmdResult.Set((string)so.Key, StashValue.FromObject(def));
                         }
                     }
 
                     // Initialize sub-positionals with defaults
-                    var subPos = cmdProps.Has("positionals") ? cmdProps.Get("positionals") as List<object?> : null;
+                    var subPos = cmdProps.Has("positionals") ? AsObjectList(cmdProps.Get("positionals").ToObject()) : null;
                     if (subPos is not null)
                     {
-                        foreach (var sp in subPos)
+                        foreach (StashValue sp in subPos)
                         {
-                            if (sp is not StashDictionary spDict)
+                            if (sp.ToObject() is not StashDictionary spDict)
                             {
                                 continue;
                             }
 
-                            string? spName = spDict.Has("name") ? spDict.Get("name") as string : null;
+                            string? spName = spDict.Has("name") ? spDict.Get("name").ToObject() as string : null;
                             if (spName is null)
                             {
                                 continue;
                             }
 
-                            object? def = spDict.Has("default") ? spDict.Get("default") : null;
-                            cmdResult.Set(spName, def);
+                            object? def = spDict.Has("default") ? spDict.Get("default").ToObject() : null;
+                            cmdResult.Set(spName, StashValue.FromObject(def));
                         }
                     }
                 }
 
-                result.Set(cmdName, cmdResult);
+                result.Set(cmdName, StashValue.FromObj(cmdResult));
             }
         }
 
@@ -162,8 +168,8 @@ public sealed class ArgumentParser
             {
                 string name = (string)entry.Key;
                 flagsByLong[$"--{name}"] = name;
-                var props = entry.Value as StashDictionary;
-                string? shortName = props is not null && props.Has("short") ? props.Get("short") as string : null;
+                var props = entry.Value.ToObject() as StashDictionary;
+                string? shortName = props is not null && props.Has("short") ? props.Get("short").ToObject() as string : null;
                 if (shortName is not null)
                 {
                     flagsByShort[$"-{shortName}"] = name;
@@ -176,10 +182,10 @@ public sealed class ArgumentParser
             foreach (var entry in optionsSpec.RawEntries())
             {
                 string name = (string)entry.Key;
-                var props = entry.Value as StashDictionary;
+                var props = entry.Value.ToObject() as StashDictionary;
                 optionsByLong[$"--{name}"] = props;
                 optionNameByLong[$"--{name}"] = name;
-                string? shortName = props is not null && props.Has("short") ? props.Get("short") as string : null;
+                string? shortName = props is not null && props.Has("short") ? props.Get("short").ToObject() as string : null;
                 if (shortName is not null)
                 {
                     optionsByShort[$"-{shortName}"] = props;
@@ -209,7 +215,7 @@ public sealed class ArgumentParser
             foreach (var entry in commandsSpec.RawEntries())
             {
                 string cmdName = (string)entry.Key;
-                var cmdProps = entry.Value as StashDictionary;
+                var cmdProps = entry.Value.ToObject() as StashDictionary;
 
                 var cfl = new Dictionary<string, string>();
                 var cfs = new Dictionary<string, string>();
@@ -220,15 +226,15 @@ public sealed class ArgumentParser
 
                 if (cmdProps is not null)
                 {
-                    var subFlags = cmdProps.Has("flags") ? cmdProps.Get("flags") as StashDictionary : null;
+                    var subFlags = cmdProps.Has("flags") ? cmdProps.Get("flags").ToObject() as StashDictionary : null;
                     if (subFlags is not null)
                     {
                         foreach (var sf in subFlags.RawEntries())
                         {
                             string n = (string)sf.Key;
                             cfl[$"--{n}"] = n;
-                            var sfProps = sf.Value as StashDictionary;
-                            string? s = sfProps is not null && sfProps.Has("short") ? sfProps.Get("short") as string : null;
+                            var sfProps = sf.Value.ToObject() as StashDictionary;
+                            string? s = sfProps is not null && sfProps.Has("short") ? sfProps.Get("short").ToObject() as string : null;
                             if (s is not null)
                             {
                                 cfs[$"-{s}"] = n;
@@ -236,15 +242,15 @@ public sealed class ArgumentParser
                         }
                     }
 
-                    var subOpts = cmdProps.Has("options") ? cmdProps.Get("options") as StashDictionary : null;
+                    var subOpts = cmdProps.Has("options") ? cmdProps.Get("options").ToObject() as StashDictionary : null;
                     if (subOpts is not null)
                     {
                         foreach (var so in subOpts.RawEntries())
                         {
                             string n = (string)so.Key;
-                            var soProps = so.Value as StashDictionary;
+                            var soProps = so.Value.ToObject() as StashDictionary;
                             col[$"--{n}"] = (n, soProps);
-                            string? s = soProps is not null && soProps.Has("short") ? soProps.Get("short") as string : null;
+                            string? s = soProps is not null && soProps.Has("short") ? soProps.Get("short").ToObject() as string : null;
                             if (s is not null)
                             {
                                 cos[$"-{s}"] = (n, soProps);
@@ -252,12 +258,12 @@ public sealed class ArgumentParser
                         }
                     }
 
-                    var subPos = cmdProps.Has("positionals") ? cmdProps.Get("positionals") as List<object?> : null;
+                    var subPos = cmdProps.Has("positionals") ? AsObjectList(cmdProps.Get("positionals").ToObject()) : null;
                     if (subPos is not null)
                     {
-                        foreach (var sp in subPos)
+                        foreach (StashValue sp in subPos)
                         {
-                            if (sp is StashDictionary spDict)
+                            if (sp.ToObject() is StashDictionary spDict)
                             {
                                 cpos.Add(spDict);
                             }
@@ -294,17 +300,17 @@ public sealed class ArgumentParser
             // If we have an active command, try command-level args first
             if (activeCommandName is not null)
             {
-                var cmdResult = (StashDictionary)result.Get(activeCommandName)!;
+                var cmdResult = (StashDictionary)result.Get(activeCommandName).AsObj!;
 
                 if (cmdFlagsByLong[activeCommandName].TryGetValue(arg, out var cmdFlagName))
                 {
-                    cmdResult.Set(cmdFlagName, true);
+                    cmdResult.Set(cmdFlagName, StashValue.True);
                     i++;
                     continue;
                 }
                 if (cmdFlagsByShort[activeCommandName].TryGetValue(arg, out cmdFlagName))
                 {
-                    cmdResult.Set(cmdFlagName, true);
+                    cmdResult.Set(cmdFlagName, StashValue.True);
                     i++;
                     continue;
                 }
@@ -321,8 +327,8 @@ public sealed class ArgumentParser
 
                         val = _scriptArgs[i];
                     }
-                    string? optType = cmdOpt.Props is not null && cmdOpt.Props.Has("type") ? cmdOpt.Props.Get("type") as string : null;
-                    cmdResult.Set(cmdOpt.Name, CoerceArgValue(val, optType, arg));
+                    string? optType = cmdOpt.Props is not null && cmdOpt.Props.Has("type") ? cmdOpt.Props.Get("type").ToObject() as string : null;
+                    cmdResult.Set(cmdOpt.Name, StashValue.FromObject(CoerceArgValue(val, optType, arg)));
                     i++;
                     continue;
                 }
@@ -339,8 +345,8 @@ public sealed class ArgumentParser
 
                         val = _scriptArgs[i];
                     }
-                    string? optType = cmdOpt.Props is not null && cmdOpt.Props.Has("type") ? cmdOpt.Props.Get("type") as string : null;
-                    cmdResult.Set(cmdOpt.Name, CoerceArgValue(val, optType, arg));
+                    string? optType = cmdOpt.Props is not null && cmdOpt.Props.Has("type") ? cmdOpt.Props.Get("type").ToObject() as string : null;
+                    cmdResult.Set(cmdOpt.Name, StashValue.FromObject(CoerceArgValue(val, optType, arg)));
                     i++;
                     continue;
                 }
@@ -350,9 +356,9 @@ public sealed class ArgumentParser
                 if (!arg.StartsWith("-") && cmdPosIdx < cmdPositionalDefs[activeCommandName].Count)
                 {
                     var cp = cmdPositionalDefs[activeCommandName][cmdPosIdx];
-                    string cpName = cp.Has("name") ? cp.Get("name") as string ?? arg : arg;
-                    string? posType = cp.Has("type") ? cp.Get("type") as string : null;
-                    cmdResult.Set(cpName, CoerceArgValue(arg, posType, cpName));
+                    string cpName = cp.Has("name") ? cp.Get("name").ToObject() as string ?? arg : arg;
+                    string? posType = cp.Has("type") ? cp.Get("type").ToObject() as string : null;
+                    cmdResult.Set(cpName, StashValue.FromObject(CoerceArgValue(arg, posType, cpName)));
                     cmdPositionalIndices[activeCommandName]++;
                     i++;
                     continue;
@@ -362,13 +368,13 @@ public sealed class ArgumentParser
             // Top-level flag match
             if (flagsByLong.TryGetValue(arg, out var topFlagName))
             {
-                result.Set(topFlagName, true);
+                result.Set(topFlagName, StashValue.True);
                 i++;
                 continue;
             }
             if (flagsByShort.TryGetValue(arg, out topFlagName))
             {
-                result.Set(topFlagName, true);
+                result.Set(topFlagName, StashValue.True);
                 i++;
                 continue;
             }
@@ -387,8 +393,8 @@ public sealed class ArgumentParser
 
                     val = _scriptArgs[i];
                 }
-                string? optType = topOptProps is not null && topOptProps.Has("type") ? topOptProps.Get("type") as string : null;
-                result.Set(topOptName, CoerceArgValue(val, optType, arg));
+                string? optType = topOptProps is not null && topOptProps.Has("type") ? topOptProps.Get("type").ToObject() as string : null;
+                result.Set(topOptName, StashValue.FromObject(CoerceArgValue(val, optType, arg)));
                 i++;
                 continue;
             }
@@ -405,8 +411,8 @@ public sealed class ArgumentParser
 
                     val = _scriptArgs[i];
                 }
-                string? optType = topOptProps is not null && topOptProps.Has("type") ? topOptProps.Get("type") as string : null;
-                result.Set(topOptName, CoerceArgValue(val, optType, arg));
+                string? optType = topOptProps is not null && topOptProps.Has("type") ? topOptProps.Get("type").ToObject() as string : null;
+                result.Set(topOptName, StashValue.FromObject(CoerceArgValue(val, optType, arg)));
                 i++;
                 continue;
             }
@@ -414,7 +420,7 @@ public sealed class ArgumentParser
             // Command match
             if (!arg.StartsWith("-") && commandNames.Contains(arg))
             {
-                result.Set("command", arg);
+                result.Set("command", StashValue.FromObj(arg));
                 activeCommandName = arg;
                 i++;
                 continue;
@@ -423,10 +429,10 @@ public sealed class ArgumentParser
             // Positional (only non-dash args when not matching a command)
             if (!arg.StartsWith("-") && positionalsSpec is not null && positionalIndex < positionalsSpec.Count)
             {
-                var pos = positionalsSpec[positionalIndex] as StashDictionary;
-                string posName = pos is not null && pos.Has("name") ? pos.Get("name") as string ?? arg : arg;
-                string? posType = pos is not null && pos.Has("type") ? pos.Get("type") as string : null;
-                result.Set(posName, CoerceArgValue(arg, posType, posName));
+                var pos = positionalsSpec[positionalIndex].ToObject() as StashDictionary;
+                string posName = pos is not null && pos.Has("name") ? pos.Get("name").ToObject() as string ?? arg : arg;
+                string? posType = pos is not null && pos.Has("type") ? pos.Get("type").ToObject() as string : null;
+                result.Set(posName, StashValue.FromObject(CoerceArgValue(arg, posType, posName)));
                 positionalIndex++;
                 i++;
                 continue;
@@ -437,14 +443,14 @@ public sealed class ArgumentParser
         }
 
         // Auto-handle help flag
-        if (result.Has("help") && result.Get("help") is true)
+        if (result.Has("help") && result.Get("help").ToObject() is true)
         {
             PrintHelp(spec, result);
             System.Environment.Exit(0);
         }
 
         // Auto-handle version flag
-        if (result.Has("version") && result.Get("version") is true && version is not null)
+        if (result.Has("version") && result.Get("version").ToObject() is true && version is not null)
         {
             Console.WriteLine(version);
             System.Environment.Exit(0);
@@ -456,9 +462,9 @@ public sealed class ArgumentParser
             foreach (var entry in optionsSpec.RawEntries())
             {
                 string optName = (string)entry.Key;
-                var props = entry.Value as StashDictionary;
-                bool required = props is not null && props.Has("required") && props.Get("required") is true;
-                if (required && result.Get(optName) is null)
+                var props = entry.Value.ToObject() as StashDictionary;
+                bool required = props is not null && props.Has("required") && props.Get("required").ToObject() is true;
+                if (required && result.Get(optName).ToObject() is null)
                 {
                     throw new RuntimeError($"Required option '--{optName}' was not provided.");
                 }
@@ -468,21 +474,21 @@ public sealed class ArgumentParser
         // Validate required positionals
         if (positionalsSpec is not null)
         {
-            foreach (var item in positionalsSpec)
+            foreach (StashValue item in positionalsSpec)
             {
-                if (item is not StashDictionary posDict)
+                if (item.ToObject() is not StashDictionary posDict)
                 {
                     continue;
                 }
 
-                string? posName = posDict.Has("name") ? posDict.Get("name") as string : null;
+                string? posName = posDict.Has("name") ? posDict.Get("name").ToObject() as string : null;
                 if (posName is null)
                 {
                     continue;
                 }
 
-                bool required = posDict.Has("required") && posDict.Get("required") is true;
-                if (required && result.Get(posName) is null)
+                bool required = posDict.Has("required") && posDict.Get("required").ToObject() is true;
+                if (required && result.Get(posName).ToObject() is null)
                 {
                     throw new RuntimeError($"Required positional argument '{posName}' was not provided.");
                 }
@@ -492,44 +498,44 @@ public sealed class ArgumentParser
         // Validate required command-level args if a command is active
         if (activeCommandName is not null && commandsSpec is not null)
         {
-            var cmdProps = commandsSpec.Get(activeCommandName) as StashDictionary;
+            var cmdProps = commandsSpec.Get(activeCommandName).ToObject() as StashDictionary;
             if (cmdProps is not null)
             {
-                var cmdResult = (StashDictionary)result.Get(activeCommandName)!;
+                var cmdResult = (StashDictionary)result.Get(activeCommandName).AsObj!;
 
-                var subOpts = cmdProps.Has("options") ? cmdProps.Get("options") as StashDictionary : null;
+                var subOpts = cmdProps.Has("options") ? cmdProps.Get("options").ToObject() as StashDictionary : null;
                 if (subOpts is not null)
                 {
                     foreach (var entry in subOpts.RawEntries())
                     {
                         string optName = (string)entry.Key;
-                        var props = entry.Value as StashDictionary;
-                        bool required = props is not null && props.Has("required") && props.Get("required") is true;
-                        if (required && cmdResult.Get(optName) is null)
+                        var props = entry.Value.ToObject() as StashDictionary;
+                        bool required = props is not null && props.Has("required") && props.Get("required").ToObject() is true;
+                        if (required && cmdResult.Get(optName).ToObject() is null)
                         {
                             throw new RuntimeError($"Required option '--{optName}' for command '{activeCommandName}' was not provided.");
                         }
                     }
                 }
 
-                var subPos = cmdProps.Has("positionals") ? cmdProps.Get("positionals") as List<object?> : null;
+                var subPos = cmdProps.Has("positionals") ? AsObjectList(cmdProps.Get("positionals").ToObject()) : null;
                 if (subPos is not null)
                 {
-                    foreach (var sp in subPos)
+                    foreach (StashValue sp in subPos)
                     {
-                        if (sp is not StashDictionary spDict)
+                        if (sp.ToObject() is not StashDictionary spDict)
                         {
                             continue;
                         }
 
-                        string? posName = spDict.Has("name") ? spDict.Get("name") as string : null;
+                        string? posName = spDict.Has("name") ? spDict.Get("name").ToObject() as string : null;
                         if (posName is null)
                         {
                             continue;
                         }
 
-                        bool required = spDict.Has("required") && spDict.Get("required") is true;
-                        if (required && cmdResult.Get(posName) is null)
+                        bool required = spDict.Has("required") && spDict.Get("required").ToObject() is true;
+                        if (required && cmdResult.Get(posName).ToObject() is null)
                         {
                             throw new RuntimeError($"Required positional argument '{posName}' for command '{activeCommandName}' was not provided.");
                         }
@@ -593,13 +599,13 @@ public sealed class ArgumentParser
     {
         var sb = new StringBuilder();
 
-        string? scriptName = spec.Has("name") ? spec.Get("name") as string : null;
-        string? version = spec.Has("version") ? spec.Get("version") as string : null;
-        string? description = spec.Has("description") ? spec.Get("description") as string : null;
-        var flagsSpec = spec.Has("flags") ? spec.Get("flags") as StashDictionary : null;
-        var optionsSpec = spec.Has("options") ? spec.Get("options") as StashDictionary : null;
-        var commandsSpec = spec.Has("commands") ? spec.Get("commands") as StashDictionary : null;
-        var positionalsSpec = spec.Has("positionals") ? spec.Get("positionals") as List<object?> : null;
+        string? scriptName = spec.Has("name") ? spec.Get("name").ToObject() as string : null;
+        string? version = spec.Has("version") ? spec.Get("version").ToObject() as string : null;
+        string? description = spec.Has("description") ? spec.Get("description").ToObject() as string : null;
+        var flagsSpec = spec.Has("flags") ? spec.Get("flags").ToObject() as StashDictionary : null;
+        var optionsSpec = spec.Has("options") ? spec.Get("options").ToObject() as StashDictionary : null;
+        var commandsSpec = spec.Has("commands") ? spec.Get("commands").ToObject() as StashDictionary : null;
+        var positionalsSpec = spec.Has("positionals") ? AsObjectList(spec.Get("positionals").ToObject()) : null;
 
         // Header
         if (scriptName is not null)
@@ -639,15 +645,15 @@ public sealed class ArgumentParser
 
         if (positionalsSpec is not null)
         {
-            foreach (var posObj in positionalsSpec)
+            foreach (StashValue posObj in positionalsSpec)
             {
-                if (posObj is not StashDictionary pos)
+                if (posObj.ToObject() is not StashDictionary pos)
                 {
                     continue;
                 }
 
-                string posName = pos.Has("name") ? pos.Get("name") as string ?? "arg" : "arg";
-                bool required = pos.Has("required") && pos.Get("required") is true;
+                string posName = pos.Has("name") ? pos.Get("name").ToObject() as string ?? "arg" : "arg";
+                bool required = pos.Has("required") && pos.Get("required").ToObject() is true;
                 sb.Append(required ? $" <{posName}>" : $" [{posName}]");
             }
         }
@@ -670,8 +676,8 @@ public sealed class ArgumentParser
             foreach (var entry in commandsSpec.RawEntries())
             {
                 string cmdName = (string)entry.Key;
-                var cmdProps = entry.Value as StashDictionary;
-                string? cmdDesc = cmdProps is not null && cmdProps.Has("description") ? cmdProps.Get("description") as string : null;
+                var cmdProps = entry.Value.ToObject() as StashDictionary;
+                string? cmdDesc = cmdProps is not null && cmdProps.Has("description") ? cmdProps.Get("description").ToObject() as string : null;
                 sb.Append($"  {cmdName.PadRight(maxCmdLen + 2)}");
                 if (cmdDesc is not null)
                 {
@@ -688,32 +694,32 @@ public sealed class ArgumentParser
         {
             sb.AppendLine("ARGUMENTS:");
             int maxPosLen = 0;
-            foreach (var posObj in positionalsSpec)
+            foreach (StashValue posObj in positionalsSpec)
             {
-                if (posObj is not StashDictionary pos)
+                if (posObj.ToObject() is not StashDictionary pos)
                 {
                     continue;
                 }
 
-                string posName = pos.Has("name") ? pos.Get("name") as string ?? "arg" : "arg";
-                bool required = pos.Has("required") && pos.Get("required") is true;
+                string posName = pos.Has("name") ? pos.Get("name").ToObject() as string ?? "arg" : "arg";
+                bool required = pos.Has("required") && pos.Get("required").ToObject() is true;
                 string label = required ? $"<{posName}>" : $"[{posName}]";
                 if (label.Length > maxPosLen)
                 {
                     maxPosLen = label.Length;
                 }
             }
-            foreach (var posObj in positionalsSpec)
+            foreach (StashValue posObj in positionalsSpec)
             {
-                if (posObj is not StashDictionary pos)
+                if (posObj.ToObject() is not StashDictionary pos)
                 {
                     continue;
                 }
 
-                string posName = pos.Has("name") ? pos.Get("name") as string ?? "arg" : "arg";
-                bool required = pos.Has("required") && pos.Get("required") is true;
-                string? posDesc = pos.Has("description") ? pos.Get("description") as string : null;
-                object? posDefault = pos.Has("default") ? pos.Get("default") : null;
+                string posName = pos.Has("name") ? pos.Get("name").ToObject() as string ?? "arg" : "arg";
+                bool required = pos.Has("required") && pos.Get("required").ToObject() is true;
+                string? posDesc = pos.Has("description") ? pos.Get("description").ToObject() as string : null;
+                object? posDefault = pos.Has("default") ? pos.Get("default").ToObject() : null;
                 string label = required ? $"<{posName}>" : $"[{posName}]";
                 sb.Append($"  {label.PadRight(maxPosLen + 2)}");
                 if (posDesc is not null)
@@ -742,9 +748,9 @@ public sealed class ArgumentParser
                 foreach (var entry in flagsSpec.RawEntries())
                 {
                     string flagName = (string)entry.Key;
-                    var props = entry.Value as StashDictionary;
-                    string? shortName = props is not null && props.Has("short") ? props.Get("short") as string : null;
-                    string? flagDesc = props is not null && props.Has("description") ? props.Get("description") as string : null;
+                    var props = entry.Value.ToObject() as StashDictionary;
+                    string? shortName = props is not null && props.Has("short") ? props.Get("short").ToObject() as string : null;
+                    string? flagDesc = props is not null && props.Has("description") ? props.Get("description").ToObject() as string : null;
                     string left = shortName is not null ? $"-{shortName}, --{flagName}" : $"    --{flagName}";
                     optLines.Add((left, flagDesc));
                 }
@@ -755,12 +761,12 @@ public sealed class ArgumentParser
                 foreach (var entry in optionsSpec.RawEntries())
                 {
                     string optName = (string)entry.Key;
-                    var props = entry.Value as StashDictionary;
-                    string? shortName = props is not null && props.Has("short") ? props.Get("short") as string : null;
-                    string? optType = props is not null && props.Has("type") ? props.Get("type") as string : null;
-                    string? optDesc = props is not null && props.Has("description") ? props.Get("description") as string : null;
-                    object? optDefault = props is not null && props.Has("default") ? props.Get("default") : null;
-                    bool required = props is not null && props.Has("required") && props.Get("required") is true;
+                    var props = entry.Value.ToObject() as StashDictionary;
+                    string? shortName = props is not null && props.Has("short") ? props.Get("short").ToObject() as string : null;
+                    string? optType = props is not null && props.Has("type") ? props.Get("type").ToObject() as string : null;
+                    string? optDesc = props is not null && props.Has("description") ? props.Get("description").ToObject() as string : null;
+                    object? optDefault = props is not null && props.Has("default") ? props.Get("default").ToObject() : null;
+                    bool required = props is not null && props.Has("required") && props.Get("required").ToObject() is true;
                     string typeHint = optType is not null ? $" <{optType}>" : " <value>";
                     string left = shortName is not null ? $"-{shortName}, --{optName}{typeHint}" : $"    --{optName}{typeHint}";
                     string? right = optDesc;
@@ -805,15 +811,15 @@ public sealed class ArgumentParser
             foreach (var entry in commandsSpec.RawEntries())
             {
                 string cmdName = (string)entry.Key;
-                var cmdProps = entry.Value as StashDictionary;
+                var cmdProps = entry.Value.ToObject() as StashDictionary;
                 if (cmdProps is null)
                 {
                     continue;
                 }
 
-                var subFlags = cmdProps.Has("flags") ? cmdProps.Get("flags") as StashDictionary : null;
-                var subOpts = cmdProps.Has("options") ? cmdProps.Get("options") as StashDictionary : null;
-                var subPos = cmdProps.Has("positionals") ? cmdProps.Get("positionals") as List<object?> : null;
+                var subFlags = cmdProps.Has("flags") ? cmdProps.Get("flags").ToObject() as StashDictionary : null;
+                var subOpts = cmdProps.Has("options") ? cmdProps.Get("options").ToObject() as StashDictionary : null;
+                var subPos = cmdProps.Has("positionals") ? AsObjectList(cmdProps.Get("positionals").ToObject()) : null;
 
                 bool hasSubArgs = (subFlags is not null && subFlags.Count > 0) ||
                                   (subOpts is not null && subOpts.Count > 0) ||
@@ -827,16 +833,16 @@ public sealed class ArgumentParser
 
                 if (subPos is not null && subPos.Count > 0)
                 {
-                    foreach (var posObj in subPos)
+                    foreach (StashValue posObj in subPos)
                     {
-                        if (posObj is not StashDictionary pos)
+                        if (posObj.ToObject() is not StashDictionary pos)
                         {
                             continue;
                         }
 
-                        string posName = pos.Has("name") ? pos.Get("name") as string ?? "arg" : "arg";
-                        bool required = pos.Has("required") && pos.Get("required") is true;
-                        string? posDesc = pos.Has("description") ? pos.Get("description") as string : null;
+                        string posName = pos.Has("name") ? pos.Get("name").ToObject() as string ?? "arg" : "arg";
+                        bool required = pos.Has("required") && pos.Get("required").ToObject() is true;
+                        string? posDesc = pos.Has("description") ? pos.Get("description").ToObject() as string : null;
                         string label = required ? $"<{posName}>" : $"[{posName}]";
                         sb.Append($"  {label,-20}");
                         if (posDesc is not null)
@@ -855,9 +861,9 @@ public sealed class ArgumentParser
                     foreach (var sfEntry in subFlags.RawEntries())
                     {
                         string flagName = (string)sfEntry.Key;
-                        var props = sfEntry.Value as StashDictionary;
-                        string? shortName = props is not null && props.Has("short") ? props.Get("short") as string : null;
-                        string? flagDesc = props is not null && props.Has("description") ? props.Get("description") as string : null;
+                        var props = sfEntry.Value.ToObject() as StashDictionary;
+                        string? shortName = props is not null && props.Has("short") ? props.Get("short").ToObject() as string : null;
+                        string? flagDesc = props is not null && props.Has("description") ? props.Get("description").ToObject() as string : null;
                         string left = shortName is not null ? $"-{shortName}, --{flagName}" : $"    --{flagName}";
                         cmdOptLines.Add((left, flagDesc));
                     }
@@ -868,12 +874,12 @@ public sealed class ArgumentParser
                     foreach (var soEntry in subOpts.RawEntries())
                     {
                         string optName = (string)soEntry.Key;
-                        var props = soEntry.Value as StashDictionary;
-                        string? shortName = props is not null && props.Has("short") ? props.Get("short") as string : null;
-                        string? optType = props is not null && props.Has("type") ? props.Get("type") as string : null;
-                        string? optDesc = props is not null && props.Has("description") ? props.Get("description") as string : null;
-                        object? optDefault = props is not null && props.Has("default") ? props.Get("default") : null;
-                        bool required = props is not null && props.Has("required") && props.Get("required") is true;
+                        var props = soEntry.Value.ToObject() as StashDictionary;
+                        string? shortName = props is not null && props.Has("short") ? props.Get("short").ToObject() as string : null;
+                        string? optType = props is not null && props.Has("type") ? props.Get("type").ToObject() as string : null;
+                        string? optDesc = props is not null && props.Has("description") ? props.Get("description").ToObject() as string : null;
+                        object? optDefault = props is not null && props.Has("default") ? props.Get("default").ToObject() : null;
+                        bool required = props is not null && props.Has("required") && props.Get("required").ToObject() is true;
                         string typeHint = optType is not null ? $" <{optType}>" : " <value>";
                         string left = shortName is not null ? $"-{shortName}, --{optName}{typeHint}" : $"    --{optName}{typeHint}";
                         string? right = optDesc;

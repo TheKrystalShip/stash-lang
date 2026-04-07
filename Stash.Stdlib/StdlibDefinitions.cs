@@ -36,13 +36,13 @@ public static class StdlibDefinitions
     /// Creates the globals dictionary for a bytecode VM, populated with all built-in
     /// functions, namespaces, and types filtered by the given capabilities.
     /// </summary>
-    public static Dictionary<string, object?> CreateVMGlobals(StashCapabilities capabilities = StashCapabilities.All)
+    public static Dictionary<string, StashValue> CreateVMGlobals(StashCapabilities capabilities = StashCapabilities.All)
     {
-        var globals = new Dictionary<string, object?>();
+        var globals = new Dictionary<string, StashValue>();
 
         // Spread global functions into the flat globals dictionary
         var globalNs = GetGlobalNamespace(capabilities);
-        foreach (var (key, value) in globalNs.Namespace.GetAllMembers())
+        foreach (var (key, value) in globalNs.Namespace.GetAllMemberValues())
         {
             globals[key] = value;
         }
@@ -55,7 +55,7 @@ public static class StdlibDefinitions
                 continue;
             }
 
-            globals[nsDef.Name] = nsDef.Namespace;
+            globals[nsDef.Name] = StashValue.FromObj(nsDef.Namespace);
         }
 
         return globals;

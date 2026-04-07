@@ -40,60 +40,60 @@ public static class PkgBuiltIns
             string? projectRoot = FindProjectRoot(ctx);
             if (projectRoot == null)
             {
-                return null;
+                return StashValue.Null;
             }
 
             PackageManifest? manifest = PackageManifest.Load(projectRoot);
             if (manifest == null)
             {
-                return null;
+                return StashValue.Null;
             }
 
             var dict = new StashDictionary();
 
             if (manifest.Name != null)
             {
-                dict.Set("name", manifest.Name);
+                dict.Set("name", StashValue.FromObj(manifest.Name));
             }
 
             if (manifest.Version != null)
             {
-                dict.Set("version", manifest.Version);
+                dict.Set("version", StashValue.FromObj(manifest.Version));
             }
 
             if (manifest.Description != null)
             {
-                dict.Set("description", manifest.Description);
+                dict.Set("description", StashValue.FromObj(manifest.Description));
             }
 
             if (manifest.Author != null)
             {
-                dict.Set("author", manifest.Author);
+                dict.Set("author", StashValue.FromObj(manifest.Author));
             }
 
             if (manifest.License != null)
             {
-                dict.Set("license", manifest.License);
+                dict.Set("license", StashValue.FromObj(manifest.License));
             }
 
             if (manifest.Main != null)
             {
-                dict.Set("main", manifest.Main);
+                dict.Set("main", StashValue.FromObj(manifest.Main));
             }
 
             if (manifest.Repository != null)
             {
-                dict.Set("repository", manifest.Repository);
+                dict.Set("repository", StashValue.FromObj(manifest.Repository));
             }
 
             if (manifest.Stash != null)
             {
-                dict.Set("stash", manifest.Stash);
+                dict.Set("stash", StashValue.FromObj(manifest.Stash));
             }
 
             if (manifest.Private != null)
             {
-                dict.Set("private", manifest.Private.Value);
+                dict.Set("private", StashValue.FromBool(manifest.Private.Value));
             }
 
             if (manifest.Dependencies != null)
@@ -101,29 +101,29 @@ public static class PkgBuiltIns
                 var deps = new StashDictionary();
                 foreach (var (name, version) in manifest.Dependencies)
                 {
-                    deps.Set(name, version);
+                    deps.Set(name, StashValue.FromObj(version));
                 }
-                dict.Set("dependencies", deps);
+                dict.Set("dependencies", StashValue.FromObj(deps));
             }
 
             if (manifest.Keywords != null)
             {
-                var keywords = new List<object?>();
+                var keywords = new List<StashValue>();
                 foreach (string kw in manifest.Keywords)
                 {
-                    keywords.Add(kw);
+                    keywords.Add(StashValue.FromObj(kw.Trim()));
                 }
-                dict.Set("keywords", keywords);
+                dict.Set("keywords", StashValue.FromObj(keywords));
             }
 
             if (manifest.Files != null)
             {
-                var files = new List<object?>();
+                var files = new List<StashValue>();
                 foreach (string f in manifest.Files)
                 {
-                    files.Add(f);
+                    files.Add(StashValue.FromObj(f.Trim()));
                 }
-                dict.Set("files", files);
+                dict.Set("files", StashValue.FromObj(files));
             }
 
             if (manifest.Registries != null)
@@ -131,12 +131,12 @@ public static class PkgBuiltIns
                 var registries = new StashDictionary();
                 foreach (var entry in manifest.Registries)
                 {
-                    registries.Set(entry.Key, entry.Value);
+                    registries.Set(entry.Key, StashValue.FromObj(entry.Value));
                 }
-                dict.Set("registries", registries);
+                dict.Set("registries", StashValue.FromObj(registries));
             }
 
-            return dict;
+            return StashValue.FromObj(dict);
         });
 
         // pkg.version() — Returns the "version" field from the nearest stash.json manifest, or null if not set.
@@ -145,11 +145,11 @@ public static class PkgBuiltIns
             string? projectRoot = FindProjectRoot(ctx);
             if (projectRoot == null)
             {
-                return null;
+                return StashValue.Null;
             }
 
             PackageManifest? manifest = PackageManifest.Load(projectRoot);
-            return manifest?.Version;
+            return manifest?.Version is string v ? StashValue.FromObj(v) : StashValue.Null;
         });
 
         // pkg.dependencies() — Returns a dict of resolved dependencies from stash.lock, falling back to stash.json "dependencies".
@@ -159,7 +159,7 @@ public static class PkgBuiltIns
             string? projectRoot = FindProjectRoot(ctx);
             if (projectRoot == null)
             {
-                return null;
+                return StashValue.Null;
             }
 
             LockFile? lockFile = LockFile.Load(projectRoot);
@@ -168,29 +168,30 @@ public static class PkgBuiltIns
                 var dict = new StashDictionary();
                 foreach (var (name, entry) in lockFile.Resolved)
                 {
-                    dict.Set(name, entry.Version);
+                    dict.Set(name, StashValue.FromObj(entry.Version));
                 }
-                return dict;
+                return StashValue.FromObj(dict);
             }
 
             PackageManifest? manifest = PackageManifest.Load(projectRoot);
             if (manifest?.Dependencies == null)
             {
-                return null;
+                return StashValue.Null;
             }
 
             var deps = new StashDictionary();
             foreach (var (name, version) in manifest.Dependencies)
             {
-                deps.Set(name, version);
+                deps.Set(name, StashValue.FromObj(version));
             }
-            return deps;
+            return StashValue.FromObj(deps);
         });
 
         // pkg.root() — Returns the absolute path of the nearest project root directory (containing stash.json), or null.
         ns.Function("root", [], (ctx, _) =>
         {
-            return FindProjectRoot(ctx);
+            string? root = FindProjectRoot(ctx);
+            return root is not null ? StashValue.FromObj(root) : StashValue.Null;
         });
 
         return ns.Build();

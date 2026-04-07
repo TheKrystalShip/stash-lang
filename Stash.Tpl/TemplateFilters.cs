@@ -74,6 +74,14 @@ public static class TemplateFilters
     /// Converts a string to upper-case using the invariant culture
     /// (e.g. <c>{{ "hello" | upper }}</c> → <c>"HELLO"</c>).
     /// </summary>
+    private static List<StashValue>? ToStashList(object? value)
+    {
+        if (value is List<StashValue> list) return list;
+        return null;
+    }
+
+    private static bool IsArray(object? value) => value is List<StashValue>;
+
     /// <exception cref="TemplateException">Thrown when <paramref name="value"/> is not a string.</exception>
     private static object? Upper(object? value)
     {
@@ -129,7 +137,8 @@ public static class TemplateFilters
             return (long)s.Length;
         }
 
-        if (value is List<object?> list)
+        var list = ToStashList(value);
+        if (list is not null)
         {
             return (long)list.Count;
         }
@@ -157,9 +166,10 @@ public static class TemplateFilters
             Array.Reverse(chars);
             return new string(chars);
         }
-        if (value is List<object?> list)
+        var list = ToStashList(value);
+        if (list is not null)
         {
-            var copy = new List<object?>(list);
+            var copy = new List<StashValue>(list);
             copy.Reverse();
             return copy;
         }
@@ -182,13 +192,14 @@ public static class TemplateFilters
             throw new TemplateException("Filter 'join' requires a separator argument.");
         }
 
-        if (value is not List<object?> list)
+        var list = ToStashList(value);
+        if (list is null)
         {
             throw new TemplateException("Filter 'join' requires an array value.");
         }
 
         var separator = args[0];
-        return string.Join(separator, list.Select(RuntimeValues.Stringify));
+        return string.Join(separator, list.Select(item => RuntimeValues.Stringify(item.ToObject())));
     }
 
     /// <summary>
@@ -213,7 +224,7 @@ public static class TemplateFilters
         }
 
         var parts = s.Split(args[0]);
-        return new List<object?>(parts.Select(p => (object?)p));
+        return new List<StashValue>(parts.Select(p => StashValue.FromObj(p)));
     }
 
     /// <summary>
@@ -375,9 +386,10 @@ public static class TemplateFilters
             return s.Length > 0 ? s[0].ToString() : null;
         }
 
-        if (value is List<object?> list)
+        var list = ToStashList(value);
+        if (list is not null)
         {
-            return list.Count > 0 ? list[0] : null;
+            return list.Count > 0 ? list[0].ToObject() : null;
         }
 
         throw new TemplateException("Filter 'first' requires a string or array.");
@@ -398,9 +410,10 @@ public static class TemplateFilters
             return s.Length > 0 ? s[^1].ToString() : null;
         }
 
-        if (value is List<object?> list)
+        var list = ToStashList(value);
+        if (list is not null)
         {
-            return list.Count > 0 ? list[^1] : null;
+            return list.Count > 0 ? list[^1].ToObject() : null;
         }
 
         throw new TemplateException("Filter 'last' requires a string or array.");
@@ -414,32 +427,35 @@ public static class TemplateFilters
     /// <exception cref="TemplateException">Thrown when <paramref name="value"/> is not an array.</exception>
     private static object? Sort(object? value)
     {
-        if (value is not List<object?> list)
+        var list = ToStashList(value);
+        if (list is null)
         {
             throw new TemplateException("Filter 'sort' requires an array.");
         }
 
-        var copy = new List<object?>(list);
+        var copy = new List<StashValue>(list);
         copy.Sort((a, b) =>
         {
-            if (a is long la && b is long lb)
+            var ao = a.ToObject();
+            var bo = b.ToObject();
+            if (ao is long la && bo is long lb)
             {
                 return la.CompareTo(lb);
             }
 
-            if (a is double da && b is double db)
+            if (ao is double da && bo is double db)
             {
                 return da.CompareTo(db);
             }
 
-            if (a is string sa && b is string sb)
+            if (ao is string sa && bo is string sb)
             {
                 return string.Compare(sa, sb, StringComparison.Ordinal);
             }
 
             return string.Compare(
-                RuntimeValues.Stringify(a),
-                RuntimeValues.Stringify(b),
+                RuntimeValues.Stringify(ao),
+                RuntimeValues.Stringify(bo),
                 StringComparison.Ordinal);
         });
         return copy;

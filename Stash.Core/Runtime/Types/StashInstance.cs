@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Stash.Common;
+using Stash.Runtime;
 
 /// <summary>
 /// Represents a runtime instance of a struct — a dictionary of field values with a type tag.
@@ -12,50 +13,50 @@ public class StashInstance
 {
     public string TypeName { get; }
     public StashStruct? Struct { get; }
-    private readonly Dictionary<string, object?> _fields;
+    private readonly Dictionary<string, StashValue> _fields;
 
     /// <summary>
     /// When set, ToString() returns the stringified value of this field instead of the full struct representation.
     /// </summary>
     public string? StringifyField { get; init; }
 
-    public StashInstance(string typeName, Dictionary<string, object?> fields)
+    public StashInstance(string typeName, Dictionary<string, StashValue> fields)
     {
         TypeName = typeName;
         Struct = null;
         _fields = fields;
     }
 
-    public StashInstance(string typeName, StashStruct structDef, Dictionary<string, object?> fields)
+    public StashInstance(string typeName, StashStruct structDef, Dictionary<string, StashValue> fields)
     {
         TypeName = typeName;
         Struct = structDef;
         _fields = fields;
     }
 
-    public StashInstance(string typeName, Dictionary<string, object?> fields, StashStruct? structDef)
+    public StashInstance(string typeName, Dictionary<string, StashValue> fields, StashStruct? structDef)
     {
         TypeName = typeName;
         Struct = structDef;
         _fields = fields;
     }
 
-    public object? GetField(string name, SourceSpan? span)
+    public StashValue GetField(string name, SourceSpan? span)
     {
-        if (_fields.TryGetValue(name, out object? value))
+        if (_fields.TryGetValue(name, out StashValue value))
         {
             return value;
         }
 
         if (Struct != null && Struct.Methods.TryGetValue(name, out IStashCallable? method))
         {
-            return new StashBoundMethod(this, method);
+            return StashValue.FromObj(new StashBoundMethod(this, method));
         }
 
         throw new RuntimeError($"Undefined field '{name}' on struct '{TypeName}'.", span);
     }
 
-    public void SetField(string name, object? value, SourceSpan? span)
+    public void SetField(string name, StashValue value, SourceSpan? span)
     {
         if (!_fields.ContainsKey(name))
         {
@@ -65,9 +66,9 @@ public class StashInstance
         _fields[name] = value;
     }
 
-    public IReadOnlyDictionary<string, object?> GetFields() => _fields;
+    public IReadOnlyDictionary<string, StashValue> GetFields() => _fields;
 
-    public IEnumerable<KeyValuePair<string, object?>> GetAllFields()
+    public IEnumerable<KeyValuePair<string, StashValue>> GetAllFields()
     {
         return _fields;
     }
@@ -86,9 +87,9 @@ public class StashInstance
 
         try
         {
-            if (StringifyField is not null && _fields.TryGetValue(StringifyField, out object? sfValue))
+            if (StringifyField is not null && _fields.TryGetValue(StringifyField, out StashValue sfValue))
             {
-                return RuntimeValues.Stringify(sfValue);
+                return RuntimeValues.Stringify(sfValue.ToObject());
             }
 
             var sb = new StringBuilder(TypeName);
@@ -103,7 +104,7 @@ public class StashInstance
                 first = false;
                 sb.Append(kvp.Key);
                 sb.Append(": ");
-                sb.Append(RuntimeValues.Stringify(kvp.Value));
+                sb.Append(RuntimeValues.Stringify(kvp.Value.ToObject()));
             }
             sb.Append(" }");
             return sb.ToString();

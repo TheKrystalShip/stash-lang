@@ -28,7 +28,7 @@ public static class TaskBuiltIns
         ns.Function("await",    [Param("task", "Future")], Await);
         ns.Function("awaitAll", [Param("tasks", "array")], AwaitAll);
         ns.Function("awaitAny", [Param("tasks", "array")], AwaitAny);
-        ns.Function("status",   [Param("task", "Future")], (ctx, args) => Status(ctx, args, taskStatusEnum));
+        ns.Function("status",   [Param("task", "Future")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) => Status(ctx, args, taskStatusEnum));
         ns.Function("cancel",   [Param("task", "Future")], Cancel);
         ns.Function("all",     [Param("tasks", "array")], All);
         ns.Function("race",    [Param("tasks", "array")], Race);
@@ -40,18 +40,18 @@ public static class TaskBuiltIns
         return ns.Build();
     }
 
-    private static object? Run(IInterpreterContext ctx, List<object?> args)
+    private static StashValue Run(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var callable = Args.Callable(args, 0, "task.run");
+        var callable = SvArgs.Callable(args, 0, "task.run");
 
         var cts = new CancellationTokenSource();
 
-        var dotnetTask = Task.Run(() =>
+        var dotnetTask = Task.Run<object?>(() =>
         {
             IInterpreterContext child = ctx.Fork(cts.Token);
             try
             {
-                return child.InvokeCallback(callable, new List<object?>());
+                return child.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty).ToObject();
             }
             finally
             {
@@ -59,24 +59,24 @@ public static class TaskBuiltIns
             }
         });
 
-        return new StashFuture(dotnetTask, cts);
+        return StashValue.FromObj(new StashFuture(dotnetTask, cts));
     }
 
-    private static object? Await(IInterpreterContext ctx, List<object?> args)
+    private static StashValue Await(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var future = Args.Future(args, 0, "task.await");
+        var future = SvArgs.Future(args, 0, "task.await");
 
-        return future.GetResult();
+        return StashValue.FromObject(future.GetResult());
     }
 
-    private static object? AwaitAll(IInterpreterContext ctx, List<object?> args)
+    private static StashValue AwaitAll(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var items = Args.List(args, 0, "task.awaitAll");
+        var items = SvArgs.StashList(args, 0, "task.awaitAll");
 
         var futures = new List<StashFuture>(items.Count);
-        foreach (object? item in items)
+        foreach (StashValue item in items)
         {
-            if (item is not StashFuture future)
+            if (item.ToObject() is not StashFuture future)
             {
                 throw new RuntimeError("First argument to 'task.awaitAll' must be a Future.");
             }
@@ -92,7 +92,7 @@ public static class TaskBuiltIns
         }
 
         // Collect results — failed/cancelled tasks become StashError values
-        var results = new List<object?>(futures.Count);
+        var results = new List<StashValue>(futures.Count);
         foreach (StashFuture f in futures)
         {
             if (f.IsFaulted)
@@ -100,24 +100,24 @@ public static class TaskBuiltIns
                 string? msg = null;
                 try { f.DotNetTask.GetAwaiter().GetResult(); }
                 catch (Exception ex) { msg = ex.Message; }
-                results.Add(new StashError(msg ?? "Task failed.", "TaskError"));
+                results.Add(StashValue.FromObj(new StashError(msg ?? "Task failed.", "TaskError")));
             }
             else if (f.IsCancelled)
             {
-                results.Add(new StashError("Task was cancelled.", "TaskCancelled"));
+                results.Add(StashValue.FromObj(new StashError("Task was cancelled.", "TaskCancelled")));
             }
             else
             {
-                results.Add(f.DotNetTask.Result);
+                results.Add(StashValue.FromObject(f.DotNetTask.Result));
             }
         }
 
-        return results;
+        return StashValue.FromObj(results);
     }
 
-    private static object? AwaitAny(IInterpreterContext ctx, List<object?> args)
+    private static StashValue AwaitAny(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var items = Args.List(args, 0, "task.awaitAny");
+        var items = SvArgs.StashList(args, 0, "task.awaitAny");
 
         if (items.Count == 0)
         {
@@ -125,9 +125,9 @@ public static class TaskBuiltIns
         }
 
         var futures = new List<StashFuture>(items.Count);
-        foreach (object? item in items)
+        foreach (StashValue item in items)
         {
-            if (item is not StashFuture future)
+            if (item.ToObject() is not StashFuture future)
             {
                 throw new RuntimeError("First argument to 'task.awaitAny' must be a Future.");
             }
@@ -148,46 +148,46 @@ public static class TaskBuiltIns
             }
         }
 
-        return completed.GetResult();
+        return StashValue.FromObject(completed.GetResult());
     }
 
-    private static object? Status(IInterpreterContext ctx, List<object?> args, StashEnum taskStatusEnum)
+    private static StashValue Status(IInterpreterContext ctx, ReadOnlySpan<StashValue> args, StashEnum taskStatusEnum)
     {
-        var future = Args.Future(args, 0, "task.status");
+        var future = SvArgs.Future(args, 0, "task.status");
 
         string statusStr = future.Status; // "Running", "Completed", "Failed", "Cancelled"
-        return taskStatusEnum.GetMember(statusStr);
+        return StashValue.FromObject(taskStatusEnum.GetMember(statusStr));
     }
 
-    private static object? Cancel(IInterpreterContext ctx, List<object?> args)
+    private static StashValue Cancel(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var future = Args.Future(args, 0, "task.cancel");
+        var future = SvArgs.Future(args, 0, "task.cancel");
 
         future.Cancel();
-        return null;
+        return StashValue.Null;
     }
 
-    private static object? All(IInterpreterContext ctx, List<object?> args)
+    private static StashValue All(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var items = Args.List(args, 0, "task.all");
+        var items = SvArgs.StashList(args, 0, "task.all");
 
         if (items.Count == 0)
         {
-            return StashFuture.Resolved(new List<object?>());
+            return StashValue.FromObj(StashFuture.Resolved(new List<StashValue>()));
         }
 
         // Collect all .NET tasks
         var tasks = new List<Task<object?>>(items.Count);
-        foreach (object? item in items)
+        foreach (StashValue item in items)
         {
-            if (item is StashFuture future)
+            if (item.ToObject() is StashFuture future)
             {
                 tasks.Add(future.DotNetTask);
             }
             else
             {
                 // Plain value — wrap in completed task
-                tasks.Add(Task.FromResult(item));
+                tasks.Add(Task.FromResult(item.ToObject()));
             }
         }
 
@@ -195,20 +195,20 @@ public static class TaskBuiltIns
         var combinedTask = Task.Run(async () =>
         {
             await Task.WhenAll(tasks);
-            var results = new List<object?>(tasks.Count);
+            var results = new List<StashValue>(tasks.Count);
             foreach (var t in tasks)
             {
-                results.Add(t.Result);
+                results.Add(StashValue.FromObject(t.Result));
             }
             return (object?)results;
         });
 
-        return new StashFuture(combinedTask, cts);
+        return StashValue.FromObj(new StashFuture(combinedTask, cts));
     }
 
-    private static object? Race(IInterpreterContext ctx, List<object?> args)
+    private static StashValue Race(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var items = Args.List(args, 0, "task.race");
+        var items = SvArgs.StashList(args, 0, "task.race");
 
         if (items.Count == 0)
         {
@@ -216,15 +216,15 @@ public static class TaskBuiltIns
         }
 
         var tasks = new List<Task<object?>>(items.Count);
-        foreach (object? item in items)
+        foreach (StashValue item in items)
         {
-            if (item is StashFuture future)
+            if (item.ToObject() is StashFuture future)
             {
                 tasks.Add(future.DotNetTask);
             }
             else
             {
-                tasks.Add(Task.FromResult(item));
+                tasks.Add(Task.FromResult(item.ToObject()));
             }
         }
 
@@ -235,17 +235,17 @@ public static class TaskBuiltIns
             return await winner;
         });
 
-        return new StashFuture(raceTask, cts);
+        return StashValue.FromObj(new StashFuture(raceTask, cts));
     }
 
-    private static object? TaskResolve(IInterpreterContext ctx, List<object?> args)
+    private static StashValue TaskResolve(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        return StashFuture.Resolved(args.Count > 0 ? args[0] : null);
+        return StashValue.FromObj(StashFuture.Resolved(args.Length > 0 ? args[0].ToObject() : null));
     }
 
-    private static object? Delay(IInterpreterContext ctx, List<object?> args)
+    private static StashValue Delay(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
     {
-        var seconds = Args.Numeric(args, 0, "task.delay");
+        var seconds = SvArgs.Numeric(args, 0, "task.delay");
 
         int ms = (int)(seconds * 1000);
         var cts = new CancellationTokenSource();
@@ -255,7 +255,7 @@ public static class TaskBuiltIns
             return (object?)null;
         });
 
-        return new StashFuture(delayTask, cts);
+        return StashValue.FromObj(new StashFuture(delayTask, cts));
     }
 }
 

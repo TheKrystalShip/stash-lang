@@ -1684,7 +1684,7 @@ public class VirtualMachineTests : BytecodeTestBase
         });
 
         var vm = new VirtualMachine();
-        vm.Globals["testFn"] = testFn;
+        vm.Globals["testFn"] = StashValue.FromObj(testFn);
         object? result = vm.Execute(chunk);
 
         Assert.True(contextWasProvided);
@@ -1709,7 +1709,7 @@ public class VirtualMachineTests : BytecodeTestBase
 
         var vm = new VirtualMachine();
         vm.Output = output;
-        vm.Globals["testPrint"] = testPrint;
+        vm.Globals["testPrint"] = StashValue.FromObj(testPrint);
         vm.Execute(chunk);
 
         Assert.Equal("hello", output.ToString());
@@ -1726,7 +1726,7 @@ public class VirtualMachineTests : BytecodeTestBase
 
         var testFn = new TestCallable((ctx, args) => null, arity: 2);
         var vm = new VirtualMachine();
-        vm.Globals["testFn"] = testFn;
+        vm.Globals["testFn"] = StashValue.FromObj(testFn);
 
         Assert.Throws<RuntimeError>(() => vm.Execute(chunk));
     }
@@ -2937,9 +2937,9 @@ public class VirtualMachineTests : BytecodeTestBase
             """);
         var dict = Assert.IsType<StashDictionary>(result);
         Assert.True(dict.Has("b"));
-        Assert.Equal(2L, dict.Get("b"));
+        Assert.Equal(2L, dict.Get("b").ToObject());
         Assert.True(dict.Has("c"));
-        Assert.Equal(3L, dict.Get("c"));
+        Assert.Equal(3L, dict.Get("c").ToObject());
     }
 
     [Fact]

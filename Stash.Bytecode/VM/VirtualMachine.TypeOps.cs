@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -33,7 +34,7 @@ public sealed partial class VirtualMachine
         "float"     => value is double,
         "string"    => value is string,
         "bool"      => value is bool,
-        "array"     => value is List<object?>,
+        "array"     => value is List<StashValue>,
         "dict"      => value is StashDictionary,
         "null"      => value is null,
         "function"  => value is VMFunction or IStashCallable,
@@ -77,10 +78,11 @@ public sealed partial class VirtualMachine
             string typeName = (string)frame.Chunk.Constants[typeIdx].AsObj!;
             object? value = Pop().ToObject();
             // Check globals for a variable holding a type definition (e.g. `let t = Foo; x is t`)
-            Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
-            if (globals.TryGetValue(typeName, out object? globalType) &&
-                globalType is StashStruct or StashEnum or StashInterface)
+            Dictionary<string, StashValue> globals = frame.ModuleGlobals ?? _globals;
+            if (globals.TryGetValue(typeName, out StashValue globalSv) &&
+                globalSv.AsObj is StashStruct or StashEnum or StashInterface)
             {
+                object? globalType = globalSv.AsObj;
                 bool r = globalType switch
                 {
                     StashStruct sd => value is StashInstance inst && inst.TypeName == sd.Name,
@@ -123,10 +125,10 @@ public sealed partial class VirtualMachine
         var structDef = new StashStruct(metadata.Name, fieldList, methods);
 
         // Resolve and validate interfaces
-        Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
+        Dictionary<string, StashValue> globals = frame.ModuleGlobals ?? _globals;
         foreach (string ifaceName in metadata.InterfaceNames)
         {
-            if (!globals.TryGetValue(ifaceName, out object? resolved) || resolved is not StashInterface iface)
+            if (!globals.TryGetValue(ifaceName, out StashValue resolvedSv) || resolvedSv.AsObj is not StashInterface iface)
             {
                 throw new RuntimeError($"'{ifaceName}' is not an interface.", span);
             }
@@ -221,8 +223,8 @@ public sealed partial class VirtualMachine
         }
         else
         {
-            Dictionary<string, object?> globals = frame.ModuleGlobals ?? _globals;
-            if (!globals.TryGetValue(metadata.TypeName, out object? resolved) || resolved is not StashStruct structDef)
+            Dictionary<string, StashValue> globals = frame.ModuleGlobals ?? _globals;
+            if (!globals.TryGetValue(metadata.TypeName, out StashValue resolvedSv) || resolvedSv.AsObj is not StashStruct structDef)
             {
                 throw new RuntimeError($"Cannot extend '{metadata.TypeName}': not a known type.", span);
             }
@@ -242,7 +244,8 @@ public sealed partial class VirtualMachine
         // 1. StashInstance: field + method access
         if (obj is StashInstance instance)
         {
-            object? result = instance.GetField(name, span);
+            StashValue resultSv = instance.GetField(name, span);
+            object? result = resultSv.ToObject();
             // Intercept StashBoundMethod wrapping VMFunction → return VMBoundMethod instead
             if (result is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
             {
@@ -261,7 +264,7 @@ public sealed partial class VirtualMachine
                 return new VMExtensionBoundMethod(obj, dictExtFunc);
             }
 
-            return dict.Get(name);
+            return dict.Get(name).ToObject();
         }
 
         // 3. StashNamespace: member access
@@ -311,7 +314,7 @@ public sealed partial class VirtualMachine
             {
                 "message" => error.Message,
                 "type" => error.Type,
-                "stack" => error.Stack is not null ? new List<object?>(error.Stack) : null,
+                "stack" => error.Stack is not null ? new List<StashValue>(error.Stack.Select(s => StashValue.FromObj(s))) : null,
                 _ => error.Properties?.TryGetValue(name, out object? propVal) == true
                     ? propVal
                     : throw new RuntimeError($"Error has no property '{name}'.", span)
@@ -384,9 +387,9 @@ public sealed partial class VirtualMachine
         }
 
         // 8. Built-in type .length properties
-        if (obj is List<object?> list && name == "length")
+        if (obj is List<StashValue> svList && name == "length")
         {
-            return (long)list.Count;
+            return (long)svList.Count;
         }
 
         if (obj is string s && name == "length")
@@ -398,7 +401,7 @@ public sealed partial class VirtualMachine
         string? extTypeName = obj switch
         {
             string => "string",
-            List<object?> => "array",
+            List<StashValue> => "array",
             long => "int",
             double => "float",
             _ => null
@@ -419,13 +422,13 @@ public sealed partial class VirtualMachine
         string? ufcsNsName = obj switch
         {
             string => "str",
-            List<object?> => "arr",
+            List<StashValue> => "arr",
             _ => null
         };
 
         if (ufcsNsName is not null &&
-            _globals.TryGetValue(ufcsNsName, out object? nsVal) &&
-            nsVal is StashNamespace ufcsNs &&
+            _globals.TryGetValue(ufcsNsName, out StashValue nsSv) &&
+            nsSv.AsObj is StashNamespace ufcsNs &&
             ufcsNs.HasMember(name))
         {
             object? member = ufcsNs.GetMember(name, span);
@@ -442,12 +445,12 @@ public sealed partial class VirtualMachine
     {
         if (obj is StashInstance instance)
         {
-            instance.SetField(name, value, span);
+            instance.SetField(name, StashValue.FromObject(value), span);
             return;
         }
         if (obj is StashDictionary dict)
         {
-            dict.Set(name, value);
+            dict.Set(name, StashValue.FromObject(value));
             return;
         }
         throw new RuntimeError($"Cannot set field '{name}' on {RuntimeValues.Stringify(obj)}.", span);

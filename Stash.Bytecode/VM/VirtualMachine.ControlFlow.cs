@@ -75,17 +75,17 @@ public sealed partial class VirtualMachine
         if (errorVal is StashDictionary throwDict)
         {
             string errMsg = throwDict.Has("message")
-                ? throwDict.Get("message")?.ToString() ?? ""
+                ? throwDict.Get("message").ToObject()?.ToString() ?? ""
                 : RuntimeValues.Stringify(errorVal);
             string errType = throwDict.Has("type")
-                ? throwDict.Get("type")?.ToString() ?? "RuntimeError"
+                ? throwDict.Get("type").ToObject()?.ToString() ?? "RuntimeError"
                 : "RuntimeError";
             var props = new Dictionary<string, object?>();
             foreach (var kv in throwDict.GetAllEntries())
             {
                 if (kv.Key is string k)
                 {
-                    props[k] = kv.Value;
+                    props[k] = kv.Value.ToObject();
                 }
             }
 
@@ -190,13 +190,14 @@ public sealed partial class VirtualMachine
             object? optStruct = Pop().ToObject();
             if (optStruct is StashInstance oi)
             {
-                if (oi.GetFields().TryGetValue("delay", out object? dv))
+                if (oi.GetFields().TryGetValue("delay", out StashValue dv))
                 {
-                    if (dv is long dl)
+                    object? dvObj = dv.ToObject();
+                    if (dvObj is long dl)
                     {
                         retryDelayMs = dl;
                     }
-                    else if (dv is StashDuration dd)
+                    else if (dvObj is StashDuration dd)
                     {
                         retryDelayMs = (long)dd.TotalMilliseconds;
                     }
@@ -242,10 +243,10 @@ public sealed partial class VirtualMachine
         }
 
         // Execute retry loop
-        object? retryLastResult = null;
+        StashValue retryLastResult = StashValue.Null;
         RuntimeError? retryLastError = null;
 
-        var retryErrors = new List<object?>();
+        var retryErrors = new List<StashValue>();
 
         for (long attempt = 1; attempt <= maxAttempts; attempt++)
         {
@@ -254,11 +255,11 @@ public sealed partial class VirtualMachine
             {
                 // Build attempt context dict
                 var attemptCtx = new StashDictionary();
-                attemptCtx.Set("current", attempt);
-                attemptCtx.Set("max", maxAttempts);
-                attemptCtx.Set("remaining", maxAttempts - attempt);
-                attemptCtx.Set("errors", new List<object?>(retryErrors));
-                retryLastResult = ExecuteVMFunctionInline(bodyVmFn, new object?[] { attemptCtx }, span);
+                attemptCtx.Set("current", StashValue.FromInt(attempt));
+                attemptCtx.Set("max", StashValue.FromInt(maxAttempts));
+                attemptCtx.Set("remaining", StashValue.FromInt(maxAttempts - attempt));
+                attemptCtx.Set("errors", StashValue.FromObj(new List<StashValue>(retryErrors)));
+                retryLastResult = ExecuteVMFunctionInlineDirect(bodyVmFn, new StashValue[] { StashValue.FromObj(attemptCtx) }, span);
             }
             catch (RuntimeError rex)
             {
@@ -266,19 +267,19 @@ public sealed partial class VirtualMachine
                 retryLastError = rex;
 
                 var retryErr = new StashError(rex.Message, rex.ErrorType ?? "RuntimeError", null, rex.Properties);
-                retryErrors.Add(retryErr);
+                retryErrors.Add(StashValue.FromObj(retryErr));
 
                 // Only call onRetry if this is NOT the last attempt
                 if (attempt < maxAttempts)
                 {
                     if (onRetryVmFn != null)
                     {
-                        ExecuteVMFunctionInline(onRetryVmFn,
-                            new object?[] { attempt, retryErr }, span);
+                        ExecuteVMFunctionInlineDirect(onRetryVmFn,
+                            new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(retryErr) }, span);
                     }
                     else if (onRetryCb != null)
                     {
-                        onRetryCb.Call(_context, new List<object?> { attempt, retryErr });
+                        onRetryCb.CallDirect(_context, new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(retryErr) });
                     }
                 }
             }
@@ -288,22 +289,22 @@ public sealed partial class VirtualMachine
                 bool success = true;
                 if (untilVmFn != null)
                 {
-                    object?[] untilArgs = untilVmFn.Chunk.Arity >= 2
-                        ? new object?[] { retryLastResult, attempt }
-                        : new object?[] { retryLastResult };
-                    object? pred = ExecuteVMFunctionInline(untilVmFn, untilArgs, span);
-                    if (RuntimeOps.IsFalsy(StashValue.FromObject(pred)))
+                    StashValue[] untilArgs = untilVmFn.Chunk.Arity >= 2
+                        ? new StashValue[] { retryLastResult, StashValue.FromInt(attempt) }
+                        : new StashValue[] { retryLastResult };
+                    StashValue pred = ExecuteVMFunctionInlineDirect(untilVmFn, untilArgs, span);
+                    if (RuntimeOps.IsFalsy(pred))
                     {
                         success = false;
                     }
                 }
                 else if (untilCb != null)
                 {
-                    List<object?> untilArgs2 = untilCb is VMFunction cbFn && cbFn.Chunk.Arity >= 2
-                        ? new List<object?> { retryLastResult, attempt }
-                        : new List<object?> { retryLastResult };
-                    object? pred = untilCb.Call(_context, untilArgs2);
-                    if (RuntimeOps.IsFalsy(StashValue.FromObject(pred)))
+                    StashValue[] untilArgs2 = untilCb is VMFunction cbFn && cbFn.Chunk.Arity >= 2
+                        ? new StashValue[] { retryLastResult, StashValue.FromInt(attempt) }
+                        : new StashValue[] { retryLastResult };
+                    StashValue pred2 = untilCb.CallDirect(_context, untilArgs2);
+                    if (RuntimeOps.IsFalsy(pred2))
                     {
                         success = false;
                     }
@@ -311,19 +312,19 @@ public sealed partial class VirtualMachine
 
                 if (success)
                 {
-                    return StashValue.FromObject(retryLastResult);
+                    return retryLastResult;
                 }
                 // Until predicate failed — treat as a retry-worthy failure
                 if (attempt < maxAttempts)
                 {
                     if (onRetryVmFn != null)
                     {
-                        ExecuteVMFunctionInline(onRetryVmFn,
-                            new object?[] { attempt, new StashError("Predicate not satisfied", "RetryError") }, span);
+                        ExecuteVMFunctionInlineDirect(onRetryVmFn,
+                            new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(new StashError("Predicate not satisfied", "RetryError")) }, span);
                     }
                     else if (onRetryCb != null)
                     {
-                        onRetryCb.Call(_context, new List<object?> { attempt, new StashError("Predicate not satisfied", "RetryError") });
+                        onRetryCb.CallDirect(_context, new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(new StashError("Predicate not satisfied", "RetryError")) });
                     }
                 }
                 bodyThrew = true;

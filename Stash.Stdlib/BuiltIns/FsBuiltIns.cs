@@ -88,14 +88,14 @@ public static class FsBuiltIns
         {
             try
             {
-                var eventFields = new Dictionary<string, object?>
+                var eventFields = new Dictionary<string, StashValue>
                 {
-                    ["type"] = eventType,
-                    ["path"] = path,
-                    ["oldPath"] = oldPath
+                    ["type"] = StashValue.FromObj(eventType),
+                    ["path"] = StashValue.FromObj(path),
+                    ["oldPath"] = oldPath is not null ? StashValue.FromObj(oldPath) : StashValue.Null
                 };
                 var watchEvent = new StashInstance("WatchEvent", eventFields);
-                Context.InvokeCallback(Callback, new List<object?> { watchEvent });
+                Context.InvokeCallbackDirect(Callback, new StashValue[] { StashValue.FromObj(watchEvent) });
             }
             catch
             {
@@ -130,69 +130,69 @@ public static class FsBuiltIns
         ns.Enum("WatchEventType", ["Created", "Modified", "Deleted", "Renamed"]);
 
         // fs.readFile(path) — Reads the entire contents of a file as a string. Throws on I/O error.
-        ns.Function("readFile", [Param("path", "string")], (ctx, args) =>
+        ns.Function("readFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.readFile");
+            var path = SvArgs.String(args, 0, "fs.readFile");
             path = ctx.ExpandTilde(path);
 
-            try { return System.IO.File.ReadAllText(path); }
+            try { return StashValue.FromObj(System.IO.File.ReadAllText(path)); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
         });
 
         // fs.writeFile(path, content) — Writes a string to a file, creating or overwriting it. Returns null.
-        ns.Function("writeFile", [Param("path", "string"), Param("content", "string")], (ctx, args) =>
+        ns.Function("writeFile", [Param("path", "string"), Param("content", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.writeFile");
-            var content = Args.String(args, 1, "fs.writeFile");
+            var path = SvArgs.String(args, 0, "fs.writeFile");
+            var content = SvArgs.String(args, 1, "fs.writeFile");
             path = ctx.ExpandTilde(path);
 
             try { System.IO.File.WriteAllText(path, content); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot write file '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.exists(path) — Returns true if the given path is an existing file, false otherwise.
-        ns.Function("exists", [Param("path", "string")], (ctx, args) =>
+        ns.Function("exists", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.exists");
+            var path = SvArgs.String(args, 0, "fs.exists");
             path = ctx.ExpandTilde(path);
 
-            return System.IO.File.Exists(path);
+            return StashValue.FromBool(System.IO.File.Exists(path));
         });
 
         // fs.dirExists(path) — Returns true if the given path is an existing directory, false otherwise.
-        ns.Function("dirExists", [Param("path", "string")], (ctx, args) =>
+        ns.Function("dirExists", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.dirExists");
+            var path = SvArgs.String(args, 0, "fs.dirExists");
             path = ctx.ExpandTilde(path);
 
-            return System.IO.Directory.Exists(path);
+            return StashValue.FromBool(System.IO.Directory.Exists(path));
         });
 
         // fs.pathExists(path) — Returns true if the given path exists as either a file or directory, false otherwise.
-        ns.Function("pathExists", [Param("path", "string")], (ctx, args) =>
+        ns.Function("pathExists", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.pathExists");
+            var path = SvArgs.String(args, 0, "fs.pathExists");
             path = ctx.ExpandTilde(path);
 
-            return System.IO.File.Exists(path) || System.IO.Directory.Exists(path);
+            return StashValue.FromBool(System.IO.File.Exists(path) || System.IO.Directory.Exists(path));
         });
 
         // fs.createDir(path) — Creates a directory (and any missing parent directories). Returns null. No-ops if the directory already exists.
-        ns.Function("createDir", [Param("path", "string")], (ctx, args) =>
+        ns.Function("createDir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.createDir");
+            var path = SvArgs.String(args, 0, "fs.createDir");
             path = ctx.ExpandTilde(path);
 
             try { System.IO.Directory.CreateDirectory(path); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create directory '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.delete(path) — Deletes a file or recursively deletes a directory. Throws if the path does not exist.
-        ns.Function("delete", [Param("path", "string")], (ctx, args) =>
+        ns.Function("delete", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.delete");
+            var path = SvArgs.String(args, 0, "fs.delete");
             path = ctx.ExpandTilde(path);
 
             try
@@ -211,95 +211,98 @@ public static class FsBuiltIns
                 }
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot delete '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.copy(src, dst) — Copies a file from src to dst, overwriting dst if it exists. Returns null.
-        ns.Function("copy", [Param("src", "string"), Param("dst", "string")], (ctx, args) =>
+        ns.Function("copy", [Param("src", "string"), Param("dst", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var src = Args.String(args, 0, "fs.copy");
-            var dst = Args.String(args, 1, "fs.copy");
+            var src = SvArgs.String(args, 0, "fs.copy");
+            var dst = SvArgs.String(args, 1, "fs.copy");
             src = ctx.ExpandTilde(src);
             dst = ctx.ExpandTilde(dst);
 
             try { System.IO.File.Copy(src, dst, overwrite: true); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot copy '{src}' to '{dst}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.move(src, dst) — Moves or renames a file from src to dst, overwriting dst if it exists. Returns null.
-        ns.Function("move", [Param("src", "string"), Param("dst", "string")], (ctx, args) =>
+        ns.Function("move", [Param("src", "string"), Param("dst", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var src = Args.String(args, 0, "fs.move");
-            var dst = Args.String(args, 1, "fs.move");
+            var src = SvArgs.String(args, 0, "fs.move");
+            var dst = SvArgs.String(args, 1, "fs.move");
             src = ctx.ExpandTilde(src);
             dst = ctx.ExpandTilde(dst);
 
             try { System.IO.File.Move(src, dst, overwrite: true); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot move '{src}' to '{dst}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.size(path) — Returns the size of a file in bytes (integer).
-        ns.Function("size", [Param("path", "string")], (ctx, args) =>
+        ns.Function("size", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.size");
+            var path = SvArgs.String(args, 0, "fs.size");
             path = ctx.ExpandTilde(path);
 
-            try { return new System.IO.FileInfo(path).Length; }
+            try { return StashValue.FromInt(new System.IO.FileInfo(path).Length); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}"); }
         });
 
         // fs.listDir(path) — Returns an array of all file and directory paths directly inside the given directory.
-        ns.Function("listDir", [Param("path", "string")], (ctx, args) =>
+        ns.Function("listDir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.listDir");
+            var path = SvArgs.String(args, 0, "fs.listDir");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 var entries = System.IO.Directory.GetFileSystemEntries(path);
-                var result = new List<object?>();
+                var result = new List<StashValue>(entries.Length);
                 foreach (var entry in entries)
                 {
-                    result.Add(entry);
+                    result.Add(StashValue.FromObj(entry));
                 }
 
-                return result;
+                return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot list directory '{path}': {e.Message}"); }
         });
 
         // fs.appendFile(path, content) — Appends a string to the end of a file, creating it if it doesn't exist. Returns null.
-        ns.Function("appendFile", [Param("path", "string"), Param("content", "string")], (ctx, args) =>
+        ns.Function("appendFile", [Param("path", "string"), Param("content", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.appendFile");
-            var content = Args.String(args, 1, "fs.appendFile");
+            var path = SvArgs.String(args, 0, "fs.appendFile");
+            var content = SvArgs.String(args, 1, "fs.appendFile");
             path = ctx.ExpandTilde(path);
 
             try { System.IO.File.AppendAllText(path, content); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot append to file '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.readLines(path) — Reads all lines of a file and returns them as an array of strings.
-        ns.Function("readLines", [Param("path", "string")], (ctx, args) =>
+        ns.Function("readLines", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.readLines");
+            var path = SvArgs.String(args, 0, "fs.readLines");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 var lines = System.IO.File.ReadAllLines(path);
-                return new List<object?>(lines);
+                var result = new List<StashValue>(lines.Length);
+                foreach (var line in lines)
+                    result.Add(StashValue.FromObj(line));
+                return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
         });
 
         // fs.glob(pattern) — Returns an array of file paths matching a glob pattern (e.g. "src/**/*.cs"). Supports wildcards in filename only.
-        ns.Function("glob", [Param("pattern", "string")], (ctx, args) =>
+        ns.Function("glob", [Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var pattern = Args.String(args, 0, "fs.glob");
+            var pattern = SvArgs.String(args, 0, "fs.glob");
             pattern = ctx.ExpandTilde(pattern);
 
             try
@@ -317,147 +320,153 @@ public static class FsBuiltIns
                 }
 
                 var files = System.IO.Directory.GetFiles(dir, filePattern, System.IO.SearchOption.AllDirectories);
-                return new List<object?>(files);
+                var result = new List<StashValue>(files.Length);
+                foreach (var f in files)
+                    result.Add(StashValue.FromObj(f));
+                return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"fs.glob failed: {e.Message}"); }
         });
 
         // fs.isFile(path) — Returns true if the path refers to an existing regular file.
-        ns.Function("isFile", [Param("path", "string")], (ctx, args) =>
+        ns.Function("isFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.isFile");
+            var path = SvArgs.String(args, 0, "fs.isFile");
             path = ctx.ExpandTilde(path);
 
-            return System.IO.File.Exists(path);
+            return StashValue.FromBool(System.IO.File.Exists(path));
         });
 
         // fs.isDir(path) — Returns true if the path refers to an existing directory.
-        ns.Function("isDir", [Param("path", "string")], (ctx, args) =>
+        ns.Function("isDir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.isDir");
+            var path = SvArgs.String(args, 0, "fs.isDir");
             path = ctx.ExpandTilde(path);
 
-            return System.IO.Directory.Exists(path);
+            return StashValue.FromBool(System.IO.Directory.Exists(path));
         });
 
         // fs.isSymlink(path) — Returns true if the path is an existing symbolic link (reparse point).
-        ns.Function("isSymlink", [Param("path", "string")], (ctx, args) =>
+        ns.Function("isSymlink", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.isSymlink");
+            var path = SvArgs.String(args, 0, "fs.isSymlink");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 var info = new System.IO.FileInfo(path);
-                return info.Exists && info.Attributes.HasFlag(System.IO.FileAttributes.ReparsePoint);
+                return StashValue.FromBool(info.Exists && info.Attributes.HasFlag(System.IO.FileAttributes.ReparsePoint));
             }
             catch (System.IO.IOException)
             {
-                return false;
+                return StashValue.FromBool(false);
             }
         });
 
         // fs.tempFile() — Creates a new empty temporary file and returns its path string.
-        ns.Function("tempFile", [], (_, _) =>
+        ns.Function("tempFile", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _args) =>
         {
-            return System.IO.Path.GetTempFileName();
+            return StashValue.FromObj(System.IO.Path.GetTempFileName());
         });
 
         // fs.tempDir() — Creates a new temporary directory with a random name and returns its path string.
-        ns.Function("tempDir", [], (_, _) =>
+        ns.Function("tempDir", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _args) =>
         {
             string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName());
             System.IO.Directory.CreateDirectory(dir);
-            return dir;
+            return StashValue.FromObj(dir);
         });
 
         // fs.modifiedAt(path) — Returns the last-modified time of a file as a Unix timestamp (float, seconds since epoch).
-        ns.Function("modifiedAt", [Param("path", "string")], (ctx, args) =>
+        ns.Function("modifiedAt", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.modifiedAt");
+            var path = SvArgs.String(args, 0, "fs.modifiedAt");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 var info = new System.IO.FileInfo(path);
-                return (double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0;
+                return StashValue.FromFloat((double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get modified time for '{path}': {e.Message}"); }
         });
 
         // fs.walk(path) — Recursively walks a directory and returns an array of all file paths within it (all depths).
-        ns.Function("walk", [Param("path", "string")], (ctx, args) =>
+        ns.Function("walk", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.walk");
+            var path = SvArgs.String(args, 0, "fs.walk");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 var files = System.IO.Directory.GetFiles(path, "*", System.IO.SearchOption.AllDirectories);
-                return new List<object?>(files);
+                var result = new List<StashValue>(files.Length);
+                foreach (var f in files)
+                    result.Add(StashValue.FromObj(f));
+                return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"fs.walk failed: {e.Message}"); }
         });
 
         // fs.readable(path) — Returns true if the path exists and the current process can read it.
-        ns.Function("readable", [Param("path", "string")], (ctx, args) =>
+        ns.Function("readable", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.readable");
+            var path = SvArgs.String(args, 0, "fs.readable");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
                 {
-                    return false;
+                    return StashValue.FromBool(false);
                 }
 
                 using var stream = System.IO.File.OpenRead(path);
-                return true;
+                return StashValue.FromBool(true);
             }
-            catch (System.UnauthorizedAccessException) { return false; }
-            catch (System.IO.IOException) { return false; }
+            catch (System.UnauthorizedAccessException) { return StashValue.FromBool(false); }
+            catch (System.IO.IOException) { return StashValue.FromBool(false); }
         });
 
         // fs.writable(path) — Returns true if the path exists and the current process can write to it.
-        ns.Function("writable", [Param("path", "string")], (ctx, args) =>
+        ns.Function("writable", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.writable");
+            var path = SvArgs.String(args, 0, "fs.writable");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
                 {
-                    return false;
+                    return StashValue.FromBool(false);
                 }
 
                 if (System.IO.File.Exists(path))
                 {
                     using var stream = System.IO.File.OpenWrite(path);
-                    return true;
+                    return StashValue.FromBool(true);
                 }
                 // For directories, check by attempting to create a temp file
                 var testFile = System.IO.Path.Combine(path, System.IO.Path.GetRandomFileName());
                 using (System.IO.File.Create(testFile)) { }
                 System.IO.File.Delete(testFile);
-                return true;
+                return StashValue.FromBool(true);
             }
-            catch (System.UnauthorizedAccessException) { return false; }
-            catch (System.IO.IOException) { return false; }
+            catch (System.UnauthorizedAccessException) { return StashValue.FromBool(false); }
+            catch (System.IO.IOException) { return StashValue.FromBool(false); }
         });
 
         // fs.executable(path) — Returns true if the path is an existing file and appears to be executable (by extension on Windows, by Unix mode bits on Unix).
-        ns.Function("executable", [Param("path", "string")], (ctx, args) =>
+        ns.Function("executable", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.executable");
+            var path = SvArgs.String(args, 0, "fs.executable");
             path = ctx.ExpandTilde(path);
 
             try
             {
                 if (!System.IO.File.Exists(path))
                 {
-                    return false;
+                    return StashValue.FromBool(false);
                 }
 
                 if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
@@ -465,24 +474,24 @@ public static class FsBuiltIns
                 {
                     // On Windows, check file extension
                     var ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
-                    return ext is ".exe" or ".cmd" or ".bat" or ".com" or ".ps1";
+                    return StashValue.FromBool(ext is ".exe" or ".cmd" or ".bat" or ".com" or ".ps1");
                 }
                 else
                 {
                     // On Unix, check executable permission via file mode
                     var mode = System.IO.File.GetUnixFileMode(path);
-                    return (mode & (System.IO.UnixFileMode.UserExecute |
+                    return StashValue.FromBool((mode & (System.IO.UnixFileMode.UserExecute |
                                     System.IO.UnixFileMode.GroupExecute |
-                                    System.IO.UnixFileMode.OtherExecute)) != 0;
+                                    System.IO.UnixFileMode.OtherExecute)) != 0);
                 }
             }
-            catch (System.IO.IOException) { return false; }
+            catch (System.IO.IOException) { return StashValue.FromBool(false); }
         });
 
         // fs.createFile(path) — Creates an empty file at path, or updates its last-modified time if it already exists (similar to Unix touch). Returns null.
-        ns.Function("createFile", [Param("path", "string")], (ctx, args) =>
+        ns.Function("createFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.createFile");
+            var path = SvArgs.String(args, 0, "fs.createFile");
             path = ctx.ExpandTilde(path);
 
             try
@@ -497,14 +506,14 @@ public static class FsBuiltIns
                 }
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create file '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.symlink(target, linkPath) — Creates a symbolic link at linkPath pointing to target. Returns null.
-        ns.Function("symlink", [Param("target", "string"), Param("linkPath", "string")], (ctx, args) =>
+        ns.Function("symlink", [Param("target", "string"), Param("linkPath", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var target = Args.String(args, 0, "fs.symlink");
-            var linkPath = Args.String(args, 1, "fs.symlink");
+            var target = SvArgs.String(args, 0, "fs.symlink");
+            var linkPath = SvArgs.String(args, 1, "fs.symlink");
             target = ctx.ExpandTilde(target);
             linkPath = ctx.ExpandTilde(linkPath);
 
@@ -513,13 +522,13 @@ public static class FsBuiltIns
                 System.IO.File.CreateSymbolicLink(linkPath, target);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create symlink '{linkPath}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         });
 
         // fs.stat(path) — Returns a dict with file metadata: size (int), isFile (bool), isDir (bool), isSymlink (bool), modified (float), created (float), name (string).
-        ns.Function("stat", [Param("path", "string")], (ctx, args) =>
+        ns.Function("stat", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.stat");
+            var path = SvArgs.String(args, 0, "fs.stat");
             path = ctx.ExpandTilde(path);
 
             try
@@ -532,25 +541,25 @@ public static class FsBuiltIns
 
                 var isDir = System.IO.Directory.Exists(path);
                 var result = new StashDictionary();
-                result.Set("size", isDir ? 0L : info.Length);
-                result.Set("isFile", info.Exists && !isDir);
-                result.Set("isDir", isDir);
+                result.Set("size", StashValue.FromInt(isDir ? 0L : info.Length));
+                result.Set("isFile", StashValue.FromBool(info.Exists && !isDir));
+                result.Set("isDir", StashValue.FromBool(isDir));
                 bool isSymlink = false;
                 try { isSymlink = (System.IO.File.GetAttributes(path) & System.IO.FileAttributes.ReparsePoint) != 0; } catch { }
-                result.Set("isSymlink", isSymlink);
-                result.Set("modified", (double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0);
-                result.Set("created", (double)new System.DateTimeOffset(info.CreationTimeUtc).ToUnixTimeMilliseconds() / 1000.0);
-                result.Set("name", System.IO.Path.GetFileName(path));
-                return result;
+                result.Set("isSymlink", StashValue.FromBool(isSymlink));
+                result.Set("modified", StashValue.FromFloat((double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0));
+                result.Set("created", StashValue.FromFloat((double)new System.DateTimeOffset(info.CreationTimeUtc).ToUnixTimeMilliseconds() / 1000.0));
+                result.Set("name", StashValue.FromObj(System.IO.Path.GetFileName(path)));
+                return StashValue.FromObj(result);
             }
             catch (RuntimeError) { throw; }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot stat '{path}': {e.Message}"); }
         });
 
         // fs.getPermissions(path) — Returns a FilePermissions struct describing the file's permission bits.
-        ns.Function("getPermissions", [Param("path", "string")], (ctx, args) =>
+        ns.Function("getPermissions", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.getPermissions");
+            var path = SvArgs.String(args, 0, "fs.getPermissions");
             path = ctx.ExpandTilde(path);
 
             try
@@ -579,59 +588,59 @@ public static class FsBuiltIns
                         isExe = false;
                     }
 
-                    return new StashInstance("FilePermissions", new Dictionary<string, object?>
+                    return StashValue.FromObj(new StashInstance("FilePermissions", new Dictionary<string, StashValue>
                     {
-                        ["owner"] = new StashInstance("FilePermission", new Dictionary<string, object?>
+                        ["owner"] = StashValue.FromObj(new StashInstance("FilePermission", new Dictionary<string, StashValue>
                         {
-                            ["read"] = true,
-                            ["write"] = !isReadOnly,
-                            ["execute"] = isExe,
-                        }),
-                        ["group"] = new StashInstance("FilePermission", new Dictionary<string, object?>
+                            ["read"] = StashValue.True,
+                            ["write"] = StashValue.FromBool(!isReadOnly),
+                            ["execute"] = StashValue.FromBool(isExe),
+                        })),
+                        ["group"] = StashValue.FromObj(new StashInstance("FilePermission", new Dictionary<string, StashValue>
                         {
-                            ["read"] = true,
-                            ["write"] = !isReadOnly,
-                            ["execute"] = isExe,
-                        }),
-                        ["others"] = new StashInstance("FilePermission", new Dictionary<string, object?>
+                            ["read"] = StashValue.True,
+                            ["write"] = StashValue.FromBool(!isReadOnly),
+                            ["execute"] = StashValue.FromBool(isExe),
+                        })),
+                        ["others"] = StashValue.FromObj(new StashInstance("FilePermission", new Dictionary<string, StashValue>
                         {
-                            ["read"] = true,
-                            ["write"] = !isReadOnly,
-                            ["execute"] = isExe,
-                        }),
-                    });
+                            ["read"] = StashValue.True,
+                            ["write"] = StashValue.FromBool(!isReadOnly),
+                            ["execute"] = StashValue.FromBool(isExe),
+                        })),
+                    }));
                 }
                 else
                 {
                     var mode = System.IO.File.GetUnixFileMode(path);
 
-                    var owner = new StashInstance("FilePermission", new Dictionary<string, object?>
+                    var owner = new StashInstance("FilePermission", new Dictionary<string, StashValue>
                     {
-                        ["read"] = (mode & System.IO.UnixFileMode.UserRead) != 0,
-                        ["write"] = (mode & System.IO.UnixFileMode.UserWrite) != 0,
-                        ["execute"] = (mode & System.IO.UnixFileMode.UserExecute) != 0,
+                        ["read"] = StashValue.FromBool((mode & System.IO.UnixFileMode.UserRead) != 0),
+                        ["write"] = StashValue.FromBool((mode & System.IO.UnixFileMode.UserWrite) != 0),
+                        ["execute"] = StashValue.FromBool((mode & System.IO.UnixFileMode.UserExecute) != 0),
                     });
 
-                    var group = new StashInstance("FilePermission", new Dictionary<string, object?>
+                    var group = new StashInstance("FilePermission", new Dictionary<string, StashValue>
                     {
-                        ["read"] = (mode & System.IO.UnixFileMode.GroupRead) != 0,
-                        ["write"] = (mode & System.IO.UnixFileMode.GroupWrite) != 0,
-                        ["execute"] = (mode & System.IO.UnixFileMode.GroupExecute) != 0,
+                        ["read"] = StashValue.FromBool((mode & System.IO.UnixFileMode.GroupRead) != 0),
+                        ["write"] = StashValue.FromBool((mode & System.IO.UnixFileMode.GroupWrite) != 0),
+                        ["execute"] = StashValue.FromBool((mode & System.IO.UnixFileMode.GroupExecute) != 0),
                     });
 
-                    var others = new StashInstance("FilePermission", new Dictionary<string, object?>
+                    var others = new StashInstance("FilePermission", new Dictionary<string, StashValue>
                     {
-                        ["read"] = (mode & System.IO.UnixFileMode.OtherRead) != 0,
-                        ["write"] = (mode & System.IO.UnixFileMode.OtherWrite) != 0,
-                        ["execute"] = (mode & System.IO.UnixFileMode.OtherExecute) != 0,
+                        ["read"] = StashValue.FromBool((mode & System.IO.UnixFileMode.OtherRead) != 0),
+                        ["write"] = StashValue.FromBool((mode & System.IO.UnixFileMode.OtherWrite) != 0),
+                        ["execute"] = StashValue.FromBool((mode & System.IO.UnixFileMode.OtherExecute) != 0),
                     });
 
-                    return new StashInstance("FilePermissions", new Dictionary<string, object?>
+                    return StashValue.FromObj(new StashInstance("FilePermissions", new Dictionary<string, StashValue>
                     {
-                        ["owner"] = owner,
-                        ["group"] = group,
-                        ["others"] = others,
-                    });
+                        ["owner"] = StashValue.FromObj(owner),
+                        ["group"] = StashValue.FromObj(group),
+                        ["others"] = StashValue.FromObj(others),
+                    }));
                 }
             }
             catch (RuntimeError) { throw; }
@@ -640,10 +649,10 @@ public static class FsBuiltIns
         }, returnType: "FilePermissions", documentation: "Returns a FilePermissions struct describing the read/write/execute permissions for owner, group, and others.\n@param path The path to inspect.\n@return A FilePermissions struct with owner, group, and others fields (each a FilePermission with read, write, execute bools).");
 
         // fs.setPermissions(path, permissions) — Sets file permissions from a FilePermissions struct.
-        ns.Function("setPermissions", [Param("path", "string"), Param("permissions", "FilePermissions")], (ctx, args) =>
+        ns.Function("setPermissions", [Param("path", "string"), Param("permissions", "FilePermissions")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.setPermissions");
-            var perms = Args.Instance(args, 1, "FilePermissions", "fs.setPermissions");
+            var path = SvArgs.String(args, 0, "fs.setPermissions");
+            var perms = SvArgs.Instance(args, 1, "FilePermissions", "fs.setPermissions");
             path = ctx.ExpandTilde(path);
 
             try
@@ -651,18 +660,18 @@ public static class FsBuiltIns
                 if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
                     throw new RuntimeError($"Path does not exist: '{path}'.");
 
-                var ownerInst = perms.GetField("owner", null) as StashInstance
+                var ownerInst = perms.GetField("owner", null).ToObject() as StashInstance
                     ?? throw new RuntimeError("'owner' field must be a FilePermission struct.");
-                var groupInst = perms.GetField("group", null) as StashInstance
+                var groupInst = perms.GetField("group", null).ToObject() as StashInstance
                     ?? throw new RuntimeError("'group' field must be a FilePermission struct.");
-                var othersInst = perms.GetField("others", null) as StashInstance
+                var othersInst = perms.GetField("others", null).ToObject() as StashInstance
                     ?? throw new RuntimeError("'others' field must be a FilePermission struct.");
 
                 if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
                     System.Runtime.InteropServices.OSPlatform.Windows))
                 {
                     // Windows: only write permission (ReadOnly attribute) can be controlled
-                    bool ownerWrite = ownerInst.GetField("write", null) as bool? ?? false;
+                    bool ownerWrite = ownerInst.GetField("write", null).ToObject() as bool? ?? false;
                     if (System.IO.File.Exists(path))
                     {
                         new System.IO.FileInfo(path).IsReadOnly = !ownerWrite;
@@ -681,17 +690,17 @@ public static class FsBuiltIns
                 {
                     var mode = System.IO.UnixFileMode.None;
 
-                    if (ownerInst.GetField("read", null) as bool? ?? false) mode |= System.IO.UnixFileMode.UserRead;
-                    if (ownerInst.GetField("write", null) as bool? ?? false) mode |= System.IO.UnixFileMode.UserWrite;
-                    if (ownerInst.GetField("execute", null) as bool? ?? false) mode |= System.IO.UnixFileMode.UserExecute;
+                    if (ownerInst.GetField("read", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.UserRead;
+                    if (ownerInst.GetField("write", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.UserWrite;
+                    if (ownerInst.GetField("execute", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.UserExecute;
 
-                    if (groupInst.GetField("read", null) as bool? ?? false) mode |= System.IO.UnixFileMode.GroupRead;
-                    if (groupInst.GetField("write", null) as bool? ?? false) mode |= System.IO.UnixFileMode.GroupWrite;
-                    if (groupInst.GetField("execute", null) as bool? ?? false) mode |= System.IO.UnixFileMode.GroupExecute;
+                    if (groupInst.GetField("read", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.GroupRead;
+                    if (groupInst.GetField("write", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.GroupWrite;
+                    if (groupInst.GetField("execute", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.GroupExecute;
 
-                    if (othersInst.GetField("read", null) as bool? ?? false) mode |= System.IO.UnixFileMode.OtherRead;
-                    if (othersInst.GetField("write", null) as bool? ?? false) mode |= System.IO.UnixFileMode.OtherWrite;
-                    if (othersInst.GetField("execute", null) as bool? ?? false) mode |= System.IO.UnixFileMode.OtherExecute;
+                    if (othersInst.GetField("read", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.OtherRead;
+                    if (othersInst.GetField("write", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.OtherWrite;
+                    if (othersInst.GetField("execute", null).ToObject() as bool? ?? false) mode |= System.IO.UnixFileMode.OtherExecute;
 
                     System.IO.File.SetUnixFileMode(path, mode);
                 }
@@ -699,14 +708,14 @@ public static class FsBuiltIns
             catch (RuntimeError) { throw; }
             catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}"); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set permissions on '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         }, returnType: "null", documentation: "Sets file permissions from a FilePermissions struct. On Unix, sets full rwx bits for owner/group/others. On Windows, controls the read-only attribute based on owner write permission.\n@param path The file path to modify.\n@param permissions A FilePermissions struct with owner, group, and others fields.");
 
         // fs.setReadOnly(path, readOnly) — Cross-platform convenience for toggling the read-only state.
-        ns.Function("setReadOnly", [Param("path", "string"), Param("readOnly", "bool")], (ctx, args) =>
+        ns.Function("setReadOnly", [Param("path", "string"), Param("readOnly", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.setReadOnly");
-            var readOnly = Args.Bool(args, 1, "fs.setReadOnly");
+            var path = SvArgs.String(args, 0, "fs.setReadOnly");
+            var readOnly = SvArgs.Bool(args, 1, "fs.setReadOnly");
             path = ctx.ExpandTilde(path);
 
             try
@@ -749,14 +758,14 @@ public static class FsBuiltIns
             catch (RuntimeError) { throw; }
             catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}"); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         }, returnType: "null", documentation: "Sets or clears the read-only state of a file. On Unix, toggles write bits. On Windows, sets the ReadOnly file attribute.\n@param path The file path to modify.\n@param readOnly True to make the file read-only, false to make it writable.");
 
         // fs.setExecutable(path, executable) — Sets or clears the executable bit (Unix) or is a no-op on Windows.
-        ns.Function("setExecutable", [Param("path", "string"), Param("executable", "bool")], (ctx, args) =>
+        ns.Function("setExecutable", [Param("path", "string"), Param("executable", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "fs.setExecutable");
-            var executable = Args.Bool(args, 1, "fs.setExecutable");
+            var path = SvArgs.String(args, 0, "fs.setExecutable");
+            var executable = SvArgs.Bool(args, 1, "fs.setExecutable");
             path = ctx.ExpandTilde(path);
 
             try
@@ -785,17 +794,18 @@ public static class FsBuiltIns
             catch (RuntimeError) { throw; }
             catch (System.UnauthorizedAccessException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}"); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set executable on '{path}': {e.Message}"); }
-            return null;
+            return StashValue.Null;
         }, returnType: "null", documentation: "Sets or clears the executable permission on a file. On Unix, toggles the user execute bit (adds on true, clears all execute bits on false). On Windows, this is a no-op since executability is determined by file extension.\n@param path The file path to modify.\n@param executable True to make executable, false to remove execute permission.");
 
         // ── File watching ─────────────────────────────────────────────────────
 
         // fs.watch(path, callback, options?) — Watch a file or directory for changes.
-        ns.Function("watch", [Param("path", "string"), Param("callback", "function"), Param("options", "WatchOptions")], (ctx, args) =>
+        ns.Function("watch", [Param("path", "string"), Param("callback", "function"), Param("options", "WatchOptions")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 2, 3, "fs.watch");
-            var path = Args.String(args, 0, "fs.watch");
-            var callback = Args.Callable(args, 1, "fs.watch");
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'fs.watch' expects 2 or 3 arguments.");
+            var path = SvArgs.String(args, 0, "fs.watch");
+            var callback = SvArgs.Callable(args, 1, "fs.watch");
             path = ctx.ExpandTilde(path);
             path = System.IO.Path.GetFullPath(path);
 
@@ -808,12 +818,12 @@ public static class FsBuiltIns
             int bufferSize = 8192;
             int debounceMs = 100;
 
-            if (args.Count > 2 && args[2] is StashInstance opts && opts.TypeName == "WatchOptions")
+            if (args.Length > 2 && args[2].IsObj && args[2].AsObj is StashInstance opts && opts.TypeName == "WatchOptions")
             {
-                if (opts.GetField("recursive", null) is bool r) recursive = r;
-                if (opts.GetField("filter", null) is string f) filter = f;
-                if (opts.GetField("bufferSize", null) is long bs) bufferSize = (int)bs;
-                if (opts.GetField("debounce", null) is long db) debounceMs = (int)db;
+                if (opts.GetField("recursive", null).ToObject() is bool r) recursive = r;
+                if (opts.GetField("filter", null).ToObject() is string f) filter = f;
+                if (opts.GetField("bufferSize", null).ToObject() is long bs) bufferSize = (int)bs;
+                if (opts.GetField("debounce", null).ToObject() is long db) debounceMs = (int)db;
             }
 
             // Determine watch path and filter for FileSystemWatcher
@@ -839,7 +849,7 @@ public static class FsBuiltIns
             };
 
             // Create the handle
-            var handle = new StashInstance("Watcher", new Dictionary<string, object?>());
+            var handle = new StashInstance("Watcher", new Dictionary<string, StashValue>());
 
             // Create watcher state (manages debouncing + callback invocation)
             var state = new WatcherState(watcher, callback, ctx, debounceMs);
@@ -877,13 +887,13 @@ public static class FsBuiltIns
                 throw new RuntimeError($"Cannot watch '{path}': {ex.Message}");
             }
 
-            return handle;
+            return StashValue.FromObj(handle);
         }, isVariadic: true, returnType: "Watcher", documentation: "Watches a file or directory for changes and invokes a callback for each event. Returns a Watcher handle that can be passed to fs.unwatch() to stop watching.\n\nThe callback receives a WatchEvent struct with type (a WatchEventType enum: Created, Modified, Deleted, Renamed), path (absolute), and oldPath (for renames only).\n\nCallbacks execute in an isolated forked context. Value-type variables from the parent scope are snapshotted; mutations to reference types (dicts, struct instances) are visible in both directions.\n\nEvents are debounced by default (100ms window) to suppress duplicate OS notifications. Set debounce to 0 in WatchOptions to receive every raw event.\n\n@param path File or directory path to watch.\n@param callback Function receiving a WatchEvent on each change.\n@param options Optional WatchOptions struct: recursive (bool), filter (string glob), bufferSize (int bytes), debounce (int ms).");
 
         // fs.unwatch(watcher) — Stop watching a file or directory.
-        ns.Function("unwatch", [Param("watcher", "Watcher")], (ctx, args) =>
+        ns.Function("unwatch", [Param("watcher", "Watcher")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var handle = Args.Instance(args, 0, "Watcher", "fs.unwatch");
+            var handle = SvArgs.Instance(args, 0, "Watcher", "fs.unwatch");
 
             if (_activeWatchers.TryRemove(handle, out WatcherState? state))
             {
@@ -893,7 +903,7 @@ public static class FsBuiltIns
             // Remove from tracked list (best-effort — may not be in this context's list)
             ctx.TrackedWatchers.RemoveAll(e => ReferenceEquals(e.Handle, handle));
 
-            return null;
+            return StashValue.Null;
         }, returnType: "null", documentation: "Stops a file watcher previously created by fs.watch(). Disposes the underlying OS watcher and removes it from tracking. Calling fs.unwatch() on an already-stopped watcher is a no-op.\n\n@param watcher The Watcher handle returned by fs.watch().");
 
         // ── Built-in structs for file permissions ─────────────────────────────

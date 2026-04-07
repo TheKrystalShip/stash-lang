@@ -1,6 +1,7 @@
 namespace Stash.Runtime.Types;
 
 using System.Collections.Generic;
+using Stash.Runtime;
 
 /// <summary>
 /// Represents an exclusive range of integers: start..end or start..end..step
@@ -33,6 +34,23 @@ public class StashRange
             {
                 yield return i;
             }
+        }
+    }
+
+    /// <summary>
+    /// Iterates the range yielding StashValue integers directly (no boxing).
+    /// </summary>
+    public IEnumerable<StashValue> IterateValues()
+    {
+        if (Step > 0)
+        {
+            for (long i = Start; i < End; i += Step)
+                yield return StashValue.FromInt(i);
+        }
+        else if (Step < 0)
+        {
+            for (long i = Start; i > End; i += Step)
+                yield return StashValue.FromInt(i);
         }
     }
 

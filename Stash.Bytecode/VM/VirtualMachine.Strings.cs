@@ -86,11 +86,11 @@ public sealed partial class VirtualMachine
                     }
                 };
             }
-            Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, object?>
+            Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
             {
-                ["stdout"] = "",
-                ["stderr"] = "",
-                ["exitCode"] = (long)exitCode
+                ["stdout"] = StashValue.FromObj(""),
+                ["stderr"] = StashValue.FromObj(""),
+                ["exitCode"] = StashValue.FromInt((long)exitCode)
             }) { StringifyField = "stdout" }));
         }
         else
@@ -111,11 +111,11 @@ public sealed partial class VirtualMachine
                     }
                 };
             }
-            Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, object?>
+            Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
             {
-                ["stdout"] = stdout,
-                ["stderr"] = stderr,
-                ["exitCode"] = (long)exitCode
+                ["stdout"] = StashValue.FromObj(stdout),
+                ["stderr"] = StashValue.FromObj(stderr),
+                ["exitCode"] = StashValue.FromInt((long)exitCode)
             }) { StringifyField = "stdout" }));
         }
     }
@@ -156,8 +156,8 @@ public sealed partial class VirtualMachine
         string stdout = "", stderr = "";
         if (cmdResult is StashInstance ri)
         {
-            stdout = (ri.GetField("stdout", span) as string) ?? "";
-            stderr = (ri.GetField("stderr", span) as string) ?? "";
+            stdout = (ri.GetField("stdout", span).ToObject() as string) ?? "";
+            stderr = (ri.GetField("stderr", span).ToObject() as string) ?? "";
         }
 
         string content = stream switch
@@ -183,11 +183,11 @@ public sealed partial class VirtualMachine
             throw new RuntimeError($"Redirect failed: {ex.Message}", span);
         }
 
-        var newFields = new Dictionary<string, object?>
+        var newFields = new Dictionary<string, StashValue>
         {
-            ["stdout"] = (stream == 0 || stream == 2) ? "" : stdout,
-            ["stderr"] = (stream == 1 || stream == 2) ? "" : stderr,
-            ["exitCode"] = cmdResult is StashInstance ri2 ? ri2.GetField("exitCode", span) : 0L
+            ["stdout"] = StashValue.FromObj((stream == 0 || stream == 2) ? "" : stdout),
+            ["stderr"] = StashValue.FromObj((stream == 1 || stream == 2) ? "" : stderr),
+            ["exitCode"] = cmdResult is StashInstance ri2 ? ri2.GetField("exitCode", span) : StashValue.Zero
         };
         Push(StashValue.FromObj(new StashInstance("CommandResult", newFields) { StringifyField = "stdout" }));
     }

@@ -427,7 +427,7 @@ public class DebugSessionTests
     public void FormatVariable_List_ReturnsArrayTypeWithReference()
     {
         var session = new DebugSession();
-        var list = new List<object?> { 1L, 2L, 3L };
+        var list = new List<StashValue> { StashValue.FromInt(1L), StashValue.FromInt(2L), StashValue.FromInt(3L) };
         var v = InvokeFormatVariable(session, "arr", list);
         Assert.Equal("array", v.Type);
         Assert.Equal("array[3]", v.Value);
@@ -438,7 +438,7 @@ public class DebugSessionTests
     public void FormatVariable_EmptyList_ReturnsArrayZeroCount()
     {
         var session = new DebugSession();
-        var v = InvokeFormatVariable(session, "arr", new List<object?>());
+        var v = InvokeFormatVariable(session, "arr", new List<StashValue>());
         Assert.Equal("array", v.Type);
         Assert.Equal("array[0]", v.Value);
         Assert.True(v.VariablesReference > 0);
@@ -449,8 +449,8 @@ public class DebugSessionTests
     {
         var session = new DebugSession();
         var dict = new StashDictionary();
-        dict.Set("key1", "value1");
-        dict.Set("key2", "value2");
+        dict.Set("key1", StashValue.FromObj("value1"));
+        dict.Set("key2", StashValue.FromObj("value2"));
         var v = InvokeFormatVariable(session, "d", dict);
         Assert.Equal("dict", v.Type);
         Assert.Equal("dict[2]", v.Value);
@@ -461,10 +461,10 @@ public class DebugSessionTests
     public void FormatVariable_StashInstance_ReturnsTypeNameWithReference()
     {
         var session = new DebugSession();
-        var instance = new StashInstance("Point", new Dictionary<string, object?>
+        var instance = new StashInstance("Point", new Dictionary<string, StashValue>
         {
-            { "x", 10L },
-            { "y", 20L },
+            { "x", StashValue.FromInt(10L) },
+            { "y", StashValue.FromInt(20L) },
         });
         var v = InvokeFormatVariable(session, "p", instance);
         Assert.Equal("Point", v.Type);

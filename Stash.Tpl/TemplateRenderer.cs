@@ -241,16 +241,16 @@ public class TemplateRenderer
         for (int i = 0; i < totalCount; i++)
         {
             var childEnv = _evaluator.CreateChildEnvironment(env);
-            _evaluator.DefineVariable(childEnv, forNode.Variable, items[i]);
+            _evaluator.DefineVariable(childEnv, forNode.Variable, items[i].ToObject());
 
             // Define loop metadata as a StashInstance
-            var loopFields = new Dictionary<string, object?>
+            var loopFields = new Dictionary<string, StashValue>
             {
-                { "index", (long)(i + 1) },
-                { "index0", (long)i },
-                { "first", i == 0 },
-                { "last", i == totalCount - 1 },
-                { "length", (long)totalCount }
+                { "index", StashValue.FromInt((long)(i + 1)) },
+                { "index0", StashValue.FromInt((long)i) },
+                { "first", StashValue.FromBool(i == 0) },
+                { "last", StashValue.FromBool(i == totalCount - 1) },
+                { "length", StashValue.FromInt((long)totalCount) }
             };
             _evaluator.DefineVariable(childEnv, "loop", new StashInstance("LoopInfo", loopFields));
 
@@ -272,34 +272,34 @@ public class TemplateRenderer
     /// Thrown when <paramref name="iterableValue"/> is <see langword="null"/> or an
     /// unsupported type.
     /// </exception>
-    private List<object?> CollectItems(object? iterableValue, string iterableExpr)
+    private List<StashValue> CollectItems(object? iterableValue, string iterableExpr)
     {
         switch (iterableValue)
         {
-            case List<object?> list:
+            case List<StashValue> list:
                 return list;
 
             case StashRange range:
-                var items = new List<object?>();
-                foreach (var val in range.Iterate())
+                var items = new List<StashValue>();
+                foreach (var val in range.IterateValues())
                 {
                     items.Add(val);
                 }
                 return items;
 
             case string s:
-                var chars = new List<object?>();
+                var chars = new List<StashValue>();
                 foreach (var c in s)
                 {
-                    chars.Add(c.ToString());
+                    chars.Add(StashValue.FromObj(c.ToString()));
                 }
                 return chars;
 
             case StashDictionary dict:
-                var keys = new List<object?>();
+                var keys = new List<StashValue>();
                 foreach (var entry in dict.RawEntries())
                 {
-                    keys.Add(entry.Key);
+                    keys.Add(StashValue.FromObject(entry.Key));
                 }
                 return keys;
 
@@ -360,7 +360,7 @@ public class TemplateRenderer
         {
             if (entry.Key is string key)
             {
-                _evaluator.DefineVariable(env, key, entry.Value);
+                _evaluator.DefineVariable(env, key, entry.Value.ToObject());
             }
         }
 

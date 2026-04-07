@@ -45,16 +45,16 @@ public static class HttpBuiltIns
         ns.RequiresCapability(StashCapabilities.Network);
 
         // http.get(url) — Sends an HTTP GET request. Returns a HttpResponse struct with status, body, and headers.
-        ns.Function("get", [Param("url", "string")], (_, args) =>
+        ns.Function("get", [Param("url", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var url = Args.String(args, 0, "http.get");
+            var url = SvArgs.String(args, 0, "http.get");
 
             ValidateUrl(url, "http.get");
 
             try
             {
                 var response = _client.GetAsync(url).GetAwaiter().GetResult();
-                return MakeResponse(response);
+                return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
             {
@@ -67,10 +67,10 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse");
 
         // http.post(url, body) — Sends an HTTP POST request with a JSON body string. Returns a HttpResponse struct.
-        ns.Function("post", [Param("url", "string"), Param("body", "string")], (_, args) =>
+        ns.Function("post", [Param("url", "string"), Param("body", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var url = Args.String(args, 0, "http.post");
-            var body = Args.String(args, 1, "http.post");
+            var url = SvArgs.String(args, 0, "http.post");
+            var body = SvArgs.String(args, 1, "http.post");
 
             ValidateUrl(url, "http.post");
 
@@ -78,7 +78,7 @@ public static class HttpBuiltIns
             {
                 var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
                 var response = _client.PostAsync(url, content).GetAwaiter().GetResult();
-                return MakeResponse(response);
+                return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
             {
@@ -91,10 +91,10 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse");
 
         // http.put(url, body) — Sends an HTTP PUT request with a JSON body string. Returns a HttpResponse struct.
-        ns.Function("put", [Param("url", "string"), Param("body", "string")], (_, args) =>
+        ns.Function("put", [Param("url", "string"), Param("body", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var url = Args.String(args, 0, "http.put");
-            var body = Args.String(args, 1, "http.put");
+            var url = SvArgs.String(args, 0, "http.put");
+            var body = SvArgs.String(args, 1, "http.put");
 
             ValidateUrl(url, "http.put");
 
@@ -102,7 +102,7 @@ public static class HttpBuiltIns
             {
                 var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
                 var response = _client.PutAsync(url, content).GetAwaiter().GetResult();
-                return MakeResponse(response);
+                return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
             {
@@ -115,16 +115,16 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse");
 
         // http.delete(url) — Sends an HTTP DELETE request. Returns a HttpResponse struct with status, body, and headers.
-        ns.Function("delete", [Param("url", "string")], (_, args) =>
+        ns.Function("delete", [Param("url", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var url = Args.String(args, 0, "http.delete");
+            var url = SvArgs.String(args, 0, "http.delete");
 
             ValidateUrl(url, "http.delete");
 
             try
             {
                 var response = _client.DeleteAsync(url).GetAwaiter().GetResult();
-                return MakeResponse(response);
+                return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
             {
@@ -137,11 +137,11 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse");
 
         // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
-        ns.Function("request", [Param("options", "dict")], (_, args) =>
+        ns.Function("request", [Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var options = Args.Dict(args, 0, "http.request");
+            var options = SvArgs.Dict(args, 0, "http.request");
 
-            var urlVal = options.Get("url");
+            var urlVal = options.Get("url").ToObject();
             if (urlVal is not string url)
             {
                 throw new RuntimeError("http.request: 'url' must be a string.");
@@ -149,23 +149,23 @@ public static class HttpBuiltIns
 
             ValidateUrl(url, "http.request");
 
-            var methodVal = options.Get("method");
+            var methodVal = options.Get("method").ToObject();
             var methodStr = methodVal is string m ? m.ToUpperInvariant() : "GET";
 
             var requestMessage = new HttpRequestMessage(new HttpMethod(methodStr), url);
 
-            var headersVal = options.Get("headers");
+            var headersVal = options.Get("headers").ToObject();
             if (headersVal is StashDictionary headersDict)
             {
-                foreach (var key in headersDict.Keys())
+                foreach (var key in headersDict.RawKeys())
                 {
                     var keyStr = RuntimeValues.Stringify(key);
-                    var valStr = RuntimeValues.Stringify(headersDict.Get(key!));
+                    var valStr = RuntimeValues.Stringify(headersDict.Get(key).ToObject());
                     requestMessage.Headers.TryAddWithoutValidation(keyStr, valStr);
                 }
             }
 
-            var bodyVal = options.Get("body");
+            var bodyVal = options.Get("body").ToObject();
             if (bodyVal is string bodyStr)
             {
                 requestMessage.Content = new StringContent(bodyStr, System.Text.Encoding.UTF8, "application/json");
@@ -174,7 +174,7 @@ public static class HttpBuiltIns
             try
             {
                 var response = _client.SendAsync(requestMessage).GetAwaiter().GetResult();
-                return MakeResponse(response);
+                return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
             {
@@ -187,10 +187,10 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse");
 
         // http.patch(url, body) — Sends an HTTP PATCH request with a JSON body string. Returns a HttpResponse struct.
-        ns.Function("patch", [Param("url", "string"), Param("body", "string")], (_, args) =>
+        ns.Function("patch", [Param("url", "string"), Param("body", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var url = Args.String(args, 0, "http.patch");
-            var body = Args.String(args, 1, "http.patch");
+            var url = SvArgs.String(args, 0, "http.patch");
+            var body = SvArgs.String(args, 1, "http.patch");
 
             ValidateUrl(url, "http.patch");
 
@@ -198,7 +198,7 @@ public static class HttpBuiltIns
             {
                 var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
                 var response = _client.PatchAsync(url, content).GetAwaiter().GetResult();
-                return MakeResponse(response);
+                return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
             {
@@ -211,10 +211,10 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse");
 
         // http.download(url, path) — Downloads the response body of a GET request and writes it to the given file path. Returns null.
-        ns.Function("download", [Param("url", "string"), Param("path", "string")], (ctx, args) =>
+        ns.Function("download", [Param("url", "string"), Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var url = Args.String(args, 0, "http.download");
-            var path = Args.String(args, 1, "http.download");
+            var url = SvArgs.String(args, 0, "http.download");
+            var path = SvArgs.String(args, 1, "http.download");
 
             ValidateUrl(url, "http.download");
             path = ctx.ExpandTilde(path);
@@ -240,7 +240,7 @@ public static class HttpBuiltIns
                 try { System.IO.File.Delete(path); } catch { }
                 throw new RuntimeError($"http.download: cannot write file '{path}': {e.Message}");
             }
-            return null;
+            return StashValue.Null;
         });
 
         ns.Struct("HttpResponse", [
@@ -265,19 +265,19 @@ public static class HttpBuiltIns
 
         foreach (var header in response.Headers)
         {
-            headers.Set(header.Key, string.Join(", ", header.Value));
+            headers.Set(header.Key, StashValue.FromObj(string.Join(", ", header.Value)));
         }
 
         foreach (var header in response.Content.Headers)
         {
-            headers.Set(header.Key, string.Join(", ", header.Value));
+            headers.Set(header.Key, StashValue.FromObj(string.Join(", ", header.Value)));
         }
 
-        return new StashInstance("HttpResponse", new Dictionary<string, object?>
+        return new StashInstance("HttpResponse", new Dictionary<string, StashValue>
         {
-            ["status"] = (long)response.StatusCode,
-            ["body"] = body,
-            ["headers"] = headers
+            ["status"] = StashValue.FromInt((long)response.StatusCode),
+            ["body"] = StashValue.FromObj(body),
+            ["headers"] = StashValue.FromObj(headers)
         });
     }
 

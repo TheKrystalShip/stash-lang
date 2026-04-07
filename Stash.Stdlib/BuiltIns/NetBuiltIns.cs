@@ -21,9 +21,9 @@ public static class NetBuiltIns
         ns.RequiresCapability(StashCapabilities.Network);
 
         // net.subnetInfo(ip) — Returns subnet details for a CIDR IP address.
-        ns.Function("subnetInfo", [Param("ip", "ip")], (_, args) =>
+        ns.Function("subnetInfo", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var ip = Args.IpAddress(args, 0, "net.subnetInfo");
+            var ip = SvArgs.IpAddress(args, 0, "net.subnetInfo");
             if (ip.PrefixLength is null)
                 throw new RuntimeError("'net.subnetInfo' requires a CIDR IP address (e.g., @192.168.1.0/24).");
 
@@ -48,60 +48,60 @@ public static class NetBuiltIns
             var firstHost = new StashIpAddress(firstHostBytes, null);
             var lastHost = new StashIpAddress(lastHostBytes, null);
 
-            return new StashInstance("SubnetInfo", new Dictionary<string, object?>
+            return StashValue.FromObj(new StashInstance("SubnetInfo", new Dictionary<string, StashValue>
             {
-                ["network"] = network,
-                ["broadcast"] = broadcast,
-                ["mask"] = mask,
-                ["wildcard"] = wildcard,
-                ["hostCount"] = hostCount,
-                ["firstHost"] = firstHost,
-                ["lastHost"] = lastHost,
-            });
+                ["network"] = StashValue.FromObj(network),
+                ["broadcast"] = StashValue.FromObj(broadcast),
+                ["mask"] = StashValue.FromObj(mask),
+                ["wildcard"] = StashValue.FromObj(wildcard),
+                ["hostCount"] = StashValue.FromInt(hostCount),
+                ["firstHost"] = StashValue.FromObj(firstHost),
+                ["lastHost"] = StashValue.FromObj(lastHost),
+            }));
         }, returnType: "SubnetInfo", documentation: "Returns subnet details for a CIDR IP address.");
 
         // net.mask(ip) — Returns the subnet mask for a CIDR IP address.
-        ns.Function("mask", [Param("ip", "ip")], (_, args) =>
+        ns.Function("mask", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var ip = Args.IpAddress(args, 0, "net.mask");
+            var ip = SvArgs.IpAddress(args, 0, "net.mask");
             var (maskBytes, _, _, _) = ComputeSubnetComponents(ip, "net.mask");
-            return new StashIpAddress(maskBytes, null);
+            return StashValue.FromObj(new StashIpAddress(maskBytes, null));
         }, returnType: "ip", documentation: "Returns the subnet mask for a CIDR IP address.");
 
         // net.network(ip) — Returns the network address for a CIDR IP address.
-        ns.Function("network", [Param("ip", "ip")], (_, args) =>
+        ns.Function("network", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var ip = Args.IpAddress(args, 0, "net.network");
+            var ip = SvArgs.IpAddress(args, 0, "net.network");
             var (_, networkBytes, _, _) = ComputeSubnetComponents(ip, "net.network");
-            return new StashIpAddress(networkBytes, ip.PrefixLength!.Value);
+            return StashValue.FromObj(new StashIpAddress(networkBytes, ip.PrefixLength!.Value));
         }, returnType: "ip", documentation: "Returns the network address for a CIDR IP address.");
 
         // net.broadcast(ip) — Returns the broadcast address for a CIDR IP address.
-        ns.Function("broadcast", [Param("ip", "ip")], (_, args) =>
+        ns.Function("broadcast", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var ip = Args.IpAddress(args, 0, "net.broadcast");
+            var ip = SvArgs.IpAddress(args, 0, "net.broadcast");
             var (_, _, broadcastBytes, _) = ComputeSubnetComponents(ip, "net.broadcast");
-            return new StashIpAddress(broadcastBytes, null);
+            return StashValue.FromObj(new StashIpAddress(broadcastBytes, null));
         }, returnType: "ip", documentation: "Returns the broadcast address for a CIDR IP address.");
 
         // net.hostCount(ip) — Returns the number of usable host addresses in a CIDR subnet.
-        ns.Function("hostCount", [Param("ip", "ip")], (_, args) =>
+        ns.Function("hostCount", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var ip = Args.IpAddress(args, 0, "net.hostCount");
+            var ip = SvArgs.IpAddress(args, 0, "net.hostCount");
             ComputeSubnetComponents(ip, "net.hostCount"); // validates PrefixLength
-            return ComputeHostCount(ip);
+            return StashValue.FromInt(ComputeHostCount(ip));
         }, returnType: "int", documentation: "Returns the number of usable host addresses in a CIDR subnet.");
 
         // net.resolve(hostname) — Resolves a hostname to its first IP address via DNS.
-        ns.Function("resolve", [Param("hostname", "string")], (_, args) =>
+        ns.Function("resolve", [Param("hostname", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var hostname = Args.String(args, 0, "net.resolve");
+            var hostname = SvArgs.String(args, 0, "net.resolve");
             try
             {
                 var entry = Dns.GetHostEntry(hostname);
                 if (entry.AddressList.Length == 0)
                     throw new RuntimeError($"No DNS records found for '{hostname}'.");
-                return new StashIpAddress(entry.AddressList[0], null);
+                return StashValue.FromObj(new StashIpAddress(entry.AddressList[0], null));
             }
             catch (SocketException ex)
             {
@@ -110,13 +110,13 @@ public static class NetBuiltIns
         }, returnType: "ip", documentation: "Resolves a hostname to its first IP address via DNS.\n@param hostname The hostname to resolve.\n@return The first resolved IP address.");
 
         // net.resolveAll(hostname) — Resolves a hostname to all IP addresses via DNS.
-        ns.Function("resolveAll", [Param("hostname", "string")], (_, args) =>
+        ns.Function("resolveAll", [Param("hostname", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var hostname = Args.String(args, 0, "net.resolveAll");
+            var hostname = SvArgs.String(args, 0, "net.resolveAll");
             try
             {
                 var entry = Dns.GetHostEntry(hostname);
-                return entry.AddressList.Select(a => (object?)new StashIpAddress(a, null)).ToList();
+                return StashValue.FromObj(entry.AddressList.Select(a => (object?)new StashIpAddress(a, null)).ToList());
             }
             catch (SocketException ex)
             {
@@ -125,13 +125,13 @@ public static class NetBuiltIns
         }, returnType: "array", documentation: "Resolves a hostname to all IP addresses via DNS.\n@param hostname The hostname to resolve.\n@return An array of resolved IP addresses.");
 
         // net.reverseLookup(ip) — Performs reverse DNS lookup for an IP address.
-        ns.Function("reverseLookup", [Param("ip", "ip")], (_, args) =>
+        ns.Function("reverseLookup", [Param("ip", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var ip = Args.IpAddress(args, 0, "net.reverseLookup");
+            var ip = SvArgs.IpAddress(args, 0, "net.reverseLookup");
             try
             {
                 var entry = Dns.GetHostEntry(ip.Address);
-                return entry.HostName;
+                return StashValue.FromObj(entry.HostName);
             }
             catch (SocketException ex)
             {
@@ -140,40 +140,41 @@ public static class NetBuiltIns
         }, returnType: "string", documentation: "Performs reverse DNS lookup for an IP address.\n@param ip The IP address to lookup.\n@return The hostname associated with the IP.");
 
         // net.ping(host) — Sends an ICMP ping to a host and returns the result.
-        ns.Function("ping", [Param("host", "ip")], (_, args) =>
+        ns.Function("ping", [Param("host", "ip")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var host = Args.IpAddress(args, 0, "net.ping");
+            var host = SvArgs.IpAddress(args, 0, "net.ping");
             using var pinger = new Ping();
             try
             {
                 PingReply reply = pinger.Send(host.Address, 5000);
-                return new StashInstance("PingResult", new Dictionary<string, object?>
+                return StashValue.FromObj(new StashInstance("PingResult", new Dictionary<string, StashValue>
                 {
-                    ["alive"] = reply.Status == IPStatus.Success,
-                    ["latency"] = (double)reply.RoundtripTime,
-                    ["ttl"] = reply.Status == IPStatus.Success ? (long)(reply.Options?.Ttl ?? 0) : 0L,
-                });
+                    ["alive"] = StashValue.FromBool(reply.Status == IPStatus.Success),
+                    ["latency"] = StashValue.FromFloat((double)reply.RoundtripTime),
+                    ["ttl"] = StashValue.FromInt(reply.Status == IPStatus.Success ? (long)(reply.Options?.Ttl ?? 0) : 0L),
+                }));
             }
             catch (PingException)
             {
-                return new StashInstance("PingResult", new Dictionary<string, object?>
+                return StashValue.FromObj(new StashInstance("PingResult", new Dictionary<string, StashValue>
                 {
-                    ["alive"] = false,
-                    ["latency"] = 0.0,
-                    ["ttl"] = 0L,
-                });
+                    ["alive"] = StashValue.False,
+                    ["latency"] = StashValue.FromFloat(0.0),
+                    ["ttl"] = StashValue.Zero,
+                }));
             }
         }, returnType: "PingResult", documentation: "Sends an ICMP ping to a host and returns the result. On Linux, requires root or CAP_NET_RAW capability.\n@param host The IP address to ping.\n@return A PingResult with alive, latency, and ttl fields.");
 
         // net.isPortOpen(host, port, ?timeout) — Checks if a TCP port is open on a host.
-        ns.Function("isPortOpen", [Param("host", "string|ip"), Param("port", "int"), Param("timeout", "int")], (_, args) =>
+        ns.Function("isPortOpen", [Param("host", "string|ip"), Param("port", "int"), Param("timeout", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            Args.Count(args, 2, 3, "net.isPortOpen");
-            object hostArg = args[0]!;
-            var port = Args.Long(args, 1, "net.isPortOpen");
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("net.isPortOpen: expected 2 or 3 arguments.");
+            object? hostArg = args[0].ToObject();
+            var port = SvArgs.Long(args, 1, "net.isPortOpen");
             if (port < 1 || port > 65535)
                 throw new RuntimeError("Port must be between 1 and 65535.");
-            int timeout = args.Count > 2 ? (int)Args.Long(args, 2, "net.isPortOpen") : 3000;
+            int timeout = args.Length > 2 ? (int)SvArgs.Long(args, 2, "net.isPortOpen") : 3000;
 
             try
             {
@@ -185,30 +186,29 @@ public static class NetBuiltIns
                     client.ConnectAsync(hostname, (int)port, cts.Token).GetAwaiter().GetResult();
                 else
                     throw new RuntimeError("First argument to 'net.isPortOpen' must be an IP address or hostname string.");
-                return client.Connected;
+                return StashValue.FromBool(client.Connected);
             }
             catch (RuntimeError) { throw; }
             catch
             {
-                return false;
+                return StashValue.False;
             }
         }, returnType: "bool", documentation: "Checks if a TCP port is open on a host.\n@param host The IP address or hostname string to check.\n@param port The port number (1-65535).\n@param timeout Optional timeout in milliseconds (default 3000).");
 
         // net.interfaces() — Returns information about all network interfaces.
-        ns.Function("interfaces", [], (_, args) =>
-        {
-            return BuildInterfaceList(NetworkInterface.GetAllNetworkInterfaces());
-        }, returnType: "array", documentation: "Returns information about all network interfaces.\n@return An array of InterfaceInfo structs.");
+        ns.Function("interfaces", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
+            StashValue.FromObj(BuildInterfaceList(NetworkInterface.GetAllNetworkInterfaces())),
+            returnType: "array", documentation: "Returns information about all network interfaces.\n@return An array of InterfaceInfo structs.");
 
         // net.interface(name) — Returns information about a specific network interface.
-        ns.Function("interface", [Param("name", "string")], (_, args) =>
+        ns.Function("interface", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "net.interface");
+            var name = SvArgs.String(args, 0, "net.interface");
             var match = NetworkInterface.GetAllNetworkInterfaces()
                 .FirstOrDefault(ni => ni.Name == name);
             if (match is null)
                 throw new RuntimeError($"Network interface '{name}' not found.");
-            return BuildInterfaceList([match])[0];
+            return StashValue.FromObj(BuildInterfaceList([match])[0]);
         }, returnType: "InterfaceInfo", documentation: "Returns information about a specific network interface.\n@param name The interface name (e.g., \"eth0\", \"wlan0\").\n@return An InterfaceInfo struct.");
 
         // Struct definitions
@@ -293,9 +293,9 @@ public static class NetBuiltIns
         }
     }
 
-    private static List<object?> BuildInterfaceList(IEnumerable<NetworkInterface> interfaces)
+    private static List<StashValue> BuildInterfaceList(IEnumerable<NetworkInterface> interfaces)
     {
-        var result = new List<object?>();
+        var result = new List<StashValue>();
 
         foreach (var ni in interfaces)
         {
@@ -339,18 +339,18 @@ public static class NetBuiltIns
             if (mac.Length == 12)
                 mac = string.Join(":", Enumerable.Range(0, 6).Select(i => mac.Substring(i * 2, 2)));
 
-            result.Add(new StashInstance("InterfaceInfo", new Dictionary<string, object?>
+            result.Add(StashValue.FromObj(new StashInstance("InterfaceInfo", new Dictionary<string, StashValue>
             {
-                ["name"] = ni.Name,
-                ["ip"] = (object?)ipv4,
-                ["ipv6"] = (object?)ipv6,
-                ["mac"] = mac,
-                ["gateway"] = (object?)gateway,
-                ["subnet"] = (object?)subnetAddr,
-                ["status"] = ni.OperationalStatus.ToString(),
-                ["type"] = ni.NetworkInterfaceType.ToString(),
-                ["up"] = ni.OperationalStatus == OperationalStatus.Up,
-            }));
+                ["name"] = StashValue.FromObj(ni.Name),
+                ["ip"] = ipv4 is not null ? StashValue.FromObj(ipv4) : StashValue.Null,
+                ["ipv6"] = ipv6 is not null ? StashValue.FromObj(ipv6) : StashValue.Null,
+                ["mac"] = StashValue.FromObj(mac),
+                ["gateway"] = gateway is not null ? StashValue.FromObj(gateway) : StashValue.Null,
+                ["subnet"] = subnetAddr is not null ? StashValue.FromObj(subnetAddr) : StashValue.Null,
+                ["status"] = StashValue.FromObj(ni.OperationalStatus.ToString()),
+                ["type"] = StashValue.FromObj(ni.NetworkInterfaceType.ToString()),
+                ["up"] = StashValue.FromBool(ni.OperationalStatus == OperationalStatus.Up),
+            })));
         }
 
         return result;

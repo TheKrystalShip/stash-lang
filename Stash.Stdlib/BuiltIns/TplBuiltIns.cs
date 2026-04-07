@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.IO;
 using Stash.Runtime;
 using Stash.Stdlib.Registration;
@@ -42,25 +43,25 @@ public static class TplBuiltIns
 
         // tpl.render(template, data) — render a template string with data dictionary
         // tpl.render(compiled, data) — render a pre-compiled template with data dictionary
-        ns.Function("render", [Param("template"), Param("data", "dict")], (ctx, args) =>
+        ns.Function("render", [Param("template"), Param("data", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var data = Args.Dict(args, 1, "tpl.render");
+            var data = SvArgs.Dict(args, 1, "tpl.render");
 
             // If first arg is a string, render it as a template
-            if (args[0] is string template)
+            if (args[0].ToObject() is string template)
             {
-                return ctx.CompileAndRenderTemplate(template, data);
+                return StashValue.FromObj(ctx.CompileAndRenderTemplate(template, data));
             }
 
             // If first arg is a compiled template (List<TemplateNode>), render pre-parsed AST
-            return ctx.RenderCompiledTemplate(args[0], data);
+            return StashValue.FromObj(ctx.RenderCompiledTemplate(args[0].ToObject(), data));
         });
 
         // tpl.renderFile(path, data) — render a template file with data dictionary
-        ns.Function("renderFile", [Param("path", "string"), Param("data", "dict")], (ctx, args) =>
+        ns.Function("renderFile", [Param("path", "string"), Param("data", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var path = Args.String(args, 0, "tpl.renderFile");
-            var data = Args.Dict(args, 1, "tpl.renderFile");
+            var path = SvArgs.String(args, 0, "tpl.renderFile");
+            var data = SvArgs.Dict(args, 1, "tpl.renderFile");
             string expandedPath = ExpandTilde(path);
 
             if (!File.Exists(expandedPath))
@@ -78,14 +79,14 @@ public static class TplBuiltIns
                 throw new RuntimeError($"Failed to read template file '{path}': {ex.Message}");
             }
             string? basePath = Path.GetDirectoryName(Path.GetFullPath(expandedPath));
-            return ctx.CompileAndRenderTemplate(template, data, basePath);
+            return StashValue.FromObject(ctx.CompileAndRenderTemplate(template, data, basePath));
         });
 
         // tpl.compile(template) — pre-compile a template string for repeated rendering
-        ns.Function("compile", [Param("template", "string")], (ctx, args) =>
+        ns.Function("compile", [Param("template", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var template = Args.String(args, 0, "tpl.compile");
-            return ctx.CompileTemplate(template);
+            var template = SvArgs.String(args, 0, "tpl.compile");
+            return StashValue.FromObject(ctx.CompileTemplate(template));
         });
 
         return ns.Build();

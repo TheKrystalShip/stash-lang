@@ -126,9 +126,9 @@ let result = free <= total;
     {
         var result = Run("let result = sys.diskUsage();");
         var dict = Assert.IsType<StashDictionary>(result);
-        Assert.NotNull(dict.Get("total"));
-        Assert.NotNull(dict.Get("used"));
-        Assert.NotNull(dict.Get("free"));
+        Assert.NotNull(dict.Get("total").ToObject());
+        Assert.NotNull(dict.Get("used").ToObject());
+        Assert.NotNull(dict.Get("free").ToObject());
     }
 
     [Fact]
@@ -156,7 +156,7 @@ let result = d[""total""] == d[""used""] + d[""free""];
     {
         var result = Run(@"let result = sys.diskUsage(""/"");");
         var dict = Assert.IsType<StashDictionary>(result);
-        Assert.NotNull(dict.Get("total"));
+        Assert.NotNull(dict.Get("total").ToObject());
     }
 
     [Fact]
@@ -170,7 +170,7 @@ let result = d[""total""] == d[""used""] + d[""free""];
     {
         var result = Run("let result = sys.diskUsage();");
         var dict = Assert.IsType<StashDictionary>(result);
-        var total = Assert.IsType<long>(dict.Get("total"));
+        var total = Assert.IsType<long>(dict.Get("total").ToObject());
         Assert.True(total >= 1024L * 1024L);
     }
 
@@ -257,7 +257,7 @@ let result = typeof(first[""name""]) == ""string"" and typeof(first[""addresses"
         foreach (var entry in arr)
         {
             var dict = Assert.IsType<StashDictionary>(entry);
-            var name = Assert.IsType<string>(dict.Get("name"));
+            var name = Assert.IsType<string>(dict.Get("name").ToObject());
             Assert.False(string.IsNullOrEmpty(name));
         }
     }
@@ -270,7 +270,7 @@ let result = typeof(first[""name""]) == ""string"" and typeof(first[""addresses"
         foreach (var entry in arr)
         {
             var dict = Assert.IsType<StashDictionary>(entry);
-            Assert.IsType<List<object?>>(dict.Get("addresses"));
+            Assert.IsType<List<object?>>(dict.Get("addresses").ToObject());
         }
     }
 

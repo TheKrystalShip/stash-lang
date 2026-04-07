@@ -1,5 +1,6 @@
 namespace Stash.Stdlib.BuiltIns;
 
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -20,10 +21,10 @@ public static class TestBuiltIns
         var ns = new NamespaceBuilder("test");
 
         // test.it(name, fn) — register and execute a test case
-        ns.Function("it", [Param("name", "string"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("it", [Param("name", "string"), Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "test.it");
-            var body = Args.Callable(args, 1, "test.it");
+            var name = SvArgs.String(args, 0, "test.it");
+            var body = SvArgs.Callable(args, 1, "test.it");
             var harness = ctx.TestHarness;
             var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
 
@@ -36,7 +37,7 @@ public static class TestBuiltIns
                 bool matches = ctx.TestFilter.Any(f => fullName.StartsWith(f));
                 if (!matches)
                 {
-                    return null; // Silent — filtered-out tests emit nothing
+                    return StashValue.Null; // Silent — filtered-out tests emit nothing
                 }
             }
 
@@ -44,7 +45,7 @@ public static class TestBuiltIns
             if (ctx.DiscoveryMode)
             {
                 ctx.TestHarness?.OnTestDiscovered(fullName, span);
-                return null;
+                return StashValue.Null;
             }
 
             harness?.OnTestStart(fullName, span);
@@ -57,11 +58,11 @@ public static class TestBuiltIns
                 {
                     foreach (var hook in level)
                     {
-                        ctx.InvokeCallback(hook, new List<object?>());
+                        ctx.InvokeCallbackDirect(hook, ReadOnlySpan<StashValue>.Empty);
                     }
                 }
 
-                ctx.InvokeCallback(body, new List<object?>());
+                ctx.InvokeCallbackDirect(body, ReadOnlySpan<StashValue>.Empty);
                 sw.Stop();
 
                 // Run afterEach hooks from all describe levels (innermost to outermost)
@@ -69,7 +70,7 @@ public static class TestBuiltIns
                 {
                     foreach (var hook in ctx.AfterEachHooks[i])
                     {
-                        ctx.InvokeCallback(hook, new List<object?>());
+                        ctx.InvokeCallbackDirect(hook, ReadOnlySpan<StashValue>.Empty);
                     }
                 }
 
@@ -101,14 +102,14 @@ public static class TestBuiltIns
                 }
             }
 
-            return null;
+            return StashValue.Null;
         });
 
         // test.skip(name, fn) — register a skipped test; body is never executed
-        ns.Function("skip", [Param("name", "string"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("skip", [Param("name", "string"), Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "test.skip");
-            Args.Callable(args, 1, "test.skip");
+            var name = SvArgs.String(args, 0, "test.skip");
+            SvArgs.Callable(args, 1, "test.skip");
             string fullName = BuildFullName(ctx, ctx.CurrentDescribe, name);
 
             // Check test filter
@@ -117,7 +118,7 @@ public static class TestBuiltIns
                 bool matches = ctx.TestFilter.Any(f => fullName.StartsWith(f));
                 if (!matches)
                 {
-                    return null;
+                    return StashValue.Null;
                 }
             }
 
@@ -126,18 +127,18 @@ public static class TestBuiltIns
             {
                 var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
                 ctx.TestHarness?.OnTestDiscovered(fullName, span);
-                return null;
+                return StashValue.Null;
             }
 
             ctx.TestHarness?.OnTestSkip(fullName, "skipped");
-            return null;
+            return StashValue.Null;
         });
 
         // test.describe(name, fn) — group tests
-        ns.Function("describe", [Param("name", "string"), Param("fn", "function")], (ctx, args) =>
+        ns.Function("describe", [Param("name", "string"), Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var name = Args.String(args, 0, "test.describe");
-            var body = Args.Callable(args, 1, "test.describe");
+            var name = SvArgs.String(args, 0, "test.describe");
+            var body = SvArgs.Callable(args, 1, "test.describe");
             var harness = ctx.TestHarness;
 
             // Build the fully qualified suite name from nested describes
@@ -151,7 +152,7 @@ public static class TestBuiltIns
                 bool anyMatch = ctx.TestFilter.Any(f => f.StartsWith(fullName) || fullName.StartsWith(f));
                 if (!anyMatch)
                 {
-                    return null; // Skip entire describe block
+                    return StashValue.Null; // Skip entire describe block
                 }
             }
 
@@ -171,14 +172,14 @@ public static class TestBuiltIns
 
             try
             {
-                ctx.InvokeCallback(body, new List<object?>());
+                ctx.InvokeCallbackDirect(body, ReadOnlySpan<StashValue>.Empty);
             }
             finally
             {
                 // Run afterAll hooks for this scope
                 foreach (var hook in ctx.AfterAllHooks[^1])
                 {
-                    ctx.InvokeCallback(hook, new List<object?>());
+                    ctx.InvokeCallbackDirect(hook, ReadOnlySpan<StashValue>.Empty);
                 }
 
                 // Pop hook layers
@@ -194,73 +195,73 @@ public static class TestBuiltIns
                 ctx.CurrentDescribe = previousDescribe;
             }
 
-            return null;
+            return StashValue.Null;
         });
 
         // test.beforeAll(fn) — execute fn() immediately inside a describe block (runs before any tests below it)
-        ns.Function("beforeAll", [Param("fn", "function")], (ctx, args) =>
+        ns.Function("beforeAll", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var callable = Args.Callable(args, 0, "test.beforeAll");
+            var callable = SvArgs.Callable(args, 0, "test.beforeAll");
             if (ctx.BeforeEachHooks.Count == 0)
             {
                 throw new RuntimeError("test.beforeAll() must be used inside a test.describe() block.", ctx.CurrentSpan);
             }
-            ctx.InvokeCallback(callable, new List<object?>());
-            return null;
+            ctx.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty);
+            return StashValue.Null;
         });
 
         // test.afterAll(fn) — register fn() to run when the current describe block ends
-        ns.Function("afterAll", [Param("fn", "function")], (ctx, args) =>
+        ns.Function("afterAll", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var callable = Args.Callable(args, 0, "test.afterAll");
+            var callable = SvArgs.Callable(args, 0, "test.afterAll");
             if (ctx.AfterAllHooks.Count == 0)
             {
                 throw new RuntimeError("test.afterAll() must be used inside a test.describe() block.", ctx.CurrentSpan);
             }
             ctx.AfterAllHooks[^1].Add(callable);
-            return null;
+            return StashValue.Null;
         });
 
         // test.beforeEach(fn) — register fn() to run before each test in the current describe scope
-        ns.Function("beforeEach", [Param("fn", "function")], (ctx, args) =>
+        ns.Function("beforeEach", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var callable = Args.Callable(args, 0, "test.beforeEach");
+            var callable = SvArgs.Callable(args, 0, "test.beforeEach");
             if (ctx.BeforeEachHooks.Count == 0)
             {
                 throw new RuntimeError("test.beforeEach() must be used inside a test.describe() block.", ctx.CurrentSpan);
             }
             ctx.BeforeEachHooks[^1].Add(callable);
-            return null;
+            return StashValue.Null;
         });
 
         // test.afterEach(fn) — register fn() to run after each test in the current describe scope
-        ns.Function("afterEach", [Param("fn", "function")], (ctx, args) =>
+        ns.Function("afterEach", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var callable = Args.Callable(args, 0, "test.afterEach");
+            var callable = SvArgs.Callable(args, 0, "test.afterEach");
             if (ctx.AfterEachHooks.Count == 0)
             {
                 throw new RuntimeError("test.afterEach() must be used inside a test.describe() block.", ctx.CurrentSpan);
             }
             ctx.AfterEachHooks[^1].Add(callable);
-            return null;
+            return StashValue.Null;
         });
 
         // test.captureOutput(fn) — execute fn() with output redirected to a string, returns captured output
-        ns.Function("captureOutput", [Param("fn", "function")], (ctx, args) =>
+        ns.Function("captureOutput", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var callable = Args.Callable(args, 0, "test.captureOutput");
+            var callable = SvArgs.Callable(args, 0, "test.captureOutput");
             var previousOutput = ctx.Output;
             var sw = new StringWriter();
             ctx.Output = sw;
             try
             {
-                ctx.InvokeCallback(callable, new List<object?>());
+                ctx.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty);
             }
             finally
             {
                 ctx.Output = previousOutput;
             }
-            return sw.ToString();
+            return StashValue.FromObj(sw.ToString());
         });
 
         return ns.Build();

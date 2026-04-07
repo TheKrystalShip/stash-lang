@@ -13,8 +13,8 @@ public class YamlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = yaml.parse("name: Alice\nage: 30");""");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal("Alice", d.Get("name"));
-        Assert.Equal(30L, d.Get("age"));
+        Assert.Equal("Alice", d.Get("name").ToObject());
+        Assert.Equal(30L, d.Get("age").ToObject());
     }
 
     [Fact]
@@ -22,9 +22,9 @@ public class YamlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = yaml.parse("server:\n  host: localhost\n  port: 8080");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var server = Assert.IsType<StashDictionary>(d.Get("server"));
-        Assert.Equal("localhost", server.Get("host"));
-        Assert.Equal(8080L, server.Get("port"));
+        var server = Assert.IsType<StashDictionary>(d.Get("server").ToObject());
+        Assert.Equal("localhost", server.Get("host").ToObject());
+        Assert.Equal(8080L, server.Get("port").ToObject());
     }
 
     [Fact]
@@ -41,7 +41,7 @@ public class YamlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = yaml.parse("tags:\n  - a\n  - b");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var tags = Assert.IsType<List<object?>>(d.Get("tags"));
+        var tags = Assert.IsType<List<object?>>(d.Get("tags").ToObject());
         Assert.Equal("a", tags[0]);
         Assert.Equal("b", tags[1]);
     }
@@ -51,8 +51,8 @@ public class YamlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = yaml.parse("enabled: true\nverbose: false");""");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal(true, d.Get("enabled"));
-        Assert.Equal(false, d.Get("verbose"));
+        Assert.Equal(true, d.Get("enabled").ToObject());
+        Assert.Equal(false, d.Get("verbose").ToObject());
     }
 
     [Fact]
@@ -60,7 +60,7 @@ public class YamlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = yaml.parse("data: null");""");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Null(d.Get("data"));
+        Assert.Null(d.Get("data").ToObject());
     }
 
     [Fact]
@@ -68,7 +68,7 @@ public class YamlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = yaml.parse("ratio: 3.14");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var ratio = Assert.IsType<double>(d.Get("ratio"));
+        var ratio = Assert.IsType<double>(d.Get("ratio").ToObject());
         Assert.InRange(ratio, 3.13, 3.15);
     }
 
@@ -98,9 +98,9 @@ public class YamlBuiltInsTests : StashTestBase
         var list = Assert.IsType<List<object?>>(result);
         Assert.Equal(2, list.Count);
         var first = Assert.IsType<StashDictionary>(list[0]);
-        Assert.Equal("a", first.Get("name"));
+        Assert.Equal("a", first.Get("name").ToObject());
         var second = Assert.IsType<StashDictionary>(list[1]);
-        Assert.Equal("b", second.Get("name"));
+        Assert.Equal("b", second.Get("name").ToObject());
     }
 
     // ── yaml.stringify ────────────────────────────────────────────────────
@@ -157,8 +157,8 @@ public class YamlBuiltInsTests : StashTestBase
             let result = yaml.parse(serialized);
             """);
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal("Paris", d.Get("city"));
-        Assert.Equal(2100000L, d.Get("pop"));
+        Assert.Equal("Paris", d.Get("city").ToObject());
+        Assert.Equal(2100000L, d.Get("pop").ToObject());
     }
 
     [Fact]
@@ -222,8 +222,8 @@ public class YamlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = config.parse("name: test\nport: 80", "yaml");""");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal("test", d.Get("name"));
-        Assert.Equal(80L, d.Get("port"));
+        Assert.Equal("test", d.Get("name").ToObject());
+        Assert.Equal(80L, d.Get("port").ToObject());
     }
 
     [Fact]
@@ -254,8 +254,8 @@ public class YamlBuiltInsTests : StashTestBase
                 let result = loaded;
                 """);
             var d = Assert.IsType<StashDictionary>(result);
-            Assert.Equal("stash", d.Get("app"));
-            Assert.Equal(9000L, d.Get("port"));
+            Assert.Equal("stash", d.Get("app").ToObject());
+            Assert.Equal(9000L, d.Get("port").ToObject());
         }
         finally
         {

@@ -13,8 +13,8 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = toml.parse("title = \"Test\"\ncount = 42");""");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal("Test", d.Get("title"));
-        Assert.Equal(42L, d.Get("count"));
+        Assert.Equal("Test", d.Get("title").ToObject());
+        Assert.Equal(42L, d.Get("count").ToObject());
     }
 
     [Fact]
@@ -22,9 +22,9 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = toml.parse("[server]\nhost = \"localhost\"\nport = 8080");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var server = Assert.IsType<StashDictionary>(d.Get("server"));
-        Assert.Equal("localhost", server.Get("host"));
-        Assert.Equal(8080L, server.Get("port"));
+        var server = Assert.IsType<StashDictionary>(d.Get("server").ToObject());
+        Assert.Equal("localhost", server.Get("host").ToObject());
+        Assert.Equal(8080L, server.Get("port").ToObject());
     }
 
     [Fact]
@@ -32,7 +32,7 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = toml.parse("tags = [\"a\", \"b\", \"c\"]");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var tags = Assert.IsType<List<object?>>(d.Get("tags"));
+        var tags = Assert.IsType<List<object?>>(d.Get("tags").ToObject());
         Assert.Equal(3, tags.Count);
         Assert.Equal("a", tags[0]);
         Assert.Equal("b", tags[1]);
@@ -44,12 +44,12 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = toml.parse("[[products]]\nname = \"A\"\n[[products]]\nname = \"B\"");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var products = Assert.IsType<List<object?>>(d.Get("products"));
+        var products = Assert.IsType<List<object?>>(d.Get("products").ToObject());
         Assert.Equal(2, products.Count);
         var first = Assert.IsType<StashDictionary>(products[0]);
-        Assert.Equal("A", first.Get("name"));
+        Assert.Equal("A", first.Get("name").ToObject());
         var second = Assert.IsType<StashDictionary>(products[1]);
-        Assert.Equal("B", second.Get("name"));
+        Assert.Equal("B", second.Get("name").ToObject());
     }
 
     [Fact]
@@ -57,8 +57,8 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = toml.parse("enabled = true\nverbose = false");""");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal(true, d.Get("enabled"));
-        Assert.Equal(false, d.Get("verbose"));
+        Assert.Equal(true, d.Get("enabled").ToObject());
+        Assert.Equal(false, d.Get("verbose").ToObject());
     }
 
     [Fact]
@@ -66,7 +66,7 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = toml.parse("ratio = 3.14");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var ratio = Assert.IsType<double>(d.Get("ratio"));
+        var ratio = Assert.IsType<double>(d.Get("ratio").ToObject());
         Assert.InRange(ratio, 3.13, 3.15);
     }
 
@@ -75,7 +75,7 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = toml.parse("count = 42");""");
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal(42L, d.Get("count"));
+        Assert.Equal(42L, d.Get("count").ToObject());
     }
 
     [Fact]
@@ -155,8 +155,8 @@ public class TomlBuiltInsTests : StashTestBase
             let result = toml.parse(serialized);
             """);
         var d = Assert.IsType<StashDictionary>(result);
-        Assert.Equal("Berlin", d.Get("city"));
-        Assert.Equal(3700000L, d.Get("pop"));
+        Assert.Equal("Berlin", d.Get("city").ToObject());
+        Assert.Equal(3700000L, d.Get("pop").ToObject());
     }
 
     [Fact]
@@ -201,9 +201,9 @@ public class TomlBuiltInsTests : StashTestBase
     {
         var result = Run("""let result = config.parse("[server]\nhost = \"localhost\"\nport = 8080", "toml");""");
         var d = Assert.IsType<StashDictionary>(result);
-        var server = Assert.IsType<StashDictionary>(d.Get("server"));
-        Assert.Equal("localhost", server.Get("host"));
-        Assert.Equal(8080L, server.Get("port"));
+        var server = Assert.IsType<StashDictionary>(d.Get("server").ToObject());
+        Assert.Equal("localhost", server.Get("host").ToObject());
+        Assert.Equal(8080L, server.Get("port").ToObject());
     }
 
     [Fact]
@@ -234,8 +234,8 @@ public class TomlBuiltInsTests : StashTestBase
                 let result = loaded;
                 """);
             var d = Assert.IsType<StashDictionary>(result);
-            Assert.Equal("stash", d.Get("app"));
-            Assert.Equal(9000L, d.Get("port"));
+            Assert.Equal("stash", d.Get("app").ToObject());
+            Assert.Equal(9000L, d.Get("port").ToObject());
         }
         finally
         {

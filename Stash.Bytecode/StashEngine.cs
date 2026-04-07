@@ -346,7 +346,7 @@ public class StashEngine
     /// </summary>
     public void SetGlobal(string name, object? value)
     {
-        EnsureVM().Globals[name] = value;
+        EnsureVM().Globals[name] = StashValue.FromObject(value);
     }
 
     /// <summary>
@@ -355,7 +355,7 @@ public class StashEngine
     /// </summary>
     public object? GetGlobal(string name)
     {
-        return EnsureVM().Globals.TryGetValue(name, out var value) ? value : null;
+        return EnsureVM().Globals.TryGetValue(name, out StashValue value) ? value.ToObject() : null;
     }
 
     /// <summary>
@@ -367,7 +367,13 @@ public class StashEngine
     /// <returns>A function object that can be passed to <see cref="SetGlobal"/>.</returns>
     public BuiltInFunction CreateFunction(string name, int arity, Func<List<object?>, object?> body)
     {
-        return new BuiltInFunction(name, arity, (interp, args) => body(args));
+        return new BuiltInFunction(name, arity, (ctx, args) =>
+        {
+            var list = new List<object?>(args.Length);
+            foreach (StashValue sv in args)
+                list.Add(sv.ToObject());
+            return StashValue.FromObject(body(list));
+        });
     }
 
     /// <summary>
@@ -376,7 +382,13 @@ public class StashEngine
     /// </summary>
     public BuiltInFunction CreateFunction(string name, int arity, Func<IInterpreterContext, List<object?>, object?> body)
     {
-        return new BuiltInFunction(name, arity, body);
+        return new BuiltInFunction(name, arity, (ctx, args) =>
+        {
+            var list = new List<object?>(args.Length);
+            foreach (StashValue sv in args)
+                list.Add(sv.ToObject());
+            return StashValue.FromObject(body(ctx, list));
+        });
     }
 
     /// <summary>
@@ -398,7 +410,7 @@ public class StashEngine
     /// <summary>
     /// Converts a Stash array to a .NET list.
     /// </summary>
-    public List<object?> ToList(object? value) => StashTypeConverter.ToList(value);
+    public List<StashValue> ToList(object? value) => StashTypeConverter.ToList(value);
 
     /// <summary>
     /// Creates a Stash dictionary from a .NET dictionary.
