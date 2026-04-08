@@ -68,10 +68,10 @@ public sealed partial class Compiler
         CompileExpr(stmt.Initializer);
         _scope.MarkInitialized(slot);
 
-        // Track literal const values for compile-time folding in EmitVariable.
-        if (_enclosing is null && stmt.Initializer is LiteralExpr literal)
+        // Track constant values for compile-time folding in EmitVariable.
+        if (_enclosing is null && TryEvaluateConstant(stmt.Initializer, out object? constValue))
         {
-            _globalSlots.TrackConstValue(stmt.Name.Lexeme, literal.Value);
+            _globalSlots.TrackConstValue(stmt.Name.Lexeme, constValue);
         }
 
         // At top-level, also seed globals so that OP_LOAD_GLOBAL (emitted because

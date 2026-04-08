@@ -232,20 +232,16 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Logic_And_EmitsAndWithJump()
     {
-        string disasm = Disassemble("true && false;");
-        Assert.Contains("true", disasm);
+        string disasm = Disassemble("let a = true; let b = false; a && b;");
         Assert.Contains("and", disasm);
-        Assert.Contains("false", disasm);
         Assert.Contains("->", disasm);
     }
 
     [Fact]
     public void Logic_Or_EmitsOrWithJump()
     {
-        string disasm = Disassemble("false || true;");
-        Assert.Contains("false", disasm);
+        string disasm = Disassemble("let a = false; let b = true; a || b;");
         Assert.Contains("or", disasm);
-        Assert.Contains("true", disasm);
     }
 
     // =========================================================================
@@ -268,8 +264,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Ternary_EmitsConditionAndJumps()
     {
-        string disasm = Disassemble("true ? 1 : 2;");
-        Assert.Contains("true", disasm);
+        string disasm = Disassemble("let x = true; x ? 1 : 2;");
         Assert.Contains("jmp.false", disasm);
         Assert.Contains("jmp", disasm);
     }
@@ -357,15 +352,14 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void If_WithoutElse_EmitsJumpFalse()
     {
-        string disasm = Disassemble("if (true) { 42; }");
-        Assert.Contains("true", disasm);
+        string disasm = Disassemble("let x = true; if (x) { 42; }");
         Assert.Contains("jmp.false", disasm);
     }
 
     [Fact]
     public void If_WithElse_EmitsJumpFalseAndJump()
     {
-        string disasm = Disassemble("if (true) { 1; } else { 2; }");
+        string disasm = Disassemble("let x = true; if (x) { 1; } else { 2; }");
         Assert.Contains("jmp.false", disasm);
         Assert.Contains("jmp", disasm);
     }
@@ -733,8 +727,8 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Complex_NestedArithmetic_ProducesCorrectOrder()
     {
-        // 1 + 2 * 3 parses as 1 + (2 * 3) → Multiply emitted before Add
-        string disasm = Disassemble("1 + 2 * 3;");
+        // a + b * c parses as a + (b * c) → Multiply emitted before Add
+        string disasm = Disassemble("let a = 1; let b = 2; let c = 3; a + b * c;");
         int mulIdx = disasm.IndexOf("mul", StringComparison.Ordinal);
         int addIdx = disasm.IndexOf("add", StringComparison.Ordinal);
         Assert.True(mulIdx < addIdx, "mul should be emitted before add for correct precedence");

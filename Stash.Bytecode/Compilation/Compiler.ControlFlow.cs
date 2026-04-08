@@ -15,6 +15,21 @@ public sealed partial class Compiler
     /// <inheritdoc />
     public object? VisitIfStmt(IfStmt stmt)
     {
+        // Dead branch elimination: if condition is a compile-time constant,
+        // only compile the taken branch.
+        if (TryEvaluateConstant(stmt.Condition, out object? condValue))
+        {
+            if (!CompileTimeIsFalsy(condValue))
+            {
+                CompileStmt(stmt.ThenBranch);
+            }
+            else if (stmt.ElseBranch != null)
+            {
+                CompileStmt(stmt.ElseBranch);
+            }
+            return null;
+        }
+
         _builder.AddSourceMapping(stmt.Span);
         CompileExpr(stmt.Condition);
         int elseJump = _builder.EmitJump(OpCode.JumpFalse);

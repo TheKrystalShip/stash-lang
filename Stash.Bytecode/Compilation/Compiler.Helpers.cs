@@ -24,22 +24,7 @@ public sealed partial class Compiler
             // Const-global folding: emit literal directly instead of LoadGlobal
             if (isLoad && _globalSlots.TryGetConstValue(name, out object? constValue))
             {
-                switch (constValue)
-                {
-                    case null:
-                        _builder.Emit(OpCode.Null);
-                        break;
-                    case true:
-                        _builder.Emit(OpCode.True);
-                        break;
-                    case false:
-                        _builder.Emit(OpCode.False);
-                        break;
-                    default:
-                        ushort idx = _builder.AddConstant(constValue);
-                        _builder.Emit(OpCode.Const, idx);
-                        break;
-                }
+                EmitFoldedConstant(constValue);
             }
             else
             {

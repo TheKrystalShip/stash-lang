@@ -57,21 +57,10 @@ public sealed partial class Compiler
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
         // Compile-time constant folding for unary operators
-        if (expr.Right is LiteralExpr lit)
+        if (TryEvaluateConstant(expr, out object? folded))
         {
-            object? folded = expr.Operator.Type switch
-            {
-                TokenType.Minus when lit.Value is long l   => (object)(-l),
-                TokenType.Minus when lit.Value is double d => (object)(-d),
-                TokenType.Bang  when lit.Value is bool b   => (object)(!b),
-                TokenType.Tilde when lit.Value is long l   => (object)(~l),
-                _ => null,
-            };
-            if (folded is not null)
-            {
-                EmitFoldedConstant(folded);
-                return null;
-            }
+            EmitFoldedConstant(folded);
+            return null;
         }
 
         _builder.AddSourceMapping(expr.Span);
@@ -97,15 +86,11 @@ public sealed partial class Compiler
     /// <inheritdoc />
     public object? VisitBinaryExpr(BinaryExpr expr)
     {
-        // Compile-time constant folding: both operands are literals
-        if (expr.Left is LiteralExpr leftLit && expr.Right is LiteralExpr rightLit)
+        // Compile-time constant folding: recursive evaluation
+        if (TryEvaluateConstant(expr, out object? folded))
         {
-            object? folded = TryFoldBinary(leftLit.Value, rightLit.Value, expr.Operator.Type);
-            if (folded is not null)
-            {
-                EmitFoldedConstant(folded);
-                return null;
-            }
+            EmitFoldedConstant(folded);
+            return null;
         }
 
         // Short-circuit AND — if left is falsy, skip right and leave left on stack
@@ -252,9 +237,159 @@ public sealed partial class Compiler
         }
     }
 
+    /// <summary>
+    /// Recursively evaluates an expression at compile time. Returns true and the
+    /// computed value if every leaf is compile-time-known, false otherwise.
+    /// </summary>
+    private bool TryEvaluateConstant(Expr expr, out object? value)
+    {
+        switch (expr)
+        {
+            case LiteralExpr lit:
+                value = lit.Value;
+                return true;
+
+            case GroupingExpr grp:
+                return TryEvaluateConstant(grp.Expression, out value);
+
+            case UnaryExpr unary:
+                if (!TryEvaluateConstant(unary.Right, out object? operand))
+                {
+                    value = null;
+                    return false;
+                }
+                value = unary.Operator.Type switch
+                {
+                    TokenType.Minus when operand is long l   => (object)(-l),
+                    TokenType.Minus when operand is double d => (object)(-d),
+                    TokenType.Bang  when operand is bool b   => (object)(!b),
+                    TokenType.Tilde when operand is long l   => (object)(~l),
+                    _ => null,
+                };
+                return value is not null;
+
+            case BinaryExpr bin:
+                // Short-circuit AND
+                if (bin.Operator.Type == TokenType.AmpersandAmpersand)
+                {
+                    if (!TryEvaluateConstant(bin.Left, out object? left))
+                    {
+                        value = null;
+                        return false;
+                    }
+                    if (CompileTimeIsFalsy(left))
+                    {
+                        value = left;
+                        return true;
+                    }
+                    return TryEvaluateConstant(bin.Right, out value);
+                }
+
+                // Short-circuit OR
+                if (bin.Operator.Type == TokenType.PipePipe)
+                {
+                    if (!TryEvaluateConstant(bin.Left, out object? left))
+                    {
+                        value = null;
+                        return false;
+                    }
+                    if (!CompileTimeIsFalsy(left))
+                    {
+                        value = left;
+                        return true;
+                    }
+                    return TryEvaluateConstant(bin.Right, out value);
+                }
+
+                // Regular binary ops
+                if (TryEvaluateConstant(bin.Left, out object? lhs) &&
+                    TryEvaluateConstant(bin.Right, out object? rhs))
+                {
+                    value = TryFoldBinary(lhs, rhs, bin.Operator.Type);
+                    return value is not null;
+                }
+                value = null;
+                return false;
+
+            case IdentifierExpr id when id.ResolvedDistance == -1:
+                if (_globalSlots.TryGetConstValue(id.Name.Lexeme, out object? constVal))
+                {
+                    value = constVal;
+                    return true;
+                }
+                value = null;
+                return false;
+
+            case InterpolatedStringExpr interp:
+                var sb = new System.Text.StringBuilder();
+                foreach (Expr part in interp.Parts)
+                {
+                    if (!TryEvaluateConstant(part, out object? partVal))
+                    {
+                        value = null;
+                        return false;
+                    }
+                    sb.Append(CompileTimeStringify(partVal));
+                }
+                value = sb.ToString();
+                return true;
+
+            case TernaryExpr ternary:
+                if (!TryEvaluateConstant(ternary.Condition, out object? condVal))
+                {
+                    value = null;
+                    return false;
+                }
+                return CompileTimeIsFalsy(condVal)
+                    ? TryEvaluateConstant(ternary.ElseBranch, out value)
+                    : TryEvaluateConstant(ternary.ThenBranch, out value);
+
+            default:
+                value = null;
+                return false;
+        }
+    }
+
+    /// <summary>
+    /// Mirrors RuntimeOps.IsFalsy for compile-time constant values (boxed as object?).
+    /// </summary>
+    private static bool CompileTimeIsFalsy(object? value) => value switch
+    {
+        null => true,
+        bool b => !b,
+        long l => l == 0,
+        double d => d == 0.0,
+        string s => s.Length == 0,
+        _ => false,
+    };
+
+    /// <summary>
+    /// Converts a compile-time constant value to its string representation,
+    /// matching the runtime Stringify behavior.
+    /// </summary>
+    private static string CompileTimeStringify(object? value) => value switch
+    {
+        string s => s,
+        long l => l.ToString(),
+        double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
+        bool b => b ? "true" : "false",
+        null => "null",
+        _ => value.ToString() ?? "",
+    };
+
     /// <inheritdoc />
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
+        // Compile-time branch selection for constant conditions
+        if (TryEvaluateConstant(expr.Condition, out object? condValue))
+        {
+            if (!CompileTimeIsFalsy(condValue))
+                CompileExpr(expr.ThenBranch);
+            else
+                CompileExpr(expr.ElseBranch);
+            return null;
+        }
+
         _builder.AddSourceMapping(expr.Span);
         CompileExpr(expr.Condition);
         int elseJump = _builder.EmitJump(OpCode.JumpFalse);
