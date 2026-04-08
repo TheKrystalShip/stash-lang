@@ -41,6 +41,7 @@ const path = __importStar(require("path"));
 const node_1 = require("vscode-languageclient/node");
 const testing_1 = require("./testing");
 const resolveBinary_1 = require("./resolveBinary");
+const bytecodeViewer_1 = require("./bytecodeViewer");
 let client;
 let debugOutput;
 let lspTrace;
@@ -93,6 +94,9 @@ function activate(context) {
     const factory = new StashDebugAdapterFactory(debugOutput);
     const registration = vscode.debug.registerDebugAdapterDescriptorFactory("stash", factory);
     context.subscriptions.push(registration);
+    // ── Bytecode Viewer ────────────────────────────────────────────────────────
+    const bytecodeViewerProvider = new bytecodeViewer_1.StashBytecodeViewerProvider();
+    context.subscriptions.push(vscode.window.registerCustomEditorProvider(bytecodeViewer_1.StashBytecodeViewerProvider.viewType, bytecodeViewerProvider, { supportsMultipleEditorsPerDocument: false }));
 }
 function deactivate() {
     lspTrace?.dispose();

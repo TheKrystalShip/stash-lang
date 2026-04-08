@@ -9,6 +9,7 @@ import {
 } from "vscode-languageclient/node";
 import { activateTesting } from "./testing";
 import { resolveBinary } from "./resolveBinary";
+import { StashBytecodeViewerProvider } from "./bytecodeViewer";
 
 let client: LanguageClient | undefined;
 let debugOutput: vscode.OutputChannel | undefined;
@@ -92,6 +93,17 @@ export function activate(context: vscode.ExtensionContext) {
   const factory = new StashDebugAdapterFactory(debugOutput);
   const registration = vscode.debug.registerDebugAdapterDescriptorFactory("stash", factory);
   context.subscriptions.push(registration);
+
+  // ── Bytecode Viewer ────────────────────────────────────────────────────────
+
+  const bytecodeViewerProvider = new StashBytecodeViewerProvider();
+  context.subscriptions.push(
+    vscode.window.registerCustomEditorProvider(
+      StashBytecodeViewerProvider.viewType,
+      bytecodeViewerProvider,
+      { supportsMultipleEditorsPerDocument: false }
+    )
+  );
 }
 
 export function deactivate(): Thenable<void> | undefined {

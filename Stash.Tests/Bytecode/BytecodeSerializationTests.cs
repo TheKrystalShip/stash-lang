@@ -1,8 +1,10 @@
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Stash.Bytecode;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 
 namespace Stash.Tests.Bytecode;
 
@@ -522,5 +524,312 @@ public class BytecodeSerializationTests
         Assert.Equal(long.MaxValue,   result.Constants[maxLongIdx].AsInt);
         Assert.Equal(long.MinValue,   result.Constants[minLongIdx].AsInt);
         Assert.Equal(double.MaxValue, result.Constants[maxDblIdx].AsFloat);
+    }
+
+    // =========================================================================
+    // Metadata constant round-trip tests
+    // =========================================================================
+
+    [Fact]
+    public void RoundTrip_CommandMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new CommandMetadata(3, true, false);
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<CommandMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal(3, result.PartCount);
+        Assert.True(result.IsPassthrough);
+        Assert.False(result.IsStrict);
+    }
+
+    [Fact]
+    public void RoundTrip_StructMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new StructMetadata("Point", new[] { "x", "y" }, new[] { "toString" }, new[] { "ISerializable" });
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<StructMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal("Point", result.Name);
+        Assert.Equal(new[] { "x", "y" }, result.Fields);
+        Assert.Equal(new[] { "toString" }, result.MethodNames);
+        Assert.Equal(new[] { "ISerializable" }, result.InterfaceNames);
+    }
+
+    [Fact]
+    public void RoundTrip_EnumMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new EnumMetadata("Color", new[] { "Red", "Green", "Blue" });
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<EnumMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal("Color", result.Name);
+        Assert.Equal(new[] { "Red", "Green", "Blue" }, result.Members);
+    }
+
+    [Fact]
+    public void RoundTrip_InterfaceMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new InterfaceMetadata(
+            "IShape",
+            new[]
+            {
+                new InterfaceField("name", "str"),
+                new InterfaceField("size", null),
+            },
+            new[]
+            {
+                new InterfaceMethod("area",  0, new List<string>(),          new List<string?>(),               "float"),
+                new InterfaceMethod("draw",  2, new List<string> { "x", "y" }, new List<string?> { "int", "int" }, null),
+            });
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<InterfaceMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal("IShape", result.Name);
+
+        Assert.Equal(2, result.Fields.Length);
+        Assert.Equal("name", result.Fields[0].Name);
+        Assert.Equal("str",  result.Fields[0].TypeHint);
+        Assert.Equal("size", result.Fields[1].Name);
+        Assert.Null(result.Fields[1].TypeHint);
+
+        Assert.Equal(2, result.Methods.Length);
+        Assert.Equal("area",  result.Methods[0].Name);
+        Assert.Equal(0,       result.Methods[0].Arity);
+        Assert.Empty(result.Methods[0].ParameterNames);
+        Assert.Empty(result.Methods[0].ParameterTypes);
+        Assert.Equal("float", result.Methods[0].ReturnType);
+
+        Assert.Equal("draw",           result.Methods[1].Name);
+        Assert.Equal(2,                result.Methods[1].Arity);
+        Assert.Equal(new[] { "x", "y" }, result.Methods[1].ParameterNames);
+        Assert.Equal(new string?[] { "int", "int" }, result.Methods[1].ParameterTypes);
+        Assert.Null(result.Methods[1].ReturnType);
+    }
+
+    [Fact]
+    public void RoundTrip_ExtendMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new ExtendMetadata("Point", new[] { "translate", "scale" }, false);
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<ExtendMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal("Point", result.TypeName);
+        Assert.Equal(new[] { "translate", "scale" }, result.MethodNames);
+        Assert.False(result.IsBuiltIn);
+    }
+
+    [Fact]
+    public void RoundTrip_ImportMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new ImportMetadata(new[] { "math", "utils" });
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<ImportMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal(new[] { "math", "utils" }, result.Names);
+    }
+
+    [Fact]
+    public void RoundTrip_ImportAsMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new ImportAsMetadata("myModule");
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<ImportAsMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal("myModule", result.AliasName);
+    }
+
+    [Fact]
+    public void RoundTrip_DestructureMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var withRest    = new DestructureMetadata("dict", new[] { "a", "b" }, "rest", true);
+        var withoutRest = new DestructureMetadata("arr",  new[] { "first" },   null,   false);
+        builder.AddConstant(withRest);
+        builder.AddConstant(withoutRest);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Equal(2, restored.Constants.Length);
+
+        var r1 = Assert.IsType<DestructureMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal("dict",   r1.Kind);
+        Assert.Equal(new[] { "a", "b" }, r1.Names);
+        Assert.Equal("rest",  r1.RestName);
+        Assert.True(r1.IsConst);
+
+        var r2 = Assert.IsType<DestructureMetadata>(restored.Constants[1].AsObj);
+        Assert.Equal("arr",            r2.Kind);
+        Assert.Equal(new[] { "first" }, r2.Names);
+        Assert.Null(r2.RestName);
+        Assert.False(r2.IsConst);
+    }
+
+    [Fact]
+    public void RoundTrip_RetryMetadata_Preserved()
+    {
+        var builder = new ChunkBuilder { Optimize = false };
+        var meta = new RetryMetadata(2, true, true, false);
+        builder.AddConstant(meta);
+        builder.Emit(OpCode.Null);
+        builder.Emit(OpCode.Return);
+        Chunk original = builder.Build();
+
+        Chunk restored = RoundTrip(original);
+
+        Assert.Single(restored.Constants);
+        var result = Assert.IsType<RetryMetadata>(restored.Constants[0].AsObj);
+        Assert.Equal(2, result.OptionCount);
+        Assert.True(result.HasUntilClause);
+        Assert.True(result.HasOnRetryClause);
+        Assert.False(result.OnRetryIsReference);
+    }
+
+    // =========================================================================
+    // Nested chunk debug stripping
+    // =========================================================================
+
+    [Fact]
+    public void RoundTrip_StripDebugInfo_NestedChunksAlsoStripped()
+    {
+        // Build inner function with debug info
+        var innerBuilder = new ChunkBuilder
+        {
+            Name       = "inner",
+            Arity      = 1,
+            MinArity   = 1,
+            LocalCount = 2,
+            LocalNames = ["a", "b"],
+            LocalIsConst = [false, true],
+            Optimize   = false,
+        };
+        innerBuilder.AddSourceMapping(0, new SourceSpan("test.stash", 5, 1, 5, 10));
+        innerBuilder.Emit(OpCode.Return);
+        Chunk innerChunk = innerBuilder.Build();
+
+        // Build outer chunk containing the inner as a constant
+        var outerBuilder = new ChunkBuilder
+        {
+            LocalCount   = 1,
+            LocalNames   = ["x"],
+            LocalIsConst = [false],
+            Optimize     = false,
+        };
+        outerBuilder.AddSourceMapping(0, new SourceSpan("test.stash", 1, 1, 1, 10));
+        ushort idx = outerBuilder.AddConstant(innerChunk);
+        outerBuilder.Emit(OpCode.Const, idx);
+        Chunk original = outerBuilder.Build();
+
+        // Round-trip with debug info STRIPPED
+        Chunk result = RoundTrip(original, includeDebugInfo: false);
+
+        // Outer chunk should have no debug info
+        Assert.Null(result.LocalNames);
+        Assert.Null(result.LocalIsConst);
+        Assert.Equal(0, result.SourceMap.Count);
+
+        // Nested chunk should also have no debug info
+        var nested = Assert.IsType<Chunk>(result.Constants[0].AsObj);
+        Assert.Equal("inner", nested.Name);
+        Assert.Equal(1, nested.Arity);
+        Assert.Null(nested.LocalNames);
+        Assert.Null(nested.LocalIsConst);
+        Assert.Equal(0, nested.SourceMap.Count);
+    }
+
+    // =========================================================================
+    // Safety limit tests
+    // =========================================================================
+
+    [Fact]
+    public void Read_OversizedStringConstant_Throws()
+    {
+        // Build a valid .stashc header from a real write
+        var builder = new ChunkBuilder { Optimize = false };
+        builder.Emit(OpCode.Null);
+        Chunk headerChunk = builder.Build();
+
+        using var headerStream = new MemoryStream();
+        BytecodeWriter.Write(headerStream, headerChunk);
+        byte[] validHeader = headerStream.ToArray()[..32]; // 32-byte header only
+
+        // Hand-craft chunk body with an oversized string constant
+        using var ms = new MemoryStream();
+        using var writer = new BinaryWriter(ms, Encoding.UTF8, leaveOpen: true);
+
+        // Write valid header
+        writer.Write(validHeader);
+
+        // Chunk: null name
+        writer.Write((ushort)0xFFFF);
+        // Arity, MinArity, LocalCount, GlobalSlotCount
+        writer.Write((ushort)0);
+        writer.Write((ushort)0);
+        writer.Write((ushort)0);
+        writer.Write((ushort)0);
+        // Flags
+        writer.Write((byte)0);
+        // Code: 0 bytes
+        writer.Write((uint)0);
+        // Constants: 1 constant
+        writer.Write((ushort)1);
+        // Tag 4 = string, with oversized length
+        writer.Write((byte)4);
+        writer.Write(0x7FFFFFFF); // ~2 GB
+        writer.Flush();
+
+        ms.Position = 0;
+        Assert.Throws<InvalidDataException>(() => BytecodeReader.Read(ms));
     }
 }

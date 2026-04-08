@@ -258,6 +258,18 @@
         "path": "./images/stash-file-icon-theme.json"
       }
     ],
+    "customEditors": [
+      {
+        "viewType": "stash.bytecodeViewer",
+        "displayName": "Stash Bytecode Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.stashc"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
     "debuggers": [
       {
         "type": "stash",

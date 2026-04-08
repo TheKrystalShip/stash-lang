@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
@@ -179,7 +180,7 @@ public static class BytecodeWriter
         writer.Write(chunk.Code);
 
         // Constants: u16 count + [tagged values]
-        WriteConstants(writer, chunk.Constants);
+        WriteConstants(writer, chunk.Constants, includeDebugInfo);
 
         // Upvalues: u8 count + [(u8 index, u8 isLocal)]
         WriteUpvalues(writer, chunk.Upvalues);
@@ -194,16 +195,16 @@ public static class BytecodeWriter
         }
     }
 
-    private static void WriteConstants(BinaryWriter writer, StashValue[] constants)
+    private static void WriteConstants(BinaryWriter writer, StashValue[] constants, bool includeDebugInfo)
     {
         writer.Write((ushort)constants.Length);
         foreach (StashValue value in constants)
         {
-            WriteConstant(writer, value);
+            WriteConstant(writer, value, includeDebugInfo);
         }
     }
 
-    private static void WriteConstant(BinaryWriter writer, StashValue value)
+    private static void WriteConstant(BinaryWriter writer, StashValue value, bool includeDebugInfo)
     {
         switch (value.Tag)
         {
@@ -238,9 +239,82 @@ public static class BytecodeWriter
                 else if (obj is Chunk nestedChunk)
                 {
                     writer.Write((byte)5);
-                    // Nested chunks do not repeat debug info — they inherit from parent context.
-                    // The top-level call controls debug inclusion via the chunk flags written above.
-                    WriteChunk(writer, nestedChunk, includeDebugInfo: true);
+                    // Nested chunks inherit the debug info flag from the top-level header.
+                    WriteChunk(writer, nestedChunk, includeDebugInfo);
+                }
+                else if (obj is CommandMetadata cmd)
+                {
+                    writer.Write((byte)6);
+                    writer.Write((ushort)cmd.PartCount);
+                    writer.Write((byte)(cmd.IsPassthrough ? 1 : 0));
+                    writer.Write((byte)(cmd.IsStrict ? 1 : 0));
+                }
+                else if (obj is StructMetadata structMeta)
+                {
+                    writer.Write((byte)7);
+                    WriteLengthPrefixedString(writer, structMeta.Name);
+                    WriteStringArray(writer, structMeta.Fields);
+                    WriteStringArray(writer, structMeta.MethodNames);
+                    WriteStringArray(writer, structMeta.InterfaceNames);
+                }
+                else if (obj is EnumMetadata enumMeta)
+                {
+                    writer.Write((byte)8);
+                    WriteLengthPrefixedString(writer, enumMeta.Name);
+                    WriteStringArray(writer, enumMeta.Members);
+                }
+                else if (obj is InterfaceMetadata ifaceMeta)
+                {
+                    writer.Write((byte)9);
+                    WriteLengthPrefixedString(writer, ifaceMeta.Name);
+                    writer.Write((ushort)ifaceMeta.Fields.Length);
+                    foreach (InterfaceField field in ifaceMeta.Fields)
+                    {
+                        WriteLengthPrefixedString(writer, field.Name);
+                        WriteNullableString(writer, field.TypeHint);
+                    }
+                    writer.Write((ushort)ifaceMeta.Methods.Length);
+                    foreach (InterfaceMethod method in ifaceMeta.Methods)
+                    {
+                        WriteLengthPrefixedString(writer, method.Name);
+                        writer.Write((ushort)method.Arity);
+                        WriteStringArray(writer, [.. method.ParameterNames]);
+                        WriteNullableStringArray(writer, method.ParameterTypes);
+                        WriteNullableString(writer, method.ReturnType);
+                    }
+                }
+                else if (obj is ExtendMetadata extendMeta)
+                {
+                    writer.Write((byte)10);
+                    WriteLengthPrefixedString(writer, extendMeta.TypeName);
+                    WriteStringArray(writer, extendMeta.MethodNames);
+                    writer.Write((byte)(extendMeta.IsBuiltIn ? 1 : 0));
+                }
+                else if (obj is ImportMetadata importMeta)
+                {
+                    writer.Write((byte)11);
+                    WriteStringArray(writer, importMeta.Names);
+                }
+                else if (obj is ImportAsMetadata importAsMeta)
+                {
+                    writer.Write((byte)12);
+                    WriteLengthPrefixedString(writer, importAsMeta.AliasName);
+                }
+                else if (obj is DestructureMetadata destructureMeta)
+                {
+                    writer.Write((byte)13);
+                    WriteLengthPrefixedString(writer, destructureMeta.Kind);
+                    WriteStringArray(writer, destructureMeta.Names);
+                    WriteNullableString(writer, destructureMeta.RestName);
+                    writer.Write((byte)(destructureMeta.IsConst ? 1 : 0));
+                }
+                else if (obj is RetryMetadata retryMeta)
+                {
+                    writer.Write((byte)14);
+                    writer.Write((ushort)retryMeta.OptionCount);
+                    writer.Write((byte)(retryMeta.HasUntilClause ? 1 : 0));
+                    writer.Write((byte)(retryMeta.HasOnRetryClause ? 1 : 0));
+                    writer.Write((byte)(retryMeta.OnRetryIsReference ? 1 : 0));
                 }
                 else
                 {
@@ -407,5 +481,19 @@ public static class BytecodeWriter
             return;
         }
         WriteLengthPrefixedString(writer, value);
+    }
+
+    private static void WriteStringArray(BinaryWriter writer, string[] values)
+    {
+        writer.Write((ushort)values.Length);
+        foreach (string s in values)
+            WriteLengthPrefixedString(writer, s);
+    }
+
+    private static void WriteNullableStringArray(BinaryWriter writer, IReadOnlyList<string?> values)
+    {
+        writer.Write((ushort)values.Count);
+        foreach (string? s in values)
+            WriteNullableString(writer, s);
     }
 }

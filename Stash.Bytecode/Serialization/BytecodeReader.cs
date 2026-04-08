@@ -1,8 +1,10 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
@@ -16,6 +18,7 @@ public static class BytecodeReader
     private const byte   FlagHasEmbeddedSource = 0x04;
     private const ushort NullLength            = 0xFFFF;
     private const int    MaxCodeLength         = 16 * 1024 * 1024; // 16 MB
+    private const int    MaxStringLength       = 16 * 1024 * 1024; // 16 MB
 
     /// <summary>Read and validate a .stashc stream, returning the top-level chunk.</summary>
     public static Chunk Read(Stream stream)
@@ -86,6 +89,9 @@ public static class BytecodeReader
         ReadChunk(reader, hasDebugInfo);
 
         uint sourceLength = reader.ReadUInt32();
+        if (sourceLength > MaxStringLength)
+            throw new InvalidDataException(
+                $"Embedded source length {sourceLength} exceeds the {MaxStringLength / (1024 * 1024)} MB safety limit.");
         byte[] sourceBytes = reader.ReadBytes((int)sourceLength);
         return Encoding.UTF8.GetString(sourceBytes);
     }
@@ -286,6 +292,15 @@ public static class BytecodeReader
             3 => StashValue.FromFloat(BitConverter.Int64BitsToDouble(reader.ReadInt64())),
             4 => StashValue.FromObj(ReadString32(reader)),
             5 => StashValue.FromObj(ReadChunk(reader, hasDebugInfo)),
+            6 => StashValue.FromObj(ReadCommandMetadata(reader)),
+            7 => StashValue.FromObj(ReadStructMetadata(reader)),
+            8 => StashValue.FromObj(ReadEnumMetadata(reader)),
+            9 => StashValue.FromObj(ReadInterfaceMetadata(reader)),
+            10 => StashValue.FromObj(ReadExtendMetadata(reader)),
+            11 => StashValue.FromObj(ReadImportMetadata(reader)),
+            12 => StashValue.FromObj(ReadImportAsMetadata(reader)),
+            13 => StashValue.FromObj(ReadDestructureMetadata(reader)),
+            14 => StashValue.FromObj(ReadRetryMetadata(reader)),
             _ => throw new InvalidDataException($"Unknown constant tag {tag} in .stashc constant pool.")
         };
     }
@@ -360,7 +375,115 @@ public static class BytecodeReader
     private static string ReadString32(BinaryReader reader)
     {
         uint length = reader.ReadUInt32();
+        if (length > MaxStringLength)
+            throw new InvalidDataException(
+                $"String constant length {length} exceeds the {MaxStringLength / (1024 * 1024)} MB safety limit.");
         byte[] bytes = reader.ReadBytes((int)length);
         return Encoding.UTF8.GetString(bytes);
+    }
+
+    private static string[] ReadStringArray(BinaryReader reader)
+    {
+        ushort count = reader.ReadUInt16();
+        string[] values = new string[count];
+        for (int i = 0; i < count; i++)
+            values[i] = ReadString16(reader);
+        return values;
+    }
+
+    private static string?[] ReadNullableStringArray(BinaryReader reader)
+    {
+        ushort count = reader.ReadUInt16();
+        string?[] values = new string?[count];
+        for (int i = 0; i < count; i++)
+            values[i] = ReadNullableString16(reader);
+        return values;
+    }
+
+    private static CommandMetadata ReadCommandMetadata(BinaryReader reader)
+    {
+        int partCount = reader.ReadUInt16();
+        bool isPassthrough = reader.ReadByte() != 0;
+        bool isStrict = reader.ReadByte() != 0;
+        return new CommandMetadata(partCount, isPassthrough, isStrict);
+    }
+
+    private static StructMetadata ReadStructMetadata(BinaryReader reader)
+    {
+        string name = ReadString16(reader);
+        string[] fields = ReadStringArray(reader);
+        string[] methodNames = ReadStringArray(reader);
+        string[] interfaceNames = ReadStringArray(reader);
+        return new StructMetadata(name, fields, methodNames, interfaceNames);
+    }
+
+    private static EnumMetadata ReadEnumMetadata(BinaryReader reader)
+    {
+        string name = ReadString16(reader);
+        string[] members = ReadStringArray(reader);
+        return new EnumMetadata(name, members);
+    }
+
+    private static InterfaceMetadata ReadInterfaceMetadata(BinaryReader reader)
+    {
+        string name = ReadString16(reader);
+        ushort fieldCount = reader.ReadUInt16();
+        InterfaceField[] fields = new InterfaceField[fieldCount];
+        for (int i = 0; i < fieldCount; i++)
+        {
+            string fieldName = ReadString16(reader);
+            string? typeHint = ReadNullableString16(reader);
+            fields[i] = new InterfaceField(fieldName, typeHint);
+        }
+        ushort methodCount = reader.ReadUInt16();
+        InterfaceMethod[] methods = new InterfaceMethod[methodCount];
+        for (int i = 0; i < methodCount; i++)
+        {
+            string methodName = ReadString16(reader);
+            int arity = reader.ReadUInt16();
+            string[] paramNames = ReadStringArray(reader);
+            string?[] paramTypes = ReadNullableStringArray(reader);
+            string? returnType = ReadNullableString16(reader);
+            methods[i] = new InterfaceMethod(methodName, arity, new List<string>(paramNames), new List<string?>(paramTypes), returnType);
+        }
+        return new InterfaceMetadata(name, fields, methods);
+    }
+
+    private static ExtendMetadata ReadExtendMetadata(BinaryReader reader)
+    {
+        string typeName = ReadString16(reader);
+        string[] methodNames = ReadStringArray(reader);
+        bool isBuiltIn = reader.ReadByte() != 0;
+        return new ExtendMetadata(typeName, methodNames, isBuiltIn);
+    }
+
+    private static ImportMetadata ReadImportMetadata(BinaryReader reader)
+    {
+        string[] names = ReadStringArray(reader);
+        return new ImportMetadata(names);
+    }
+
+    private static ImportAsMetadata ReadImportAsMetadata(BinaryReader reader)
+    {
+        string aliasName = ReadString16(reader);
+        return new ImportAsMetadata(aliasName);
+    }
+
+    private static DestructureMetadata ReadDestructureMetadata(BinaryReader reader)
+    {
+        string kind = ReadString16(reader);
+        string[] names = ReadStringArray(reader);
+        string? restName = ReadNullableString16(reader);
+        bool isConst = reader.ReadByte() != 0;
+        return new DestructureMetadata(kind, names, restName, isConst);
+    }
+
+    private static RetryMetadata ReadRetryMetadata(BinaryReader reader)
+    {
+        int optionCount = reader.ReadUInt16();
+        bool hasUntilClause = reader.ReadByte() != 0;
+        bool hasOnRetryClause = reader.ReadByte() != 0;
+        bool onRetryIsReference = reader.ReadByte() != 0;
+        return new RetryMetadata(optionCount, hasUntilClause, hasOnRetryClause, onRetryIsReference);
     }
 }
