@@ -293,6 +293,7 @@ public class DisassemblerTests
     {
         // Simulates: var x = 42; return x + 10;
         var builder = new ChunkBuilder();
+        builder.Optimize = false;
         builder.LocalCount = 2;
 
         var line1 = new SourceSpan("test.stash", 1, 1, 1, 12);

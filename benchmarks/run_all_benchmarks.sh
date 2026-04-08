@@ -10,8 +10,9 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RUNS=3
 
 # Ensure dotnet project is built
-echo "Building Stash..."
-dotnet build "$PROJECT_DIR" -c Release --nologo -v quiet 2>/dev/null
+echo "Building Stash (AOT)..."
+dotnet publish "$PROJECT_DIR/Stash.Cli/" -c Release --nologo -v quiet -o "$PROJECT_DIR/.bench-bin" 2>/dev/null
+STASH_BIN="$PROJECT_DIR/.bench-bin/Stash"
 
 # Helper: extract the "Time: NNN ms" or "Total time: NNN ms" value from output
 extract_time() {
@@ -61,7 +62,7 @@ echo ""
 echo ">>> Algorithms"
 declare -A algo_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_algorithms.stash" \
+    "Stash:$STASH_BIN $SCRIPT_DIR/bench_algorithms.stash" \
     "Python:python3 $SCRIPT_DIR/bench_algorithms.py" \
     "Node.js:node $SCRIPT_DIR/bench_algorithms.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_algorithms.rb" \
@@ -82,7 +83,7 @@ echo ""
 echo ">>> Function Calls"
 declare -A func_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_function_calls.stash" \
+    "Stash:$STASH_BIN $SCRIPT_DIR/bench_function_calls.stash" \
     "Python:python3 $SCRIPT_DIR/bench_function_calls.py" \
     "Node.js:node $SCRIPT_DIR/bench_function_calls.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_function_calls.rb" \
@@ -103,7 +104,7 @@ echo ""
 echo ">>> Expression Throughput"
 declare -A expr_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_lexer_heavy.stash" \
+    "Stash:$STASH_BIN $SCRIPT_DIR/bench_lexer_heavy.stash" \
     "Python:python3 $SCRIPT_DIR/bench_lexer_heavy.py" \
     "Node.js:node $SCRIPT_DIR/bench_lexer_heavy.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_lexer_heavy.rb" \
@@ -124,7 +125,7 @@ echo ""
 echo ">>> Built-in Functions"
 declare -A ns_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_namespace_calls.stash" \
+    "Stash:$STASH_BIN $SCRIPT_DIR/bench_namespace_calls.stash" \
     "Python:python3 $SCRIPT_DIR/bench_namespace_calls.py" \
     "Node.js:node $SCRIPT_DIR/bench_namespace_calls.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_namespace_calls.rb" \
@@ -145,7 +146,7 @@ echo ""
 echo ">>> Scope Lookup"
 declare -A scope_results
 for lang_label_cmd in \
-    "Stash:dotnet run --project $PROJECT_DIR/Stash.Cli/ -c Release -- $SCRIPT_DIR/bench_scope_lookup.stash" \
+    "Stash:$STASH_BIN $SCRIPT_DIR/bench_scope_lookup.stash" \
     "Python:python3 $SCRIPT_DIR/bench_scope_lookup.py" \
     "Node.js:node $SCRIPT_DIR/bench_scope_lookup.js" \
     "Ruby:ruby $SCRIPT_DIR/bench_scope_lookup.rb" \

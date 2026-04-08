@@ -62,11 +62,14 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// <summary>Names of captured upvalues, in capture order, for debugger closure scope display.</summary>
     private readonly List<string> _upvalueNames = new();
 
+    private readonly bool _optimize;
+
     // ---- Construction ----
 
-    private Compiler(Compiler? enclosing, string? name, GlobalSlotAllocator globalSlots)
+    private Compiler(Compiler? enclosing, string? name, GlobalSlotAllocator globalSlots, bool optimize = true)
     {
-        _builder = new ChunkBuilder { Name = name };
+        _optimize = optimize;
+        _builder = new ChunkBuilder { Name = name, Optimize = optimize };
         _scope = new CompilerScope();
         _enclosing = enclosing;
         _globalSlots = globalSlots;
@@ -80,10 +83,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// </summary>
     /// <param name="statements">The resolved program statements to compile.</param>
     /// <returns>The compiled script chunk, ready for execution by the VM.</returns>
-    public static Chunk Compile(List<Stmt> statements)
+    public static Chunk Compile(List<Stmt> statements, bool optimize = true)
     {
         var globalSlots = new GlobalSlotAllocator();
-        var compiler = new Compiler(null, null, globalSlots);
+        var compiler = new Compiler(null, null, globalSlots, optimize);
         foreach (Stmt stmt in statements)
         {
             compiler.CompileStmt(stmt);
@@ -101,10 +104,10 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// Compiles a single expression into a Chunk that returns the expression's value.
     /// Used by StashEngine.Evaluate() for the bytecode backend.
     /// </summary>
-    public static Chunk CompileExpression(Expr expression)
+    public static Chunk CompileExpression(Expr expression, bool optimize = true)
     {
         var globalSlots = new GlobalSlotAllocator();
-        var compiler = new Compiler(null, null, globalSlots);
+        var compiler = new Compiler(null, null, globalSlots, optimize);
         compiler.CompileExpr(expression);
         compiler._builder.Emit(OpCode.Return);
         compiler._builder.LocalCount = compiler._scope.PeakLocalCount;

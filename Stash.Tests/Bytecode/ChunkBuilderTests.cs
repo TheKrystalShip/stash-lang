@@ -29,7 +29,7 @@ public class ChunkBuilderTests
         foreach (OpCode op in Enum.GetValues<OpCode>())
         {
             int size = OpCodeInfo.OperandSize(op);
-            Assert.InRange(size, 0, 2);
+            Assert.InRange(size, 0, 3);
         }
     }
 
@@ -115,6 +115,7 @@ public class ChunkBuilderTests
     public void Emit_MultipleInstructions_ProducesCorrectSequence()
     {
         var builder = new ChunkBuilder();
+        builder.Optimize = false;
         ushort constIdx = builder.AddConstant(42L);    // constant pool index 0
         builder.Emit(OpCode.Const, constIdx);          // offset 0: Const 0
         builder.Emit(OpCode.StoreLocal, (byte)0);      // offset 3: StoreLocal 0

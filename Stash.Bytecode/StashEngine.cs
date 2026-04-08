@@ -126,6 +126,12 @@ public class StashEngine
     /// </summary>
     public long StepCount => _vm?.StepCount ?? 0;
 
+    /// <summary>
+    /// When true (default), the bytecode peephole optimizer runs during compilation,
+    /// fusing common instruction sequences into superinstructions.
+    /// </summary>
+    public bool OptimizeBytecode { get; set; } = true;
+
     /// <summary>Creates and configures the bytecode VM with built-in globals.</summary>
     private VirtualMachine EnsureVM()
     {
@@ -169,7 +175,7 @@ public class StashEngine
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements);
+            Chunk chunk = Compiler.Compile(statements, optimize: OptimizeBytecode);
             var vm = EnsureVM();
             SyncVMSettings(vm);
             object? result = vm.Execute(chunk);
@@ -218,7 +224,7 @@ public class StashEngine
 
         try
         {
-            Chunk chunk = Compiler.CompileExpression(expr);
+            Chunk chunk = Compiler.CompileExpression(expr, optimize: OptimizeBytecode);
             var vm = EnsureVM();
             SyncVMSettings(vm);
             object? result = vm.Execute(chunk);
@@ -296,7 +302,7 @@ public class StashEngine
 
         try
         {
-            Chunk chunk = Compiler.Compile(script.Statements);
+            Chunk chunk = Compiler.Compile(script.Statements, optimize: OptimizeBytecode);
             var vm = EnsureVM();
             SyncVMSettings(vm);
             object? result = vm.Execute(chunk);

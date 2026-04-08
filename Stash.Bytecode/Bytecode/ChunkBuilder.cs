@@ -31,6 +31,9 @@ public class ChunkBuilder
     public bool[]? LocalIsConst { get; set; }
     public string[]? UpvalueNames { get; set; }
 
+    /// <summary>When true, the peephole optimizer runs during Build() to fuse instructions.</summary>
+    public bool Optimize { get; set; } = true;
+
     /// <summary>Shared global slot allocator for slot-based global access. Null for legacy compilation.</summary>
     internal GlobalSlotAllocator? GlobalSlotAllocator { get; set; }
 
@@ -231,11 +234,23 @@ public class ChunkBuilder
     // ---- Build ----
 
     /// <summary>
+    /// Runs the peephole optimizer on the current bytecode, replacing multi-instruction
+    /// sequences with fused superinstructions and specializing common opcodes.
+    /// </summary>
+    internal void RunPeepholeOptimizer()
+    {
+        PeepholeOptimizer.Optimize(_code, ref _codeCount, _constants, _sourceMapEntries);
+    }
+
+    /// <summary>
     /// Freeze the builder state into an immutable <see cref="Chunk"/>.
     /// The builder should not be used after calling this method.
     /// </summary>
     public Chunk Build()
     {
+        if (Optimize)
+            RunPeepholeOptimizer();
+
         byte[] code = _code.AsSpan(0, _codeCount).ToArray();
         ArrayPool<byte>.Shared.Return(_code);
         _code = null!; // prevent reuse after Build

@@ -245,7 +245,7 @@ public sealed partial class Compiler
         bool hasRestParam,
         bool firstParamIsConst = false)
     {
-        var fnCompiler = new Compiler(this, name, _globalSlots);
+        var fnCompiler = new Compiler(this, name, _globalSlots, _optimize);
         fnCompiler._builder.Arity = parameters.Count;
         fnCompiler._builder.IsAsync = isAsync;
         fnCompiler._builder.HasRestParam = hasRestParam;

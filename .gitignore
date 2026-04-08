@@ -1,6 +1,7 @@
 # Build outputs
 bin/
 obj/
+.bench-bin/
 *.dll
 *.exe
 *.pdb

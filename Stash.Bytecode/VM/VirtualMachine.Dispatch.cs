@@ -59,6 +59,7 @@ public sealed partial class VirtualMachine
         }
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private object? RunInner(int targetFrameCount = 0)
     {
         IDebugger? debugger = _debugger;
@@ -242,6 +243,27 @@ public sealed partial class VirtualMachine
 
                 // ==================== Retry ====================
                 case OpCode.Retry: Push(ExecuteRetry(ref frame)); break;
+
+                // ==================== Superinstructions ====================
+                case OpCode.LoadLocal0: Push(_stack[frame.BaseSlot]); break;
+                case OpCode.LoadLocal1: Push(_stack[frame.BaseSlot + 1]); break;
+                case OpCode.LoadLocal2: Push(_stack[frame.BaseSlot + 2]); break;
+                case OpCode.LoadLocal3: Push(_stack[frame.BaseSlot + 3]); break;
+                case OpCode.Call0: ExecuteCallN(ref frame, 0, debugger); break;
+                case OpCode.Call1: ExecuteCallN(ref frame, 1, debugger); break;
+                case OpCode.Call2: ExecuteCallN(ref frame, 2, debugger); break;
+                case OpCode.LL_Add: ExecuteLL_Add(ref frame); break;
+                case OpCode.LC_Add: ExecuteLC_Add(ref frame); break;
+                case OpCode.LC_LessThan: ExecuteLC_LessThan(ref frame); break;
+                case OpCode.DupStoreLocalPop: ExecuteDupStoreLocalPop(ref frame); break;
+                case OpCode.LL_LessThan: ExecuteLL_LessThan(ref frame); break;
+                case OpCode.LC_Subtract: ExecuteLC_Subtract(ref frame); break;
+                case OpCode.L_Return:
+                    if (ExecuteL_Return(ref frame, targetFrameCount, debugger, out object? lRetResult))
+                    {
+                        return lRetResult;
+                    }
+                    break;
 
                 // ==================== Deferred / Not-yet-implemented ====================
                 case OpCode.CheckNumeric: ExecuteCheckNumeric(ref frame); break;

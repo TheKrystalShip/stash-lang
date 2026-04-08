@@ -56,6 +56,54 @@ public static class Disassembler
         int operandSize = OpCodeInfo.OperandSize(opCode);
         string opName = opCode.ToString();
 
+        // Superinstructions with non-standard operand layouts
+        switch (opCode)
+        {
+            case OpCode.LL_Add:
+            case OpCode.LL_LessThan:
+            {
+                byte slot1 = chunk.Code[offset + 1];
+                byte slot2 = chunk.Code[offset + 2];
+                string op = opCode == OpCode.LL_Add ? "+" : "<";
+                sb.AppendLine($"{opName,-16} {slot1,4} {slot2,4}    ; local[{slot1}] {op} local[{slot2}]");
+                return offset + 3;
+            }
+
+            case OpCode.LC_Add:
+            case OpCode.LC_Subtract:
+            case OpCode.LC_LessThan:
+            {
+                byte slot = chunk.Code[offset + 1];
+                ushort constIdx = (ushort)((chunk.Code[offset + 2] << 8) | chunk.Code[offset + 3]);
+                string op = opCode switch
+                {
+                    OpCode.LC_Add => "+",
+                    OpCode.LC_Subtract => "-",
+                    OpCode.LC_LessThan => "<",
+                    _ => "?"
+                };
+                sb.Append($"{opName,-16} {slot,4} {constIdx,4}");
+                if (constIdx < chunk.Constants.Length)
+                    sb.Append($"    ; local[{slot}] {op} {FormatConstant(chunk.Constants[constIdx])}");
+                sb.AppendLine();
+                return offset + 4;
+            }
+
+            case OpCode.DupStoreLocalPop:
+            {
+                byte slot = chunk.Code[offset + 1];
+                sb.AppendLine($"{opName,-16} {slot,4}    ; store-and-pop local[{slot}]");
+                return offset + 2;
+            }
+
+            case OpCode.L_Return:
+            {
+                byte slot = chunk.Code[offset + 1];
+                sb.AppendLine($"{opName,-16} {slot,4}    ; return local[{slot}]");
+                return offset + 2;
+            }
+        }
+
         switch (operandSize)
         {
             case 0:

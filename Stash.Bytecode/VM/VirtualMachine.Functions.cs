@@ -356,6 +356,11 @@ public sealed partial class VirtualMachine
     private bool ExecuteReturn(ref CallFrame frame, int targetFrameCount, IDebugger? debugger, out object? result)
     {
         StashValue retVal = Pop();
+        return ExecuteReturnValue(retVal, targetFrameCount, debugger, out result);
+    }
+
+    private bool ExecuteReturnValue(StashValue retVal, int targetFrameCount, IDebugger? debugger, out object? result)
+    {
         int baseSlot = _frames[_frameCount - 1].BaseSlot;
         if (debugger is not null && _debugCallStack.Count > 0)
         {
@@ -385,6 +390,11 @@ public sealed partial class VirtualMachine
     private void ExecuteCall(ref CallFrame frame, IDebugger? debugger)
     {
         byte argc = ReadByte(ref frame);
+        ExecuteCallN(ref frame, argc, debugger);
+    }
+
+    private void ExecuteCallN(ref CallFrame frame, byte argc, IDebugger? debugger)
+    {
         // Save caller context before frame may be invalidated by PushFrame.
         // Avoid the O(log n) binary search — only compute span when actually needed.
         int callerIP = frame.IP - 1;

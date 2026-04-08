@@ -511,9 +511,10 @@ public class CompilerTests : BytecodeTestBase
         }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
-        Assert.Contains("LoadLocal", fnDisasm);
-        Assert.Contains("Add", fnDisasm);
-        Assert.Contains("Return", fnDisasm);
+        // Optimizer may fuse LoadLocal+LoadLocal+Add → LL_Add and LoadLocal+Return → L_Return
+        Assert.True(fnDisasm.Contains("LoadLocal") || fnDisasm.Contains("LL_Add"), "Expected LoadLocal or LL_Add in disassembly");
+        Assert.True(fnDisasm.Contains("Add"), "Expected Add (standalone or in LL_Add) in disassembly");
+        Assert.True(fnDisasm.Contains("Return"), "Expected Return (standalone or in L_Return) in disassembly");
     }
 
     // =========================================================================
@@ -859,7 +860,7 @@ public class CompilerTests : BytecodeTestBase
             fn foo() {
                 for (let x in [1, 2, 3]) { x; }
             }
-            """);
+            """, optimize: false);
         Chunk? fnChunk = null;
         foreach (StashValue c in chunk.Constants)
             if (c.AsObj is Chunk fc) { fnChunk = fc; break; }

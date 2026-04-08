@@ -39,6 +39,8 @@ namespace Stash;
 public class Program
 {
     private static VirtualMachine? _activeVM;
+    private static bool _optimize = true;
+    private static bool _disassemble = false;
     /// <summary>Parses CLI arguments and dispatches to the appropriate execution mode.</summary>
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
@@ -52,9 +54,11 @@ public class Program
 
         string? commandString = null;
         bool debug = false;
+        bool disassemble = false;
         bool test = false;
         bool testList = false;
         string? testFilter = null;
+        bool optimize = true;
         string? scriptPath = null;
         int scriptArgStart = -1;
 
@@ -90,6 +94,14 @@ public class Program
             {
                 testFilter = args[i]["--test-filter=".Length..];
             }
+            else if (args[i] == "--no-optimize" && scriptPath is null && commandString is null)
+            {
+                optimize = false;
+            }
+            else if (args[i] == "--disassemble" && scriptPath is null && commandString is null)
+            {
+                disassemble = true;
+            }
             else if (args[i] == "--" && scriptPath is null && commandString is null)
             {
                 // Everything after -- becomes script args (for stdin piping)
@@ -111,6 +123,8 @@ public class Program
         string[] scriptArgs = scriptArgStart >= 0 && scriptArgStart < args.Length
             ? args[scriptArgStart..]
             : Array.Empty<string>();
+        _optimize = optimize;
+        _disassemble = disassemble;
 
         // Register cleanup handlers for graceful shutdown
         Console.CancelKeyPress += (_, e) =>
@@ -134,7 +148,7 @@ public class Program
                 System.Environment.Exit(64);
                 return;
             }
-            RunSource(commandString, "<command>", scriptArgs);
+            RunSource(commandString, "<command>", scriptArgs, disassemble);
             return;
         }
 
@@ -148,7 +162,7 @@ public class Program
                 return;
             }
             string source = Console.In.ReadToEnd();
-            RunSource(source, "<stdin>", scriptArgs);
+            RunSource(source, "<stdin>", scriptArgs, disassemble);
             return;
         }
 
@@ -167,9 +181,23 @@ public class Program
             return;
         }
 
+        if (disassemble && scriptPath is null)
+        {
+            Console.Error.WriteLine("Error: --disassemble mode requires a script file.");
+            System.Environment.Exit(64);
+            return;
+        }
+
         // Mode 4: Script file execution
         if (scriptPath is not null)
         {
+            if (disassemble && (debug || test))
+            {
+                Console.Error.WriteLine("Error: --disassemble cannot be combined with --debug or --test.");
+                System.Environment.Exit(64);
+                return;
+            }
+
             if (debug && test)
             {
                 RunFileWithDebuggerAndTests(scriptPath, scriptArgs, testFilter, testList);
@@ -184,7 +212,7 @@ public class Program
             }
             else
             {
-                RunFile(scriptPath, scriptArgs);
+                RunFile(scriptPath, scriptArgs, disassemble);
             }
             return;
         }
@@ -197,7 +225,7 @@ public class Program
     /// <param name="source">The source code to execute.</param>
     /// <param name="sourceName">Diagnostic name for the source (e.g., "&lt;command&gt;" or "&lt;stdin&gt;").</param>
     /// <param name="scriptArgs">Arguments to pass to the script.</param>
-    private static void RunSource(string source, string sourceName, string[] scriptArgs)
+    private static void RunSource(string source, string sourceName, string[] scriptArgs, bool disassemble = false)
     {
         // Stage 1: Lex
         var lexer = new Lexer(source, sourceName);
@@ -231,7 +259,14 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements);
+            Chunk chunk = Compiler.Compile(statements, _optimize);
+
+            if (disassemble)
+            {
+                PrintDisassembly(chunk);
+                return;
+            }
+
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -263,7 +298,7 @@ public class Program
     /// <summary>Executes a Stash script file.</summary>
     /// <param name="path">Path to the script file.</param>
     /// <param name="scriptArgs">Arguments to pass to the script.</param>
-    private static void RunFile(string path, string[] scriptArgs)
+    private static void RunFile(string path, string[] scriptArgs, bool disassemble = false)
     {
         if (!System.IO.File.Exists(path))
         {
@@ -305,7 +340,14 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements);
+            Chunk chunk = Compiler.Compile(statements, _optimize);
+
+            if (disassemble)
+            {
+                PrintDisassembly(chunk);
+                return;
+            }
+
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -380,7 +422,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements);
+            Chunk chunk = Compiler.Compile(statements, _optimize);
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -454,7 +496,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements);
+            Chunk chunk = Compiler.Compile(statements, _optimize);
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -540,7 +582,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements);
+            Chunk chunk = Compiler.Compile(statements, _optimize);
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -647,7 +689,7 @@ public class Program
                     try
                     {
                         SemanticResolver.Resolve(statements);
-                        Chunk chunk = Compiler.Compile(statements);
+                        Chunk chunk = Compiler.Compile(statements, _optimize);
                         vm.ExecuteRepl(chunk);
                     }
                     catch (RuntimeError ex)
@@ -673,7 +715,7 @@ public class Program
 
                     try
                     {
-                        Chunk chunk = Compiler.CompileExpression(expr);
+                        Chunk chunk = Compiler.CompileExpression(expr, _optimize);
                         object? result = vm.Execute(chunk);
                         if (result is not null)
                         {
@@ -739,7 +781,7 @@ public class Program
             throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", null);
 
         SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts);
+        return Compiler.Compile(stmts, _optimize);
     }
 
     /// <summary>
@@ -779,6 +821,21 @@ public class Program
         }
 
         return false;
+    }
+
+    /// <summary>Prints bytecode disassembly for the given chunk and any nested function chunks.</summary>
+    /// <param name="chunk">The top-level compiled chunk to disassemble.</param>
+    private static void PrintDisassembly(Chunk chunk)
+    {
+        Console.Out.WriteLine(Disassembler.Disassemble(chunk));
+
+        foreach (StashValue constant in chunk.Constants)
+        {
+            if (constant.AsObj is Chunk fnChunk)
+            {
+                Console.Out.WriteLine(Disassembler.Disassemble(fnChunk));
+            }
+        }
     }
 
     /// <summary>Formats and prints a runtime error to stderr.</summary>

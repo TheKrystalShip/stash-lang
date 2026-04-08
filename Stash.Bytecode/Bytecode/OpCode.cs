@@ -259,6 +259,39 @@ public enum OpCode : byte
     InitConstGlobal, // 82
     /// <summary>Peek at top of stack; throw RuntimeError if not int or float.</summary>
     CheckNumeric,    // 83
+
+    // -------------------------------------------------------------------------
+    // Superinstructions — Fused Multi-Opcode and Single-Opcode Specializations
+    // -------------------------------------------------------------------------
+
+    /// <summary>Push local variable at slot 0 (specialization of LoadLocal).</summary>
+    LoadLocal0,         // 84
+    /// <summary>Push local variable at slot 1 (specialization of LoadLocal).</summary>
+    LoadLocal1,         // 85
+    /// <summary>Push local variable at slot 2 (specialization of LoadLocal).</summary>
+    LoadLocal2,         // 86
+    /// <summary>Push local variable at slot 3 (specialization of LoadLocal).</summary>
+    LoadLocal3,         // 87
+    /// <summary>Call function with 0 arguments (specialization of Call).</summary>
+    Call0,              // 88
+    /// <summary>Call function with 1 argument (specialization of Call).</summary>
+    Call1,              // 89
+    /// <summary>Call function with 2 arguments (specialization of Call).</summary>
+    Call2,              // 90
+    /// <summary>Fused: LoadLocal + LoadLocal + Add (u8 slot1, u8 slot2).</summary>
+    LL_Add,             // 91
+    /// <summary>Fused: LoadLocal + Const + Add (u8 slot, u16 const_idx).</summary>
+    LC_Add,             // 92
+    /// <summary>Fused: LoadLocal + Const + LessThan (u8 slot, u16 const_idx).</summary>
+    LC_LessThan,        // 93
+    /// <summary>Fused: Dup + StoreLocal + Pop — store-and-discard (u8 slot).</summary>
+    DupStoreLocalPop,   // 94
+    /// <summary>Fused: LoadLocal + LoadLocal + LessThan (u8 slot1, u8 slot2).</summary>
+    LL_LessThan,        // 95
+    /// <summary>Fused: LoadLocal + Const + Subtract (u8 slot, u16 const_idx).</summary>
+    LC_Subtract,        // 96
+    /// <summary>Fused: LoadLocal + Return (u8 slot).</summary>
+    L_Return,           // 97
 }
 
 /// <summary>
@@ -362,6 +395,24 @@ public static class OpCodeInfo
         OpCode.Switch          => 2,
         OpCode.Retry           => 2,
         OpCode.Iterate         => 2,
+
+        // Superinstructions — Tier 0 (zero-operand specializations)
+        OpCode.LoadLocal0    => 0,
+        OpCode.LoadLocal1    => 0,
+        OpCode.LoadLocal2    => 0,
+        OpCode.LoadLocal3    => 0,
+        OpCode.Call0         => 0,
+        OpCode.Call1         => 0,
+        OpCode.Call2         => 0,
+
+        // Superinstructions — Tier 1 (fused multi-opcode)
+        OpCode.LL_Add          => 2,  // u8 + u8
+        OpCode.LC_Add          => 3,  // u8 + u16
+        OpCode.LC_LessThan     => 3,  // u8 + u16
+        OpCode.DupStoreLocalPop => 1, // u8
+        OpCode.LL_LessThan     => 2,  // u8 + u8
+        OpCode.LC_Subtract     => 3,  // u8 + u16
+        OpCode.L_Return        => 1,  // u8
 
         _ => throw new System.ArgumentOutOfRangeException(nameof(opCode), opCode, "Unknown opcode."),
     };
