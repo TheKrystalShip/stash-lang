@@ -12,6 +12,7 @@ internal sealed class GlobalSlotAllocator
 {
     private readonly Dictionary<string, ushort> _nameToSlot = new(StringComparer.Ordinal);
     private ushort _nextSlot;
+    private readonly Dictionary<string, object?> _constValues = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Returns the slot index for <paramref name="name"/>, allocating a new one if first seen.
@@ -25,6 +26,12 @@ internal sealed class GlobalSlotAllocator
         }
         return slot;
     }
+
+    /// <summary>Records the compile-time literal value of a const global.</summary>
+    public void TrackConstValue(string name, object? value) => _constValues[name] = value;
+
+    /// <summary>Returns true and the tracked value if <paramref name="name"/> is a folded const global.</summary>
+    public bool TryGetConstValue(string name, out object? value) => _constValues.TryGetValue(name, out value);
 
     /// <summary>Total number of global slots allocated so far.</summary>
     public int Count => _nextSlot;
