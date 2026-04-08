@@ -101,7 +101,7 @@ public sealed partial class Compiler
             // Captured directly from the enclosing function's locals
             _enclosing._builder.MayHaveCapturedLocals = true;
             byte idx = _builder.AddUpvalue((byte)localSlot, isLocal: true);
-            if (idx == _upvalueNames.Count)
+            if (idx == (_upvalueNames ??= new()).Count)
             {
                 _upvalueNames.Add(name);
             }
@@ -114,7 +114,7 @@ public sealed partial class Compiler
             // Transitively captured through the enclosing function's own upvalue chain
             byte enclosingUpvalue = _enclosing.ResolveUpvalue(name, distance - 1);
             byte idx = _builder.AddUpvalue(enclosingUpvalue, isLocal: false);
-            if (idx == _upvalueNames.Count)
+            if (idx == (_upvalueNames ??= new()).Count)
             {
                 _upvalueNames.Add(name);
             }
@@ -162,9 +162,9 @@ public sealed partial class Compiler
     /// </summary>
     private void EmitPendingFinally()
     {
-        for (int i = _activeFinally.Count - 1; i >= 0; i--)
+        for (int i = (_activeFinally?.Count ?? 0) - 1; i >= 0; i--)
         {
-            FinallyInfo fi = _activeFinally[i];
+            FinallyInfo fi = _activeFinally![i];
             for (int h = 0; h < fi.HandlerCount; h++)
             {
                 _builder.Emit(OpCode.TryEnd);
@@ -182,7 +182,7 @@ public sealed partial class Compiler
     /// </summary>
     private void PatchBreakJumps()
     {
-        LoopContext loop = _loops.Pop();
+        LoopContext loop = _loops!.Pop();
         foreach (int jump in loop.BreakJumps)
         {
             _builder.PatchJump(jump);
@@ -316,7 +316,7 @@ public sealed partial class Compiler
         fnCompiler._builder.LocalCount = fnCompiler._scope.PeakLocalCount;
         fnCompiler._builder.LocalNames = fnCompiler._scope.GetPeakLocalNames();
         fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetPeakLocalIsConst();
-        fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames.Count > 0 ? fnCompiler._upvalueNames.ToArray() : null;
+        fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames?.ToArray();
         Chunk fnChunk = fnCompiler._builder.Build();
 
         // Add chunk to constant pool and emit OP_CLOSURE

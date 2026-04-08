@@ -90,7 +90,7 @@ public sealed partial class Compiler
             int innerCatchJump = _builder.EmitJump(OpCode.TryBegin);
 
             // --- Try body ---
-            _activeFinally.Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 2 });
+            (_activeFinally ??= new()).Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 2 });
             foreach (Stmt s in stmt.TryBody.Statements)
             {
                 CompileStmt(s);
@@ -122,7 +122,7 @@ public sealed partial class Compiler
                 EmitScopePops();
             }
 
-            _activeFinally.RemoveAt(_activeFinally.Count - 1);
+            _activeFinally!.RemoveAt(_activeFinally!.Count - 1);
 
             // --- After catch ---
             _builder.PatchJump(afterCatchJump);
@@ -193,12 +193,12 @@ public sealed partial class Compiler
         {
             int errorJump = _builder.EmitJump(OpCode.TryBegin);
 
-            _activeFinally.Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 1 });
+            (_activeFinally ??= new()).Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 1 });
             foreach (Stmt s in stmt.TryBody.Statements)
             {
                 CompileStmt(s);
             }
-            _activeFinally.RemoveAt(_activeFinally.Count - 1);
+            _activeFinally!.RemoveAt(_activeFinally!.Count - 1);
 
             _builder.Emit(OpCode.TryEnd);
 

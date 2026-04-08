@@ -22,6 +22,7 @@ public static class StdlibDefinitions
 
     // GetOrAdd may invoke the factory more than once under contention; Define() is pure so this is safe.
     private static readonly ConcurrentDictionary<StashCapabilities, NamespaceDefinition> _globalsCache = new();
+    private static readonly ConcurrentDictionary<StashCapabilities, Dictionary<string, StashValue>> _vmGlobalsCache = new();
 
     public static IReadOnlyList<NamespaceDefinition> Namespaces => _namespaces.Value;
 
@@ -35,8 +36,15 @@ public static class StdlibDefinitions
     /// <summary>
     /// Creates the globals dictionary for a bytecode VM, populated with all built-in
     /// functions, namespaces, and types filtered by the given capabilities.
+    /// Returns a copy of a cached template so repeated VM creation avoids 38 individual inserts.
     /// </summary>
     public static Dictionary<string, StashValue> CreateVMGlobals(StashCapabilities capabilities = StashCapabilities.All)
+    {
+        var template = _vmGlobalsCache.GetOrAdd(capabilities, static caps => BuildVMGlobals(caps));
+        return new Dictionary<string, StashValue>(template);
+    }
+
+    private static Dictionary<string, StashValue> BuildVMGlobals(StashCapabilities capabilities)
     {
         var globals = new Dictionary<string, StashValue>();
 

@@ -48,7 +48,7 @@ public sealed partial class Compiler
             ContinueTarget = loopStart,
             ScopeDepth = _scope.ScopeDepth,
         };
-        _loops.Push(loopCtx);
+        (_loops ??= new()).Push(loopCtx);
 
         CompileExpr(stmt.Condition);
         int exitJump = _builder.EmitJump(OpCode.JumpFalse);
@@ -74,7 +74,7 @@ public sealed partial class Compiler
             ContinueTarget = -1,  // determined after body, before condition
             ScopeDepth = _scope.ScopeDepth,
         };
-        _loops.Push(loopCtx);
+        (_loops ??= new()).Push(loopCtx);
 
         CompileStmt(stmt.Body);
 
@@ -112,7 +112,7 @@ public sealed partial class Compiler
             ContinueTarget = -1,  // set after body, before increment
             ScopeDepth = _scope.ScopeDepth,
         };
-        _loops.Push(loopCtx);
+        (_loops ??= new()).Push(loopCtx);
 
         int exitJump = -1;
         if (stmt.Condition != null)
@@ -180,7 +180,7 @@ public sealed partial class Compiler
             ContinueTarget = loopStart,
             ScopeDepth = _scope.ScopeDepth,
         };
-        _loops.Push(loopCtx);
+        (_loops ??= new()).Push(loopCtx);
 
         // OP_ITERATE: advance iterator; if exhausted, jump to exit
         int exitJump = _builder.EmitJump(OpCode.Iterate);
@@ -213,16 +213,16 @@ public sealed partial class Compiler
     public object? VisitBreakStmt(BreakStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
-        if (_loops.Count == 0)
+        if ((_loops?.Count ?? 0) == 0)
         {
             throw new CompileError("'break' outside of loop.", stmt.Span);
         }
 
         EmitPendingFinally();
-        EmitScopeCleanup(_loops.Peek().ScopeDepth);
+        EmitScopeCleanup(_loops!.Peek().ScopeDepth);
 
         int jump = _builder.EmitJump(OpCode.Jump);
-        _loops.Peek().BreakJumps.Add(jump);
+        _loops!.Peek().BreakJumps.Add(jump);
         return null;
     }
 
@@ -230,14 +230,14 @@ public sealed partial class Compiler
     public object? VisitContinueStmt(ContinueStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
-        if (_loops.Count == 0)
+        if ((_loops?.Count ?? 0) == 0)
         {
             throw new CompileError("'continue' outside of loop.", stmt.Span);
         }
 
         EmitPendingFinally();
 
-        LoopContext loop = _loops.Peek();
+        LoopContext loop = _loops!.Peek();
         EmitScopeCleanup(loop.ScopeDepth);
 
         if (loop.ContinueTarget >= 0)
@@ -266,10 +266,10 @@ public sealed partial class Compiler
             _builder.Emit(OpCode.Null);
         }
 
-        if (_activeFinally.Count > 0)
+        if (_activeFinally is { Count: > 0 })
         {
             // Save return value, run finally blocks, then return
-            int saveSlot = _activeFinally[^1].SaveSlot;
+            int saveSlot = _activeFinally![^1].SaveSlot;
             _builder.Emit(OpCode.StoreLocal, (byte)saveSlot);
             EmitPendingFinally();
             _builder.Emit(OpCode.LoadLocal, (byte)saveSlot);

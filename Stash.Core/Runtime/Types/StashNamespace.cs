@@ -4,6 +4,7 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using System.Threading;
 using Stash.Common;
 
 /// <summary>
@@ -34,15 +35,23 @@ public class StashNamespace
 
     public void Freeze()
     {
-        if (_mutableMembers is not null)
+        if (_frozenMembers is not null) return;
+        var mutable = _mutableMembers;
+        if (mutable is null) return;
+        var frozen = mutable.ToFrozenDictionary();
+        if (Interlocked.CompareExchange(ref _frozenMembers, frozen, null) == null)
         {
-            _frozenMembers = _mutableMembers.ToFrozenDictionary();
             _mutableMembers = null;
         }
     }
 
     public bool HasMember(string name)
     {
+        if (_frozenMembers is null && IsBuiltIn)
+        {
+            Freeze();
+        }
+
         if (_frozenMembers is not null)
         {
             return _frozenMembers.ContainsKey(name);
@@ -56,6 +65,11 @@ public class StashNamespace
     /// </summary>
     public StashValue GetMemberValue(string name, SourceSpan? span)
     {
+        if (_frozenMembers is null && IsBuiltIn)
+        {
+            Freeze();
+        }
+
         if (_frozenMembers is not null)
         {
             if (_frozenMembers.TryGetValue(name, out StashValue frozenValue))

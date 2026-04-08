@@ -48,9 +48,9 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
         public int ScopeDepth;
     }
 
-    private readonly Stack<LoopContext> _loops = new();
+    private Stack<LoopContext>? _loops;
 
-    private readonly List<FinallyInfo> _activeFinally = new();
+    private List<FinallyInfo>? _activeFinally;
 
     private struct FinallyInfo
     {
@@ -60,7 +60,7 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     }
 
     /// <summary>Names of captured upvalues, in capture order, for debugger closure scope display.</summary>
-    private readonly List<string> _upvalueNames = new();
+    private List<string>? _upvalueNames;
 
     private readonly bool _optimize;
 

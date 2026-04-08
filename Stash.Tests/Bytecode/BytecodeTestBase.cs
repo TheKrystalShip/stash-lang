@@ -61,4 +61,13 @@ public abstract class BytecodeTestBase
         var vm = new VirtualMachine();
         return Normalize(vm.Execute(chunk));
     }
+
+    /// <summary>
+    /// Compile source and return the disassembly string.
+    /// </summary>
+    protected static string Disassemble(string source)
+    {
+        Chunk chunk = CompileSource(source);
+        return Disassembler.Disassemble(chunk);
+    }
 }

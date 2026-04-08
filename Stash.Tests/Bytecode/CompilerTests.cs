@@ -6,15 +6,6 @@ namespace Stash.Tests.Bytecode;
 public class CompilerTests : BytecodeTestBase
 {
     /// <summary>
-    /// Compile source and return the disassembly string.
-    /// </summary>
-    private static string Disassemble(string source)
-    {
-        Chunk chunk = CompileSource(source);
-        return Disassembler.Disassemble(chunk);
-    }
-
-    /// <summary>
     /// Helper to check that specific opcode sequences appear in the disassembly.
     /// </summary>
     private static void AssertContainsOpcodes(string disasm, params string[] expectedOpcodes)
@@ -92,24 +83,21 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Unary_Negate_EmitsNegate()
     {
-        string disasm = Disassemble("-42;");
-        Assert.Contains("const", disasm);
+        string disasm = Disassemble("let x = 42; -x;");
         Assert.Contains("neg", disasm);
     }
 
     [Fact]
     public void Unary_LogicalNot_EmitsNot()
     {
-        string disasm = Disassemble("!true;");
-        Assert.Contains("true", disasm);
+        string disasm = Disassemble("let x = true; !x;");
         Assert.Contains("not", disasm);
     }
 
     [Fact]
     public void Unary_BitwiseNot_EmitsBitNot()
     {
-        string disasm = Disassemble("~42;");
-        Assert.Contains("const", disasm);
+        string disasm = Disassemble("let x = 42; ~x;");
         Assert.Contains("bit.not", disasm);
     }
 
@@ -120,35 +108,35 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Binary_Addition_EmitsAdd()
     {
-        string disasm = Disassemble("1 + 2;");
-        AssertContainsOpcodes(disasm, "const", "add", "pop");
+        string disasm = Disassemble("let a = 1; let b = 2; a + b;");
+        Assert.Contains("add", disasm);
     }
 
     [Fact]
     public void Binary_Subtraction_EmitsSubtract()
     {
-        string disasm = Disassemble("5 - 3;");
+        string disasm = Disassemble("let a = 5; let b = 3; a - b;");
         Assert.Contains("sub", disasm);
     }
 
     [Fact]
     public void Binary_Multiplication_EmitsMultiply()
     {
-        string disasm = Disassemble("2 * 3;");
+        string disasm = Disassemble("let a = 2; let b = 3; a * b;");
         Assert.Contains("mul", disasm);
     }
 
     [Fact]
     public void Binary_Division_EmitsDivide()
     {
-        string disasm = Disassemble("10 / 2;");
+        string disasm = Disassemble("let a = 10; let b = 2; a / b;");
         Assert.Contains("div", disasm);
     }
 
     [Fact]
     public void Binary_Modulo_EmitsModulo()
     {
-        string disasm = Disassemble("10 % 3;");
+        string disasm = Disassemble("let a = 10; let b = 3; a % b;");
         Assert.Contains("mod", disasm);
     }
 
@@ -159,42 +147,42 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Binary_Equal_EmitsEqual()
     {
-        string disasm = Disassemble("1 == 2;");
+        string disasm = Disassemble("let a = 1; let b = 2; a == b;");
         Assert.Contains("eq", disasm);
     }
 
     [Fact]
     public void Binary_NotEqual_EmitsNotEqual()
     {
-        string disasm = Disassemble("1 != 2;");
+        string disasm = Disassemble("let a = 1; let b = 2; a != b;");
         Assert.Contains("neq", disasm);
     }
 
     [Fact]
     public void Binary_LessThan_EmitsLessThan()
     {
-        string disasm = Disassemble("1 < 2;");
+        string disasm = Disassemble("let a = 1; let b = 2; a < b;");
         Assert.Contains("lt", disasm);
     }
 
     [Fact]
     public void Binary_GreaterThan_EmitsGreaterThan()
     {
-        string disasm = Disassemble("1 > 2;");
+        string disasm = Disassemble("let a = 1; let b = 2; a > b;");
         Assert.Contains("gt", disasm);
     }
 
     [Fact]
     public void Binary_LessEqual_EmitsLessEqual()
     {
-        string disasm = Disassemble("1 <= 2;");
+        string disasm = Disassemble("let a = 1; let b = 2; a <= b;");
         Assert.Contains("le", disasm);
     }
 
     [Fact]
     public void Binary_GreaterEqual_EmitsGreaterEqual()
     {
-        string disasm = Disassemble("1 >= 2;");
+        string disasm = Disassemble("let a = 1; let b = 2; a >= b;");
         Assert.Contains("ge", disasm);
     }
 
@@ -205,35 +193,35 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Binary_BitwiseAnd_EmitsBitAnd()
     {
-        string disasm = Disassemble("5 & 3;");
+        string disasm = Disassemble("let a = 5; let b = 3; a & b;");
         Assert.Contains("bit.and", disasm);
     }
 
     [Fact]
     public void Binary_BitwiseOr_EmitsBitOr()
     {
-        string disasm = Disassemble("5 | 3;");
+        string disasm = Disassemble("let a = 5; let b = 3; a | b;");
         Assert.Contains("bit.or", disasm);
     }
 
     [Fact]
     public void Binary_BitwiseXor_EmitsBitXor()
     {
-        string disasm = Disassemble("5 ^ 3;");
+        string disasm = Disassemble("let a = 5; let b = 3; a ^ b;");
         Assert.Contains("bit.xor", disasm);
     }
 
     [Fact]
     public void Binary_ShiftLeft_EmitsShiftLeft()
     {
-        string disasm = Disassemble("1 << 3;");
+        string disasm = Disassemble("let a = 1; let b = 3; a << b;");
         Assert.Contains("shl", disasm);
     }
 
     [Fact]
     public void Binary_ShiftRight_EmitsShiftRight()
     {
-        string disasm = Disassemble("8 >> 2;");
+        string disasm = Disassemble("let a = 8; let b = 2; a >> b;");
         Assert.Contains("shr", disasm);
     }
 
@@ -658,7 +646,7 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Grouping_TransparentToCompiler()
     {
-        string disasm = Disassemble("(1 + 2);");
+        string disasm = Disassemble("let a = 1; let b = 2; (a + b);");
         Assert.Contains("add", disasm);
     }
 

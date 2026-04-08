@@ -98,11 +98,10 @@ public class NamespaceBuilder
     }
 
     /// <summary>
-    /// Builds the namespace definition, freezing the runtime namespace.
+    /// Builds the namespace definition. The runtime namespace is frozen lazily on first member access.
     /// </summary>
     public NamespaceDefinition Build()
     {
-        _namespace.Freeze();
         return new NamespaceDefinition(_name, _namespace, _functions, _constants, _structs, _enums, _requiredCapability);
     }
 }

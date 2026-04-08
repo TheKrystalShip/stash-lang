@@ -56,6 +56,24 @@ public sealed partial class Compiler
     /// <inheritdoc />
     public object? VisitUnaryExpr(UnaryExpr expr)
     {
+        // Compile-time constant folding for unary operators
+        if (expr.Right is LiteralExpr lit)
+        {
+            object? folded = expr.Operator.Type switch
+            {
+                TokenType.Minus when lit.Value is long l   => (object)(-l),
+                TokenType.Minus when lit.Value is double d => (object)(-d),
+                TokenType.Bang  when lit.Value is bool b   => (object)(!b),
+                TokenType.Tilde when lit.Value is long l   => (object)(~l),
+                _ => null,
+            };
+            if (folded is not null)
+            {
+                EmitFoldedConstant(folded);
+                return null;
+            }
+        }
+
         _builder.AddSourceMapping(expr.Span);
         CompileExpr(expr.Right);
         switch (expr.Operator.Type)
@@ -79,6 +97,17 @@ public sealed partial class Compiler
     /// <inheritdoc />
     public object? VisitBinaryExpr(BinaryExpr expr)
     {
+        // Compile-time constant folding: both operands are literals
+        if (expr.Left is LiteralExpr leftLit && expr.Right is LiteralExpr rightLit)
+        {
+            object? folded = TryFoldBinary(leftLit.Value, rightLit.Value, expr.Operator.Type);
+            if (folded is not null)
+            {
+                EmitFoldedConstant(folded);
+                return null;
+            }
+        }
+
         // Short-circuit AND — if left is falsy, skip right and leave left on stack
         if (expr.Operator.Type == TokenType.AmpersandAmpersand)
         {
@@ -127,6 +156,100 @@ public sealed partial class Compiler
         };
         _builder.Emit(op);
         return null;
+    }
+
+    /// <summary>
+    /// Attempts to evaluate a binary operation on two literal values at compile time.
+    /// Returns the result if successful, or null if the operation cannot be folded.
+    /// </summary>
+    private static object? TryFoldBinary(object? left, object? right, TokenType op)
+    {
+        // Numeric arithmetic (int × int → int, anything with float → float)
+        if (left is long li && right is long ri)
+        {
+            return op switch
+            {
+                TokenType.Plus           => li + ri,
+                TokenType.Minus          => li - ri,
+                TokenType.Star           => li * ri,
+                TokenType.Slash          when ri != 0              => li / ri,
+                TokenType.Percent        when ri != 0              => li % ri,
+                TokenType.EqualEqual     => li == ri,
+                TokenType.BangEqual      => li != ri,
+                TokenType.Less           => li < ri,
+                TokenType.Greater        => li > ri,
+                TokenType.LessEqual      => li <= ri,
+                TokenType.GreaterEqual   => li >= ri,
+                TokenType.Ampersand      => li & ri,
+                TokenType.Pipe           => li | ri,
+                TokenType.Caret          => li ^ ri,
+                TokenType.LessLess       when ri >= 0 && ri < 64   => li << (int)ri,
+                TokenType.GreaterGreater when ri >= 0 && ri < 64   => li >> (int)ri,
+                _ => null,
+            };
+        }
+
+        // Float arithmetic
+        double? ld = left  is long ll ? ll : left  is double dl ? dl : null;
+        double? rd = right is long rl ? rl : right is double dr ? dr : null;
+        if (ld.HasValue && rd.HasValue && (left is double || right is double))
+        {
+            return op switch
+            {
+                TokenType.Plus         => ld.Value + rd.Value,
+                TokenType.Minus        => ld.Value - rd.Value,
+                TokenType.Star         => ld.Value * rd.Value,
+                TokenType.Slash        when rd.Value != 0.0 => ld.Value / rd.Value,
+                TokenType.Percent      when rd.Value != 0.0 => ld.Value % rd.Value,
+                TokenType.EqualEqual   => ld.Value == rd.Value,
+                TokenType.BangEqual    => ld.Value != rd.Value,
+                TokenType.Less         => ld.Value < rd.Value,
+                TokenType.Greater      => ld.Value > rd.Value,
+                TokenType.LessEqual    => ld.Value <= rd.Value,
+                TokenType.GreaterEqual => ld.Value >= rd.Value,
+                _ => null,
+            };
+        }
+
+        // String concatenation
+        if (left is string ls && right is string rs && op == TokenType.Plus)
+        {
+            return ls + rs;
+        }
+
+        // Boolean equality
+        if (left is bool lb && right is bool rb)
+        {
+            return op switch
+            {
+                TokenType.EqualEqual => lb == rb,
+                TokenType.BangEqual  => lb != rb,
+                _ => null,
+            };
+        }
+
+        return null;
+    }
+
+    /// <summary>Emits a single instruction for a compile-time-folded constant value.</summary>
+    private void EmitFoldedConstant(object? value)
+    {
+        switch (value)
+        {
+            case null:
+                _builder.Emit(OpCode.Null);
+                break;
+            case true:
+                _builder.Emit(OpCode.True);
+                break;
+            case false:
+                _builder.Emit(OpCode.False);
+                break;
+            default:
+                ushort idx = _builder.AddConstant(value);
+                _builder.Emit(OpCode.Const, idx);
+                break;
+        }
     }
 
     /// <inheritdoc />

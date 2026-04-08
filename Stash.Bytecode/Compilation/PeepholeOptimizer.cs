@@ -26,7 +26,7 @@ internal static class PeepholeOptimizer
             return;
 
         // Step 1: Find all jump targets
-        HashSet<int> jumpTargets = ComputeJumpTargets(code, codeLength, constants);
+        bool[] jumpTargets = ComputeJumpTargets(code, codeLength, constants);
 
         // Step 2: Single-pass fusion + specialization (in-place, wp <= rp always)
         Dictionary<int, int> offsetMap = new();
@@ -108,9 +108,9 @@ internal static class PeepholeOptimizer
 
     // ---- Jump Target Analysis ----
 
-    private static HashSet<int> ComputeJumpTargets(byte[] code, int codeLength, IReadOnlyList<StashValue> constants)
+    private static bool[] ComputeJumpTargets(byte[] code, int codeLength, IReadOnlyList<StashValue> constants)
     {
-        HashSet<int> targets = new();
+        bool[] targets = new bool[codeLength + 1];
         int offset = 0;
         while (offset < codeLength)
         {
@@ -127,7 +127,7 @@ internal static class PeepholeOptimizer
                     absTarget = offset + 3 + (short)raw;
 
                 if (absTarget >= 0 && absTarget <= codeLength)
-                    targets.Add(absTarget);
+                    targets[absTarget] = true;
             }
 
             offset += instrSize;
@@ -168,7 +168,7 @@ internal static class PeepholeOptimizer
 
     private static bool TryFuse3(
         byte[] code, int rp, int codeLength,
-        HashSet<int> jumpTargets,
+        bool[] jumpTargets,
         IReadOnlyList<StashValue> constants,
         out OpCode fusedOp, out int oldSize, out int newSize)
     {
@@ -182,7 +182,7 @@ internal static class PeepholeOptimizer
         if (rp1 >= codeLength) return false;
 
         // Instruction 2 must not be a jump target
-        if (jumpTargets.Contains(rp1)) return false;
+        if (jumpTargets[rp1]) return false;
 
         OpCode op1 = (OpCode)code[rp1];
         int size1 = GetInstructionSize(code, rp1, constants);
@@ -190,7 +190,7 @@ internal static class PeepholeOptimizer
         if (rp2 >= codeLength) return false;
 
         // Instruction 3 must not be a jump target
-        if (jumpTargets.Contains(rp2)) return false;
+        if (jumpTargets[rp2]) return false;
 
         OpCode op2 = (OpCode)code[rp2];
         int size2 = GetInstructionSize(code, rp2, constants);
@@ -298,7 +298,7 @@ internal static class PeepholeOptimizer
 
     private static bool TryFuse2(
         byte[] code, int rp, int codeLength,
-        HashSet<int> jumpTargets,
+        bool[] jumpTargets,
         IReadOnlyList<StashValue> constants,
         out OpCode fusedOp, out int oldSize, out int newSize)
     {
@@ -312,7 +312,7 @@ internal static class PeepholeOptimizer
         if (rp1 >= codeLength) return false;
 
         // Instruction 2 must not be a jump target
-        if (jumpTargets.Contains(rp1)) return false;
+        if (jumpTargets[rp1]) return false;
 
         OpCode op1 = (OpCode)code[rp1];
 

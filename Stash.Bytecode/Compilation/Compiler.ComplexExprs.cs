@@ -177,7 +177,7 @@ public sealed partial class Compiler
         fnCompiler._builder.LocalCount = fnCompiler._scope.PeakLocalCount;
         fnCompiler._builder.LocalNames = fnCompiler._scope.GetPeakLocalNames();
         fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetPeakLocalIsConst();
-        fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames.Count > 0 ? fnCompiler._upvalueNames.ToArray() : null;
+        fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames is { Count: > 0 } ? fnCompiler._upvalueNames.ToArray() : null;
         Chunk lambdaChunk = fnCompiler._builder.Build();
 
         ushort chunkIdx = _builder.AddConstant(lambdaChunk);
@@ -247,7 +247,7 @@ public sealed partial class Compiler
         bodyCompiler._builder.LocalCount = bodyCompiler._scope.PeakLocalCount;
         bodyCompiler._builder.LocalNames = bodyCompiler._scope.GetPeakLocalNames();
         bodyCompiler._builder.LocalIsConst = bodyCompiler._scope.GetPeakLocalIsConst();
-        bodyCompiler._builder.UpvalueNames = bodyCompiler._upvalueNames.Count > 0 ? bodyCompiler._upvalueNames.ToArray() : null;
+        bodyCompiler._builder.UpvalueNames = bodyCompiler._upvalueNames is { Count: > 0 } ? bodyCompiler._upvalueNames.ToArray() : null;
         Chunk bodyChunk = bodyCompiler._builder.Build();
         ushort bodyIdx = _builder.AddConstant(bodyChunk);
         _builder.Emit(OpCode.Closure, bodyIdx);
@@ -301,7 +301,7 @@ public sealed partial class Compiler
                 onRetryCompiler._builder.LocalCount = onRetryCompiler._scope.PeakLocalCount;
                 onRetryCompiler._builder.LocalNames = onRetryCompiler._scope.GetPeakLocalNames();
                 onRetryCompiler._builder.LocalIsConst = onRetryCompiler._scope.GetPeakLocalIsConst();
-                onRetryCompiler._builder.UpvalueNames = onRetryCompiler._upvalueNames.Count > 0 ? onRetryCompiler._upvalueNames.ToArray() : null;
+                onRetryCompiler._builder.UpvalueNames = onRetryCompiler._upvalueNames is { Count: > 0 } ? onRetryCompiler._upvalueNames.ToArray() : null;
                 Chunk onRetryChunk = onRetryCompiler._builder.Build();
                 ushort onRetryIdx = _builder.AddConstant(onRetryChunk);
                 _builder.Emit(OpCode.Closure, onRetryIdx);
