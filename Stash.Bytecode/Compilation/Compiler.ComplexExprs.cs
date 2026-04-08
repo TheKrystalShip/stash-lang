@@ -49,7 +49,8 @@ public sealed partial class Compiler
             {
                 CompileExpr(dot.Object);                          // [obj]
                 _builder.Emit(OpCode.Dup);                        // [obj, obj]
-                _builder.Emit(OpCode.GetField, nameIdx);          // [obj, oldVal]
+                ushort icSlot = _builder.AllocateICSlot();
+                _builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot);          // [obj, oldVal]
                 _builder.Emit(OpCode.CheckNumeric);
                 ushort oneIdx = _builder.AddConstant(1L);
                 _builder.Emit(OpCode.Const, oneIdx);
@@ -62,7 +63,8 @@ public sealed partial class Compiler
                 // Postfix: perform mutation first, then derive oldVal from newVal
                 CompileExpr(dot.Object);                                // [..., obj]
                 _builder.Emit(OpCode.Dup);                              // [..., obj, obj]
-                _builder.Emit(OpCode.GetField, nameIdx);                // [..., obj, oldVal]
+                ushort icSlot2 = _builder.AllocateICSlot();
+                _builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot2);                // [..., obj, oldVal]
                 _builder.Emit(OpCode.CheckNumeric);
                 ushort oneIdx = _builder.AddConstant(1L);
                 _builder.Emit(OpCode.Const, oneIdx);                    // [..., obj, oldVal, 1]

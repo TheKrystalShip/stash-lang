@@ -27,6 +27,7 @@ public class ChunkBuilder
     public int LocalCount { get; set; }
     public bool IsAsync { get; set; }
     public bool HasRestParam { get; set; }
+    public bool MayHaveCapturedLocals { get; set; }
     public string[]? LocalNames { get; set; }
     public bool[]? LocalIsConst { get; set; }
     public string[]? UpvalueNames { get; set; }
@@ -36,6 +37,8 @@ public class ChunkBuilder
 
     /// <summary>Shared global slot allocator for slot-based global access. Null for legacy compilation.</summary>
     internal GlobalSlotAllocator? GlobalSlotAllocator { get; set; }
+
+    private int _icSlotCount;
 
     /// <summary>Current bytecode offset (next byte to be written).</summary>
     public int CurrentOffset => _codeCount;
@@ -57,6 +60,9 @@ public class ChunkBuilder
         _code[_codeCount++] = operand;
     }
 
+    /// <summary>Allocate an inline cache slot and return its index.</summary>
+    public ushort AllocateICSlot() => (ushort)_icSlotCount++;
+
     /// <summary>Emit an opcode followed by a u16 operand (big-endian).</summary>
     public void Emit(OpCode opCode, ushort operand)
     {
@@ -64,6 +70,17 @@ public class ChunkBuilder
         _code[_codeCount++] = (byte)opCode;
         _code[_codeCount++] = (byte)(operand >> 8);
         _code[_codeCount++] = (byte)(operand & 0xFF);
+    }
+
+    /// <summary>Emit an opcode followed by two u16 operands (big-endian).</summary>
+    public void Emit(OpCode opCode, ushort operand1, ushort operand2)
+    {
+        EnsureCodeCapacity(5);
+        _code[_codeCount++] = (byte)opCode;
+        _code[_codeCount++] = (byte)(operand1 >> 8);
+        _code[_codeCount++] = (byte)(operand1 & 0xFF);
+        _code[_codeCount++] = (byte)(operand2 >> 8);
+        _code[_codeCount++] = (byte)(operand2 & 0xFF);
     }
 
     /// <summary>Emit a raw byte (for inline upvalue descriptors after OP_CLOSURE).</summary>
@@ -258,7 +275,7 @@ public class ChunkBuilder
         string[]? globalNameTable = GlobalSlotAllocator?.BuildNameTable();
         int globalSlotCount = GlobalSlotAllocator?.Count ?? 0;
 
-        return new Chunk(
+        var chunk = new Chunk(
             code: code,
             constants: _constants.ToArray(),
             sourceMap: new SourceMap(_sourceMapEntries.ToArray()),
@@ -269,12 +286,18 @@ public class ChunkBuilder
             name: Name,
             isAsync: IsAsync,
             hasRestParam: HasRestParam,
+            mayHaveCapturedLocals: MayHaveCapturedLocals,
             localNames: LocalNames,
             localIsConst: LocalIsConst,
             upvalueNames: UpvalueNames,
             globalNameTable: globalNameTable,
             globalSlotCount: globalSlotCount
         );
+
+        if (_icSlotCount > 0)
+            chunk.ICSlots = new ICSlot[_icSlotCount];
+
+        return chunk;
     }
 
     private sealed class StashValueComparer : IEqualityComparer<StashValue>

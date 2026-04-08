@@ -51,10 +51,18 @@ internal static class PeepholeOptimizer
                 continue;
             }
 
-            // ---- Tier 1: 2-instruction fusions (LoadLocal + Return) ----
+            // ---- Tier 1: 2-instruction fusions (LoadLocal + Return, Compare+JumpFalse, IncrLocal/DecrLocal) ----
             if (TryFuse2(code, rp, codeLength, jumpTargets, constants, out fusedOp, out oldSize, out newSize))
             {
+                // Compute origJumpOff BEFORE WriteFused2, which may overwrite bytes at rp when wp is close to rp.
+                int origJumpOff = IsJumpInstruction(fusedOp)
+                    ? rp + GetInstructionSize(code, rp, constants)
+                    : 0;
                 WriteFused2(code, rp, wp, fusedOp);
+                if (origJumpOff != 0)
+                {
+                    jumpFixups.Add((wp, origJumpOff));
+                }
                 rp += oldSize;
                 wp += newSize;
                 continue;
@@ -131,7 +139,10 @@ internal static class PeepholeOptimizer
     private static bool IsJumpInstruction(OpCode op) => op is
         OpCode.Jump or OpCode.JumpTrue or OpCode.JumpFalse or
         OpCode.Loop or OpCode.And or OpCode.Or or
-        OpCode.NullCoalesce or OpCode.Iterate or OpCode.TryBegin;
+        OpCode.NullCoalesce or OpCode.Iterate or OpCode.TryBegin or
+        OpCode.LessThanJumpFalse or OpCode.GreaterThanJumpFalse or
+        OpCode.LessEqualJumpFalse or OpCode.GreaterEqualJumpFalse or
+        OpCode.EqualJumpFalse or OpCode.NotEqualJumpFalse;
 
     // ---- Instruction Size ----
 
@@ -305,6 +316,27 @@ internal static class PeepholeOptimizer
 
         OpCode op1 = (OpCode)code[rp1];
 
+        // Pattern: LC_Add slot, constIdx(==1) + DupStoreLocalPop slot → IncrLocal slot
+        // Pattern: LC_Subtract slot, constIdx(==1) + DupStoreLocalPop slot → DecrLocal slot
+        if ((op0 == OpCode.LC_Add || op0 == OpCode.LC_Subtract) && op1 == OpCode.DupStoreLocalPop)
+        {
+            byte addSlot = code[rp + 1];
+            ushort constIdx = (ushort)((code[rp + 2] << 8) | code[rp + 3]);
+            byte dspSlot = code[rp1 + 1];
+            if (addSlot == dspSlot && constIdx < constants.Count)
+            {
+                StashValue cv = constants[(int)constIdx];
+                if (cv.IsInt && cv.AsInt == 1)
+                {
+                    int size1 = GetInstructionSize(code, rp1, constants);
+                    fusedOp = op0 == OpCode.LC_Add ? OpCode.IncrLocal : OpCode.DecrLocal;
+                    oldSize = size0 + size1; // 4+2=6
+                    newSize = 2; // opcode + u8
+                    return true;
+                }
+            }
+        }
+
         // Pattern: LoadLocal + Return
         if (op0 == OpCode.LoadLocal && op1 == OpCode.Return)
         {
@@ -312,6 +344,29 @@ internal static class PeepholeOptimizer
             oldSize = size0 + 1; // 2+1=3
             newSize = 2; // opcode + u8
             return true;
+        }
+
+        // Pattern: {Compare} + JumpFalse → {Compare}JumpFalse
+        if (op1 == OpCode.JumpFalse)
+        {
+            int size1 = GetInstructionSize(code, rp1, constants);
+            OpCode? fused = op0 switch
+            {
+                OpCode.LessThan    => OpCode.LessThanJumpFalse,
+                OpCode.GreaterThan => OpCode.GreaterThanJumpFalse,
+                OpCode.LessEqual   => OpCode.LessEqualJumpFalse,
+                OpCode.GreaterEqual => OpCode.GreaterEqualJumpFalse,
+                OpCode.Equal       => OpCode.EqualJumpFalse,
+                OpCode.NotEqual    => OpCode.NotEqualJumpFalse,
+                _ => null
+            };
+            if (fused is not null)
+            {
+                fusedOp = fused.Value;
+                oldSize = size0 + size1; // 1+3=4
+                newSize = 3; // opcode + i16
+                return true;
+            }
         }
 
         return false;
@@ -322,6 +377,24 @@ internal static class PeepholeOptimizer
         if (fusedOp == OpCode.L_Return)
         {
             byte slot = code[rp + 1]; // operand of LoadLocal
+            code[wp] = (byte)fusedOp;
+            code[wp + 1] = slot;
+        }
+        else if (fusedOp is OpCode.LessThanJumpFalse or OpCode.GreaterThanJumpFalse or
+                 OpCode.LessEqualJumpFalse or OpCode.GreaterEqualJumpFalse or
+                 OpCode.EqualJumpFalse or OpCode.NotEqualJumpFalse)
+        {
+            // Compare op (1 byte) at rp, JumpFalse opcode at rp+1, i16 offset at rp+2..rp+3
+            // Read before write — wp may overlap with rp when no prior reductions occurred
+            byte hi = code[rp + 2];
+            byte lo = code[rp + 3];
+            code[wp] = (byte)fusedOp;
+            code[wp + 1] = hi;
+            code[wp + 2] = lo;
+        }
+        else if (fusedOp is OpCode.IncrLocal or OpCode.DecrLocal)
+        {
+            byte slot = code[rp + 1]; // slot from LC_Add/LC_Subtract
             code[wp] = (byte)fusedOp;
             code[wp + 1] = slot;
         }

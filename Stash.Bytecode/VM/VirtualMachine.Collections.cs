@@ -233,23 +233,19 @@ public sealed partial class VirtualMachine
         if (structDef is StashStruct ss)
         {
             // Initialize all declared fields to null, then override with provided values
-            var allFields = new Dictionary<string, StashValue>(ss.Fields.Count);
-            foreach (string f in ss.Fields)
-            {
-                allFields[f] = StashValue.Null;
-            }
+            var slots = new StashValue[ss.Fields.Count];
 
             foreach (KeyValuePair<string, StashValue> kvp in providedFields)
             {
-                if (!allFields.ContainsKey(kvp.Key))
+                if (!ss.FieldIndices.TryGetValue(kvp.Key, out int idx))
                 {
                     throw new RuntimeError($"Unknown field '{kvp.Key}' for struct '{ss.Name}'.", span);
                 }
 
-                allFields[kvp.Key] = kvp.Value;
+                slots[idx] = kvp.Value;
             }
 
-            Push(StashValue.FromObj(new StashInstance(ss.Name, ss, allFields)));
+            Push(StashValue.FromObj(new StashInstance(ss.Name, ss, slots)));
         }
         else
         {
@@ -415,6 +411,93 @@ public sealed partial class VirtualMachine
         }
 
         // General path
+        object? obj = objVal.ToObject();
+        Push(StashValue.FromObject(GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame))));
+    }
+
+    private void ExecuteGetFieldIC(ref CallFrame frame)
+    {
+        ushort nameIdx = ReadU16(ref frame);
+        ushort icSlotIdx = ReadU16(ref frame);
+        StashValue objVal = Pop();
+
+        // --- IC fast path ---
+        ref ICSlot ic = ref frame.Chunk.ICSlots![icSlotIdx];
+
+        if (ic.State == 1) // Monomorphic
+        {
+            if (objVal.Tag == StashValueTag.Obj)
+            {
+                object? rawObj = objVal.AsObj;
+
+                // Namespace IC hit — guard is the namespace object itself
+                if (rawObj == ic.Guard)
+                {
+                    Push(ic.CachedValue);
+                    return;
+                }
+
+                // Struct field IC hit — guard is the StashStruct, CachedValue holds field index
+                if (rawObj is StashInstance inst && inst.FieldSlots is not null
+                    && inst.Struct == ic.Guard)
+                {
+                    Push(inst.FieldSlots[(int)ic.CachedValue.AsInt]);
+                    return;
+                }
+            }
+
+            // Guard mismatch → megamorphic
+            ic.State = 2;
+        }
+
+        // --- IC slow path (uninitialized or megamorphic) ---
+        string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
+
+        if (objVal.Tag == StashValueTag.Obj)
+        {
+            object? rawObj = objVal.AsObj;
+
+            // Namespace fast path
+            if (rawObj is StashNamespace ns)
+            {
+                StashValue result = ns.GetMemberValue(fieldName, null);
+
+                // Populate IC if uninitialized and namespace is frozen
+                if (ic.State == 0 && ns.IsFrozen)
+                {
+                    ic.Guard = rawObj;
+                    ic.CachedValue = result;
+                    ic.State = 1;
+                }
+
+                Push(result);
+                return;
+            }
+
+            // Struct instance fast path — populate IC for field access
+            if (rawObj is StashInstance inst2 && inst2.FieldSlots is not null)
+            {
+                StashValue result = inst2.GetField(fieldName, GetCurrentSpan(ref frame));
+
+                // Convert StashBoundMethod → VMBoundMethod for bytecode VM compatibility
+                if (result.AsObj is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
+                {
+                    result = StashValue.FromObj(new VMBoundMethod(bound.Instance, vmFunc));
+                }
+
+                if (ic.State == 0 && inst2.Struct!.FieldIndices.TryGetValue(fieldName, out int fieldIdx))
+                {
+                    ic.Guard = inst2.Struct;
+                    ic.CachedValue = StashValue.FromInt(fieldIdx);
+                    ic.State = 1;
+                }
+
+                Push(result);
+                return;
+            }
+        }
+
+        // General path — no IC for other receiver types
         object? obj = objVal.ToObject();
         Push(StashValue.FromObject(GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame))));
     }

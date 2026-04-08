@@ -260,7 +260,8 @@ public sealed partial class Compiler
             int nullJump = _builder.EmitJump(OpCode.JumpTrue);
 
             // Not null — do field access
-            _builder.Emit(OpCode.GetField, nameIdx);
+            ushort icSlot1 = _builder.AllocateICSlot();
+            _builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot1);
             int endJump = _builder.EmitJump(OpCode.Jump);
 
             // Was null — object is already null on stack, which is the result
@@ -270,7 +271,8 @@ public sealed partial class Compiler
         }
         else
         {
-            _builder.Emit(OpCode.GetField, nameIdx);
+            ushort icSlot = _builder.AllocateICSlot();
+            _builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot);
         }
 
         return null;

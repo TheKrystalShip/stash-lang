@@ -29,7 +29,7 @@ public class ChunkBuilderTests
         foreach (OpCode op in Enum.GetValues<OpCode>())
         {
             int size = OpCodeInfo.OperandSize(op);
-            Assert.InRange(size, 0, 3);
+            Assert.InRange(size, 0, 4);
         }
     }
 

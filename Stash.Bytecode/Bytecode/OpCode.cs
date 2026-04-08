@@ -292,6 +292,27 @@ public enum OpCode : byte
     LC_Subtract,        // 96
     /// <summary>Fused: LoadLocal + Return (u8 slot).</summary>
     L_Return,           // 97
+
+    /// <summary>Get field with inline cache (u16 name_idx, u16 ic_slot_idx).</summary>
+    GetFieldIC,     // 98
+
+    /// <summary>Fused: LessThan + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
+    LessThanJumpFalse,     // 99
+    /// <summary>Fused: GreaterThan + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
+    GreaterThanJumpFalse,  // 100
+    /// <summary>Fused: LessEqual + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
+    LessEqualJumpFalse,    // 101
+    /// <summary>Fused: GreaterEqual + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
+    GreaterEqualJumpFalse, // 102
+    /// <summary>Fused: Equal + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
+    EqualJumpFalse,        // 103
+    /// <summary>Fused: NotEqual + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
+    NotEqualJumpFalse,     // 104
+
+    /// <summary>Fused: increment local variable in-place by 1 (u8 slot). No push/pop.</summary>
+    IncrLocal,             // 105
+    /// <summary>Fused: decrement local variable in-place by 1 (u8 slot). No push/pop.</summary>
+    DecrLocal,             // 106
 }
 
 /// <summary>
@@ -413,6 +434,17 @@ public static class OpCodeInfo
         OpCode.LL_LessThan     => 2,  // u8 + u8
         OpCode.LC_Subtract     => 3,  // u8 + u16
         OpCode.L_Return        => 1,  // u8
+        OpCode.GetFieldIC      => 4,  // u16 + u16
+
+        OpCode.LessThanJumpFalse     => 2,  // i16
+        OpCode.GreaterThanJumpFalse  => 2,  // i16
+        OpCode.LessEqualJumpFalse    => 2,  // i16
+        OpCode.GreaterEqualJumpFalse => 2,  // i16
+        OpCode.EqualJumpFalse        => 2,  // i16
+        OpCode.NotEqualJumpFalse     => 2,  // i16
+
+        OpCode.IncrLocal => 1,  // u8
+        OpCode.DecrLocal => 1,  // u8
 
         _ => throw new System.ArgumentOutOfRangeException(nameof(opCode), opCode, "Unknown opcode."),
     };

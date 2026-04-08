@@ -69,6 +69,15 @@ public static class Disassembler
                 return offset + 3;
             }
 
+            case OpCode.GetFieldIC:
+            {
+                ushort nameIdx = (ushort)((chunk.Code[offset + 1] << 8) | chunk.Code[offset + 2]);
+                ushort icSlotIdx = (ushort)((chunk.Code[offset + 3] << 8) | chunk.Code[offset + 4]);
+                string fieldName = nameIdx < chunk.Constants.Length && chunk.Constants[nameIdx].AsObj is string fn ? $"\"{fn}\"" : nameIdx.ToString();
+                sb.AppendLine($"{opName,-16} {fieldName} [IC:{icSlotIdx}]");
+                return offset + 5;
+            }
+
             case OpCode.LC_Add:
             case OpCode.LC_Subtract:
             case OpCode.LC_LessThan:
@@ -100,6 +109,34 @@ public static class Disassembler
             {
                 byte slot = chunk.Code[offset + 1];
                 sb.AppendLine($"{opName,-16} {slot,4}    ; return local[{slot}]");
+                return offset + 2;
+            }
+
+            case OpCode.LessThanJumpFalse:
+            case OpCode.GreaterThanJumpFalse:
+            case OpCode.LessEqualJumpFalse:
+            case OpCode.GreaterEqualJumpFalse:
+            case OpCode.EqualJumpFalse:
+            case OpCode.NotEqualJumpFalse:
+            {
+                ushort operand = (ushort)((chunk.Code[offset + 1] << 8) | chunk.Code[offset + 2]);
+                short signedOffset = (short)operand;
+                int target = offset + 3 + signedOffset;
+                sb.AppendLine($"{opName,-24} {operand,4}    ; -> {target:D4}");
+                return offset + 3;
+            }
+
+            case OpCode.IncrLocal:
+            {
+                byte slot = chunk.Code[offset + 1];
+                sb.AppendLine($"{opName,-16} {slot,4}    ; local[{slot}]++");
+                return offset + 2;
+            }
+
+            case OpCode.DecrLocal:
+            {
+                byte slot = chunk.Code[offset + 1];
+                sb.AppendLine($"{opName,-16} {slot,4}    ; local[{slot}]--");
                 return offset + 2;
             }
         }

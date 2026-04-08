@@ -13,6 +13,8 @@ public class StashNamespace
 {
     public string Name { get; }
     public bool IsBuiltIn { get; init; }
+    /// <summary>Whether this namespace has been frozen (all built-in namespaces are frozen at startup).</summary>
+    public bool IsFrozen => _frozenMembers is not null;
     private Dictionary<string, StashValue>? _mutableMembers = new();
     private FrozenDictionary<string, StashValue>? _frozenMembers;
 

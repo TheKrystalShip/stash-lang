@@ -337,10 +337,18 @@ public static class RuntimeValues
 
     private static StashInstance DeepCopyInstance(StashInstance instance)
     {
-        var fieldsCopy = new Dictionary<string, StashValue>();
-        foreach (var (name, val) in instance.GetAllFields())
+        if (instance.FieldSlots is not null && instance.Struct is not null)
         {
-            fieldsCopy[name] = StashValue.FromObject(DeepCopy(val.ToObject()));
+            var slotsCopy = new StashValue[instance.FieldSlots.Length];
+            for (int i = 0; i < slotsCopy.Length; i++)
+                slotsCopy[i] = StashValue.FromObject(DeepCopy(instance.FieldSlots[i].ToObject()));
+            return new StashInstance(instance.TypeName, instance.Struct, slotsCopy);
+        }
+
+        var fieldsCopy = new Dictionary<string, StashValue>();
+        foreach (KeyValuePair<string, StashValue> kvp in instance.GetAllFields())
+        {
+            fieldsCopy[kvp.Key] = StashValue.FromObject(DeepCopy(kvp.Value.ToObject()));
         }
         return new StashInstance(instance.TypeName, fieldsCopy, instance.Struct);
     }

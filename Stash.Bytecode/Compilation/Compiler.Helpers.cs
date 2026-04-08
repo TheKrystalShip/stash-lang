@@ -76,6 +76,7 @@ public sealed partial class Compiler
         if (localSlot >= 0)
         {
             // Captured directly from the enclosing function's locals
+            _enclosing._builder.MayHaveCapturedLocals = true;
             byte idx = _builder.AddUpvalue((byte)localSlot, isLocal: true);
             if (idx == _upvalueNames.Count)
             {

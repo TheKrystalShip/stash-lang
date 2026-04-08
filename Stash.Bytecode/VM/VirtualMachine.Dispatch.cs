@@ -1,4 +1,5 @@
 using System;
+using System.Buffers;
 using System.Collections.Generic;
 using System.Runtime.CompilerServices;
 using Stash.Common;
@@ -69,8 +70,8 @@ public sealed partial class VirtualMachine
         // single lastDebugLine variable crosses frame boundaries.
         if (debugger is not null && _lastDebugLinePerFrame is null)
         {
-            _lastDebugLinePerFrame = new int[DefaultFrameDepth];
-            _lastDebugLinePerFrame.AsSpan().Fill(-1);
+            _lastDebugLinePerFrame = ArrayPool<int>.Shared.Rent(DefaultFrameDepth);
+            _lastDebugLinePerFrame.AsSpan(0, DefaultFrameDepth).Fill(-1);
         }
 
         while (true)
@@ -89,8 +90,11 @@ public sealed partial class VirtualMachine
                     if (frameIdx >= _lastDebugLinePerFrame!.Length)
                     {
                         int oldLen = _lastDebugLinePerFrame.Length;
-                        Array.Resize(ref _lastDebugLinePerFrame, _frames.Length);
-                        _lastDebugLinePerFrame.AsSpan(oldLen).Fill(-1);
+                        int[] newArray = ArrayPool<int>.Shared.Rent(_frames.Length);
+                        _lastDebugLinePerFrame.AsSpan(0, oldLen).CopyTo(newArray);
+                        ArrayPool<int>.Shared.Return(_lastDebugLinePerFrame);
+                        _lastDebugLinePerFrame = newArray;
+                        _lastDebugLinePerFrame.AsSpan(oldLen, _lastDebugLinePerFrame.Length - oldLen).Fill(-1);
                     }
 
                     if (curLine != _lastDebugLinePerFrame[frameIdx] || debugger.IsPauseRequested)
@@ -191,6 +195,7 @@ public sealed partial class VirtualMachine
 
                 // ==================== Object Access ====================
                 case OpCode.GetField: ExecuteGetField(ref frame); break;
+                case OpCode.GetFieldIC: ExecuteGetFieldIC(ref frame); break;
                 case OpCode.SetField: ExecuteSetField(ref frame); break;
                 case OpCode.GetIndex: ExecuteGetIndex(ref frame); break;
                 case OpCode.SetIndex: ExecuteSetIndex(ref frame); break;
@@ -264,6 +269,14 @@ public sealed partial class VirtualMachine
                         return lRetResult;
                     }
                     break;
+                case OpCode.LessThanJumpFalse: ExecuteLessThanJumpFalse(ref frame); break;
+                case OpCode.GreaterThanJumpFalse: ExecuteGreaterThanJumpFalse(ref frame); break;
+                case OpCode.LessEqualJumpFalse: ExecuteLessEqualJumpFalse(ref frame); break;
+                case OpCode.GreaterEqualJumpFalse: ExecuteGreaterEqualJumpFalse(ref frame); break;
+                case OpCode.EqualJumpFalse: ExecuteEqualJumpFalse(ref frame); break;
+                case OpCode.NotEqualJumpFalse: ExecuteNotEqualJumpFalse(ref frame); break;
+                case OpCode.IncrLocal: ExecuteIncrLocal(ref frame); break;
+                case OpCode.DecrLocal: ExecuteDecrLocal(ref frame); break;
 
                 // ==================== Deferred / Not-yet-implemented ====================
                 case OpCode.CheckNumeric: ExecuteCheckNumeric(ref frame); break;

@@ -70,8 +70,8 @@ public sealed partial class VirtualMachine
 
     public VirtualMachine(Dictionary<string, StashValue>? globals = null, CancellationToken ct = default)
     {
-        _stack = new StashValue[DefaultStackSize];
-        _frames = new CallFrame[DefaultFrameDepth];
+        _stack = ArrayPool<StashValue>.Shared.Rent(DefaultStackSize);
+        _frames = ArrayPool<CallFrame>.Shared.Rent(DefaultFrameDepth);
         _globals = globals ?? new Dictionary<string, StashValue>();
         _openUpvalues = new List<Upvalue>();
         _ct = ct;
@@ -415,6 +415,7 @@ public sealed partial class VirtualMachine
 
     private void CloseUpvalues(int fromSlot)
     {
+        if (_openUpvalues.Count == 0) return;
         for (int i = _openUpvalues.Count - 1; i >= 0; i--)
         {
             if (_openUpvalues[i].StackIndex >= fromSlot)

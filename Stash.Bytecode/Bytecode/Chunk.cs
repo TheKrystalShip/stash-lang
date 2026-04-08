@@ -42,6 +42,12 @@ public class Chunk
     public bool HasRestParam { get; }
 
     /// <summary>
+    /// True if this function's body contains Closure opcodes that capture locals from this scope.
+    /// When false, CloseUpvalues can be skipped entirely on return.
+    /// </summary>
+    public bool MayHaveCapturedLocals { get; }
+
+    /// <summary>
     /// Local variable names for debugger inspection. Index = slot number.
     /// Null when debugging info is not needed (e.g., release builds).
     /// </summary>
@@ -72,6 +78,12 @@ public class Chunk
     /// </summary>
     public int GlobalSlotCount { get; }
 
+    /// <summary>
+    /// Inline cache slots for GetFieldIC instructions. Each GetFieldIC references
+    /// an IC slot by index. Null when no GetFieldIC instructions exist in this chunk.
+    /// </summary>
+    internal ICSlot[]? ICSlots { get; set; }
+
     public Chunk(
         byte[] code,
         StashValue[] constants,
@@ -83,6 +95,7 @@ public class Chunk
         string? name,
         bool isAsync,
         bool hasRestParam,
+        bool mayHaveCapturedLocals = false,
         string[]? localNames = null,
         bool[]? localIsConst = null,
         string[]? upvalueNames = null,
@@ -99,6 +112,7 @@ public class Chunk
         Name = name;
         IsAsync = isAsync;
         HasRestParam = hasRestParam;
+        MayHaveCapturedLocals = mayHaveCapturedLocals;
         LocalNames = localNames;
         LocalIsConst = localIsConst;
         UpvalueNames = upvalueNames;

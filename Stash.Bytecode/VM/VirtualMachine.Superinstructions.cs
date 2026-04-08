@@ -123,4 +123,132 @@ public sealed partial class VirtualMachine
         StashValue retVal = _stack[frame.BaseSlot + slot];
         return ExecuteReturnValue(retVal, targetFrameCount, debugger, out result);
     }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteLessThanJumpFalse(ref CallFrame frame)
+    {
+        short offset = ReadI16(ref frame);
+        StashValue b = Pop(), a = Pop();
+        if (a.IsInt && b.IsInt)
+        {
+            if (!(a.AsInt < b.AsInt)) frame.IP += offset;
+        }
+        else if (a.IsNumeric && b.IsNumeric)
+        {
+            double ad = a.IsInt ? (double)a.AsInt : a.AsFloat;
+            double bd = b.IsInt ? (double)b.AsInt : b.AsFloat;
+            if (!(ad < bd)) frame.IP += offset;
+        }
+        else
+        {
+            if (!RuntimeOps.LessThan(a, b, GetCurrentSpan(ref frame))) frame.IP += offset;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGreaterThanJumpFalse(ref CallFrame frame)
+    {
+        short offset = ReadI16(ref frame);
+        StashValue b = Pop(), a = Pop();
+        if (a.IsInt && b.IsInt)
+        {
+            if (!(a.AsInt > b.AsInt)) frame.IP += offset;
+        }
+        else if (a.IsNumeric && b.IsNumeric)
+        {
+            double ad = a.IsInt ? (double)a.AsInt : a.AsFloat;
+            double bd = b.IsInt ? (double)b.AsInt : b.AsFloat;
+            if (!(ad > bd)) frame.IP += offset;
+        }
+        else
+        {
+            if (!RuntimeOps.GreaterThan(a, b, GetCurrentSpan(ref frame))) frame.IP += offset;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteLessEqualJumpFalse(ref CallFrame frame)
+    {
+        short offset = ReadI16(ref frame);
+        StashValue b = Pop(), a = Pop();
+        if (a.IsInt && b.IsInt)
+        {
+            if (!(a.AsInt <= b.AsInt)) frame.IP += offset;
+        }
+        else if (a.IsNumeric && b.IsNumeric)
+        {
+            double ad = a.IsInt ? (double)a.AsInt : a.AsFloat;
+            double bd = b.IsInt ? (double)b.AsInt : b.AsFloat;
+            if (!(ad <= bd)) frame.IP += offset;
+        }
+        else
+        {
+            if (!RuntimeOps.LessEqual(a, b, GetCurrentSpan(ref frame))) frame.IP += offset;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGreaterEqualJumpFalse(ref CallFrame frame)
+    {
+        short offset = ReadI16(ref frame);
+        StashValue b = Pop(), a = Pop();
+        if (a.IsInt && b.IsInt)
+        {
+            if (!(a.AsInt >= b.AsInt)) frame.IP += offset;
+        }
+        else if (a.IsNumeric && b.IsNumeric)
+        {
+            double ad = a.IsInt ? (double)a.AsInt : a.AsFloat;
+            double bd = b.IsInt ? (double)b.AsInt : b.AsFloat;
+            if (!(ad >= bd)) frame.IP += offset;
+        }
+        else
+        {
+            if (!RuntimeOps.GreaterEqual(a, b, GetCurrentSpan(ref frame))) frame.IP += offset;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteEqualJumpFalse(ref CallFrame frame)
+    {
+        short offset = ReadI16(ref frame);
+        StashValue b = Pop(), a = Pop();
+        if (!RuntimeOps.IsEqual(a, b))
+            frame.IP += offset;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteNotEqualJumpFalse(ref CallFrame frame)
+    {
+        short offset = ReadI16(ref frame);
+        StashValue b = Pop(), a = Pop();
+        if (RuntimeOps.IsEqual(a, b))
+            frame.IP += offset;
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteIncrLocal(ref CallFrame frame)
+    {
+        byte slot = ReadByte(ref frame);
+        ref StashValue val = ref _stack[frame.BaseSlot + slot];
+        if (val.IsInt)
+            val = StashValue.FromInt(val.AsInt + 1);
+        else if (val.IsFloat)
+            val = StashValue.FromFloat(val.AsFloat + 1.0);
+        else
+            val = RuntimeOps.Add(val, StashValue.One, GetCurrentSpan(ref frame));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteDecrLocal(ref CallFrame frame)
+    {
+        byte slot = ReadByte(ref frame);
+        ref StashValue val = ref _stack[frame.BaseSlot + slot];
+        if (val.IsInt)
+            val = StashValue.FromInt(val.AsInt - 1);
+        else if (val.IsFloat)
+            val = StashValue.FromFloat(val.AsFloat - 1.0);
+        else
+            val = RuntimeOps.Subtract(val, StashValue.One, GetCurrentSpan(ref frame));
+    }
 }

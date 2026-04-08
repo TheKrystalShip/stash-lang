@@ -9,6 +9,7 @@ public class StashStruct
 {
     public string Name { get; }
     public List<string> Fields { get; }
+    public Dictionary<string, int> FieldIndices { get; }
     public Dictionary<string, IStashCallable> Methods { get; }
     public List<StashInterface> Interfaces { get; }
     public HashSet<string> OriginalMethodNames { get; }
@@ -20,6 +21,12 @@ public class StashStruct
         Methods = methods;
         Interfaces = new List<StashInterface>();
         OriginalMethodNames = new HashSet<string>(methods.Keys);
+
+        // Build field index mapping for slot-based instance storage
+        var indices = new Dictionary<string, int>(fields.Count);
+        for (int i = 0; i < fields.Count; i++)
+            indices[fields[i]] = i;
+        FieldIndices = indices;
     }
 
     public override string ToString() => $"<struct {Name}>";

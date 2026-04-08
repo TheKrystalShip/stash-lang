@@ -368,7 +368,8 @@ public sealed partial class VirtualMachine
             _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
             debugger.OnFunctionExit(funcName, _debugThreadId);
         }
-        CloseUpvalues(baseSlot);
+        if (_frames[_frameCount - 1].Chunk.MayHaveCapturedLocals)
+            CloseUpvalues(baseSlot);
         _frameCount--;
         if (_frameCount == 0)
         {
@@ -406,71 +407,80 @@ public sealed partial class VirtualMachine
         if (callee is VMFunction fn)
         {
             Chunk fnChunk = fn.Chunk;
-            int provided = argc;
-            int expected = fnChunk.Arity;
-            int minArity = fnChunk.MinArity;
 
-            if (fnChunk.HasRestParam)
+            // Fast path: exact arity, no rest params, not async (most common case)
+            if (argc == fnChunk.Arity && !fnChunk.HasRestParam && !fnChunk.IsAsync)
             {
-                int nonRestCount = expected - 1;
-                int minRequired = Math.Min(minArity, nonRestCount);
-                if (provided < minRequired)
-                {
-                    throw new RuntimeError(
-                        $"Expected at least {minRequired} arguments but got {provided}.",
-                        callerSourceMap.GetSpan(callerIP));
-                }
-
-                if (provided < nonRestCount)
-                {
-                    for (int i = provided; i < nonRestCount; i++)
-                    {
-                        Push(StashValue.FromObj(NotProvided));
-                    }
-                    provided = nonRestCount;
-                }
-
-                int restCount = Math.Max(0, provided - nonRestCount);
-                var restList = new List<StashValue>(restCount);
-                int restStart = _sp - restCount;
-                for (int i = restStart; i < _sp; i++)
-                {
-                    restList.Add(_stack[i]);
-                }
-                _sp = restStart;
-                Push(StashValue.FromObj(restList));
-                provided = expected;
+                PushFrame(fnChunk, _sp - argc, fn.Upvalues, fnChunk.Name, fn.ModuleGlobals);
             }
             else
             {
-                if (provided < minArity || provided > expected)
-                {
-                    string expectedStr = minArity == expected
-                        ? $"{expected}"
-                        : $"{minArity} to {expected}";
-                    throw new RuntimeError(
-                        $"Expected {expectedStr} arguments but got {provided}.",
-                        callerSourceMap.GetSpan(callerIP));
-                }
+                int provided = argc;
+                int expected = fnChunk.Arity;
+                int minArity = fnChunk.MinArity;
 
-                if (provided < expected)
+                if (fnChunk.HasRestParam)
                 {
-                    for (int i = provided; i < expected; i++)
+                    int nonRestCount = expected - 1;
+                    int minRequired = Math.Min(minArity, nonRestCount);
+                    if (provided < minRequired)
                     {
-                        Push(StashValue.FromObj(NotProvided));
+                        throw new RuntimeError(
+                            $"Expected at least {minRequired} arguments but got {provided}.",
+                            callerSourceMap.GetSpan(callerIP));
+                    }
+
+                    if (provided < nonRestCount)
+                    {
+                        for (int i = provided; i < nonRestCount; i++)
+                        {
+                            Push(StashValue.FromObj(NotProvided));
+                        }
+                        provided = nonRestCount;
+                    }
+
+                    int restCount = Math.Max(0, provided - nonRestCount);
+                    var restList = new List<StashValue>(restCount);
+                    int restStart = _sp - restCount;
+                    for (int i = restStart; i < _sp; i++)
+                    {
+                        restList.Add(_stack[i]);
+                    }
+                    _sp = restStart;
+                    Push(StashValue.FromObj(restList));
+                    provided = expected;
+                }
+                else
+                {
+                    if (provided < minArity || provided > expected)
+                    {
+                        string expectedStr = minArity == expected
+                            ? $"{expected}"
+                            : $"{minArity} to {expected}";
+                        throw new RuntimeError(
+                            $"Expected {expectedStr} arguments but got {provided}.",
+                            callerSourceMap.GetSpan(callerIP));
+                    }
+
+                    if (provided < expected)
+                    {
+                        for (int i = provided; i < expected; i++)
+                        {
+                            Push(StashValue.FromObj(NotProvided));
+                        }
                     }
                 }
-            }
 
-            int baseSlot = _sp - expected;
+                int baseSlot = _sp - expected;
 
-            if (fnChunk.IsAsync)
-            {
-                Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, fn.Upvalues, baseSlot, callerSourceMap.GetSpan(callerIP), fn.ModuleGlobals)));
-            }
-            else
-            {
-                PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name, fn.ModuleGlobals);
+                if (fnChunk.IsAsync)
+                {
+                    Push(StashValue.FromObject(SpawnAsyncFunction(fnChunk, fn.Upvalues, baseSlot, callerSourceMap.GetSpan(callerIP), fn.ModuleGlobals)));
+                }
+                else
+                {
+                    PushFrame(fnChunk, baseSlot, fn.Upvalues, fnChunk.Name, fn.ModuleGlobals);
+                }
             }
         }
         else if (callee is BuiltInFunction builtIn)
