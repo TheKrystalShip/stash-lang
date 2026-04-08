@@ -23,6 +23,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.IO;
 using Stash.Bytecode;
 using Stash.Lexing;
 using Stash.Parsing;
@@ -61,6 +62,10 @@ public class Program
         bool optimize = true;
         string? scriptPath = null;
         int scriptArgStart = -1;
+        bool compile = false;
+        bool strip = false;
+        bool verify = false;
+        string? outputPath = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -77,32 +82,55 @@ public class Program
                 scriptArgStart = i + 1;
                 break;
             }
-            else if (args[i] == "--debug" && scriptPath is null && commandString is null)
+            else if (args[i] == "--debug" && commandString is null)
             {
                 debug = true;
             }
-            else if (args[i] == "--test" && scriptPath is null && commandString is null)
+            else if (args[i] == "--test" && commandString is null)
             {
                 test = true;
             }
-            else if (args[i] == "--test-list" && scriptPath is null && commandString is null)
+            else if (args[i] == "--test-list" && commandString is null)
             {
                 testList = true;
                 test = true;  // --test-list implies --test
             }
-            else if (args[i].StartsWith("--test-filter=") && scriptPath is null && commandString is null)
+            else if (args[i].StartsWith("--test-filter=") && commandString is null)
             {
                 testFilter = args[i]["--test-filter=".Length..];
             }
-            else if (args[i] == "--no-optimize" && scriptPath is null && commandString is null)
+            else if (args[i] == "--no-optimize" && commandString is null)
             {
                 optimize = false;
             }
-            else if (args[i] == "--disassemble" && scriptPath is null && commandString is null)
+            else if (args[i] == "--compile" && commandString is null)
+            {
+                compile = true;
+            }
+            else if (args[i] == "--strip" && commandString is null)
+            {
+                strip = true;
+            }
+            else if (args[i] == "--verify" && commandString is null)
+            {
+                verify = true;
+            }
+            else if ((args[i] == "-o" || args[i] == "--output") && commandString is null)
+            {
+                if (i + 1 >= args.Length)
+                {
+                    Console.Error.WriteLine("Error: -o requires an output path argument.");
+                    System.Environment.Exit(64);
+                    return;
+                }
+                outputPath = args[i + 1];
+                i++;
+            }
+            else if (args[i] == "--disassemble" && commandString is null)
             {
                 disassemble = true;
             }
-            else if (args[i] == "--" && scriptPath is null && commandString is null)
+            else if (args[i] == "--" && commandString is null)
             {
                 // Everything after -- becomes script args (for stdin piping)
                 scriptArgStart = i + 1;
@@ -188,9 +216,49 @@ public class Program
             return;
         }
 
+        if (compile && scriptPath is null)
+        {
+            Console.Error.WriteLine("Error: --compile requires a script file.");
+            System.Environment.Exit(64);
+            return;
+        }
+
+        if (verify && scriptPath is null)
+        {
+            Console.Error.WriteLine("Error: --verify requires a file.");
+            System.Environment.Exit(64);
+            return;
+        }
+
+        if (compile && (debug || test || disassemble))
+        {
+            Console.Error.WriteLine("Error: --compile cannot be combined with --debug, --test, or --disassemble.");
+            System.Environment.Exit(64);
+            return;
+        }
+
+        if (verify && (debug || test || disassemble || compile))
+        {
+            Console.Error.WriteLine("Error: --verify cannot be combined with other flags.");
+            System.Environment.Exit(64);
+            return;
+        }
+
         // Mode 4: Script file execution
         if (scriptPath is not null)
         {
+            if (verify)
+            {
+                VerifyBytecodeFile(scriptPath);
+                return;
+            }
+
+            if (compile)
+            {
+                CompileToFile(scriptPath, outputPath, strip, optimize);
+                return;
+            }
+
             if (disassemble && (debug || test))
             {
                 Console.Error.WriteLine("Error: --disassemble cannot be combined with --debug or --test.");
@@ -263,7 +331,7 @@ public class Program
 
             if (disassemble)
             {
-                PrintDisassembly(chunk);
+                PrintDisassembly(chunk, source);
                 return;
             }
 
@@ -307,6 +375,13 @@ public class Program
             return;
         }
 
+        // Check if file is pre-compiled bytecode
+        if (BytecodeReader.IsBytecodeFile(path))
+        {
+            RunBytecodeFile(path, scriptArgs, disassemble);
+            return;
+        }
+
         string source = System.IO.File.ReadAllText(path);
 
         // Stage 1: Lex — pass filename so SourceSpan references the actual file
@@ -344,7 +419,7 @@ public class Program
 
             if (disassemble)
             {
-                PrintDisassembly(chunk);
+                PrintDisassembly(chunk, source);
                 return;
             }
 
@@ -823,19 +898,147 @@ public class Program
         return false;
     }
 
-    /// <summary>Prints bytecode disassembly for the given chunk and any nested function chunks.</summary>
+    /// <summary>Prints bytecode disassembly for the given chunk and all nested function chunks.</summary>
     /// <param name="chunk">The top-level compiled chunk to disassemble.</param>
-    private static void PrintDisassembly(Chunk chunk)
+    /// <param name="sourceText">Optional source text for inline source annotations.</param>
+    private static void PrintDisassembly(Chunk chunk, string? sourceText = null)
     {
-        Console.Out.WriteLine(Disassembler.Disassemble(chunk));
-
-        foreach (StashValue constant in chunk.Constants)
+        var options = new DisassemblerOptions
         {
-            if (constant.AsObj is Chunk fnChunk)
-            {
-                Console.Out.WriteLine(Disassembler.Disassemble(fnChunk));
-            }
+            Color = !Console.IsOutputRedirected,
+            SourceText = sourceText,
+        };
+        Console.Out.WriteLine(Disassembler.DisassembleAll(chunk, options));
+    }
+
+    private static void CompileToFile(string path, string? outputPath, bool strip, bool optimize)
+    {
+        if (!System.IO.File.Exists(path))
+        {
+            Console.Error.WriteLine($"Error: file not found: {path}");
+            System.Environment.Exit(66);
+            return;
         }
+
+        string source = System.IO.File.ReadAllText(path);
+
+        var lexer = new Lexer(source, path);
+        List<Token> tokens = lexer.ScanTokens();
+        if (lexer.Errors.Count > 0)
+        {
+            foreach (string error in lexer.Errors)
+                Console.Error.WriteLine($"[lex error] {error}");
+            System.Environment.Exit(65);
+            return;
+        }
+
+        var parser = new Parser(tokens);
+        List<Stmt> statements = parser.ParseProgram();
+        if (parser.Errors.Count > 0)
+        {
+            foreach (string error in parser.Errors)
+                Console.Error.WriteLine($"[parse error] {error}");
+            System.Environment.Exit(65);
+            return;
+        }
+
+        try
+        {
+            SemanticResolver.Resolve(statements);
+            Chunk chunk = Compiler.Compile(statements, optimize);
+
+            string outPath = outputPath ?? System.IO.Path.ChangeExtension(path, ".stashc");
+            BytecodeWriter.Write(outPath, chunk, includeDebugInfo: !strip, optimized: optimize, sourceText: source, embedSource: true);
+            Console.WriteLine($"Compiled {path} \u2192 {outPath}");
+        }
+        catch (RuntimeError ex)
+        {
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+        }
+    }
+
+    private static void RunBytecodeFile(string path, string[] scriptArgs, bool disassemble)
+    {
+        try
+        {
+            Chunk chunk = BytecodeReader.Read(path);
+
+            if (disassemble)
+            {
+                string? embeddedSource = BytecodeReader.ReadEmbeddedSource(path);
+                PrintDisassembly(chunk, embeddedSource);
+                return;
+            }
+
+            var globals = CreateVMGlobals();
+            var vm = new VirtualMachine(globals);
+            _activeVM = vm;
+            vm.CurrentFile = path;
+            vm.Output = Console.Out;
+            vm.ErrorOutput = Console.Error;
+            vm.Input = Console.In;
+            vm.ScriptArgs = scriptArgs;
+            vm.ModuleLoader = LoadModuleForVM;
+            vm.Execute(chunk);
+        }
+        catch (InvalidDataException ex)
+        {
+            Console.Error.WriteLine($"[bytecode error] {ex.Message}");
+            System.Environment.Exit(65);
+        }
+        catch (RuntimeError ex)
+        {
+            PrintRuntimeError(ex);
+            System.Environment.Exit(70);
+        }
+        finally
+        {
+            _activeVM?.CleanupTrackedProcesses();
+            _activeVM?.CleanupTrackedWatchers();
+            _activeVM = null;
+        }
+    }
+
+    private static void VerifyBytecodeFile(string path)
+    {
+        if (!System.IO.File.Exists(path))
+        {
+            Console.Error.WriteLine($"Error: file not found: {path}");
+            System.Environment.Exit(66);
+            return;
+        }
+
+        try
+        {
+            Chunk chunk = BytecodeReader.Read(path);
+            Console.WriteLine($"Valid .stashc file: {path}");
+            Console.WriteLine($"  Functions: {CountFunctions(chunk)}");
+            Console.WriteLine($"  Constants: {chunk.Constants.Length}");
+            Console.WriteLine($"  Code size: {chunk.Code.Length} bytes");
+            Console.WriteLine($"  Globals: {chunk.GlobalSlotCount}");
+        }
+        catch (InvalidDataException ex)
+        {
+            Console.Error.WriteLine($"Invalid bytecode file: {ex.Message}");
+            System.Environment.Exit(1);
+        }
+        catch (Exception ex)
+        {
+            Console.Error.WriteLine($"Error reading bytecode file: {ex.Message}");
+            System.Environment.Exit(1);
+        }
+    }
+
+    private static int CountFunctions(Chunk chunk)
+    {
+        int count = 0;
+        foreach (StashValue c in chunk.Constants)
+        {
+            if (c.AsObj is Chunk)
+                count++;
+        }
+        return count;
     }
 
     /// <summary>Formats and prints a runtime error to stderr.</summary>
