@@ -15,6 +15,7 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     private readonly ChunkBuilder _builder;
     private readonly CompilerScope _scope;
     private readonly Compiler? _enclosing;
+    private readonly GlobalSlotAllocator _globalSlots;
 
     /// <summary>
     /// Tracks loop state for break/continue jump patching.
@@ -63,11 +64,13 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
 
     // ---- Construction ----
 
-    private Compiler(Compiler? enclosing, string? name)
+    private Compiler(Compiler? enclosing, string? name, GlobalSlotAllocator globalSlots)
     {
         _builder = new ChunkBuilder { Name = name };
         _scope = new CompilerScope();
         _enclosing = enclosing;
+        _globalSlots = globalSlots;
+        _builder.GlobalSlotAllocator = globalSlots;
     }
 
     // ---- Public API ----
@@ -79,7 +82,8 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// <returns>The compiled script chunk, ready for execution by the VM.</returns>
     public static Chunk Compile(List<Stmt> statements)
     {
-        var compiler = new Compiler(null, null);
+        var globalSlots = new GlobalSlotAllocator();
+        var compiler = new Compiler(null, null, globalSlots);
         foreach (Stmt stmt in statements)
         {
             compiler.CompileStmt(stmt);
@@ -99,7 +103,8 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// </summary>
     public static Chunk CompileExpression(Expr expression)
     {
-        var compiler = new Compiler(null, null);
+        var globalSlots = new GlobalSlotAllocator();
+        var compiler = new Compiler(null, null, globalSlots);
         compiler.CompileExpr(expression);
         compiler._builder.Emit(OpCode.Return);
         compiler._builder.LocalCount = compiler._scope.PeakLocalCount;

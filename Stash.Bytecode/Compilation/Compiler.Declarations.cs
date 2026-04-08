@@ -52,8 +52,8 @@ public sealed partial class Compiler
             if (resolvedSlot >= 0)
             {
                 _builder.Emit(OpCode.LoadLocal, (byte)resolvedSlot);
-                ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
-                _builder.Emit(OpCode.StoreGlobal, nameIdx);
+                ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+                _builder.Emit(OpCode.StoreGlobal, globalSlot);
             }
         }
 
@@ -78,8 +78,8 @@ public sealed partial class Compiler
             if (resolvedSlot >= 0)
             {
                 _builder.Emit(OpCode.LoadLocal, (byte)resolvedSlot);
-                ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
-                _builder.Emit(OpCode.InitConstGlobal, nameIdx);
+                ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+                _builder.Emit(OpCode.InitConstGlobal, globalSlot);
             }
         }
 
@@ -120,8 +120,8 @@ public sealed partial class Compiler
         // and harmless in local scopes where LoadLocal is used instead
         _builder.Emit(OpCode.Dup);
         {
-            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, globalSlot);
         }
 
         return null;
@@ -206,8 +206,8 @@ public sealed partial class Compiler
         // and harmless in local scopes where LoadLocal is used instead
         _builder.Emit(OpCode.Dup);
         {
-            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, globalSlot);
         }
 
         return null;
@@ -233,8 +233,8 @@ public sealed partial class Compiler
 
         _builder.Emit(OpCode.Dup);
         {
-            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, globalSlot);
         }
 
         return null;
@@ -283,8 +283,8 @@ public sealed partial class Compiler
 
         _builder.Emit(OpCode.Dup);
         {
-            ushort nameIdx = _builder.AddConstant(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, globalSlot);
         }
 
         return null;
@@ -376,8 +376,8 @@ public sealed partial class Compiler
             if (_enclosing is null && _scope.ScopeDepth == 0)
             {
                 _builder.Emit(OpCode.LoadLocal, (byte)slot);
-                ushort nameIdx = _builder.AddConstant(name.Lexeme);
-                _builder.Emit(OpCode.StoreGlobal, nameIdx);
+                ushort globalSlot = _globalSlots.GetOrAllocate(name.Lexeme);
+                _builder.Emit(OpCode.StoreGlobal, globalSlot);
             }
         }
 
@@ -401,8 +401,8 @@ public sealed partial class Compiler
         if (_enclosing is null && _scope.ScopeDepth == 0)
         {
             _builder.Emit(OpCode.LoadLocal, (byte)slot);
-            ushort nameIdx = _builder.AddConstant(stmt.Alias.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, nameIdx);
+            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Alias.Lexeme);
+            _builder.Emit(OpCode.StoreGlobal, globalSlot);
         }
 
         return null;
@@ -437,8 +437,8 @@ public sealed partial class Compiler
             if (_enclosing is null && _scope.ScopeDepth == 0)
             {
                 _builder.Emit(OpCode.LoadLocal, (byte)slot);
-                ushort nameIdx = _builder.AddConstant(name.Lexeme);
-                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, nameIdx);
+                ushort globalSlot = _globalSlots.GetOrAllocate(name.Lexeme);
+                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, globalSlot);
             }
         }
 
@@ -451,8 +451,8 @@ public sealed partial class Compiler
             if (_enclosing is null && _scope.ScopeDepth == 0)
             {
                 _builder.Emit(OpCode.LoadLocal, (byte)restSlot);
-                ushort restNameIdx = _builder.AddConstant(stmt.RestName.Lexeme);
-                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, restNameIdx);
+                ushort globalSlot = _globalSlots.GetOrAllocate(stmt.RestName.Lexeme);
+                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, globalSlot);
             }
         }
 

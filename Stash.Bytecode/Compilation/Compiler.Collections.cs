@@ -57,8 +57,8 @@ public sealed partial class Compiler
         }
         else
         {
-            ushort nameIdx = _builder.AddConstant(expr.Name.Lexeme);
-            _builder.Emit(OpCode.LoadGlobal, nameIdx);
+            ushort slot = _globalSlots.GetOrAllocate(expr.Name.Lexeme);
+            _builder.Emit(OpCode.LoadGlobal, slot);
         }
 
         // Push each field name string followed by its value

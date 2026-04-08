@@ -126,7 +126,7 @@ public sealed partial class Compiler
     {
         _builder.AddSourceMapping(expr.Span);
 
-        var fnCompiler = new Compiler(this, null);
+        var fnCompiler = new Compiler(this, null, _globalSlots);
         fnCompiler._builder.Arity = expr.Parameters.Count;
         fnCompiler._builder.IsAsync = expr.IsAsync;
         fnCompiler._builder.HasRestParam = expr.HasRestParam;
@@ -217,7 +217,7 @@ public sealed partial class Compiler
         }
 
         // --- Compile body as closure ---
-        var bodyCompiler = new Compiler(this, "<retry_body>");
+        var bodyCompiler = new Compiler(this, "<retry_body>", _globalSlots);
         bodyCompiler._scope.BeginScope();
         bodyCompiler._builder.Arity = 1;
         bodyCompiler._builder.MinArity = 1;
@@ -276,7 +276,7 @@ public sealed partial class Compiler
             else
             {
                 // Inline block: compile as a closure with (attempt, error) parameters
-                var onRetryCompiler = new Compiler(this, "<on_retry>");
+                var onRetryCompiler = new Compiler(this, "<on_retry>", _globalSlots);
                 onRetryCompiler._builder.Arity = 2;
                 onRetryCompiler._builder.MinArity = 2;
                 onRetryCompiler._scope.BeginScope();

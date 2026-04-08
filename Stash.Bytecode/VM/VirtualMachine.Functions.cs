@@ -466,8 +466,8 @@ public sealed partial class VirtualMachine
         else if (callee is BuiltInFunction builtIn)
         {
             // Fast path: built-in function — skip CallValue dispatch chain
-            _context._callSourceMap = callerSourceMap;
-            _context._callIP = callerIP;
+            _context.CallSourceMap = callerSourceMap;
+            _context.CallIP = callerIP;
             _context._currentSpan = null;
 
             if (builtIn.Arity != -1)
@@ -499,8 +499,8 @@ public sealed partial class VirtualMachine
         else
         {
             // Remaining cases: VMBoundMethod, VMExtensionBoundMethod, lambdas, etc.
-            _context._callSourceMap = callerSourceMap;
-            _context._callIP = callerIP;
+            _context.CallSourceMap = callerSourceMap;
+            _context.CallIP = callerIP;
             _context._currentSpan = null;
             CallValue(callee, argc, null);
         }

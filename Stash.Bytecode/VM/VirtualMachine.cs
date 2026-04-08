@@ -44,6 +44,11 @@ public sealed partial class VirtualMachine
 
     private readonly Dictionary<string, StashValue> _globals;
     private readonly HashSet<string> _constGlobals = new(StringComparer.Ordinal);
+    private StashValue[] _globalSlots = Array.Empty<StashValue>();
+    private bool[] _constGlobalSlots = Array.Empty<bool>();
+    private string[] _globalNameTable = Array.Empty<string>();
+    private static readonly object _undefinedSentinel = new();
+    internal static readonly StashValue UndefinedGlobal = StashValue.FromObj(_undefinedSentinel);
     private readonly List<Upvalue> _openUpvalues;
     private readonly CancellationToken _ct;
 
@@ -202,6 +207,7 @@ public sealed partial class VirtualMachine
         _openUpvalues.Clear();
         _debugCallStack.Clear();
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
+        InitGlobalSlots(chunk);
 
         if (_debugger is not null)
         {
@@ -224,6 +230,7 @@ public sealed partial class VirtualMachine
         _openUpvalues.Clear();
         _debugCallStack.Clear();
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
+        InitGlobalSlots(chunk);
 
         object? result;
         if (_debugger is not null)
@@ -249,6 +256,58 @@ public sealed partial class VirtualMachine
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Initializes the slot-based global variable array from the compiled chunk's name table
+    /// and any pre-populated globals (built-in namespaces, imported values, etc.).
+    /// </summary>
+    internal void InitGlobalSlots(Chunk chunk)
+    {
+        string[]? nameTable = chunk.GlobalNameTable;
+        if (nameTable == null) return;
+
+        int slotCount = chunk.GlobalSlotCount;
+        if (_globalSlots.Length < slotCount)
+        {
+            _globalSlots = new StashValue[slotCount];
+            _constGlobalSlots = new bool[slotCount];
+        }
+
+        _globalNameTable = nameTable;
+
+        // Populate slots from the existing _globals dictionary (built-in namespaces, etc.)
+        for (int i = 0; i < slotCount; i++)
+        {
+            string name = nameTable[i];
+            if (_globals.TryGetValue(name, out StashValue value))
+            {
+                _globalSlots[i] = value;
+                if (_constGlobals.Contains(name))
+                    _constGlobalSlots[i] = true;
+            }
+            else
+            {
+                _globalSlots[i] = UndefinedGlobal;
+                _constGlobalSlots[i] = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Re-reads globals from the shared <c>_globals</c> dictionary into <c>_globalSlots</c>.
+    /// Called after off-thread callbacks (fs.watch, signal handlers) that may have modified
+    /// globals via a child VM's write-through path.
+    /// </summary>
+    internal void RefreshGlobalSlots()
+    {
+        for (int i = 0; i < _globalNameTable.Length && i < _globalSlots.Length; i++)
+        {
+            if (_globals.TryGetValue(_globalNameTable[i], out StashValue value))
+            {
+                _globalSlots[i] = value;
+            }
+        }
     }
 
     // ---- Frame Management ----

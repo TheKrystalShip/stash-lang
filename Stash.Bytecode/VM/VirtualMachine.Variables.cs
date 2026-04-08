@@ -13,37 +13,81 @@ public sealed partial class VirtualMachine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteLoadGlobal(ref CallFrame frame)
     {
-        ushort nameIdx = ReadU16(ref frame);
-        string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        Dictionary<string, StashValue> globals = frame.ModuleGlobals ?? _globals;
-        if (!globals.TryGetValue(name, out StashValue value))
+        ushort slot = ReadU16(ref frame);
+        Dictionary<string, StashValue>? mg = frame.ModuleGlobals;
+        if (mg == null || mg == _globals)
         {
-            throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
+            // Fast path: main-script global — direct array access
+            StashValue val = _globalSlots[slot];
+            if (val.AsObj == _undefinedSentinel)
+            {
+                ThrowUndefinedGlobal(ref frame, slot);
+            }
+            Push(val);
         }
+        else
+        {
+            // Module function — fall back to dict lookup using name table
+            string name = frame.Chunk.GlobalNameTable![slot];
+            if (!mg.TryGetValue(name, out StashValue value))
+            {
+                throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
+            }
+            Push(value);
+        }
+    }
 
-        Push(value);
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ThrowUndefinedGlobal(ref CallFrame frame, ushort slot)
+    {
+        string name = _globalNameTable.Length > slot ? _globalNameTable[slot] : $"<slot {slot}>";
+        throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteStoreGlobal(ref CallFrame frame)
     {
-        ushort nameIdx = ReadU16(ref frame);
-        string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        if (_constGlobals.Contains(name))
+        ushort slot = ReadU16(ref frame);
+        Dictionary<string, StashValue>? mg = frame.ModuleGlobals;
+        if (mg == null || mg == _globals)
         {
-            throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+            // Fast path: main-script global
+            if (_constGlobalSlots.Length > slot && _constGlobalSlots[slot])
+            {
+                throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+            }
+            StashValue val = Pop();
+            _globalSlots[slot] = val;
+            // Write-through to dict for module loading, debugger, REPL compatibility
+            string name = _globalNameTable[slot];
+            _globals[name] = val;
         }
-
-        Dictionary<string, StashValue> globals = frame.ModuleGlobals ?? _globals;
-        globals[name] = Pop();
+        else
+        {
+            // Module function — dict-based
+            string name = frame.Chunk.GlobalNameTable![slot];
+            if (_constGlobals.Contains(name))
+            {
+                throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+            }
+            mg[name] = Pop();
+        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteInitConstGlobal(ref CallFrame frame)
     {
-        ushort nameIdx = ReadU16(ref frame);
-        string name = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        _globals[name] = Pop();
+        ushort slot = ReadU16(ref frame);
+        StashValue val = Pop();
+        // Slot-based path
+        if (_globalSlots.Length > slot)
+        {
+            _globalSlots[slot] = val;
+            _constGlobalSlots[slot] = true;
+        }
+        // Write-through to dict + constGlobals set
+        string name = _globalNameTable.Length > slot ? _globalNameTable[slot] : frame.Chunk.GlobalNameTable![slot];
+        _globals[name] = val;
         _constGlobals.Add(name);
     }
 

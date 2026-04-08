@@ -33,13 +33,13 @@ internal sealed class VMContext : IInterpreterContext
 
     // Lazy span: set by the VM before each built-in call so built-ins can report
     // their call-site location without an eager O(log n) binary search on the success path.
-    internal SourceMap? _callSourceMap;
-    internal int _callIP;
+    internal SourceMap? CallSourceMap;
+    internal int CallIP;
     internal SourceSpan? _currentSpan;
 
     public SourceSpan? CurrentSpan
     {
-        get => _currentSpan ?? _callSourceMap?.GetSpan(_callIP);
+        get => _currentSpan ?? CallSourceMap?.GetSpan(CallIP);
         set => _currentSpan = value;
     }
 
@@ -270,8 +270,13 @@ internal sealed class VMContext : IInterpreterContext
                 if (ModuleCache != null) childVm.ModuleCache = ModuleCache;
                 if (ModuleLocks != null) childVm.ModuleLocks = ModuleLocks;
 
+                childVm.InitGlobalSlots(vmFn.Chunk);
                 StashValue[] argsCopy = args.ToArray();
-                return childVm.CallClosureDirect(vmFn, argsCopy);
+                StashValue result = childVm.CallClosureDirect(vmFn, argsCopy);
+                // Sync any globals modified by the child back to the parent VM's slot array.
+                // The child writes through to the shared _globals dict; refresh the parent's slots.
+                ActiveVM?.RefreshGlobalSlots();
+                return result;
             }
         }
         return callable.CallDirect(Fork(), args);

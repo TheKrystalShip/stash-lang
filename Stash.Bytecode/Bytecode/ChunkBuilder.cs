@@ -31,6 +31,9 @@ public class ChunkBuilder
     public bool[]? LocalIsConst { get; set; }
     public string[]? UpvalueNames { get; set; }
 
+    /// <summary>Shared global slot allocator for slot-based global access. Null for legacy compilation.</summary>
+    internal GlobalSlotAllocator? GlobalSlotAllocator { get; set; }
+
     /// <summary>Current bytecode offset (next byte to be written).</summary>
     public int CurrentOffset => _codeCount;
 
@@ -237,6 +240,9 @@ public class ChunkBuilder
         ArrayPool<byte>.Shared.Return(_code);
         _code = null!; // prevent reuse after Build
 
+        string[]? globalNameTable = GlobalSlotAllocator?.BuildNameTable();
+        int globalSlotCount = GlobalSlotAllocator?.Count ?? 0;
+
         return new Chunk(
             code: code,
             constants: _constants.ToArray(),
@@ -250,7 +256,9 @@ public class ChunkBuilder
             hasRestParam: HasRestParam,
             localNames: LocalNames,
             localIsConst: LocalIsConst,
-            upvalueNames: UpvalueNames
+            upvalueNames: UpvalueNames,
+            globalNameTable: globalNameTable,
+            globalSlotCount: globalSlotCount
         );
     }
 

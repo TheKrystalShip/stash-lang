@@ -83,6 +83,7 @@ public sealed partial class VirtualMachine
 
             int childBase = childVM._sp - arity;
             childVM.PushFrame(fnChunk, childBase, upvalues, fnChunk.Name, moduleGlobals);
+            childVM.InitGlobalSlots(fnChunk);
             return childVM.Run();
         }, cts.Token);
 

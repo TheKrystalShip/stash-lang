@@ -22,8 +22,8 @@ public sealed partial class Compiler
         if (resolvedDistance == -1)
         {
             // Global variable
-            ushort nameIdx = _builder.AddConstant(name);
-            _builder.Emit(isLoad ? OpCode.LoadGlobal : OpCode.StoreGlobal, nameIdx);
+            ushort slot = _globalSlots.GetOrAllocate(name);
+            _builder.Emit(isLoad ? OpCode.LoadGlobal : OpCode.StoreGlobal, slot);
         }
         else
         {
@@ -56,8 +56,8 @@ public sealed partial class Compiler
             else
             {
                 // Resolver said distance=0 but scope doesn't have it — fall back to global
-                ushort nameIdx = _builder.AddConstant(name);
-                _builder.Emit(isLoad ? OpCode.LoadGlobal : OpCode.StoreGlobal, nameIdx);
+                ushort globalSlot = _globalSlots.GetOrAllocate(name);
+                _builder.Emit(isLoad ? OpCode.LoadGlobal : OpCode.StoreGlobal, globalSlot);
             }
         }
     }
@@ -245,7 +245,7 @@ public sealed partial class Compiler
         bool hasRestParam,
         bool firstParamIsConst = false)
     {
-        var fnCompiler = new Compiler(this, name);
+        var fnCompiler = new Compiler(this, name, _globalSlots);
         fnCompiler._builder.Arity = parameters.Count;
         fnCompiler._builder.IsAsync = isAsync;
         fnCompiler._builder.HasRestParam = hasRestParam;

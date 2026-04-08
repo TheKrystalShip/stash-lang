@@ -59,6 +59,19 @@ public class Chunk
     /// </summary>
     public string[]? UpvalueNames { get; }
 
+    /// <summary>
+    /// Maps global slot indices to variable names. Shared across all chunks from
+    /// the same compilation unit. Used by the VM for error messages and module fallback.
+    /// Null for chunks compiled without slot-based globals (e.g. legacy/test paths).
+    /// </summary>
+    public string[]? GlobalNameTable { get; }
+
+    /// <summary>
+    /// Total number of global variable slots needed for this compilation unit.
+    /// The VM pre-allocates a <c>StashValue[]</c> of this size.
+    /// </summary>
+    public int GlobalSlotCount { get; }
+
     public Chunk(
         byte[] code,
         StashValue[] constants,
@@ -72,7 +85,9 @@ public class Chunk
         bool hasRestParam,
         string[]? localNames = null,
         bool[]? localIsConst = null,
-        string[]? upvalueNames = null)
+        string[]? upvalueNames = null,
+        string[]? globalNameTable = null,
+        int globalSlotCount = 0)
     {
         Code = code;
         Constants = constants;
@@ -87,5 +102,7 @@ public class Chunk
         LocalNames = localNames;
         LocalIsConst = localIsConst;
         UpvalueNames = upvalueNames;
+        GlobalNameTable = globalNameTable;
+        GlobalSlotCount = globalSlotCount;
     }
 }
