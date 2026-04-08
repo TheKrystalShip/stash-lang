@@ -377,12 +377,70 @@ All `str` functions take the target string as the first argument. Strings are im
 
 ### Regex
 
-| Function                             | Description                                                     |
-| ------------------------------------ | --------------------------------------------------------------- |
-| `str.match(s, pattern)`              | Return the first substring matching a regex pattern (or `null`) |
-| `str.matchAll(s, pattern)`           | Return an array of all substrings matching a regex pattern      |
-| `str.isMatch(s, pattern)`            | Return `true` if string contains a match for the regex pattern  |
-| `str.replaceRegex(s, pattern, repl)` | Replace all regex matches with a replacement string             |
+| Function                             | Description                                                                      |
+| ------------------------------------ | -------------------------------------------------------------------------------- |
+| `str.match(s, pattern)`              | Return the first substring matching a regex pattern (or `null`)                  |
+| `str.matchAll(s, pattern)`           | Return an array of all substrings matching a regex pattern                       |
+| `str.capture(s, pattern)`            | Return a `RegexMatch` struct for the first match with capture groups (or `null`) |
+| `str.captureAll(s, pattern)`         | Return an array of `RegexMatch` structs for all matches with capture groups      |
+| `str.isMatch(s, pattern)`            | Return `true` if string contains a match for the regex pattern                   |
+| `str.replaceRegex(s, pattern, repl)` | Replace all regex matches with a replacement string                              |
+
+All regex functions use a 5-second timeout to guard against catastrophic backtracking.
+
+#### `RegexMatch` Struct
+
+Returned by `str.capture()` and `str.captureAll()`.
+
+| Field         | Type                   | Description                                            |
+| ------------- | ---------------------- | ------------------------------------------------------ |
+| `value`       | `string`               | The full matched text                                  |
+| `index`       | `int`                  | Start position of the match in the input string        |
+| `length`      | `int`                  | Length of the matched text                             |
+| `groups`      | `array<RegexGroup>`    | All capture groups (index 0 = full match)              |
+| `namedGroups` | `dict<string, string>` | Named capture group values keyed by group name         |
+
+#### `RegexGroup` Struct
+
+Each entry in `RegexMatch.groups`.
+
+| Field    | Type     | Description                                                |
+| -------- | -------- | ---------------------------------------------------------- |
+| `value`  | `string` | Captured text (`null` if the group did not participate)    |
+| `index`  | `int`    | Start position in the input (`-1` if group didn't match)   |
+| `length` | `int`    | Length of the capture                                      |
+| `name`   | `string` | Group name for named groups (`null` for positional groups) |
+
+#### Regex Capture Examples
+
+```stash
+// Positional capture groups
+let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+io.println(m.value);           // "1.23"
+io.println(m.groups[1].value); // "1"
+io.println(m.groups[2].value); // "23"
+
+// Named capture groups
+let line = "192.168.1.1 myhost";
+let m = str.capture(line, "(?<ip>\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+(?<host>\\S+)");
+io.println(m.namedGroups["ip"]);   // "192.168.1.1"
+io.println(m.namedGroups["host"]); // "myhost"
+
+// Multiple matches with captureAll
+let emails = "alice@example.com and bob@work.org";
+let matches = str.captureAll(emails, "(\\w+)@(\\w+)");
+for (let m in matches) {
+    io.println(m.groups[1].value + " at " + m.groups[2].value);
+}
+// "alice at example"
+// "bob at work"
+
+// Optional group that doesn't participate
+let m = str.capture("ac", "(a)(b)?(c)");
+io.println(m.groups[1].value); // "a"
+io.println(m.groups[2].value); // null (group didn't match)
+io.println(m.groups[3].value); // "c"
+```
 
 ### Examples
 

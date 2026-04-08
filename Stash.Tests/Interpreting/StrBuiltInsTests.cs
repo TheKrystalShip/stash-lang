@@ -257,4 +257,237 @@ public class StrBuiltInsTests : StashTestBase
     {
         RunExpectingError("str.wrap(\"hello\", \"ten\");");
     }
+
+    // ── str.capture ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Capture_NoGroups_ReturnsFullMatch()
+    {
+        var result = Run("""
+            let m = str.capture("hello world", "world");
+            let result = m.value;
+        """);
+        Assert.Equal("world", result);
+    }
+
+    [Fact]
+    public void Capture_FullMatchValue()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.value;
+        """);
+        Assert.Equal("1.23", result);
+    }
+
+    [Fact]
+    public void Capture_FullMatchIndex()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.index;
+        """);
+        Assert.Equal(8L, result);
+    }
+
+    [Fact]
+    public void Capture_FullMatchLength()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.length;
+        """);
+        Assert.Equal(4L, result);
+    }
+
+    [Fact]
+    public void Capture_PositionalGroups_Values()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.groups[1].value;
+        """);
+        Assert.Equal("1", result);
+
+        var result2 = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.groups[2].value;
+        """);
+        Assert.Equal("23", result2);
+    }
+
+    [Fact]
+    public void Capture_PositionalGroups_Index()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.groups[1].index;
+        """);
+        Assert.Equal(8L, result);
+    }
+
+    [Fact]
+    public void Capture_PositionalGroups_Length()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.groups[1].length;
+        """);
+        Assert.Equal(1L, result);
+    }
+
+    [Fact]
+    public void Capture_NamedGroups_Dict()
+    {
+        var result = Run("""
+            let m = str.capture("192.168.1.1 myhost", "(?<ip>\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+(?<host>\\S+)");
+            let result = m.namedGroups["ip"];
+        """);
+        Assert.Equal("192.168.1.1", result);
+    }
+
+    [Fact]
+    public void Capture_NamedGroups_GroupName()
+    {
+        var result = Run("""
+            let m = str.capture("192.168.1.1 myhost", "(?<ip>\\d+\\.\\d+\\.\\d+\\.\\d+)\\s+(?<host>\\S+)");
+            let result = m.groups[1].name;
+        """);
+        Assert.Equal("ip", result);
+    }
+
+    [Fact]
+    public void Capture_NamedGroups_PositionalGroupNameIsNull()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = m.groups[0].name == null;
+        """);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Capture_OptionalGroupNotMatched_ValueIsNull()
+    {
+        var result = Run("""
+            let m = str.capture("a", "(a)(b)?");
+            let result = m.groups[2].value == null;
+        """);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Capture_OptionalGroupNotMatched_IndexIsNegativeOne()
+    {
+        var result = Run("""
+            let m = str.capture("a", "(a)(b)?");
+            let result = m.groups[2].index;
+        """);
+        Assert.Equal(-1L, result);
+    }
+
+    [Fact]
+    public void Capture_NoMatch_ReturnsNull()
+    {
+        var result = Run("""
+            let result = str.capture("hello", "\\d+") == null;
+        """);
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Capture_InvalidPattern_Throws()
+    {
+        RunExpectingError("""str.capture("hello", "(unclosed");""");
+    }
+
+    [Fact]
+    public void Capture_NonStringFirst_Throws()
+    {
+        RunExpectingError("""str.capture(42, "\\d+");""");
+    }
+
+    [Fact]
+    public void Capture_NonStringSecond_Throws()
+    {
+        RunExpectingError("""str.capture("hello", 42);""");
+    }
+
+    [Fact]
+    public void Capture_GroupsCount()
+    {
+        var result = Run("""
+            let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+            let result = len(m.groups);
+        """);
+        Assert.Equal(3L, result);
+    }
+
+    // ── str.captureAll ────────────────────────────────────────────────────
+
+    [Fact]
+    public void CaptureAll_MultipleMatches_Count()
+    {
+        var result = Run("""
+            let matches = str.captureAll("a@b c@d", "(\\w+)@(\\w+)");
+            let result = len(matches);
+        """);
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void CaptureAll_MultipleMatches_FirstValue()
+    {
+        var result = Run("""
+            let matches = str.captureAll("a@b c@d", "(\\w+)@(\\w+)");
+            let result = matches[0].value;
+        """);
+        Assert.Equal("a@b", result);
+    }
+
+    [Fact]
+    public void CaptureAll_MultipleMatches_SecondValue()
+    {
+        var result = Run("""
+            let matches = str.captureAll("a@b c@d", "(\\w+)@(\\w+)");
+            let result = matches[1].value;
+        """);
+        Assert.Equal("c@d", result);
+    }
+
+    [Fact]
+    public void CaptureAll_MultipleMatches_Groups()
+    {
+        var result = Run("""
+            let matches = str.captureAll("a@b c@d", "(\\w+)@(\\w+)");
+            let result = matches[0].groups[1].value;
+        """);
+        Assert.Equal("a", result);
+    }
+
+    [Fact]
+    public void CaptureAll_NamedGroups()
+    {
+        var result = Run("""
+            let matches = str.captureAll("a@b c@d", "(?<user>\\w+)@(?<domain>\\w+)");
+            let result = matches[1].namedGroups["user"];
+        """);
+        Assert.Equal("c", result);
+    }
+
+    [Fact]
+    public void CaptureAll_NoMatches_EmptyArray()
+    {
+        var result = Run("""
+            let matches = str.captureAll("hello", "\\d+");
+            let result = len(matches);
+        """);
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void CaptureAll_InvalidPattern_Throws()
+    {
+        RunExpectingError("""str.captureAll("hello", "(unclosed");""");
+    }
 }

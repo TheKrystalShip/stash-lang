@@ -38,6 +38,21 @@ public static class StrBuiltIns
         // ── str namespace ───────────────────────────────────────────────
         var ns = new NamespaceBuilder("str");
 
+        ns.Struct("RegexGroup", [
+            new BuiltInField("value", "string"),
+            new BuiltInField("index", "int"),
+            new BuiltInField("length", "int"),
+            new BuiltInField("name", "string"),
+        ]);
+
+        ns.Struct("RegexMatch", [
+            new BuiltInField("value", "string"),
+            new BuiltInField("index", "int"),
+            new BuiltInField("length", "int"),
+            new BuiltInField("groups", "array"),
+            new BuiltInField("namedGroups", "dict"),
+        ]);
+
         // str.upper(s) — Returns a copy of s with all characters converted to uppercase
         // using invariant culture rules.
         // Throws RuntimeError if the argument is not a string.
@@ -469,6 +484,62 @@ public static class StrBuiltIns
             returnType: "string",
             documentation: "Returns the string with all regex matches replaced by replacement.\n@param s The string\n@param pattern Regex pattern\n@param replacement Replacement string (backreferences supported)\n@return Modified string");
 
+        // str.capture(s, pattern) — Returns a RegexMatch struct for the first match of pattern
+        // in s, or null if no match. Supports named capture groups via (?<name>...) syntax.
+        // Uses a 5-second timeout. Throws RuntimeError if any argument is not a string, the
+        // pattern is invalid, or the match times out.
+        ns.Function("capture", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            var s = SvArgs.String(args, 0, "str.capture");
+            var pattern = SvArgs.String(args, 1, "str.capture");
+            try
+            {
+                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
+                var m = regex.Match(s);
+                if (!m.Success) return StashValue.Null;
+                return StashValue.FromObj(BuildRegexMatch(m));
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new RuntimeError("'str.capture' regex match timed out.");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new RuntimeError($"'str.capture' invalid regex pattern: {ex.Message}");
+            }
+        },
+            returnType: "RegexMatch",
+            documentation: "Returns a RegexMatch struct for the first regex match with capture groups, or null if none.\n@param s The string to search\n@param pattern Regex pattern (supports named groups via (?<name>...) syntax)\n@return RegexMatch struct with value, index, length, groups, and namedGroups — or null");
+
+        // str.captureAll(s, pattern) — Returns an array of RegexMatch structs for all matches
+        // of pattern in s. Supports named capture groups via (?<name>...) syntax.
+        // Uses a 5-second timeout. Throws RuntimeError if any argument is not a string, the
+        // pattern is invalid, or the match times out.
+        ns.Function("captureAll", [Param("s", "string"), Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            var s = SvArgs.String(args, 0, "str.captureAll");
+            var pattern = SvArgs.String(args, 1, "str.captureAll");
+            try
+            {
+                var regex = new Regex(pattern, RegexOptions.None, TimeSpan.FromSeconds(5));
+                var matches = regex.Matches(s);
+                var result = new List<StashValue>(matches.Count);
+                foreach (Match m in matches)
+                    result.Add(StashValue.FromObj(BuildRegexMatch(m)));
+                return StashValue.FromObj(result);
+            }
+            catch (RegexMatchTimeoutException)
+            {
+                throw new RuntimeError("'str.captureAll' regex match timed out.");
+            }
+            catch (ArgumentException ex)
+            {
+                throw new RuntimeError($"'str.captureAll' invalid regex pattern: {ex.Message}");
+            }
+        },
+            returnType: "array",
+            documentation: "Returns an array of RegexMatch structs for all regex matches with capture groups.\n@param s The string to search\n@param pattern Regex pattern (supports named groups via (?<name>...) syntax)\n@return Array of RegexMatch structs");
+
         // str.count(s, substring) — Returns the number of non-overlapping occurrences of
         // substring in s using ordinal comparison. Substring must not be empty.
         // Throws RuntimeError if either argument is not a string or if substring is empty.
@@ -672,5 +743,45 @@ public static class StrBuiltIns
             documentation: "Wraps the string at word boundaries so no line exceeds width characters.\n@param s The string\n@param width Maximum line width\n@return Wrapped string");
 
         return ns.Build();
+    }
+
+    private static StashInstance BuildRegexMatch(Match m)
+    {
+        var groups = new List<StashValue>(m.Groups.Count);
+        var namedGroups = new StashDictionary();
+
+        for (int i = 0; i < m.Groups.Count; i++)
+        {
+            Group g = m.Groups[i];
+            string? groupName = null;
+
+            // Check if this group has a name (non-numeric)
+            string gName = m.Groups.Keys.ElementAtOrDefault(i) ?? i.ToString();
+            if (gName != i.ToString())
+                groupName = gName;
+
+            var groupInstance = new StashInstance("RegexGroup", new Dictionary<string, StashValue>
+            {
+                ["value"] = g.Success ? StashValue.FromObj(g.Value) : StashValue.Null,
+                ["index"] = g.Success ? StashValue.FromInt(g.Index) : StashValue.FromInt(-1L),
+                ["length"] = g.Success ? StashValue.FromInt(g.Length) : StashValue.FromInt(0L),
+                ["name"] = groupName != null ? StashValue.FromObj(groupName) : StashValue.Null,
+            });
+
+            groups.Add(StashValue.FromObj(groupInstance));
+
+            // Add to namedGroups dict if this is a named group and it succeeded
+            if (groupName != null && g.Success)
+                namedGroups.Set(groupName, StashValue.FromObj(g.Value));
+        }
+
+        return new StashInstance("RegexMatch", new Dictionary<string, StashValue>
+        {
+            ["value"] = StashValue.FromObj(m.Value),
+            ["index"] = StashValue.FromInt(m.Index),
+            ["length"] = StashValue.FromInt(m.Length),
+            ["groups"] = StashValue.FromObj(groups),
+            ["namedGroups"] = StashValue.FromObj(namedGroups),
+        });
     }
 }

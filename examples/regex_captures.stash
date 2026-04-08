@@ -1,0 +1,120 @@
+#!/usr/bin/env stash
+
+// examples/regex_captures.stash
+// Regex Captures — str.capture() and str.captureAll() with positional/named groups,
+// RegexMatch/RegexGroup fields, namedGroups dict, and practical log-line parsing.
+
+io.println("=" * 56);
+io.println("  Regex Captures");
+io.println("=" * 56);
+// ─── Guard: No Match Returns null ────────────────────────────────────────────
+
+io.println("\n-- No Match Returns null --");
+let nomatch = str.capture("hello world", "\\d+");
+if (nomatch == null) {
+  io.println("  No digits found — capture returned null");
+}
+// ─── Basic Positional Capture ─────────────────────────────────────────────────
+
+io.println("\n-- Positional Capture Groups --");
+// groups[0] is always the full match; groups[1], [2], ... are the capture groups
+
+let m = str.capture("version 1.23", "(\\d+)\\.(\\d+)");
+io.println($"  full match : \"{m.value}\"");
+io.println($"  at index   : {m.index}, length: {m.length}");
+io.println($"  groups[0]  : \"{m.groups[0].value}\"  (full match)");
+io.println($"  groups[1]  : \"{m.groups[1].value}\"  (major)");
+io.println($"  groups[2]  : \"{m.groups[2].value}\"  (minor)");
+// ─── RegexGroup Fields ────────────────────────────────────────────────────────
+
+io.println("\n-- RegexGroup Fields (.value, .index, .length, .name) --");
+let g1 = m.groups[1];
+let g2 = m.groups[2];
+io.println($"  group 1 → value={g1.value}, index={g1.index}, length={g1.length}, name={g1.name}");
+io.println($"  group 2 → value={g2.value}, index={g2.index}, length={g2.length}, name={g2.name}");
+// ─── Named Capture Groups ─────────────────────────────────────────────────────
+
+io.println("\n-- Named Capture Groups --");
+let date_str = "2026-04-08";
+let dm = str.capture(date_str, "(?<year>\\d{4})-(?<month>\\d{2})-(?<day>\\d{2})");
+// Access via .namedGroups dict (convenient name-based lookup)
+
+io.println($"  input  : \"{date_str}\"");
+io.println($"  year   : {dm.namedGroups["year"]}");
+io.println($"  month  : {dm.namedGroups["month"]}");
+io.println($"  day    : {dm.namedGroups["day"]}");
+// Named groups also appear in .groups with their .name populated
+
+io.println("\n  via .groups array:");
+for (let g in dm.groups) {
+  let label = g.name != null ? $"<{g.name}>" : "(positional)";
+  io.println($"    {label} → \"{g.value}\" (index={g.index})");
+}
+// ─── Optional Group That Doesn't Participate ──────────────────────────────────
+
+io.println("\n-- Optional Group (null when it doesn't participate) --");
+// Pattern: (a)(b)?(c) — the middle group is optional
+
+let om = str.capture("ac", "(a)(b)?(c)");
+io.println($"  input     : \"ac\"");
+io.println($"  groups[1] : {om.groups[1].value}"); // "a"
+
+io.println($"  groups[2] : {om.groups[2].value}"); // null
+
+io.println($"  groups[3] : {om.groups[3].value}"); // "c"
+
+// Null-safe access pattern for optional groups
+
+let optional_b = om.groups[2].value;
+if (optional_b == null) {
+  io.println("  (group 2 did not participate — safely handled)");
+} else {
+  io.println($"  group 2 captured: \"{optional_b}\"");
+}
+
+// ─── str.captureAll() — Multiple Matches ─────────────────────────────────────
+
+io.println("\n-- captureAll: All Matches --");
+
+let text = "alice@example.com and bob@work.org and carol@dev.io";
+let email_matches = str.captureAll(text, "(?<user>[\\w.]+)@(?<domain>[\\w.]+)");
+
+io.println($"  Found {len(email_matches)} email address(es):");
+
+for (let em in email_matches) {
+  let user = em.namedGroups["user"];
+  let domain = em.namedGroups["domain"];
+  io.println($"    user={user}, domain={domain}  (at index {em.index})");
+}
+
+// ─── Practical Sysadmin Use Case: Log Line Parsing ───────────────────────────
+
+io.println("\n-- Sysadmin: Apache Access Log Parsing --");
+
+// Typical Apache combined log format:
+//   IP - - [timestamp] "METHOD /path HTTP/1.1" status bytes
+let log_lines = [
+  "127.0.0.1 - - [08/Apr/2026:12:01:44 +0000] \"GET /index.html HTTP/1.1\" 200 3456",
+  "10.0.0.5 - alice [08/Apr/2026:12:02:11 +0000] \"POST /api/login HTTP/1.1\" 401 128",
+  "192.168.1.42 - - [08/Apr/2026:12:03:05 +0000] \"DELETE /admin HTTP/1.1\" 403 64"
+];
+
+// Named groups make the pattern self-documenting
+let log_pattern = "(?<ip>[\\d.]+) - (?<user>\\S+) \\[(?<ts>[^\\]]+)\\] \"(?<method>\\w+) (?<path>\\S+) [^\"]+\" (?<status>\\d+) (?<bytes>\\d+)";
+io.println($"  Parsing {len(log_lines)} log line(s):\n");
+for (let line in log_lines) {
+  let lm = str.capture(line, log_pattern);
+  if (lm == null) {
+    io.println($"  [WARN] Could not parse: {line}");
+  } else {
+    let ip = lm.namedGroups["ip"];
+    let user = lm.namedGroups["user"];
+    let method = lm.namedGroups["method"];
+    let path = lm.namedGroups["path"];
+    let status = lm.namedGroups["status"];
+    let bytes = lm.namedGroups["bytes"];
+    io.println($"  {ip} → {method} {path}  [{status}]  ({bytes} bytes)  user={user}");
+  }
+}
+io.println();
+io.println("Done.");
