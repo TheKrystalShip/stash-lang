@@ -324,20 +324,28 @@ public static class Disassembler
         Dictionary<int, string> labels, int idx, uint word, OpCode op, StringBuilder sb)
     {
         string mnem = _opNames.TryGetValue(op, out string? n) ? n : $"op_{(byte)op:x2}";
-        string operands = FormatInstruction(chunk, labels, idx, word, op);
+        (string operands, string? comment) = FormatInstruction(chunk, labels, idx, word, op);
 
         string offsetStr = options.Compact
             ? $"{idx,4}:"
             : Col(options, $"  {idx:x4}:", Ansi.Dim);
 
-        string mnemStr = Col(options, $"{mnem,-16}", Ansi.Bold);
+        string mnemStr = Col(options, $"{mnem,-20}", Ansi.Bold);
 
-        sb.AppendLine($"{offsetStr}  {mnemStr}{operands}");
+        if (comment != null)
+        {
+            string commentStr = Col(options, $"; {comment}", Ansi.DimGreen);
+            sb.AppendLine($"{offsetStr}  {mnemStr}{operands,-24}{commentStr}");
+        }
+        else
+        {
+            sb.AppendLine($"{offsetStr}  {mnemStr}{operands}");
+        }
     }
 
     // ─── Operand Formatter ───────────────────────────────────────────────────
 
-    private static string FormatInstruction(Chunk chunk, Dictionary<int, string> labels, int idx, uint word, OpCode op)
+    private static (string operands, string? comment) FormatInstruction(Chunk chunk, Dictionary<int, string> labels, int idx, uint word, OpCode op)
     {
         InstrFmt fmt = GetFormat(op);
         byte a = Instruction.GetA(word);
@@ -349,131 +357,131 @@ public static class Disassembler
         return op switch
         {
             // Loads
-            OpCode.LoadK       => $"r{a}, k{bx}                  ; {FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)}",
-            OpCode.LoadNull    => $"r{a}",
-            OpCode.LoadBool    => $"r{a}, {(b != 0 ? "true" : "false")}{(c != 0 ? "           ; skip next" : "")}",
-            OpCode.Move        => $"r{a}, r{b}",
+            OpCode.LoadK       => ($"r{a}, k{bx}", FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)),
+            OpCode.LoadNull    => ($"r{a}", null),
+            OpCode.LoadBool    => ($"r{a}, {(b != 0 ? "true" : "false")}", c != 0 ? "skip next" : null),
+            OpCode.Move        => ($"r{a}, r{b}", null),
 
             // Globals
-            OpCode.GetGlobal      => $"r{a}, [g{bx}]              ; {FormatGlobal(chunk, bx)}",
-            OpCode.SetGlobal      => $"[g{bx}], r{a}              ; {FormatGlobal(chunk, bx)}",
-            OpCode.InitConstGlobal=> $"[g{bx}], r{a}              ; {FormatGlobal(chunk, bx)} (const)",
+            OpCode.GetGlobal      => ($"r{a}, [g{bx}]", FormatGlobal(chunk, bx)),
+            OpCode.SetGlobal      => ($"[g{bx}], r{a}", FormatGlobal(chunk, bx)),
+            OpCode.InitConstGlobal=> ($"[g{bx}], r{a}", $"{FormatGlobal(chunk, bx)} (const)"),
 
             // Upvalues
-            OpCode.GetUpval    => $"r{a}, [uv{b}]              ; {GetUpvalueName(chunk, b)}",
-            OpCode.SetUpval    => $"[uv{b}], r{a}              ; {GetUpvalueName(chunk, b)}",
-            OpCode.CloseUpval  => $"r{a}",
+            OpCode.GetUpval    => ($"r{a}, [uv{b}]", GetUpvalueName(chunk, b)),
+            OpCode.SetUpval    => ($"[uv{b}], r{a}", GetUpvalueName(chunk, b)),
+            OpCode.CloseUpval  => ($"r{a}", null),
 
             // Arithmetic
-            OpCode.Add         => $"r{a}, r{b}, r{c}",
-            OpCode.Sub         => $"r{a}, r{b}, r{c}",
-            OpCode.Mul         => $"r{a}, r{b}, r{c}",
-            OpCode.Div         => $"r{a}, r{b}, r{c}",
-            OpCode.Mod         => $"r{a}, r{b}, r{c}",
-            OpCode.Pow         => $"r{a}, r{b}, r{c}",
-            OpCode.Neg         => $"r{a}, r{b}",
-            OpCode.AddI        => $"r{a}, {sbx}",
+            OpCode.Add         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Sub         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Mul         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Div         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Mod         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Pow         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Neg         => ($"r{a}, r{b}", null),
+            OpCode.AddI        => ($"r{a}, {sbx}", null),
 
             // Bitwise
-            OpCode.BAnd        => $"r{a}, r{b}, r{c}",
-            OpCode.BOr         => $"r{a}, r{b}, r{c}",
-            OpCode.BXor        => $"r{a}, r{b}, r{c}",
-            OpCode.BNot        => $"r{a}, r{b}",
-            OpCode.Shl         => $"r{a}, r{b}, r{c}",
-            OpCode.Shr         => $"r{a}, r{b}, r{c}",
+            OpCode.BAnd        => ($"r{a}, r{b}, r{c}", null),
+            OpCode.BOr         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.BXor        => ($"r{a}, r{b}, r{c}", null),
+            OpCode.BNot        => ($"r{a}, r{b}", null),
+            OpCode.Shl         => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Shr         => ($"r{a}, r{b}, r{c}", null),
 
             // Comparisons
-            OpCode.Eq          => $"r{a}, r{b}, r{c}",
-            OpCode.Ne          => $"r{a}, r{b}, r{c}",
-            OpCode.Lt          => $"r{a}, r{b}, r{c}",
-            OpCode.Le          => $"r{a}, r{b}, r{c}",
-            OpCode.Gt          => $"r{a}, r{b}, r{c}",
-            OpCode.Ge          => $"r{a}, r{b}, r{c}",
+            OpCode.Eq          => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Ne          => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Lt          => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Le          => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Gt          => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Ge          => ($"r{a}, r{b}, r{c}", null),
 
             // Logic
-            OpCode.Not         => $"r{a}, r{b}",
-            OpCode.TestSet     => $"r{a}, r{b}, {c}",
-            OpCode.Test        => $"r{a}, {c}",
+            OpCode.Not         => ($"r{a}, r{b}", null),
+            OpCode.TestSet     => ($"r{a}, r{b}, {c}", null),
+            OpCode.Test        => ($"r{a}, {c}", null),
 
             // Jumps
-            OpCode.Jmp         => $"{GetLabelRef(labels, idx + 1 + sbx)}              ; {sbx:+0;-0}",
-            OpCode.JmpFalse    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}          ; {sbx:+0;-0}",
-            OpCode.JmpTrue     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}          ; {sbx:+0;-0}",
-            OpCode.Loop        => $"{GetLabelRef(labels, idx + 1 + sbx)}              ; {sbx:+0;-0}",
+            OpCode.Jmp         => (GetLabelRef(labels, idx + 1 + sbx), $"{sbx:+0;-0}"),
+            OpCode.JmpFalse    => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", $"{sbx:+0;-0}"),
+            OpCode.JmpTrue     => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", $"{sbx:+0;-0}"),
+            OpCode.Loop        => (GetLabelRef(labels, idx + 1 + sbx), $"{sbx:+0;-0}"),
 
             // Calls
-            OpCode.Call        => $"r{a}, {c}",
-            OpCode.Return      => b != 0 ? $"r{a}" : "null",
-            OpCode.CallSpread  => $"r{a}",
+            OpCode.Call        => ($"r{a}, {c}", null),
+            OpCode.Return      => (b != 0 ? $"r{a}" : "null", null),
+            OpCode.CallSpread  => ($"r{a}", null),
 
             // Iteration
-            OpCode.ForPrep     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.ForLoop     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.ForPrepII   => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.ForLoopII   => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.IterPrep    => $"r{a}",
-            OpCode.IterLoop    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.ForPrep     => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
+            OpCode.ForLoop     => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
+            OpCode.ForPrepII   => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
+            OpCode.ForLoopII   => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
+            OpCode.IterPrep    => ($"r{a}", null),
+            OpCode.IterLoop    => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
 
             // Tables
-            OpCode.GetTable    => $"r{a}, r{b}, r{c}",
-            OpCode.SetTable    => $"r{a}, r{b}, r{c}",
-            OpCode.GetField    => $"r{a}, r{b}, k{c}           ; .{FormatFieldName(chunk, c)}",
-            OpCode.GetFieldIC  => $"r{a}, r{b}, k{c}           ; .{FormatFieldName(chunk, c)} [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]",
-            OpCode.CallBuiltIn => $"r{a}, r{b}, {c}            ; ({c} args) [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]",
-            OpCode.SetField    => $"r{a}, r{c}, k{b}           ; .{FormatFieldName(chunk, b)}",
-            OpCode.Self        => $"r{a}, r{b}, k{c}           ; .{FormatFieldName(chunk, c)}",
+            OpCode.GetTable    => ($"r{a}, r{b}, r{c}", null),
+            OpCode.SetTable    => ($"r{a}, r{b}, r{c}", null),
+            OpCode.GetField    => ($"r{a}, r{b}, k{c}", $".{FormatFieldName(chunk, c)}"),
+            OpCode.GetFieldIC  => ($"r{a}, r{b}, k{c}", $".{FormatFieldName(chunk, c)} [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]"),
+            OpCode.CallBuiltIn => ($"r{a}, r{b}, {c}", $"({c} args) [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]"),
+            OpCode.SetField    => ($"r{a}, r{c}, k{b}", $".{FormatFieldName(chunk, b)}"),
+            OpCode.Self        => ($"r{a}, r{b}, k{c}", $".{FormatFieldName(chunk, c)}"),
 
             // Collections
-            OpCode.NewArray    => $"r{a}, {b}",
-            OpCode.NewDict     => $"r{a}, {b}",
-            OpCode.NewRange    => $"r{a}, r{b}, r{c}",
-            OpCode.Spread      => $"r{a}, r{b}",
-            OpCode.Destructure => $"r{a}, k{bx}",
+            OpCode.NewArray    => ($"r{a}, {b}", null),
+            OpCode.NewDict     => ($"r{a}, {b}", null),
+            OpCode.NewRange    => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Spread      => ($"r{a}, r{b}", null),
+            OpCode.Destructure => ($"r{a}, k{bx}", null),
 
             // Closures & Types
-            OpCode.Closure     => $"r{a}, k{bx}               ; {FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)}",
-            OpCode.NewStruct   => $"r{a}, k{b}, {c}",
-            OpCode.TypeOf      => $"r{a}, r{b}",
-            OpCode.Is          => $"r{a}, r{b}, k{c}",
+            OpCode.Closure     => ($"r{a}, k{bx}", FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)),
+            OpCode.NewStruct   => ($"r{a}, k{b}, {c}", null),
+            OpCode.TypeOf      => ($"r{a}, r{b}", null),
+            OpCode.Is          => ($"r{a}, r{b}, k{c}", null),
 
             // Error handling
-            OpCode.TryBegin    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.TryEnd      => "",
-            OpCode.Throw       => $"r{a}",
-            OpCode.TryExpr     => $"r{a}, r{b}",
+            OpCode.TryBegin    => ($"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}", null),
+            OpCode.TryEnd      => ("", null),
+            OpCode.Throw       => ($"r{a}", null),
+            OpCode.TryExpr     => ($"r{a}, r{b}", null),
 
             // Type decls
-            OpCode.StructDecl  => $"r{a}, k{bx}",
-            OpCode.EnumDecl    => $"r{a}, k{bx}",
-            OpCode.IfaceDecl   => $"r{a}, k{bx}",
-            OpCode.Extend      => $"r{a}, k{bx}",
+            OpCode.StructDecl  => ($"r{a}, k{bx}", null),
+            OpCode.EnumDecl    => ($"r{a}, k{bx}", null),
+            OpCode.IfaceDecl   => ($"r{a}, k{bx}", null),
+            OpCode.Extend      => ($"r{a}, k{bx}", null),
 
             // Shell
-            OpCode.Command     => $"r{a}, {b}, {c}",
-            OpCode.Pipe        => $"r{a}, r{b}, r{c}",
-            OpCode.Redirect    => $"r{a}, r{c}, {b}",
-            OpCode.Interpolate => $"r{a}, {b}",
+            OpCode.Command     => ($"r{a}, {b}, {c}", null),
+            OpCode.Pipe        => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Redirect    => ($"r{a}, r{c}, {b}", null),
+            OpCode.Interpolate => ($"r{a}, {b}", null),
 
             // Modules
-            OpCode.Import      => $"r{a}, k{bx}",
-            OpCode.ImportAs    => $"r{a}, k{bx}",
+            OpCode.Import      => ($"r{a}, k{bx}", null),
+            OpCode.ImportAs    => ($"r{a}, k{bx}", null),
 
             // Misc
-            OpCode.In          => $"r{a}, r{b}, r{c}",
-            OpCode.Switch      => $"r{a}, k{bx}",
-            OpCode.ElevateBegin=> $"r{a}, r{b}",
-            OpCode.ElevateEnd  => "",
-            OpCode.Retry       => $"k{bx}",
-            OpCode.Await       => $"r{a}, r{b}",
+            OpCode.In          => ($"r{a}, r{b}, r{c}", null),
+            OpCode.Switch      => ($"r{a}, k{bx}", null),
+            OpCode.ElevateBegin=> ($"r{a}, r{b}", null),
+            OpCode.ElevateEnd  => ("", null),
+            OpCode.Retry       => ($"k{bx}", null),
+            OpCode.Await       => ($"r{a}, r{b}", null),
 
-            _ => fmt switch
+            _ => (fmt switch
             {
                 InstrFmt.ABC  => $"r{a}, r{b}, r{c}",
                 InstrFmt.ABx  => $"r{a}, k{bx}",
                 InstrFmt.AsBx => $"r{a}, {sbx:+0;-0}",
                 InstrFmt.Ax   => "",
                 _ => ""
-            }
+            }, (string?)null)
         };
     }
 
