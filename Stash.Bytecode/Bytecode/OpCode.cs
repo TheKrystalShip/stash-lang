@@ -205,38 +205,6 @@ public enum OpCode : byte
     GetFieldIC,                 // 79
     /// <summary>ABC+companion: Fused GetField+Call for namespace built-ins; R(A) = R(B).K[ic.ConstantIndex](R(A+1)..R(A+C)); companion = IC slot.</summary>
     CallBuiltIn,                // 80
-
-    // === Quickened Arithmetic (Phase 1 — integer specialization) ===
-    /// <summary>ABC: R(A) = R(B) + R(C) — specialized for int+int.</summary>
-    AddII = 81,
-    /// <summary>ABC: R(A) = R(B) - R(C) — specialized for int+int.</summary>
-    SubII = 82,
-    /// <summary>ABC: R(A) = R(B) * R(C) — specialized for int+int.</summary>
-    MulII = 83,
-    /// <summary>ABC: R(A) = R(B) / R(C) — specialized for int+int.</summary>
-    DivII = 84,
-    /// <summary>ABC: R(A) = R(B) % R(C) — specialized for int+int.</summary>
-    ModII = 85,
-
-    // === Quickened Comparison (Phase 1) ===
-    /// <summary>ABC: R(A) = (R(B) &lt; R(C)) — specialized for int.</summary>
-    LtII = 86,
-    /// <summary>ABC: R(A) = (R(B) &lt;= R(C)) — specialized for int.</summary>
-    LeII = 87,
-    /// <summary>ABC: R(A) = (R(B) &gt; R(C)) — specialized for int.</summary>
-    GtII = 88,
-    /// <summary>ABC: R(A) = (R(B) &gt;= R(C)) — specialized for int.</summary>
-    GeII = 89,
-    /// <summary>ABC: R(A) = (R(B) == R(C)) — specialized for int.</summary>
-    EqII = 90,
-    /// <summary>ABC: R(A) = (R(B) != R(C)) — specialized for int.</summary>
-    NeII = 91,
-
-    // === Quickened Iteration (Phase 1) ===
-    /// <summary>AsBx: Numeric for init — specialized for int counter/step/limit. Also quickens matching ForLoop.</summary>
-    ForPrepII = 92,
-    /// <summary>AsBx: Int for-loop step — guard-free, trusts ForPrepII type verification.</summary>
-    ForLoopII = 93,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>
@@ -261,7 +229,7 @@ public static class OpCodeInfo
         OpCode.LoadK or OpCode.GetGlobal or OpCode.SetGlobal or OpCode.InitConstGlobal
         or OpCode.AddI    // AsBx but same extraction format
         or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-        or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII or OpCode.IterLoop
+        or OpCode.ForPrep or OpCode.ForLoop or OpCode.IterLoop
         or OpCode.Closure or OpCode.TryBegin
         or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl or OpCode.Extend
         or OpCode.Import or OpCode.ImportAs

@@ -59,12 +59,6 @@ public sealed class Chunk
     /// <summary>Inline cache slots for GetField operations.</summary>
     internal ICSlot[]? ICSlots { get; set; }
 
-    /// <summary>Per-instruction quickening counters, parallel to Code[]. Null if quickening is not active.</summary>
-    internal byte[]? QuickenCounters { get; set; }
-
-    /// <summary>Number of times this chunk has been called. Used to trigger quickening activation.</summary>
-    internal int CallCount { get; set; }
-
     internal Chunk(
         uint[] code,
         StashValue[] constants,

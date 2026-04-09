@@ -337,39 +337,10 @@ public sealed partial class VirtualMachine
                 case OpCode.Await: ExecuteAwait(ref frame, inst); break;
 
                 default:
-                {
-                    OpCode op = Instruction.GetOp(inst);
-                    if (op >= OpCode.AddII && op <= OpCode.ForLoopII)
-                    {
-                        DispatchQuickened(ref frame, inst, op);
-                        break;
-                    }
                     throw new RuntimeError(
-                        $"Unknown opcode {op} at offset {frame.IP - 1}.",
+                        $"Unknown opcode {Instruction.GetOp(inst)} at offset {frame.IP - 1}.",
                         GetCurrentSpan(ref frame));
-                }
             }
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void DispatchQuickened(ref CallFrame frame, uint inst, OpCode op)
-    {
-        switch (op)
-        {
-            case OpCode.AddII: ExecuteAddII(ref frame, inst); break;
-            case OpCode.SubII: ExecuteSubII(ref frame, inst); break;
-            case OpCode.MulII: ExecuteMulII(ref frame, inst); break;
-            case OpCode.DivII: ExecuteDivII(ref frame, inst); break;
-            case OpCode.ModII: ExecuteModII(ref frame, inst); break;
-            case OpCode.LtII:  ExecuteLtII(ref frame, inst); break;
-            case OpCode.LeII:  ExecuteLeII(ref frame, inst); break;
-            case OpCode.GtII:  ExecuteGtII(ref frame, inst); break;
-            case OpCode.GeII:  ExecuteGeII(ref frame, inst); break;
-            case OpCode.EqII:  ExecuteEqII(ref frame, inst); break;
-            case OpCode.NeII:  ExecuteNeII(ref frame, inst); break;
-            case OpCode.ForPrepII: ExecuteForPrepII(ref frame, inst); break;
-            case OpCode.ForLoopII: ExecuteForLoopII(ref frame, inst); break;
         }
     }
 
