@@ -12,17 +12,22 @@ public static class DiagnosticDescriptors
     // ── SA00xx — Infrastructure ──────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0001 = new("SA0001", "Unknown diagnostic code in suppression directive", DiagnosticLevel.Warning, "Infrastructure", "Unknown diagnostic code '{0}' in suppression directive.");
     public static readonly DiagnosticDescriptor SA0002 = new("SA0002", "Malformed diagnostic code in suppression directive", DiagnosticLevel.Warning, "Infrastructure", "Malformed diagnostic code '{0}' in suppression directive. Expected format: SA followed by 4 digits.");
+    public static readonly DiagnosticDescriptor SA0003 = new("SA0003", "Unused suppression directive", DiagnosticLevel.Warning, "Infrastructure", "Suppression directive for '{0}' did not suppress any diagnostics.");
 
     // ── SA01xx — Control Flow ────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0101 = new("SA0101", "Break outside loop", DiagnosticLevel.Error, "Control flow", "'break' used outside of a loop.");
     public static readonly DiagnosticDescriptor SA0102 = new("SA0102", "Continue outside loop", DiagnosticLevel.Error, "Control flow", "'continue' used outside of a loop.");
     public static readonly DiagnosticDescriptor SA0103 = new("SA0103", "Return outside function", DiagnosticLevel.Error, "Control flow", "'return' used outside of a function.");
     public static readonly DiagnosticDescriptor SA0104 = new("SA0104", "Unreachable code", DiagnosticLevel.Information, "Control flow", "Unreachable code detected.");
+    public static readonly DiagnosticDescriptor SA0105 = new("SA0105", "Empty block body", DiagnosticLevel.Information, "Control flow", "Empty {0} body.");
 
     // ── SA02xx — Declarations ────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0201 = new("SA0201", "Unused declaration", DiagnosticLevel.Information, "Declarations", "{0} '{1}' is declared but never used.");
     public static readonly DiagnosticDescriptor SA0202 = new("SA0202", "Undefined identifier", DiagnosticLevel.Warning, "Declarations", "'{0}' is not defined.");
     public static readonly DiagnosticDescriptor SA0203 = new("SA0203", "Constant reassignment", DiagnosticLevel.Error, "Declarations", "Cannot reassign constant '{0}'.");
+    public static readonly DiagnosticDescriptor SA0205 = new("SA0205", "Variable could be constant", DiagnosticLevel.Information, "Declarations", "Variable '{0}' is never reassigned. Consider using 'const' instead of 'let'.");
+    public static readonly DiagnosticDescriptor SA0206 = new("SA0206", "Unused parameter", DiagnosticLevel.Information, "Declarations", "Parameter '{0}' is declared but never used.");
+    public static readonly DiagnosticDescriptor SA0207 = new("SA0207", "Shadow variable", DiagnosticLevel.Warning, "Declarations", "Variable '{0}' shadows an outer variable with the same name.");
 
     // ── SA03xx — Type Safety ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0301 = new("SA0301", "Variable type mismatch", DiagnosticLevel.Warning, "Type safety", "Variable '{0}' is declared as '{1}' but initialized with '{2}'.");
@@ -69,13 +74,18 @@ public static class DiagnosticDescriptors
         // Use reflection-free manual registration
         dict[SA0001.Code] = SA0001;
         dict[SA0002.Code] = SA0002;
+        dict[SA0003.Code] = SA0003;
         dict[SA0101.Code] = SA0101;
         dict[SA0102.Code] = SA0102;
         dict[SA0103.Code] = SA0103;
         dict[SA0104.Code] = SA0104;
+        dict[SA0105.Code] = SA0105;
         dict[SA0201.Code] = SA0201;
         dict[SA0202.Code] = SA0202;
         dict[SA0203.Code] = SA0203;
+        dict[SA0205.Code] = SA0205;
+        dict[SA0206.Code] = SA0206;
+        dict[SA0207.Code] = SA0207;
         dict[SA0301.Code] = SA0301;
         dict[SA0302.Code] = SA0302;
         dict[SA0303.Code] = SA0303;

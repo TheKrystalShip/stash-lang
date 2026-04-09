@@ -145,7 +145,7 @@ public class SemanticValidatorTests : AnalysisTestBase
     [Fact]
     public void DefinedVariable_NoWarning()
     {
-        var diagnostics = Validate("let x = 1; let y = x; io.println(y);");
+        var diagnostics = Validate("const x = 1; const y = x; io.println(y);");
 
         Assert.Empty(diagnostics);
     }
@@ -153,7 +153,7 @@ public class SemanticValidatorTests : AnalysisTestBase
     [Fact]
     public void ValidProgram_NoErrors()
     {
-        var diagnostics = Validate("let x = 1; fn foo(a) { return a + x; } foo(2);");
+        var diagnostics = Validate("const x = 1; fn foo(a) { return a + x; } foo(2);");
 
         Assert.Empty(diagnostics);
     }
@@ -163,7 +163,7 @@ public class SemanticValidatorTests : AnalysisTestBase
     [Fact]
     public void TypeHintedVarDecl_ProducesNoErrors()
     {
-        var diagnostics = Validate("let name: string = \"Alice\"; io.println(name);");
+        var diagnostics = Validate("let name: string = \"Alice\"; name = \"Bob\"; io.println(name);");
         Assert.Empty(diagnostics);
     }
 
@@ -177,7 +177,7 @@ public class SemanticValidatorTests : AnalysisTestBase
     [Fact]
     public void TypeHintedFnDecl_ProducesNoErrors()
     {
-        var diagnostics = Validate("fn add(a: int, b: int) -> int { return a; }");
+        var diagnostics = Validate("fn add(a: int, b: int) -> int { return a + b; }");
         Assert.Empty(diagnostics);
     }
 
@@ -191,7 +191,7 @@ public class SemanticValidatorTests : AnalysisTestBase
     [Fact]
     public void TypeHintedForIn_ProducesNoErrors()
     {
-        var diagnostics = Validate("let names = [\"a\"]; for (let _: string in names) { }");
+        var diagnostics = Validate("const names = [\"a\"]; for (let _: string in names) { io.println(_); }");
         Assert.Empty(diagnostics);
     }
 
@@ -203,8 +203,11 @@ public class SemanticValidatorTests : AnalysisTestBase
             let cfg: Config = null;
             const MAX: int = 100;
             fn process(item: string, count) -> bool {
+                io.println(item);
+                io.println(count);
                 return true;
             }
+            cfg = null;
             io.println(cfg);
             io.println(MAX);
         ";

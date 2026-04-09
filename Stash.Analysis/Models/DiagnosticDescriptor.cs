@@ -13,6 +13,7 @@ public sealed class DiagnosticDescriptor
     public DiagnosticLevel DefaultLevel { get; }
     public string Category { get; }
     public string MessageFormat { get; }
+    public string HelpUrl => $"https://stash-lang.dev/docs/rules/{Code}";
 
     public DiagnosticDescriptor(string code, string title, DiagnosticLevel defaultLevel, string category, string messageFormat)
     {

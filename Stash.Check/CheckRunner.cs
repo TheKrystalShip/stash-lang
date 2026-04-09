@@ -37,7 +37,7 @@ internal sealed class CheckRunner
                 continue;
             }
 
-            var analysis = engine.Analyze(uri, source);
+            var analysis = engine.Analyze(uri, source, _options.NoImports);
             results.Add(new FileResult(uri, analysis));
         }
 

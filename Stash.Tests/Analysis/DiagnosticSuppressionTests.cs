@@ -572,4 +572,72 @@ public class DiagnosticSuppressionTests : AnalysisTestBase
         Assert.False(map.IsSuppressed("SA0101", 1));
         Assert.False(map.IsSuppressed(null, 1));
     }
+
+    // ── SA0003: Unused suppression detection ──────────────────────────
+
+    [Fact]
+    public void SuppressionMap_Filter_UnusedLineSuppression_EmitsSA0003()
+    {
+        var map = new SuppressionMap();
+        map.AddLineSuppression(5, new HashSet<string> { "SA0201" });
+        // No diagnostics on line 5 — suppression is unused
+        var diagnostics = new List<SemanticDiagnostic>();
+        var result = map.Filter(diagnostics);
+        Assert.Single(result);
+        Assert.Equal("SA0003", result[0].Code);
+        Assert.Contains("SA0201", result[0].Message);
+    }
+
+    [Fact]
+    public void SuppressionMap_Filter_UsedLineSuppression_NoSA0003()
+    {
+        var map = new SuppressionMap();
+        map.AddLineSuppression(5, new HashSet<string> { "SA0201" });
+        var diagnostics = new List<SemanticDiagnostic>
+        {
+            new("SA0201", "Unused variable", DiagnosticLevel.Information, new SourceSpan("<test>", 5, 1, 5, 6)),
+        };
+        var result = map.Filter(diagnostics);
+        Assert.DoesNotContain(result, d => d.Code == "SA0003");
+    }
+
+    [Fact]
+    public void SuppressionMap_Filter_UnusedBlanketLineSuppression_EmitsSA0003()
+    {
+        var map = new SuppressionMap();
+        map.AddLineSuppression(5, null); // Blanket suppression
+        // No diagnostics on line 5
+        var diagnostics = new List<SemanticDiagnostic>();
+        var result = map.Filter(diagnostics);
+        Assert.Single(result);
+        Assert.Equal("SA0003", result[0].Code);
+        Assert.Contains("all codes", result[0].Message);
+    }
+
+    [Fact]
+    public void SuppressionMap_Filter_UnusedRangeSuppression_EmitsSA0003()
+    {
+        var map = new SuppressionMap();
+        map.AddRangeSuppression(5, 10, new HashSet<string> { "SA0201" });
+        // No diagnostics in range 5-10
+        var diagnostics = new List<SemanticDiagnostic>();
+        var result = map.Filter(diagnostics);
+        Assert.Single(result);
+        Assert.Equal("SA0003", result[0].Code);
+        Assert.Contains("SA0201", result[0].Message);
+    }
+
+    [Fact]
+    public void SuppressionMap_Filter_UsedRangeSuppression_NoSA0003()
+    {
+        var map = new SuppressionMap();
+        map.AddRangeSuppression(5, 10, new HashSet<string> { "SA0201" });
+        var diagnostics = new List<SemanticDiagnostic>
+        {
+            new("SA0201", "Unused variable", DiagnosticLevel.Information, new SourceSpan("<test>", 7, 1, 7, 6)),
+        };
+        var result = map.Filter(diagnostics);
+        // Diagnostic was suppressed, no SA0003
+        Assert.DoesNotContain(result, d => d.Code == "SA0003");
+    }
 }

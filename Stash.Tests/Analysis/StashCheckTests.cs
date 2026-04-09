@@ -46,7 +46,7 @@ public class StashCheckTests
     public void CheckOptions_NoArgs_DefaultsToCurrentDir()
     {
         var opts = CheckOptions.Parse(Array.Empty<string>());
-        Assert.Equal("sarif", opts.Format);
+        Assert.Equal("text", opts.Format);
         Assert.Equal("information", opts.Severity);
         Assert.False(opts.NoImports);
         Assert.False(opts.ShowVersion);
@@ -546,6 +546,36 @@ public class StashCheckTests
     }
 
     // ── Cleanup helper ───────────────────────────────────────────────
+
+    [Fact]
+    public void CheckOptions_Statistics_ParsedCorrectly()
+    {
+        var opts = CheckOptions.Parse(new[] { "--statistics", "src/" });
+        Assert.True(opts.ShowStatistics);
+        Assert.Single(opts.Paths);
+    }
+
+    [Fact]
+    public void CheckOptions_ShowFiles_ParsedCorrectly()
+    {
+        var opts = CheckOptions.Parse(new[] { "--show-files", "src/" });
+        Assert.True(opts.ShowFiles);
+        Assert.Single(opts.Paths);
+    }
+
+    [Fact]
+    public void CheckOptions_TextFormat_ParsedCorrectly()
+    {
+        var opts = CheckOptions.Parse(new[] { "--format", "text" });
+        Assert.Equal("text", opts.Format);
+    }
+
+    [Fact]
+    public void CheckOptions_SarifFormat_ParsedCorrectly()
+    {
+        var opts = CheckOptions.Parse(new[] { "--format", "sarif" });
+        Assert.Equal("sarif", opts.Format);
+    }
 
     private static void CleanupTempFile(string file)
     {

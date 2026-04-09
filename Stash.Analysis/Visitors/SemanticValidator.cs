@@ -85,6 +85,9 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         }
 
         CheckUnusedSymbols();
+        CheckLetCouldBeConst();
+        CheckUnusedParameters();
+        CheckShadowVariables();
 
         return _diagnostics;
     }
@@ -149,6 +152,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     public object? VisitWhileStmt(WhileStmt stmt)
     {
         stmt.Condition.Accept(this);
+        if (stmt.Body is BlockStmt bodyBlock && bodyBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(bodyBlock.Span, "while"));
+        }
         _loopDepth++;
         stmt.Body.Accept(this);
         _loopDepth--;
@@ -178,6 +185,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitDoWhileStmt(DoWhileStmt stmt)
     {
+        if (stmt.Body is BlockStmt bodyBlock && bodyBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(bodyBlock.Span, "do-while"));
+        }
         _loopDepth++;
         stmt.Body.Accept(this);
         _loopDepth--;
@@ -194,6 +205,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         if (stmt.Condition is not null)
         {
             stmt.Condition.Accept(this);
+        }
+        if (stmt.Body is BlockStmt bodyBlock && bodyBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(bodyBlock.Span, "for"));
         }
         _loopDepth++;
         stmt.Body.Accept(this);
@@ -215,6 +230,10 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     {
         ValidateTypeHint(stmt.TypeHint);
         stmt.Iterable.Accept(this);
+        if (stmt.Body is BlockStmt bodyBlock && bodyBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(bodyBlock.Span, "for-in"));
+        }
         _loopDepth++;
         stmt.Body.Accept(this);
         _loopDepth--;
@@ -465,13 +484,107 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         }
     }
 
+    private void CheckLetCouldBeConst()
+    {
+        foreach (var symbol in _scopeTree.All)
+        {
+            if (symbol.Kind != SymbolKind.Variable) continue;
+            if (symbol.Span.StartLine == 0) continue;
+            if (symbol.Name == "_") continue;
+            if (symbol.Detail == "caught error") continue;
+
+            bool hasWrite = false;
+            foreach (var r in _scopeTree.References)
+            {
+                if (r.ResolvedSymbol == symbol && r.Kind == ReferenceKind.Write)
+                {
+                    hasWrite = true;
+                    break;
+                }
+            }
+
+            if (!hasWrite)
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0205.CreateDiagnostic(symbol.Span, symbol.Name));
+            }
+        }
+    }
+
+    private void CheckUnusedParameters()
+    {
+        foreach (var symbol in _scopeTree.All)
+        {
+            if (symbol.Kind != SymbolKind.Parameter) continue;
+            if (symbol.Span.StartLine == 0) continue;
+            if (symbol.Name.StartsWith('_')) continue;
+
+            bool isUsed = false;
+            foreach (var r in _scopeTree.References)
+            {
+                if (r.ResolvedSymbol == symbol)
+                {
+                    isUsed = true;
+                    break;
+                }
+            }
+
+            if (!isUsed)
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0206.CreateUnnecessaryDiagnostic(symbol.Span, symbol.Name));
+            }
+        }
+    }
+
+    private void CheckShadowVariables()
+    {
+        CheckShadowsInScope(_scopeTree.GlobalScope);
+    }
+
+    private void CheckShadowsInScope(Scope scope)
+    {
+        foreach (var symbol in scope.Symbols)
+        {
+            if (symbol.Span.StartLine == 0) continue;
+            if (symbol.Kind is not (SymbolKind.Variable or SymbolKind.Constant or SymbolKind.LoopVariable or SymbolKind.Parameter)) continue;
+
+            var ancestor = scope.Parent;
+            while (ancestor != null)
+            {
+                foreach (var outerSym in ancestor.GetSymbolsByName(symbol.Name))
+                {
+                    if (outerSym.Span.StartLine == 0) continue;
+                    if (outerSym.Kind is SymbolKind.Variable or SymbolKind.Constant or SymbolKind.LoopVariable or SymbolKind.Parameter)
+                    {
+                        _diagnostics.Add(DiagnosticDescriptors.SA0207.CreateDiagnostic(symbol.Span, symbol.Name));
+                        goto nextSymbol;
+                    }
+                }
+                ancestor = ancestor.Parent;
+            }
+            nextSymbol:;
+        }
+
+        foreach (var child in scope.Children)
+        {
+            CheckShadowsInScope(child);
+        }
+    }
+
     /// <summary>Recurses into the condition and both branches of an if statement.</summary>
     /// <param name="stmt">The if statement.</param>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitIfStmt(IfStmt stmt)
     {
         stmt.Condition.Accept(this);
+        if (stmt.ThenBranch is BlockStmt thenBlock && thenBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(thenBlock.Span, "if"));
+        }
         stmt.ThenBranch.Accept(this);
+        if (stmt.ElseBranch is BlockStmt elseBlock && elseBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(elseBlock.Span, "else"));
+        }
         stmt.ElseBranch?.Accept(this);
         return null;
     }
@@ -575,7 +688,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <inheritdoc />
     public object? VisitTryCatchStmt(TryCatchStmt stmt)
     {
+        if (stmt.TryBody is BlockStmt tryBlock && tryBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(tryBlock.Span, "try"));
+        }
         stmt.TryBody.Accept(this);
+        if (stmt.CatchBody is BlockStmt catchBlock && catchBlock.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0105.CreateDiagnostic(catchBlock.Span, "catch"));
+        }
         stmt.CatchBody?.Accept(this);
         stmt.FinallyBody?.Accept(this);
         return null;

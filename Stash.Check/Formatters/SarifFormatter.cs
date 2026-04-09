@@ -216,6 +216,7 @@ internal sealed class SarifFormatter : IOutputFormatter
             {
                 Id = kvp.Value.Code,
                 ShortDescription = new SarifMessage { Text = kvp.Value.Title },
+                HelpUri = kvp.Value.HelpUrl,
                 DefaultConfiguration = new SarifConfiguration { Level = level },
                 Properties = new Dictionary<string, object> { ["category"] = kvp.Value.Category }
             });
@@ -267,6 +268,7 @@ internal sealed class SarifReportingDescriptor
 {
     public string? Id { get; set; }
     public SarifMessage? ShortDescription { get; set; }
+    public string? HelpUri { get; set; }
     public SarifConfiguration? DefaultConfiguration { get; set; }
     public Dictionary<string, object>? Properties { get; set; }
 }

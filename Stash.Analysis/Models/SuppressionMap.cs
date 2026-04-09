@@ -155,16 +155,100 @@ public class SuppressionMap
     /// </summary>
     public List<SemanticDiagnostic> Filter(List<SemanticDiagnostic> diagnostics)
     {
+        // Track which suppressions are actually used
+        var usedLineSuppressions = new Dictionary<int, HashSet<string>>();
+        var usedRangeIndices = new HashSet<int>();
+
         var result = new List<SemanticDiagnostic>(diagnostics.Count);
         foreach (var d in diagnostics)
         {
-            if (!IsSuppressed(d.Code, d.Span.StartLine))
+            if (IsSuppressedWithTracking(d.Code, d.Span.StartLine, usedLineSuppressions, usedRangeIndices))
             {
-                result.Add(d);
+                continue;
+            }
+            result.Add(d);
+        }
+
+        // Detect unused line suppressions
+        foreach (var (line, codes) in _lineSuppressions)
+        {
+            if (codes == null)
+            {
+                // Blanket suppression — check if any diagnostic was suppressed on this line
+                if (!usedLineSuppressions.ContainsKey(line))
+                {
+                    var span = GetLineSpan(line);
+                    result.Add(DiagnosticDescriptors.SA0003.CreateDiagnostic(span, "all codes"));
+                }
+            }
+            else
+            {
+                foreach (string code in codes)
+                {
+                    if (!usedLineSuppressions.TryGetValue(line, out var usedCodes) || !usedCodes.Contains(code))
+                    {
+                        var span = GetLineSpan(line);
+                        result.Add(DiagnosticDescriptors.SA0003.CreateDiagnostic(span, code));
+                    }
+                }
             }
         }
+
+        // Detect unused range suppressions
+        for (int i = 0; i < _rangeSuppressions.Count; i++)
+        {
+            if (!usedRangeIndices.Contains(i))
+            {
+                var (startLine, _, codes) = _rangeSuppressions[i];
+                string label = codes == null ? "all codes" : string.Join(", ", codes);
+                var span = GetLineSpan(startLine - 1);
+                result.Add(DiagnosticDescriptors.SA0003.CreateDiagnostic(span, label));
+            }
+        }
+
         // Add directive diagnostics (these are not suppressible)
         result.AddRange(_directiveDiagnostics);
         return result;
+    }
+
+    private bool IsSuppressedWithTracking(string? code, int line, Dictionary<int, HashSet<string>> usedLineSuppressions, HashSet<int> usedRangeIndices)
+    {
+        bool suppressed = false;
+
+        // Check line-level suppressions
+        if (_lineSuppressions.TryGetValue(line, out var lineCodes))
+        {
+            if (lineCodes == null || (code != null && lineCodes.Contains(code)))
+            {
+                suppressed = true;
+                if (!usedLineSuppressions.TryGetValue(line, out var usedCodes))
+                {
+                    usedCodes = new HashSet<string>();
+                    usedLineSuppressions[line] = usedCodes;
+                }
+                if (code != null) usedCodes.Add(code);
+            }
+        }
+
+        // Check range suppressions
+        for (int i = 0; i < _rangeSuppressions.Count; i++)
+        {
+            var (startLine, endLine, rangeCodes) = _rangeSuppressions[i];
+            if (line < startLine) continue;
+            if (endLine != null && line > endLine) continue;
+
+            if (rangeCodes == null || (code != null && rangeCodes.Contains(code)))
+            {
+                suppressed = true;
+                usedRangeIndices.Add(i);
+            }
+        }
+
+        return suppressed;
+    }
+
+    private static SourceSpan GetLineSpan(int line)
+    {
+        return new SourceSpan("", line, 1, line, 1);
     }
 }

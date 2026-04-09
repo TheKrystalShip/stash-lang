@@ -28,6 +28,9 @@ public class AnalysisEngine
     /// <summary>Thread-safe cache mapping document URIs to their most recent analysis results.</summary>
     private readonly ConcurrentDictionary<Uri, AnalysisResult> _cache = new();
 
+    /// <summary>Content hash cache: maps URI → (hash, result) for skipping unchanged files.</summary>
+    private readonly ConcurrentDictionary<Uri, (int ContentHash, AnalysisResult Result)> _contentHashCache = new();
+
     /// <summary>Resolver responsible for locating and parsing imported Stash modules.</summary>
     private readonly ImportResolver _importResolver = new();
 
@@ -48,9 +51,19 @@ public class AnalysisEngine
     /// An <see cref="AnalysisResult"/> containing tokens, AST statements, symbol table,
     /// diagnostics, and import information.
     /// </returns>
-    public AnalysisResult Analyze(Uri uri, string source)
+    public AnalysisResult Analyze(Uri uri, string source, bool noImports = false)
     {
         _logger.LogDebug("Analyzing {Uri}", uri);
+
+        // Content-hash short-circuit: skip full re-analysis if source hasn't changed
+        int sourceHash = source.GetHashCode();
+        if (_contentHashCache.TryGetValue(uri, out var cached) && cached.ContentHash == sourceHash)
+        {
+            _logger.LogDebug("Content hash match for {Uri}, returning cached result", uri);
+            _cache[uri] = cached.Result;
+            return cached.Result;
+        }
+
         var filePath = uri.IsFile ? uri.LocalPath : uri.ToString();
 
         var lexer = new Lexer(source, filePath, preserveTrivia: true);
@@ -74,64 +87,72 @@ public class AnalysisEngine
         var symbols = symbolCollector.Collect(statements);
 
         // Resolve imports and inject enriched symbols before semantic validation
-        var importResolution = _importResolver.ResolveImports(uri, statements, ParseModule);
+        List<SemanticDiagnostic> importDiagnostics = new();
+        Dictionary<string, ImportResolver.ModuleInfo> namespaceImportsResult = new();
 
-        foreach (var resolvedSym in importResolution.ResolvedSymbols)
+        if (!noImports)
         {
-            var globalSymbols = symbols.GlobalScope.Symbols;
-            bool replaced = false;
-            for (int i = 0; i < globalSymbols.Count; i++)
+            var importResolution = _importResolver.ResolveImports(uri, statements, ParseModule);
+            importDiagnostics = importResolution.Diagnostics;
+            namespaceImportsResult = importResolution.NamespaceImports;
+
+            foreach (var resolvedSym in importResolution.ResolvedSymbols)
             {
-                if (globalSymbols[i].Name == resolvedSym.Name && globalSymbols[i].SourceUri == null)
+                var globalSymbols = symbols.GlobalScope.Symbols;
+                bool replaced = false;
+                for (int i = 0; i < globalSymbols.Count; i++)
                 {
-                    if (resolvedSym.Kind == SymbolKind.Field || resolvedSym.Kind == SymbolKind.EnumMember)
+                    if (globalSymbols[i].Name == resolvedSym.Name && globalSymbols[i].SourceUri == null)
                     {
+                        if (resolvedSym.Kind == SymbolKind.Field || resolvedSym.Kind == SymbolKind.EnumMember)
+                        {
+                            break;
+                        }
+                        var oldSymbol = globalSymbols[i];
+                        symbols.GlobalScope.ReplaceSymbol(i, resolvedSym);
+                        replaced = true;
+
+                        // Update references that still point to the old placeholder
+                        foreach (var reference in symbols.References)
+                        {
+                            if (reference.ResolvedSymbol == oldSymbol)
+                            {
+                                reference.ResolvedSymbol = resolvedSym;
+                            }
+                        }
                         break;
                     }
-                    var oldSymbol = globalSymbols[i];
-                    symbols.GlobalScope.ReplaceSymbol(i, resolvedSym);
-                    replaced = true;
-
-                    // Update references that still point to the old placeholder
-                    foreach (var reference in symbols.References)
-                    {
-                        if (reference.ResolvedSymbol == oldSymbol)
-                        {
-                            reference.ResolvedSymbol = resolvedSym;
-                        }
-                    }
-                    break;
+                }
+                if (!replaced)
+                {
+                    symbols.GlobalScope.AddSymbol(resolvedSym);
                 }
             }
-            if (!replaced)
-            {
-                symbols.GlobalScope.AddSymbol(resolvedSym);
-            }
-        }
 
-        foreach (var (alias, moduleInfo) in importResolution.NamespaceImports)
-        {
-            var globalSymbols = symbols.GlobalScope.Symbols;
-            for (int i = 0; i < globalSymbols.Count; i++)
+            foreach (var (alias, moduleInfo) in importResolution.NamespaceImports)
             {
-                if (globalSymbols[i].Name == alias && globalSymbols[i].Kind == SymbolKind.Namespace)
+                var globalSymbols = symbols.GlobalScope.Symbols;
+                for (int i = 0; i < globalSymbols.Count; i++)
                 {
-                    var oldSymbol = globalSymbols[i];
-                    var newSymbol = new SymbolInfo(
-                        alias, SymbolKind.Namespace, oldSymbol.Span,
-                        detail: oldSymbol.Detail,
-                        sourceUri: moduleInfo.Uri);
-                    symbols.GlobalScope.ReplaceSymbol(i, newSymbol);
-
-                    // Patch references that still point to the old placeholder
-                    foreach (var reference in symbols.References)
+                    if (globalSymbols[i].Name == alias && globalSymbols[i].Kind == SymbolKind.Namespace)
                     {
-                        if (reference.ResolvedSymbol == oldSymbol)
+                        var oldSymbol = globalSymbols[i];
+                        var newSymbol = new SymbolInfo(
+                            alias, SymbolKind.Namespace, oldSymbol.Span,
+                            detail: oldSymbol.Detail,
+                            sourceUri: moduleInfo.Uri);
+                        symbols.GlobalScope.ReplaceSymbol(i, newSymbol);
+
+                        // Patch references that still point to the old placeholder
+                        foreach (var reference in symbols.References)
                         {
-                            reference.ResolvedSymbol = newSymbol;
+                            if (reference.ResolvedSymbol == oldSymbol)
+                            {
+                                reference.ResolvedSymbol = newSymbol;
+                            }
                         }
+                        break;
                     }
-                    break;
                 }
             }
         }
@@ -142,7 +163,7 @@ public class AnalysisEngine
 
         var validator = new SemanticValidator(symbols);
         var semanticDiagnostics = validator.Validate(statements);
-        semanticDiagnostics.AddRange(importResolution.Diagnostics);
+        semanticDiagnostics.AddRange(importDiagnostics);
 
         // Parse suppression directives from trivia tokens
         var suppressionMap = SuppressionDirectiveParser.Parse(tokens);
@@ -155,8 +176,9 @@ public class AnalysisEngine
 
         var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors,
             lexer.StructuredErrors, parser.StructuredErrors, symbols, semanticDiagnostics,
-            importResolution.NamespaceImports);
+            namespaceImportsResult);
         _logger.LogDebug("Analysis complete: {Uri} — {DiagCount} diagnostics, {SymbolCount} symbols", uri, result.SemanticDiagnostics.Count, result.Symbols.All.Count);
+        _contentHashCache[uri] = (sourceHash, result);
         _cache[uri] = result;
         return result;
     }

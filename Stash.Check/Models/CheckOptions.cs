@@ -5,7 +5,7 @@ using System.Collections.Generic;
 
 internal sealed class CheckOptions
 {
-    public string Format { get; init; } = "sarif";
+    public string Format { get; init; } = "text";
     public string? OutputPath { get; init; }
     public List<string> ExcludeGlobs { get; init; } = new();
     public string Severity { get; init; } = "information";
@@ -13,16 +13,20 @@ internal sealed class CheckOptions
     public List<string> Paths { get; init; } = new();
     public bool ShowVersion { get; init; }
     public bool ShowHelp { get; init; }
+    public bool ShowStatistics { get; init; }
+    public bool ShowFiles { get; init; }
 
     public static CheckOptions Parse(string[] args)
     {
-        string format = "sarif";
+        string format = "text";
         string? outputPath = null;
         var excludeGlobs = new List<string>();
         string severity = "information";
         bool noImports = false;
         bool showVersion = false;
         bool showHelp = false;
+        bool showStatistics = false;
+        bool showFiles = false;
         var paths = new List<string>();
 
         for (int i = 0; i < args.Length; i++)
@@ -74,6 +78,14 @@ internal sealed class CheckOptions
                     noImports = true;
                     break;
 
+                case "--statistics":
+                    showStatistics = true;
+                    break;
+
+                case "--show-files":
+                    showFiles = true;
+                    break;
+
                 case "--version":
                     showVersion = true;
                     break;
@@ -108,7 +120,9 @@ internal sealed class CheckOptions
             NoImports = noImports,
             Paths = paths,
             ShowVersion = showVersion,
-            ShowHelp = showHelp
+            ShowHelp = showHelp,
+            ShowStatistics = showStatistics,
+            ShowFiles = showFiles
         };
     }
 }
