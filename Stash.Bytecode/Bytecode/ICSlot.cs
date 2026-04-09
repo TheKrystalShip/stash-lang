@@ -18,4 +18,6 @@ internal struct ICSlot
 
     /// <summary>IC state: 0 = uninitialized, 1 = monomorphic, 2 = megamorphic.</summary>
     public byte State;
+    /// <summary>Constant pool index of the field name (for slow-path fallback).</summary>
+    public ushort ConstantIndex;
 }

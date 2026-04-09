@@ -189,6 +189,15 @@ public static class BytecodeWriter
         // GlobalNameTable: u16 count + [length-prefixed strings]
         WriteGlobalNameTable(writer, chunk.GlobalNameTable);
 
+        // IC slot count + ConstantIndex array (u16 count + u16[])
+        ushort icSlotCount = (ushort)(chunk.ICSlots?.Length ?? 0);
+        writer.Write(icSlotCount);
+        if (chunk.ICSlots is { } icSlots)
+        {
+            for (int i = 0; i < icSlots.Length; i++)
+                writer.Write(icSlots[i].ConstantIndex);
+        }
+
         // Debug info (only if flag was set in header)
         if (includeDebugInfo)
         {

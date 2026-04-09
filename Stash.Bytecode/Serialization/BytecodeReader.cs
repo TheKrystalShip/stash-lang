@@ -194,6 +194,15 @@ public static class BytecodeReader
         for (int i = 0; i < globalNameCount; i++)
             globalNameTable![i] = ReadString16(reader);
 
+        // IC slots (u16 count + u16[] ConstantIndex)
+        ushort icSlotCount = reader.ReadUInt16();
+        ICSlot[]? icSlots = icSlotCount > 0 ? new ICSlot[icSlotCount] : null;
+        if (icSlots is not null)
+        {
+            for (int i = 0; i < icSlotCount; i++)
+                icSlots[i].ConstantIndex = reader.ReadUInt16();
+        }
+
         // Debug info (only present when the debug flag is set in the file header)
         SourceMapEntry[] sourceMapEntries = Array.Empty<SourceMapEntry>();
         string[]? localNames   = null;
@@ -273,7 +282,7 @@ public static class BytecodeReader
             upvalueNames,
             globalNameTable,
             globalSlotCount,
-            icSlots: null);
+            icSlots: icSlots);
 
         return chunk;
     }

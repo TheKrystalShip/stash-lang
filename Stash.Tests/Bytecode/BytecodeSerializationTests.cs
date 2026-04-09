@@ -446,10 +446,10 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_ICSlots_NotSerialized()
     {
-        // IC slots are runtime state — they are NOT serialized to the bytecode file.
+        // IC slot count and ConstantIndex are serialized, but runtime state is reset.
         var builder = new ChunkBuilder();
-        ushort icSlot1 = builder.AllocateICSlot();
-        ushort icSlot2 = builder.AllocateICSlot();
+        ushort icSlot1 = builder.AllocateICSlot(3);
+        ushort icSlot2 = builder.AllocateICSlot(7);
         builder.EmitA(OpCode.LoadNull, 0);
         builder.EmitA(OpCode.LoadNull, 0);
         Chunk original = builder.Build();
@@ -457,10 +457,17 @@ public class BytecodeSerializationTests
         // ICSlots exist in the original (runtime) chunk
         Assert.NotNull(original.ICSlots);
         Assert.Equal(2, original.ICSlots!.Length);
+        Assert.Equal(3, original.ICSlots[0].ConstantIndex);
+        Assert.Equal(7, original.ICSlots[1].ConstantIndex);
 
-        // After round-trip, they are null (not serialized)
+        // After round-trip, count and ConstantIndex are preserved; runtime state is zeroed
         Chunk result = RoundTrip(original);
-        Assert.Null(result.ICSlots);
+        Assert.NotNull(result.ICSlots);
+        Assert.Equal(2, result.ICSlots!.Length);
+        Assert.Equal(3, result.ICSlots[0].ConstantIndex);
+        Assert.Equal(7, result.ICSlots[1].ConstantIndex);
+        Assert.Null(result.ICSlots[0].Guard);
+        Assert.Equal((byte)0, result.ICSlots[0].State);
     }
 
     // =========================================================================

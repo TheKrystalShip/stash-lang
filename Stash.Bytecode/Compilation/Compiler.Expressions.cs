@@ -237,12 +237,54 @@ partial class Compiler
         byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
 
-        // Reserve a contiguous window: [callee, arg0, ..., argN]
         int argc = expr.Arguments.Count;
-        byte calleeReg = _scope.ReserveRegs(1 + argc);
+        bool hasSpread = expr.Arguments.Any(a => a is SpreadExpr);
+
+        // Fused CallBuiltIn: when callee is a simple DotExpr (e.g., math.sqrt)
+        // and no optional chaining or spread args are involved
+        if (expr.Callee is DotExpr dot && !dot.IsOptional && !expr.IsOptional && !hasSpread && argc <= 255)
+        {
+            ushort nameIdx = _builder.AddConstant(dot.Name.Lexeme);
+            if (nameIdx <= 255)
+            {
+                // Reserve contiguous window first: [result/callee, arg0, ..., argN]
+                byte calleeReg = _scope.ReserveRegs(1 + argc);
+
+                // Compile the receiver (namespace) into a temp ABOVE the call window
+                // so FreeTemp works correctly (stack-based register allocator)
+                byte nsReg = CompileExpr(dot.Object);
+
+                // Compile arguments into consecutive registers after calleeReg
+                for (int i = 0; i < argc; i++)
+                    CompileExprTo(expr.Arguments[i], (byte)(calleeReg + 1 + i));
+
+                // Emit fused CallBuiltIn + companion word
+                ushort icSlot = _builder.AllocateICSlot(nameIdx);
+                _builder.EmitABC(OpCode.CallBuiltIn, calleeReg, nsReg, (byte)argc);
+                _builder.EmitRaw((uint)icSlot); // companion word: IC slot index
+
+                _scope.FreeTemp(nsReg);
+
+                // Move result to dest and free call window
+                if (calleeReg != dest)
+                {
+                    _builder.EmitAB(OpCode.Move, dest, calleeReg);
+                    _scope.FreeTempFrom(calleeReg);
+                }
+                else if (argc > 0)
+                {
+                    _scope.FreeTempFrom((byte)(calleeReg + 1));
+                }
+
+                return null;
+            }
+        }
+
+        // Generic path: reserve window, compile callee+args, emit Call
+        byte calleeReg2 = _scope.ReserveRegs(1 + argc);
 
         // Compile callee into calleeReg
-        CompileExprTo(expr.Callee, calleeReg);
+        CompileExprTo(expr.Callee, calleeReg2);
 
         // Optional call: ?.() — check if callee is null before calling
         int nullJump = -1;
@@ -251,41 +293,40 @@ partial class Compiler
             byte nullReg = _scope.AllocTemp();
             _builder.EmitA(OpCode.LoadNull, nullReg);
             byte eqReg = _scope.AllocTemp();
-            _builder.EmitABC(OpCode.Eq, eqReg, calleeReg, nullReg);
+            _builder.EmitABC(OpCode.Eq, eqReg, calleeReg2, nullReg);
             nullJump = _builder.EmitJump(OpCode.JmpTrue, eqReg);
             _scope.FreeTemp(eqReg);
             _scope.FreeTemp(nullReg);
         }
 
         // Compile arguments into consecutive registers after callee
-        bool hasSpread = expr.Arguments.Any(a => a is SpreadExpr);
         for (int i = 0; i < argc; i++)
-            CompileExprTo(expr.Arguments[i], (byte)(calleeReg + 1 + i));
+            CompileExprTo(expr.Arguments[i], (byte)(calleeReg2 + 1 + i));
 
         // Emit call instruction — result lands in calleeReg
         if (hasSpread)
-            _builder.EmitABC(OpCode.CallSpread, calleeReg, (byte)argc, 0);
+            _builder.EmitABC(OpCode.CallSpread, calleeReg2, (byte)argc, 0);
         else
-            _builder.EmitABC(OpCode.Call, calleeReg, 0, (byte)argc);
+            _builder.EmitABC(OpCode.Call, calleeReg2, 0, (byte)argc);
 
         // Optional: if callee was null, jump here and load null instead
         if (expr.IsOptional)
         {
             int endJump = _builder.EmitJump(OpCode.Jmp);
             _builder.PatchJump(nullJump);
-            _builder.EmitA(OpCode.LoadNull, calleeReg);
+            _builder.EmitA(OpCode.LoadNull, calleeReg2);
             _builder.PatchJump(endJump);
         }
 
         // Move result to dest and free call window
-        if (calleeReg != dest)
+        if (calleeReg2 != dest)
         {
-            _builder.EmitAB(OpCode.Move, dest, calleeReg);
-            _scope.FreeTempFrom(calleeReg);
+            _builder.EmitAB(OpCode.Move, dest, calleeReg2);
+            _scope.FreeTempFrom(calleeReg2);
         }
         else if (argc > 0)
         {
-            _scope.FreeTempFrom((byte)(calleeReg + 1));
+            _scope.FreeTempFrom((byte)(calleeReg2 + 1));
         }
 
         return null;
@@ -533,7 +574,9 @@ partial class Compiler
     {
         if (nameIdx <= 255)
         {
-            _builder.EmitABC(OpCode.GetField, dest, objReg, (byte)nameIdx);
+            ushort icSlot = _builder.AllocateICSlot(nameIdx);
+            _builder.EmitABC(OpCode.GetFieldIC, dest, objReg, (byte)nameIdx);
+            _builder.EmitRaw((uint)icSlot); // companion word: IC slot index
         }
         else
         {

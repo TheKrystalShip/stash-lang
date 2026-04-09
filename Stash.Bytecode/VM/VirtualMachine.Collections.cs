@@ -172,6 +172,61 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObject(result);
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGetFieldIC(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int icIdx = (int)frame.Chunk.Code[frame.IP++]; // read companion word
+        int @base = frame.BaseSlot;
+
+        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
+        StashValue objVal = _stack[@base + b];
+
+        // IC fast path: monomorphic hit
+        if (ic.State == 1 && objVal.AsObj == ic.Guard)
+        {
+            _stack[@base + a] = ic.CachedValue;
+            return;
+        }
+
+        // IC slow path: full lookup + populate/transition
+        string fieldName = (string)frame.Chunk.Constants[c].AsObj!;
+
+        if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is StashNamespace ns)
+        {
+            StashValue result = ns.GetMemberValue(fieldName, null);
+            _stack[@base + a] = result;
+
+            // Populate IC only for frozen namespaces
+            if (ns.IsFrozen)
+            {
+                if (ic.State == 0) // Uninitialized → Monomorphic
+                {
+                    ic.Guard = ns;
+                    ic.CachedValue = result;
+                    ic.State = 1;
+                }
+                else if (ic.State == 1) // Monomorphic miss → Megamorphic
+                {
+                    ic.State = 2;
+                }
+            }
+            return;
+        }
+
+        // Non-namespace receiver: fall back to full GetField logic
+        object? obj = objVal.ToObject();
+        object? result2 = GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame));
+        if (result2 is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
+            result2 = new VMBoundMethod(bound.Instance, vmFunc);
+        _stack[@base + a] = StashValue.FromObject(result2);
+
+        // Transition IC to megamorphic (receiver type changed)
+        if (ic.State <= 1) ic.State = 2;
+    }
+
     private void ExecuteSetField(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

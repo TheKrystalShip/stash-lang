@@ -633,6 +633,90 @@ public sealed partial class VirtualMachine
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteCallBuiltIn(ref CallFrame frame, uint inst, IDebugger? debugger)
+    {
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte argc = Instruction.GetC(inst);
+        int icIdx = (int)frame.Chunk.Code[frame.IP++]; // read companion word
+        int @base = frame.BaseSlot;
+
+        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
+
+        // IC fast path: cached BuiltInFunction
+        if (ic.State == 1 && _stack[@base + b].AsObj == ic.Guard)
+        {
+            var builtIn = (BuiltInFunction)ic.CachedValue.AsObj!;
+
+            _context.CallSourceMap = frame.Chunk.SourceMap;
+            _context.CallIP = frame.IP - 2; // points to CallBuiltIn, not companion
+            _context._currentSpan = null;
+
+            ReadOnlySpan<StashValue> argSpan = _stack.AsSpan(@base + a + 1, argc);
+            StashValue result;
+            try
+            {
+                result = builtIn.CallDirect(_context, argSpan);
+            }
+            catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
+            {
+                throw new RuntimeError($"Built-in function error: {ex.Message}", _context.CurrentSpan);
+            }
+            _stack[@base + a] = result;
+            return;
+        }
+
+        // IC miss: fall back to full GetField + Call
+        ExecuteCallBuiltInSlow(ref frame, a, b, argc, icIdx, debugger);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteCallBuiltInSlow(ref CallFrame frame, byte a, byte b, byte argc, int icIdx, IDebugger? debugger)
+    {
+        int @base = frame.BaseSlot;
+        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
+        string fieldName = (string)frame.Chunk.Constants[ic.ConstantIndex].AsObj!;
+        StashValue objVal = _stack[@base + b];
+
+        // Resolve the function via GetField logic
+        StashValue calleeVal;
+        if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is StashNamespace ns)
+        {
+            calleeVal = ns.GetMemberValue(fieldName, null);
+        }
+        else
+        {
+            object? obj = objVal.ToObject();
+            object? rawResult = GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame));
+            if (rawResult is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
+                rawResult = new VMBoundMethod(bound.Instance, vmFunc);
+            calleeVal = StashValue.FromObject(rawResult);
+        }
+
+        // Store callee in R(A) and dispatch via normal Call logic
+        _stack[@base + a] = calleeVal;
+
+        // Build a synthetic Call instruction: Call R(a), 0, argc
+        uint callInst = Instruction.EncodeABC(OpCode.Call, a, 0, argc);
+        ExecuteCall(ref frame, callInst, debugger);
+
+        // Populate IC if the callee is a BuiltInFunction from a frozen namespace
+        if (ic.State == 0 && calleeVal.Tag == StashValueTag.Obj && calleeVal.AsObj is BuiltInFunction)
+        {
+            if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is StashNamespace ns2 && ns2.IsFrozen)
+            {
+                ic.Guard = ns2;
+                ic.CachedValue = calleeVal;
+                ic.State = 1;
+            }
+        }
+        else if (ic.State == 1)
+        {
+            ic.State = 2; // Megamorphic
+        }
+    }
+
     private void ExecuteCallSpread(ref CallFrame frame, uint inst, IDebugger? debugger)
     {
         byte a = Instruction.GetA(inst);

@@ -630,7 +630,8 @@ public class CompilerTests : BytecodeTestBase
     [Fact]
     public void Dot_Get_EmitsGetField()
     {
-        string disasm = Disassemble("math.sqrt(4);");
+        // Use non-call dot access so DotExpr emits GetFieldIC (not fused CallBuiltIn)
+        string disasm = Disassemble("let f = math.sqrt;");
         Assert.Contains("get.field", disasm);
         Assert.Contains("sqrt", disasm);
     }

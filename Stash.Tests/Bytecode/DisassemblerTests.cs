@@ -187,22 +187,21 @@ public class DisassemblerTests
         // Hex offsets in output
         Assert.Contains("0000", output);
         Assert.Contains("0001", output);
-        Assert.Contains("0002", output);
     }
 
     [Fact]
-    public void Disassemble_RawHexBytes_Shown()
+    public void Disassemble_HexOffset_Format()
     {
         var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
-        builder.EmitA(OpCode.LoadNull, 0); // byte value 0x01
+        builder.EmitA(OpCode.LoadNull, 0);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
 
-        // Should contain hex byte representation
-        Assert.Contains("01", output);
+        // Should contain hex offset with colon format
+        Assert.Contains("0000:", output);
     }
 
     [Fact]
@@ -223,7 +222,6 @@ public class DisassemblerTests
 
         Assert.Contains("jmp.false", output);
         Assert.Contains("L0", output);
-        Assert.Contains("->", output);
     }
 
     [Fact]
@@ -243,7 +241,6 @@ public class DisassemblerTests
         string output = Disassembler.Disassemble(chunk);
 
         Assert.Contains("loop", output);
-        Assert.Contains("->", output);
     }
 
     [Fact]

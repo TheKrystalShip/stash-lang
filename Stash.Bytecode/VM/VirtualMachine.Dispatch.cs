@@ -256,6 +256,7 @@ public sealed partial class VirtualMachine
                 // ==================== Functions ====================
                 case OpCode.Call: ExecuteCall(ref frame, inst, debugger); break;
                 case OpCode.CallSpread: ExecuteCallSpread(ref frame, inst, debugger); break;
+                case OpCode.CallBuiltIn: ExecuteCallBuiltIn(ref frame, inst, debugger); break;
                 case OpCode.Return:
                     if (ExecuteReturn(ref frame, inst, targetFrameCount, debugger, out object? retResult))
                         return retResult;
@@ -272,6 +273,7 @@ public sealed partial class VirtualMachine
                 case OpCode.GetTable: ExecuteGetTable(ref frame, inst); break;
                 case OpCode.SetTable: ExecuteSetTable(ref frame, inst); break;
                 case OpCode.GetField: ExecuteGetField(ref frame, inst); break;
+                case OpCode.GetFieldIC: ExecuteGetFieldIC(ref frame, inst); break;
                 case OpCode.SetField: ExecuteSetField(ref frame, inst); break;
                 case OpCode.Self: ExecuteSelf(ref frame, inst); break;
 

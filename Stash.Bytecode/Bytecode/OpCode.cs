@@ -201,6 +201,10 @@ public enum OpCode : byte
     CallSpread,
     /// <summary>ABC: Check that R(A) is numeric, throw if not.</summary>
     CheckNumeric,
+    /// <summary>ABC+companion: R(A) = R(B).K(C) with inline cache; companion word = IC slot index.</summary>
+    GetFieldIC,                 // 79
+    /// <summary>ABC+companion: Fused GetField+Call for namespace built-ins; R(A) = R(B).K[ic.ConstantIndex](R(A+1)..R(A+C)); companion = IC slot.</summary>
+    CallBuiltIn,                // 80
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>

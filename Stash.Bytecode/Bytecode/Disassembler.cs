@@ -123,6 +123,9 @@ public static class Disassembler
         [OpCode.Retry]          = "retry",
         [OpCode.Await]          = "await",
         [OpCode.CallSpread]     = "call.spread",
+        [OpCode.CheckNumeric]   = "check.numeric",
+        [OpCode.GetFieldIC]     = "get.field.ic",
+        [OpCode.CallBuiltIn]    = "call.builtin",
     };
 
     // ─── Instruction Format Classification ───────────────────────────────────
@@ -235,7 +238,7 @@ public static class Disassembler
             var op = Instruction.GetOp(word);
 
             if (labels.TryGetValue(idx, out string? labelName))
-                sb.AppendLine(Col(options, $"  {labelName}:", Ansi.Yellow));
+                sb.AppendLine(Col(options, $"{labelName}:", Ansi.Yellow));
 
             if (!options.Compact)
             {
@@ -263,8 +266,20 @@ public static class Disassembler
                     byte isLocal = (byte)(uvWord & 0xFF);
                     byte uvIdx   = (byte)((uvWord >> 8) & 0xFF);
                     if (!options.Compact)
-                        sb.AppendLine($"      ; upvalue [{u}]: {(isLocal != 0 ? "local" : "upval")} {uvIdx}");
+                        sb.AppendLine($"                    ; upvalue [{u}]: {(isLocal != 0 ? "local" : "upval")} {uvIdx}");
                 }
+            }
+
+            // GetFieldIC: skip companion word (IC slot index)
+            if (op == OpCode.GetFieldIC)
+            {
+                idx++;
+            }
+
+            // CallBuiltIn: skip companion word (IC slot index)
+            if (op == OpCode.CallBuiltIn)
+            {
+                idx++;
             }
         }
     }
@@ -295,7 +310,7 @@ public static class Disassembler
             string gname = chunk.GlobalNameTable != null && i < chunk.GlobalNameTable.Length
                 ? chunk.GlobalNameTable[i]
                 : i.ToString();
-            sb.AppendLine($"  ${i} = {gname}");
+            sb.AppendLine($"  [g{i}] {gname}");
         }
         sb.AppendLine();
     }
@@ -310,12 +325,11 @@ public static class Disassembler
 
         string offsetStr = options.Compact
             ? $"{idx,4}:"
-            : Col(options, $"  {idx,4}", Ansi.Dim);
+            : Col(options, $"  {idx:x4}:", Ansi.Dim);
 
-        string rawHex = options.Compact ? "" : Col(options, $" {word:x8}", Ansi.Dim) + " ";
-        string mnemStr = Col(options, $"{mnem,-18}", Ansi.Bold);
+        string mnemStr = Col(options, $"{mnem,-16}", Ansi.Bold);
 
-        sb.AppendLine($"{offsetStr}{rawHex} {mnemStr} {operands}");
+        sb.AppendLine($"{offsetStr}  {mnemStr}{operands}");
     }
 
     // ─── Operand Formatter ───────────────────────────────────────────────────
@@ -332,125 +346,128 @@ public static class Disassembler
         return op switch
         {
             // Loads
-            OpCode.LoadK       => $"R({a}) = K({bx})  ; {FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)}",
-            OpCode.LoadNull    => $"R({a})",
-            OpCode.LoadBool    => $"R({a}) = {(b != 0 ? "true" : "false")}{(c != 0 ? " ; skip next" : "")}",
-            OpCode.Move        => $"R({a}) = R({b})",
+            OpCode.LoadK       => $"r{a}, k{bx}                  ; {FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)}",
+            OpCode.LoadNull    => $"r{a}",
+            OpCode.LoadBool    => $"r{a}, {(b != 0 ? "true" : "false")}{(c != 0 ? "           ; skip next" : "")}",
+            OpCode.Move        => $"r{a}, r{b}",
 
             // Globals
-            OpCode.GetGlobal      => $"R({a}) = G[{bx}]  ; {FormatGlobal(chunk, bx)}",
-            OpCode.SetGlobal      => $"G[{bx}] = R({a})  ; {FormatGlobal(chunk, bx)}",
-            OpCode.InitConstGlobal=> $"G[{bx}] = R({a})  ; {FormatGlobal(chunk, bx)} (const)",
+            OpCode.GetGlobal      => $"r{a}, [g{bx}]              ; {FormatGlobal(chunk, bx)}",
+            OpCode.SetGlobal      => $"[g{bx}], r{a}              ; {FormatGlobal(chunk, bx)}",
+            OpCode.InitConstGlobal=> $"[g{bx}], r{a}              ; {FormatGlobal(chunk, bx)} (const)",
 
             // Upvalues
-            OpCode.GetUpval    => $"R({a}) = UV[{b}]  ; {GetUpvalueName(chunk, b)}",
-            OpCode.SetUpval    => $"UV[{b}] = R({a})  ; {GetUpvalueName(chunk, b)}",
-            OpCode.CloseUpval  => $"close R({a})",
+            OpCode.GetUpval    => $"r{a}, [uv{b}]              ; {GetUpvalueName(chunk, b)}",
+            OpCode.SetUpval    => $"[uv{b}], r{a}              ; {GetUpvalueName(chunk, b)}",
+            OpCode.CloseUpval  => $"r{a}",
 
             // Arithmetic
-            OpCode.Add         => $"R({a}) = R({b}) + R({c})",
-            OpCode.Sub         => $"R({a}) = R({b}) - R({c})",
-            OpCode.Mul         => $"R({a}) = R({b}) * R({c})",
-            OpCode.Div         => $"R({a}) = R({b}) / R({c})",
-            OpCode.Mod         => $"R({a}) = R({b}) % R({c})",
-            OpCode.Pow         => $"R({a}) = R({b}) ** R({c})",
-            OpCode.Neg         => $"R({a}) = -R({b})",
-            OpCode.AddI        => $"R({a}) = R({a}) + {sbx}",
+            OpCode.Add         => $"r{a}, r{b}, r{c}",
+            OpCode.Sub         => $"r{a}, r{b}, r{c}",
+            OpCode.Mul         => $"r{a}, r{b}, r{c}",
+            OpCode.Div         => $"r{a}, r{b}, r{c}",
+            OpCode.Mod         => $"r{a}, r{b}, r{c}",
+            OpCode.Pow         => $"r{a}, r{b}, r{c}",
+            OpCode.Neg         => $"r{a}, r{b}",
+            OpCode.AddI        => $"r{a}, {sbx}",
 
             // Bitwise
-            OpCode.BAnd        => $"R({a}) = R({b}) & R({c})",
-            OpCode.BOr         => $"R({a}) = R({b}) | R({c})",
-            OpCode.BXor        => $"R({a}) = R({b}) ^ R({c})",
-            OpCode.BNot        => $"R({a}) = ~R({b})",
-            OpCode.Shl         => $"R({a}) = R({b}) << R({c})",
-            OpCode.Shr         => $"R({a}) = R({b}) >> R({c})",
+            OpCode.BAnd        => $"r{a}, r{b}, r{c}",
+            OpCode.BOr         => $"r{a}, r{b}, r{c}",
+            OpCode.BXor        => $"r{a}, r{b}, r{c}",
+            OpCode.BNot        => $"r{a}, r{b}",
+            OpCode.Shl         => $"r{a}, r{b}, r{c}",
+            OpCode.Shr         => $"r{a}, r{b}, r{c}",
 
             // Comparisons
-            OpCode.Eq          => $"R({a}) = R({b}) == R({c})",
-            OpCode.Ne          => $"R({a}) = R({b}) != R({c})",
-            OpCode.Lt          => $"R({a}) = R({b}) < R({c})",
-            OpCode.Le          => $"R({a}) = R({b}) <= R({c})",
-            OpCode.Gt          => $"R({a}) = R({b}) > R({c})",
-            OpCode.Ge          => $"R({a}) = R({b}) >= R({c})",
+            OpCode.Eq          => $"r{a}, r{b}, r{c}",
+            OpCode.Ne          => $"r{a}, r{b}, r{c}",
+            OpCode.Lt          => $"r{a}, r{b}, r{c}",
+            OpCode.Le          => $"r{a}, r{b}, r{c}",
+            OpCode.Gt          => $"r{a}, r{b}, r{c}",
+            OpCode.Ge          => $"r{a}, r{b}, r{c}",
 
             // Logic
-            OpCode.Not         => $"R({a}) = !R({b})",
-            OpCode.TestSet     => $"if IsTruthy(R({b})) == {c} then R({a}) = R({b}) else skip",
-            OpCode.Test        => $"if IsTruthy(R({a})) != {c} then skip",
+            OpCode.Not         => $"r{a}, r{b}",
+            OpCode.TestSet     => $"r{a}, r{b}, {c}",
+            OpCode.Test        => $"r{a}, {c}",
 
             // Jumps
-            OpCode.Jmp         => $"{GetLabelRef(labels, idx + 1 + sbx)}  ; offset {sbx:+0;-0}",
-            OpCode.JmpFalse    => $"if !R({a}) -> {GetLabelRef(labels, idx + 1 + sbx)}  ; offset {sbx:+0;-0}",
-            OpCode.JmpTrue     => $"if R({a}) -> {GetLabelRef(labels, idx + 1 + sbx)}  ; offset {sbx:+0;-0}",
-            OpCode.Loop        => $"-> {GetLabelRef(labels, idx + 1 + sbx)}  ; offset {sbx:+0;-0}",
+            OpCode.Jmp         => $"{GetLabelRef(labels, idx + 1 + sbx)}              ; {sbx:+0;-0}",
+            OpCode.JmpFalse    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}          ; {sbx:+0;-0}",
+            OpCode.JmpTrue     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}          ; {sbx:+0;-0}",
+            OpCode.Loop        => $"{GetLabelRef(labels, idx + 1 + sbx)}              ; {sbx:+0;-0}",
 
             // Calls
-            OpCode.Call        => $"R({a}) = R({a})(R({a}+1)..R({a}+{c}))",
-            OpCode.Return      => b != 0 ? $"return R({a})" : "return null",
-            OpCode.CallSpread  => $"R({a}) = R({a})(... spread)",
+            OpCode.Call        => $"r{a}, {c}",
+            OpCode.Return      => b != 0 ? $"r{a}" : "null",
+            OpCode.CallSpread  => $"r{a}",
 
             // Iteration
-            OpCode.ForPrep     => $"R({a}) -= R({a}+2) ; -> {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.ForLoop     => $"R({a}) += R({a}+2) ; if R({a}) <= R({a}+1) -> {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.IterPrep    => $"R({a})..R({a}+2) = iter(R({a}))",
-            OpCode.IterLoop    => $"iter step R({a}) ; -> {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.ForPrep     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.ForLoop     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.IterPrep    => $"r{a}",
+            OpCode.IterLoop    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
 
             // Tables
-            OpCode.GetTable    => $"R({a}) = R({b})[R({c})]",
-            OpCode.SetTable    => $"R({a})[R({b})] = R({c})",
-            OpCode.GetField    => $"R({a}) = R({b}).K({c})  ; \"{FormatFieldName(chunk, c)}\"",
-            OpCode.SetField    => $"R({a}).K({b}) = R({c})  ; \"{FormatFieldName(chunk, b)}\"",
-            OpCode.Self        => $"R({a}+1) = R({b}); R({a}) = R({b}).K({c})  ; \"{FormatFieldName(chunk, c)}\"",
+            OpCode.GetTable    => $"r{a}, r{b}, r{c}",
+            OpCode.SetTable    => $"r{a}, r{b}, r{c}",
+            OpCode.GetField    => $"r{a}, r{b}, k{c}           ; .{FormatFieldName(chunk, c)}",
+            OpCode.GetFieldIC  => $"r{a}, r{b}, k{c}           ; .{FormatFieldName(chunk, c)} [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]",
+            OpCode.CallBuiltIn => $"r{a}, r{b}, {c}            ; ({c} args) [ic:{(idx + 1 < chunk.Code.Length ? chunk.Code[idx + 1] : 0)}]",
+            OpCode.SetField    => $"r{a}, r{c}, k{b}           ; .{FormatFieldName(chunk, b)}",
+            OpCode.Self        => $"r{a}, r{b}, k{c}           ; .{FormatFieldName(chunk, c)}",
 
             // Collections
-            OpCode.NewArray    => $"R({a}) = [{b} elems from R({a}+1)..R({a}+{b})]",
-            OpCode.NewDict     => $"R({a}) = dict({b} pairs from R({a}+1)..R({a}+{b * 2}))",
-            OpCode.NewRange    => $"R({a}) = range(R({b}), R({c}))",
-            OpCode.Spread      => $"spread R({b}) -> R({a})",
-            OpCode.Destructure => $"destructure R({a}) per K({bx})",
+            OpCode.NewArray    => $"r{a}, {b}",
+            OpCode.NewDict     => $"r{a}, {b}",
+            OpCode.NewRange    => $"r{a}, r{b}, r{c}",
+            OpCode.Spread      => $"r{a}, r{b}",
+            OpCode.Destructure => $"r{a}, k{bx}",
 
             // Closures & Types
-            OpCode.Closure     => $"R({a}) = closure K({bx})  ; {FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)}",
-            OpCode.NewStruct   => $"R({a}) = new K({b})({c} fields from R({a}+1)..)",
-            OpCode.TypeOf      => $"R({a}) = typeof(R({b}))",
-            OpCode.Is          => $"R({a}) = R({b}) is K({c})/R({c})",
+            OpCode.Closure     => $"r{a}, k{bx}               ; {FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)}",
+            OpCode.NewStruct   => $"r{a}, k{b}, {c}",
+            OpCode.TypeOf      => $"r{a}, r{b}",
+            OpCode.Is          => $"r{a}, r{b}, k{c}",
 
             // Error handling
-            OpCode.TryBegin    => $"try catch R({a}) at {GetLabelRef(labels, idx + 1 + sbx)}",
-            OpCode.TryEnd      => "try.end",
-            OpCode.Throw       => $"throw R({a})",
-            OpCode.TryExpr     => $"R({a}) = try? R({b})",
+            OpCode.TryBegin    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.TryEnd      => "",
+            OpCode.Throw       => $"r{a}",
+            OpCode.TryExpr     => $"r{a}, r{b}",
 
             // Type decls
-            OpCode.StructDecl  => $"R({a}) = StructDecl K({bx})",
-            OpCode.EnumDecl    => $"R({a}) = EnumDecl K({bx})",
-            OpCode.IfaceDecl   => $"R({a}) = IfaceDecl K({bx})",
-            OpCode.Extend      => $"Extend K({bx}) with methods from R({a}+1)..",
+            OpCode.StructDecl  => $"r{a}, k{bx}",
+            OpCode.EnumDecl    => $"r{a}, k{bx}",
+            OpCode.IfaceDecl   => $"r{a}, k{bx}",
+            OpCode.Extend      => $"r{a}, k{bx}",
 
             // Shell
-            OpCode.Command     => $"R({a}) = command({b} parts from R({a}+1)..) flags={c}",
-            OpCode.Pipe        => $"R({a}) = R({b}) | R({c})",
-            OpCode.Redirect    => $"R({a}) = R({a}) >{(c == 0 ? "" : ">")} R({c}) flags={b}",
-            OpCode.Interpolate => $"R({a}) = interpolate({b} parts from R({a}+1)..R({a}+{b}))",
+            OpCode.Command     => $"r{a}, {b}, {c}",
+            OpCode.Pipe        => $"r{a}, r{b}, r{c}",
+            OpCode.Redirect    => $"r{a}, r{c}, {b}",
+            OpCode.Interpolate => $"r{a}, {b}",
 
             // Modules
-            OpCode.Import      => $"Import path=R({a}) meta=K({bx}) -> R({a}+1)..",
-            OpCode.ImportAs    => $"ImportAs path=R({a}) meta=K({bx}) -> R({a}+1)",
+            OpCode.Import      => $"r{a}, k{bx}",
+            OpCode.ImportAs    => $"r{a}, k{bx}",
 
             // Misc
-            OpCode.In          => $"R({a}) = R({b}) in R({c})",
-            OpCode.Switch      => $"switch R({a}) table=K({bx})",
-            OpCode.ElevateBegin=> $"R({a}) = elevate(R({b}))",
-            OpCode.ElevateEnd  => "elevate.end",
-            OpCode.Retry       => $"retry meta=K({bx})",
-            OpCode.Await       => $"R({a}) = await R({b})",
+            OpCode.In          => $"r{a}, r{b}, r{c}",
+            OpCode.Switch      => $"r{a}, k{bx}",
+            OpCode.ElevateBegin=> $"r{a}, r{b}",
+            OpCode.ElevateEnd  => "",
+            OpCode.Retry       => $"k{bx}",
+            OpCode.Await       => $"r{a}, r{b}",
 
             _ => fmt switch
             {
-                InstrFmt.ABC  => $"R({a}), R({b}), R({c})",
-                InstrFmt.ABx  => $"R({a}), K({bx})",
-                InstrFmt.AsBx => $"R({a}), {sbx:+0;-0}",
+                InstrFmt.ABC  => $"r{a}, r{b}, r{c}",
+                InstrFmt.ABx  => $"r{a}, k{bx}",
+                InstrFmt.AsBx => $"r{a}, {sbx:+0;-0}",
                 InstrFmt.Ax   => "",
+                _ => ""
             }
         };
     }
@@ -478,12 +495,16 @@ public static class Disassembler
                     uvCount = fn.Upvalues.Length;
                 idx += uvCount; // skip upvalue descriptors
             }
+            if (op == OpCode.GetFieldIC)
+                idx++; // skip companion word
+            if (op == OpCode.CallBuiltIn)
+                idx++; // skip companion word
         }
 
         var labels = new Dictionary<int, string>();
         int labelCount = 0;
         foreach (int t in targets)
-            labels[t] = $"L{labelCount++}";
+            labels[t] = $".L{labelCount++}";
         return labels;
     }
 

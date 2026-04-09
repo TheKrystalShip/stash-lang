@@ -168,8 +168,20 @@ public sealed class ChunkBuilder
     // Inline Cache
     // ==================================================================
 
+    private readonly List<ushort> _icConstantIndices = new();
+
     /// <summary>Allocate an inline cache slot. Returns the IC slot index.</summary>
-    public ushort AllocateICSlot() => (ushort)_icSlotCount++;
+    public ushort AllocateICSlot() => AllocateICSlot(0);
+
+    /// <summary>Allocate an inline cache slot with a known constant index. Returns the IC slot index.</summary>
+    public ushort AllocateICSlot(ushort constantIndex)
+    {
+        ushort slot = (ushort)_icSlotCount++;
+        while (_icConstantIndices.Count <= slot)
+            _icConstantIndices.Add(0);
+        _icConstantIndices[slot] = constantIndex;
+        return slot;
+    }
 
     // ==================================================================
     // Source Mapping
@@ -193,6 +205,11 @@ public sealed class ChunkBuilder
         string[]? globalNameTable = _globalSlots?.BuildNameTable();
         int globalSlotCount = _globalSlots?.Count ?? 0;
         ICSlot[]? icSlots = _icSlotCount > 0 ? new ICSlot[_icSlotCount] : null;
+        if (icSlots is not null)
+        {
+            for (int i = 0; i < icSlots.Length && i < _icConstantIndices.Count; i++)
+                icSlots[i].ConstantIndex = _icConstantIndices[i];
+        }
 
         return new Chunk(
             code: _code.ToArray(),

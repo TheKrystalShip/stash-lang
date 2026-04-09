@@ -111,17 +111,36 @@ export class StashBytecodeViewerProvider
       return `<span class="section">${escaped}</span>`;
     }
 
-    const labelMatch = /^(\.[A-Za-z_][A-Za-z0-9_]*:)(.*)/.exec(escaped);
+    // Jump target labels at column 0: .L0: .L1: etc.
+    const labelMatch = /^(\.\w+:)(.*)/.exec(escaped);
     if (labelMatch) {
       return `<span class="label">${labelMatch[1]}</span>${labelMatch[2]}`;
     }
 
-    const codeMatch = /^(\s+)([0-9a-f]{4})(\s+)([0-9a-f]{2}(?:\s[0-9a-f]{2})*)(\s+)(\S+)(.*)/.exec(escaped);
+    // Indented comments: source annotations "  ; 1: let x = 42" and upvalue descriptors
+    const commentLineMatch = /^(\s+)(;.*)/.exec(escaped);
+    if (commentLineMatch) {
+      return `${commentLineMatch[1]}<span class="source-line">${commentLineMatch[2]}</span>`;
+    }
+
+    // Instruction lines: "  0000:  load.k          r0, k0              ; 42"
+    const codeMatch = /^(\s+)([0-9a-f]{4}:)(\s+)(\S+)(.*)/.exec(escaped);
     if (codeMatch) {
-      const [, indent, offset, sp1, hex, sp2, opcode, rest] = codeMatch;
+      const [, indent, offset, sp1, opcode, rest] = codeMatch;
+
+      // Split operands from trailing inline comment
+      const inlineComment = /^(.*?)(;.*)$/.exec(rest);
+      if (inlineComment) {
+        return (
+          `${indent}<span class="offset">${offset}</span>${sp1}` +
+          `<span class="opcode">${opcode}</span>` +
+          `<span class="operand">${inlineComment[1]}</span>` +
+          `<span class="comment">${inlineComment[2]}</span>`
+        );
+      }
+
       return (
         `${indent}<span class="offset">${offset}</span>${sp1}` +
-        `<span class="hex">${hex}</span>${sp2}` +
         `<span class="opcode">${opcode}</span>` +
         `<span class="operand">${rest}</span>`
       );
@@ -195,7 +214,6 @@ export class StashBytecodeViewerProvider
     .comment { color: var(--vscode-editorLineNumber-foreground); }
     .section { color: var(--vscode-symbolIcon-namespaceForeground, #4ec9b0); font-weight: bold; }
     .offset { color: var(--vscode-editorLineNumber-foreground); }
-    .hex { color: var(--vscode-editorLineNumber-foreground); opacity: 0.6; }
     .opcode { color: var(--vscode-symbolIcon-functionForeground, #dcdcaa); }
     .operand { color: var(--vscode-symbolIcon-variableForeground, #9cdcfe); }
     .label { color: var(--vscode-symbolIcon-enumeratorForeground, #b5cea8); font-weight: bold; }
