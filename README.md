@@ -379,13 +379,13 @@ Stash uses a **bytecode VM** as its execution engine. The table below compares t
 
 **Results**
 
-| Benchmark                 |  Stash |      Bash | Python | Node.js |   Ruby |   Perl |    Lua |
-| ------------------------- | -----: | --------: | -----: | ------: | -----: | -----: | -----: |
-| **Algorithms**            | 204 ms | 10,786 ms |  82 ms |    6 ms |  53 ms | 193 ms |  35 ms |
-| **Function Calls**        |  87 ms |  3,773 ms |  76 ms |    4 ms |  17 ms | 101 ms |  14 ms |
-| **Expression Throughput** | 183 ms |  4,950 ms | 174 ms |   15 ms | 191 ms | 132 ms |  84 ms |
-| **Built-in Functions**    | 190 ms | 23,146 ms | 295 ms |   27 ms | 353 ms | 339 ms | 204 ms |
-| **Scope Lookup**          | 118 ms |  3,254 ms |  96 ms |    5 ms | 132 ms | 275 ms |  58 ms |
+| Benchmark                 |  Stash | Python | Node.js |   Ruby |   Perl |    Lua |      Bash |
+| ------------------------- | -----: | -----: | ------: | -----: | -----: | -----: | --------: |
+| **Algorithms**            | 162 ms |  88 ms |    7 ms |  56 ms | 208 ms |  34 ms | 10,412 ms |
+| **Function Calls**        |  93 ms |  84 ms |    3 ms |  17 ms | 101 ms |  13 ms |  3,743 ms |
+| **Expression Throughput** | 165 ms | 181 ms |   18 ms | 188 ms | 131 ms |  85 ms |  4,955 ms |
+| **Built-in Functions**    | 202 ms | 319 ms |   29 ms | 347 ms | 341 ms | 207 ms | 23,508 ms |
+| **Scope Lookup**          | 111 ms | 103 ms |    5 ms | 124 ms | 241 ms |  58 ms |  3,307 ms |
 
 > Measured on the same machine, same workload, identical algorithms and iteration counts across all languages. Median of 3 runs.
 >
