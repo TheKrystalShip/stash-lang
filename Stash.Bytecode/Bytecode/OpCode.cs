@@ -205,6 +205,12 @@ public enum OpCode : byte
     GetFieldIC,                 // 79
     /// <summary>ABC+companion: Fused GetField+Call for namespace built-ins; R(A) = R(B).K[ic.ConstantIndex](R(A+1)..R(A+C)); companion = IC slot.</summary>
     CallBuiltIn,                // 80
+
+    // === Specialized Iteration (compile-time) ===
+    /// <summary>AsBx: Integer-specialized ForPrep. R(A) -= R(A+2); IP += sBx. Skips type checks when counter/step are compile-time integers.</summary>
+    ForPrepII,                  // 81
+    /// <summary>AsBx: Integer-specialized ForLoop. Guard-free: R(A) += R(A+2); if in-bounds: IP += sBx; R(A+3) = R(A).</summary>
+    ForLoopII,                  // 82
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>
@@ -229,7 +235,7 @@ public static class OpCodeInfo
         OpCode.LoadK or OpCode.GetGlobal or OpCode.SetGlobal or OpCode.InitConstGlobal
         or OpCode.AddI    // AsBx but same extraction format
         or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-        or OpCode.ForPrep or OpCode.ForLoop or OpCode.IterLoop
+        or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII or OpCode.IterLoop
         or OpCode.Closure or OpCode.TryBegin
         or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl or OpCode.Extend
         or OpCode.Import or OpCode.ImportAs

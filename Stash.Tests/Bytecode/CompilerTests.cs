@@ -455,6 +455,47 @@ public class CompilerTests : BytecodeTestBase
         Assert.DoesNotContain("for.loop", disasm);
     }
 
+    [Fact]
+    public void NumericFor_IntLiteralInit_EmitsForPrepII()
+    {
+        string disasm = Disassemble("for (let i = 0; i < 10; i++) { 42; }");
+        Assert.Contains("for.prepII", disasm);
+        Assert.Contains("for.loopII", disasm);
+    }
+
+    [Fact]
+    public void NumericFor_IntLiteralInit_Decrement_EmitsForPrepII()
+    {
+        string disasm = Disassemble("for (let i = 10; i > 0; i--) { 42; }");
+        Assert.Contains("for.prepII", disasm);
+        Assert.Contains("for.loopII", disasm);
+    }
+
+    [Fact]
+    public void NumericFor_VariableInit_EmitsGenericForPrep()
+    {
+        // When init is a variable (not an int literal), should NOT specialize
+        string disasm = Disassemble("""
+            let start = 0;
+            for (let i = start; i < 10; i++) { 42; }
+            """);
+        Assert.DoesNotContain("for.prepII", disasm);
+        Assert.DoesNotContain("for.loopII", disasm);
+        Assert.Contains("for.prep", disasm);
+        Assert.Contains("for.loop", disasm);
+    }
+
+    [Fact]
+    public void NumericFor_ExpressionInit_EmitsGenericForPrep()
+    {
+        // When init is an expression (not a literal), should NOT specialize
+        string disasm = Disassemble("for (let i = 1 + 2; i < 10; i++) { 42; }");
+        Assert.DoesNotContain("for.prepII", disasm);
+        Assert.DoesNotContain("for.loopII", disasm);
+        Assert.Contains("for.prep", disasm);
+        Assert.Contains("for.loop", disasm);
+    }
+
     // =========================================================================
     // 16. Break and Continue
     // =========================================================================

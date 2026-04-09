@@ -771,6 +771,121 @@ public class VirtualMachineTests : BytecodeTestBase
         Assert.Equal(10.0, result);  // 0.0+1.0+2.0+3.0+4.0 = 10.0
     }
 
+    [Fact]
+    public void ForPrepII_ForwardLoop_SumsCorrectly()
+    {
+        // Int literal init → ForPrepII/ForLoopII path
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 5; i++) { sum = sum + i; }
+            return sum;
+            """);
+        Assert.Equal(10L, result);
+    }
+
+    [Fact]
+    public void ForPrepII_BackwardLoop_SumsCorrectly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 5; i > 0; i--) { sum = sum + i; }
+            return sum;
+            """);
+        Assert.Equal(15L, result);
+    }
+
+    [Fact]
+    public void ForPrepII_LessEqual_IncludesLimit()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i <= 5; i++) { sum = sum + i; }
+            return sum;
+            """);
+        Assert.Equal(15L, result); // 0+1+2+3+4+5
+    }
+
+    [Fact]
+    public void ForPrepII_GreaterEqual_IncludesLimit()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 5; i >= 0; i--) { sum = sum + i; }
+            return sum;
+            """);
+        Assert.Equal(15L, result); // 5+4+3+2+1+0
+    }
+
+    [Fact]
+    public void ForPrepII_ZeroIterations_SkipsBody()
+    {
+        object? result = Execute("""
+            let ran = null; ran = false;
+            for (let i = 0; i < 0; i++) { ran = true; }
+            return ran;
+            """);
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void ForPrepII_FloatLimit_FallsBackToGeneric()
+    {
+        // Counter is int literal (ForPrepII emitted), but limit is float at runtime.
+        // ForPrepII should fall back to generic ForPrep, ForLoopII falls back to ForLoop.
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            let limit = 5.0;
+            for (let i = 0; i < limit; i++) { sum = sum + i; }
+            return sum;
+            """);
+        // limit is 5.0, strict < means limit adjusted to 4.0. Per generic float path:
+        // counter goes 0,1,2,3,4 → sum = 10.0 (float because limit is float)
+        Assert.Equal(10.0, result);
+    }
+
+    [Fact]
+    public void ForPrepII_WithBreak_ExitsEarly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 100; i++) {
+                if (i >= 5) { break; }
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(10L, result);
+    }
+
+    [Fact]
+    public void ForPrepII_WithContinue_SkipsIteration()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 10; i++) {
+                if (i % 2 == 0) { continue; }
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(25L, result); // 1+3+5+7+9
+    }
+
+    [Fact]
+    public void ForPrepII_Nested_BothSpecialized()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 4; j++) {
+                    sum = sum + 1;
+                }
+            }
+            return sum;
+            """);
+        Assert.Equal(12L, result);
+    }
+
     // =========================================================================
     // 9. Functions
     //

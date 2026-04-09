@@ -358,8 +358,12 @@ public sealed partial class Compiler
         ushort stepIdx = _builder.AddConstant((long)stepValue);
         _builder.EmitABx(OpCode.LoadK, stepReg, stepIdx);
 
+        // Determine if we can use integer-specialized for-loop.
+        // Step is always an int literal (±1). Init must also be provably int.
+        bool useIntSpec = varDecl.Initializer is LiteralExpr { Value: int or long };
+
         // ForPrep: initialize and jump to ForLoop for the initial bounds check
-        int forPrepJump = _builder.EmitJump(OpCode.ForPrep, counterReg);
+        int forPrepJump = _builder.EmitJump(useIntSpec ? OpCode.ForPrepII : OpCode.ForPrep, counterReg);
 
         int bodyStart = _builder.CurrentOffset;
 
@@ -390,7 +394,7 @@ public sealed partial class Compiler
         _builder.PatchJump(forPrepJump);
 
         // ForLoop: increment counter, check bounds, jump back to body if in range
-        _builder.EmitAsBx(OpCode.ForLoop, counterReg, bodyStart - _builder.CurrentOffset - 1);
+        _builder.EmitAsBx(useIntSpec ? OpCode.ForLoopII : OpCode.ForLoop, counterReg, bodyStart - _builder.CurrentOffset - 1);
 
         PatchBreakJumps();
         EndScope();

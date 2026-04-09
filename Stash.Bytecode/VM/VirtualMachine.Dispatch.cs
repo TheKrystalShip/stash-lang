@@ -267,6 +267,8 @@ public sealed partial class VirtualMachine
                 case OpCode.ForLoop: ExecuteForLoop(ref frame, inst); break;
                 case OpCode.IterPrep: ExecuteIterPrep(ref frame, inst); break;
                 case OpCode.IterLoop: ExecuteIterLoop(ref frame, inst); break;
+                case OpCode.ForPrepII: ExecuteForPrepII(ref frame, inst); break;
+                case OpCode.ForLoopII: ExecuteForLoopII(ref frame, inst); break;
 
                 // ==================== Tables & Fields ====================
                 case OpCode.GetTable: ExecuteGetTable(ref frame, inst); break;

@@ -126,6 +126,8 @@ public static class Disassembler
         [OpCode.CheckNumeric]   = "check.numeric",
         [OpCode.GetFieldIC]     = "get.field.ic",
         [OpCode.CallBuiltIn]    = "call.builtin",
+        [OpCode.ForPrepII]      = "for.prepII",
+        [OpCode.ForLoopII]      = "for.loopII",
     };
 
     // ─── Instruction Format Classification ───────────────────────────────────
@@ -142,7 +144,8 @@ public static class Disassembler
 
         // AsBx (signed offset)
         OpCode.AddI or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-            or OpCode.ForPrep or OpCode.ForLoop or OpCode.IterPrep or OpCode.IterLoop => InstrFmt.AsBx,
+            or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII
+            or OpCode.IterPrep or OpCode.IterLoop => InstrFmt.AsBx,
 
         // Ax
         OpCode.TryEnd or OpCode.ElevateEnd => InstrFmt.Ax,
@@ -406,6 +409,8 @@ public static class Disassembler
             // Iteration
             OpCode.ForPrep     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
             OpCode.ForLoop     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.ForPrepII   => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.ForLoopII   => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
             OpCode.IterPrep    => $"r{a}",
             OpCode.IterLoop    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
 

@@ -305,6 +305,48 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteForPrepII(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        int @base = frame.BaseSlot;
+
+        if (_stack[@base + a].IsInt && _stack[@base + a + 1].IsInt && _stack[@base + a + 2].IsInt)
+        {
+            _stack[@base + a] = StashValue.FromInt(_stack[@base + a].AsInt - _stack[@base + a + 2].AsInt);
+            frame.IP += Instruction.GetSBx(inst);
+            return;
+        }
+
+        // Limit or counter is not int — fall back to generic path
+        ExecuteForPrep(ref frame, inst);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteForLoopII(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        int @base = frame.BaseSlot;
+
+        if (_stack[@base + a].IsInt && _stack[@base + a + 1].IsInt && _stack[@base + a + 2].IsInt)
+        {
+            long step = _stack[@base + a + 2].AsInt;
+            long newCounter = _stack[@base + a].AsInt + step;
+            _stack[@base + a] = StashValue.FromInt(newCounter);
+
+            long limit = _stack[@base + a + 1].AsInt;
+            if (step > 0 ? newCounter <= limit : newCounter >= limit)
+            {
+                frame.IP += Instruction.GetSBx(inst);
+                _stack[@base + a + 3] = StashValue.FromInt(newCounter);
+            }
+            return;
+        }
+
+        // Fall back to generic handler (handles float, mixed types)
+        ExecuteForLoop(ref frame, inst);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteForLoop(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
