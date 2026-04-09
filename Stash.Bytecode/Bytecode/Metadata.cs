@@ -40,3 +40,13 @@ internal sealed record DestructureMetadata(string Kind, string[] Names, string? 
 
 /// <summary>Metadata for OP_RETRY. Stored in the constant pool.</summary>
 internal sealed record RetryMetadata(int OptionCount, bool HasUntilClause, bool HasOnRetryClause, bool OnRetryIsReference);
+
+/// <summary>
+/// Metadata for OP_NEWSTRUCT. Stored in the constant pool.
+/// When HasTypeReg is false, TypeName names the struct (global lookup).
+/// When HasTypeReg is true, TypeName is empty and R(A+1) holds the struct type; field values start at R(A+2).
+/// </summary>
+internal sealed record StructInitMetadata(
+    string TypeName,
+    bool HasTypeReg,
+    string[] FieldNames);

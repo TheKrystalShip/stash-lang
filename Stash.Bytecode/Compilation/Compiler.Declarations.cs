@@ -1,258 +1,214 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Runtime;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
-/// <summary>
-/// Declaration and basic statement visitor implementations.
-/// </summary>
-public sealed partial class Compiler
+partial class Compiler
 {
     // =========================================================================
     // Statement Visitors
     // =========================================================================
 
-    /// <inheritdoc />
     public object? VisitExprStmt(ExprStmt stmt)
     {
-        _builder.AddSourceMapping(stmt.Span);
-        CompileExpr(stmt.Expression);
-        _builder.Emit(OpCode.Pop);
+        byte reg = CompileExpr(stmt.Expression);
+        _scope.FreeTemp(reg);
         return null;
     }
 
-    /// <inheritdoc />
-    public object? VisitVarDeclStmt(VarDeclStmt stmt)
-    {
-        _builder.AddSourceMapping(stmt.Span);
-        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
-
-        if (stmt.Initializer != null)
-        {
-            CompileExpr(stmt.Initializer);
-        }
-        else
-        {
-            _builder.Emit(OpCode.Null);
-        }
-
-        _scope.MarkInitialized(slot);
-        // The initializer value on the stack IS the local — no separate store needed.
-
-        // At top-level, also seed globals so that OP_LOAD_GLOBAL (emitted because
-        // the Resolver leaves top-level variables unresolved at distance=-1) can
-        // find the initial value.
-        if (_enclosing is null && _scope.ScopeDepth == 0)
-        {
-            int resolvedSlot = _scope.ResolveLocal(stmt.Name.Lexeme);
-            if (resolvedSlot >= 0)
-            {
-                _builder.Emit(OpCode.LoadLocal, (byte)resolvedSlot);
-                ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
-                _builder.Emit(OpCode.StoreGlobal, globalSlot);
-            }
-        }
-
-        return null;
-    }
-
-    /// <inheritdoc />
-    public object? VisitConstDeclStmt(ConstDeclStmt stmt)
-    {
-        _builder.AddSourceMapping(stmt.Span);
-        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: true);
-        CompileExpr(stmt.Initializer);
-        _scope.MarkInitialized(slot);
-
-        // Track constant values for compile-time folding in EmitVariable.
-        if (_enclosing is null && TryEvaluateConstant(stmt.Initializer, out object? constValue))
-        {
-            _globalSlots.TrackConstValue(stmt.Name.Lexeme, constValue);
-        }
-
-        // At top-level, also seed globals so that OP_LOAD_GLOBAL (emitted because
-        // the Resolver leaves top-level variables unresolved at distance=-1) can
-        // find the initial value. Use InitConstGlobal so the VM marks the name as
-        // immutable and throws on any subsequent StoreGlobal to the same name.
-        if (_enclosing is null)
-        {
-            int resolvedSlot = _scope.ResolveLocal(stmt.Name.Lexeme);
-            if (resolvedSlot >= 0)
-            {
-                _builder.Emit(OpCode.LoadLocal, (byte)resolvedSlot);
-                ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
-                _builder.Emit(OpCode.InitConstGlobal, globalSlot);
-            }
-        }
-
-        return null;
-    }
-
-    /// <inheritdoc />
     public object? VisitBlockStmt(BlockStmt stmt)
     {
         _scope.BeginScope();
         foreach (Stmt s in stmt.Statements)
-        {
             CompileStmt(s);
-        }
-
-        EmitScopePops();
+        EndScope();
         return null;
     }
 
-    /// <inheritdoc />
+    public object? VisitVarDeclStmt(VarDeclStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        byte reg = _scope.DeclareLocal(stmt.Name.Lexeme);
+        if (stmt.Initializer != null)
+            CompileExprTo(stmt.Initializer, reg);
+        else
+            _builder.EmitA(OpCode.LoadNull, reg);
+        _scope.MarkInitialized();
+
+        // OPT-10: Track numeric locals
+        if (stmt.Initializer != null && IsNumericExpr(stmt.Initializer))
+            _scope.MarkNumeric(reg);
+
+        // At top level, also write to global slot for cross-module access
+        if (_enclosing == null && _scope.ScopeDepth == 0)
+        {
+            ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.EmitABx(OpCode.SetGlobal, reg, gslot);
+        }
+        return null;
+    }
+
+    public object? VisitConstDeclStmt(ConstDeclStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        byte reg = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: true);
+        CompileExprTo(stmt.Initializer, reg);
+        _scope.MarkInitialized();
+
+        // OPT-10: Track numeric locals
+        if (IsNumericExpr(stmt.Initializer))
+            _scope.MarkNumeric(reg);
+
+        if (_enclosing == null && _scope.ScopeDepth == 0)
+        {
+            ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.EmitABx(OpCode.InitConstGlobal, reg, gslot);
+            if (TryEvaluateConstant(stmt.Initializer, out object? constVal))
+                _globalSlots.TrackConstValue(stmt.Name.Lexeme, constVal);
+        }
+        else if (TryEvaluateConstant(stmt.Initializer, out object? constVal))
+        {
+            _globalSlots.TrackConstValue(stmt.Name.Lexeme, constVal);
+        }
+        return null;
+    }
+
     public object? VisitFnDeclStmt(FnDeclStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        // Declare the function name as a local before compiling its body (enables recursion)
-        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
-        _scope.MarkInitialized(slot);
+        Chunk fnChunk = CompileFunction(
+            stmt.Parameters, stmt.Body, stmt.Name.Lexeme,
+            stmt.IsAsync, stmt.HasRestParam, stmt.DefaultValues);
 
-        CompileFunction(
-            stmt.Name.Lexeme,
-            stmt.Parameters,
-            stmt.DefaultValues,
-            stmt.Body,
-            stmt.IsAsync,
-            stmt.HasRestParam);
+        ushort fnIdx = _builder.AddConstant(StashValue.FromObj(fnChunk));
 
-        // Dup + StoreGlobal: needed because references use LoadGlobal (distance=-1 at top level)
-        // and harmless in local scopes where LoadLocal is used instead
-        _builder.Emit(OpCode.Dup);
+        byte reg = _scope.DeclareLocal(stmt.Name.Lexeme);
+        _builder.EmitABx(OpCode.Closure, reg, fnIdx);
+        foreach (UpvalueDescriptor uv in fnChunk.Upvalues)
+            _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
+        _scope.MarkInitialized();
+
+        if (_enclosing == null && _scope.ScopeDepth == 0)
         {
-            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, globalSlot);
+            ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.EmitABx(OpCode.SetGlobal, reg, gslot);
         }
-
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitThrowStmt(ThrowStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
-        CompileExpr(stmt.Value);
-        _builder.Emit(OpCode.Throw);
+        byte reg = CompileExpr(stmt.Value);
+        _builder.EmitA(OpCode.Throw, reg);
+        _scope.FreeTemp(reg);
         return null;
     }
 
-
-    // --- Deferred statement visitors ---
-
-    /// <inheritdoc />
     public object? VisitStructDeclStmt(StructDeclStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
-        _scope.MarkInitialized(slot);
-
-        // Compile each method as a closure (pushes VMFunction onto stack)
-        var methodNames = new string[stmt.Methods.Count];
-        for (int i = 0; i < stmt.Methods.Count; i++)
+        var methodNames = new List<string>();
+        var methodChunks = new List<Chunk>();
+        foreach (FnDeclStmt method in stmt.Methods)
         {
-            methodNames[i] = stmt.Methods[i].Name.Lexeme;
+            List<Token> methodParams = method.Parameters;
+            List<Expr?>? methodDefaults = method.DefaultValues;
 
-            // Prepend a synthetic 'self' parameter so the VM's arity check passes.
-            // CallValue for VMBoundMethod does argc+1 (inserting self), so expected must match.
-            // Only add if not already explicitly declared by the user.
-            List<Token> methodParams;
-            List<Expr?> methodDefaults;
-            bool hasSelfParam = stmt.Methods[i].Parameters.Count > 0
-                && stmt.Methods[i].Parameters[0].Lexeme == "self";
-
-            if (hasSelfParam)
+            // Prepend implicit 'self' if not already in parameter list
+            if (!methodParams.Any(p => p.Lexeme == "self"))
             {
-                methodParams = stmt.Methods[i].Parameters;
-                methodDefaults = stmt.Methods[i].DefaultValues;
-            }
-            else
-            {
-                methodParams = new List<Token>();
-                methodParams.Add(new Token(TokenType.Identifier, "self", null, stmt.Methods[i].Name.Span));
-                methodParams.AddRange(stmt.Methods[i].Parameters);
+                methodParams = new List<Token>(methodParams.Count + 1);
+                methodParams.Add(new Token(TokenType.Identifier, "self", null, method.Name.Span));
+                methodParams.AddRange(method.Parameters);
 
-                methodDefaults = new List<Expr?>();
-                methodDefaults.Add(null); // self has no default
-                methodDefaults.AddRange(stmt.Methods[i].DefaultValues);
+                // Shift default values to account for the prepended self (which has no default)
+                if (methodDefaults != null && methodDefaults.Count > 0)
+                {
+                    var newDefaults = new List<Expr?>(methodDefaults.Count + 1) { null };
+                    newDefaults.AddRange(methodDefaults);
+                    methodDefaults = newDefaults;
+                }
             }
 
-            CompileFunction(
-                stmt.Methods[i].Name.Lexeme,
-                methodParams,
-                methodDefaults,
-                stmt.Methods[i].Body,
-                stmt.Methods[i].IsAsync,
-                stmt.Methods[i].HasRestParam);
+            Chunk mChunk = CompileFunction(
+                methodParams, method.Body, method.Name.Lexeme,
+                method.IsAsync, method.HasRestParam, methodDefaults);
+            methodNames.Add(method.Name.Lexeme);
+            methodChunks.Add(mChunk);
         }
 
-        string[] fields = new string[stmt.Fields.Count];
+        string[] fieldNames = new string[stmt.Fields.Count];
         for (int i = 0; i < stmt.Fields.Count; i++)
-        {
-            fields[i] = stmt.Fields[i].Lexeme;
-        }
+            fieldNames[i] = stmt.Fields[i].Lexeme;
 
-        string[] interfaceNames = new string[stmt.Interfaces.Count];
+        string[] ifaceNames = new string[stmt.Interfaces.Count];
         for (int i = 0; i < stmt.Interfaces.Count; i++)
+            ifaceNames[i] = stmt.Interfaces[i].Lexeme;
+
+        var meta = new StructMetadata(stmt.Name.Lexeme, fieldNames, methodNames.ToArray(), ifaceNames);
+        ushort metaIdx = _builder.AddConstant(meta);
+
+        byte destReg = _scope.DeclareLocal(stmt.Name.Lexeme);
+
+        // Emit method closures into registers above destReg
+        foreach (Chunk mChunk in methodChunks)
         {
-            interfaceNames[i] = stmt.Interfaces[i].Lexeme;
+            byte mReg = _scope.AllocTemp();
+            ushort mIdx = _builder.AddConstant(StashValue.FromObj(mChunk));
+            _builder.EmitABx(OpCode.Closure, mReg, mIdx);
+            foreach (UpvalueDescriptor uv in mChunk.Upvalues)
+                _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
         }
 
-        var metadata = new StructMetadata(stmt.Name.Lexeme, fields, methodNames, interfaceNames);
-        ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.StructDecl, metaIdx);
+        _builder.EmitABx(OpCode.StructDecl, destReg, metaIdx);
+        _scope.FreeTempFrom((byte)(destReg + 1));
+        _scope.MarkInitialized();
 
-        // Dup + StoreGlobal: needed because references use LoadGlobal (distance=-1 at top level)
-        // and harmless in local scopes where LoadLocal is used instead
-        _builder.Emit(OpCode.Dup);
+        if (_enclosing == null && _scope.ScopeDepth == 0)
         {
-            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, globalSlot);
+            ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.EmitABx(OpCode.SetGlobal, destReg, gslot);
         }
-
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitEnumDeclStmt(EnumDeclStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
-        _scope.MarkInitialized(slot);
-
         string[] members = new string[stmt.Members.Count];
         for (int i = 0; i < stmt.Members.Count; i++)
-        {
             members[i] = stmt.Members[i].Lexeme;
-        }
 
-        var metadata = new EnumMetadata(stmt.Name.Lexeme, members);
-        ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.EnumDecl, metaIdx);
+        var meta = new EnumMetadata(stmt.Name.Lexeme, members);
+        ushort metaIdx = _builder.AddConstant(meta);
 
-        _builder.Emit(OpCode.Dup);
+        byte destReg = _scope.DeclareLocal(stmt.Name.Lexeme);
+        _builder.EmitABx(OpCode.EnumDecl, destReg, metaIdx);
+        _scope.MarkInitialized();
+
+        if (_enclosing == null && _scope.ScopeDepth == 0)
         {
-            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, globalSlot);
+            ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.EmitABx(OpCode.SetGlobal, destReg, gslot);
         }
-
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
-
-        int slot = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: false);
-        _scope.MarkInitialized(slot);
 
         var fields = new InterfaceField[stmt.Fields.Count];
         for (int i = 0; i < stmt.Fields.Count; i++)
@@ -266,203 +222,196 @@ public sealed partial class Compiler
         for (int i = 0; i < stmt.Methods.Count; i++)
         {
             InterfaceMethodSignature sig = stmt.Methods[i];
-            var paramNames = new List<string>();
-            foreach (Token p in sig.Parameters)
-            {
-                paramNames.Add(p.Lexeme);
-            }
-
-            var paramTypes = new List<string?>();
-            for (int j = 0; j < sig.Parameters.Count; j++)
-            {
-                string? paramType = j < sig.ParameterTypes.Count ? sig.ParameterTypes[j]?.Lexeme : null;
-                paramTypes.Add(paramType);
-            }
-
-            string? returnType = sig.ReturnType?.Lexeme;
-            methods[i] = new InterfaceMethod(sig.Name.Lexeme, sig.Parameters.Count, paramNames, paramTypes, returnType);
+            var paramNames = sig.Parameters.Select(p => p.Lexeme).ToList();
+            var paramTypes = sig.Parameters
+                .Select((_, j) => j < sig.ParameterTypes.Count ? sig.ParameterTypes[j]?.Lexeme : null)
+                .ToList();
+            methods[i] = new InterfaceMethod(
+                sig.Name.Lexeme, sig.Parameters.Count, paramNames, paramTypes, sig.ReturnType?.Lexeme);
         }
 
-        var metadata = new InterfaceMetadata(stmt.Name.Lexeme, fields, methods);
-        ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.InterfaceDecl, metaIdx);
+        var meta = new InterfaceMetadata(stmt.Name.Lexeme, fields, methods);
+        ushort metaIdx = _builder.AddConstant(meta);
 
-        _builder.Emit(OpCode.Dup);
+        byte destReg = _scope.DeclareLocal(stmt.Name.Lexeme);
+        _builder.EmitABx(OpCode.IfaceDecl, destReg, metaIdx);
+        _scope.MarkInitialized();
+
+        if (_enclosing == null && _scope.ScopeDepth == 0)
         {
-            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, globalSlot);
+            ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+            _builder.EmitABx(OpCode.SetGlobal, destReg, gslot);
         }
-
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitExtendStmt(ExtendStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        if (!(_enclosing is null && _scope.ScopeDepth == 0))
+        if (_enclosing != null || _scope.ScopeDepth > 0)
         {
-            ushort msgIdx = _builder.AddConstant("'extend' blocks must be declared at the top level.");
-            _builder.Emit(OpCode.Const, msgIdx);
-            _builder.Emit(OpCode.Throw);
+            byte errReg = _scope.AllocTemp();
+            ushort msgIdx = _builder.AddConstant("'extend' blocks must be defined at the top level.");
+            _builder.EmitABx(OpCode.LoadK, errReg, msgIdx);
+            _builder.EmitA(OpCode.Throw, errReg);
+            _scope.FreeTemp(errReg);
             return null;
         }
 
         string typeName = stmt.TypeName.Lexeme;
         bool isBuiltIn = typeName is "string" or "array" or "dict" or "int" or "float";
 
-        var methodNames = new string[stmt.Methods.Count];
-        for (int i = 0; i < stmt.Methods.Count; i++)
+        var methodNames = new List<string>();
+        var methodChunks = new List<Chunk>();
+        foreach (FnDeclStmt method in stmt.Methods)
         {
-            methodNames[i] = stmt.Methods[i].Name.Lexeme;
+            List<Token> methodParams = method.Parameters;
+            List<Expr?>? methodDefaults = method.DefaultValues;
 
-            List<Token> methodParams;
-            List<Expr?> methodDefaults;
-            bool hasSelfParam = stmt.Methods[i].Parameters.Count > 0
-                && stmt.Methods[i].Parameters[0].Lexeme == "self";
-
-            if (!hasSelfParam)
+            // Prepend implicit 'self' if not already in parameter list
+            if (!methodParams.Any(p => p.Lexeme == "self"))
             {
-                methodParams = new List<Token>();
-                methodParams.Add(new Token(TokenType.Identifier, "self", null, stmt.Methods[i].Name.Span));
-                methodParams.AddRange(stmt.Methods[i].Parameters);
+                methodParams = new List<Token>(methodParams.Count + 1);
+                methodParams.Add(new Token(TokenType.Identifier, "self", null, method.Name.Span));
+                methodParams.AddRange(method.Parameters);
 
-                methodDefaults = new List<Expr?>();
-                methodDefaults.Add(null); // self has no default
-                methodDefaults.AddRange(stmt.Methods[i].DefaultValues);
-            }
-            else
-            {
-                methodParams = stmt.Methods[i].Parameters;
-                methodDefaults = stmt.Methods[i].DefaultValues;
+                // Shift default values to account for the prepended self (which has no default)
+                if (methodDefaults != null && methodDefaults.Count > 0)
+                {
+                    var newDefaults = new List<Expr?>(methodDefaults.Count + 1) { null };
+                    newDefaults.AddRange(methodDefaults);
+                    methodDefaults = newDefaults;
+                }
             }
 
-            CompileFunction(
-                stmt.Methods[i].Name.Lexeme,
-                methodParams,
-                methodDefaults,
-                stmt.Methods[i].Body,
-                stmt.Methods[i].IsAsync,
-                stmt.Methods[i].HasRestParam,
-                firstParamIsConst: !hasSelfParam);
+            Chunk mChunk = CompileFunction(
+                methodParams, method.Body, method.Name.Lexeme,
+                method.IsAsync, method.HasRestParam, methodDefaults,
+                constFirstParam: true);
+            methodNames.Add(method.Name.Lexeme);
+            methodChunks.Add(mChunk);
         }
 
-        var metadata = new ExtendMetadata(typeName, methodNames, isBuiltIn);
-        ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.Extend, metaIdx);
+        var meta = new ExtendMetadata(typeName, methodNames.ToArray(), isBuiltIn);
+        ushort metaIdx = _builder.AddConstant(meta);
 
+        byte baseReg = _scope.AllocTemp();
+        foreach (Chunk mChunk in methodChunks)
+        {
+            byte mReg = _scope.AllocTemp();
+            ushort mIdx = _builder.AddConstant(StashValue.FromObj(mChunk));
+            _builder.EmitABx(OpCode.Closure, mReg, mIdx);
+            foreach (UpvalueDescriptor uv in mChunk.Upvalues)
+                _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
+        }
+
+        _builder.EmitABx(OpCode.Extend, baseReg, metaIdx);
+        _scope.FreeTempFrom(baseReg);
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitImportStmt(ImportStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        // Compile path expression (pushes module path string onto stack)
-        CompileExpr(stmt.Path);
+        // Compile path into a temp register
+        byte pathReg = CompileExpr(stmt.Path);
 
         string[] names = new string[stmt.Names.Count];
         for (int i = 0; i < stmt.Names.Count; i++)
-        {
             names[i] = stmt.Names[i].Lexeme;
-        }
 
         var metadata = new ImportMetadata(names);
         ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.Import, metaIdx);
-        // VM pops path, loads module, pushes N values onto stack (one per name)
 
-        // Declare each imported name as a local
-        foreach (Token name in stmt.Names)
+        // Import R(pathReg), K(metaIdx) — VM reads path from R(A), writes N results to R(A+1)..R(A+N)
+        _builder.EmitABx(OpCode.Import, pathReg, metaIdx);
+
+        // Declare each imported name as a local (allocated consecutively after pathReg)
+        for (int i = 0; i < stmt.Names.Count; i++)
         {
-            int slot = _scope.DeclareLocal(name.Lexeme, isConst: false);
-            _scope.MarkInitialized(slot);
-            if (_enclosing is null && _scope.ScopeDepth == 0)
+            byte nameReg = _scope.DeclareLocal(stmt.Names[i].Lexeme);
+            _scope.MarkInitialized();
+
+            if (_enclosing == null && _scope.ScopeDepth == 0)
             {
-                _builder.Emit(OpCode.LoadLocal, (byte)slot);
-                ushort globalSlot = _globalSlots.GetOrAllocate(name.Lexeme);
-                _builder.Emit(OpCode.StoreGlobal, globalSlot);
+                ushort gslot = _globalSlots.GetOrAllocate(stmt.Names[i].Lexeme);
+                _builder.EmitABx(OpCode.SetGlobal, nameReg, gslot);
             }
         }
-
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitImportAsStmt(ImportAsStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        CompileExpr(stmt.Path);
+        byte pathReg = CompileExpr(stmt.Path);
 
         var metadata = new ImportAsMetadata(stmt.Alias.Lexeme);
         ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.ImportAs, metaIdx);
-        // VM pops path, loads module, wraps as StashNamespace, pushes 1 value
 
-        int slot = _scope.DeclareLocal(stmt.Alias.Lexeme, isConst: false);
-        _scope.MarkInitialized(slot);
-        if (_enclosing is null && _scope.ScopeDepth == 0)
+        // ImportAs R(pathReg), K(metaIdx) — VM reads path from R(A), writes result to R(A+1)
+        _builder.EmitABx(OpCode.ImportAs, pathReg, metaIdx);
+
+        byte aliasReg = _scope.DeclareLocal(stmt.Alias.Lexeme);
+        _scope.MarkInitialized();
+
+        if (_enclosing == null && _scope.ScopeDepth == 0)
         {
-            _builder.Emit(OpCode.LoadLocal, (byte)slot);
-            ushort globalSlot = _globalSlots.GetOrAllocate(stmt.Alias.Lexeme);
-            _builder.Emit(OpCode.StoreGlobal, globalSlot);
+            ushort gslot = _globalSlots.GetOrAllocate(stmt.Alias.Lexeme);
+            _builder.EmitABx(OpCode.SetGlobal, aliasReg, gslot);
         }
-
         return null;
     }
 
-    /// <inheritdoc />
     public object? VisitDestructureStmt(DestructureStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        // Compile the initializer expression (pushes array/dict onto stack)
-        CompileExpr(stmt.Initializer);
+        // Compile initializer into a temp register
+        byte initReg = CompileExpr(stmt.Initializer);
 
         string kind = stmt.Kind == DestructureStmt.PatternKind.Array ? "array" : "object";
         string[] names = new string[stmt.Names.Count];
         for (int i = 0; i < stmt.Names.Count; i++)
-        {
             names[i] = stmt.Names[i].Lexeme;
-        }
 
         var metadata = new DestructureMetadata(kind, names, stmt.RestName?.Lexeme, stmt.IsConst);
         ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.Destructure, metaIdx);
-        // VM pops initializer, pushes N values (one per name + optional rest)
 
-        // Declare each name as a local
-        foreach (Token name in stmt.Names)
+        // Destructure R(initReg), K(metaIdx) — VM reads from R(A), writes N results to R(A+1)..
+        _builder.EmitABx(OpCode.Destructure, initReg, metaIdx);
+
+        // Declare each destructured name as a local
+        for (int i = 0; i < stmt.Names.Count; i++)
         {
-            int slot = _scope.DeclareLocal(name.Lexeme, isConst: stmt.IsConst);
-            _scope.MarkInitialized(slot);
+            byte nameReg = _scope.DeclareLocal(stmt.Names[i].Lexeme, isConst: stmt.IsConst);
+            _scope.MarkInitialized();
 
-            if (_enclosing is null && _scope.ScopeDepth == 0)
+            if (_enclosing == null && _scope.ScopeDepth == 0)
             {
-                _builder.Emit(OpCode.LoadLocal, (byte)slot);
-                ushort globalSlot = _globalSlots.GetOrAllocate(name.Lexeme);
-                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, globalSlot);
+                ushort gslot = _globalSlots.GetOrAllocate(stmt.Names[i].Lexeme);
+                _builder.EmitABx(
+                    stmt.IsConst ? OpCode.InitConstGlobal : OpCode.SetGlobal,
+                    nameReg, gslot);
             }
         }
 
-        // Declare rest name if present
         if (stmt.RestName != null)
         {
-            int restSlot = _scope.DeclareLocal(stmt.RestName.Lexeme, isConst: stmt.IsConst);
-            _scope.MarkInitialized(restSlot);
+            byte restReg = _scope.DeclareLocal(stmt.RestName.Lexeme, isConst: stmt.IsConst);
+            _scope.MarkInitialized();
 
-            if (_enclosing is null && _scope.ScopeDepth == 0)
+            if (_enclosing == null && _scope.ScopeDepth == 0)
             {
-                _builder.Emit(OpCode.LoadLocal, (byte)restSlot);
-                ushort globalSlot = _globalSlots.GetOrAllocate(stmt.RestName.Lexeme);
-                _builder.Emit(stmt.IsConst ? OpCode.InitConstGlobal : OpCode.StoreGlobal, globalSlot);
+                ushort gslot = _globalSlots.GetOrAllocate(stmt.RestName.Lexeme);
+                _builder.EmitABx(
+                    stmt.IsConst ? OpCode.InitConstGlobal : OpCode.SetGlobal,
+                    restReg, gslot);
             }
         }
-
         return null;
     }
-
 }

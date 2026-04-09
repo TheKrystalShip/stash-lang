@@ -20,25 +20,22 @@ public sealed partial class Compiler
         if (TryEvaluateConstant(stmt.Condition, out object? condValue))
         {
             if (!CompileTimeIsFalsy(condValue))
-            {
                 CompileStmt(stmt.ThenBranch);
-            }
             else if (stmt.ElseBranch != null)
-            {
                 CompileStmt(stmt.ElseBranch);
-            }
             return null;
         }
 
         _builder.AddSourceMapping(stmt.Span);
-        CompileExpr(stmt.Condition);
-        int elseJump = _builder.EmitJump(OpCode.JumpFalse);
+        byte condReg = CompileExpr(stmt.Condition);
+        int elseJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+        _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.ThenBranch);
 
         if (stmt.ElseBranch != null)
         {
-            int endJump = _builder.EmitJump(OpCode.Jump);
+            int endJump = _builder.EmitJump(OpCode.Jmp);
             _builder.PatchJump(elseJump);
             CompileStmt(stmt.ElseBranch);
             _builder.PatchJump(endJump);
@@ -65,12 +62,13 @@ public sealed partial class Compiler
         };
         (_loops ??= new()).Push(loopCtx);
 
-        CompileExpr(stmt.Condition);
-        int exitJump = _builder.EmitJump(OpCode.JumpFalse);
+        byte condReg = CompileExpr(stmt.Condition);
+        int exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+        _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.Body);
 
-        _builder.EmitLoop(loopStart);
+        _builder.EmitLoop(0, loopStart);
         _builder.PatchJump(exitJump);
 
         PatchBreakJumps();
@@ -86,20 +84,23 @@ public sealed partial class Compiler
         var loopCtx = new LoopContext
         {
             LoopStart = loopStart,
-            ContinueTarget = -1,  // determined after body, before condition
             ScopeDepth = _scope.ScopeDepth,
         };
         (_loops ??= new()).Push(loopCtx);
 
         CompileStmt(stmt.Body);
 
-        // All continue statements now have their target here (before the condition)
+        // Continue target is the condition check — patch any pending continue jumps here
         loopCtx.ContinueTarget = _builder.CurrentOffset;
-        PatchContinueJumps(loopCtx, _builder);
+        foreach (int j in loopCtx.ContinueJumps)
+            _builder.PatchJump(j);
+        loopCtx.ContinueJumps.Clear();
 
-        CompileExpr(stmt.Condition);
-        int exitJump = _builder.EmitJump(OpCode.JumpFalse);
-        _builder.EmitLoop(loopStart);
+        // Condition: if true, loop back; if false, fall through to exit
+        byte condReg = CompileExpr(stmt.Condition);
+        int exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+        _scope.FreeTemp(condReg);
+        _builder.EmitLoop(0, loopStart);
         _builder.PatchJump(exitJump);
 
         PatchBreakJumps();
@@ -111,20 +112,19 @@ public sealed partial class Compiler
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        // Wrap the entire for-loop in a scope so initializer variables are cleaned up on exit
+        if (TryCompileNumericFor(stmt))
+            return null;
+
         _scope.BeginScope();
 
         if (stmt.Initializer != null)
-        {
             CompileStmt(stmt.Initializer);
-        }
 
         int loopStart = _builder.CurrentOffset;
 
         var loopCtx = new LoopContext
         {
             LoopStart = loopStart,
-            ContinueTarget = -1,  // set after body, before increment
             ScopeDepth = _scope.ScopeDepth,
         };
         (_loops ??= new()).Push(loopCtx);
@@ -132,33 +132,32 @@ public sealed partial class Compiler
         int exitJump = -1;
         if (stmt.Condition != null)
         {
-            CompileExpr(stmt.Condition);
-            exitJump = _builder.EmitJump(OpCode.JumpFalse);
+            byte condReg = CompileExpr(stmt.Condition);
+            exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+            _scope.FreeTemp(condReg);
         }
 
         CompileStmt(stmt.Body);
 
-        // Continue should jump here — before the increment expression
+        // Continue target is before the increment — patch any pending continue jumps here
         loopCtx.ContinueTarget = _builder.CurrentOffset;
-        PatchContinueJumps(loopCtx, _builder);
+        foreach (int j in loopCtx.ContinueJumps)
+            _builder.PatchJump(j);
+        loopCtx.ContinueJumps.Clear();
 
         if (stmt.Increment != null)
         {
-            CompileExpr(stmt.Increment);
-            _builder.Emit(OpCode.Pop);  // discard the increment result
+            byte incReg = CompileExpr(stmt.Increment);
+            _scope.FreeTemp(incReg);
         }
 
-        _builder.EmitLoop(loopStart);
+        _builder.EmitLoop(0, loopStart);
 
         if (exitJump >= 0)
-        {
             _builder.PatchJump(exitJump);
-        }
 
         PatchBreakJumps();
-
-        // Clean up the initializer variable (for-scope)
-        EmitScopePops();
+        EndScope();
         return null;
     }
 
@@ -168,27 +167,29 @@ public sealed partial class Compiler
         _builder.AddSourceMapping(stmt.Span);
         _scope.BeginScope();
 
-        // Declare a synthetic local for the iterator so it occupies a proper stack slot.
-        // Without this, the iterator value on the stack misaligns subsequent local slot indices.
-        int iterSlot = _scope.DeclareLocal("<iter>", isConst: false);
-        CompileExpr(stmt.Iterable);
-        _builder.Emit(OpCode.Iterator);
-        _scope.MarkInitialized(iterSlot);
+        // Declare loop variables FIRST — they get stable local registers
+        byte valueReg = _scope.DeclareLocal(stmt.VariableName.Lexeme);
+        byte indexReg = 0;
+        bool hasIndex = stmt.IndexName != null;
+        if (hasIndex)
+            indexReg = _scope.DeclareLocal(stmt.IndexName!.Lexeme);
 
-        // Optional index variable — declared as a local (updated by the VM)
-        if (stmt.IndexName != null)
-        {
-            int indexSlot = _scope.DeclareLocal(stmt.IndexName.Lexeme, isConst: false);
-            _builder.Emit(OpCode.Null);  // placeholder value for index
-            _scope.MarkInitialized(indexSlot);
-        }
+        // Allocate temp for iterable + 2 scratch regs for IterLoop writeback
+        // Layout: [iterableReg] [scratch1 = iterableReg+1] [scratch2 = iterableReg+2]
+        byte iterableReg = _scope.DeclareLocal("<iter>");
+        _scope.MarkInitialized();
+        byte scratch1 = _scope.DeclareLocal("<iter_val>");
+        _scope.MarkInitialized();
+        byte scratch2 = _scope.DeclareLocal("<iter_idx>");
+        _scope.MarkInitialized();
 
-        // Loop variable
-        int varSlot = _scope.DeclareLocal(stmt.VariableName.Lexeme, isConst: false);
-        _builder.Emit(OpCode.Null);  // placeholder value for loop variable
-        _scope.MarkInitialized(varSlot);
+        CompileExprTo(stmt.Iterable, iterableReg);
+
+        // IterPrep converts the value in-place into an iterator object
+        _builder.EmitAB(OpCode.IterPrep, iterableReg, hasIndex ? (byte)1 : (byte)0);
 
         int loopStart = _builder.CurrentOffset;
+
         var loopCtx = new LoopContext
         {
             LoopStart = loopStart,
@@ -197,30 +198,32 @@ public sealed partial class Compiler
         };
         (_loops ??= new()).Push(loopCtx);
 
-        // OP_ITERATE: advance iterator; if exhausted, jump to exit
-        int exitJump = _builder.EmitJump(OpCode.Iterate);
+        // IterLoop advances the iterator; if exhausted, jumps forward past the loop body
+        int iterCheck = _builder.EmitJump(OpCode.IterLoop, iterableReg);
 
-        // Iterator pushed the next value — store it into the loop variable
-        _builder.Emit(OpCode.StoreLocal, (byte)varSlot);
+        // IterLoop writes value to R(iterableReg+1) and index to R(iterableReg+2);
+        // move them into the declared local registers
+        _builder.EmitAB(OpCode.Move, valueReg, scratch1);
+        if (hasIndex)
+            _builder.EmitAB(OpCode.Move, indexReg, scratch2);
 
-        CompileStmt(stmt.Body);
+        // Inner scope for the loop body
+        _scope.BeginScope();
+        foreach (Stmt s in stmt.Body.Statements)
+            CompileStmt(s);
 
-        // Close any upvalues captured from loop-iteration variables before looping back,
-        // ensuring each iteration's closures freeze the current value of the loop variable.
-        // Without this, all closures in a loop share a single open upvalue that reads the
-        // live (ever-changing) stack slot — causing tasks/closures to see wrong values.
-        _builder.Emit(OpCode.CloseUpvalue, (byte)varSlot);
-        if (stmt.IndexName != null)
-        {
-            _builder.Emit(OpCode.CloseUpvalue, (byte)(varSlot - 1)); // index slot is one below varSlot
-        }
+        // Close upvalues captured during this iteration before looping back so that
+        // each iteration's closures capture an independent copy of the loop variable
+        if (_builder.MayHaveCapturedLocals)
+            _builder.EmitA(OpCode.CloseUpval, valueReg);
 
-        _builder.EmitLoop(loopStart);
-        _builder.PatchJump(exitJump);
+        EndScope();
 
-        // Iterator is now a declared local — cleaned up by EmitScopePops below
+        _builder.EmitLoop(0, loopStart);
+        _builder.PatchJump(iterCheck);
+
         PatchBreakJumps();
-        EmitScopePops();
+        EndScope();
         return null;
     }
 
@@ -228,16 +231,26 @@ public sealed partial class Compiler
     public object? VisitBreakStmt(BreakStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
-        if ((_loops?.Count ?? 0) == 0)
-        {
+        if (_loops == null || _loops.Count == 0)
             throw new CompileError("'break' outside of loop.", stmt.Span);
+
+        LoopContext loop = _loops.Peek();
+
+        // Inline any finally bodies that are inside this loop (innermost first)
+        if (_activeFinally != null)
+        {
+            for (int i = _activeFinally.Count - 1; i >= 0; i--)
+            {
+                FinallyInfo fi = _activeFinally[i];
+                if (fi.ScopeDepth > loop.ScopeDepth && fi.Body != null)
+                {
+                    _builder.EmitAx(OpCode.TryEnd, 0);
+                    CompileStmt(fi.Body);
+                }
+            }
         }
 
-        EmitPendingFinally();
-        EmitScopeCleanup(_loops!.Peek().ScopeDepth);
-
-        int jump = _builder.EmitJump(OpCode.Jump);
-        _loops!.Peek().BreakJumps.Add(jump);
+        loop.BreakJumps.Add(_builder.EmitJump(OpCode.Jmp));
         return null;
     }
 
@@ -245,53 +258,191 @@ public sealed partial class Compiler
     public object? VisitContinueStmt(ContinueStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
-        if ((_loops?.Count ?? 0) == 0)
-        {
+        if (_loops == null || _loops.Count == 0)
             throw new CompileError("'continue' outside of loop.", stmt.Span);
+
+        LoopContext loop = _loops.Peek();
+
+        // Inline any finally bodies that are inside this loop (innermost first)
+        if (_activeFinally != null)
+        {
+            for (int i = _activeFinally.Count - 1; i >= 0; i--)
+            {
+                FinallyInfo fi = _activeFinally[i];
+                if (fi.ScopeDepth > loop.ScopeDepth && fi.Body != null)
+                {
+                    _builder.EmitAx(OpCode.TryEnd, 0);
+                    CompileStmt(fi.Body);
+                }
+            }
         }
-
-        EmitPendingFinally();
-
-        LoopContext loop = _loops!.Peek();
-        EmitScopeCleanup(loop.ScopeDepth);
 
         if (loop.ContinueTarget >= 0)
         {
-            _builder.EmitLoop(loop.ContinueTarget);
+            // Target is known — emit backward jump directly
+            _builder.EmitLoop(0, loop.ContinueTarget);
         }
         else
         {
-            int jump = _builder.EmitJump(OpCode.Jump);
-            loop.ContinueJumps.Add(jump);
+            // Target not yet known — emit forward jump to be patched later
+            loop.ContinueJumps.Add(_builder.EmitJump(OpCode.Jmp));
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Attempts to compile a for-loop as an optimized numeric for using ForPrep/ForLoop opcodes.
+    /// Returns true if the pattern was recognized and optimized code was emitted.
+    /// </summary>
+    private bool TryCompileNumericFor(ForStmt stmt)
+    {
+        // 1. Init must be a VarDeclStmt with a non-null initializer
+        if (stmt.Initializer is not VarDeclStmt varDecl || varDecl.Initializer == null)
+            return false;
+
+        // 2. Condition must be BinaryExpr: <ident> <cmp> <limit>
+        if (stmt.Condition is not BinaryExpr cond)
+            return false;
+        if (cond.Left is not IdentifierExpr condIdent || condIdent.Name.Lexeme != varDecl.Name.Lexeme)
+            return false;
+
+        TokenType cmpOp = cond.Operator.Type;
+        if (cmpOp != TokenType.Less && cmpOp != TokenType.LessEqual &&
+            cmpOp != TokenType.Greater && cmpOp != TokenType.GreaterEqual)
+            return false;
+
+        // 3. Increment must be UpdateExpr (++ or --) on the same variable
+        if (stmt.Increment is not UpdateExpr update)
+            return false;
+        if (update.Operand is not IdentifierExpr incIdent || incIdent.Name.Lexeme != varDecl.Name.Lexeme)
+            return false;
+
+        TokenType incOp = update.Operator.Type;
+        if (incOp != TokenType.PlusPlus && incOp != TokenType.MinusMinus)
+            return false;
+
+        // 4. Step/comparison consistency
+        bool isPositiveStep = incOp == TokenType.PlusPlus;
+        bool isUpperBound = cmpOp == TokenType.Less || cmpOp == TokenType.LessEqual;
+        if (isPositiveStep != isUpperBound)
+            return false;
+
+        int stepValue = isPositiveStep ? 1 : -1;
+
+        // --- Emit optimized ForPrep/ForLoop code ---
+
+        _scope.BeginScope();
+
+        // Allocate 4 consecutive registers: counter, limit, step, loop variable
+        byte counterReg = _scope.DeclareLocal("<for_counter>");
+        _scope.MarkInitialized();
+        byte limitReg = _scope.DeclareLocal("<for_limit>");
+        _scope.MarkInitialized();
+        byte stepReg = _scope.DeclareLocal("<for_step>");
+        _scope.MarkInitialized();
+        byte varReg = _scope.DeclareLocal(varDecl.Name.Lexeme);
+        _scope.MarkInitialized();
+
+        // Load initial value into counter register
+        CompileExprTo(varDecl.Initializer, counterReg);
+
+        // Load limit and adjust for strict comparisons so ForLoop uses <=/>= semantics
+        CompileExprTo(cond.Right, limitReg);
+        if (cmpOp == TokenType.Less)
+            _builder.EmitAsBx(OpCode.AddI, limitReg, -1);
+        else if (cmpOp == TokenType.Greater)
+            _builder.EmitAsBx(OpCode.AddI, limitReg, 1);
+
+        // Load step constant
+        ushort stepIdx = _builder.AddConstant((long)stepValue);
+        _builder.EmitABx(OpCode.LoadK, stepReg, stepIdx);
+
+        // ForPrep: initialize and jump to ForLoop for the initial bounds check
+        int forPrepJump = _builder.EmitJump(OpCode.ForPrep, counterReg);
+
+        int bodyStart = _builder.CurrentOffset;
+
+        var loopCtx = new LoopContext
+        {
+            LoopStart = bodyStart,
+            ScopeDepth = _scope.ScopeDepth,
+        };
+        (_loops ??= new()).Push(loopCtx);
+
+        // Inner scope for the loop body
+        _scope.BeginScope();
+        foreach (Stmt s in stmt.Body.Statements)
+            CompileStmt(s);
+
+        if (_builder.MayHaveCapturedLocals)
+            _builder.EmitA(OpCode.CloseUpval, varReg);
+
+        EndScope();
+
+        // Patch continue jumps to the ForLoop instruction position
+        loopCtx.ContinueTarget = _builder.CurrentOffset;
+        foreach (int j in loopCtx.ContinueJumps)
+            _builder.PatchJump(j);
+        loopCtx.ContinueJumps.Clear();
+
+        // Patch ForPrep to jump here (the ForLoop instruction)
+        _builder.PatchJump(forPrepJump);
+
+        // ForLoop: increment counter, check bounds, jump back to body if in range
+        _builder.EmitAsBx(OpCode.ForLoop, counterReg, bodyStart - _builder.CurrentOffset - 1);
+
+        PatchBreakJumps();
+        EndScope();
+
+        return true;
     }
 
     /// <inheritdoc />
     public object? VisitReturnStmt(ReturnStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
+
+        byte reg;
+        bool isLocal = false;
         if (stmt.Value != null)
         {
-            CompileExpr(stmt.Value);
+            // OPT-3: If returning a local variable, use its register directly.
+            // Disable when active finally blocks exist — they could modify the local
+            // between the finally body and the Return opcode.
+            if (_activeFinally is not { Count: > 0 } && TryGetLocalReg(stmt.Value, out byte localReg))
+            {
+                reg = localReg;
+                isLocal = true;
+            }
+            else
+            {
+                reg = CompileExpr(stmt.Value);
+            }
         }
         else
         {
-            _builder.Emit(OpCode.Null);
+            reg = _scope.AllocTemp();
+            _builder.EmitA(OpCode.LoadNull, reg);
         }
 
-        if (_activeFinally is { Count: > 0 })
+        // Inline all active finally bodies before returning (innermost to outermost)
+        if (_activeFinally != null)
         {
-            // Save return value, run finally blocks, then return
-            int saveSlot = _activeFinally![^1].SaveSlot;
-            _builder.Emit(OpCode.StoreLocal, (byte)saveSlot);
-            EmitPendingFinally();
-            _builder.Emit(OpCode.LoadLocal, (byte)saveSlot);
+            for (int i = _activeFinally.Count - 1; i >= 0; i--)
+            {
+                FinallyInfo fi = _activeFinally[i];
+                if (fi.Body != null)
+                {
+                    _builder.EmitAx(OpCode.TryEnd, 0);
+                    CompileStmt(fi.Body);
+                }
+            }
         }
 
-        _builder.Emit(OpCode.Return);
+        _builder.EmitABC(OpCode.Return, reg, 1, 0);
+        if (!isLocal) _scope.FreeTemp(reg);
+
         return null;
     }
-
 }

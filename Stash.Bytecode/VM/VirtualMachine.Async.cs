@@ -91,109 +91,15 @@ public sealed partial class VirtualMachine
     }
 
 
-    private void ExecuteCallSpread(ref CallFrame frame, IDebugger? debugger)
-    {
-        // Scan backward from stack top to find ArgSentinel
-        int rawArgc = 0;
-        int sentinelIdx = -1;
-        for (int i = _sp - 1; i >= 0; i--)
-        {
-            if (ReferenceEquals(_stack[i].AsObj, _argSentinel))
-            {
-                sentinelIdx = i;
-                break;
-            }
-            rawArgc++;
-        }
-
-        if (sentinelIdx < 0)
-        {
-            throw new RuntimeError("Internal error: ArgMark sentinel not found.", GetCurrentSpan(ref frame));
-        }
-
-        // Callee is right below the sentinel
-        object? callee = _stack[sentinelIdx - 1].AsObj;
-        SourceSpan? callSpan = GetCurrentSpan(ref frame);
-
-        // Expand SpreadMarkers: collect all args, expanding spreads
-        var expandedArgs = new List<StashValue>(rawArgc);
-        for (int i = sentinelIdx + 1; i < _sp; i++)
-        {
-            StashValue argVal = _stack[i];
-            if (argVal.IsObj && argVal.AsObj is SpreadMarker sm)
-            {
-                if (sm.Items is List<StashValue> svSpreadList)
-                {
-                    expandedArgs.AddRange(svSpreadList);
-                }
-                else
-                {
-                    throw new RuntimeError("Spread in function call requires an array.",
-                        callSpan);
-                }
-            }
-            else
-            {
-                expandedArgs.Add(argVal);
-            }
-        }
-
-        // Write expanded args back to stack starting at sentinelIdx
-        int expandedArgc = expandedArgs.Count;
-        // Ensure stack capacity
-        while (sentinelIdx + expandedArgc >= _stack.Length)
-        {
-            var bigger = new StashValue[_stack.Length * 2];
-            Array.Copy(_stack, bigger, _stack.Length);
-            _stack = bigger;
-        }
-        for (int i = 0; i < expandedArgc; i++)
-        {
-            _stack[sentinelIdx + i] = expandedArgs[i];
-        }
-        _sp = sentinelIdx + expandedArgc;
-
-        int prevFrameCount = _frameCount;
-        CallValue(callee, expandedArgc, callSpan);
-
-        if (StepLimit > 0 && ++StepCount >= StepLimit)
-        {
-            throw new Stash.Runtime.StepLimitExceededException(StepLimit);
-        }
-
-        // Debug: track function entry (same as OP_CALL)
-        if (debugger is not null && _frameCount > prevFrameCount)
-        {
-            ref CallFrame newFrame = ref _frames[_frameCount - 1];
-            IDebugScope scope = BuildFrameScope(ref newFrame);
-            string funcName = newFrame.FunctionName ?? "<anonymous>";
-
-            _debugCallStack.Add(new Stash.Debugging.CallFrame
-            {
-                FunctionName = funcName,
-                CallSite = callSpan,
-                LocalScope = scope,
-            });
-
-            if (debugger.ShouldBreakOnFunctionEntry(funcName))
-            {
-                debugger.OnFunctionEnter(funcName, callSpan!.Value, scope, _debugThreadId);
-            }
-        }
-    }
-
-
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteAwait(ref CallFrame frame)
+    private void ExecuteAwait(ref CallFrame frame, uint inst)
     {
-        object? future = Pop().ToObject();
-        if (future is StashFuture sf)
-        {
-            Push(StashValue.FromObject(sf.GetResult()));
-        }
-        else
-        {
-            Push(StashValue.FromObject(future)); // non-future values pass through
-        }
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        int @base = frame.BaseSlot;
+        object? future = _stack[@base + b].ToObject();
+        _stack[@base + a] = future is StashFuture sf
+            ? StashValue.FromObject(sf.GetResult())
+            : _stack[@base + b]; // non-future values pass through
     }
 }

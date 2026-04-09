@@ -3,111 +3,126 @@ using Stash.Runtime;
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Represents a compiled unit of bytecode — either a top-level script or a function body.
-/// Contains the instruction stream, constant pool, source map, and metadata.
+/// Immutable compiled function prototype for the register-based VM.
+/// Each instruction is a 32-bit word in the Code array.
 /// </summary>
-public class Chunk
+public sealed class Chunk
 {
-    /// <summary>The bytecode instruction stream.</summary>
-    public byte[] Code { get; }
+    /// <summary>Instruction stream (32-bit words).</summary>
+    public uint[] Code { get; }
 
-    /// <summary>
-    /// Constant pool — stores numbers, strings, and nested Chunks referenced by OP_CONST
-    /// and other instructions that take a constant pool index.
-    /// </summary>
+    /// <summary>Constant pool.</summary>
     public StashValue[] Constants { get; }
 
-    /// <summary>Bytecode offset → source location mappings for debugging and error reporting.</summary>
+    /// <summary>Maps instruction indices to source locations.</summary>
     public SourceMap SourceMap { get; }
 
-    /// <summary>Number of parameters this function accepts.</summary>
+    /// <summary>Number of declared parameters.</summary>
     public int Arity { get; }
 
-    /// <summary>Minimum number of arguments (accounts for default parameter values).</summary>
+    /// <summary>Minimum number of arguments (accounts for defaults).</summary>
     public int MinArity { get; }
 
-    /// <summary>Number of local variable slots needed on the value stack.</summary>
-    public int LocalCount { get; }
+    /// <summary>Maximum number of registers used by this function.</summary>
+    public int MaxRegs { get; }
 
-    /// <summary>Upvalue capture descriptors for closures.</summary>
+    /// <summary>Upvalue descriptors for closure creation.</summary>
     public UpvalueDescriptor[] Upvalues { get; }
 
-    /// <summary>Function name, or null for the top-level script chunk.</summary>
+    /// <summary>Function name (null for top-level script).</summary>
     public string? Name { get; }
 
-    /// <summary>Whether this is an async function.</summary>
+    /// <summary>Whether this function is async.</summary>
     public bool IsAsync { get; }
 
-    /// <summary>Whether the last parameter is a rest parameter (variadic).</summary>
+    /// <summary>Whether this function has a rest parameter.</summary>
     public bool HasRestParam { get; }
 
-    /// <summary>
-    /// True if this function's body contains Closure opcodes that capture locals from this scope.
-    /// When false, CloseUpvalues can be skipped entirely on return.
-    /// </summary>
-    public bool MayHaveCapturedLocals { get; }
+    /// <summary>Optimization hint: true if any local may be captured by a closure.</summary>
+    public bool MayHaveCapturedLocals { get; internal set; }
 
-    /// <summary>
-    /// Local variable names for debugger inspection. Index = slot number.
-    /// Null when debugging info is not needed (e.g., release builds).
-    /// </summary>
+    /// <summary>Debug: register index → variable name.</summary>
     public string[]? LocalNames { get; }
 
-    /// <summary>
-    /// Per-local constness flags for debugger mutation guards. Index = slot number.
-    /// Null when debugging info is not needed.
-    /// </summary>
+    /// <summary>Debug: const flags per register slot.</summary>
     public bool[]? LocalIsConst { get; }
 
-    /// <summary>
-    /// Upvalue variable names for debugger closure scope display. Index = upvalue index.
-    /// Null when debugging info is not needed.
-    /// </summary>
+    /// <summary>Debug: upvalue names for closure scope display.</summary>
     public string[]? UpvalueNames { get; }
 
-    /// <summary>
-    /// Maps global slot indices to variable names. Shared across all chunks from
-    /// the same compilation unit. Used by the VM for error messages and module fallback.
-    /// Null for chunks compiled without slot-based globals (e.g. legacy/test paths).
-    /// </summary>
+    /// <summary>Global slot index → variable name mapping.</summary>
     public string[]? GlobalNameTable { get; }
 
-    /// <summary>
-    /// Total number of global variable slots needed for this compilation unit.
-    /// The VM pre-allocates a <c>StashValue[]</c> of this size.
-    /// </summary>
+    /// <summary>Total number of global slots.</summary>
     public int GlobalSlotCount { get; }
 
-    /// <summary>
-    /// Inline cache slots for GetFieldIC instructions. Each GetFieldIC references
-    /// an IC slot by index. Null when no GetFieldIC instructions exist in this chunk.
-    /// </summary>
+    /// <summary>Inline cache slots for GetField operations.</summary>
     internal ICSlot[]? ICSlots { get; set; }
 
-    public Chunk(
-        byte[] code,
+    internal Chunk(
+        uint[] code,
         StashValue[] constants,
         SourceMap sourceMap,
         int arity,
         int minArity,
-        int localCount,
+        int maxRegs,
         UpvalueDescriptor[] upvalues,
         string? name,
         bool isAsync,
         bool hasRestParam,
-        bool mayHaveCapturedLocals = false,
-        string[]? localNames = null,
-        bool[]? localIsConst = null,
-        string[]? upvalueNames = null,
-        string[]? globalNameTable = null,
-        int globalSlotCount = 0)
+        bool mayHaveCapturedLocals,
+        string[]? localNames,
+        string[]? localIsConstNames,
+        string[]? upvalueNames,
+        string[]? globalNameTable,
+        int globalSlotCount,
+        ICSlot[]? icSlots)
     {
         Code = code;
         Constants = constants;
         SourceMap = sourceMap;
         Arity = arity;
         MinArity = minArity;
-        LocalCount = localCount;
+        MaxRegs = maxRegs;
+        Upvalues = upvalues;
+        Name = name;
+        IsAsync = isAsync;
+        HasRestParam = hasRestParam;
+        MayHaveCapturedLocals = mayHaveCapturedLocals;
+        LocalNames = localNames;
+        LocalIsConst = localIsConstNames != null ? new bool[localIsConstNames.Length] : null;
+        UpvalueNames = upvalueNames;
+        GlobalNameTable = globalNameTable;
+        GlobalSlotCount = globalSlotCount;
+        ICSlots = icSlots;
+    }
+
+    // Overload with bool[] for LocalIsConst directly
+    internal Chunk(
+        uint[] code,
+        StashValue[] constants,
+        SourceMap sourceMap,
+        int arity,
+        int minArity,
+        int maxRegs,
+        UpvalueDescriptor[] upvalues,
+        string? name,
+        bool isAsync,
+        bool hasRestParam,
+        bool mayHaveCapturedLocals,
+        string[]? localNames,
+        bool[]? localIsConst,
+        string[]? upvalueNames,
+        string[]? globalNameTable,
+        int globalSlotCount,
+        ICSlot[]? icSlots)
+    {
+        Code = code;
+        Constants = constants;
+        SourceMap = sourceMap;
+        Arity = arity;
+        MinArity = minArity;
+        MaxRegs = maxRegs;
         Upvalues = upvalues;
         Name = name;
         IsAsync = isAsync;
@@ -118,5 +133,6 @@ public class Chunk
         UpvalueNames = upvalueNames;
         GlobalNameTable = globalNameTable;
         GlobalSlotCount = globalSlotCount;
+        ICSlots = icSlots;
     }
 }

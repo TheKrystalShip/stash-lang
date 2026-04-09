@@ -89,478 +89,289 @@ public sealed partial class VirtualMachine
         throw new RuntimeError($"Cannot index-assign into {RuntimeValues.Stringify(obj)}.", GetCurrentSpan(ref frame));
     }
 
-    private static StashIterator CreateIterator(object? iterable, SourceSpan? span)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGetTable(ref CallFrame frame, uint inst)
     {
-        if (iterable is StashDictionary dict)
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue obj = _stack[@base + b];
+        StashValue idx = _stack[@base + c];
+
+        // Fast path: array[int]
+        if (obj.Tag == StashValueTag.Obj && obj.AsObj is List<StashValue> list && idx.IsInt)
         {
-            IEnumerator<StashValue> keyEnum = dict.IterableKeys()
-                .Select(k => StashValue.FromObject(k))
-                .GetEnumerator();
-            return new StashIterator(keyEnum, dict);
+            long i = idx.AsInt;
+            if (i < 0) i += list.Count;
+            if ((ulong)i < (ulong)list.Count)
+            {
+                _stack[@base + a] = list[(int)i];
+                return;
+            }
+            throw new RuntimeError(
+                $"Index {idx.AsInt} out of bounds for array of length {list.Count}.",
+                GetCurrentSpan(ref frame));
         }
 
-        if (iterable is List<StashValue> svList)
-        {
-            return new StashIterator(new List<StashValue>(svList).GetEnumerator());
-        }
-
-        if (iterable is StashRange range)
-        {
-            return new StashIterator(range.IterateValues().GetEnumerator());
-        }
-
-        if (iterable is string s)
-        {
-            return new StashIterator(RuntimeValues.StringToStashValues(s).GetEnumerator());
-        }
-
-        throw new RuntimeError($"Cannot iterate over {RuntimeValues.Stringify(iterable)}.", span);
+        // General path
+        _stack[@base + a] = StashValue.FromObject(GetIndexValue(obj.ToObject(), idx.ToObject(), ref frame));
     }
 
-    private void ExecuteArray(ref CallFrame frame)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteSetTable(ref CallFrame frame, uint inst)
     {
-        ushort count = ReadU16(ref frame);
-        var list = new List<StashValue>(count);
-        int start = _sp - count;
-        for (int i = start; i < _sp; i++)
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue obj = _stack[@base + a];
+        StashValue idx = _stack[@base + b];
+        StashValue val = _stack[@base + c];
+
+        // Fast path: array[int] = val
+        if (obj.Tag == StashValueTag.Obj && obj.AsObj is List<StashValue> list && idx.IsInt)
         {
-            StashValue val = _stack[i];
+            long i = idx.AsInt;
+            if (i < 0) i += list.Count;
+            if ((ulong)i < (ulong)list.Count)
+            {
+                list[(int)i] = val;
+                return;
+            }
+            throw new RuntimeError(
+                $"Index {idx.AsInt} out of bounds for array of length {list.Count}.",
+                GetCurrentSpan(ref frame));
+        }
+
+        SetIndexValue(obj.ToObject(), idx.ToObject(), val.ToObject(), ref frame);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGetField(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        string fieldName = (string)frame.Chunk.Constants[c].AsObj!;
+        StashValue objVal = _stack[@base + b];
+
+        // Fast path: namespace member access (e.g., math.abs)
+        if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is StashNamespace ns)
+        {
+            _stack[@base + a] = ns.GetMemberValue(fieldName, null);
+            return;
+        }
+
+        object? obj = objVal.ToObject();
+        object? result = GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame));
+        // Convert StashBoundMethod to VMBoundMethod for in-VM method dispatch
+        if (result is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
+            result = new VMBoundMethod(bound.Instance, vmFunc);
+        _stack[@base + a] = StashValue.FromObject(result);
+    }
+
+    private void ExecuteSetField(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        string fieldName = (string)frame.Chunk.Constants[b].AsObj!;
+        object? obj = _stack[@base + a].ToObject();
+        object? value = _stack[@base + c].ToObject();
+        SetFieldValue(obj, fieldName, value, GetCurrentSpan(ref frame));
+    }
+
+    private void ExecuteSelf(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        string methodName = (string)frame.Chunk.Constants[c].AsObj!;
+
+        // Copy receiver to R(A+1), look up method and store in R(A).
+        _stack[@base + a + 1] = _stack[@base + b];
+        object? receiver = _stack[@base + b].ToObject();
+        object? method = GetFieldValue(receiver, methodName, GetCurrentSpan(ref frame));
+        // Unwrap bound methods — Self already provides the receiver at R(A+1).
+        if (method is VMBoundMethod vmBound) method = vmBound.Function;
+        else if (method is StashBoundMethod stashBound && stashBound.Method is VMFunction vmFn) method = vmFn;
+        _stack[@base + a] = StashValue.FromObject(method);
+    }
+
+    private void ExecuteNewArray(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte count = Instruction.GetB(inst);
+        int @base = frame.BaseSlot;
+        var list = new List<StashValue>(count);
+        for (int i = 0; i < count; i++)
+        {
+            StashValue val = _stack[@base + a + 1 + i];
             if (val.IsObj && val.AsObj is SpreadMarker sm)
             {
-                if (sm.Items is List<StashValue> spreadSvItems)
-                {
-                    list.AddRange(spreadSvItems);
-                }
+                if (sm.Items is List<StashValue> items)
+                    list.AddRange(items);
                 else
-                {
-                    throw new RuntimeError("Spread operator requires an array.",
-                        GetCurrentSpan(ref frame));
-                }
+                    throw new RuntimeError("Spread operator requires an array.", GetCurrentSpan(ref frame));
             }
             else
             {
                 list.Add(val);
             }
         }
-        _sp = start;
-        Push(StashValue.FromObj(list));
+        _stack[@base + a] = StashValue.FromObj(list);
     }
 
-    private void ExecuteDict(ref CallFrame frame)
+    private void ExecuteNewDict(ref CallFrame frame, uint inst)
     {
-        ushort count = ReadU16(ref frame);
+        byte a = Instruction.GetA(inst);
+        byte count = Instruction.GetB(inst);
+        int @base = frame.BaseSlot;
         var dict = new StashDictionary();
-        int start = _sp - (count * 2);
-        for (int i = start; i < _sp; i += 2)
+        for (int i = 0; i < count; i++)
         {
-            object? key = _stack[i].ToObject();
-            StashValue valSv = _stack[i + 1];
+            object? key = _stack[@base + a + 1 + i * 2].ToObject();
+            StashValue valSv = _stack[@base + a + 2 + i * 2];
             object? valObj = valSv.ToObject();
-            if (valObj is SpreadMarker sm)
+
+            if (key == null)
             {
-                if (sm.Items is StashDictionary spreadDict)
+                // Spread entry: compiler emits LoadNull for the key slot.
+                if (valObj is SpreadMarker sm)
                 {
-                    foreach (KeyValuePair<object, StashValue> kv in spreadDict.RawEntries())
+                    if (sm.Items is StashDictionary spreadDict)
                     {
-                        dict.Set(kv.Key, kv.Value);
+                        foreach (KeyValuePair<object, StashValue> kv in spreadDict.RawEntries())
+                            dict.Set(kv.Key, kv.Value);
+                    }
+                    else if (sm.Items is StashInstance inst2)
+                    {
+                        foreach (KeyValuePair<string, StashValue> kv in inst2.GetFields())
+                            dict.Set(kv.Key, kv.Value);
+                    }
+                    else
+                    {
+                        throw new RuntimeError(
+                            "Cannot spread non-dict value into dict literal.", GetCurrentSpan(ref frame));
                     }
                 }
-                else if (sm.Items is StashInstance inst)
-                {
-                    foreach (KeyValuePair<string, StashValue> kv in inst.GetFields())
-                    {
-                        dict.Set(kv.Key, kv.Value);
-                    }
-                }
-                else
-                {
-                    throw new RuntimeError("Cannot spread non-dict value into dict literal.",
-                        GetCurrentSpan(ref frame));
-                }
+                // else: null key with non-spread value — skip
             }
             else
             {
-                dict.Set(key!, valSv);
+                dict.Set(key, valSv);
             }
         }
-        _sp = start;
-        Push(StashValue.FromObj(dict));
+        _stack[@base + a] = StashValue.FromObj(dict);
     }
 
-    private void ExecuteRange(ref CallFrame frame)
+    private void ExecuteNewRange(ref CallFrame frame, uint inst)
     {
-        StashValue step = Pop();
-        StashValue end = Pop();
-        StashValue start = Pop();
-        long s = start.IsInt ? start.AsInt
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue startVal = _stack[@base + b];
+        StashValue endVal = _stack[@base + c];
+        StashValue stepVal = _stack[@base + a + 1]; // step pre-loaded by compiler at R(A+1)
+
+        long start = startVal.IsInt ? startVal.AsInt
             : throw new RuntimeError("Range start must be an integer.", GetCurrentSpan(ref frame));
-        long e = end.IsInt ? end.AsInt
+        long end = endVal.IsInt ? endVal.AsInt
             : throw new RuntimeError("Range end must be an integer.", GetCurrentSpan(ref frame));
-        long st = step.IsInt ? step.AsInt : (s <= e ? 1L : -1L);
-        if (st == 0)
-        {
-            throw new RuntimeError("'range' step cannot be zero.", GetCurrentSpan(ref frame));
-        }
 
-        Push(StashValue.FromObj(new StashRange(s, e, st)));
-    }
-
-    private void ExecuteSpread(ref CallFrame frame)
-    {
-        object? iterable = Pop().ToObject();
-        Push(StashValue.FromObj(new SpreadMarker(iterable!)));
-    }
-
-    private void ExecuteStructInit(ref CallFrame frame)
-    {
-        ushort fieldCount = ReadU16(ref frame);
-        SourceSpan? span = GetCurrentSpan(ref frame);
-        // Stack layout: [structDef][name0][val0][name1][val1]...
-        var providedFields = new Dictionary<string, StashValue>(fieldCount);
-        int pairStart = _sp - (fieldCount * 2);
-        for (int i = pairStart; i < _sp; i += 2)
-        {
-            string fname = (string)_stack[i].AsObj!;
-            if (providedFields.ContainsKey(fname))
-            {
-                throw new RuntimeError($"Duplicate field '{fname}' in struct initialization.", span);
-            }
-
-            providedFields[fname] = _stack[i + 1];
-        }
-        _sp = pairStart;
-        object? structDef = Pop().ToObject();
-        if (structDef is StashStruct ss)
-        {
-            // Initialize all declared fields to null, then override with provided values
-            var slots = new StashValue[ss.Fields.Count];
-
-            foreach (KeyValuePair<string, StashValue> kvp in providedFields)
-            {
-                if (!ss.FieldIndices.TryGetValue(kvp.Key, out int idx))
-                {
-                    throw new RuntimeError($"Unknown field '{kvp.Key}' for struct '{ss.Name}'.", span);
-                }
-
-                slots[idx] = kvp.Value;
-            }
-
-            Push(StashValue.FromObj(new StashInstance(ss.Name, ss, slots)));
-        }
+        long step;
+        if (stepVal.IsNull)
+            step = start <= end ? 1L : -1L;
+        else if (stepVal.IsInt)
+            step = stepVal.AsInt;
         else
-        {
-            throw new RuntimeError("Not a struct type.", span);
-        }
+            throw new RuntimeError("Range step must be an integer.", GetCurrentSpan(ref frame));
+
+        if (step == 0)
+            throw new RuntimeError("'range' step cannot be zero.", GetCurrentSpan(ref frame));
+
+        _stack[@base + a] = StashValue.FromObj(new StashRange(start, end, step));
     }
 
-    private void ExecuteDestructure(ref CallFrame frame)
+    private void ExecuteSpread(ref CallFrame frame, uint inst)
     {
-        ushort metaDestructIdx = ReadU16(ref frame);
-        var destructMeta = (DestructureMetadata)frame.Chunk.Constants[metaDestructIdx].AsObj!;
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        int @base = frame.BaseSlot;
+        object? iterable = _stack[@base + b].ToObject();
+        _stack[@base + a] = StashValue.FromObj(new SpreadMarker(iterable!));
+    }
 
-        object? initializer = Pop().ToObject();
+    private void ExecuteDestructure(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        ushort metaIdx = Instruction.GetBx(inst);
+        int @base = frame.BaseSlot;
+        var meta = (DestructureMetadata)frame.Chunk.Constants[metaIdx].AsObj!;
+        object? initializer = _stack[@base + a].ToObject();
+        int writeReg = a; // values written to R(A), R(A+1), ...
 
-        if (destructMeta.Kind == "array")
+        if (meta.Kind == "array")
         {
-            if (initializer is not List<StashValue> svList)
-            {
-                throw new RuntimeError("Array destructuring requires an array value.", GetCurrentSpan(ref frame));
-            }
+            if (initializer is not List<StashValue> list)
+                throw new RuntimeError(
+                    "Array destructuring requires an array value.", GetCurrentSpan(ref frame));
 
-            for (int i = 0; i < destructMeta.Names.Length; i++)
-            {
-                Push(i < svList.Count ? svList[i] : StashValue.Null);
-            }
+            for (int i = 0; i < meta.Names.Length; i++)
+                _stack[@base + writeReg + i] = i < list.Count ? list[i] : StashValue.Null;
 
-            if (destructMeta.RestName != null)
+            if (meta.RestName != null)
             {
                 var rest = new List<StashValue>();
-                for (int i = destructMeta.Names.Length; i < svList.Count; i++)
-                {
-                    rest.Add(svList[i]);
-                }
-                Push(StashValue.FromObj(rest));
+                for (int i = meta.Names.Length; i < list.Count; i++)
+                    rest.Add(list[i]);
+                _stack[@base + writeReg + meta.Names.Length] = StashValue.FromObj(rest);
             }
         }
         else
         {
-            if (initializer is StashInstance destructInst)
+            if (initializer is StashInstance si)
             {
-                var usedNames = new HashSet<string>(destructMeta.Names);
-                foreach (string dname in destructMeta.Names)
-                {
-                    Push(destructInst.GetField(dname, null));
-                }
+                var usedNames = new HashSet<string>(meta.Names);
+                for (int i = 0; i < meta.Names.Length; i++)
+                    _stack[@base + writeReg + i] = si.GetField(meta.Names[i], null);
 
-                if (destructMeta.RestName != null)
+                if (meta.RestName != null)
                 {
                     var rest = new StashDictionary();
-                    foreach (KeyValuePair<string, StashValue> kvp in destructInst.GetAllFields())
-                    {
-                        if (!usedNames.Contains(kvp.Key))
-                        {
-                            rest.Set(kvp.Key, kvp.Value);
-                        }
-                    }
-                    Push(StashValue.FromObj(rest));
+                    foreach (KeyValuePair<string, StashValue> kv in si.GetAllFields())
+                        if (!usedNames.Contains(kv.Key)) rest.Set(kv.Key, kv.Value);
+                    _stack[@base + writeReg + meta.Names.Length] = StashValue.FromObj(rest);
                 }
             }
-            else if (initializer is StashDictionary destructDict)
+            else if (initializer is StashDictionary dict)
             {
-                var usedNames = new HashSet<string>(destructMeta.Names);
-                foreach (string dname in destructMeta.Names)
-                {
-                    Push(destructDict.Has(dname) ? destructDict.Get(dname) : StashValue.Null);
-                }
+                var usedNames = new HashSet<string>(meta.Names);
+                for (int i = 0; i < meta.Names.Length; i++)
+                    _stack[@base + writeReg + i] = dict.Has(meta.Names[i])
+                        ? dict.Get(meta.Names[i])
+                        : StashValue.Null;
 
-                if (destructMeta.RestName != null)
+                if (meta.RestName != null)
                 {
                     var rest = new StashDictionary();
-                    var allKeys = destructDict.Keys();
-                    foreach (StashValue k in allKeys)
-                    {
+                    foreach (StashValue k in dict.Keys())
                         if (k.ToObject() is string ks && !usedNames.Contains(ks))
-                        {
-                            rest.Set(ks, destructDict.Get(ks));
-                        }
-                    }
-                    Push(StashValue.FromObj(rest));
+                            rest.Set(ks, dict.Get(ks));
+                    _stack[@base + writeReg + meta.Names.Length] = StashValue.FromObj(rest);
                 }
             }
             else
             {
                 throw new RuntimeError(
-                    "Object destructuring requires a struct instance or dictionary.", GetCurrentSpan(ref frame));
+                    "Object destructuring requires a struct instance or dictionary.",
+                    GetCurrentSpan(ref frame));
             }
         }
-    }
-
-    private void ExecuteIterator(ref CallFrame frame)
-    {
-        SourceSpan? span = GetCurrentSpan(ref frame);
-        object? iterable = Pop().ToObject();
-        Push(StashValue.FromObj(CreateIterator(iterable, span)));
-    }
-
-    private void ExecuteIterate(ref CallFrame frame)
-    {
-        short exitOffset = ReadI16(ref frame);
-
-        // Find the StashIterator in the current for-in scope by scanning backward
-        // (at most 3 slots: iterator, optional index var, loop var)
-        StashIterator? iter = null;
-        int iterSlot = -1;
-        for (int i = _sp - 1; i >= Math.Max(frame.BaseSlot, _sp - 4); i--)
-        {
-            if (_stack[i].AsObj is StashIterator found)
-            {
-                iter = found;
-                iterSlot = i;
-                break;
-            }
-        }
-        if (iter == null)
-        {
-            throw new RuntimeError("Internal error: no active iterator.", GetCurrentSpan(ref frame));
-        }
-
-        if (!iter.MoveNext())
-        {
-            frame.IP += exitOffset;
-        }
-        else
-        {
-            Push(iter.Current);
-            // Update index variable if present.
-            // Layout: [iter @ iterSlot][indexVar @ iterSlot+1][loopVar] = 3 locals
-            //         [iter @ iterSlot][loopVar]                         = 2 locals
-            // After Push, _sp increased by 1; forInLocals = (_sp - 1) - iterSlot
-            int forInLocals = (_sp - 1) - iterSlot;
-            if (forInLocals == 3)
-            {
-                if (iter.Dictionary != null)
-                {
-                    // Dict key-value iteration: Current is the key as StashValue
-                    StashValue key = iter.Current;
-                    _stack[iterSlot + 1] = key;  // key
-                    _stack[_sp - 1] = iter.Dictionary.Get(key.ToObject()!);  // value
-                }
-                else
-                {
-                    _stack[iterSlot + 1] = StashValue.FromInt(iter.Index);
-                }
-            }
-        }
-    }
-
-    private void ExecuteGetField(ref CallFrame frame)
-    {
-        ushort nameIdx = ReadU16(ref frame);
-        string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        StashValue objVal = Pop();
-
-        // Fast path: namespace member access (e.g. math.abs) — no span needed
-        if (objVal.Tag == StashValueTag.Obj)
-        {
-            object? rawObj = objVal.AsObj;
-            if (rawObj is StashNamespace ns)
-            {
-                Push(ns.GetMemberValue(fieldName, null));
-                return;
-            }
-        }
-
-        // General path
-        object? obj = objVal.ToObject();
-        Push(StashValue.FromObject(GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame))));
-    }
-
-    private void ExecuteGetFieldIC(ref CallFrame frame)
-    {
-        ushort nameIdx = ReadU16(ref frame);
-        ushort icSlotIdx = ReadU16(ref frame);
-        StashValue objVal = Pop();
-
-        // --- IC fast path ---
-        ref ICSlot ic = ref frame.Chunk.ICSlots![icSlotIdx];
-
-        if (ic.State == 1) // Monomorphic
-        {
-            if (objVal.Tag == StashValueTag.Obj)
-            {
-                object? rawObj = objVal.AsObj;
-
-                // Namespace IC hit — guard is the namespace object itself
-                if (rawObj == ic.Guard)
-                {
-                    Push(ic.CachedValue);
-                    return;
-                }
-
-                // Struct field IC hit — guard is the StashStruct, CachedValue holds field index
-                if (rawObj is StashInstance inst && inst.FieldSlots is not null
-                    && inst.Struct == ic.Guard)
-                {
-                    Push(inst.FieldSlots[(int)ic.CachedValue.AsInt]);
-                    return;
-                }
-            }
-
-            // Guard mismatch → megamorphic
-            ic.State = 2;
-        }
-
-        // --- IC slow path (uninitialized or megamorphic) ---
-        string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-
-        if (objVal.Tag == StashValueTag.Obj)
-        {
-            object? rawObj = objVal.AsObj;
-
-            // Namespace fast path
-            if (rawObj is StashNamespace ns)
-            {
-                StashValue result = ns.GetMemberValue(fieldName, null);
-
-                // Populate IC if uninitialized and namespace is frozen
-                if (ic.State == 0 && ns.IsFrozen)
-                {
-                    ic.Guard = rawObj;
-                    ic.CachedValue = result;
-                    ic.State = 1;
-                }
-
-                Push(result);
-                return;
-            }
-
-            // Struct instance fast path — populate IC for field access
-            if (rawObj is StashInstance inst2 && inst2.FieldSlots is not null)
-            {
-                StashValue result = inst2.GetField(fieldName, GetCurrentSpan(ref frame));
-
-                // Convert StashBoundMethod → VMBoundMethod for bytecode VM compatibility
-                if (result.AsObj is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
-                {
-                    result = StashValue.FromObj(new VMBoundMethod(bound.Instance, vmFunc));
-                }
-
-                if (ic.State == 0 && inst2.Struct!.FieldIndices.TryGetValue(fieldName, out int fieldIdx))
-                {
-                    ic.Guard = inst2.Struct;
-                    ic.CachedValue = StashValue.FromInt(fieldIdx);
-                    ic.State = 1;
-                }
-
-                Push(result);
-                return;
-            }
-        }
-
-        // General path — no IC for other receiver types
-        object? obj = objVal.ToObject();
-        Push(StashValue.FromObject(GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame))));
-    }
-
-    private void ExecuteSetField(ref CallFrame frame)
-    {
-        ushort nameIdx = ReadU16(ref frame);
-        string fieldName = (string)frame.Chunk.Constants[nameIdx].AsObj!;
-        StashValue valueVal = Pop();
-        object? value = valueVal.ToObject();
-        object? obj = Pop().ToObject();
-        SetFieldValue(obj, fieldName, value, GetCurrentSpan(ref frame));
-        Push(valueVal);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteGetIndex(ref CallFrame frame)
-    {
-        StashValue indexVal = Pop();
-        StashValue objVal = Pop();
-
-        // Fast path: array[int] — StashValue list (no boxing)
-        if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is List<StashValue> svList && indexVal.IsInt)
-        {
-            long i = indexVal.AsInt;
-            if (i < 0) i += svList.Count;
-            if ((ulong)i < (ulong)svList.Count)
-            {
-                Push(svList[(int)i]);
-                return;
-            }
-            throw new RuntimeError($"Index {indexVal.AsInt} out of bounds for array of length {svList.Count}.",
-                GetCurrentSpan(ref frame));
-        }
-
-        // General path — falls through to existing logic with lazy span
-        Push(StashValue.FromObject(GetIndexValue(objVal.ToObject(), indexVal.ToObject(), ref frame)));
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteSetIndex(ref CallFrame frame)
-    {
-        StashValue valueVal = Pop();
-        StashValue indexVal = Pop();
-        StashValue objVal = Pop();
-
-        // Fast path: array[int] = value — StashValue list (no boxing)
-        if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is List<StashValue> svList && indexVal.IsInt)
-        {
-            long i = indexVal.AsInt;
-            if (i < 0) i += svList.Count;
-            if ((ulong)i < (ulong)svList.Count)
-            {
-                svList[(int)i] = valueVal;
-                Push(valueVal);
-                return;
-            }
-            throw new RuntimeError($"Index {indexVal.AsInt} out of bounds for array of length {svList.Count}.",
-                GetCurrentSpan(ref frame));
-        }
-
-        // General path with lazy span
-        SetIndexValue(objVal.ToObject(), indexVal.ToObject(), valueVal.ToObject(), ref frame);
-        Push(valueVal);
     }
 }

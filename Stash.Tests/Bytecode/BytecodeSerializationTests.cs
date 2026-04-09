@@ -29,7 +29,7 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_EmptyChunk_PreservesDefaults()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -46,26 +46,26 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_SimpleOpcodes_PreservesCode()
     {
-        var builder = new ChunkBuilder { Optimize = false };
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Pop);
-        builder.Emit(OpCode.Return);
+        var builder = new ChunkBuilder();
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
 
         Assert.Equal(original.Code.Length, result.Code.Length);
-        Assert.Equal((byte)OpCode.Null,   result.Code[0]);
-        Assert.Equal((byte)OpCode.Pop,    result.Code[1]);
-        Assert.Equal((byte)OpCode.Return, result.Code[2]);
+        Assert.Equal(OpCode.LoadNull, Instruction.GetOp(result.Code[0]));
+        Assert.Equal(OpCode.LoadNull, Instruction.GetOp(result.Code[1]));
+        Assert.Equal(OpCode.Return,   Instruction.GetOp(result.Code[2]));
     }
 
     [Fact]
     public void RoundTrip_IntConstant_PreservesValue()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         ushort idx = builder.AddConstant(42L);
-        builder.Emit(OpCode.Const, idx);
+        builder.EmitABx(OpCode.LoadK, 0, idx);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -78,9 +78,9 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_FloatConstant_PreservesValue()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         ushort idx = builder.AddConstant(3.14);
-        builder.Emit(OpCode.Const, idx);
+        builder.EmitABx(OpCode.LoadK, 0, idx);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -93,9 +93,9 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_StringConstant_PreservesValue()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         ushort idx = builder.AddConstant("hello world");
-        builder.Emit(OpCode.Const, idx);
+        builder.EmitABx(OpCode.LoadK, 0, idx);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -108,11 +108,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_BoolConstants_PreservesValues()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         ushort trueIdx  = builder.AddConstant(StashValue.FromBool(true));
         ushort falseIdx = builder.AddConstant(StashValue.FromBool(false));
-        builder.Emit(OpCode.Const, trueIdx);
-        builder.Emit(OpCode.Const, falseIdx);
+        builder.EmitABx(OpCode.LoadK, 0, trueIdx);
+        builder.EmitABx(OpCode.LoadK, 0, falseIdx);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -127,13 +127,13 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_NestedChunk_PreservesFunction()
     {
-        var innerBuilder = new ChunkBuilder { Name = "inner", Arity = 2, MinArity = 1, Optimize = false };
-        innerBuilder.Emit(OpCode.Return);
+        var innerBuilder = new ChunkBuilder { Name = "inner", Arity = 2, MinArity = 1 };
+        innerBuilder.EmitA(OpCode.Return, 0);
         Chunk innerChunk = innerBuilder.Build();
 
-        var outerBuilder = new ChunkBuilder { Optimize = false };
+        var outerBuilder = new ChunkBuilder();
         ushort idx = outerBuilder.AddConstant(innerChunk);
-        outerBuilder.Emit(OpCode.Const, idx);
+        outerBuilder.EmitABx(OpCode.LoadK, 0, idx);
         Chunk original = outerBuilder.Build();
 
         Chunk result = RoundTrip(original);
@@ -143,8 +143,8 @@ public class BytecodeSerializationTests
         Assert.Equal("inner", nested.Name);
         Assert.Equal(2, nested.Arity);
         Assert.Equal(1, nested.MinArity);
-        byte returnByte = Assert.Single(nested.Code);
-        Assert.Equal((byte)OpCode.Return, returnByte);
+        uint returnWord = Assert.Single(nested.Code);
+        Assert.Equal(OpCode.Return, Instruction.GetOp(returnWord));
     }
 
     [Fact]
@@ -155,11 +155,11 @@ public class BytecodeSerializationTests
             Name                  = "testFunc",
             Arity                 = 2,
             MinArity              = 1,
-            LocalCount            = 5,
+            MaxRegs = 5,
             IsAsync               = true,
             HasRestParam          = true,
             MayHaveCapturedLocals = true,
-            Optimize              = false,
+
         };
         Chunk original = builder.Build();
 
@@ -168,7 +168,7 @@ public class BytecodeSerializationTests
         Assert.Equal("testFunc", result.Name);
         Assert.Equal(2, result.Arity);
         Assert.Equal(1, result.MinArity);
-        Assert.Equal(5, result.LocalCount);
+        Assert.Equal(5, result.MaxRegs);
         Assert.True(result.IsAsync);
         Assert.True(result.HasRestParam);
         Assert.True(result.MayHaveCapturedLocals);
@@ -177,7 +177,7 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_Upvalues_PreservesDescriptors()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         builder.AddUpvalue(3, isLocal: true);
         builder.AddUpvalue(1, isLocal: false);
         Chunk original = builder.Build();
@@ -194,15 +194,15 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_SourceMap_PreservesLocations()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
 
-        // Add mappings at explicit offsets before emitting code
-        builder.AddSourceMapping(0, new SourceSpan("test.stash",  1, 1, 1, 5));
-        builder.AddSourceMapping(1, new SourceSpan("test.stash",  2, 1, 2, 10));
-        builder.AddSourceMapping(2, new SourceSpan("other.stash", 5, 3, 5, 8));
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Pop);
-        builder.Emit(OpCode.Return);
+        // Add a mapping, emit instruction, then add next mapping (offset is auto-tracked)
+        builder.AddSourceMapping(new SourceSpan("test.stash",  1, 1, 1, 5));
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.AddSourceMapping(new SourceSpan("test.stash",  2, 1, 2, 10));
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.AddSourceMapping(new SourceSpan("other.stash", 5, 3, 5, 8));
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -233,8 +233,8 @@ public class BytecodeSerializationTests
         {
             LocalNames   = ["x", "y", "z"],
             LocalIsConst = [true, false, true],
-            LocalCount   = 3,
-            Optimize     = false,
+            MaxRegs = 3,
+
         };
         Chunk original = builder.Build();
 
@@ -252,7 +252,7 @@ public class BytecodeSerializationTests
         var builder = new ChunkBuilder
         {
             UpvalueNames = ["captured"],
-            Optimize     = false,
+
         };
         builder.AddUpvalue(0, isLocal: true);
         Chunk original = builder.Build();
@@ -270,8 +270,8 @@ public class BytecodeSerializationTests
         allocator.GetOrAllocate("x");
         allocator.GetOrAllocate("y");
 
-        var builder = new ChunkBuilder { Optimize = false };
-        builder.GlobalSlotAllocator = allocator;
+        var builder = new ChunkBuilder();
+        builder.SetGlobalSlots(allocator);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -290,11 +290,11 @@ public class BytecodeSerializationTests
             LocalNames   = ["a", "b"],
             LocalIsConst = [false, true],
             UpvalueNames = ["captured"],
-            LocalCount   = 2,
-            Optimize     = false,
+            MaxRegs = 2,
+
         };
-        builder.Emit(OpCode.Null);
-        builder.AddSourceMapping(0, new SourceSpan("test.stash", 1, 1, 1, 5));
+        builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
+        builder.EmitA(OpCode.LoadNull, 0);
         builder.AddUpvalue(0, isLocal: true);
         Chunk original = builder.Build();
 
@@ -309,7 +309,7 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_LargeConstantPool_HandlesMany()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         for (int i = 0; i < 500; i++)
             builder.AddConstant($"constant_{i}");
         Chunk original = builder.Build();
@@ -325,7 +325,7 @@ public class BytecodeSerializationTests
     public void RoundTrip_EmbeddedSource_Preserved()
     {
         const string sourceText = "let x = 1;";
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         Chunk original = builder.Build();
 
         string tempPath = Path.GetTempFileName();
@@ -381,8 +381,8 @@ public class BytecodeSerializationTests
     public void Read_CorruptedStream_Throws()
     {
         // Write valid bytecode then truncate to header + a few extra bytes
-        var builder = new ChunkBuilder { Optimize = false };
-        builder.Emit(OpCode.Return);
+        var builder = new ChunkBuilder();
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         using var full = new MemoryStream();
@@ -400,7 +400,7 @@ public class BytecodeSerializationTests
     [Fact]
     public void IsBytecodeStream_ValidHeader_ReturnsTrue()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         Chunk original = builder.Build();
 
         using var ms = new MemoryStream();
@@ -444,20 +444,23 @@ public class BytecodeSerializationTests
     // =========================================================================
 
     [Fact]
-    public void RoundTrip_GetFieldIC_ReconstructsICSlots()
+    public void RoundTrip_ICSlots_NotSerialized()
     {
-        var builder = new ChunkBuilder { Optimize = false };
-        ushort nameIdx = builder.AddConstant("fieldName");
+        // IC slots are runtime state — they are NOT serialized to the bytecode file.
+        var builder = new ChunkBuilder();
         ushort icSlot1 = builder.AllocateICSlot();
         ushort icSlot2 = builder.AllocateICSlot();
-        builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot1);
-        builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot2);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.LoadNull, 0);
         Chunk original = builder.Build();
 
-        Chunk result = RoundTrip(original);
+        // ICSlots exist in the original (runtime) chunk
+        Assert.NotNull(original.ICSlots);
+        Assert.Equal(2, original.ICSlots!.Length);
 
-        Assert.NotNull(result.ICSlots);
-        Assert.Equal(2, result.ICSlots!.Length);
+        // After round-trip, they are null (not serialized)
+        Chunk result = RoundTrip(original);
+        Assert.Null(result.ICSlots);
     }
 
     // =========================================================================
@@ -467,7 +470,7 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_NullName_PreservesNull()
     {
-        var builder = new ChunkBuilder { Optimize = false }; // Name defaults to null
+        var builder = new ChunkBuilder(); // Name defaults to null
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -478,9 +481,9 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_EmptyStringConstant_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         ushort idx = builder.AddConstant("");
-        builder.Emit(OpCode.Const, idx);
+        builder.EmitABx(OpCode.LoadK, 0, idx);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -492,11 +495,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_NegativeNumbers_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         ushort negIntIdx   = builder.AddConstant(-42L);
         ushort negFloatIdx = builder.AddConstant(-3.14);
-        builder.Emit(OpCode.Const, negIntIdx);
-        builder.Emit(OpCode.Const, negFloatIdx);
+        builder.EmitABx(OpCode.LoadK, 0, negIntIdx);
+        builder.EmitABx(OpCode.LoadK, 0, negFloatIdx);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -509,13 +512,13 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_MaxValues_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         ushort maxLongIdx = builder.AddConstant(long.MaxValue);
         ushort minLongIdx = builder.AddConstant(long.MinValue);
         ushort maxDblIdx  = builder.AddConstant(double.MaxValue);
-        builder.Emit(OpCode.Const, maxLongIdx);
-        builder.Emit(OpCode.Const, minLongIdx);
-        builder.Emit(OpCode.Const, maxDblIdx);
+        builder.EmitABx(OpCode.LoadK, 0, maxLongIdx);
+        builder.EmitABx(OpCode.LoadK, 0, minLongIdx);
+        builder.EmitABx(OpCode.LoadK, 0, maxDblIdx);
         Chunk original = builder.Build();
 
         Chunk result = RoundTrip(original);
@@ -533,11 +536,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_CommandMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new CommandMetadata(3, true, false);
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -552,11 +555,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_StructMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new StructMetadata("Point", new[] { "x", "y" }, new[] { "toString" }, new[] { "ISerializable" });
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -572,11 +575,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_EnumMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new EnumMetadata("Color", new[] { "Red", "Green", "Blue" });
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -590,7 +593,7 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_InterfaceMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new InterfaceMetadata(
             "IShape",
             new[]
@@ -604,8 +607,8 @@ public class BytecodeSerializationTests
                 new InterfaceMethod("draw",  2, new List<string> { "x", "y" }, new List<string?> { "int", "int" }, null),
             });
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -637,11 +640,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_ExtendMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new ExtendMetadata("Point", new[] { "translate", "scale" }, false);
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -656,11 +659,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_ImportMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new ImportMetadata(new[] { "math", "utils" });
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -673,11 +676,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_ImportAsMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new ImportAsMetadata("myModule");
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -690,13 +693,13 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_DestructureMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var withRest    = new DestructureMetadata("dict", new[] { "a", "b" }, "rest", true);
         var withoutRest = new DestructureMetadata("arr",  new[] { "first" },   null,   false);
         builder.AddConstant(withRest);
         builder.AddConstant(withoutRest);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -719,11 +722,11 @@ public class BytecodeSerializationTests
     [Fact]
     public void RoundTrip_RetryMetadata_Preserved()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var meta = new RetryMetadata(2, true, true, false);
         builder.AddConstant(meta);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
         Chunk original = builder.Build();
 
         Chunk restored = RoundTrip(original);
@@ -749,26 +752,26 @@ public class BytecodeSerializationTests
             Name       = "inner",
             Arity      = 1,
             MinArity   = 1,
-            LocalCount = 2,
+            MaxRegs = 2,
             LocalNames = ["a", "b"],
             LocalIsConst = [false, true],
-            Optimize   = false,
+
         };
-        innerBuilder.AddSourceMapping(0, new SourceSpan("test.stash", 5, 1, 5, 10));
-        innerBuilder.Emit(OpCode.Return);
+        innerBuilder.AddSourceMapping(new SourceSpan("test.stash", 5, 1, 5, 10));
+        innerBuilder.EmitA(OpCode.Return, 0);
         Chunk innerChunk = innerBuilder.Build();
 
         // Build outer chunk containing the inner as a constant
         var outerBuilder = new ChunkBuilder
         {
-            LocalCount   = 1,
+            MaxRegs = 1,
             LocalNames   = ["x"],
             LocalIsConst = [false],
-            Optimize     = false,
+
         };
-        outerBuilder.AddSourceMapping(0, new SourceSpan("test.stash", 1, 1, 1, 10));
+        outerBuilder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 10));
         ushort idx = outerBuilder.AddConstant(innerChunk);
-        outerBuilder.Emit(OpCode.Const, idx);
+        outerBuilder.EmitABx(OpCode.LoadK, 0, idx);
         Chunk original = outerBuilder.Build();
 
         // Round-trip with debug info STRIPPED
@@ -796,8 +799,8 @@ public class BytecodeSerializationTests
     public void Read_OversizedStringConstant_Throws()
     {
         // Build a valid .stashc header from a real write
-        var builder = new ChunkBuilder { Optimize = false };
-        builder.Emit(OpCode.Null);
+        var builder = new ChunkBuilder();
+        builder.EmitA(OpCode.LoadNull, 0);
         Chunk headerChunk = builder.Build();
 
         using var headerStream = new MemoryStream();

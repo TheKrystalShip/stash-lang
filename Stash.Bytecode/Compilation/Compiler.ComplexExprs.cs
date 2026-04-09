@@ -1,9 +1,8 @@
-using System;
 using System.Collections.Generic;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
-using Stash.Runtime.Types;
+using Stash.Runtime;
 
 namespace Stash.Bytecode;
 
@@ -15,108 +14,122 @@ public sealed partial class Compiler
     /// <inheritdoc />
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
+        byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
 
+        int sign = expr.Operator.Type == TokenType.PlusPlus ? 1 : -1;
+
+        // ── Identifier operand: x++ / ++x ──────────────────────────────
         if (expr.Operand is IdentifierExpr id)
         {
-            // Load the current value
-            EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: true);
-            _builder.Emit(OpCode.CheckNumeric);
-
-            if (!expr.IsPrefix)
-            {
-                _builder.Emit(OpCode.Dup);  // postfix: preserve old value as expression result
-            }
-
-            ushort oneIdx = _builder.AddConstant(1L);
-            _builder.Emit(OpCode.Const, oneIdx);
-            _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
-
             if (expr.IsPrefix)
             {
-                _builder.Emit(OpCode.Dup);  // prefix: preserve new value as expression result
+                // OPT-4: For local variables, operate directly on the local's register
+                int localReg = (id.ResolvedDistance >= 0) ? _scope.ResolveLocal(id.Name.Lexeme) : -1;
+                if (localReg >= 0 && !_scope.IsLocalConst(localReg))
+                {
+                    if (!_scope.IsKnownNumeric(localReg))
+                        _builder.EmitA(OpCode.CheckNumeric, (byte)localReg);
+                    _builder.EmitAsBx(OpCode.AddI, (byte)localReg, sign);
+                    _scope.MarkNumeric(localReg);
+                    if ((byte)localReg != dest)
+                        _builder.EmitAB(OpCode.Move, dest, (byte)localReg);
+                }
+                else
+                {
+                    // Fallback for upvalues, globals, consts
+                    EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: true, dest);
+                    _builder.EmitA(OpCode.CheckNumeric, dest);
+                    _builder.EmitAsBx(OpCode.AddI, dest, sign);
+                    EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: false, dest);
+                }
             }
-
-            EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: false);
+            else
+            {
+                int localReg = (id.ResolvedDistance >= 0) ? _scope.ResolveLocal(id.Name.Lexeme) : -1;
+                if (localReg >= 0 && !_scope.IsLocalConst(localReg) && (byte)localReg != dest)
+                {
+                    // OPT-4: Local postfix, dest != local: copy old value to dest, then increment in-place
+                    if (!_scope.IsKnownNumeric(localReg))
+                        _builder.EmitA(OpCode.CheckNumeric, (byte)localReg);
+                    _builder.EmitAB(OpCode.Move, dest, (byte)localReg); // dest = old value
+                    _builder.EmitAsBx(OpCode.AddI, (byte)localReg, sign); // local = new value
+                    _scope.MarkNumeric(localReg);
+                }
+                else
+                {
+                    // Fallback: upvalues, globals, consts, or dest==local (postfix aliasing)
+                    EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: true, dest);
+                    _builder.EmitA(OpCode.CheckNumeric, dest);
+                    byte temp = _scope.AllocTemp();
+                    _builder.EmitAB(OpCode.Move, temp, dest);    // temp = old value
+                    _builder.EmitAsBx(OpCode.AddI, temp, sign);  // temp = new value
+                    EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: false, temp);
+                    _scope.FreeTemp(temp);
+                    // dest still holds old value — postfix result
+                }
+            }
             return null;
         }
 
+        // ── Dot access: obj.field++ / ++obj.field ───────────────────────
         if (expr.Operand is DotExpr dot)
         {
             ushort nameIdx = _builder.AddConstant(dot.Name.Lexeme);
+            byte objReg = CompileExpr(dot.Object);
 
             if (expr.IsPrefix)
             {
-                CompileExpr(dot.Object);                          // [obj]
-                _builder.Emit(OpCode.Dup);                        // [obj, obj]
-                ushort icSlot = _builder.AllocateICSlot();
-                _builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot);          // [obj, oldVal]
-                _builder.Emit(OpCode.CheckNumeric);
-                ushort oneIdx = _builder.AddConstant(1L);
-                _builder.Emit(OpCode.Const, oneIdx);
-                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
-                // [obj, newVal]
-                _builder.Emit(OpCode.SetField, nameIdx);          // [newVal]
+                EmitGetField(dest, objReg, nameIdx);          // dest = obj.field (current)
+                _builder.EmitA(OpCode.CheckNumeric, dest);
+                _builder.EmitAsBx(OpCode.AddI, dest, sign);  // dest = new value
+                EmitSetField(objReg, nameIdx, dest);          // obj.field = new value
+                // dest = new value — prefix result
             }
             else
             {
-                // Postfix: perform mutation first, then derive oldVal from newVal
-                CompileExpr(dot.Object);                                // [..., obj]
-                _builder.Emit(OpCode.Dup);                              // [..., obj, obj]
-                ushort icSlot2 = _builder.AllocateICSlot();
-                _builder.Emit(OpCode.GetFieldIC, nameIdx, icSlot2);                // [..., obj, oldVal]
-                _builder.Emit(OpCode.CheckNumeric);
-                ushort oneIdx = _builder.AddConstant(1L);
-                _builder.Emit(OpCode.Const, oneIdx);                    // [..., obj, oldVal, 1]
-                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
-                // [..., obj, newVal]
-                _builder.Emit(OpCode.SetField, nameIdx);                // [..., newVal]
-                // Derive oldVal: reverse the operation
-                _builder.Emit(OpCode.Const, oneIdx);                    // [..., newVal, 1]
-                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Subtract : OpCode.Add);
-                // [..., oldVal]
+                EmitGetField(dest, objReg, nameIdx);          // dest = old value
+                _builder.EmitA(OpCode.CheckNumeric, dest);
+                byte temp = _scope.AllocTemp();
+                _builder.EmitAB(OpCode.Move, temp, dest);    // temp = old value
+                _builder.EmitAsBx(OpCode.AddI, temp, sign);  // temp = new value
+                EmitSetField(objReg, nameIdx, temp);          // obj.field = new value
+                _scope.FreeTemp(temp);
+                // dest = old value — postfix result
             }
+
+            _scope.FreeTemp(objReg);
             return null;
         }
 
+        // ── Index access: obj[idx]++ / ++obj[idx] ───────────────────────
         if (expr.Operand is IndexExpr idx)
         {
-            ushort oneIdx = _builder.AddConstant(1L);
+            byte objReg = CompileExpr(idx.Object);
+            byte idxReg = CompileExpr(idx.Index);
 
             if (expr.IsPrefix)
             {
-                // Prefix: ++arr[i] — stack: [obj, index, oldVal] → SetIndex → [newVal]
-                CompileExpr(idx.Object);                          // [obj]
-                CompileExpr(idx.Index);                           // [obj, index]
-                CompileExpr(idx.Object);                          // [obj, index, obj2]
-                CompileExpr(idx.Index);                           // [obj, index, obj2, index2]
-                _builder.Emit(OpCode.GetIndex);                   // [obj, index, oldVal]
-                _builder.Emit(OpCode.CheckNumeric);
-                _builder.Emit(OpCode.Const, oneIdx);
-                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
-                // [obj, index, newVal]
-                _builder.Emit(OpCode.SetIndex);                   // [newVal]  (SetIndex pops 3, pushes 1)
+                _builder.EmitABC(OpCode.GetTable, dest, objReg, idxReg); // dest = obj[idx]
+                _builder.EmitA(OpCode.CheckNumeric, dest);
+                _builder.EmitAsBx(OpCode.AddI, dest, sign);               // dest = new value
+                _builder.EmitABC(OpCode.SetTable, objReg, idxReg, dest);  // obj[idx] = new value
+                // dest = new value — prefix result
             }
             else
             {
-                // Postfix: arr[i]++ — read old value first, then mutate
-                CompileExpr(idx.Object);                          // [obj]
-                CompileExpr(idx.Index);                           // [obj, index]
-                _builder.Emit(OpCode.GetIndex);                   // [oldVal] — this is the result
-
-                // Now perform the mutation by re-evaluating
-                CompileExpr(idx.Object);                          // [oldVal, obj]
-                CompileExpr(idx.Index);                           // [oldVal, obj, index]
-                CompileExpr(idx.Object);                          // [oldVal, obj, index, obj2]
-                CompileExpr(idx.Index);                           // [oldVal, obj, index, obj2, index2]
-                _builder.Emit(OpCode.GetIndex);                   // [oldVal, obj, index, currVal]
-                _builder.Emit(OpCode.CheckNumeric);
-                _builder.Emit(OpCode.Const, oneIdx);
-                _builder.Emit(expr.Operator.Type == TokenType.PlusPlus ? OpCode.Add : OpCode.Subtract);
-                // [oldVal, obj, index, newVal]
-                _builder.Emit(OpCode.SetIndex);                   // [oldVal, newVal]  (SetIndex pops 3, pushes 1)
-                _builder.Emit(OpCode.Pop);                        // [oldVal] — discard newVal, keep result
+                _builder.EmitABC(OpCode.GetTable, dest, objReg, idxReg); // dest = old value
+                _builder.EmitA(OpCode.CheckNumeric, dest);
+                byte temp = _scope.AllocTemp();
+                _builder.EmitAB(OpCode.Move, temp, dest);                 // temp = old value
+                _builder.EmitAsBx(OpCode.AddI, temp, sign);               // temp = new value
+                _builder.EmitABC(OpCode.SetTable, objReg, idxReg, temp);  // obj[idx] = new value
+                _scope.FreeTemp(temp);
+                // dest = old value — postfix result
             }
+
+            _scope.FreeTemp(idxReg);
+            _scope.FreeTemp(objReg);
             return null;
         }
 
@@ -126,68 +139,92 @@ public sealed partial class Compiler
     /// <inheritdoc />
     public object? VisitLambdaExpr(LambdaExpr expr)
     {
+        byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
 
-        var fnCompiler = new Compiler(this, null, _globalSlots, _optimize);
-        fnCompiler._builder.Arity = expr.Parameters.Count;
-        fnCompiler._builder.IsAsync = expr.IsAsync;
-        fnCompiler._builder.HasRestParam = expr.HasRestParam;
+        var child = new Compiler(this, null, _globalSlots);
+        int paramCount = expr.Parameters.Count;
 
-        int paramCount = expr.HasRestParam ? expr.Parameters.Count - 1 : expr.Parameters.Count;
-        int minArity = paramCount;
-        for (int i = paramCount - 1; i >= 0; i--)
-        {
-            if (i < expr.DefaultValues.Count && expr.DefaultValues[i] != null)
-            {
-                minArity--;
-            }
-            else
-            {
-                break;
-            }
-        }
-        fnCompiler._builder.MinArity = minArity;
-
-        fnCompiler._scope.BeginScope();
+        // Declare parameters as locals (registers 0..paramCount-1)
         foreach (Token param in expr.Parameters)
+            child._scope.DeclareLocal(param.Lexeme);
+
+        // Compute MinArity: scan trailing defaults
+        int minArity = paramCount;
+        bool hasDefaultParams = false;
+        if (expr.DefaultValues != null && expr.DefaultValues.Count > 0)
         {
-            int slot = fnCompiler._scope.DeclareLocal(param.Lexeme, isConst: false);
-            fnCompiler._scope.MarkInitialized(slot);
+            int countForDefaults = expr.HasRestParam ? paramCount - 1 : paramCount;
+            for (int i = countForDefaults - 1; i >= 0; i--)
+            {
+                if (expr.DefaultValues.Count > i && expr.DefaultValues[i] != null)
+                {
+                    minArity = i;
+                    hasDefaultParams = true;
+                }
+                else
+                    break;
+            }
         }
 
-        // Emit default parameter prologue
-        fnCompiler.EmitDefaultPrologue(expr.Parameters, expr.DefaultValues, expr.HasRestParam);
+        if (hasDefaultParams && expr.DefaultValues != null)
+        {
+            for (int i = 0; i < expr.DefaultValues.Count && i < paramCount; i++)
+            {
+                if (expr.DefaultValues[i] == null) continue;
 
+                byte paramReg = (byte)i;
+                byte tempSentinel = child._scope.AllocTemp();
+                ushort sentinelIdx = child._builder.AddConstant(VirtualMachine.NotProvided);
+                child._builder.EmitABx(OpCode.LoadK, tempSentinel, sentinelIdx);
+
+                byte cmpReg = child._scope.AllocTemp();
+                child._builder.EmitABC(OpCode.Ne, cmpReg, paramReg, tempSentinel);
+                int skipDefault = child._builder.EmitJump(OpCode.JmpTrue, cmpReg);
+                child._scope.FreeTemp(cmpReg);
+                child._scope.FreeTemp(tempSentinel);
+
+                child.CompileExprTo(expr.DefaultValues[i]!, paramReg);
+                child._builder.PatchJump(skipDefault);
+            }
+        }
+
+        // Compile body
         if (expr.ExpressionBody != null)
         {
-            fnCompiler.CompileExpr(expr.ExpressionBody);
-            fnCompiler._builder.Emit(OpCode.Return);
+            byte resultReg = child._scope.AllocTemp();
+            child.CompileExprTo(expr.ExpressionBody, resultReg);
+            child._builder.EmitABC(OpCode.Return, resultReg, 1, 0);
+            child._scope.FreeTemp(resultReg);
         }
         else if (expr.BlockBody != null)
         {
             foreach (Stmt s in expr.BlockBody.Statements)
-            {
-                fnCompiler.CompileStmt(s);
-            }
-
-            fnCompiler._builder.Emit(OpCode.Null);
-            fnCompiler._builder.Emit(OpCode.Return);
+                child.CompileStmt(s);
         }
 
-        fnCompiler._builder.LocalCount = fnCompiler._scope.PeakLocalCount;
-        fnCompiler._builder.LocalNames = fnCompiler._scope.GetPeakLocalNames();
-        fnCompiler._builder.LocalIsConst = fnCompiler._scope.GetPeakLocalIsConst();
-        fnCompiler._builder.UpvalueNames = fnCompiler._upvalueNames is { Count: > 0 } ? fnCompiler._upvalueNames.ToArray() : null;
-        Chunk lambdaChunk = fnCompiler._builder.Build();
+        // Implicit return null at function end (unreachable for expression bodies)
+        byte retReg = child._scope.AllocTemp();
+        child._builder.EmitA(OpCode.LoadNull, retReg);
+        child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
+        child._scope.FreeTemp(retReg);
 
-        ushort chunkIdx = _builder.AddConstant(lambdaChunk);
-        _builder.Emit(OpCode.Closure, chunkIdx);
+        // Finalize chunk metadata
+        child._builder.Arity = paramCount;
+        child._builder.MinArity = minArity;
+        child._builder.MaxRegs = child._scope.MaxRegs;
+        child._builder.IsAsync = expr.IsAsync;
+        child._builder.HasRestParam = expr.HasRestParam;
+        child._builder.LocalNames = child._scope.GetLocalNames();
+        child._builder.LocalIsConst = child._scope.GetLocalIsConst();
+        child._builder.UpvalueNames = child._upvalueNames?.ToArray();
 
+        Chunk lambdaChunk = child._builder.Build();
+
+        ushort chunkIdx = _builder.AddConstant(StashValue.FromObj(lambdaChunk));
+        _builder.EmitABx(OpCode.Closure, dest, chunkIdx);
         foreach (UpvalueDescriptor uv in lambdaChunk.Upvalues)
-        {
-            _builder.EmitByte(uv.IsLocal ? (byte)1 : (byte)0);
-            _builder.EmitByte(uv.Index);
-        }
+            _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
 
         return null;
     }
@@ -195,128 +232,148 @@ public sealed partial class Compiler
     /// <inheritdoc />
     public object? VisitRetryExpr(RetryExpr expr)
     {
+        byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
 
-        // --- Compile max attempts ---
-        CompileExpr(expr.MaxAttempts); // [maxAttempts] on stack
+        bool hasUntil = expr.UntilClause != null;
+        bool hasOnRetry = expr.OnRetryClause != null;
+        bool onRetryIsReference = hasOnRetry && expr.OnRetryClause!.IsReference;
 
-        // --- Compile options ---
+        // All retry operands occupy consecutive temp registers starting at maxAttemptsReg.
+        // Layout: [maxAttempts] [options...] [body] [until?] [onRetry?]
+        // Retry ABx: R(A)=maxAttempts is overwritten with the result; K(Bx)=metadata.
+
+        // ── maxAttempts ──────────────────────────────────────────────────
+        byte maxAttemptsReg = _scope.AllocTemp();
+        CompileExprTo(expr.MaxAttempts, maxAttemptsReg);
+
+        // ── options ──────────────────────────────────────────────────────
         int optionCount = 0;
-        if (expr.NamedOptions != null)
+        if (expr.NamedOptions != null && expr.NamedOptions.Count > 0)
         {
+            // Named options: (nameReg, valueReg) pairs in consecutive registers
             foreach (var (name, value) in expr.NamedOptions)
             {
+                byte nameReg = _scope.AllocTemp();
                 ushort nameIdx = _builder.AddConstant(name.Lexeme);
-                _builder.Emit(OpCode.Const, nameIdx);
-                CompileExpr(value);
+                _builder.EmitABx(OpCode.LoadK, nameReg, nameIdx);
+
+                byte valReg = _scope.AllocTemp();
+                CompileExprTo(value, valReg);
+
                 optionCount++;
             }
         }
         else if (expr.OptionsExpr != null)
         {
-            CompileExpr(expr.OptionsExpr);
-            optionCount = -1; // Special: entire options struct on stack
+            // Struct/dict options: one register holding the options object
+            byte optReg = _scope.AllocTemp();
+            CompileExprTo(expr.OptionsExpr, optReg);
+            optionCount = -1;
         }
 
-        // --- Compile body as closure ---
-        var bodyCompiler = new Compiler(this, "<retry_body>", _globalSlots, _optimize);
-        bodyCompiler._scope.BeginScope();
-        bodyCompiler._builder.Arity = 1;
-        bodyCompiler._builder.MinArity = 1;
-        int bodyAttemptSlot = bodyCompiler._scope.DeclareLocal("attempt", isConst: true);
-        bodyCompiler._scope.MarkInitialized(bodyAttemptSlot);
-        List<Stmt> bodyStmts = expr.Body.Statements;
-        for (int i = 0; i < bodyStmts.Count; i++)
+        // ── body closure ─────────────────────────────────────────────────
+        byte bodyReg = _scope.AllocTemp();
         {
-            if (i == bodyStmts.Count - 1 && bodyStmts[i] is ExprStmt lastExpr)
+            var bodyChild = new Compiler(this, "<retry_body>", _globalSlots);
+
+            // Single `attempt` parameter in register 0
+            bodyChild._scope.DeclareLocal("attempt");
+            bodyChild._builder.Arity = 1;
+            bodyChild._builder.MinArity = 1;
+
+            var bodyStmts = expr.Body.Statements;
+            for (int i = 0; i < bodyStmts.Count; i++)
             {
-                bodyCompiler.CompileExpr(lastExpr.Expression);
+                bool isLast = i == bodyStmts.Count - 1;
+                if (isLast && bodyStmts[i] is ExprStmt lastExprStmt)
+                {
+                    // Return the value of the final expression statement
+                    byte resultReg = bodyChild._scope.AllocTemp();
+                    bodyChild.CompileExprTo(lastExprStmt.Expression, resultReg);
+                    bodyChild._builder.EmitABC(OpCode.Return, resultReg, 1, 0);
+                    bodyChild._scope.FreeTemp(resultReg);
+                }
+                else
+                {
+                    bodyChild.CompileStmt(bodyStmts[i]);
+                }
             }
-            else
-            {
-                bodyCompiler.CompileStmt(bodyStmts[i]);
-            }
+
+            // Implicit null return (fallthrough / empty body)
+            byte bodyRetReg = bodyChild._scope.AllocTemp();
+            bodyChild._builder.EmitA(OpCode.LoadNull, bodyRetReg);
+            bodyChild._builder.EmitABC(OpCode.Return, bodyRetReg, 1, 0);
+            bodyChild._scope.FreeTemp(bodyRetReg);
+
+            bodyChild._builder.MaxRegs = bodyChild._scope.MaxRegs;
+            bodyChild._builder.LocalNames = bodyChild._scope.GetLocalNames();
+            bodyChild._builder.LocalIsConst = bodyChild._scope.GetLocalIsConst();
+            bodyChild._builder.UpvalueNames = bodyChild._upvalueNames?.ToArray();
+
+            Chunk bodyChunk = bodyChild._builder.Build();
+            ushort bodyChunkIdx = _builder.AddConstant(StashValue.FromObj(bodyChunk));
+            _builder.EmitABx(OpCode.Closure, bodyReg, bodyChunkIdx);
+            foreach (UpvalueDescriptor uv in bodyChunk.Upvalues)
+                _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
         }
 
-        if (bodyStmts.Count == 0 || bodyStmts[^1] is not ExprStmt)
-        {
-            bodyCompiler._builder.Emit(OpCode.Null);
-        }
-
-        bodyCompiler._builder.Emit(OpCode.Return);
-        bodyCompiler._builder.LocalCount = bodyCompiler._scope.PeakLocalCount;
-        bodyCompiler._builder.LocalNames = bodyCompiler._scope.GetPeakLocalNames();
-        bodyCompiler._builder.LocalIsConst = bodyCompiler._scope.GetPeakLocalIsConst();
-        bodyCompiler._builder.UpvalueNames = bodyCompiler._upvalueNames is { Count: > 0 } ? bodyCompiler._upvalueNames.ToArray() : null;
-        Chunk bodyChunk = bodyCompiler._builder.Build();
-        ushort bodyIdx = _builder.AddConstant(bodyChunk);
-        _builder.Emit(OpCode.Closure, bodyIdx);
-        foreach (UpvalueDescriptor uv in bodyChunk.Upvalues)
-        {
-            _builder.EmitByte(uv.IsLocal ? (byte)1 : (byte)0);
-            _builder.EmitByte(uv.Index);
-        }
-
-        // --- Compile until clause (if present) ---
-        bool hasUntil = expr.UntilClause != null;
+        // ── until clause ─────────────────────────────────────────────────
         if (hasUntil)
         {
-            CompileExpr(expr.UntilClause!);
+            byte untilReg = _scope.AllocTemp();
+            CompileExprTo(expr.UntilClause!, untilReg);
         }
 
-        // --- Compile onRetry clause (if present) ---
-        bool hasOnRetry = expr.OnRetryClause != null;
-        bool onRetryIsReference = false;
+        // ── onRetry clause ───────────────────────────────────────────────
         if (hasOnRetry)
         {
+            byte onRetryReg = _scope.AllocTemp();
             OnRetryNode onRetry = expr.OnRetryClause!;
-            onRetryIsReference = onRetry.IsReference;
+
             if (onRetry.IsReference)
             {
-                CompileExpr(onRetry.Reference!);
+                CompileExprTo(onRetry.Reference!, onRetryReg);
             }
             else
             {
-                // Inline block: compile as a closure with (attempt, error) parameters
-                var onRetryCompiler = new Compiler(this, "<on_retry>", _globalSlots, _optimize);
-                onRetryCompiler._builder.Arity = 2;
-                onRetryCompiler._builder.MinArity = 2;
-                onRetryCompiler._scope.BeginScope();
-
-                string attemptName = onRetry.ParamAttempt?.Lexeme ?? "<attempt>";
-                int attemptSlot = onRetryCompiler._scope.DeclareLocal(attemptName, isConst: false);
-                onRetryCompiler._scope.MarkInitialized(attemptSlot);
-
-                string errorName = onRetry.ParamError?.Lexeme ?? "<error>";
-                int errorSlot = onRetryCompiler._scope.DeclareLocal(errorName, isConst: false);
-                onRetryCompiler._scope.MarkInitialized(errorSlot);
+                // Inline block: compile as closure with (attempt, error) parameters
+                var onRetryChild = new Compiler(this, "<on_retry>", _globalSlots);
+                onRetryChild._scope.DeclareLocal(onRetry.ParamAttempt?.Lexeme ?? "<attempt>");
+                onRetryChild._scope.DeclareLocal(onRetry.ParamError?.Lexeme ?? "<error>");
+                onRetryChild._builder.Arity = 2;
+                onRetryChild._builder.MinArity = 2;
 
                 foreach (Stmt s in onRetry.Body!.Statements)
-                {
-                    onRetryCompiler.CompileStmt(s);
-                }
+                    onRetryChild.CompileStmt(s);
 
-                onRetryCompiler._builder.Emit(OpCode.Null);
-                onRetryCompiler._builder.Emit(OpCode.Return);
-                onRetryCompiler._builder.LocalCount = onRetryCompiler._scope.PeakLocalCount;
-                onRetryCompiler._builder.LocalNames = onRetryCompiler._scope.GetPeakLocalNames();
-                onRetryCompiler._builder.LocalIsConst = onRetryCompiler._scope.GetPeakLocalIsConst();
-                onRetryCompiler._builder.UpvalueNames = onRetryCompiler._upvalueNames is { Count: > 0 } ? onRetryCompiler._upvalueNames.ToArray() : null;
-                Chunk onRetryChunk = onRetryCompiler._builder.Build();
-                ushort onRetryIdx = _builder.AddConstant(onRetryChunk);
-                _builder.Emit(OpCode.Closure, onRetryIdx);
+                byte onRetryRetReg = onRetryChild._scope.AllocTemp();
+                onRetryChild._builder.EmitA(OpCode.LoadNull, onRetryRetReg);
+                onRetryChild._builder.EmitABC(OpCode.Return, onRetryRetReg, 1, 0);
+                onRetryChild._scope.FreeTemp(onRetryRetReg);
+
+                onRetryChild._builder.MaxRegs = onRetryChild._scope.MaxRegs;
+                onRetryChild._builder.LocalNames = onRetryChild._scope.GetLocalNames();
+                onRetryChild._builder.LocalIsConst = onRetryChild._scope.GetLocalIsConst();
+                onRetryChild._builder.UpvalueNames = onRetryChild._upvalueNames?.ToArray();
+
+                Chunk onRetryChunk = onRetryChild._builder.Build();
+                ushort onRetryChunkIdx = _builder.AddConstant(StashValue.FromObj(onRetryChunk));
+                _builder.EmitABx(OpCode.Closure, onRetryReg, onRetryChunkIdx);
                 foreach (UpvalueDescriptor uv in onRetryChunk.Upvalues)
-                {
-                    _builder.EmitByte(uv.IsLocal ? (byte)1 : (byte)0);
-                    _builder.EmitByte(uv.Index);
-                }
+                    _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
             }
         }
 
-        // --- Emit OP_RETRY ---
+        // ── emit Retry instruction ────────────────────────────────────────
         var metadata = new RetryMetadata(optionCount, hasUntil, hasOnRetry, onRetryIsReference);
         ushort metaIdx = _builder.AddConstant(metadata);
-        _builder.Emit(OpCode.Retry, metaIdx);
+        _builder.EmitABx(OpCode.Retry, maxAttemptsReg, metaIdx);
+
+        // VM writes the retry result back to R(maxAttemptsReg)
+        if (maxAttemptsReg != dest)
+            _builder.EmitAB(OpCode.Move, dest, maxAttemptsReg);
+        _scope.FreeTempFrom(maxAttemptsReg);
 
         return null;
     }

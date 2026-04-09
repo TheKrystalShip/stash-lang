@@ -6,34 +6,31 @@ using Stash.Runtime;
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Variable load/store opcode handlers for globals, locals, and upvalues.
+/// Variable load/store opcode handlers for globals and upvalues.
 /// </summary>
 public sealed partial class VirtualMachine
 {
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteLoadGlobal(ref CallFrame frame)
+    private void ExecuteGetGlobal(ref CallFrame frame, uint inst)
     {
-        ushort slot = ReadU16(ref frame);
+        byte a = Instruction.GetA(inst);
+        ushort slot = Instruction.GetBx(inst);
         Dictionary<string, StashValue>? mg = frame.ModuleGlobals;
         if (mg == null || mg == _globals)
         {
             // Fast path: main-script global — direct array access
             StashValue val = _globalSlots[slot];
             if (val.AsObj == _undefinedSentinel)
-            {
                 ThrowUndefinedGlobal(ref frame, slot);
-            }
-            Push(val);
+            _stack[frame.BaseSlot + a] = val;
         }
         else
         {
             // Module function — fall back to dict lookup using name table
             string name = frame.Chunk.GlobalNameTable![slot];
             if (!mg.TryGetValue(name, out StashValue value))
-            {
                 throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
-            }
-            Push(value);
+            _stack[frame.BaseSlot + a] = value;
         }
     }
 
@@ -45,93 +42,75 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteStoreGlobal(ref CallFrame frame)
+    private void ExecuteSetGlobal(ref CallFrame frame, uint inst)
     {
-        ushort slot = ReadU16(ref frame);
+        byte a = Instruction.GetA(inst);
+        ushort slot = Instruction.GetBx(inst);
         Dictionary<string, StashValue>? mg = frame.ModuleGlobals;
         if (mg == null || mg == _globals)
         {
             // Fast path: main-script global
             if (_constGlobalSlots.Length > slot && _constGlobalSlots[slot])
-            {
                 throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
-            }
-            StashValue val = Pop();
+            StashValue val = _stack[frame.BaseSlot + a];
             _globalSlots[slot] = val;
-            // Write-through to dict for module loading, debugger, REPL compatibility
-            string name = _globalNameTable[slot];
-            _globals[name] = val;
+            // Write-through to dict for module loading, debugger, and REPL compatibility
+            _globals[_globalNameTable[slot]] = val;
         }
         else
         {
-            // Module function — dict-based
+            // Module function — dict-based fallback
             string name = frame.Chunk.GlobalNameTable![slot];
             if (_constGlobals.Contains(name))
-            {
                 throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
-            }
-            mg[name] = Pop();
+            mg[name] = _stack[frame.BaseSlot + a];
         }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteInitConstGlobal(ref CallFrame frame)
+    private void ExecuteInitConstGlobal(ref CallFrame frame, uint inst)
     {
-        ushort slot = ReadU16(ref frame);
-        StashValue val = Pop();
-        // Slot-based path
-        if (_globalSlots.Length > slot)
-        {
-            _globalSlots[slot] = val;
-            _constGlobalSlots[slot] = true;
-        }
-        // Write-through to dict + constGlobals set
-        string name = _globalNameTable.Length > slot ? _globalNameTable[slot] : frame.Chunk.GlobalNameTable![slot];
+        byte a = Instruction.GetA(inst);
+        ushort slot = Instruction.GetBx(inst);
+        StashValue val = _stack[frame.BaseSlot + a];
+        _globalSlots[slot] = val;
+        _constGlobalSlots[slot] = true;
+        string name = _globalNameTable.Length > slot
+            ? _globalNameTable[slot]
+            : frame.Chunk.GlobalNameTable![slot];
         _globals[name] = val;
         _constGlobals.Add(name);
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteConst(ref CallFrame frame)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGetUpval(ref CallFrame frame, uint inst)
     {
-        ushort idx = ReadU16(ref frame);
-        Push(frame.Chunk.Constants[idx]);
+        byte a = Instruction.GetA(inst);
+        byte idx = Instruction.GetB(inst);
+        _stack[frame.BaseSlot + a] = frame.Upvalues![idx].Value;
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteLoadLocal(ref CallFrame frame)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteSetUpval(ref CallFrame frame, uint inst)
     {
-        byte slot = ReadByte(ref frame);
-        Push(_stack[frame.BaseSlot + slot]);
+        byte a = Instruction.GetA(inst);
+        byte idx = Instruction.GetB(inst);
+        frame.Upvalues![idx].Value = _stack[frame.BaseSlot + a];
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteStoreLocal(ref CallFrame frame)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteCloseUpval(ref CallFrame frame, uint inst)
     {
-        byte slot = ReadByte(ref frame);
-        _stack[frame.BaseSlot + slot] = Pop();
+        byte a = Instruction.GetA(inst);
+        CloseUpvalues(frame.BaseSlot + a);
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteLoadUpvalue(ref CallFrame frame)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteCheckNumeric(ref CallFrame frame, uint inst)
     {
-        byte idx = ReadByte(ref frame);
-        Push(frame.Upvalues![idx].Value);
-    }
-
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteStoreUpvalue(ref CallFrame frame)
-    {
-        byte idx = ReadByte(ref frame);
-        frame.Upvalues![idx].Value = Pop();
-    }
-
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteCheckNumeric(ref CallFrame frame)
-    {
-        if (!Peek().IsNumeric)
-        {
+        byte a = Instruction.GetA(inst);
+        if (!_stack[frame.BaseSlot + a].IsNumeric)
             throw new RuntimeError("Operand of '++' or '--' must be a number.", GetCurrentSpan(ref frame));
-        }
     }
 }
+

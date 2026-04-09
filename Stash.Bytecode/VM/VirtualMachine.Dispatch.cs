@@ -22,6 +22,7 @@ public sealed partial class VirtualMachine
         public int CatchIP;
         public int StackLevel;
         public int FrameIndex;
+        public byte ErrorReg;  // register that receives the caught error value
     }
 
     // ------------------------------------------------------------------
@@ -45,17 +46,18 @@ public sealed partial class VirtualMachine
                 // Close any upvalues in the unwound stack region before restoring
                 CloseUpvalues(handler.StackLevel);
 
-                // Restore call stack and operand stack to the handler's save point
+                // Restore call stack and stack pointer to the handler's save point
                 _frameCount = handler.FrameIndex + 1;
                 _sp = handler.StackLevel;
 
-                // Push a StashError value for the catch block to consume
+                // Construct the StashError and store it in the designated error register
                 var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
                 _context.LastError = stashError;
-                Push(StashValue.FromObj(stashError));
+                ref CallFrame handlerFrame = ref _frames[_frameCount - 1];
+                _stack[handlerFrame.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
 
                 // Resume execution at the catch handler's bytecode offset
-                _frames[_frameCount - 1].IP = handler.CatchIP;
+                handlerFrame.IP = handler.CatchIP;
             }
         }
     }
@@ -65,9 +67,7 @@ public sealed partial class VirtualMachine
     {
         IDebugger? debugger = _debugger;
         // Per-frame last-debug-line tracking prevents re-triggering a breakpoint
-        // at line N in a caller frame after returning from a callee that also ended
-        // at line N (or any different line), which would otherwise happen because the
-        // single lastDebugLine variable crosses frame boundaries.
+        // at line N in a caller frame after returning from a callee.
         if (debugger is not null && _lastDebugLinePerFrame is null)
         {
             _lastDebugLinePerFrame = ArrayPool<int>.Shared.Rent(DefaultFrameDepth);
@@ -77,7 +77,9 @@ public sealed partial class VirtualMachine
         while (true)
         {
             ref CallFrame frame = ref _frames[_frameCount - 1];
-            byte instruction = frame.Chunk.Code[frame.IP++];
+
+            // Fetch the 32-bit instruction and advance the instruction pointer.
+            uint inst = frame.Chunk.Code[frame.IP++];
 
             // ── Debug hook: check for breakpoints/stepping at statement boundaries ──
             if (debugger is not null)
@@ -109,197 +111,237 @@ public sealed partial class VirtualMachine
                 }
             }
 
-            switch ((OpCode)instruction)
+            switch (Instruction.GetOp(inst))
             {
-                // ==================== Constants & Literals ====================
-                case OpCode.Const: ExecuteConst(ref frame); break;
-                case OpCode.Null: Push(StashValue.Null); break;
-                case OpCode.True: Push(StashValue.True); break;
-                case OpCode.False: Push(StashValue.False); break;
-
-                // ==================== Stack Manipulation ====================
-                case OpCode.Pop: _sp--; break;
-                case OpCode.Dup: Push(_stack[_sp - 1]); break;
+                // ==================== Loads & Constants ====================
+                case OpCode.LoadK:
+                {
+                    byte a = Instruction.GetA(inst);
+                    ushort bx = Instruction.GetBx(inst);
+                    _stack[frame.BaseSlot + a] = frame.Chunk.Constants[bx];
+                    break;
+                }
+                case OpCode.LoadNull:
+                {
+                    byte a = Instruction.GetA(inst);
+                    _stack[frame.BaseSlot + a] = StashValue.Null;
+                    break;
+                }
+                case OpCode.LoadBool:
+                {
+                    byte a = Instruction.GetA(inst);
+                    byte b = Instruction.GetB(inst);
+                    byte c = Instruction.GetC(inst);
+                    _stack[frame.BaseSlot + a] = StashValue.FromBool(b != 0);
+                    if (c != 0) frame.IP++;
+                    break;
+                }
+                case OpCode.Move:
+                {
+                    byte a = Instruction.GetA(inst);
+                    byte b = Instruction.GetB(inst);
+                    _stack[frame.BaseSlot + a] = _stack[frame.BaseSlot + b];
+                    break;
+                }
 
                 // ==================== Variable Access ====================
-                case OpCode.LoadLocal: ExecuteLoadLocal(ref frame); break;
-                case OpCode.StoreLocal: ExecuteStoreLocal(ref frame); break;
-                case OpCode.LoadGlobal: ExecuteLoadGlobal(ref frame); break;
-                case OpCode.StoreGlobal: ExecuteStoreGlobal(ref frame); break;
-                case OpCode.InitConstGlobal: ExecuteInitConstGlobal(ref frame); break;
-                case OpCode.LoadUpvalue: ExecuteLoadUpvalue(ref frame); break;
-                case OpCode.StoreUpvalue: ExecuteStoreUpvalue(ref frame); break;
+                case OpCode.GetGlobal: ExecuteGetGlobal(ref frame, inst); break;
+                case OpCode.SetGlobal: ExecuteSetGlobal(ref frame, inst); break;
+                case OpCode.InitConstGlobal: ExecuteInitConstGlobal(ref frame, inst); break;
+                case OpCode.GetUpval: ExecuteGetUpval(ref frame, inst); break;
+                case OpCode.SetUpval: ExecuteSetUpval(ref frame, inst); break;
+                case OpCode.CloseUpval: ExecuteCloseUpval(ref frame, inst); break;
+                case OpCode.CheckNumeric: ExecuteCheckNumeric(ref frame, inst); break;
 
                 // ==================== Arithmetic ====================
-                case OpCode.Add: ExecuteAdd(ref frame); break;
-                case OpCode.Subtract: ExecuteSubtract(ref frame); break;
-                case OpCode.Multiply: ExecuteMultiply(ref frame); break;
-                case OpCode.Divide: ExecuteDivide(ref frame); break;
-                case OpCode.Modulo: ExecuteModulo(ref frame); break;
-                case OpCode.Power: ExecutePower(ref frame); break;
-                case OpCode.Negate: ExecuteNegate(ref frame); break;
+                case OpCode.Add: ExecuteAdd(ref frame, inst); break;
+                case OpCode.Sub: ExecuteSub(ref frame, inst); break;
+                case OpCode.Mul: ExecuteMul(ref frame, inst); break;
+                case OpCode.Div: ExecuteDiv(ref frame, inst); break;
+                case OpCode.Mod: ExecuteMod(ref frame, inst); break;
+                case OpCode.Pow: ExecutePow(ref frame, inst); break;
+                case OpCode.Neg: ExecuteNeg(ref frame, inst); break;
+                case OpCode.AddI: ExecuteAddI(ref frame, inst); break;
 
                 // ==================== Bitwise ====================
-                case OpCode.BitAnd: ExecuteBitAnd(ref frame); break;
-                case OpCode.BitOr: ExecuteBitOr(ref frame); break;
-                case OpCode.BitXor: ExecuteBitXor(ref frame); break;
-                case OpCode.BitNot: Push(RuntimeOps.BitNot(Pop(), GetCurrentSpan(ref frame))); break;
-                case OpCode.ShiftLeft: ExecuteShiftLeft(ref frame); break;
-                case OpCode.ShiftRight: ExecuteShiftRight(ref frame); break;
+                case OpCode.BAnd: ExecuteBAnd(ref frame, inst); break;
+                case OpCode.BOr: ExecuteBOr(ref frame, inst); break;
+                case OpCode.BXor: ExecuteBXor(ref frame, inst); break;
+                case OpCode.BNot: ExecuteBNot(ref frame, inst); break;
+                case OpCode.Shl: ExecuteShl(ref frame, inst); break;
+                case OpCode.Shr: ExecuteShr(ref frame, inst); break;
 
                 // ==================== Comparison ====================
-                case OpCode.Equal: ExecuteEqual(ref frame); break;
-                case OpCode.NotEqual: ExecuteNotEqual(ref frame); break;
-                case OpCode.LessThan: ExecuteLessThan(ref frame); break;
-                case OpCode.LessEqual: ExecuteLessEqual(ref frame); break;
-                case OpCode.GreaterThan: ExecuteGreaterThan(ref frame); break;
-                case OpCode.GreaterEqual: ExecuteGreaterEqual(ref frame); break;
+                case OpCode.Eq: ExecuteEq(ref frame, inst); break;
+                case OpCode.Ne: ExecuteNe(ref frame, inst); break;
+                case OpCode.Lt: ExecuteLt(ref frame, inst); break;
+                case OpCode.Le: ExecuteLe(ref frame, inst); break;
+                case OpCode.Gt: ExecuteGt(ref frame, inst); break;
+                case OpCode.Ge: ExecuteGe(ref frame, inst); break;
 
                 // ==================== Logic ====================
-                case OpCode.Not: Push(StashValue.FromBool(RuntimeOps.IsFalsy(Pop()))); break;
-                case OpCode.And: ExecuteAnd(ref frame); break;
-                case OpCode.Or: ExecuteOr(ref frame); break;
-                case OpCode.NullCoalesce: ExecuteNullCoalesce(ref frame); break;
+                case OpCode.Not:
+                {
+                    // ABC: R(A) = !IsTruthy(R(B))
+                    byte a = Instruction.GetA(inst);
+                    byte b = Instruction.GetB(inst);
+                    _stack[frame.BaseSlot + a] = StashValue.FromBool(RuntimeOps.IsFalsy(_stack[frame.BaseSlot + b]));
+                    break;
+                }
+                case OpCode.TestSet:
+                {
+                    // ABC: if IsTruthy(R(B)) == C then R(A) = R(B) else skip next
+                    byte a = Instruction.GetA(inst);
+                    byte b = Instruction.GetB(inst);
+                    byte c = Instruction.GetC(inst);
+                    StashValue rb = _stack[frame.BaseSlot + b];
+                    bool truthy = !RuntimeOps.IsFalsy(rb);
+                    if (truthy == (c != 0))
+                        _stack[frame.BaseSlot + a] = rb;
+                    else
+                        frame.IP++;
+                    break;
+                }
+                case OpCode.Test:
+                {
+                    // ABC: if IsTruthy(R(A)) != C then skip next
+                    byte a = Instruction.GetA(inst);
+                    byte c = Instruction.GetC(inst);
+                    bool truthy = !RuntimeOps.IsFalsy(_stack[frame.BaseSlot + a]);
+                    if (truthy != (c != 0))
+                        frame.IP++;
+                    break;
+                }
+                case OpCode.In: ExecuteIn(ref frame, inst); break;
 
                 // ==================== Control Flow ====================
-                case OpCode.Jump: ExecuteJump(ref frame); break;
-                case OpCode.JumpTrue: ExecuteJumpTrue(ref frame); break;
-                case OpCode.JumpFalse: ExecuteJumpFalse(ref frame); break;
-                case OpCode.Loop:
-                    ExecuteLoop(ref frame);
-                    if (debugger is not null && debugger.IsPauseRequested)
-                    {
-                        _lastDebugLinePerFrame![_frameCount - 1] = -1;
-                    }
-
+                case OpCode.Jmp:
+                {
+                    frame.IP += Instruction.GetSBx(inst);
                     break;
+                }
+                case OpCode.JmpFalse:
+                {
+                    byte a = Instruction.GetA(inst);
+                    if (RuntimeOps.IsFalsy(_stack[frame.BaseSlot + a]))
+                        frame.IP += Instruction.GetSBx(inst);
+                    break;
+                }
+                case OpCode.JmpTrue:
+                {
+                    byte a = Instruction.GetA(inst);
+                    if (!RuntimeOps.IsFalsy(_stack[frame.BaseSlot + a]))
+                        frame.IP += Instruction.GetSBx(inst);
+                    break;
+                }
+                case OpCode.Loop:
+                {
+                    // AsBx: IP += sBx (negative → backward jump) + cancellation + step limit
+                    if ((++_loopCheckCounter & 0xFF) == 0)
+                    {
+                        _ct.ThrowIfCancellationRequested();
+                        if (StepLimit > 0)
+                        {
+                            StepCount += 256;
+                            if (StepCount >= StepLimit)
+                                throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+                        }
+                    }
+                    frame.IP += Instruction.GetSBx(inst);
+                    if (debugger is not null && debugger.IsPauseRequested)
+                        _lastDebugLinePerFrame![_frameCount - 1] = -1;
+                    break;
+                }
 
                 // ==================== Functions ====================
-                case OpCode.Call: ExecuteCall(ref frame, debugger); break;
-                case OpCode.ArgMark: Push(StashValue.FromObj(_argSentinel)); break;
-                case OpCode.CallSpread: ExecuteCallSpread(ref frame, debugger); break;
-                case OpCode.Closure: ExecuteClosure(ref frame); break;
+                case OpCode.Call: ExecuteCall(ref frame, inst, debugger); break;
+                case OpCode.CallSpread: ExecuteCallSpread(ref frame, inst, debugger); break;
                 case OpCode.Return:
-                    if (ExecuteReturn(ref frame, targetFrameCount, debugger, out object? retResult))
-                    {
+                    if (ExecuteReturn(ref frame, inst, targetFrameCount, debugger, out object? retResult))
                         return retResult;
-                    }
-
                     break;
-
-                // ==================== Collections ====================
-                case OpCode.Array: ExecuteArray(ref frame); break;
-                case OpCode.Dict: ExecuteDict(ref frame); break;
-                case OpCode.Range: ExecuteRange(ref frame); break;
-                case OpCode.Spread: ExecuteSpread(ref frame); break;
-
-                // ==================== Object Access ====================
-                case OpCode.GetField: ExecuteGetField(ref frame); break;
-                case OpCode.GetFieldIC: ExecuteGetFieldIC(ref frame); break;
-                case OpCode.SetField: ExecuteSetField(ref frame); break;
-                case OpCode.GetIndex: ExecuteGetIndex(ref frame); break;
-                case OpCode.SetIndex: ExecuteSetIndex(ref frame); break;
-                case OpCode.StructInit: ExecuteStructInit(ref frame); break;
-
-                // ==================== Strings ====================
-                case OpCode.Interpolate: ExecuteInterpolate(ref frame); break;
-
-                // ==================== Type Operations ====================
-                case OpCode.Is: ExecuteIs(ref frame); break;
-                case OpCode.StructDecl: ExecuteStructDecl(ref frame); break;
-                case OpCode.EnumDecl: ExecuteEnumDecl(ref frame); break;
-                case OpCode.InterfaceDecl: ExecuteInterfaceDecl(ref frame); break;
-                case OpCode.Extend: ExecuteExtend(ref frame); break;
-
-                // ==================== Error Handling ====================
-                case OpCode.Throw: ExecuteThrow(ref frame); break;
-                case OpCode.TryBegin: ExecuteTryBegin(ref frame); break;
-                case OpCode.TryEnd: ExecuteTryEnd(); break;
-
-                // ==================== Switch ====================
-                case OpCode.Switch: ExecuteSwitch(ref frame); break;
+                case OpCode.Closure: ExecuteClosure(ref frame, inst); break;
 
                 // ==================== Iteration ====================
-                case OpCode.Iterator: ExecuteIterator(ref frame); break;
-                case OpCode.Iterate: ExecuteIterate(ref frame); break;
+                case OpCode.ForPrep: ExecuteForPrep(ref frame, inst); break;
+                case OpCode.ForLoop: ExecuteForLoop(ref frame, inst); break;
+                case OpCode.IterPrep: ExecuteIterPrep(ref frame, inst); break;
+                case OpCode.IterLoop: ExecuteIterLoop(ref frame, inst); break;
 
-                // ==================== Async ====================
-                case OpCode.Await: ExecuteAwait(ref frame); break;
-                case OpCode.CloseUpvalue: ExecuteCloseUpvalue(ref frame); break;
+                // ==================== Tables & Fields ====================
+                case OpCode.GetTable: ExecuteGetTable(ref frame, inst); break;
+                case OpCode.SetTable: ExecuteSetTable(ref frame, inst); break;
+                case OpCode.GetField: ExecuteGetField(ref frame, inst); break;
+                case OpCode.SetField: ExecuteSetField(ref frame, inst); break;
+                case OpCode.Self: ExecuteSelf(ref frame, inst); break;
 
-                // ==================== Containment ====================
-                case OpCode.In: ExecuteIn(ref frame); break;
+                // ==================== Collections ====================
+                case OpCode.NewArray: ExecuteNewArray(ref frame, inst); break;
+                case OpCode.NewDict: ExecuteNewDict(ref frame, inst); break;
+                case OpCode.NewRange: ExecuteNewRange(ref frame, inst); break;
+                case OpCode.Spread: ExecuteSpread(ref frame, inst); break;
+                case OpCode.Destructure: ExecuteDestructure(ref frame, inst); break;
+
+                // ==================== Types & Closures ====================
+                case OpCode.NewStruct: ExecuteNewStruct(ref frame, inst); break;
+                case OpCode.TypeOf: ExecuteTypeOf(ref frame, inst); break;
+                case OpCode.Is: ExecuteIs(ref frame, inst); break;
+                case OpCode.StructDecl: ExecuteStructDecl(ref frame, inst); break;
+                case OpCode.EnumDecl: ExecuteEnumDecl(ref frame, inst); break;
+                case OpCode.IfaceDecl: ExecuteIfaceDecl(ref frame, inst); break;
+                case OpCode.Extend: ExecuteExtend(ref frame, inst); break;
+
+                // ==================== Error Handling ====================
+                case OpCode.TryBegin:
+                {
+                    // ABx (signed offset via EmitJump+PatchJump): push handler; decode with GetSBx
+                    byte errReg = Instruction.GetA(inst);
+                    int catchOffset = Instruction.GetSBx(inst);
+                    _exceptionHandlers.Add(new ExceptionHandler
+                    {
+                        CatchIP = frame.IP + catchOffset,
+                        StackLevel = _sp,
+                        FrameIndex = _frameCount - 1,
+                        ErrorReg = errReg,
+                    });
+                    break;
+                }
+                case OpCode.TryEnd: ExecuteTryEnd(); break;
+                case OpCode.Throw: ExecuteThrow(ref frame, inst); break;
+                case OpCode.TryExpr: ExecuteTryExpr(ref frame, inst); break;
+
+                // ==================== Strings ====================
+                case OpCode.Interpolate: ExecuteInterpolate(ref frame, inst); break;
 
                 // ==================== Shell Commands ====================
-                case OpCode.Command: ExecuteCommand(ref frame); break;
-                case OpCode.Pipe: ExecutePipe(ref frame); break;
-                case OpCode.Redirect: ExecuteRedirect(ref frame); break;
+                case OpCode.Command: ExecuteCommand(ref frame, inst); break;
+                case OpCode.Pipe: ExecutePipe(ref frame, inst); break;
+                case OpCode.Redirect: ExecuteRedirect(ref frame, inst); break;
 
                 // ==================== Module Import ====================
-                case OpCode.Import: ExecuteImport(ref frame); break;
-                case OpCode.ImportAs: ExecuteImportAs(ref frame); break;
+                case OpCode.Import: ExecuteImport(ref frame, inst); break;
+                case OpCode.ImportAs: ExecuteImportAs(ref frame, inst); break;
 
-                // ==================== Destructure ====================
-                case OpCode.Destructure: ExecuteDestructure(ref frame); break;
+                // ==================== Switch ====================
+                case OpCode.Switch: ExecuteSwitch(ref frame, inst); break;
 
                 // ==================== Elevation ====================
-                case OpCode.ElevateBegin: ExecuteElevateBegin(ref frame); break;
-                case OpCode.ElevateEnd: ExecuteElevateEnd(ref frame); break;
+                case OpCode.ElevateBegin: ExecuteElevateBegin(ref frame, inst); break;
+                case OpCode.ElevateEnd: ExecuteElevateEnd(ref frame, inst); break;
 
                 // ==================== Retry ====================
-                case OpCode.Retry: Push(ExecuteRetry(ref frame)); break;
+                case OpCode.Retry: ExecuteRetry(ref frame, inst); break;
 
-                // ==================== Superinstructions ====================
-                case OpCode.LoadLocal0: Push(_stack[frame.BaseSlot]); break;
-                case OpCode.LoadLocal1: Push(_stack[frame.BaseSlot + 1]); break;
-                case OpCode.LoadLocal2: Push(_stack[frame.BaseSlot + 2]); break;
-                case OpCode.LoadLocal3: Push(_stack[frame.BaseSlot + 3]); break;
-                case OpCode.Call0: ExecuteCallN(ref frame, 0, debugger); break;
-                case OpCode.Call1: ExecuteCallN(ref frame, 1, debugger); break;
-                case OpCode.Call2: ExecuteCallN(ref frame, 2, debugger); break;
-                case OpCode.LL_Add: ExecuteLL_Add(ref frame); break;
-                case OpCode.LC_Add: ExecuteLC_Add(ref frame); break;
-                case OpCode.LC_LessThan: ExecuteLC_LessThan(ref frame); break;
-                case OpCode.DupStoreLocalPop: ExecuteDupStoreLocalPop(ref frame); break;
-                case OpCode.LL_LessThan: ExecuteLL_LessThan(ref frame); break;
-                case OpCode.LC_Subtract: ExecuteLC_Subtract(ref frame); break;
-                case OpCode.L_Return:
-                    if (ExecuteL_Return(ref frame, targetFrameCount, debugger, out object? lRetResult))
-                    {
-                        return lRetResult;
-                    }
-                    break;
-                case OpCode.LessThanJumpFalse: ExecuteLessThanJumpFalse(ref frame); break;
-                case OpCode.GreaterThanJumpFalse: ExecuteGreaterThanJumpFalse(ref frame); break;
-                case OpCode.LessEqualJumpFalse: ExecuteLessEqualJumpFalse(ref frame); break;
-                case OpCode.GreaterEqualJumpFalse: ExecuteGreaterEqualJumpFalse(ref frame); break;
-                case OpCode.EqualJumpFalse: ExecuteEqualJumpFalse(ref frame); break;
-                case OpCode.NotEqualJumpFalse: ExecuteNotEqualJumpFalse(ref frame); break;
-                case OpCode.IncrLocal: ExecuteIncrLocal(ref frame); break;
-                case OpCode.DecrLocal: ExecuteDecrLocal(ref frame); break;
-
-                // ==================== Deferred / Not-yet-implemented ====================
-                case OpCode.CheckNumeric: ExecuteCheckNumeric(ref frame); break;
-
-                case OpCode.PreIncrement:
-                case OpCode.PreDecrement:
-                case OpCode.PostIncrement:
-                case OpCode.PostDecrement:
-                case OpCode.TryExpr:
-                    {
-                        int operandSize = OpCodeInfo.OperandSize((OpCode)instruction);
-                        frame.IP += operandSize;
-                        throw new RuntimeError(
-                            $"Opcode {(OpCode)instruction} is not yet implemented in the bytecode VM.",
-                            GetCurrentSpan(ref frame));
-                    }
+                // ==================== Async ====================
+                case OpCode.Await: ExecuteAwait(ref frame, inst); break;
 
                 default:
                     throw new RuntimeError(
-                        $"Unknown opcode {instruction} at offset {frame.IP - 1}.",
+                        $"Unknown opcode {Instruction.GetOp(inst)} at offset {frame.IP - 1}.",
                         GetCurrentSpan(ref frame));
             }
         }
     }
 
 }
+

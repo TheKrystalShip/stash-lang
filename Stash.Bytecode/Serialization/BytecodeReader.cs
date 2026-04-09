@@ -151,10 +151,10 @@ public static class BytecodeReader
         // Name (u16 length + UTF-8, 0xFFFF = null)
         string? name = ReadNullableString16(reader);
 
-        // Arity / minArity / localCount / globalSlotCount (all u16 LE)
+        // Arity / minArity / maxRegs / globalSlotCount (all u16 LE)
         int arity           = reader.ReadUInt16();
         int minArity        = reader.ReadUInt16();
-        int localCount      = reader.ReadUInt16();
+        int maxRegs         = reader.ReadUInt16();
         int globalSlotCount = reader.ReadUInt16();
 
         // Chunk flags (bit 0: IsAsync, bit 1: HasRestParam, bit 2: MayHaveCapturedLocals)
@@ -163,12 +163,14 @@ public static class BytecodeReader
         bool hasRestParam          = (chunkFlags & 0x02) != 0;
         bool mayHaveCapturedLocals = (chunkFlags & 0x04) != 0;
 
-        // Code (u32 length + raw bytes)
+        // Code (u32 instruction count + uint[] 4-bytes-per-instruction LE)
         uint codeLength = reader.ReadUInt32();
         if (codeLength > MaxCodeLength)
             throw new InvalidDataException(
-                $"Code blob length {codeLength} exceeds the 16 MB safety limit.");
-        byte[] code = reader.ReadBytes((int)codeLength);
+                $"Code length {codeLength} exceeds the 16 MB safety limit.");
+        uint[] code = new uint[codeLength];
+        for (int i = 0; i < (int)codeLength; i++)
+            code[i] = reader.ReadUInt32();
 
         // Constants (u16 count + tagged values)
         int constantCount = reader.ReadUInt16();
@@ -260,7 +262,7 @@ public static class BytecodeReader
             new SourceMap(sourceMapEntries),
             arity,
             minArity,
-            localCount,
+            maxRegs,
             upvalues,
             name,
             isAsync,
@@ -270,13 +272,8 @@ public static class BytecodeReader
             localIsConst,
             upvalueNames,
             globalNameTable,
-            globalSlotCount);
-
-        // Reconstruct IC slots by counting GetFieldIC opcodes in the code stream.
-        // GetFieldIC (opcode 98) is 5 bytes: 1 opcode byte + u16 name_idx + u16 ic_slot_idx.
-        int icSlotCount = CountGetFieldICOpcodes(code, constants);
-        if (icSlotCount > 0)
-            chunk.ICSlots = new ICSlot[icSlotCount];
+            globalSlotCount,
+            icSlots: null);
 
         return chunk;
     }
@@ -301,48 +298,9 @@ public static class BytecodeReader
             12 => StashValue.FromObj(ReadImportAsMetadata(reader)),
             13 => StashValue.FromObj(ReadDestructureMetadata(reader)),
             14 => StashValue.FromObj(ReadRetryMetadata(reader)),
+            15 => StashValue.FromObj(ReadStructInitMetadata(reader)),
             _ => throw new InvalidDataException($"Unknown constant tag {tag} in .stashc constant pool.")
         };
-    }
-
-    /// <summary>
-    /// Walks the bytecode array and counts <see cref="OpCode.GetFieldIC"/> instructions,
-    /// correctly skipping the variable-length inline upvalue descriptors that follow
-    /// <see cref="OpCode.Closure"/> instructions.
-    /// </summary>
-    private static int CountGetFieldICOpcodes(byte[] code, StashValue[] constants)
-    {
-        const byte GetFieldICByte = 98; // OpCode.GetFieldIC: 1 opcode + u16 + u16 = 5 bytes
-        const byte ClosureByte    = 41; // OpCode.Closure: 1 opcode + u16 + N*2 upvalue bytes
-
-        int count = 0;
-        int i = 0;
-        while (i < code.Length)
-        {
-            byte op = code[i];
-            i++; // consume opcode byte
-
-            if (op == GetFieldICByte)
-            {
-                count++;
-                i += 4; // skip u16 name_idx + u16 ic_slot_idx
-            }
-            else if (op == ClosureByte)
-            {
-                // Standard 2-byte constant pool index, then N*2 bytes of inline upvalue descriptors.
-                ushort constIdx = (ushort)((code[i] << 8) | code[i + 1]);
-                i += 2;
-                int uvCount = constIdx < constants.Length && constants[constIdx].AsObj is Chunk fn
-                    ? fn.Upvalues.Length
-                    : 0;
-                i += uvCount * 2; // 1 byte isLocal + 1 byte index per descriptor
-            }
-            else
-            {
-                i += OpCodeInfo.OperandSize((OpCode)op);
-            }
-        }
-        return count;
     }
 
     // -------------------------------------------------------------------------
@@ -485,5 +443,13 @@ public static class BytecodeReader
         bool hasOnRetryClause = reader.ReadByte() != 0;
         bool onRetryIsReference = reader.ReadByte() != 0;
         return new RetryMetadata(optionCount, hasUntilClause, hasOnRetryClause, onRetryIsReference);
+    }
+
+    private static StructInitMetadata ReadStructInitMetadata(BinaryReader reader)
+    {
+        string typeName = ReadString16(reader);
+        bool hasTypeReg = reader.ReadByte() != 0;
+        string[] fieldNames = ReadStringArray(reader);
+        return new StructInitMetadata(typeName, hasTypeReg, fieldNames);
     }
 }

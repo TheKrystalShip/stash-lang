@@ -13,45 +13,36 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed partial class VirtualMachine
 {
-    private void ExecuteCommand(ref CallFrame frame)
+    private void ExecuteCommand(ref CallFrame frame, uint inst)
     {
-        ushort metaCmdIdx = ReadU16(ref frame);
+        byte a = Instruction.GetA(inst);
+        byte partCount = Instruction.GetB(inst);
+        byte flags = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
         SourceSpan? span = GetCurrentSpan(ref frame);
-        var cmdMetadata = (CommandMetadata)frame.Chunk.Constants[metaCmdIdx].AsObj!;
 
+        // Parts are in R(A+1)..R(A+partCount)
         Span<char> stackBuf = stackalloc char[256];
         var vsb = new ValueStringBuilder(stackBuf);
-        int partStart = _sp - cmdMetadata.PartCount;
-        for (int i = partStart; i < _sp; i++)
-        {
-            vsb.Append(RuntimeOps.Stringify(_stack[i]));
-        }
-
-        _sp = partStart;
+        for (int i = 1; i <= partCount; i++)
+            vsb.Append(RuntimeOps.Stringify(_stack[@base + a + i]));
 
         string command = _context.ExpandTilde(vsb.AsSpan().Trim().ToString());
         vsb.Dispose();
         if (string.IsNullOrEmpty(command))
-        {
             throw new RuntimeError("Command cannot be empty.", span);
-        }
 
         var (program, arguments) = CommandParser.Parse(command);
 
-        // Expand tilde in individual arguments (the full-command ExpandTilde above
-        // only handles a leading ~ in the program name)
+        // Expand tilde in individual arguments
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
         for (int i = 0; i < arguments.Count; i++)
         {
             string arg = arguments[i];
             if (arg == "~")
-            {
                 arguments[i] = home;
-            }
             else if (arg.StartsWith("~/", StringComparison.Ordinal) || arg.StartsWith("~\\", StringComparison.Ordinal))
-            {
                 arguments[i] = Path.Combine(home, arg[2..]);
-            }
         }
 
         // Apply elevation prefix if active
@@ -68,10 +59,13 @@ public sealed partial class VirtualMachine
             }
         }
 
-        if (cmdMetadata.IsPassthrough)
+        bool isPassthrough = (flags & 0x01) != 0;
+        bool isStrict      = (flags & 0x02) != 0;
+
+        if (isPassthrough)
         {
             var (_, _, exitCode) = ExecPassthrough(program, arguments, span);
-            if (cmdMetadata.IsStrict && exitCode != 0)
+            if (isStrict && exitCode != 0)
             {
                 throw new RuntimeError(
                     $"Command failed with exit code {exitCode}: {command}",
@@ -86,17 +80,17 @@ public sealed partial class VirtualMachine
                     }
                 };
             }
-            Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
+            _stack[@base + a] = StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
             {
                 ["stdout"] = StashValue.FromObj(""),
                 ["stderr"] = StashValue.FromObj(""),
                 ["exitCode"] = StashValue.FromInt((long)exitCode)
-            }) { StringifyField = "stdout" }));
+            }) { StringifyField = "stdout" });
         }
         else
         {
             var (stdout, stderr, exitCode) = ExecCaptured(program, arguments, null, span);
-            if (cmdMetadata.IsStrict && exitCode != 0)
+            if (isStrict && exitCode != 0)
             {
                 throw new RuntimeError(
                     $"Command failed with exit code {exitCode}: {command}",
@@ -111,40 +105,46 @@ public sealed partial class VirtualMachine
                     }
                 };
             }
-            Push(StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
+            _stack[@base + a] = StashValue.FromObj(new StashInstance("CommandResult", new Dictionary<string, StashValue>
             {
                 ["stdout"] = StashValue.FromObj(stdout),
                 ["stderr"] = StashValue.FromObj(stderr),
                 ["exitCode"] = StashValue.FromInt((long)exitCode)
-            }) { StringifyField = "stdout" }));
+            }) { StringifyField = "stdout" });
         }
     }
 
-    private void ExecutePipe(ref CallFrame frame)
+    private void ExecutePipe(ref CallFrame frame, uint inst)
     {
-        // Both sides have already been executed. Return the right result, which
-        // carries the final exit code per pipeline semantics.
-        // True streaming pipes are a future enhancement (Phase 7+).
-        StashValue rightResult = Pop();
-        StashValue leftResult = Pop();
+        // ABC: R(A) = pipe(R(B), R(C)) — both sides already evaluated
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
 
         static bool IsCommandResult(object? obj) =>
             obj is StashDictionary d && d.Has("stdout") && d.Has("exitCode");
 
-        if (!IsCommandResult(leftResult.ToObject()) || !IsCommandResult(rightResult.ToObject()))
-        {
-            throw new RuntimeError("All stages in a pipe must be command expressions.", GetCurrentSpan(ref frame));
-        }
+        object? leftResult  = _stack[@base + b].ToObject();
+        object? rightResult = _stack[@base + c].ToObject();
 
-        Push(rightResult);
+        if (!IsCommandResult(leftResult) || !IsCommandResult(rightResult))
+            throw new RuntimeError("All stages in a pipe must be command expressions.", GetCurrentSpan(ref frame));
+
+        _stack[@base + a] = _stack[@base + c]; // result is the right side
     }
 
-    private void ExecuteRedirect(ref CallFrame frame)
+    private void ExecuteRedirect(ref CallFrame frame, uint inst)
     {
-        byte flags = ReadByte(ref frame);
+        // ABC: Redirect R(A) stream (B=flags) to file R(C); result back in R(A)
+        byte a = Instruction.GetA(inst);
+        byte flags = Instruction.GetB(inst);
+        byte c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
         SourceSpan? span = GetCurrentSpan(ref frame);
-        object? target = Pop().ToObject();
-        object? cmdResult = Pop().ToObject();
+
+        object? target    = _stack[@base + c].ToObject();
+        object? cmdResult = _stack[@base + a].ToObject();
 
         string filePath = target is string fp
             ? fp
@@ -170,13 +170,9 @@ public sealed partial class VirtualMachine
         try
         {
             if (append)
-            {
                 File.AppendAllText(filePath, content);
-            }
             else
-            {
                 File.WriteAllText(filePath, content);
-            }
         }
         catch (Exception ex)
         {
@@ -189,15 +185,20 @@ public sealed partial class VirtualMachine
             ["stderr"] = StashValue.FromObj((stream == 1 || stream == 2) ? "" : stderr),
             ["exitCode"] = cmdResult is StashInstance ri2 ? ri2.GetField("exitCode", span) : StashValue.Zero
         };
-        Push(StashValue.FromObj(new StashInstance("CommandResult", newFields) { StringifyField = "stdout" }));
+        _stack[@base + a] = StashValue.FromObj(new StashInstance("CommandResult", newFields) { StringifyField = "stdout" });
     }
 
     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteInterpolate(ref CallFrame frame)
+    private void ExecuteInterpolate(ref CallFrame frame, uint inst)
     {
-        ushort count = ReadU16(ref frame);
-        string result = RuntimeOps.Interpolate(_stack, _sp, count);
-        _sp -= count;
-        Push(StashValue.FromObj(result));
+        // ABC: R(A) = interpolate B parts from R(A+1)..R(A+B)
+        byte a = Instruction.GetA(inst);
+        byte partCount = Instruction.GetB(inst);
+        int @base = frame.BaseSlot;
+
+        // Build the interpolated string from register slice R(A+1)..R(A+partCount)
+        // RuntimeOps.Interpolate(stack, sp, count) reads stack[sp-count..sp-1]
+        string result = RuntimeOps.Interpolate(_stack, @base + a + 1 + partCount, partCount);
+        _stack[@base + a] = StashValue.FromObj(result);
     }
 }

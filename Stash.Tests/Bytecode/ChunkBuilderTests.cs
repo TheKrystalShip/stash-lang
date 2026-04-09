@@ -9,104 +9,115 @@ public class ChunkBuilderTests
     // ---- OpCodeInfo Tests ----
 
     [Theory]
-    [InlineData(OpCode.Null, 0)]
-    [InlineData(OpCode.Add, 0)]
-    [InlineData(OpCode.Return, 0)]
-    [InlineData(OpCode.LoadLocal, 1)]
-    [InlineData(OpCode.Call, 1)]
-    [InlineData(OpCode.Const, 2)]
-    [InlineData(OpCode.Jump, 2)]
-    [InlineData(OpCode.Closure, 2)]
-    public void OpCodeInfo_OperandSize_ReturnsExpectedSize(OpCode opCode, int expected)
+    [InlineData(OpCode.Add, OpCodeFormat.ABC)]
+    [InlineData(OpCode.Return, OpCodeFormat.ABC)]
+    [InlineData(OpCode.LoadNull, OpCodeFormat.ABC)]
+    [InlineData(OpCode.LoadK, OpCodeFormat.ABx)]
+    [InlineData(OpCode.GetGlobal, OpCodeFormat.ABx)]
+    [InlineData(OpCode.Jmp, OpCodeFormat.ABx)]
+    [InlineData(OpCode.TryEnd, OpCodeFormat.Ax)]
+    public void OpCodeInfo_GetFormat_ReturnsExpectedFormat(OpCode opCode, OpCodeFormat expected)
     {
-        Assert.Equal(expected, OpCodeInfo.OperandSize(opCode));
+        Assert.Equal(expected, OpCodeInfo.GetFormat(opCode));
     }
 
     [Fact]
-    public void OpCodeInfo_AllOpcodes_HaveDefinedSize()
+    public void OpCodeInfo_AllOpcodes_HaveDefinedFormat()
     {
-        // Verify every defined opcode has a valid operand size (doesn't throw)
         foreach (OpCode op in Enum.GetValues<OpCode>())
         {
-            int size = OpCodeInfo.OperandSize(op);
-            Assert.InRange(size, 0, 4);
+            OpCodeFormat fmt = OpCodeInfo.GetFormat(op);
+            Assert.True(Enum.IsDefined(fmt));
         }
     }
 
     // ---- Emit Tests ----
 
     [Fact]
-    public void Emit_NoOperand_EmitsSingleByte()
+    public void EmitABC_ProducesSingleInstruction()
     {
         var builder = new ChunkBuilder();
-        builder.Emit(OpCode.Add);
+        builder.EmitABC(OpCode.Add, 1, 2, 3);
         Chunk chunk = builder.Build();
 
         Assert.Single(chunk.Code);
-        Assert.Equal((byte)OpCode.Add, chunk.Code[0]);
+        Assert.Equal(OpCode.Add, Instruction.GetOp(chunk.Code[0]));
     }
 
     [Fact]
-    public void Emit_ByteOperand_EmitsTwoBytes()
+    public void EmitABC_FieldsAreCorrectlyEncoded()
     {
         var builder = new ChunkBuilder();
-        builder.Emit(OpCode.LoadLocal, 5);
+        builder.EmitABC(OpCode.Add, 7, 15, 42);
         Chunk chunk = builder.Build();
 
-        Assert.Equal(2, chunk.Code.Length);
-        Assert.Equal((byte)OpCode.LoadLocal, chunk.Code[0]);
-        Assert.Equal(5, chunk.Code[1]);
+        uint inst = chunk.Code[0];
+        Assert.Equal(OpCode.Add, Instruction.GetOp(inst));
+        Assert.Equal(7, Instruction.GetA(inst));
+        Assert.Equal(15, Instruction.GetB(inst));
+        Assert.Equal(42, Instruction.GetC(inst));
     }
 
     [Fact]
-    public void Emit_UShortOperand_EmitsThreeBytesBigEndian()
+    public void EmitABx_ProducesSingleInstruction()
     {
         var builder = new ChunkBuilder();
-        builder.Emit(OpCode.Const, (ushort)0x0102);
-        Chunk chunk = builder.Build();
-
-        Assert.Equal(3, chunk.Code.Length);
-        Assert.Equal((byte)OpCode.Const, chunk.Code[0]);
-        Assert.Equal(0x01, chunk.Code[1]); // high byte
-        Assert.Equal(0x02, chunk.Code[2]); // low byte
-    }
-
-    [Fact]
-    public void Emit_UShortOperand_Zero_EmitsCorrectly()
-    {
-        var builder = new ChunkBuilder();
-        builder.Emit(OpCode.Const, (ushort)0);
-        Chunk chunk = builder.Build();
-
-        Assert.Equal(0x00, chunk.Code[1]);
-        Assert.Equal(0x00, chunk.Code[2]);
-    }
-
-    [Fact]
-    public void EmitByte_EmitsRawByte()
-    {
-        var builder = new ChunkBuilder();
-        builder.EmitByte(0xAB);
+        builder.EmitABx(OpCode.LoadK, 2, 5);
         Chunk chunk = builder.Build();
 
         Assert.Single(chunk.Code);
-        Assert.Equal(0xAB, chunk.Code[0]);
+        Assert.Equal(OpCode.LoadK, Instruction.GetOp(chunk.Code[0]));
     }
 
     [Fact]
-    public void CurrentOffset_TracksEmittedBytes()
+    public void EmitABx_FieldsAreCorrectlyEncoded()
+    {
+        var builder = new ChunkBuilder();
+        builder.EmitABx(OpCode.LoadK, 3, 1000);
+        Chunk chunk = builder.Build();
+
+        uint inst = chunk.Code[0];
+        Assert.Equal(OpCode.LoadK, Instruction.GetOp(inst));
+        Assert.Equal(3, Instruction.GetA(inst));
+        Assert.Equal(1000, Instruction.GetBx(inst));
+    }
+
+    [Fact]
+    public void EmitAsBx_FieldsAreCorrectlyEncoded()
+    {
+        var builder = new ChunkBuilder();
+        builder.EmitAsBx(OpCode.Jmp, 0, 42);
+        Chunk chunk = builder.Build();
+
+        uint inst = chunk.Code[0];
+        Assert.Equal(OpCode.Jmp, Instruction.GetOp(inst));
+        Assert.Equal(42, Instruction.GetSBx(inst));
+    }
+
+    [Fact]
+    public void EmitAsBx_NegativeOffset_EncodesCorrectly()
+    {
+        var builder = new ChunkBuilder();
+        builder.EmitAsBx(OpCode.Loop, 0, -5);
+        Chunk chunk = builder.Build();
+
+        Assert.Equal(-5, Instruction.GetSBx(chunk.Code[0]));
+    }
+
+    [Fact]
+    public void CurrentOffset_TracksEmittedInstructions()
     {
         var builder = new ChunkBuilder();
         Assert.Equal(0, builder.CurrentOffset);
 
-        builder.Emit(OpCode.Null);     // 1 byte
+        builder.EmitABC(OpCode.LoadNull, 0, 0, 0);  // instruction 0
         Assert.Equal(1, builder.CurrentOffset);
 
-        builder.Emit(OpCode.LoadLocal, 3);  // 2 bytes
-        Assert.Equal(3, builder.CurrentOffset);
+        builder.EmitABx(OpCode.LoadK, 1, 0);        // instruction 1
+        Assert.Equal(2, builder.CurrentOffset);
 
-        builder.Emit(OpCode.Const, (ushort)42);  // 3 bytes
-        Assert.Equal(6, builder.CurrentOffset);
+        builder.EmitABC(OpCode.Add, 2, 0, 1);       // instruction 2
+        Assert.Equal(3, builder.CurrentOffset);
     }
 
     // ---- Multiple Instructions ----
@@ -115,17 +126,14 @@ public class ChunkBuilderTests
     public void Emit_MultipleInstructions_ProducesCorrectSequence()
     {
         var builder = new ChunkBuilder();
-        builder.Optimize = false;
-        ushort constIdx = builder.AddConstant(42L);    // constant pool index 0
-        builder.Emit(OpCode.Const, constIdx);          // offset 0: Const 0
-        builder.Emit(OpCode.StoreLocal, (byte)0);      // offset 3: StoreLocal 0
-        builder.Emit(OpCode.LoadLocal, (byte)0);       // offset 5: LoadLocal 0
-        builder.Emit(OpCode.Add);                      // offset 7: Add
-        builder.Emit(OpCode.Return);                   // offset 8: Return
+        ushort constIdx = builder.AddConstant(42L);
+        builder.EmitABx(OpCode.LoadK, 0, constIdx);   // instruction 0
+        builder.EmitABC(OpCode.Add, 0, 0, 0);          // instruction 1
+        builder.EmitA(OpCode.Return, 0);               // instruction 2
 
         Chunk chunk = builder.Build();
-        Assert.Equal(9, chunk.Code.Length);
-        Assert.Equal((byte)OpCode.Return, chunk.Code[8]);
+        Assert.Equal(3, chunk.Code.Length);
+        Assert.Equal(OpCode.Return, Instruction.GetOp(chunk.Code[2]));
     }
 
     // ---- Constant Pool Tests ----
@@ -208,30 +216,29 @@ public class ChunkBuilderTests
     public void EmitJump_PatchJump_ProducesCorrectForwardOffset()
     {
         var builder = new ChunkBuilder();
-        // Emit: JumpFalse (offset 0) -> placeholder -> Add (offset 3) -> Null (offset 4)
-        int patch = builder.EmitJump(OpCode.JumpFalse); // 3 bytes: opcode + 2 placeholder
-        builder.Emit(OpCode.Add);                        // offset 3
-        builder.PatchJump(patch);                        // patch to point to offset 4
+        // JmpFalse at instruction index 0 (placeholder sBx=0)
+        int patch = builder.EmitJump(OpCode.JmpFalse);
+        // Add at instruction index 1
+        builder.EmitABC(OpCode.Add, 0, 1, 2);
+        // PatchJump(0) → sBx = _code.Count - 0 - 1 = 2 - 0 - 1 = 1
+        builder.PatchJump(patch);
 
         Chunk chunk = builder.Build();
-        // The jump operand should encode offset 1 (from offset 3 to offset 4)
-        // Actually: target=4, jumpFrom=patch+2=3, offset=4-3=1
-        ushort encoded = (ushort)((chunk.Code[patch] << 8) | chunk.Code[patch + 1]);
-        short signedOffset = (short)encoded;
-        Assert.Equal(1, signedOffset);  // Jump over 1 byte (the Add instruction)
+        int offset = Instruction.GetSBx(chunk.Code[patch]);
+        Assert.Equal(1, offset);
     }
 
     [Fact]
     public void EmitJump_PatchJump_ZeroOffset()
     {
         var builder = new ChunkBuilder();
-        int patch = builder.EmitJump(OpCode.Jump);  // 3 bytes
-        builder.PatchJump(patch);                    // patch to point to current = offset 3
+        // Jmp at index 0, patch immediately → sBx = 1 - 0 - 1 = 0
+        int patch = builder.EmitJump(OpCode.Jmp);
+        builder.PatchJump(patch);
 
         Chunk chunk = builder.Build();
-        ushort encoded = (ushort)((chunk.Code[patch] << 8) | chunk.Code[patch + 1]);
-        short signedOffset = (short)encoded;
-        Assert.Equal(0, signedOffset);
+        int offset = Instruction.GetSBx(chunk.Code[patch]);
+        Assert.Equal(0, offset);
     }
 
     // ---- Loop Tests ----
@@ -240,18 +247,16 @@ public class ChunkBuilderTests
     public void EmitLoop_ProducesCorrectBackwardOffset()
     {
         var builder = new ChunkBuilder();
-        int loopStart = builder.CurrentOffset;       // offset 0
-        builder.Emit(OpCode.Add);                     // offset 0, 1 byte
-        builder.Emit(OpCode.Pop);                     // offset 1, 1 byte
-        builder.EmitLoop(loopStart);                  // offset 2: Loop <backward-offset>
+        int loopStart = builder.CurrentOffset;          // index 0
+        builder.EmitABC(OpCode.Add, 0, 1, 2);           // instruction 0
+        builder.EmitABC(OpCode.Sub, 0, 0, 1);           // instruction 1
+        // EmitLoop(0, 0) → offset = 0 - 2 - 1 = -3
+        builder.EmitLoop(0, loopStart);                 // instruction 2
 
         Chunk chunk = builder.Build();
-        Assert.Equal((byte)OpCode.Loop, chunk.Code[2]);
-
-        // EmitLoop adds the Loop opcode byte (_code.Count becomes 3),
-        // then computes offset = (_code.Count + 2) - loopStart = (3 + 2) - 0 = 5
-        ushort backOffset = (ushort)((chunk.Code[3] << 8) | chunk.Code[4]);
-        Assert.Equal(5, backOffset);
+        Assert.Equal(OpCode.Loop, Instruction.GetOp(chunk.Code[2]));
+        int backOffset = Instruction.GetSBx(chunk.Code[2]);
+        Assert.Equal(-3, backOffset);
     }
 
     // ---- Source Map Tests ----
@@ -262,28 +267,14 @@ public class ChunkBuilderTests
         var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 10);
         builder.AddSourceMapping(span);
-        builder.Emit(OpCode.Null);
+        builder.EmitABC(OpCode.LoadNull, 0, 0, 0);
 
         var span2 = new SourceSpan("test.stash", 2, 1, 2, 10);
         builder.AddSourceMapping(span2);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.Return, 0);
 
         Chunk chunk = builder.Build();
         Assert.Equal(2, chunk.SourceMap.Count);
-    }
-
-    [Fact]
-    public void AddSourceMapping_AtSpecificOffset()
-    {
-        var builder = new ChunkBuilder();
-        builder.Emit(OpCode.Null);  // offset 0
-        builder.Emit(OpCode.Pop);   // offset 1
-
-        var span = new SourceSpan("test.stash", 5, 1, 5, 10);
-        builder.AddSourceMapping(0, span);
-
-        Chunk chunk = builder.Build();
-        Assert.Equal(5, chunk.SourceMap.GetLine(0));
     }
 
     // ---- Upvalue Tests ----
@@ -328,18 +319,18 @@ public class ChunkBuilderTests
             Name = "myFunc",
             Arity = 3,
             MinArity = 1,
-            LocalCount = 5,
+            MaxRegs = 5,
             IsAsync = true,
             HasRestParam = true
         };
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.Return, 0);
 
         Chunk chunk = builder.Build();
 
         Assert.Equal("myFunc", chunk.Name);
         Assert.Equal(3, chunk.Arity);
         Assert.Equal(1, chunk.MinArity);
-        Assert.Equal(5, chunk.LocalCount);
+        Assert.Equal(5, chunk.MaxRegs);
         Assert.True(chunk.IsAsync);
         Assert.True(chunk.HasRestParam);
     }
@@ -348,13 +339,13 @@ public class ChunkBuilderTests
     public void Build_DefaultMetadata()
     {
         var builder = new ChunkBuilder();
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.Return, 0);
         Chunk chunk = builder.Build();
 
         Assert.Null(chunk.Name);
         Assert.Equal(0, chunk.Arity);
         Assert.Equal(0, chunk.MinArity);
-        Assert.Equal(0, chunk.LocalCount);
+        Assert.Equal(0, chunk.MaxRegs);
         Assert.False(chunk.IsAsync);
         Assert.False(chunk.HasRestParam);
         Assert.Empty(chunk.Upvalues);

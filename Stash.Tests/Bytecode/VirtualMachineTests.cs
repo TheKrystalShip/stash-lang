@@ -607,6 +607,170 @@ public class VirtualMachineTests : BytecodeTestBase
         Assert.Equal(5050L, result);
     }
 
+    // ----- Numeric For (ForPrep/ForLoop optimized) -----
+
+    [Fact]
+    public void NumericFor_BasicForward_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 5; i++) {
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(10L, result);  // 0+1+2+3+4 = 10
+    }
+
+    [Fact]
+    public void NumericFor_LessEqual_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 1; i <= 5; i++) {
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(15L, result);  // 1+2+3+4+5 = 15
+    }
+
+    [Fact]
+    public void NumericFor_Backward_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 5; i > 0; i--) {
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(15L, result);  // 5+4+3+2+1 = 15
+    }
+
+    [Fact]
+    public void NumericFor_GreaterEqual_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 5; i >= 1; i--) {
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(15L, result);  // 5+4+3+2+1 = 15
+    }
+
+    [Fact]
+    public void NumericFor_ZeroIterations_SkipsBody()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 0; i++) {
+                sum = sum + 1;
+            }
+            return sum;
+            """);
+        Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void NumericFor_SingleIteration_ExecutesOnce()
+    {
+        object? result = Execute("""
+            let count = null; count = 0;
+            for (let i = 0; i < 1; i++) {
+                count = count + 1;
+            }
+            return count;
+            """);
+        Assert.Equal(1L, result);
+    }
+
+    [Fact]
+    public void NumericFor_Break_ExitsEarly()
+    {
+        object? result = Execute("""
+            let last = null; last = -1;
+            for (let i = 0; i < 10; i++) {
+                if (i == 3) { break; }
+                last = i;
+            }
+            return last;
+            """);
+        Assert.Equal(2L, result);
+    }
+
+    [Fact]
+    public void NumericFor_Continue_SkipsIteration()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 5; i++) {
+                if (i == 2) { continue; }
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(8L, result);  // 0+1+3+4 = 8
+    }
+
+    [Fact]
+    public void NumericFor_Nested_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0;
+            for (let i = 0; i < 3; i++) {
+                for (let j = 0; j < 3; j++) {
+                    sum = sum + 1;
+                }
+            }
+            return sum;
+            """);
+        Assert.Equal(9L, result);
+    }
+
+    [Fact]
+    public void NumericFor_VariableLimit_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let n = null; n = 5;
+            let sum = null; sum = 0;
+            for (let i = 0; i < n; i++) {
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(10L, result);  // 0+1+2+3+4 = 10
+    }
+
+    [Fact]
+    public void NumericFor_VariableStart_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let start = null; start = 3;
+            let sum = null; sum = 0;
+            for (let i = start; i < 6; i++) {
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(12L, result);  // 3+4+5 = 12
+    }
+
+    [Fact]
+    public void NumericFor_FloatCounter_ExecutesCorrectly()
+    {
+        object? result = Execute("""
+            let sum = null; sum = 0.0;
+            for (let i = 0.0; i < 5; i++) {
+                sum = sum + i;
+            }
+            return sum;
+            """);
+        Assert.Equal(10.0, result);  // 0.0+1.0+2.0+3.0+4.0 = 10.0
+    }
+
     // =========================================================================
     // 9. Functions
     //
@@ -2659,50 +2823,50 @@ public class VirtualMachineTests : BytecodeTestBase
     [Fact]
     public void Power_IntegerBase_ReturnsLong()
     {
-        var b = new ChunkBuilder { Name = "<test>" };
+        var b = new ChunkBuilder { Name = "<test>", MaxRegs = 2 };
         ushort c1 = b.AddConstant(2L); ushort c2 = b.AddConstant(3L);
-        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
-        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        b.EmitABx(OpCode.LoadK, 0, c1); b.EmitABx(OpCode.LoadK, 1, c2);
+        b.EmitABC(OpCode.Pow, 0, 0, 1); b.EmitAB(OpCode.Return, 0, 1);
         Assert.Equal(8L, new VirtualMachine().Execute(b.Build()));
     }
 
     [Fact]
     public void Power_FloatExponent_ReturnsDouble()
     {
-        var b = new ChunkBuilder { Name = "<test>" };
+        var b = new ChunkBuilder { Name = "<test>", MaxRegs = 2 };
         ushort c1 = b.AddConstant(2.0); ushort c2 = b.AddConstant(3.0);
-        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
-        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        b.EmitABx(OpCode.LoadK, 0, c1); b.EmitABx(OpCode.LoadK, 1, c2);
+        b.EmitABC(OpCode.Pow, 0, 0, 1); b.EmitAB(OpCode.Return, 0, 1);
         Assert.Equal(8.0, new VirtualMachine().Execute(b.Build()));
     }
 
     [Fact]
     public void Power_ZeroPower_ReturnsOne()
     {
-        var b = new ChunkBuilder { Name = "<test>" };
+        var b = new ChunkBuilder { Name = "<test>", MaxRegs = 2 };
         ushort c1 = b.AddConstant(5L); ushort c2 = b.AddConstant(0L);
-        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
-        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        b.EmitABx(OpCode.LoadK, 0, c1); b.EmitABx(OpCode.LoadK, 1, c2);
+        b.EmitABC(OpCode.Pow, 0, 0, 1); b.EmitAB(OpCode.Return, 0, 1);
         Assert.Equal(1L, new VirtualMachine().Execute(b.Build()));
     }
 
     [Fact]
     public void Power_NegativeFloatExponent_ReturnsDouble()
     {
-        var b = new ChunkBuilder { Name = "<test>" };
+        var b = new ChunkBuilder { Name = "<test>", MaxRegs = 2 };
         ushort c1 = b.AddConstant(2.0); ushort c2 = b.AddConstant(-1.0);
-        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
-        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        b.EmitABx(OpCode.LoadK, 0, c1); b.EmitABx(OpCode.LoadK, 1, c2);
+        b.EmitABC(OpCode.Pow, 0, 0, 1); b.EmitAB(OpCode.Return, 0, 1);
         Assert.Equal(0.5, new VirtualMachine().Execute(b.Build()));
     }
 
     [Fact]
     public void Power_NonNumbers_ThrowsError()
     {
-        var b = new ChunkBuilder { Name = "<test>" };
+        var b = new ChunkBuilder { Name = "<test>", MaxRegs = 2 };
         ushort c1 = b.AddConstant("a"); ushort c2 = b.AddConstant(2L);
-        b.Emit(OpCode.Const, c1); b.Emit(OpCode.Const, c2);
-        b.Emit(OpCode.Power); b.Emit(OpCode.Return);
+        b.EmitABx(OpCode.LoadK, 0, c1); b.EmitABx(OpCode.LoadK, 1, c2);
+        b.EmitABC(OpCode.Pow, 0, 0, 1); b.EmitAB(OpCode.Return, 0, 1);
         Assert.Throws<RuntimeError>(() => new VirtualMachine().Execute(b.Build()));
     }
 

@@ -296,40 +296,39 @@ public sealed partial class VirtualMachine
         throw new RuntimeError($"Package '{packageName}' has no entry point (no index.stash or main field).", span);
     }
 
-    private void ExecuteImport(ref CallFrame frame)
+    private void ExecuteImport(ref CallFrame frame, uint inst)
     {
-        ushort metaImportIdx = ReadU16(ref frame);
+        byte a = Instruction.GetA(inst);
+        ushort metaIdx = Instruction.GetBx(inst);
+        int @base = frame.BaseSlot;
         SourceSpan? span = GetCurrentSpan(ref frame);
-        var importMeta = (ImportMetadata)frame.Chunk.Constants[metaImportIdx].AsObj!;
+        var importMeta = (ImportMetadata)frame.Chunk.Constants[metaIdx].AsObj!;
 
-        StashValue pathVal = Pop();
-        string modulePath = pathVal.AsObj is string mp
+        string modulePath = _stack[@base + a].AsObj is string mp
             ? mp
             : throw new RuntimeError("Module path must be a string.", span);
 
         Dictionary<string, StashValue> moduleEnv = LoadModule(modulePath, span);
 
-        foreach (string importName in importMeta.Names)
+        for (int i = 0; i < importMeta.Names.Length; i++)
         {
+            string importName = importMeta.Names[i];
             if (moduleEnv.TryGetValue(importName, out StashValue importedValue))
-            {
-                Push(importedValue);
-            }
+                _stack[@base + a + i] = importedValue;
             else
-            {
                 throw new RuntimeError($"Module does not export '{importName}'.", span);
-            }
         }
     }
 
-    private void ExecuteImportAs(ref CallFrame frame)
+    private void ExecuteImportAs(ref CallFrame frame, uint inst)
     {
-        ushort metaImportAsIdx = ReadU16(ref frame);
+        byte a = Instruction.GetA(inst);
+        ushort metaIdx = Instruction.GetBx(inst);
+        int @base = frame.BaseSlot;
         SourceSpan? span = GetCurrentSpan(ref frame);
-        var importAsMeta = (ImportAsMetadata)frame.Chunk.Constants[metaImportAsIdx].AsObj!;
+        var importAsMeta = (ImportAsMetadata)frame.Chunk.Constants[metaIdx].AsObj!;
 
-        StashValue pathVal = Pop();
-        string modulePath = pathVal.AsObj is string mp
+        string modulePath = _stack[@base + a].AsObj is string mp
             ? mp
             : throw new RuntimeError("Module path must be a string.", span);
 
@@ -340,13 +339,10 @@ public sealed partial class VirtualMachine
         {
             object? val = kvp.Value.ToObject();
             if (val is StashNamespace sn && sn.IsBuiltIn)
-            {
                 continue; // skip inherited built-in namespaces
-            }
-
             ns.Define(kvp.Key, val);
         }
         ns.Freeze();
-        Push(StashValue.FromObj(ns));
+        _stack[@base + a] = StashValue.FromObj(ns);
     }
 }

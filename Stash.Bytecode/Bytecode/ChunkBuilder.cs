@@ -1,30 +1,27 @@
 using System;
-using System.Buffers;
 using System.Collections.Generic;
-using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
 
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Incrementally builds bytecode instructions, constants, and source mappings,
-/// then freezes the result into an immutable <see cref="Chunk"/>.
+/// Builds a <see cref="Chunk"/> incrementally by emitting 32-bit register-based instructions.
 /// </summary>
-public class ChunkBuilder
+public sealed class ChunkBuilder
 {
-    private byte[] _code = ArrayPool<byte>.Shared.Rent(256);
-    private int _codeCount;
+    private readonly List<uint> _code = new();
     private readonly List<StashValue> _constants = new();
-    private readonly Dictionary<StashValue, ushort> _constantIndex = new(StashValueComparer.Instance);
-    private readonly List<SourceMapEntry> _sourceMapEntries = new();
+    private readonly Dictionary<StashValue, ushort> _constantMap = new(StashValueComparer.Instance);
+    private readonly List<SourceMapEntry> _sourceEntries = new();
     private readonly List<UpvalueDescriptor> _upvalues = new();
+    private int _icSlotCount;
 
-    // Properties set by the compiler
-    public string? Name { get; set; }
+    // ---- Metadata (set by Compiler before Build) ----
     public int Arity { get; set; }
     public int MinArity { get; set; }
-    public int LocalCount { get; set; }
+    public int MaxRegs { get; set; }
+    public string? Name { get; set; }
     public bool IsAsync { get; set; }
     public bool HasRestParam { get; set; }
     public bool MayHaveCapturedLocals { get; set; }
@@ -32,256 +29,178 @@ public class ChunkBuilder
     public bool[]? LocalIsConst { get; set; }
     public string[]? UpvalueNames { get; set; }
 
-    /// <summary>When true, the peephole optimizer runs during Build() to fuse instructions.</summary>
-    public bool Optimize { get; set; } = true;
+    // Global slot support (shared across compilation unit)
+    private GlobalSlotAllocator? _globalSlots;
+    internal void SetGlobalSlots(GlobalSlotAllocator allocator) => _globalSlots = allocator;
 
-    /// <summary>Shared global slot allocator for slot-based global access. Null for legacy compilation.</summary>
-    internal GlobalSlotAllocator? GlobalSlotAllocator { get; set; }
+    /// <summary>Current instruction count (index of the next instruction to be emitted).</summary>
+    public int CurrentOffset => _code.Count;
 
-    private int _icSlotCount;
+    // ==================================================================
+    // Instruction Emission
+    // ==================================================================
 
-    /// <summary>Current bytecode offset (next byte to be written).</summary>
-    public int CurrentOffset => _codeCount;
+    /// <summary>Emit an ABC-format instruction.</summary>
+    public void EmitABC(OpCode op, byte a, byte b, byte c)
+        => _code.Add(Instruction.EncodeABC(op, a, b, c));
 
-    // ---- Emit Methods ----
+    /// <summary>Emit an ABC instruction with A only (B=0, C=0).</summary>
+    public void EmitA(OpCode op, byte a)
+        => _code.Add(Instruction.EncodeABC(op, a, 0, 0));
 
-    /// <summary>Emit a single opcode with no operands.</summary>
-    public void Emit(OpCode opCode)
-    {
-        EnsureCodeCapacity(1);
-        _code[_codeCount++] = (byte)opCode;
-    }
+    /// <summary>Emit an ABC instruction with A and B (C=0).</summary>
+    public void EmitAB(OpCode op, byte a, byte b)
+        => _code.Add(Instruction.EncodeABC(op, a, b, 0));
 
-    /// <summary>Emit an opcode followed by a single u8 operand.</summary>
-    public void Emit(OpCode opCode, byte operand)
-    {
-        EnsureCodeCapacity(2);
-        _code[_codeCount++] = (byte)opCode;
-        _code[_codeCount++] = operand;
-    }
+    /// <summary>Emit an ABx-format instruction.</summary>
+    public void EmitABx(OpCode op, byte a, ushort bx)
+        => _code.Add(Instruction.EncodeABx(op, a, bx));
 
-    /// <summary>Allocate an inline cache slot and return its index.</summary>
-    public ushort AllocateICSlot() => (ushort)_icSlotCount++;
+    /// <summary>Emit an AsBx-format instruction.</summary>
+    public void EmitAsBx(OpCode op, byte a, int sbx)
+        => _code.Add(Instruction.EncodeAsBx(op, a, sbx));
 
-    /// <summary>Emit an opcode followed by a u16 operand (big-endian).</summary>
-    public void Emit(OpCode opCode, ushort operand)
-    {
-        EnsureCodeCapacity(3);
-        _code[_codeCount++] = (byte)opCode;
-        _code[_codeCount++] = (byte)(operand >> 8);
-        _code[_codeCount++] = (byte)(operand & 0xFF);
-    }
+    /// <summary>Emit an Ax-format instruction.</summary>
+    public void EmitAx(OpCode op, uint ax)
+        => _code.Add(Instruction.EncodeAx(op, ax));
 
-    /// <summary>Emit an opcode followed by two u16 operands (big-endian).</summary>
-    public void Emit(OpCode opCode, ushort operand1, ushort operand2)
-    {
-        EnsureCodeCapacity(5);
-        _code[_codeCount++] = (byte)opCode;
-        _code[_codeCount++] = (byte)(operand1 >> 8);
-        _code[_codeCount++] = (byte)(operand1 & 0xFF);
-        _code[_codeCount++] = (byte)(operand2 >> 8);
-        _code[_codeCount++] = (byte)(operand2 & 0xFF);
-    }
+    /// <summary>Emit a raw 32-bit instruction word (for upvalue descriptors after Closure).</summary>
+    public void EmitRaw(uint word) => _code.Add(word);
 
-    /// <summary>Emit a raw byte (for inline upvalue descriptors after OP_CLOSURE).</summary>
-    public void EmitByte(byte value)
-    {
-        EnsureCodeCapacity(1);
-        _code[_codeCount++] = value;
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void EnsureCodeCapacity(int needed)
-    {
-        if (_codeCount + needed > _code.Length)
-            GrowCode();
-    }
-
-    [MethodImpl(MethodImplOptions.NoInlining)]
-    private void GrowCode()
-    {
-        byte[] newBuf = ArrayPool<byte>.Shared.Rent(_code.Length * 2);
-        _code.AsSpan(0, _codeCount).CopyTo(newBuf);
-        ArrayPool<byte>.Shared.Return(_code);
-        _code = newBuf;
-    }
-
-    // ---- Jump Patching ----
+    // ==================================================================
+    // Jump Support
+    // ==================================================================
 
     /// <summary>
-    /// Emit a jump instruction with a placeholder 2-byte offset.
-    /// Returns the offset of the first operand byte for later patching via <see cref="PatchJump"/>.
+    /// Emit a jump instruction with a placeholder offset (0).
+    /// Returns the instruction index for later patching via PatchJump.
     /// </summary>
-    public int EmitJump(OpCode opCode)
+    public int EmitJump(OpCode op, byte a = 0)
     {
-        EnsureCodeCapacity(3);
-        _code[_codeCount++] = (byte)opCode;
-        int patchOffset = _codeCount;
-        _code[_codeCount++] = 0xFF; // placeholder high byte
-        _code[_codeCount++] = 0xFF; // placeholder low byte
-        return patchOffset;
-    }
-
-    /// <summary>
-    /// Patches a previously emitted jump instruction to jump to the current offset.
-    /// The jump offset is relative to the instruction immediately after the jump's operand.
-    /// </summary>
-    public void PatchJump(int patchOffset)
-    {
-        // The jump target is _codeCount (where we are now).
-        // The offset is relative to the position right after the 2-byte operand.
-        int jumpTarget = _codeCount;
-        int jumpFrom = patchOffset + 2; // after the 2-byte operand
-        int offset = jumpTarget - jumpFrom;
-
-        if (offset > short.MaxValue || offset < short.MinValue)
-        {
-            throw new InvalidOperationException($"Jump offset {offset} exceeds 16-bit signed range.");
-        }
-
-        short signedOffset = (short)offset;
-        ushort encoded = (ushort)signedOffset;
-        _code[patchOffset] = (byte)(encoded >> 8);
-        _code[patchOffset + 1] = (byte)(encoded & 0xFF);
-    }
-
-    /// <summary>
-    /// Emits a backwards loop jump to the given target offset.
-    /// The operand is the unsigned distance to jump back.
-    /// </summary>
-    public void EmitLoop(int loopStart)
-    {
-        EnsureCodeCapacity(3);
-        _code[_codeCount++] = (byte)OpCode.Loop;
-        // The offset is from the position right after this instruction's operand
-        // back to loopStart.
-        int offset = (_codeCount + 2) - loopStart;
-        if (offset > ushort.MaxValue)
-        {
-            throw new InvalidOperationException($"Loop body too large: {offset} bytes.");
-        }
-
-        _code[_codeCount++] = (byte)(offset >> 8);
-        _code[_codeCount++] = (byte)(offset & 0xFF);
-    }
-
-    // ---- Constant Pool ----
-
-    /// <summary>
-    /// Add a StashValue constant to the pool and return its index.
-    /// Deduplicates by tag and value.
-    /// </summary>
-    public ushort AddConstant(StashValue value)
-    {
-        // Deduplicate primitives and strings via dictionary lookup (O(1) vs O(n))
-        if (value.Tag != StashValueTag.Obj || value.AsObj is string)
-        {
-            if (_constantIndex.TryGetValue(value, out ushort existing))
-                return existing;
-        }
-
-        if (_constants.Count > ushort.MaxValue)
-        {
-            throw new InvalidOperationException("Constant pool overflow (max 65536 entries).");
-        }
-
-        ushort index = (ushort)_constants.Count;
-        _constants.Add(value);
-
-        if (value.Tag != StashValueTag.Obj || value.AsObj is string)
-            _constantIndex[value] = index;
-
+        int index = _code.Count;
+        EmitAsBx(op, a, 0); // placeholder sBx = 0
         return index;
     }
 
-    /// <summary>Add a long integer constant.</summary>
+    /// <summary>
+    /// Patch a previously emitted jump instruction to jump to the current position.
+    /// The offset is relative: currentOffset - patchIndex - 1.
+    /// </summary>
+    public void PatchJump(int patchIndex)
+    {
+        int offset = _code.Count - patchIndex - 1;
+        if (offset > Instruction.SBxMax || offset < Instruction.SBxMin)
+            throw new InvalidOperationException($"Jump offset {offset} out of range.");
+        _code[patchIndex] = Instruction.PatchSBx(_code[patchIndex], offset);
+    }
+
+    /// <summary>
+    /// Emit a backward jump (loop) to the given target instruction index.
+    /// Uses Loop opcode with cancellation check.
+    /// </summary>
+    public void EmitLoop(byte a, int loopTarget)
+    {
+        int offset = loopTarget - _code.Count - 1; // negative offset
+        if (offset < Instruction.SBxMin || offset > Instruction.SBxMax)
+            throw new InvalidOperationException($"Loop offset {offset} out of range.");
+        EmitAsBx(OpCode.Loop, a, offset);
+    }
+
+    // ==================================================================
+    // Constants
+    // ==================================================================
+
+    /// <summary>
+    /// Add a constant to the pool, deduplicating matching values.
+    /// Returns the constant pool index.
+    /// </summary>
+    public ushort AddConstant(StashValue value)
+    {
+        if (_constantMap.TryGetValue(value, out ushort existing))
+            return existing;
+
+        if (_constants.Count >= Instruction.BxMax)
+            throw new InvalidOperationException("Constant pool overflow (>65535 entries).");
+
+        ushort index = (ushort)_constants.Count;
+        _constants.Add(value);
+        _constantMap[value] = index;
+        return index;
+    }
+
+    /// <summary>Add a string constant.</summary>
+    public ushort AddConstant(string value) => AddConstant(StashValue.FromObj(value));
+
+    /// <summary>Add a long constant.</summary>
     public ushort AddConstant(long value) => AddConstant(StashValue.FromInt(value));
 
     /// <summary>Add a double constant.</summary>
     public ushort AddConstant(double value) => AddConstant(StashValue.FromFloat(value));
 
-    /// <summary>Add a string constant.</summary>
-    public ushort AddConstant(string value) => AddConstant(StashValue.FromObj(value));
+    /// <summary>Add an object constant (metadata records, etc.).</summary>
+    public ushort AddConstant(object value) => AddConstant(StashValue.FromObj(value));
 
-    /// <summary>Add a compiled chunk (function body) constant.</summary>
-    public ushort AddConstant(Chunk value) => AddConstant(StashValue.FromObj(value));
+    // ==================================================================
+    // Upvalues
+    // ==================================================================
 
-    /// <summary>Add an arbitrary object constant (for metadata, etc.).</summary>
-    public ushort AddConstant(object value) => AddConstant(StashValue.FromObject(value));
-
-    // ---- Source Map ----
-
-    /// <summary>Record a source mapping from the current bytecode offset to a source span.</summary>
-    public void AddSourceMapping(SourceSpan span)
-    {
-        _sourceMapEntries.Add(new SourceMapEntry(_codeCount, span));
-    }
-
-    /// <summary>Record a source mapping at a specific bytecode offset.</summary>
-    public void AddSourceMapping(int offset, SourceSpan span)
-    {
-        _sourceMapEntries.Add(new SourceMapEntry(offset, span));
-    }
-
-    // ---- Upvalues ----
-
-    /// <summary>Add an upvalue descriptor and return its index.</summary>
+    /// <summary>
+    /// Register an upvalue descriptor. Returns the upvalue index.
+    /// Deduplicates identical descriptors.
+    /// </summary>
     public byte AddUpvalue(byte index, bool isLocal)
     {
-        // Check for existing upvalue with same descriptor
         for (int i = 0; i < _upvalues.Count; i++)
         {
-            UpvalueDescriptor existing = _upvalues[i];
-            if (existing.Index == index && existing.IsLocal == isLocal)
-            {
+            if (_upvalues[i].Index == index && _upvalues[i].IsLocal == isLocal)
                 return (byte)i;
-            }
         }
 
-        if (_upvalues.Count > byte.MaxValue)
-        {
-            throw new InvalidOperationException("Upvalue overflow (max 256 per function).");
-        }
+        if (_upvalues.Count >= 256)
+            throw new InvalidOperationException("Upvalue overflow (>256 upvalues per function).");
 
-        int result = _upvalues.Count;
+        byte idx = (byte)_upvalues.Count;
         _upvalues.Add(new UpvalueDescriptor(index, isLocal));
-        return (byte)result;
+        return idx;
     }
 
-    // ---- Build ----
+    // ==================================================================
+    // Inline Cache
+    // ==================================================================
 
-    /// <summary>
-    /// Runs the peephole optimizer on the current bytecode, replacing multi-instruction
-    /// sequences with fused superinstructions and specializing common opcodes.
-    /// </summary>
-    internal void RunPeepholeOptimizer()
+    /// <summary>Allocate an inline cache slot. Returns the IC slot index.</summary>
+    public ushort AllocateICSlot() => (ushort)_icSlotCount++;
+
+    // ==================================================================
+    // Source Mapping
+    // ==================================================================
+
+    /// <summary>Record a source mapping for the next instruction to be emitted.</summary>
+    public void AddSourceMapping(SourceSpan span)
     {
-        PeepholeOptimizer.Optimize(_code, ref _codeCount, _constants, _sourceMapEntries);
+        _sourceEntries.Add(new SourceMapEntry(_code.Count, span));
     }
 
+    // ==================================================================
+    // Build
+    // ==================================================================
+
     /// <summary>
-    /// Freeze the builder state into an immutable <see cref="Chunk"/>.
-    /// The builder should not be used after calling this method.
+    /// Freeze the builder into an immutable <see cref="Chunk"/>.
     /// </summary>
     public Chunk Build()
     {
-        if (Optimize)
-            RunPeepholeOptimizer();
+        string[]? globalNameTable = _globalSlots?.BuildNameTable();
+        int globalSlotCount = _globalSlots?.Count ?? 0;
+        ICSlot[]? icSlots = _icSlotCount > 0 ? new ICSlot[_icSlotCount] : null;
 
-        byte[] code = _code.AsSpan(0, _codeCount).ToArray();
-        ArrayPool<byte>.Shared.Return(_code);
-        _code = null!; // prevent reuse after Build
-
-        string[]? globalNameTable = GlobalSlotAllocator?.BuildNameTable();
-        int globalSlotCount = GlobalSlotAllocator?.Count ?? 0;
-
-        var chunk = new Chunk(
-            code: code,
+        return new Chunk(
+            code: _code.ToArray(),
             constants: _constants.ToArray(),
-            sourceMap: new SourceMap(_sourceMapEntries.ToArray()),
+            sourceMap: new SourceMap(_sourceEntries.ToArray()),
             arity: Arity,
             minArity: MinArity,
-            localCount: LocalCount,
+            maxRegs: MaxRegs,
             upvalues: _upvalues.ToArray(),
             name: Name,
             isAsync: IsAsync,
@@ -291,14 +210,13 @@ public class ChunkBuilder
             localIsConst: LocalIsConst,
             upvalueNames: UpvalueNames,
             globalNameTable: globalNameTable,
-            globalSlotCount: globalSlotCount
-        );
-
-        if (_icSlotCount > 0)
-            chunk.ICSlots = new ICSlot[_icSlotCount];
-
-        return chunk;
+            globalSlotCount: globalSlotCount,
+            icSlots: icSlots);
     }
+
+    // ==================================================================
+    // Private helpers
+    // ==================================================================
 
     private sealed class StashValueComparer : IEqualityComparer<StashValue>
     {

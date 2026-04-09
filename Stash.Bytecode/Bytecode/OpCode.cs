@@ -1,451 +1,242 @@
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Single-byte instruction opcodes for the Stash bytecode virtual machine.
-/// Each opcode may be followed by zero, one, or two operand bytes as described
-/// by <see cref="OpCodeInfo.OperandSize"/>.
+/// Opcodes for the register-based bytecode VM.
+/// Each instruction is a fixed 32-bit word.
+/// Formats: ABC [op:8][A:8][B:8][C:8], ABx [op:8][A:8][Bx:16],
+///          AsBx [op:8][A:8][sBx:16], Ax [op:8][Ax:24]
 /// </summary>
 public enum OpCode : byte
 {
-    // -------------------------------------------------------------------------
-    // Constants & Literals
-    // -------------------------------------------------------------------------
+    // === Loads & Constants ===
+    /// <summary>ABx: R(A) = K(Bx) — load constant from pool.</summary>
+    LoadK,
+    /// <summary>ABC: R(A) = null.</summary>
+    LoadNull,
+    /// <summary>ABC: R(A) = (B != 0); if C != 0, skip next instruction.</summary>
+    LoadBool,
+    /// <summary>ABC: R(A) = R(B) — copy register.</summary>
+    Move,
 
-    /// <summary>Load constant from pool (u16 operand).</summary>
-    Const,          // 0
-    /// <summary>Push null.</summary>
-    Null,           // 1
-    /// <summary>Push true.</summary>
-    True,           // 2
-    /// <summary>Push false.</summary>
-    False,          // 3
+    // === Global Variables ===
+    /// <summary>ABx: R(A) = Globals[Bx].</summary>
+    GetGlobal,
+    /// <summary>ABx: Globals[Bx] = R(A).</summary>
+    SetGlobal,
+    /// <summary>ABx: Globals[Bx] = R(A), mark as const.</summary>
+    InitConstGlobal,
 
-    // -------------------------------------------------------------------------
-    // Stack Manipulation
-    // -------------------------------------------------------------------------
+    // === Upvalues ===
+    /// <summary>ABC: R(A) = Upvalues[B].</summary>
+    GetUpval,
+    /// <summary>ABC: Upvalues[B] = R(A).</summary>
+    SetUpval,
+    /// <summary>ABC: Close upvalue for register A.</summary>
+    CloseUpval,
 
-    /// <summary>Discard top of stack.</summary>
-    Pop,            // 4
-    /// <summary>Duplicate top of stack.</summary>
-    Dup,            // 5
+    // === Arithmetic ===
+    /// <summary>ABC: R(A) = R(B) + R(C).</summary>
+    Add,
+    /// <summary>ABC: R(A) = R(B) - R(C).</summary>
+    Sub,
+    /// <summary>ABC: R(A) = R(B) * R(C).</summary>
+    Mul,
+    /// <summary>ABC: R(A) = R(B) / R(C).</summary>
+    Div,
+    /// <summary>ABC: R(A) = R(B) % R(C).</summary>
+    Mod,
+    /// <summary>ABC: R(A) = R(B) ** R(C).</summary>
+    Pow,
+    /// <summary>ABC: R(A) = -R(B).</summary>
+    Neg,
+    /// <summary>AsBx: R(A) = R(A) + sBx — add signed immediate.</summary>
+    AddI,
 
-    // -------------------------------------------------------------------------
-    // Variable Access
-    // -------------------------------------------------------------------------
+    // === Bitwise ===
+    /// <summary>ABC: R(A) = R(B) &amp; R(C).</summary>
+    BAnd,
+    /// <summary>ABC: R(A) = R(B) | R(C).</summary>
+    BOr,
+    /// <summary>ABC: R(A) = R(B) ^ R(C).</summary>
+    BXor,
+    /// <summary>ABC: R(A) = ~R(B).</summary>
+    BNot,
+    /// <summary>ABC: R(A) = R(B) &lt;&lt; R(C).</summary>
+    Shl,
+    /// <summary>ABC: R(A) = R(B) &gt;&gt; R(C).</summary>
+    Shr,
 
-    /// <summary>Push local variable by slot index (u8 operand).</summary>
-    LoadLocal,      // 6
-    /// <summary>Pop and store to local slot (u8 operand).</summary>
-    StoreLocal,     // 7
-    /// <summary>Push global by name (u16 constant pool index).</summary>
-    LoadGlobal,     // 8
-    /// <summary>Pop and store to global by name (u16 constant pool index).</summary>
-    StoreGlobal,    // 9
-    /// <summary>Push captured upvalue (u8 operand).</summary>
-    LoadUpvalue,    // 10
-    /// <summary>Pop and store to upvalue (u8 operand).</summary>
-    StoreUpvalue,   // 11
+    // === Comparison (produce bool in R(A)) ===
+    /// <summary>ABC: R(A) = (R(B) == R(C)).</summary>
+    Eq,
+    /// <summary>ABC: R(A) = (R(B) != R(C)).</summary>
+    Ne,
+    /// <summary>ABC: R(A) = (R(B) &lt; R(C)).</summary>
+    Lt,
+    /// <summary>ABC: R(A) = (R(B) &lt;= R(C)).</summary>
+    Le,
+    /// <summary>ABC: R(A) = (R(B) &gt; R(C)).</summary>
+    Gt,
+    /// <summary>ABC: R(A) = (R(B) &gt;= R(C)).</summary>
+    Ge,
 
-    // -------------------------------------------------------------------------
-    // Arithmetic
-    // -------------------------------------------------------------------------
+    // === Logic ===
+    /// <summary>ABC: R(A) = !IsTruthy(R(B)).</summary>
+    Not,
+    /// <summary>ABC: if IsTruthy(R(B)) == C then R(A) = R(B) else skip next. For &amp;&amp;/||.</summary>
+    TestSet,
+    /// <summary>ABC: if IsTruthy(R(A)) != C then skip next instruction.</summary>
+    Test,
 
-    /// <summary>Pop 2, push sum (long/double/string/duration/bytesize).</summary>
-    Add,            // 12
-    /// <summary>Pop 2, push difference.</summary>
-    Subtract,       // 13
-    /// <summary>Pop 2, push product.</summary>
-    Multiply,       // 14
-    /// <summary>Pop 2, push quotient.</summary>
-    Divide,         // 15
-    /// <summary>Pop 2, push remainder.</summary>
-    Modulo,         // 16
-    /// <summary>Pop 2, push exponentiation.</summary>
-    Power,          // 17
-    /// <summary>Pop 1, push negation.</summary>
-    Negate,         // 18
+    // === Control Flow ===
+    /// <summary>AsBx: IP += sBx — unconditional jump.</summary>
+    Jmp,
+    /// <summary>AsBx: if !IsTruthy(R(A)) then IP += sBx.</summary>
+    JmpFalse,
+    /// <summary>AsBx: if IsTruthy(R(A)) then IP += sBx.</summary>
+    JmpTrue,
+    /// <summary>AsBx: IP += sBx — backward jump with cancellation check.</summary>
+    Loop,
+    /// <summary>ABC: Call R(A) with C args starting at R(A+1); result in R(A).</summary>
+    Call,
+    /// <summary>ABC: Return R(A). B=0 means return null.</summary>
+    Return,
 
-    // -------------------------------------------------------------------------
-    // Bitwise
-    // -------------------------------------------------------------------------
+    // === Iteration ===
+    /// <summary>AsBx: Numeric for init: R(A) -= R(A+2); IP += sBx.</summary>
+    ForPrep,
+    /// <summary>AsBx: R(A) += R(A+2); if R(A) &lt;= R(A+1) then { IP += sBx; R(A+3) = R(A) }.</summary>
+    ForLoop,
+    /// <summary>ABC: Create iterator from R(A), store state in R(A)..R(A+2).</summary>
+    IterPrep,
+    /// <summary>AsBx: Advance iterator; if exhausted, continue; else set values and IP += sBx.</summary>
+    IterLoop,
 
-    /// <summary>Pop 2, push bitwise AND.</summary>
-    BitAnd,         // 19
-    /// <summary>Pop 2, push bitwise OR.</summary>
-    BitOr,          // 20
-    /// <summary>Pop 2, push bitwise XOR.</summary>
-    BitXor,         // 21
-    /// <summary>Pop 1, push bitwise NOT.</summary>
-    BitNot,         // 22
-    /// <summary>Pop 2, push left shift.</summary>
-    ShiftLeft,      // 23
-    /// <summary>Pop 2, push right shift.</summary>
-    ShiftRight,     // 24
+    // === Tables & Fields ===
+    /// <summary>ABC: R(A) = R(B)[R(C)] — array index or dict key lookup.</summary>
+    GetTable,
+    /// <summary>ABC: R(A)[R(B)] = R(C) — array/dict element store.</summary>
+    SetTable,
+    /// <summary>ABC: R(A) = R(B).K(C) — field access by constant key.</summary>
+    GetField,
+    /// <summary>ABC: R(A).K(B) = R(C) — field store by constant key.</summary>
+    SetField,
+    /// <summary>ABC: R(A+1) = R(B); R(A) = R(B)[K(C)] — method lookup + self.</summary>
+    Self,
 
-    // -------------------------------------------------------------------------
-    // Comparison
-    // -------------------------------------------------------------------------
+    // === Collections ===
+    /// <summary>ABC: R(A) = new array with B elements from R(A+1)..R(A+B).</summary>
+    NewArray,
+    /// <summary>ABC: R(A) = new dict with B key-value pairs from R(A+1)..R(A+2*B).</summary>
+    NewDict,
+    /// <summary>ABC: R(A) = range(R(B), R(C)).</summary>
+    NewRange,
+    /// <summary>ABC: Expand R(B) into sequential registers starting at R(A).</summary>
+    Spread,
 
-    /// <summary>Pop 2, push equality result.</summary>
-    Equal,          // 25
-    /// <summary>Pop 2, push inequality result.</summary>
-    NotEqual,       // 26
-    /// <summary>Pop 2, push less-than result.</summary>
-    LessThan,       // 27
-    /// <summary>Pop 2, push less-or-equal result.</summary>
-    LessEqual,      // 28
-    /// <summary>Pop 2, push greater-than result.</summary>
-    GreaterThan,    // 29
-    /// <summary>Pop 2, push greater-or-equal result.</summary>
-    GreaterEqual,   // 30
+    // === Closures & Types ===
+    /// <summary>ABx: R(A) = new closure from Prototype[Bx], followed by upvalue descriptors.</summary>
+    Closure,
+    /// <summary>ABC: R(A) = new instance of struct K(B) with C field values from R(A+1).</summary>
+    NewStruct,
+    /// <summary>ABC: R(A) = typeof(R(B)) as string.</summary>
+    TypeOf,
+    /// <summary>ABC: R(A) = (R(B) is type K(C)).</summary>
+    Is,
 
-    // -------------------------------------------------------------------------
-    // Logic
-    // -------------------------------------------------------------------------
+    // === Error Handling ===
+    /// <summary>ABx: Push exception handler; catch at IP + Bx; error value → R(A).</summary>
+    TryBegin,
+    /// <summary>Ax: Pop exception handler (no operands needed, Ax unused).</summary>
+    TryEnd,
+    /// <summary>ABC: Throw R(A) as error.</summary>
+    Throw,
+    /// <summary>ABC: R(A) = try evaluate R(B); null on error.</summary>
+    TryExpr,
 
-    /// <summary>Pop 1, push logical not.</summary>
-    Not,            // 31
-    /// <summary>Short-circuit AND: if falsy, jump ahead (i16 operand).</summary>
-    And,            // 32
-    /// <summary>Short-circuit OR: if truthy, jump ahead (i16 operand).</summary>
-    Or,             // 33
-    /// <summary>If not null, jump ahead (i16 operand).</summary>
-    NullCoalesce,   // 34
+    // === Type Declarations ===
+    /// <summary>ABx: R(A) = declare struct with metadata K(Bx), methods from following registers.</summary>
+    StructDecl,
+    /// <summary>ABx: R(A) = declare enum with metadata K(Bx).</summary>
+    EnumDecl,
+    /// <summary>ABx: R(A) = declare interface with metadata K(Bx).</summary>
+    IfaceDecl,
+    /// <summary>ABx: Extend type with metadata K(Bx), methods from registers.</summary>
+    Extend,
 
-    // -------------------------------------------------------------------------
-    // Control Flow
-    // -------------------------------------------------------------------------
+    // === Shell ===
+    /// <summary>ABC: R(A) = execute command with B parts from R(A+1)..R(A+B).</summary>
+    Command,
+    /// <summary>ABC: R(A) = pipe(R(B), R(C)).</summary>
+    Pipe,
+    /// <summary>ABC: Redirect R(A) stream (B flags) to file R(C).</summary>
+    Redirect,
 
-    /// <summary>Unconditional jump (i16 signed offset).</summary>
-    Jump,           // 35
-    /// <summary>Jump if top is truthy, pop condition (i16 operand).</summary>
-    JumpTrue,       // 36
-    /// <summary>Jump if top is falsy, pop condition (i16 operand).</summary>
-    JumpFalse,      // 37
-    /// <summary>Backward jump (u16 operand — cancellation check point).</summary>
-    Loop,           // 38
+    // === Modules ===
+    /// <summary>ABx: R(A) = import module with metadata K(Bx).</summary>
+    Import,
+    /// <summary>ABx: R(A) = import module as alias, metadata K(Bx).</summary>
+    ImportAs,
 
-    // -------------------------------------------------------------------------
-    // Functions
-    // -------------------------------------------------------------------------
+    // === Strings ===
+    /// <summary>ABC: R(A) = interpolate B parts from R(A+1)..R(A+B).</summary>
+    Interpolate,
 
-    /// <summary>Call function with N args on stack (u8 operand).</summary>
-    Call,           // 39
-    /// <summary>Return top of stack from current frame.</summary>
-    Return,         // 40
-    /// <summary>Create closure (u16 constant pool index + upvalue descriptors).</summary>
-    Closure,        // 41
-
-    // -------------------------------------------------------------------------
-    // Collections
-    // -------------------------------------------------------------------------
-
-    /// <summary>Build array from N stack values (u16 operand).</summary>
-    Array,          // 42
-    /// <summary>Build dictionary from N key/value pairs (u16 operand).</summary>
-    Dict,           // 43
-    /// <summary>Pop 2-3 values, push range (start..end[..step]).</summary>
-    Range,          // 44
-    /// <summary>Spread iterable onto stack.</summary>
-    Spread,         // 45
-
-    // -------------------------------------------------------------------------
-    // Object Access
-    // -------------------------------------------------------------------------
-
-    /// <summary>Pop object, push field value (u16 name from constant pool).</summary>
-    GetField,       // 46
-    /// <summary>Pop value + object, set field (u16 name from constant pool).</summary>
-    SetField,       // 47
-    /// <summary>Pop index + object, push element.</summary>
-    GetIndex,       // 48
-    /// <summary>Pop value + index + object, set element.</summary>
-    SetIndex,       // 49
-
-    // -------------------------------------------------------------------------
-    // Type Operations
-    // -------------------------------------------------------------------------
-
-    /// <summary>Declare struct type (u16 operand).</summary>
-    StructDecl,     // 50
-    /// <summary>Instantiate struct with N fields (u16 operand).</summary>
-    StructInit,     // 51
-    /// <summary>Declare enum type (u16 operand).</summary>
-    EnumDecl,       // 52
-    /// <summary>Declare interface (u16 operand).</summary>
-    InterfaceDecl,  // 53
-    /// <summary>Register extension methods (u16 operand).</summary>
-    Extend,         // 54
-    /// <summary>Type check (u16 type_name constant pool index).</summary>
-    Is,             // 55
-
-    // -------------------------------------------------------------------------
-    // Strings
-    // -------------------------------------------------------------------------
-
-    /// <summary>Build interpolated string from N parts (u16 operand).</summary>
-    Interpolate,    // 56
-
-    // -------------------------------------------------------------------------
-    // Special
-    // -------------------------------------------------------------------------
-
-    /// <summary>Execute shell command (u16 operand).</summary>
-    Command,        // 57
-    /// <summary>Pipe two command results.</summary>
-    Pipe,           // 58
-    /// <summary>Redirect command output (u8 operand).</summary>
-    Redirect,       // 59
-    /// <summary>Import module (u16 operand).</summary>
-    Import,         // 60
-    /// <summary>Import module with alias (u16 operand).</summary>
-    ImportAs,       // 61
-    /// <summary>Destructure array/dict into locals (u16 operand).</summary>
-    Destructure,    // 62
-
-    // -------------------------------------------------------------------------
-    // Error Handling
-    // -------------------------------------------------------------------------
-
-    /// <summary>Pop value, throw as error.</summary>
-    Throw,          // 63
-    /// <summary>Push exception handler (u16 jump offset to catch).</summary>
-    TryBegin,       // 64
-    /// <summary>Pop exception handler.</summary>
-    TryEnd,         // 65
-    /// <summary>Pop expr, push result or null on error.</summary>
-    TryExpr,        // 66
-
-    // -------------------------------------------------------------------------
-    // Async
-    // -------------------------------------------------------------------------
-
-    /// <summary>Pop future, push resolved value.</summary>
-    Await,          // 67
-
-    // -------------------------------------------------------------------------
-    // Misc
-    // -------------------------------------------------------------------------
-
-    /// <summary>Pre-increment variable.</summary>
-    PreIncrement,   // 68
-    /// <summary>Pre-decrement variable.</summary>
-    PreDecrement,   // 69
-    /// <summary>Post-increment variable.</summary>
-    PostIncrement,  // 70
-    /// <summary>Post-decrement variable.</summary>
-    PostDecrement,  // 71
-    /// <summary>Switch expression dispatch (u16 operand).</summary>
-    Switch,         // 72
-    /// <summary>Enter elevated context.</summary>
-    ElevateBegin,   // 73
-    /// <summary>Exit elevated context.</summary>
-    ElevateEnd,     // 74
-    /// <summary>Retry block (u16 operand).</summary>
-    Retry,          // 75
-    /// <summary>Create iterator from iterable.</summary>
-    Iterator,       // 76
-    /// <summary>Advance iterator, push value or jump if done (i16 operand).</summary>
-    Iterate,        // 77
-    /// <summary>Check if value is in collection (containment check).</summary>
-    In,             // 78
-    /// <summary>Push argument sentinel marker for spread calls.</summary>
-    ArgMark,        // 79
-    /// <summary>Call function with spread args — scans for ArgMark sentinel.</summary>
-    CallSpread,     // 80
-    /// <summary>Close open upvalues for locals at or above a given slot (u8 operand: local slot index).</summary>
-    CloseUpvalue,   // 81
-    /// <summary>Pop and store to global by name (u16 constant pool index); also marks the global as const for mutation guards.</summary>
-    InitConstGlobal, // 82
-    /// <summary>Peek at top of stack; throw RuntimeError if not int or float.</summary>
-    CheckNumeric,    // 83
-
-    // -------------------------------------------------------------------------
-    // Superinstructions — Fused Multi-Opcode and Single-Opcode Specializations
-    // -------------------------------------------------------------------------
-
-    /// <summary>Push local variable at slot 0 (specialization of LoadLocal).</summary>
-    LoadLocal0,         // 84
-    /// <summary>Push local variable at slot 1 (specialization of LoadLocal).</summary>
-    LoadLocal1,         // 85
-    /// <summary>Push local variable at slot 2 (specialization of LoadLocal).</summary>
-    LoadLocal2,         // 86
-    /// <summary>Push local variable at slot 3 (specialization of LoadLocal).</summary>
-    LoadLocal3,         // 87
-    /// <summary>Call function with 0 arguments (specialization of Call).</summary>
-    Call0,              // 88
-    /// <summary>Call function with 1 argument (specialization of Call).</summary>
-    Call1,              // 89
-    /// <summary>Call function with 2 arguments (specialization of Call).</summary>
-    Call2,              // 90
-    /// <summary>Fused: LoadLocal + LoadLocal + Add (u8 slot1, u8 slot2).</summary>
-    LL_Add,             // 91
-    /// <summary>Fused: LoadLocal + Const + Add (u8 slot, u16 const_idx).</summary>
-    LC_Add,             // 92
-    /// <summary>Fused: LoadLocal + Const + LessThan (u8 slot, u16 const_idx).</summary>
-    LC_LessThan,        // 93
-    /// <summary>Fused: Dup + StoreLocal + Pop — store-and-discard (u8 slot).</summary>
-    DupStoreLocalPop,   // 94
-    /// <summary>Fused: LoadLocal + LoadLocal + LessThan (u8 slot1, u8 slot2).</summary>
-    LL_LessThan,        // 95
-    /// <summary>Fused: LoadLocal + Const + Subtract (u8 slot, u16 const_idx).</summary>
-    LC_Subtract,        // 96
-    /// <summary>Fused: LoadLocal + Return (u8 slot).</summary>
-    L_Return,           // 97
-
-    /// <summary>Get field with inline cache (u16 name_idx, u16 ic_slot_idx).</summary>
-    GetFieldIC,     // 98
-
-    /// <summary>Fused: LessThan + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
-    LessThanJumpFalse,     // 99
-    /// <summary>Fused: GreaterThan + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
-    GreaterThanJumpFalse,  // 100
-    /// <summary>Fused: LessEqual + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
-    LessEqualJumpFalse,    // 101
-    /// <summary>Fused: GreaterEqual + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
-    GreaterEqualJumpFalse, // 102
-    /// <summary>Fused: Equal + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
-    EqualJumpFalse,        // 103
-    /// <summary>Fused: NotEqual + JumpFalse — compare and jump without intermediate bool (i16 offset).</summary>
-    NotEqualJumpFalse,     // 104
-
-    /// <summary>Fused: increment local variable in-place by 1 (u8 slot). No push/pop.</summary>
-    IncrLocal,             // 105
-    /// <summary>Fused: decrement local variable in-place by 1 (u8 slot). No push/pop.</summary>
-    DecrLocal,             // 106
+    // === Misc ===
+    /// <summary>ABC: R(A) = R(B) in R(C) — containment check.</summary>
+    In,
+    /// <summary>ABx: Switch on R(A) with jump table K(Bx).</summary>
+    Switch,
+    /// <summary>ABx: Destructure R(A) per metadata K(Bx) into registers.</summary>
+    Destructure,
+    /// <summary>ABC: R(A) = begin elevation from R(B).</summary>
+    ElevateBegin,
+    /// <summary>Ax: End elevation.</summary>
+    ElevateEnd,
+    /// <summary>ABx: Retry block with metadata K(Bx), body/until/onRetry from registers.</summary>
+    Retry,
+    /// <summary>ABC: R(A) = await R(B).</summary>
+    Await,
+    /// <summary>ABC: Call R(A) with spread arguments.</summary>
+    CallSpread,
+    /// <summary>ABC: Check that R(A) is numeric, throw if not.</summary>
+    CheckNumeric,
 }
 
-/// <summary>
-/// Helper utilities for <see cref="OpCode"/> metadata.
-/// </summary>
+/// <summary>Instruction format types for the 32-bit encoding.</summary>
+public enum OpCodeFormat
+{
+    /// <summary>[op:8][A:8][B:8][C:8] — three registers.</summary>
+    ABC,
+    /// <summary>[op:8][A:8][Bx:16] — register + unsigned 16-bit.</summary>
+    ABx,
+    /// <summary>[op:8][A:8][sBx:16] — register + signed 16-bit (bias-encoded).</summary>
+    AsBx,
+    /// <summary>[op:8][Ax:24] — 24-bit payload.</summary>
+    Ax,
+}
+
 public static class OpCodeInfo
 {
-    /// <summary>
-    /// Returns the number of operand bytes that follow the given opcode in the instruction stream.
-    /// </summary>
-    /// <param name="opCode">The opcode to query.</param>
-    /// <returns>0, 1, or 2.</returns>
-    public static int OperandSize(OpCode opCode) => opCode switch
+    /// <summary>Returns the instruction format for a given opcode.</summary>
+    public static OpCodeFormat GetFormat(OpCode op) => op switch
     {
-        // 0-byte operands
-        OpCode.Null          => 0,
-        OpCode.True          => 0,
-        OpCode.False         => 0,
-        OpCode.Pop           => 0,
-        OpCode.Dup           => 0,
-        OpCode.Add           => 0,
-        OpCode.Subtract      => 0,
-        OpCode.Multiply      => 0,
-        OpCode.Divide        => 0,
-        OpCode.Modulo        => 0,
-        OpCode.Power         => 0,
-        OpCode.Negate        => 0,
-        OpCode.BitAnd        => 0,
-        OpCode.BitOr         => 0,
-        OpCode.BitXor        => 0,
-        OpCode.BitNot        => 0,
-        OpCode.ShiftLeft     => 0,
-        OpCode.ShiftRight    => 0,
-        OpCode.Equal         => 0,
-        OpCode.NotEqual      => 0,
-        OpCode.LessThan      => 0,
-        OpCode.LessEqual     => 0,
-        OpCode.GreaterThan   => 0,
-        OpCode.GreaterEqual  => 0,
-        OpCode.Not           => 0,
-        OpCode.Return        => 0,
-        OpCode.Range         => 0,
-        OpCode.Spread        => 0,
-        OpCode.GetIndex      => 0,
-        OpCode.SetIndex      => 0,
-        OpCode.Pipe          => 0,
-        OpCode.Throw         => 0,
-        OpCode.TryEnd        => 0,
-        OpCode.TryExpr       => 0,
-        OpCode.Await         => 0,
-        OpCode.PreIncrement  => 0,
-        OpCode.PreDecrement  => 0,
-        OpCode.PostIncrement => 0,
-        OpCode.PostDecrement => 0,
-        OpCode.ElevateBegin  => 0,
-        OpCode.ElevateEnd    => 0,
-        OpCode.Iterator      => 0,
-        OpCode.In            => 0,
-        OpCode.ArgMark       => 0,
-        OpCode.CallSpread    => 0,
-        OpCode.CheckNumeric  => 0,
+        // ABx format: register + 16-bit constant/slot index
+        OpCode.LoadK or OpCode.GetGlobal or OpCode.SetGlobal or OpCode.InitConstGlobal
+        or OpCode.AddI    // AsBx but same extraction format
+        or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
+        or OpCode.ForPrep or OpCode.ForLoop or OpCode.IterLoop
+        or OpCode.Closure or OpCode.TryBegin
+        or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl or OpCode.Extend
+        or OpCode.Import or OpCode.ImportAs
+        or OpCode.Switch or OpCode.Destructure or OpCode.Retry
+            => OpCodeFormat.ABx,
 
-        // 1-byte (u8) operands
-        OpCode.LoadLocal     => 1,
-        OpCode.CloseUpvalue  => 1,
-        OpCode.StoreLocal    => 1,
-        OpCode.LoadUpvalue   => 1,
-        OpCode.StoreUpvalue  => 1,
-        OpCode.Call          => 1,
-        OpCode.Redirect      => 1,
+        // Ax format: 24-bit payload
+        OpCode.TryEnd or OpCode.ElevateEnd
+            => OpCodeFormat.Ax,
 
-        // 2-byte (u16/i16) operands
-        OpCode.InitConstGlobal => 2,
-        OpCode.Destructure     => 2,
-        OpCode.Const           => 2,
-        OpCode.LoadGlobal      => 2,
-        OpCode.StoreGlobal     => 2,
-        OpCode.And             => 2,
-        OpCode.Or              => 2,
-        OpCode.NullCoalesce    => 2,
-        OpCode.Jump            => 2,
-        OpCode.JumpTrue        => 2,
-        OpCode.JumpFalse       => 2,
-        OpCode.Loop            => 2,
-        OpCode.Closure         => 2,
-        OpCode.Array           => 2,
-        OpCode.Dict            => 2,
-        OpCode.GetField        => 2,
-        OpCode.SetField        => 2,
-        OpCode.StructDecl      => 2,
-        OpCode.StructInit      => 2,
-        OpCode.EnumDecl        => 2,
-        OpCode.InterfaceDecl   => 2,
-        OpCode.Extend          => 2,
-        OpCode.Is              => 2,
-        OpCode.Interpolate     => 2,
-        OpCode.Command         => 2,
-        OpCode.Import          => 2,
-        OpCode.ImportAs        => 2,
-        OpCode.TryBegin        => 2,
-        OpCode.Switch          => 2,
-        OpCode.Retry           => 2,
-        OpCode.Iterate         => 2,
-
-        // Superinstructions — Tier 0 (zero-operand specializations)
-        OpCode.LoadLocal0    => 0,
-        OpCode.LoadLocal1    => 0,
-        OpCode.LoadLocal2    => 0,
-        OpCode.LoadLocal3    => 0,
-        OpCode.Call0         => 0,
-        OpCode.Call1         => 0,
-        OpCode.Call2         => 0,
-
-        // Superinstructions — Tier 1 (fused multi-opcode)
-        OpCode.LL_Add          => 2,  // u8 + u8
-        OpCode.LC_Add          => 3,  // u8 + u16
-        OpCode.LC_LessThan     => 3,  // u8 + u16
-        OpCode.DupStoreLocalPop => 1, // u8
-        OpCode.LL_LessThan     => 2,  // u8 + u8
-        OpCode.LC_Subtract     => 3,  // u8 + u16
-        OpCode.L_Return        => 1,  // u8
-        OpCode.GetFieldIC      => 4,  // u16 + u16
-
-        OpCode.LessThanJumpFalse     => 2,  // i16
-        OpCode.GreaterThanJumpFalse  => 2,  // i16
-        OpCode.LessEqualJumpFalse    => 2,  // i16
-        OpCode.GreaterEqualJumpFalse => 2,  // i16
-        OpCode.EqualJumpFalse        => 2,  // i16
-        OpCode.NotEqualJumpFalse     => 2,  // i16
-
-        OpCode.IncrLocal => 1,  // u8
-        OpCode.DecrLocal => 1,  // u8
-
-        _ => throw new System.ArgumentOutOfRangeException(nameof(opCode), opCode, "Unknown opcode."),
+        // Everything else is ABC
+        _ => OpCodeFormat.ABC,
     };
 }

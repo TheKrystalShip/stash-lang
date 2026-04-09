@@ -1,9 +1,7 @@
-using System;
 using System.Collections.Generic;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
-using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
 
@@ -17,45 +15,47 @@ public sealed partial class Compiler
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        // Push elevator expression or null for platform default
+        // Declare the error-save slot first so it occupies the lowest available
+        // register and cannot conflict with DeclareLocal calls in the body.
+        _scope.BeginScope();
+        byte savedErrReg = _scope.DeclareLocal("<elevate_err>");
+        _scope.MarkInitialized();
+        _builder.EmitA(OpCode.LoadNull, savedErrReg);
+
+        // Compile the elevator expression into a temp above savedErrReg,
+        // or load null if no elevator was specified.
+        byte elevatorReg;
         if (stmt.Elevator != null)
         {
-            CompileExpr(stmt.Elevator);
+            elevatorReg = CompileExpr(stmt.Elevator);
         }
         else
         {
-            _builder.Emit(OpCode.Null);
+            elevatorReg = _scope.AllocTemp();
+            _builder.EmitA(OpCode.LoadNull, elevatorReg);
         }
 
-        _builder.Emit(OpCode.ElevateBegin);
+        _builder.EmitABC(OpCode.ElevateBegin, 0, elevatorReg, 0);
+        _scope.FreeTemp(elevatorReg);
 
-        // Wrap body in try-finally so ElevateEnd always runs
-        int finallyErrSlot = _scope.DeclareLocal("<elevate_err>", isConst: false);
-        _scope.MarkInitialized(finallyErrSlot);
-        _builder.Emit(OpCode.Null); // placeholder for error slot
+        // Wrap the body in a try-finally so ElevateEnd always runs.
+        int errorJump = _builder.EmitJump(OpCode.TryBegin, savedErrReg);
 
-        int errorJump = _builder.EmitJump(OpCode.TryBegin);
+        CompileStmt(stmt.Body);
 
-        // --- Body ---
-        foreach (Stmt s in stmt.Body.Statements)
-        {
-            CompileStmt(s);
-        }
+        _builder.EmitAx(OpCode.TryEnd, 0);
 
-        _builder.Emit(OpCode.TryEnd);
+        // Success path: end elevation then jump to end.
+        _builder.EmitAx(OpCode.ElevateEnd, 0);
+        int endJump = _builder.EmitJump(OpCode.Jmp);
 
-        // --- Success path: ElevateEnd ---
-        _builder.Emit(OpCode.ElevateEnd);
-        int endJump = _builder.EmitJump(OpCode.Jump);
-
-        // --- Error path: ElevateEnd then re-throw ---
+        // Error path: end elevation then re-throw.
         _builder.PatchJump(errorJump);
-        _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
-        _builder.Emit(OpCode.ElevateEnd);
-        _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
-        _builder.Emit(OpCode.Throw);
+        _builder.EmitAx(OpCode.ElevateEnd, 0);
+        _builder.EmitA(OpCode.Throw, savedErrReg);
 
         _builder.PatchJump(endJump);
+        EndScope();
 
         return null;
     }
@@ -68,182 +68,160 @@ public sealed partial class Compiler
         bool hasCatch = stmt.CatchBody != null;
         bool hasFinally = stmt.FinallyBody != null;
 
-        // Synthetic local for storing error during finally's error path.
-        // Wrapped in BeginScope so it doesn't pollute the enclosing scope's slot count,
-        // which would cause outer catch-variable slot misalignment.
-        int finallyErrSlot = -1;
-        if (hasFinally)
-        {
-            _scope.BeginScope();
-            finallyErrSlot = _scope.DeclareLocal("<finally_err>", isConst: false);
-            _scope.MarkInitialized(finallyErrSlot);
-            _builder.Emit(OpCode.Null); // placeholder value for the local
-        }
-
         if (hasCatch && hasFinally)
-        {
-            // Outer handler: catches errors from try body (when catch fails) or catch body itself
-            // Ensures finally always runs
-            int outerCatchJump = _builder.EmitJump(OpCode.TryBegin);
-
-            // Inner handler: catches errors from try body, routes to catch
-            int innerCatchJump = _builder.EmitJump(OpCode.TryBegin);
-
-            // --- Try body ---
-            (_activeFinally ??= new()).Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 2 });
-            foreach (Stmt s in stmt.TryBody.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            _builder.Emit(OpCode.TryEnd); // pop inner handler
-            int afterCatchJump = _builder.EmitJump(OpCode.Jump); // skip catch
-
-            // --- Catch label (inner handler target) ---
-            _builder.PatchJump(innerCatchJump);
-            if (stmt.CatchVariable != null)
-            {
-                _scope.BeginScope();
-                int catchVarSlot = _scope.DeclareLocal(stmt.CatchVariable.Lexeme, isConst: false);
-                _scope.MarkInitialized(catchVarSlot);
-                // Error value is already on stack at the right position for this local
-            }
-            else
-            {
-                _builder.Emit(OpCode.Pop); // discard error
-            }
-            foreach (Stmt s in stmt.CatchBody!.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            if (stmt.CatchVariable != null)
-            {
-                EmitScopePops();
-            }
-
-            _activeFinally!.RemoveAt(_activeFinally!.Count - 1);
-
-            // --- After catch ---
-            _builder.PatchJump(afterCatchJump);
-            _builder.Emit(OpCode.TryEnd); // pop outer handler
-
-            // --- Finally (success path) ---
-            foreach (Stmt s in stmt.FinallyBody!.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            // Pop <finally_err> slot from the stack on the success path and end its scope
-            // so the enclosing scope's subsequent DeclareLocal calls use the correct slot.
-            EmitScopePops();
-            int endJump = _builder.EmitJump(OpCode.Jump);
-
-            // --- Outer catch label (finally error path) ---
-            _builder.PatchJump(outerCatchJump);
-            // Error is on stack, store it
-            _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
-            // Run finally body
-            foreach (Stmt s in stmt.FinallyBody!.Statements)
-            {
-                CompileStmt(s);
-            }
-            // Re-throw saved error
-            _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
-            _builder.Emit(OpCode.Throw);
-
-            _builder.PatchJump(endJump);
-        }
-        else if (hasCatch) // catch only, no finally
-        {
-            int catchJump = _builder.EmitJump(OpCode.TryBegin);
-
-            foreach (Stmt s in stmt.TryBody.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            _builder.Emit(OpCode.TryEnd);
-            int endJump = _builder.EmitJump(OpCode.Jump);
-
-            _builder.PatchJump(catchJump);
-            if (stmt.CatchVariable != null)
-            {
-                _scope.BeginScope();
-                int catchVarSlot = _scope.DeclareLocal(stmt.CatchVariable.Lexeme, isConst: false);
-                _scope.MarkInitialized(catchVarSlot);
-            }
-            else
-            {
-                _builder.Emit(OpCode.Pop);
-            }
-            foreach (Stmt s in stmt.CatchBody!.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            if (stmt.CatchVariable != null)
-            {
-                EmitScopePops();
-            }
-
-            _builder.PatchJump(endJump);
-        }
-        else if (hasFinally) // finally only, no catch
-        {
-            int errorJump = _builder.EmitJump(OpCode.TryBegin);
-
-            (_activeFinally ??= new()).Add(new FinallyInfo { Body = stmt.FinallyBody!.Statements, SaveSlot = finallyErrSlot, HandlerCount = 1 });
-            foreach (Stmt s in stmt.TryBody.Statements)
-            {
-                CompileStmt(s);
-            }
-            _activeFinally!.RemoveAt(_activeFinally!.Count - 1);
-
-            _builder.Emit(OpCode.TryEnd);
-
-            // Success path: run finally
-            foreach (Stmt s in stmt.FinallyBody!.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            // Pop <finally_err> slot from the stack on the success path and end its scope.
-            EmitScopePops();
-            int endJump = _builder.EmitJump(OpCode.Jump);
-
-            // Error path: store error, run finally, re-throw
-            _builder.PatchJump(errorJump);
-            _builder.Emit(OpCode.StoreLocal, (byte)finallyErrSlot);
-            foreach (Stmt s in stmt.FinallyBody!.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            _builder.Emit(OpCode.LoadLocal, (byte)finallyErrSlot);
-            _builder.Emit(OpCode.Throw);
-
-            _builder.PatchJump(endJump);
-        }
-        else // try only (error suppression)
-        {
-            int catchJump = _builder.EmitJump(OpCode.TryBegin);
-
-            foreach (Stmt s in stmt.TryBody.Statements)
-            {
-                CompileStmt(s);
-            }
-
-            _builder.Emit(OpCode.TryEnd);
-            int endJump = _builder.EmitJump(OpCode.Jump);
-
-            _builder.PatchJump(catchJump);
-            _builder.Emit(OpCode.Pop); // discard error
-
-            _builder.PatchJump(endJump);
-        }
+            CompileTryCatchFinally(stmt);
+        else if (hasCatch)
+            CompileTryCatch(stmt);
+        else if (hasFinally)
+            CompileTryFinally(stmt);
+        else
+            CompileTryOnly(stmt);
 
         return null;
     }
 
+    // ── try { } catch [(e)] { }  — no finally ──────────────────────────────
+    private void CompileTryCatch(TryCatchStmt stmt)
+    {
+        // The error register must be a local (not a temp) so that any
+        // DeclareLocal calls inside the try body (via VisitBlockStmt) occupy
+        // registers above it rather than aliasing it.
+        string errName = stmt.CatchVariable?.Lexeme ?? "<catch_err>";
+        _scope.BeginScope();
+        byte errReg = _scope.DeclareLocal(errName);
+        _scope.MarkInitialized();
+
+        int tryBeginIdx = _builder.EmitJump(OpCode.TryBegin, errReg);
+
+        // CompileStmt delegates to VisitBlockStmt, which opens its own nested scope.
+        CompileStmt(stmt.TryBody);
+
+        _builder.EmitAx(OpCode.TryEnd, 0);
+        int endJump = _builder.EmitJump(OpCode.Jmp);
+
+        // Catch handler: TryBegin already placed the caught exception in errReg.
+        _builder.PatchJump(tryBeginIdx);
+        CompileStmt(stmt.CatchBody!);
+
+        EndScope(); // releases errReg and closes any captured upvalues
+
+        _builder.PatchJump(endJump);
+    }
+
+    // ── try { } finally { }  — no catch ────────────────────────────────────
+    private void CompileTryFinally(TryCatchStmt stmt)
+    {
+        _scope.BeginScope();
+        byte savedErrReg = _scope.DeclareLocal("<finally_err>");
+        _scope.MarkInitialized();
+        _builder.EmitA(OpCode.LoadNull, savedErrReg);
+
+        int errorJump = _builder.EmitJump(OpCode.TryBegin, savedErrReg);
+
+        // Track this finally block so break/continue/return can inline finally code.
+        var finallyInfo = new FinallyInfo { FinallyStart = -1, ScopeDepth = _scope.ScopeDepth, Body = stmt.FinallyBody };
+        (_activeFinally ??= new()).Add(finallyInfo);
+
+        CompileStmt(stmt.TryBody);
+
+        _builder.EmitAx(OpCode.TryEnd, 0);
+
+        // FinallyStart is now known: the first instruction of the success finally body.
+        finallyInfo.FinallyStart = _builder.CurrentOffset;
+        _activeFinally.RemoveAt(_activeFinally.Count - 1);
+
+        // Success path: run finally body, then jump to end.
+        CompileStmt(stmt.FinallyBody!);
+        int endJump = _builder.EmitJump(OpCode.Jmp);
+
+        // Error path: savedErrReg holds the caught error; run finally then re-throw.
+        _builder.PatchJump(errorJump);
+        CompileStmt(stmt.FinallyBody!);
+        _builder.EmitA(OpCode.Throw, savedErrReg);
+
+        // EndScope is called after both paths are emitted so that savedErrReg
+        // remains live (and its register unaliased) during the error-path finally body.
+        _builder.PatchJump(endJump);
+        EndScope();
+    }
+
+    // ── try { } catch [(e)] { } finally { } ────────────────────────────────
+    private void CompileTryCatchFinally(TryCatchStmt stmt)
+    {
+        // Outer handler: catches any error that escapes (or is re-thrown by)
+        // the catch body, ensuring finally always runs on the error path.
+        _scope.BeginScope();
+        byte savedErrReg = _scope.DeclareLocal("<finally_err>");
+        _scope.MarkInitialized();
+        _builder.EmitA(OpCode.LoadNull, savedErrReg);
+
+        int outerTryBeginIdx = _builder.EmitJump(OpCode.TryBegin, savedErrReg);
+
+        // Inner handler: catches errors from the try body and routes them to
+        // the catch block. Declared as a local for the same reason as CompileTryCatch.
+        _scope.BeginScope();
+        string errName = stmt.CatchVariable?.Lexeme ?? "<catch_err>";
+        byte errReg = _scope.DeclareLocal(errName);
+        _scope.MarkInitialized();
+
+        int innerTryBeginIdx = _builder.EmitJump(OpCode.TryBegin, errReg);
+
+        var finallyInfo = new FinallyInfo { FinallyStart = -1, ScopeDepth = _scope.ScopeDepth, Body = stmt.FinallyBody };
+        (_activeFinally ??= new()).Add(finallyInfo);
+
+        CompileStmt(stmt.TryBody);
+
+        _builder.EmitAx(OpCode.TryEnd, 0); // pop inner handler
+        int afterCatchJump = _builder.EmitJump(OpCode.Jmp); // skip catch body
+
+        // Inner catch handler: errReg already holds the caught exception.
+        _builder.PatchJump(innerTryBeginIdx);
+        CompileStmt(stmt.CatchBody!);
+        EndScope(); // releases errReg (inner scope)
+
+        _activeFinally.RemoveAt(_activeFinally.Count - 1);
+
+        // Rejoin point: both try-body and catch-body flow merge here.
+        _builder.PatchJump(afterCatchJump);
+        _builder.EmitAx(OpCode.TryEnd, 0); // pop outer handler
+
+        // FinallyStart is now known: the first instruction of the success finally body.
+        finallyInfo.FinallyStart = _builder.CurrentOffset;
+
+        // Success path: run finally body, then jump to end.
+        CompileStmt(stmt.FinallyBody!);
+        int endJump = _builder.EmitJump(OpCode.Jmp);
+
+        // Outer catch handler: savedErrReg holds the error; run finally then re-throw.
+        _builder.PatchJump(outerTryBeginIdx);
+        CompileStmt(stmt.FinallyBody!);
+        _builder.EmitA(OpCode.Throw, savedErrReg);
+
+        // EndScope for savedErrReg after both paths, so it stays live during
+        // the error-path finally body compilation.
+        _builder.PatchJump(endJump);
+        EndScope(); // releases savedErrReg (outer scope)
+    }
+
+    // ── try { }  — error suppression, no catch/finally ─────────────────────
+    private void CompileTryOnly(TryCatchStmt stmt)
+    {
+        // Declare as a local so it doesn't alias any DeclareLocal calls in the try body.
+        _scope.BeginScope();
+        byte errReg = _scope.DeclareLocal("<try_err>");
+        _scope.MarkInitialized();
+
+        int tryBeginIdx = _builder.EmitJump(OpCode.TryBegin, errReg);
+
+        CompileStmt(stmt.TryBody);
+
+        _builder.EmitAx(OpCode.TryEnd, 0);
+        int endJump = _builder.EmitJump(OpCode.Jmp);
+
+        // Error suppression: the caught exception in errReg is silently discarded.
+        _builder.PatchJump(tryBeginIdx);
+
+        _builder.PatchJump(endJump);
+        EndScope(); // releases errReg
+    }
 }

@@ -162,10 +162,10 @@ public static class BytecodeWriter
         // Name: u16 length + UTF-8, or 0xFFFF for null
         WriteNullableString(writer, chunk.Name);
 
-        // Arity, MinArity, LocalCount, GlobalSlotCount
+        // Arity, MinArity, MaxRegs, GlobalSlotCount
         writer.Write((ushort)chunk.Arity);
         writer.Write((ushort)chunk.MinArity);
-        writer.Write((ushort)chunk.LocalCount);
+        writer.Write((ushort)chunk.MaxRegs);
         writer.Write((ushort)chunk.GlobalSlotCount);
 
         // Flags: IsAsync, HasRestParam, MayHaveCapturedLocals
@@ -175,9 +175,10 @@ public static class BytecodeWriter
         if (chunk.MayHaveCapturedLocals) chunkFlags |= 4;
         writer.Write(chunkFlags);
 
-        // Code: u32 length + byte[]
+        // Code: u32 instruction count + uint[] (each instruction is 4 bytes LE)
         writer.Write((uint)chunk.Code.Length);
-        writer.Write(chunk.Code);
+        foreach (uint word in chunk.Code)
+            writer.Write(word);
 
         // Constants: u16 count + [tagged values]
         WriteConstants(writer, chunk.Constants, includeDebugInfo);
@@ -315,6 +316,13 @@ public static class BytecodeWriter
                     writer.Write((byte)(retryMeta.HasUntilClause ? 1 : 0));
                     writer.Write((byte)(retryMeta.HasOnRetryClause ? 1 : 0));
                     writer.Write((byte)(retryMeta.OnRetryIsReference ? 1 : 0));
+                }
+                else if (obj is StructInitMetadata structInitMeta)
+                {
+                    writer.Write((byte)15);
+                    WriteLengthPrefixedString(writer, structInitMeta.TypeName);
+                    writer.Write((byte)(structInitMeta.HasTypeReg ? 1 : 0));
+                    WriteStringArray(writer, structInitMeta.FieldNames);
                 }
                 else
                 {

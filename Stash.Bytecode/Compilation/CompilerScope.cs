@@ -4,176 +4,210 @@ using System.Collections.Generic;
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Represents a single local variable tracked during bytecode compilation.
-/// </summary>
-/// <param name="Name">The variable name as it appears in source.</param>
-/// <param name="Depth">The scope depth at which the local was declared (0 = function-level).</param>
-/// <param name="IsConst">Whether the variable was declared with <c>const</c>.</param>
-/// <param name="Initialized">
-/// <c>false</c> between declaration and initialization, preventing self-referencing initializers.
-/// </param>
-public readonly record struct Local(string Name, int Depth, bool IsConst, bool Initialized);
-
-/// <summary>
-/// Tracks local variables for a single function during bytecode compilation.
-/// All locals within a function share a flat list where the index is the stack slot.
-/// Block scopes are modelled via a depth counter rather than separate scope objects.
+/// Tracks register allocation for a single function during compilation.
+/// Registers are laid out as: [params][locals][temporaries].
 /// </summary>
 internal sealed class CompilerScope
 {
-    private readonly List<Local> _locals = new();
-    private int _peakLocalCount;
-    // These two dicts duplicate data from _locals but they are intentionally kept:
-    // EndScope() removes entries from _locals when variables go out of scope, but
-    // GetPeakLocalNames() / GetPeakLocalIsConst() must return metadata for ALL slots
-    // up to the peak count — including slots whose locals have already been popped.
-    private readonly Dictionary<int, string> _localNamesBySlot = new();
-    private readonly Dictionary<int, bool> _localConstBySlot = new();
+    private readonly record struct Local(string Name, int Depth, bool IsConst, bool Initialized);
 
-    /// <summary>Gets the current block-nesting depth (0 = function-level).</summary>
+    private readonly List<Local> _locals = new();
+    private readonly Dictionary<int, string> _localNamesByReg = new();
+    private readonly Dictionary<int, bool> _localConstByReg = new();
+    private readonly Stack<int> _scopeNextFreeRegs = new();
+    private readonly HashSet<int> _knownNumericRegs = new();
+    private int _nextFreeReg;  // Next available register (after all locals + temps in use)
+    private int _maxRegs;      // High water mark of _nextFreeReg
+
     public int ScopeDepth { get; private set; }
 
-    /// <summary>Gets the total number of locals currently tracked.</summary>
+    /// <summary>Peak register count needed by this function.</summary>
+    public int MaxRegs => _maxRegs;
+
+    /// <summary>Number of currently declared locals (including params).</summary>
     public int LocalCount => _locals.Count;
 
-    // ---- Scope Management ----
-
-    /// <summary>Enters a new block scope by incrementing the depth counter.</summary>
-    public void BeginScope()
-    {
-        ScopeDepth++;
-    }
+    // ==================================================================
+    // Locals (permanent registers for the lifetime of their scope)
+    // ==================================================================
 
     /// <summary>
-    /// Exits the current block scope: removes all locals declared at the current depth,
-    /// decrements the depth counter, and returns the number of locals removed so the
-    /// compiler can emit the corresponding <c>OP_POP</c> instructions.
+    /// Declare a local variable, assigning it a register.
+    /// Returns the register number.
     /// </summary>
-    /// <returns>The number of locals that were popped from the scope.</returns>
-    public int EndScope()
+    public byte DeclareLocal(string name, bool isConst = false)
     {
-        int popped = 0;
-        while (_locals.Count > 0 && _locals[_locals.Count - 1].Depth == ScopeDepth)
-        {
-            _locals.RemoveAt(_locals.Count - 1);
-            popped++;
-        }
+        int reg = _locals.Count;
+        if (reg > 255)
+            throw new InvalidOperationException("Too many local variables (>255).");
 
-        ScopeDepth--;
-        return popped;
-    }
-
-    // ---- Local Variable Management ----
-
-    /// <summary>
-    /// Declares a new local variable at the current scope depth and returns its stack slot index.
-    /// The local is initially marked as uninitialized to guard against self-referencing initializers.
-    /// </summary>
-    /// <param name="name">The variable name.</param>
-    /// <param name="isConst">Whether the variable is declared with <c>const</c>.</param>
-    /// <returns>The flat stack slot index assigned to the new local.</returns>
-    public int DeclareLocal(string name, bool isConst)
-    {
-        int slot = _locals.Count;
         _locals.Add(new Local(name, ScopeDepth, isConst, Initialized: false));
-        _localNamesBySlot[slot] = name;
-        _localConstBySlot[slot] = isConst;
-        if (_locals.Count > _peakLocalCount)
-        {
-            _peakLocalCount = _locals.Count;
-        }
+        _localNamesByReg[reg] = name;
+        _localConstByReg[reg] = isConst;
 
-        return slot;
+        // Locals always occupy registers in order, so the next free reg is at least past this local
+        if (reg + 1 > _nextFreeReg)
+            _nextFreeReg = reg + 1;
+        if (_nextFreeReg > _maxRegs)
+            _maxRegs = _nextFreeReg;
+
+        return (byte)reg;
     }
 
-    /// <summary>
-    /// Marks the local at <paramref name="slot"/> as fully initialized.
-    /// Called after the initializer expression has been compiled.
-    /// </summary>
-    /// <param name="slot">The stack slot index of the local to mark.</param>
-    public void MarkInitialized(int slot)
+    /// <summary>Mark the most recently declared local as initialized.</summary>
+    public void MarkInitialized()
     {
-        var local = _locals[slot];
-        _locals[slot] = local with { Initialized = true };
+        if (_locals.Count > 0)
+        {
+            Local last = _locals[^1];
+            _locals[^1] = last with { Initialized = true };
+        }
     }
 
-    // ---- Variable Resolution ----
-
     /// <summary>
-    /// Searches for a local variable by name, walking backwards through the list so that
-    /// inner-scope declarations shadow outer ones.
+    /// Resolve a local variable by name. Returns register number, or -1 if not found.
+    /// Searches from most recent to oldest (for shadowing).
     /// </summary>
-    /// <param name="name">The variable name to look up.</param>
-    /// <returns>The stack slot index of the innermost matching local, or <c>-1</c> if not found.</returns>
     public int ResolveLocal(string name)
     {
         for (int i = _locals.Count - 1; i >= 0; i--)
         {
             if (_locals[i].Name == name)
-            {
                 return i;
-            }
         }
-
         return -1;
     }
 
-    // ---- Queries ----
-
-    /// <summary>Returns <c>true</c> if the local at <paramref name="slot"/> was declared with <c>const</c>.</summary>
-    /// <param name="slot">The stack slot index.</param>
-    public bool IsLocalConst(int slot) => _locals[slot].IsConst;
-
-    /// <summary>Returns the <see cref="Local"/> record at the given stack slot index.</summary>
-    /// <param name="slot">The stack slot index.</param>
-    public Local GetLocal(int slot) => _locals[slot];
-
-    /// <summary>Returns the names of all currently tracked locals, indexed by slot.</summary>
-    public string[] GetLocalNames()
+    /// <summary>Check if a register holds a const local.</summary>
+    public bool IsLocalConst(int reg)
     {
-        var names = new string[_locals.Count];
-        for (int i = 0; i < _locals.Count; i++)
-        {
-            names[i] = _locals[i].Name;
-        }
+        if (reg >= 0 && reg < _locals.Count)
+            return _locals[reg].IsConst;
+        return false;
+    }
 
+    /// <summary>Mark a local register as known to contain a numeric value.</summary>
+    public void MarkNumeric(int reg)
+    {
+        if (reg >= 0 && reg < _locals.Count)
+            _knownNumericRegs.Add(reg);
+    }
+
+    /// <summary>Check if a local register is known to contain a numeric value.</summary>
+    public bool IsKnownNumeric(int reg) => _knownNumericRegs.Contains(reg);
+
+    /// <summary>Clear the known-numeric flag for a register (e.g., on reassignment from unknown source).</summary>
+    public void ClearNumeric(int reg) => _knownNumericRegs.Remove(reg);
+
+    // ==================================================================
+    // Temporaries (LIFO allocation above locals)
+    // ==================================================================
+
+    /// <summary>
+    /// Allocate a temporary register. Must be freed with FreeTemp in LIFO order.
+    /// </summary>
+    public byte AllocTemp()
+    {
+        int reg = _nextFreeReg++;
+        if (reg > 255)
+            throw new InvalidOperationException("Register overflow (>255).");
+        if (_nextFreeReg > _maxRegs)
+            _maxRegs = _nextFreeReg;
+        return (byte)reg;
+    }
+
+    /// <summary>
+    /// Free a temporary register. Must be the most recently allocated temp (LIFO).
+    /// </summary>
+    public void FreeTemp(byte reg)
+    {
+        // Only free if it's the top of the temp stack and above the local region
+        if (reg == _nextFreeReg - 1 && reg >= _locals.Count)
+            _nextFreeReg--;
+    }
+
+    /// <summary>
+    /// Free all temporary registers from a given register upward.
+    /// </summary>
+    public void FreeTempFrom(byte reg)
+    {
+        if (reg >= _locals.Count && reg < _nextFreeReg)
+            _nextFreeReg = reg;
+    }
+
+    /// <summary>Reserve N consecutive registers starting at the current free position.</summary>
+    public byte ReserveRegs(int count)
+    {
+        byte start = (byte)_nextFreeReg;
+        _nextFreeReg += count;
+        if (_nextFreeReg > 256)
+            throw new InvalidOperationException("Register overflow (>255).");
+        if (_nextFreeReg > _maxRegs)
+            _maxRegs = _nextFreeReg;
+        return start;
+    }
+
+    /// <summary>The next register that would be allocated.</summary>
+    public byte NextFreeReg => (byte)_nextFreeReg;
+
+    // ==================================================================
+    // Scope Management
+    // ==================================================================
+
+    public void BeginScope()
+    {
+        _scopeNextFreeRegs.Push(_nextFreeReg);
+        ScopeDepth++;
+    }
+
+    /// <summary>
+    /// End the current scope. Returns the number of locals that went out of scope
+    /// (for upvalue closing). Frees their registers.
+    /// </summary>
+    public int EndScope()
+    {
+        int freed = 0;
+        while (_locals.Count > 0 && _locals[^1].Depth == ScopeDepth)
+        {
+            _locals.RemoveAt(_locals.Count - 1);
+            _knownNumericRegs.Remove(_locals.Count); // reg index = count after removal
+            freed++;
+        }
+        // Restore _nextFreeReg: use max of remaining locals and the saved value
+        // from before this scope opened, to protect temps still live in enclosing code.
+        int savedNextFreeReg = _scopeNextFreeRegs.Pop();
+        _nextFreeReg = Math.Max(_locals.Count, savedNextFreeReg);
+        ScopeDepth--;
+        return freed;
+    }
+
+    // ==================================================================
+    // Debug Metadata
+    // ==================================================================
+
+    /// <summary>Build register→name mapping for the debugger.</summary>
+    public string[]? GetLocalNames()
+    {
+        if (_localNamesByReg.Count == 0) return null;
+        int max = 0;
+        foreach (int key in _localNamesByReg.Keys)
+            if (key > max) max = key;
+        string[] names = new string[max + 1];
+        foreach (var (reg, name) in _localNamesByReg)
+            names[reg] = name;
         return names;
     }
 
-    /// <summary>Returns the const flags of all currently tracked locals, indexed by slot.</summary>
-    public bool[] GetLocalIsConst()
+    /// <summary>Build register→const flag mapping for the debugger.</summary>
+    public bool[]? GetLocalIsConst()
     {
-        var flags = new bool[_locals.Count];
-        for (int i = 0; i < _locals.Count; i++)
-        {
-            flags[i] = _locals[i].IsConst;
-        }
-
-        return flags;
-    }
-
-    /// <summary>Gets the maximum number of locals that were simultaneously alive at any point.</summary>
-    public int PeakLocalCount => _peakLocalCount;
-
-    /// <summary>Returns names for all locals that were ever declared, indexed by slot up to the peak count.</summary>
-    public string[] GetPeakLocalNames()
-    {
-        var names = new string[_peakLocalCount];
-        for (int i = 0; i < _peakLocalCount; i++)
-        {
-            names[i] = _localNamesBySlot.TryGetValue(i, out string? name) ? name : $"local_{i}";
-        }
-        return names;
-    }
-
-    /// <summary>Returns const flags for all locals that were ever declared, indexed by slot up to the peak count.</summary>
-    public bool[] GetPeakLocalIsConst()
-    {
-        var flags = new bool[_peakLocalCount];
-        for (int i = 0; i < _peakLocalCount; i++)
-        {
-            flags[i] = _localConstBySlot.TryGetValue(i, out bool c) && c;
-        }
+        if (_localConstByReg.Count == 0) return null;
+        int max = 0;
+        foreach (int key in _localConstByReg.Keys)
+            if (key > max) max = key;
+        bool[] flags = new bool[max + 1];
+        foreach (var (reg, isConst) in _localConstByReg)
+            flags[reg] = isConst;
         return flags;
     }
 }

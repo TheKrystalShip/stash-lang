@@ -327,7 +327,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements, _optimize);
+            Chunk chunk = Compiler.Compile(statements);
 
             if (disassemble)
             {
@@ -415,7 +415,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements, _optimize);
+            Chunk chunk = Compiler.Compile(statements);
 
             if (disassemble)
             {
@@ -497,7 +497,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements, _optimize);
+            Chunk chunk = Compiler.Compile(statements);
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -571,7 +571,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements, _optimize);
+            Chunk chunk = Compiler.Compile(statements);
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -657,7 +657,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements, _optimize);
+            Chunk chunk = Compiler.Compile(statements);
             var globals = CreateVMGlobals();
             var vm = new VirtualMachine(globals);
             _activeVM = vm;
@@ -764,7 +764,7 @@ public class Program
                     try
                     {
                         SemanticResolver.Resolve(statements);
-                        Chunk chunk = Compiler.Compile(statements, _optimize);
+                        Chunk chunk = Compiler.Compile(statements);
                         vm.ExecuteRepl(chunk);
                     }
                     catch (RuntimeError ex)
@@ -790,7 +790,7 @@ public class Program
 
                     try
                     {
-                        Chunk chunk = Compiler.CompileExpression(expr, _optimize);
+                        Chunk chunk = Compiler.CompileExpression(expr);
                         object? result = vm.Execute(chunk);
                         if (result is not null)
                         {
@@ -856,7 +856,7 @@ public class Program
             throw new RuntimeError($"Parse errors in module '{resolvedPath}': {parser.Errors[0]}", null);
 
         SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts, _optimize);
+        return Compiler.Compile(stmts);
     }
 
     /// <summary>
@@ -945,7 +945,7 @@ public class Program
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements, optimize);
+            Chunk chunk = Compiler.Compile(statements);
 
             string outPath = outputPath ?? System.IO.Path.ChangeExtension(path, ".stashc");
             BytecodeWriter.Write(outPath, chunk, includeDebugInfo: !strip, optimized: optimize, sourceText: source, embedSource: true);

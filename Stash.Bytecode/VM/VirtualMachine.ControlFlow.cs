@@ -9,68 +9,23 @@ using Stash.Runtime.Types;
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Control flow, exception handling, and retry opcode handlers.
+/// Control flow, exception handling, elevation, retry, and iterator opcode handlers (register-based).
 /// </summary>
 public sealed partial class VirtualMachine
 {
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteAnd(ref CallFrame frame)
-    {
-        // Short-circuit AND: if top is falsy, keep it and jump (skip right); else pop and eval right
-        short offset = ReadI16(ref frame);
-        if (RuntimeOps.IsFalsy(Peek()))
-        {
-            frame.IP += offset;
-        }
-        else
-        {
-            _sp--; // pop truthy left, continue to right operand
-        }
-    }
+    // ══════════════════════════ Exception Handling ══════════════════════════
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteOr(ref CallFrame frame)
+    private void ExecuteThrow(ref CallFrame frame, uint inst)
     {
-        // Short-circuit OR: if top is truthy, keep it and jump (skip right); else pop and eval right
-        short offset = ReadI16(ref frame);
-        if (!RuntimeOps.IsFalsy(Peek()))
-        {
-            frame.IP += offset;
-        }
-        else
-        {
-            _sp--; // pop falsy left, continue to right operand
-        }
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteNullCoalesce(ref CallFrame frame)
-    {
-        // If top is non-null, keep it and jump; else pop null and eval right
-        short offset = ReadI16(ref frame);
-        if (!Peek().IsNull && Peek().ToObject() is not StashError)
-        {
-            frame.IP += offset;
-        }
-        else
-        {
-            _sp--; // pop null, continue to right operand
-        }
-    }
-
-    private void ExecuteThrow(ref CallFrame frame)
-    {
-        object? errorVal = Pop().ToObject();
+        byte a = Instruction.GetA(inst);
+        object? errorVal = _stack[frame.BaseSlot + a].ToObject();
         SourceSpan? span = GetCurrentSpan(ref frame);
+
         if (errorVal is StashError se)
-        {
             throw new RuntimeError(se.Message, span, se.Type) { Properties = se.Properties };
-        }
 
         if (errorVal is string msg)
-        {
             throw new RuntimeError(msg, span);
-        }
 
         if (errorVal is StashDictionary throwDict)
         {
@@ -84,168 +39,155 @@ public sealed partial class VirtualMachine
             foreach (var kv in throwDict.GetAllEntries())
             {
                 if (kv.Key is string k)
-                {
                     props[k] = kv.Value.ToObject();
-                }
             }
-
             throw new RuntimeError(errMsg, span, errType) { Properties = props };
         }
+
         throw new RuntimeError(RuntimeValues.Stringify(errorVal), span);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteTryBegin(ref CallFrame frame)
+    private void ExecuteTryEnd()
     {
-        short catchOffset = ReadI16(ref frame);
-        _exceptionHandlers.Add(new ExceptionHandler
-        {
-            CatchIP = frame.IP + catchOffset,
-            StackLevel = _sp,
-            FrameIndex = _frameCount - 1,
-        });
+        if (_exceptionHandlers.Count > 0)
+            _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteSwitch(ref CallFrame frame)
+    private void ExecuteTryExpr(ref CallFrame frame, uint inst)
     {
-        ReadU16(ref frame); // skip operand — switch is compiled to basic opcodes
+        // ABx: R(A) = R(B) — value already computed; any exception was already caught by the handler.
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        _stack[frame.BaseSlot + a] = _stack[frame.BaseSlot + b];
     }
 
-    private void ExecuteElevateBegin(ref CallFrame frame)
+    // ══════════════════════════ Switch ══════════════════════════
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteSwitch(ref CallFrame frame, uint inst)
+    {
+        // Switch is compiled to basic comparison + jump opcodes; this opcode is a no-op.
+        _ = Instruction.GetBx(inst);
+    }
+
+    // ══════════════════════════ Elevation ══════════════════════════
+
+    private void ExecuteElevateBegin(ref CallFrame frame, uint inst)
     {
         if (_context.EmbeddedMode)
-        {
             throw new RuntimeError("Elevate blocks are not supported in embedded mode.", GetCurrentSpan(ref frame));
-        }
 
-        object? elevator = Pop().ToObject();
+        byte b = Instruction.GetB(inst);
+        object? elevator = _stack[frame.BaseSlot + b].ToObject();
         _context.ElevationActive = true;
+
         if (elevator is string elevStr)
-        {
             _context.ElevationCommand = elevStr;
-        }
         else if (elevator != null)
-        {
             _context.ElevationCommand = RuntimeOps.Stringify(StashValue.FromObject(elevator));
-        }
         else
-        {
             _context.ElevationCommand = OperatingSystem.IsWindows() ? "gsudo" : "sudo";
-        }
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private void ExecuteElevateEnd(ref CallFrame frame)
+    private void ExecuteElevateEnd(ref CallFrame frame, uint inst)
     {
         _context.ElevationActive = false;
         _context.ElevationCommand = null;
     }
 
-    private StashValue ExecuteRetry(ref CallFrame frame)
+    // ══════════════════════════ Retry ══════════════════════════
+
+    private void ExecuteRetry(ref CallFrame frame, uint inst)
     {
-        ushort metaRetryIdx = ReadU16(ref frame);
+        byte a = Instruction.GetA(inst);
+        int @base = frame.BaseSlot;
         SourceSpan? span = GetCurrentSpan(ref frame);
-        var retryMeta = (RetryMetadata)frame.Chunk.Constants[metaRetryIdx].AsObj!;
+        var retryMeta = (RetryMetadata)frame.Chunk.Constants[Instruction.GetBx(inst)].AsObj!;
 
-        // Pop closures in reverse order of emission (onRetry first, then until, then body)
-        VMFunction? onRetryVmFn = null;
-        IStashCallable? onRetryCb = null;
-        if (retryMeta.HasOnRetryClause)
-        {
-            object? obj = Pop().ToObject();
-            if (obj is VMFunction f1)
-            {
-                onRetryVmFn = f1;
-            }
-            else if (obj is IStashCallable c1)
-            {
-                onRetryCb = c1;
-            }
-        }
+        // Read maxAttempts from R(A).
+        StashValue maxAttemptsVal = _stack[@base + a];
+        if (!maxAttemptsVal.IsInt)
+            throw new RuntimeError("Retry max attempts must be an integer.", span);
+        long maxAttempts = maxAttemptsVal.AsInt;
+        if (maxAttempts < 0)
+            throw new RuntimeError("Retry max attempts must be non-negative.", span);
+        if (maxAttempts == 0)
+            throw new RuntimeError(
+                "All 0 retry attempts exhausted — predicate not satisfied.",
+                span, "RetryExhaustedError");
 
-        VMFunction? untilVmFn = null;
-        IStashCallable? untilCb = null;
-        if (retryMeta.HasUntilClause)
-        {
-            object? obj = Pop().ToObject();
-            if (obj is VMFunction f2)
-            {
-                untilVmFn = f2;
-            }
-            else if (obj is IStashCallable c2)
-            {
-                untilCb = c2;
-            }
-        }
-
-        object? bodyObj = Pop().ToObject();
-        VMFunction bodyVmFn = bodyObj as VMFunction
-            ?? throw new RuntimeError("Retry body must be a function.", span);
-
-        // Extract options from the stack (below body)
+        // Read options from registers at R(A+1).
+        int nextReg = a + 1;
         long retryDelayMs = 0;
+
         if (retryMeta.OptionCount == -1)
         {
-            object? optStruct = Pop().ToObject();
+            // Single options struct at R(A+1).
+            object? optStruct = _stack[@base + nextReg].ToObject();
             if (optStruct is StashInstance oi)
             {
                 if (oi.GetFields().TryGetValue("delay", out StashValue dv))
                 {
                     object? dvObj = dv.ToObject();
                     if (dvObj is long dl)
-                    {
                         retryDelayMs = dl;
-                    }
                     else if (dvObj is StashDuration dd)
-                    {
                         retryDelayMs = (long)dd.TotalMilliseconds;
-                    }
                 }
             }
+            nextReg++;
         }
         else if (retryMeta.OptionCount > 0)
         {
-            int pairStart = _sp - retryMeta.OptionCount * 2;
-            for (int oi = 0; oi < retryMeta.OptionCount; oi++)
+            // Named option pairs at R(A+1)..R(A+2*N).
+            for (int i = 0; i < retryMeta.OptionCount; i++)
             {
-                string optKey = (string)_stack[pairStart + oi * 2].AsObj!;
-                object? optVal = _stack[pairStart + oi * 2 + 1].ToObject();
+                string optKey = (string)_stack[@base + nextReg + i * 2].AsObj!;
+                object? optVal = _stack[@base + nextReg + i * 2 + 1].ToObject();
                 if (optKey == "delay")
                 {
                     if (optVal is long dl)
-                    {
                         retryDelayMs = dl;
-                    }
                     else if (optVal is StashDuration dd)
-                    {
                         retryDelayMs = (long)dd.TotalMilliseconds;
-                    }
                 }
             }
-            _sp = pairStart;
+            nextReg += retryMeta.OptionCount * 2;
         }
 
-        object? maxAttemptsObj = Pop().ToObject();
-        if (maxAttemptsObj is not long maxAttempts)
+        // Body closure at R(nextReg).
+        object? bodyObj = _stack[@base + nextReg].ToObject();
+        VMFunction bodyVmFn = bodyObj as VMFunction
+            ?? throw new RuntimeError("Retry body must be a function.", span);
+        nextReg++;
+
+        // Until closure at R(nextReg) if present.
+        VMFunction? untilVmFn = null;
+        IStashCallable? untilCb = null;
+        if (retryMeta.HasUntilClause)
         {
-            throw new RuntimeError("Retry max attempts must be an integer.", span);
-        }
-        if (maxAttempts < 0)
-        {
-            throw new RuntimeError("Retry max attempts must be non-negative.", span);
-        }
-        if (maxAttempts == 0)
-        {
-            throw new RuntimeError(
-                "All 0 retry attempts exhausted — predicate not satisfied.",
-                span, "RetryExhaustedError");
+            object? obj = _stack[@base + nextReg].ToObject();
+            if (obj is VMFunction f) untilVmFn = f;
+            else if (obj is IStashCallable c) untilCb = c;
+            nextReg++;
         }
 
-        // Execute retry loop
+        // OnRetry closure at R(nextReg) if present.
+        VMFunction? onRetryVmFn = null;
+        IStashCallable? onRetryCb = null;
+        if (retryMeta.HasOnRetryClause)
+        {
+            object? obj = _stack[@base + nextReg].ToObject();
+            if (obj is VMFunction f) onRetryVmFn = f;
+            else if (obj is IStashCallable c) onRetryCb = c;
+        }
+
+        // Execute retry loop.
         StashValue retryLastResult = StashValue.Null;
         RuntimeError? retryLastError = null;
-
         var retryErrors = new List<StashValue>();
 
         for (long attempt = 1; attempt <= maxAttempts; attempt++)
@@ -253,34 +195,30 @@ public sealed partial class VirtualMachine
             bool bodyThrew = false;
             try
             {
-                // Build attempt context dict
                 var attemptCtx = new StashDictionary();
                 attemptCtx.Set("current", StashValue.FromInt(attempt));
                 attemptCtx.Set("max", StashValue.FromInt(maxAttempts));
                 attemptCtx.Set("remaining", StashValue.FromInt(maxAttempts - attempt));
                 attemptCtx.Set("errors", StashValue.FromObj(new List<StashValue>(retryErrors)));
-                retryLastResult = ExecuteVMFunctionInlineDirect(bodyVmFn, new StashValue[] { StashValue.FromObj(attemptCtx) }, span);
+                retryLastResult = ExecuteVMFunctionInlineDirect(
+                    bodyVmFn, new StashValue[] { StashValue.FromObj(attemptCtx) }, span);
             }
             catch (RuntimeError rex)
             {
                 bodyThrew = true;
                 retryLastError = rex;
-
                 var retryErr = new StashError(rex.Message, rex.ErrorType ?? "RuntimeError", null, rex.Properties);
                 retryErrors.Add(StashValue.FromObj(retryErr));
 
-                // Only call onRetry if this is NOT the last attempt
+                // Call onRetry only when this is not the last attempt.
                 if (attempt < maxAttempts)
                 {
                     if (onRetryVmFn != null)
-                    {
                         ExecuteVMFunctionInlineDirect(onRetryVmFn,
                             new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(retryErr) }, span);
-                    }
                     else if (onRetryCb != null)
-                    {
-                        onRetryCb.CallDirect(_context, new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(retryErr) });
-                    }
+                        onRetryCb.CallDirect(_context,
+                            new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(retryErr) });
                 }
             }
 
@@ -293,10 +231,7 @@ public sealed partial class VirtualMachine
                         ? new StashValue[] { retryLastResult, StashValue.FromInt(attempt) }
                         : new StashValue[] { retryLastResult };
                     StashValue pred = ExecuteVMFunctionInlineDirect(untilVmFn, untilArgs, span);
-                    if (RuntimeOps.IsFalsy(pred))
-                    {
-                        success = false;
-                    }
+                    if (RuntimeOps.IsFalsy(pred)) success = false;
                 }
                 else if (untilCb != null)
                 {
@@ -304,118 +239,246 @@ public sealed partial class VirtualMachine
                         ? new StashValue[] { retryLastResult, StashValue.FromInt(attempt) }
                         : new StashValue[] { retryLastResult };
                     StashValue pred2 = untilCb.CallDirect(_context, untilArgs2);
-                    if (RuntimeOps.IsFalsy(pred2))
-                    {
-                        success = false;
-                    }
+                    if (RuntimeOps.IsFalsy(pred2)) success = false;
                 }
 
                 if (success)
                 {
-                    return retryLastResult;
+                    _stack[@base + a] = retryLastResult;
+                    return;
                 }
-                // Until predicate failed — treat as a retry-worthy failure
+
+                // Until predicate failed — treat as a retry-worthy failure.
                 if (attempt < maxAttempts)
                 {
+                    var predicateErr = new StashError("Predicate not satisfied", "RetryError");
                     if (onRetryVmFn != null)
-                    {
                         ExecuteVMFunctionInlineDirect(onRetryVmFn,
-                            new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(new StashError("Predicate not satisfied", "RetryError")) }, span);
-                    }
+                            new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(predicateErr) }, span);
                     else if (onRetryCb != null)
-                    {
-                        onRetryCb.CallDirect(_context, new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(new StashError("Predicate not satisfied", "RetryError")) });
-                    }
+                        onRetryCb.CallDirect(_context,
+                            new StashValue[] { StashValue.FromInt(attempt), StashValue.FromObj(predicateErr) });
                 }
                 bodyThrew = true;
             }
 
             if (retryDelayMs > 0 && attempt < maxAttempts)
-            {
                 Thread.Sleep((int)retryDelayMs);
-            }
 
             if (attempt == maxAttempts)
             {
                 if (retryLastError != null)
-                {
                     throw new RuntimeError(retryLastError.Message, span,
                         retryLastError.ErrorType ?? "RuntimeError");
-                }
-
                 throw new RuntimeError(
                     $"All {maxAttempts} retry attempts exhausted — predicate not satisfied.",
                     span, "RetryExhaustedError");
             }
         }
 
-        // Unreachable — loop always returns or throws on the last attempt
+        // Unreachable — loop always returns or throws on the last attempt.
         throw new RuntimeError("Internal error: retry exhausted without result.", span);
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteJump(ref CallFrame frame)
+    // ══════════════════════════ Numeric For ══════════════════════════
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteForPrep(ref CallFrame frame, uint inst)
     {
-        short offset = ReadI16(ref frame);
-        frame.IP += offset;
+        byte a = Instruction.GetA(inst);
+        int sBx = Instruction.GetSBx(inst);
+        int @base = frame.BaseSlot;
+
+        StashValue counter = _stack[@base + a];
+        StashValue step = _stack[@base + a + 2];
+
+        if (counter.IsInt && step.IsInt)
+            _stack[@base + a] = StashValue.FromInt(counter.AsInt - step.AsInt);
+        else if (counter.IsNumeric && step.IsNumeric)
+            _stack[@base + a] = StashValue.FromFloat(
+                (counter.IsInt ? (double)counter.AsInt : counter.AsFloat) -
+                (step.IsInt ? (double)step.AsInt : step.AsFloat));
+        else
+            throw new RuntimeError("For loop counter and step must be numbers.", GetCurrentSpan(ref frame));
+
+        frame.IP += sBx;
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteJumpTrue(ref CallFrame frame)
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteForLoop(ref CallFrame frame, uint inst)
     {
-        short offset = ReadI16(ref frame);
-        if (!RuntimeOps.IsFalsy(Pop()))
-        {
-            frame.IP += offset;
-        }
-    }
+        byte a = Instruction.GetA(inst);
+        int sBx = Instruction.GetSBx(inst);
+        int @base = frame.BaseSlot;
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteJumpFalse(ref CallFrame frame)
-    {
-        short offset = ReadI16(ref frame);
-        if (RuntimeOps.IsFalsy(Pop()))
-        {
-            frame.IP += offset;
-        }
-    }
+        StashValue step = _stack[@base + a + 2];
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteLoop(ref CallFrame frame)
-    {
-        ushort offset = ReadU16(ref frame);
-        frame.IP -= offset;
-        if ((++_loopCheckCounter & 0xFF) == 0)
+        if (_stack[@base + a].IsInt && step.IsInt && _stack[@base + a + 1].IsInt)
         {
-            if (_ct.IsCancellationRequested)
+            long newCounter = _stack[@base + a].AsInt + step.AsInt;
+            _stack[@base + a] = StashValue.FromInt(newCounter);
+            long limit = _stack[@base + a + 1].AsInt;
+            bool inBounds = step.AsInt > 0 ? newCounter <= limit : newCounter >= limit;
+            if (inBounds)
             {
-                throw new OperationCanceledException(_ct);
-            }
-
-            if (StepLimit > 0)
-            {
-                StepCount += 256;
-                if (StepCount >= StepLimit)
-                {
-                    throw new Stash.Runtime.StepLimitExceededException(StepLimit);
-                }
+                frame.IP += sBx;
+                _stack[@base + a + 3] = StashValue.FromInt(newCounter);
             }
         }
-    }
-
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteTryEnd()
-    {
-        if (_exceptionHandlers.Count > 0)
+        else if (_stack[@base + a].IsNumeric && step.IsNumeric && _stack[@base + a + 1].IsNumeric)
         {
-            _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
+            StashValue counterVal = _stack[@base + a];
+            StashValue limitVal = _stack[@base + a + 1];
+            double newCounter = (counterVal.IsInt ? (double)counterVal.AsInt : counterVal.AsFloat) +
+                                (step.IsInt ? (double)step.AsInt : step.AsFloat);
+            _stack[@base + a] = StashValue.FromFloat(newCounter);
+            double limit = limitVal.IsInt ? (double)limitVal.AsInt : limitVal.AsFloat;
+            double stepVal = step.IsInt ? (double)step.AsInt : step.AsFloat;
+            bool inBounds = stepVal > 0 ? newCounter <= limit : newCounter >= limit;
+            if (inBounds)
+            {
+                frame.IP += sBx;
+                _stack[@base + a + 3] = StashValue.FromFloat(newCounter);
+            }
+        }
+        else
+        {
+            throw new RuntimeError("For loop counter and step must be numbers.", GetCurrentSpan(ref frame));
         }
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
-    private void ExecuteCloseUpvalue(ref CallFrame frame)
+    // ══════════════════════════ Iterator ══════════════════════════
+
+    /// <summary>
+    /// Internal iterator state for register-based for-in loops.
+    /// Stored in R(A) by IterPrep; advanced by IterLoop.
+    /// </summary>
+    private sealed class IteratorState
     {
-        byte localSlot = ReadByte(ref frame);
-        CloseUpvalues(frame.BaseSlot + localSlot);
+        public object? Collection;
+        public int Index;
+        public bool Indexed;
+        public IEnumerator<KeyValuePair<object, StashValue>>? DictEnumerator;
+    }
+
+    private void ExecuteIterPrep(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte b = Instruction.GetB(inst);
+        int @base = frame.BaseSlot;
+        object? val = _stack[@base + a].ToObject();
+        SourceSpan? span = GetCurrentSpan(ref frame);
+
+        IteratorState iterState;
+
+        if (val is List<StashValue> list)
+        {
+            // Snapshot the list so mutations during iteration don't cause infinite loops
+            iterState = new IteratorState { Collection = new List<StashValue>(list) };
+        }
+        else if (val is StashDictionary dict)
+        {
+            iterState = new IteratorState
+            {
+                Collection = dict,
+                DictEnumerator = dict.GetAllEntries().GetEnumerator(),
+            };
+        }
+        else if (val is string str)
+        {
+            iterState = new IteratorState { Collection = str };
+        }
+        else if (val is StashRange range)
+        {
+            iterState = new IteratorState { Collection = range };
+        }
+        else if (val is StashEnum enumDef)
+        {
+            // Build a list of StashEnumValues so IterLoop can use the list path.
+            var members = new List<StashValue>(enumDef.Members.Count);
+            foreach (string m in enumDef.Members)
+            {
+                StashEnumValue? ev = enumDef.GetMember(m);
+                members.Add(ev != null ? StashValue.FromObj(ev) : StashValue.Null);
+            }
+            iterState = new IteratorState { Collection = members };
+        }
+        else
+        {
+            throw new RuntimeError(
+                $"Value is not iterable: {RuntimeValues.Stringify(val)}.", span);
+        }
+
+        iterState.Indexed = b != 0;
+        _stack[@base + a] = StashValue.FromObj(iterState);
+    }
+
+    private void ExecuteIterLoop(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        int @base = frame.BaseSlot;
+        var iter = (IteratorState)_stack[@base + a].AsObj!;
+
+        if (iter.Collection is List<StashValue> list)
+        {
+            if (iter.Index >= list.Count)
+            {
+                frame.IP += Instruction.GetSBx(inst);
+                return;
+            }
+            _stack[@base + a + 1] = list[iter.Index];
+            _stack[@base + a + 2] = StashValue.FromInt(iter.Index);
+            iter.Index++;
+        }
+        else if (iter.Collection is StashDictionary)
+        {
+            if (!iter.DictEnumerator!.MoveNext())
+            {
+                frame.IP += Instruction.GetSBx(inst);
+                return;
+            }
+            var kv = iter.DictEnumerator.Current;
+            if (iter.Indexed)
+            {
+                _stack[@base + a + 1] = kv.Value;                     // value slot → dict value (VariableName)
+                _stack[@base + a + 2] = StashValue.FromObj(kv.Key);  // index slot → dict key (IndexName)
+            }
+            else
+            {
+                _stack[@base + a + 1] = StashValue.FromObj(kv.Key);  // single-var: key goes to VariableName
+                _stack[@base + a + 2] = kv.Value;                     // unused in single-var mode
+            }
+            iter.Index++;
+        }
+        else if (iter.Collection is string str)
+        {
+            if (iter.Index >= str.Length)
+            {
+                frame.IP += Instruction.GetSBx(inst);
+                return;
+            }
+            _stack[@base + a + 1] = StashValue.FromObj(str[iter.Index].ToString());
+            _stack[@base + a + 2] = StashValue.FromInt(iter.Index);
+            iter.Index++;
+        }
+        else if (iter.Collection is StashRange range)
+        {
+            long step = range.Step;
+            long current = range.Start + step * iter.Index;
+            bool inBounds = step > 0 ? current < range.End : current > range.End;
+            if (!inBounds)
+            {
+                frame.IP += Instruction.GetSBx(inst);
+                return;
+            }
+            _stack[@base + a + 1] = StashValue.FromInt(current);
+            _stack[@base + a + 2] = StashValue.FromInt(iter.Index);
+            iter.Index++;
+        }
+        else
+        {
+            // Exhausted or unknown — jump past the loop body.
+            frame.IP += Instruction.GetSBx(inst);
+        }
     }
 }

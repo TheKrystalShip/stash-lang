@@ -104,7 +104,6 @@ public class DisassemblerTests
     public void Disassemble_EmptyChunk_ShowsHeader()
     {
         var builder = new ChunkBuilder();
-        builder.Optimize = false;
         Chunk chunk = builder.Build();
 
         string output = Disassembler.Disassemble(chunk);
@@ -115,8 +114,8 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_NamedChunk_ShowsName()
     {
-        var builder = new ChunkBuilder { Name = "myFunc", Optimize = false };
-        builder.Emit(OpCode.Return);
+        var builder = new ChunkBuilder { Name = "myFunc" };
+        builder.EmitA(OpCode.Return, 0);
         Chunk chunk = builder.Build();
 
         string output = Disassembler.Disassemble(chunk);
@@ -126,11 +125,11 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_SimpleOpcodes_ShowsDotNames()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -143,11 +142,11 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_ConstInstruction_ShowsValueInline()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
         ushort idx = builder.AddConstant(42L);
-        builder.Emit(OpCode.Const, idx);
+        builder.EmitABx(OpCode.LoadK, 0, idx);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -160,11 +159,11 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_StringConstant_ShowsQuoted()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 10);
         builder.AddSourceMapping(span);
         ushort idx = builder.AddConstant("hello");
-        builder.Emit(OpCode.Const, idx);
+        builder.EmitABx(OpCode.LoadK, 0, idx);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -175,12 +174,12 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_HexOffsets_Used()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Pop);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+
+        builder.EmitA(OpCode.Return, 0);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -194,10 +193,10 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_RawHexBytes_Shown()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
-        builder.Emit(OpCode.Null); // byte value 0x01
+        builder.EmitA(OpCode.LoadNull, 0); // byte value 0x01
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -209,36 +208,36 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_JumpInstruction_ShowsLabelAndTarget()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
-        int patch = builder.EmitJump(OpCode.JumpFalse);
+        int patch = builder.EmitJump(OpCode.JmpFalse);
 
         builder.AddSourceMapping(new SourceSpan("test.stash", 2, 1, 2, 5));
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Pop);
+        builder.EmitA(OpCode.LoadNull, 0);
+
         builder.PatchJump(patch);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
 
         Assert.Contains("jmp.false", output);
-        Assert.Contains(".L0", output);
+        Assert.Contains("L0", output);
         Assert.Contains("->", output);
     }
 
     [Fact]
     public void Disassemble_LoopInstruction_ShowsBackwardTarget()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
         int loopStart = builder.CurrentOffset;
-        builder.Emit(OpCode.Null);
+        builder.EmitA(OpCode.LoadNull, 0);
 
         builder.AddSourceMapping(new SourceSpan("test.stash", 2, 1, 2, 5));
-        builder.Emit(OpCode.Pop);
-        builder.EmitLoop(loopStart);
+
+        builder.EmitLoop(0, loopStart);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -250,11 +249,11 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_SourceLineAnnotations_Shown()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
-        builder.Emit(OpCode.Null);
+        builder.EmitA(OpCode.LoadNull, 0);
         builder.AddSourceMapping(new SourceSpan("test.stash", 2, 1, 2, 5));
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.Return, 0);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -266,12 +265,12 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_ConstSection_ShowsConstants()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         var span = new SourceSpan("test.stash", 1, 1, 1, 5);
         builder.AddSourceMapping(span);
         builder.AddConstant(42L);
         builder.AddConstant("hello");
-        builder.Emit(OpCode.Null);
+        builder.EmitA(OpCode.LoadNull, 0);
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -284,20 +283,18 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_CompleteProgram_ProducesReadableOutput()
     {
-        var builder = new ChunkBuilder { Optimize = false, LocalCount = 2 };
+        var builder = new ChunkBuilder { MaxRegs = 2 };
         var line1 = new SourceSpan("test.stash", 1, 1, 1, 12);
         builder.AddSourceMapping(line1);
         ushort c42 = builder.AddConstant(42L);
-        builder.Emit(OpCode.Const, c42);
-        builder.Emit(OpCode.StoreLocal, (byte)0);
+        builder.EmitABx(OpCode.LoadK, 0, c42);  // R0 = 42
 
         var line2 = new SourceSpan("test.stash", 2, 1, 2, 16);
         builder.AddSourceMapping(line2);
-        builder.Emit(OpCode.LoadLocal, (byte)0);
         ushort c10 = builder.AddConstant(10L);
-        builder.Emit(OpCode.Const, c10);
-        builder.Emit(OpCode.Add);
-        builder.Emit(OpCode.Return);
+        builder.EmitABx(OpCode.LoadK, 1, c10);  // R1 = 10
+        builder.EmitABC(OpCode.Add, 0, 0, 1);   // R0 = R0 + R1
+        builder.EmitAB(OpCode.Return, 0, 1);    // return R0
 
         Chunk chunk = builder.Build();
         string output = Disassembler.Disassemble(chunk);
@@ -315,18 +312,17 @@ public class DisassemblerTests
     public void DisassembleAll_NestedChunks_ShowsAll()
     {
         // Build inner function chunk
-        var innerBuilder = new ChunkBuilder { Name = "inner", Arity = 1, MinArity = 1, Optimize = false };
+        var innerBuilder = new ChunkBuilder { Name = "inner", Arity = 1, MinArity = 1 };
         innerBuilder.AddSourceMapping(new SourceSpan("test.stash", 5, 1, 5, 10));
-        innerBuilder.Emit(OpCode.LoadLocal, (byte)0);
-        innerBuilder.Emit(OpCode.Return);
+        innerBuilder.EmitAB(OpCode.Return, 0, 1);  // return R0
         Chunk innerChunk = innerBuilder.Build();
 
         // Build outer chunk referencing inner
-        var outerBuilder = new ChunkBuilder { Optimize = false };
+        var outerBuilder = new ChunkBuilder();
         outerBuilder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 10));
         ushort fnIdx = outerBuilder.AddConstant(innerChunk);
-        outerBuilder.Emit(OpCode.Closure, fnIdx);
-        outerBuilder.Emit(OpCode.Return);
+        outerBuilder.EmitABx(OpCode.Closure, 0, fnIdx);
+        outerBuilder.EmitAB(OpCode.Return, 0, 1);
         Chunk outerChunk = outerBuilder.Build();
 
         string output = Disassembler.DisassembleAll(outerChunk);
@@ -339,11 +335,11 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_CompactMode_SimplerFormat()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
         builder.AddConstant(42L);
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
 
         Chunk chunk = builder.Build();
         var options = new DisassemblerOptions { Compact = true };
@@ -359,10 +355,10 @@ public class DisassemblerTests
     [Fact]
     public void Disassemble_ColorMode_ContainsAnsiCodes()
     {
-        var builder = new ChunkBuilder { Optimize = false };
+        var builder = new ChunkBuilder();
         builder.AddSourceMapping(new SourceSpan("test.stash", 1, 1, 1, 5));
-        builder.Emit(OpCode.Null);
-        builder.Emit(OpCode.Return);
+        builder.EmitA(OpCode.LoadNull, 0);
+        builder.EmitA(OpCode.Return, 0);
 
         Chunk chunk = builder.Build();
         var options = new DisassemblerOptions { Color = true };

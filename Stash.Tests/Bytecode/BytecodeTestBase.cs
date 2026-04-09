@@ -45,14 +45,14 @@ public abstract class BytecodeTestBase
         return value;
     }
 
-    protected static Chunk CompileSource(string source, bool optimize = true)
+    protected static Chunk CompileSource(string source)
     {
         var lexer = new Lexer(source, "<test>");
         List<Token> tokens = lexer.ScanTokens();
         var parser = new Parser(tokens);
         List<Stmt> stmts = parser.ParseProgram();
         SemanticResolver.Resolve(stmts);
-        return Compiler.Compile(stmts, optimize);
+        return Compiler.Compile(stmts);
     }
 
     protected static object? Execute(string source)

@@ -175,7 +175,7 @@ public class StashEngine
         try
         {
             SemanticResolver.Resolve(statements);
-            Chunk chunk = Compiler.Compile(statements, optimize: OptimizeBytecode);
+            Chunk chunk = Compiler.Compile(statements);
             var vm = EnsureVM();
             SyncVMSettings(vm);
             object? result = vm.Execute(chunk);
@@ -224,7 +224,7 @@ public class StashEngine
 
         try
         {
-            Chunk chunk = Compiler.CompileExpression(expr, optimize: OptimizeBytecode);
+            Chunk chunk = Compiler.CompileExpression(expr);
             var vm = EnsureVM();
             SyncVMSettings(vm);
             object? result = vm.Execute(chunk);
@@ -302,7 +302,7 @@ public class StashEngine
 
         try
         {
-            Chunk chunk = Compiler.Compile(script.Statements, optimize: OptimizeBytecode);
+            Chunk chunk = Compiler.Compile(script.Statements);
             var vm = EnsureVM();
             SyncVMSettings(vm);
             object? result = vm.Execute(chunk);

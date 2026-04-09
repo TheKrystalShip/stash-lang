@@ -33,9 +33,6 @@ public sealed partial class VirtualMachine
     /// </summary>
     public static readonly object NotProvided = new();
 
-    /// <summary>Sentinel value pushed by OP_ArgMark to delimit spread call arguments.</summary>
-    private static readonly object _argSentinel = new object();
-
     private StashValue[] _stack;
     private int _sp; // stack pointer: index of next free slot
 
@@ -333,6 +330,13 @@ public sealed partial class VirtualMachine
         frame.Upvalues = upvalues;
         frame.FunctionName = name;
         frame.ModuleGlobals = moduleGlobals;
+
+        // Ensure the shared stack has room for this frame's entire register window.
+        int needed = baseSlot + chunk.MaxRegs;
+        while (needed >= _stack.Length)
+            GrowStack();
+        if (needed > _sp)
+            _sp = needed;
     }
 
     // ---- Stack Operations ----
@@ -371,20 +375,6 @@ public sealed partial class VirtualMachine
     private ref StashValue Peek() => ref _stack[_sp - 1];
 
     // ---- Instruction Helpers ----
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static byte ReadByte(ref CallFrame frame) => frame.Chunk.Code[frame.IP++];
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static ushort ReadU16(ref CallFrame frame)
-    {
-        byte hi = frame.Chunk.Code[frame.IP++];
-        byte lo = frame.Chunk.Code[frame.IP++];
-        return (ushort)((hi << 8) | lo);
-    }
-
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static short ReadI16(ref CallFrame frame) => (short)ReadU16(ref frame);
 
     private SourceSpan? GetCurrentSpan(ref CallFrame frame) =>
         frame.Chunk.SourceMap.GetSpan(frame.IP > 0 ? frame.IP - 1 : 0);

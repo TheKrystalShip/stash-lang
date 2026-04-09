@@ -3,12 +3,13 @@ using System.Collections.Generic;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
-using Stash.Runtime.Types;
+using Stash.Runtime;
 
 namespace Stash.Bytecode;
 
 /// <summary>
-/// Core fields, constructor, nested types, and static compile entry points.
+/// Compiles AST nodes into register-based bytecode.
+/// Each function/lambda gets its own Compiler instance with a private CompilerScope.
 /// </summary>
 public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<object?>
 {
@@ -17,107 +18,131 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     private readonly Compiler? _enclosing;
     private readonly GlobalSlotAllocator _globalSlots;
 
-    /// <summary>
-    /// Tracks loop state for break/continue jump patching.
-    /// A <c>class</c> rather than a <c>struct</c> so that mutations via
-    /// <see cref="Stack{T}.Peek"/> are visible without re-pushing.
-    /// </summary>
+    /// <summary>Target register for the current expression being compiled.</summary>
+    private byte _destReg;
+
+    /// <summary>Loop context for break/continue patching.</summary>
     private sealed class LoopContext
     {
-        /// <summary>Bytecode offset to loop back to (used by <c>EmitLoop</c>).</summary>
         public int LoopStart;
-
-        /// <summary>
-        /// Offset that <c>continue</c> should jump to, or <c>-1</c> if the target is not yet
-        /// known (do-while condition / for-loop increment — resolved before the loop ends via
-        /// <c>ContinueJumps</c>).
-        /// </summary>
-        public int ContinueTarget;
-
-        /// <summary>Forward jump offsets emitted by <c>break</c> statements, patched on loop exit.</summary>
+        public int ContinueTarget = -1;
         public readonly List<int> BreakJumps = new();
-
-        /// <summary>
-        /// Forward jump offsets emitted by <c>continue</c> statements when
-        /// <see cref="ContinueTarget"/> is not yet known (do-while, for-loop).
-        /// Patched when the continue target is determined.
-        /// </summary>
         public readonly List<int> ContinueJumps = new();
-
-        /// <summary>Scope depth at loop entry, used by <c>EmitScopeCleanup</c>.</summary>
         public int ScopeDepth;
     }
 
     private Stack<LoopContext>? _loops;
-
     private List<FinallyInfo>? _activeFinally;
-
-    private struct FinallyInfo
-    {
-        public List<Stmt> Body;
-        public int SaveSlot;
-        public int HandlerCount;
-    }
-
-    /// <summary>Names of captured upvalues, in capture order, for debugger closure scope display.</summary>
     private List<string>? _upvalueNames;
 
-    private readonly bool _optimize;
-
-    // ---- Construction ----
-
-    private Compiler(Compiler? enclosing, string? name, GlobalSlotAllocator globalSlots, bool optimize = true)
+    /// <summary>Info about an active try-finally block for break/continue/return handling.</summary>
+    private sealed class FinallyInfo
     {
-        _optimize = optimize;
-        _builder = new ChunkBuilder { Name = name, Optimize = optimize };
-        _scope = new CompilerScope();
+        public int FinallyStart;
+        public int ScopeDepth;
+        public BlockStmt? Body;
+    }
+
+    private Compiler(Compiler? enclosing, string? functionName, GlobalSlotAllocator globalSlots)
+    {
         _enclosing = enclosing;
         _globalSlots = globalSlots;
-        _builder.GlobalSlotAllocator = globalSlots;
+        _builder = new ChunkBuilder();
+        _scope = new CompilerScope();
+        _builder.Name = functionName;
+
+        if (enclosing != null)
+            _builder.SetGlobalSlots(globalSlots);
     }
 
-    // ---- Public API ----
+    // ==================================================================
+    // Public Entry Points
+    // ==================================================================
 
-    /// <summary>
-    /// Compile a list of resolved statements into a top-level script <see cref="Chunk"/>.
-    /// </summary>
-    /// <param name="statements">The resolved program statements to compile.</param>
-    /// <returns>The compiled script chunk, ready for execution by the VM.</returns>
-    public static Chunk Compile(List<Stmt> statements, bool optimize = true)
+    /// <summary>Compile a list of statements (script body) into a Chunk.</summary>
+    public static Chunk Compile(List<Stmt> statements)
     {
         var globalSlots = new GlobalSlotAllocator();
-        var compiler = new Compiler(null, null, globalSlots, optimize);
+        var compiler = new Compiler(null, null, globalSlots);
+        compiler._builder.SetGlobalSlots(globalSlots);
+
         foreach (Stmt stmt in statements)
-        {
             compiler.CompileStmt(stmt);
-        }
+
         // Implicit return null at end of script
-        compiler._builder.Emit(OpCode.Null);
-        compiler._builder.Emit(OpCode.Return);
-        compiler._builder.LocalCount = compiler._scope.PeakLocalCount;
-        compiler._builder.LocalNames = compiler._scope.GetPeakLocalNames();
-        compiler._builder.LocalIsConst = compiler._scope.GetPeakLocalIsConst();
+        byte reg = compiler._scope.AllocTemp();
+        compiler._builder.EmitA(OpCode.LoadNull, reg);
+        compiler._builder.EmitABC(OpCode.Return, reg, 1, 0);
+        compiler._scope.FreeTemp(reg);
+
+        compiler._builder.MaxRegs = compiler._scope.MaxRegs;
+        compiler._builder.LocalNames = compiler._scope.GetLocalNames();
+        compiler._builder.LocalIsConst = compiler._scope.GetLocalIsConst();
         return compiler._builder.Build();
+    }
+
+    /// <summary>Compile a single expression into a Chunk (for eval/REPL).</summary>
+    public static Chunk CompileExpression(Expr expression)
+    {
+        var globalSlots = new GlobalSlotAllocator();
+        var compiler = new Compiler(null, null, globalSlots);
+        compiler._builder.SetGlobalSlots(globalSlots);
+
+        byte result = compiler.CompileExpr(expression);
+        compiler._builder.EmitABC(OpCode.Return, result, 1, 0);
+        compiler._scope.FreeTemp(result);
+
+        compiler._builder.MaxRegs = compiler._scope.MaxRegs;
+        compiler._builder.LocalNames = compiler._scope.GetLocalNames();
+        compiler._builder.LocalIsConst = compiler._scope.GetLocalIsConst();
+        return compiler._builder.Build();
+    }
+
+    // ==================================================================
+    // Core Compilation Methods
+    // ==================================================================
+
+    /// <summary>Compile a statement.</summary>
+    private void CompileStmt(Stmt stmt) => stmt.Accept(this);
+
+    /// <summary>
+    /// Compile an expression, allocating a temporary register for the result.
+    /// Returns the register containing the result.
+    /// The caller is responsible for freeing the temp when done.
+    /// </summary>
+    private byte CompileExpr(Expr expr)
+    {
+        byte dest = _scope.AllocTemp();
+        CompileExprTo(expr, dest);
+        return dest;
     }
 
     /// <summary>
-    /// Compiles a single expression into a Chunk that returns the expression's value.
-    /// Used by StashEngine.Evaluate() for the bytecode backend.
+    /// Compile an expression into a specific destination register.
+    /// Does not allocate or free any registers.
     /// </summary>
-    public static Chunk CompileExpression(Expr expression, bool optimize = true)
+    private void CompileExprTo(Expr expr, byte dest)
     {
-        var globalSlots = new GlobalSlotAllocator();
-        var compiler = new Compiler(null, null, globalSlots, optimize);
-        compiler.CompileExpr(expression);
-        compiler._builder.Emit(OpCode.Return);
-        compiler._builder.LocalCount = compiler._scope.PeakLocalCount;
-        compiler._builder.LocalNames = compiler._scope.GetPeakLocalNames();
-        compiler._builder.LocalIsConst = compiler._scope.GetPeakLocalIsConst();
-        return compiler._builder.Build();
+        _destReg = dest;
+        expr.Accept(this);
     }
 
-    // ---- Core Helpers ----
-
-    private void CompileStmt(Stmt stmt) => stmt.Accept(this);
-    private void CompileExpr(Expr expr) => expr.Accept(this);
+    /// <summary>Emit a constant load for a folded compile-time value.</summary>
+    private void EmitFoldedConstant(object? value, byte dest)
+    {
+        StashValue sv = StashValue.FromObject(value);
+        if (sv.IsNull)
+        {
+            _builder.EmitA(OpCode.LoadNull, dest);
+        }
+        else if (sv.IsBool)
+        {
+            _builder.EmitABC(OpCode.LoadBool, dest, sv.AsBool ? (byte)1 : (byte)0, 0);
+        }
+        else
+        {
+            ushort idx = _builder.AddConstant(sv);
+            _builder.EmitABx(OpCode.LoadK, dest, idx);
+        }
+    }
 }
