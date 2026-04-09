@@ -24,6 +24,14 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed partial class VirtualMachine
 {
+    // ── Zero-cost debug mode markers ──
+    // .NET JIT/AOT fully specializes generic methods over value-type type params.
+    // typeof(TDebugMode) == typeof(DebugOn) is a compile-time constant — the JIT
+    // eliminates the entire dead branch, producing a DebugOff specialization with
+    // zero debug code in the native instruction stream.
+    internal readonly struct DebugOn { }
+    internal readonly struct DebugOff { }
+
     private const int DefaultStackSize = 1024;
     private const int DefaultFrameDepth = 256;
 
@@ -202,7 +210,8 @@ public sealed partial class VirtualMachine
         StepCount = 0;
         _exceptionHandlers.Clear();
         _openUpvalues.Clear();
-        _debugCallStack.Clear();
+        if (_debugger is not null)
+            _debugCallStack.Clear();
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
         InitGlobalSlots(chunk);
 
@@ -225,7 +234,8 @@ public sealed partial class VirtualMachine
         StepCount = 0;
         _exceptionHandlers.Clear();
         _openUpvalues.Clear();
-        _debugCallStack.Clear();
+        if (_debugger is not null)
+            _debugCallStack.Clear();
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
         InitGlobalSlots(chunk);
 

@@ -36,7 +36,7 @@ public sealed partial class VirtualMachine
         {
             try
             {
-                return RunInner(0);
+                return RunInner<DebugOff>(0);
             }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
             {
@@ -63,12 +63,9 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private object? RunInner(int targetFrameCount = 0)
+    private object? RunInner<TDebugMode>(int targetFrameCount = 0) where TDebugMode : struct
     {
-        IDebugger? debugger = _debugger;
-        // Per-frame last-debug-line tracking prevents re-triggering a breakpoint
-        // at line N in a caller frame after returning from a callee.
-        if (debugger is not null && _lastDebugLinePerFrame is null)
+        if (typeof(TDebugMode) == typeof(DebugOn) && _lastDebugLinePerFrame is null)
         {
             _lastDebugLinePerFrame = ArrayPool<int>.Shared.Rent(DefaultFrameDepth);
             _lastDebugLinePerFrame.AsSpan(0, DefaultFrameDepth).Fill(-1);
@@ -82,8 +79,10 @@ public sealed partial class VirtualMachine
             uint inst = frame.Chunk.Code[frame.IP++];
 
             // ── Debug hook: check for breakpoints/stepping at statement boundaries ──
-            if (debugger is not null)
+            // In the DebugOff specialization, this entire block is eliminated at JIT/AOT time.
+            if (typeof(TDebugMode) == typeof(DebugOn))
             {
+                IDebugger debugger = _debugger!;
                 SourceSpan? span = frame.Chunk.SourceMap.GetSpan(frame.IP - 1);
                 if (span is not null)
                 {
@@ -248,17 +247,17 @@ public sealed partial class VirtualMachine
                         }
                     }
                     frame.IP += Instruction.GetSBx(inst);
-                    if (debugger is not null && debugger.IsPauseRequested)
+                    if (typeof(TDebugMode) == typeof(DebugOn) && _debugger!.IsPauseRequested)
                         _lastDebugLinePerFrame![_frameCount - 1] = -1;
                     break;
                 }
 
                 // ==================== Functions ====================
-                case OpCode.Call: ExecuteCall(ref frame, inst, debugger); break;
-                case OpCode.CallSpread: ExecuteCallSpread(ref frame, inst, debugger); break;
-                case OpCode.CallBuiltIn: ExecuteCallBuiltIn(ref frame, inst, debugger); break;
+                case OpCode.Call: ExecuteCall<TDebugMode>(ref frame, inst); break;
+                case OpCode.CallSpread: ExecuteCallSpread<TDebugMode>(ref frame, inst); break;
+                case OpCode.CallBuiltIn: ExecuteCallBuiltIn<TDebugMode>(ref frame, inst); break;
                 case OpCode.Return:
-                    if (ExecuteReturn(ref frame, inst, targetFrameCount, debugger, out object? retResult))
+                    if (ExecuteReturn<TDebugMode>(ref frame, inst, targetFrameCount, out object? retResult))
                         return retResult;
                     break;
                 case OpCode.Closure: ExecuteClosure(ref frame, inst); break;

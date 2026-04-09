@@ -21,7 +21,7 @@ public sealed partial class VirtualMachine
         {
             try
             {
-                return RunInner(targetFrameCount);
+                return RunInner<DebugOn>(targetFrameCount);
             }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0 && _exceptionHandlers[^1].FrameIndex >= targetFrameCount)
             {
@@ -116,7 +116,7 @@ public sealed partial class VirtualMachine
         {
             try
             {
-                return RunInner(0);
+                return RunInner<DebugOn>(0);
             }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0)
             {
@@ -175,7 +175,7 @@ public sealed partial class VirtualMachine
         {
             try
             {
-                return RunInner(targetFrameCount);
+                return RunInner<DebugOff>(targetFrameCount);
             }
             catch (RuntimeError ex) when (_exceptionHandlers.Count > 0 && _exceptionHandlers[^1].FrameIndex >= targetFrameCount)
             {

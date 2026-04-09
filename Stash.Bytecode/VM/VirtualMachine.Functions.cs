@@ -355,7 +355,7 @@ public sealed partial class VirtualMachine
         return StashValue.FromObject(result);
     }
 
-    private void ExecuteCall(ref CallFrame frame, uint inst, IDebugger? debugger)
+    private void ExecuteCall<TDebugMode>(ref CallFrame frame, uint inst) where TDebugMode : struct
     {
         byte a = Instruction.GetA(inst);
         byte argc = Instruction.GetC(inst);
@@ -616,8 +616,9 @@ public sealed partial class VirtualMachine
         if (StepLimit > 0 && ++StepCount >= StepLimit)
             throw new Stash.Runtime.StepLimitExceededException(StepLimit);
 
-        if (debugger is not null && _frameCount > prevFrameCount)
+        if (typeof(TDebugMode) == typeof(DebugOn) && _frameCount > prevFrameCount)
         {
+            IDebugger debugger = _debugger!;
             SourceSpan? callSpan = callerSourceMap.GetSpan(callerIP);
             ref CallFrame newFrame = ref _frames[_frameCount - 1];
             IDebugScope scope = BuildFrameScope(ref newFrame);
@@ -634,7 +635,7 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void ExecuteCallBuiltIn(ref CallFrame frame, uint inst, IDebugger? debugger)
+    private void ExecuteCallBuiltIn<TDebugMode>(ref CallFrame frame, uint inst) where TDebugMode : struct
     {
         byte a = Instruction.GetA(inst);
         byte b = Instruction.GetB(inst);
@@ -668,11 +669,11 @@ public sealed partial class VirtualMachine
         }
 
         // IC miss: fall back to full GetField + Call
-        ExecuteCallBuiltInSlow(ref frame, a, b, argc, icIdx, debugger);
+        ExecuteCallBuiltInSlow<TDebugMode>(ref frame, a, b, argc, icIdx);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private void ExecuteCallBuiltInSlow(ref CallFrame frame, byte a, byte b, byte argc, int icIdx, IDebugger? debugger)
+    private void ExecuteCallBuiltInSlow<TDebugMode>(ref CallFrame frame, byte a, byte b, byte argc, int icIdx) where TDebugMode : struct
     {
         int @base = frame.BaseSlot;
         ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
@@ -699,7 +700,7 @@ public sealed partial class VirtualMachine
 
         // Build a synthetic Call instruction: Call R(a), 0, argc
         uint callInst = Instruction.EncodeABC(OpCode.Call, a, 0, argc);
-        ExecuteCall(ref frame, callInst, debugger);
+        ExecuteCall<TDebugMode>(ref frame, callInst);
 
         // Populate IC if the callee is a BuiltInFunction from a frozen namespace
         if (ic.State == 0 && calleeVal.Tag == StashValueTag.Obj && calleeVal.AsObj is BuiltInFunction)
@@ -717,7 +718,7 @@ public sealed partial class VirtualMachine
         }
     }
 
-    private void ExecuteCallSpread(ref CallFrame frame, uint inst, IDebugger? debugger)
+    private void ExecuteCallSpread<TDebugMode>(ref CallFrame frame, uint inst) where TDebugMode : struct
     {
         byte a = Instruction.GetA(inst);
         byte argc = Instruction.GetB(inst);   // B = arg count (with spread markers)
@@ -773,8 +774,9 @@ public sealed partial class VirtualMachine
         if (StepLimit > 0 && ++StepCount >= StepLimit)
             throw new Stash.Runtime.StepLimitExceededException(StepLimit);
 
-        if (debugger is not null && _frameCount > prevFrameCount)
+        if (typeof(TDebugMode) == typeof(DebugOn) && _frameCount > prevFrameCount)
         {
+            IDebugger debugger = _debugger!;
             SourceSpan? callSpan = callerSourceMap.GetSpan(callerIP);
             ref CallFrame newFrame = ref _frames[_frameCount - 1];
             IDebugScope scope = BuildFrameScope(ref newFrame);
@@ -790,18 +792,18 @@ public sealed partial class VirtualMachine
         }
     }
 
-    private bool ExecuteReturn(ref CallFrame frame, uint inst, int targetFrameCount, IDebugger? debugger, out object? result)
+    private bool ExecuteReturn<TDebugMode>(ref CallFrame frame, uint inst, int targetFrameCount, out object? result) where TDebugMode : struct
     {
         byte a = Instruction.GetA(inst);
         byte b = Instruction.GetB(inst);
         StashValue retVal = b != 0 ? _stack[frame.BaseSlot + a] : StashValue.Null;
         int baseSlot = frame.BaseSlot;
 
-        if (debugger is not null && _debugCallStack.Count > 0)
+        if (typeof(TDebugMode) == typeof(DebugOn) && _debugCallStack.Count > 0)
         {
             string funcName = frame.FunctionName ?? "<anonymous>";
             _debugCallStack.RemoveAt(_debugCallStack.Count - 1);
-            debugger.OnFunctionExit(funcName, _debugThreadId);
+            _debugger!.OnFunctionExit(funcName, _debugThreadId);
         }
 
         if (frame.Chunk.MayHaveCapturedLocals)
