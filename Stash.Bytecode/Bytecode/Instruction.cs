@@ -78,4 +78,9 @@ public static class Instruction
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static uint PatchSBx(uint instruction, int newSBx)
         => PatchBx(instruction, (ushort)(newSBx + SBxBias));
+
+    /// <summary>Replace the opcode byte of an instruction, keeping all operand fields.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static uint PatchOp(uint instruction, OpCode newOp)
+        => (instruction & 0xFFFFFF00) | (uint)newOp;
 }

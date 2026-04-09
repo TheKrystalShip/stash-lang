@@ -126,6 +126,20 @@ public static class Disassembler
         [OpCode.CheckNumeric]   = "check.numeric",
         [OpCode.GetFieldIC]     = "get.field.ic",
         [OpCode.CallBuiltIn]    = "call.builtin",
+        // Quickened opcodes
+        [OpCode.AddII]          = "add.ii",
+        [OpCode.SubII]          = "sub.ii",
+        [OpCode.MulII]          = "mul.ii",
+        [OpCode.DivII]          = "div.ii",
+        [OpCode.ModII]          = "mod.ii",
+        [OpCode.LtII]           = "lt.ii",
+        [OpCode.LeII]           = "le.ii",
+        [OpCode.GtII]           = "gt.ii",
+        [OpCode.GeII]           = "ge.ii",
+        [OpCode.EqII]           = "eq.ii",
+        [OpCode.NeII]           = "ne.ii",
+        [OpCode.ForPrepII]      = "for.prep.ii",
+        [OpCode.ForLoopII]      = "for.loop.ii",
     };
 
     // ─── Instruction Format Classification ───────────────────────────────────
@@ -142,7 +156,8 @@ public static class Disassembler
 
         // AsBx (signed offset)
         OpCode.AddI or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
-            or OpCode.ForPrep or OpCode.ForLoop or OpCode.IterPrep or OpCode.IterLoop => InstrFmt.AsBx,
+            or OpCode.ForPrep or OpCode.ForLoop or OpCode.ForPrepII or OpCode.ForLoopII
+            or OpCode.IterPrep or OpCode.IterLoop => InstrFmt.AsBx,
 
         // Ax
         OpCode.TryEnd or OpCode.ElevateEnd => InstrFmt.Ax,
@@ -408,6 +423,25 @@ public static class Disassembler
             OpCode.ForLoop     => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
             OpCode.IterPrep    => $"r{a}",
             OpCode.IterLoop    => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+
+            // Quickened arithmetic
+            OpCode.AddII       => $"r{a}, r{b}, r{c}",
+            OpCode.SubII       => $"r{a}, r{b}, r{c}",
+            OpCode.MulII       => $"r{a}, r{b}, r{c}",
+            OpCode.DivII       => $"r{a}, r{b}, r{c}",
+            OpCode.ModII       => $"r{a}, r{b}, r{c}",
+
+            // Quickened comparison
+            OpCode.LtII        => $"r{a}, r{b}, r{c}",
+            OpCode.LeII        => $"r{a}, r{b}, r{c}",
+            OpCode.GtII        => $"r{a}, r{b}, r{c}",
+            OpCode.GeII        => $"r{a}, r{b}, r{c}",
+            OpCode.EqII        => $"r{a}, r{b}, r{c}",
+            OpCode.NeII        => $"r{a}, r{b}, r{c}",
+
+            // Quickened iteration
+            OpCode.ForPrepII   => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
+            OpCode.ForLoopII   => $"r{a}, {GetLabelRef(labels, idx + 1 + sbx)}",
 
             // Tables
             OpCode.GetTable    => $"r{a}, r{b}, r{c}",

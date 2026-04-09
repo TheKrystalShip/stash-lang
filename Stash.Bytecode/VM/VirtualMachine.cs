@@ -337,6 +337,13 @@ public sealed partial class VirtualMachine
             GrowStack();
         if (needed > _sp)
             _sp = needed;
+
+        // ── Quickening activation ──
+        if (chunk.QuickenCounters is null && _debugger is null)
+        {
+            if (chunk.Name is null || ++chunk.CallCount >= 2)
+                QuickenChunk(chunk);
+        }
     }
 
     // ---- Stack Operations ----
