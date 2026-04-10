@@ -324,6 +324,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         _functionDepth++;
         foreach (var method in stmt.Methods)
         {
+            DispatchNodeRules(method);
             CheckUnreachableStatements(method.Body.Statements);
             foreach (var s in method.Body.Statements)
             {
@@ -342,6 +343,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         _functionDepth++;
         foreach (var method in stmt.Methods)
         {
+            DispatchNodeRules(method);
             CheckUnreachableStatements(method.Body.Statements);
             foreach (var s in method.Body.Statements)
             {

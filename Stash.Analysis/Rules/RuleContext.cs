@@ -2,6 +2,7 @@ namespace Stash.Analysis.Rules;
 
 using System;
 using System.Collections.Generic;
+using Stash.Analysis.FlowAnalysis;
 using Stash.Parsing.AST;
 
 /// <summary>
@@ -41,4 +42,10 @@ public sealed class RuleContext
 
     /// <summary>Callback used to emit a <see cref="SemanticDiagnostic"/> from a rule.</summary>
     public Action<SemanticDiagnostic> ReportDiagnostic { get; init; } = null!;
+
+    /// <summary>
+    /// The control-flow graph for the current function body or top-level scope, or
+    /// <see langword="null"/> when CFG analysis is not available for this context.
+    /// </summary>
+    public ControlFlowGraph? Cfg { get; init; }
 }

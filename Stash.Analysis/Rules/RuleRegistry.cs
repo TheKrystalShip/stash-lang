@@ -25,6 +25,7 @@ public static class RuleRegistry
             new ReturnOutsideFunctionRule(),
             new UnreachableCodeRule(),
             new EmptyBlockRule(),
+            new UnreachableBranchRule(),
 
             // Declarations (SA02xx)
             new UnusedDeclarationRule(),
@@ -33,6 +34,8 @@ public static class RuleRegistry
             new LetCouldBeConstRule(),
             new UnusedParameterRule(),
             new ShadowVariableRule(),
+            new DeadStoreRule(),
+            new DefiniteAssignmentRule(),
 
             // Type Safety (SA03xx)
             new VariableTypeMismatchRule(),
@@ -40,11 +43,13 @@ public static class RuleRegistry
             new UnknownTypeRule(),
             new FieldTypeMismatchRule(),
             new AssignmentTypeMismatchRule(),
+            new PossibleNullAccessRule(),
 
             // Functions & Calls (SA04xx)
             new UserFunctionArityRule(),
             new BuiltInFunctionArityRule(),
             new ArgumentTypeMismatchRule(),
+            new MissingReturnRule(),
 
             // Spread / Rest (SA05xx)
             new SpreadDiagnosticsRule(),

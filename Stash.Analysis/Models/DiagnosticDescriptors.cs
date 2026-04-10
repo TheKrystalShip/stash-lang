@@ -20,6 +20,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0103 = new("SA0103", "Return outside function", DiagnosticLevel.Error, "Control flow", "'return' used outside of a function.");
     public static readonly DiagnosticDescriptor SA0104 = new("SA0104", "Unreachable code", DiagnosticLevel.Information, "Control flow", "Unreachable code detected.");
     public static readonly DiagnosticDescriptor SA0105 = new("SA0105", "Empty block body", DiagnosticLevel.Information, "Control flow", "Empty {0} body.");
+    public static readonly DiagnosticDescriptor SA0106 = new("SA0106", "Unreachable code after terminating branches", DiagnosticLevel.Information, "Control flow", "Unreachable code: all preceding branches unconditionally return or throw.");
 
     // ── SA02xx — Declarations ────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0201 = new("SA0201", "Unused declaration", DiagnosticLevel.Information, "Declarations", "{0} '{1}' is declared but never used.");
@@ -28,6 +29,8 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0205 = new("SA0205", "Variable could be constant", DiagnosticLevel.Information, "Declarations", "Variable '{0}' is never reassigned. Consider using 'const' instead of 'let'.");
     public static readonly DiagnosticDescriptor SA0206 = new("SA0206", "Unused parameter", DiagnosticLevel.Information, "Declarations", "Parameter '{0}' is declared but never used.");
     public static readonly DiagnosticDescriptor SA0207 = new("SA0207", "Shadow variable", DiagnosticLevel.Warning, "Declarations", "Variable '{0}' shadows an outer variable with the same name.");
+    public static readonly DiagnosticDescriptor SA0208 = new("SA0208", "Dead store", DiagnosticLevel.Information, "Declarations", "Dead store: value assigned to '{0}' is overwritten before being read.");
+    public static readonly DiagnosticDescriptor SA0210 = new("SA0210", "Variable used before assignment on all paths", DiagnosticLevel.Warning, "Declarations", "Variable '{0}' may be used before it is assigned on all code paths.");
 
     // ── SA03xx — Type Safety ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0301 = new("SA0301", "Variable type mismatch", DiagnosticLevel.Warning, "Type safety", "Variable '{0}' is declared as '{1}' but initialized with '{2}'.");
@@ -35,11 +38,13 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0303 = new("SA0303", "Unknown type", DiagnosticLevel.Warning, "Type safety", "Unknown type '{0}'.");
     public static readonly DiagnosticDescriptor SA0304 = new("SA0304", "Field type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to field '{1}' of type '{2}'.");
     public static readonly DiagnosticDescriptor SA0305 = new("SA0305", "Variable assignment type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to variable '{1}' of type '{2}'.");
+    public static readonly DiagnosticDescriptor SA0308 = new("SA0308", "Possible null access", DiagnosticLevel.Warning, "Type safety", "Possible null access: '{0}' may be null.");
 
     // ── SA04xx — Functions & Calls ───────────────────────────────────
     public static readonly DiagnosticDescriptor SA0401 = new("SA0401", "User function arity mismatch", DiagnosticLevel.Error, "Functions & calls", "Expected {0} arguments but got {1}.");
     public static readonly DiagnosticDescriptor SA0402 = new("SA0402", "Built-in function arity mismatch", DiagnosticLevel.Error, "Functions & calls", "Expected {0} arguments but got {1}.");
     public static readonly DiagnosticDescriptor SA0403 = new("SA0403", "Argument type mismatch", DiagnosticLevel.Warning, "Functions & calls", "Argument '{0}' expects type '{1}' but got '{2}'.");
+    public static readonly DiagnosticDescriptor SA0404 = new("SA0404", "Missing return", DiagnosticLevel.Warning, "Functions & calls", "Not all code paths return a value in function '{0}'.");
 
     // ── SA05xx — Spread / Rest ───────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0501 = new("SA0501", "Spread type mismatch (array context)", DiagnosticLevel.Warning, "Spread / Rest", "Spread argument has type '{0}', expected 'array'.");
@@ -79,20 +84,25 @@ public static class DiagnosticDescriptors
         dict[SA0103.Code] = SA0103;
         dict[SA0104.Code] = SA0104;
         dict[SA0105.Code] = SA0105;
+        dict[SA0106.Code] = SA0106;
         dict[SA0201.Code] = SA0201;
         dict[SA0202.Code] = SA0202;
         dict[SA0203.Code] = SA0203;
         dict[SA0205.Code] = SA0205;
         dict[SA0206.Code] = SA0206;
         dict[SA0207.Code] = SA0207;
+        dict[SA0208.Code] = SA0208;
+        dict[SA0210.Code] = SA0210;
         dict[SA0301.Code] = SA0301;
         dict[SA0302.Code] = SA0302;
         dict[SA0303.Code] = SA0303;
         dict[SA0304.Code] = SA0304;
         dict[SA0305.Code] = SA0305;
+        dict[SA0308.Code] = SA0308;
         dict[SA0401.Code] = SA0401;
         dict[SA0402.Code] = SA0402;
         dict[SA0403.Code] = SA0403;
+        dict[SA0404.Code] = SA0404;
         dict[SA0501.Code] = SA0501;
         dict[SA0502.Code] = SA0502;
         dict[SA0503.Code] = SA0503;
