@@ -2395,4 +2395,63 @@ public class ParserTests
         Assert.True(cmd.IsStrict);
         Assert.True(cmd.Parts.Count >= 2);
     }
+
+    // =========================================================================
+    // Switch statement
+    // =========================================================================
+
+    [Fact]
+    public void Parse_SwitchStmt_BasicCase()
+    {
+        var stmts = ParseProgram("switch (x) { case 1: { let y = 1; } }");
+        var switchStmt = Assert.IsType<SwitchStmt>(Assert.Single(stmts));
+        Assert.IsType<IdentifierExpr>(switchStmt.Subject);
+        Assert.Single(switchStmt.Cases);
+        Assert.False(switchStmt.Cases[0].IsDefault);
+        Assert.Single(switchStmt.Cases[0].Patterns);
+    }
+
+    [Fact]
+    public void Parse_SwitchStmt_MultipleCases()
+    {
+        var stmts = ParseProgram("switch (x) { case 1: { let a = 1; } case 2: { let b = 2; } }");
+        var switchStmt = Assert.IsType<SwitchStmt>(Assert.Single(stmts));
+        Assert.Equal(2, switchStmt.Cases.Count);
+    }
+
+    [Fact]
+    public void Parse_SwitchStmt_WithDefault()
+    {
+        var stmts = ParseProgram("switch (x) { case 1: { let a = 1; } default: { let b = 2; } }");
+        var switchStmt = Assert.IsType<SwitchStmt>(Assert.Single(stmts));
+        Assert.Equal(2, switchStmt.Cases.Count);
+        Assert.True(switchStmt.Cases[1].IsDefault);
+        Assert.Empty(switchStmt.Cases[1].Patterns);
+    }
+
+    [Fact]
+    public void Parse_SwitchStmt_MultiplePatterns()
+    {
+        var stmts = ParseProgram("switch (x) { case 1, 2, 3: { let a = 1; } }");
+        var switchStmt = Assert.IsType<SwitchStmt>(Assert.Single(stmts));
+        Assert.Single(switchStmt.Cases);
+        Assert.Equal(3, switchStmt.Cases[0].Patterns.Count);
+    }
+
+    [Fact]
+    public void Parse_SwitchStmt_StringPatterns()
+    {
+        var stmts = ParseProgram("switch (x) { case \"hello\": { let a = 1; } case \"world\": { let b = 2; } }");
+        var switchStmt = Assert.IsType<SwitchStmt>(Assert.Single(stmts));
+        Assert.Equal(2, switchStmt.Cases.Count);
+    }
+
+    [Fact]
+    public void Parse_SwitchStmt_OnlyDefault()
+    {
+        var stmts = ParseProgram("switch (x) { default: { let a = 1; } }");
+        var switchStmt = Assert.IsType<SwitchStmt>(Assert.Single(stmts));
+        Assert.Single(switchStmt.Cases);
+        Assert.True(switchStmt.Cases[0].IsDefault);
+    }
 }

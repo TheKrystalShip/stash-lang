@@ -767,7 +767,7 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
         TokenType.While or TokenType.Do or TokenType.Break or
         TokenType.Continue or
         TokenType.Try or TokenType.Import or TokenType.As or
-        TokenType.Retry or TokenType.Switch;
+        TokenType.Retry or TokenType.Switch or TokenType.Case or TokenType.Default;
 
     /// <summary>Returns <see langword="true"/> when <paramref name="type"/> is a punctuation token.</summary>
     private static bool IsPunctuation(TokenType type) => type is

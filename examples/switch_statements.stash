@@ -1,0 +1,309 @@
+#!/usr/bin/env stash
+
+// Switch Statements Showcase
+// Basic matching · Multiple patterns · Default case · Null/bool · vs. switch expression · Nested · Real-world
+
+// ─── 1. Basic Switch Statement ──────────────────────────────────
+
+io.println("=== 1. Basic Switch Statement ===");
+
+let status = "active";
+
+switch (status) {
+    case "active": {
+        io.println("  User is active");
+    }
+    case "inactive": {
+        io.println("  User is inactive");
+    }
+    case "banned": {
+        io.println("  User is banned");
+    }
+    default: {
+        io.println("  Unknown status");
+    }
+}
+
+io.println();
+
+// ─── 2. Numeric Matching ────────────────────────────────────────
+
+io.println("=== 2. Numeric Matching ===");
+
+let code = 404;
+
+switch (code) {
+    case 200: {
+        io.println("  200 OK");
+    }
+    case 201: {
+        io.println("  201 Created");
+    }
+    case 400: {
+        io.println("  400 Bad Request");
+    }
+    case 404: {
+        io.println("  404 Not Found");
+    }
+    case 500: {
+        io.println("  500 Internal Server Error");
+    }
+    default: {
+        io.println($"  Unrecognised HTTP status: {code}");
+    }
+}
+
+io.println();
+
+// ─── 3. Multiple Patterns per Case ──────────────────────────────
+
+io.println("=== 3. Multiple Patterns per Case ===");
+
+let day = "Saturday";
+
+switch (day) {
+    case "Monday", "Tuesday", "Wednesday", "Thursday", "Friday": {
+        io.println($"  {day} is a weekday");
+    }
+    case "Saturday", "Sunday": {
+        io.println($"  {day} is a weekend day");
+    }
+}
+
+// Multiple numeric patterns
+let priority = 2;
+
+switch (priority) {
+    case 1, 2: {
+        io.println("  High priority");
+    }
+    case 3, 4: {
+        io.println("  Medium priority");
+    }
+    case 5: {
+        io.println("  Low priority");
+    }
+    default: {
+        io.println("  Unknown priority");
+    }
+}
+
+io.println();
+
+// ─── 4. No Default — Falls Through Silently ─────────────────────
+
+io.println("=== 4. No Default Case ===");
+
+let lang = "Rust";
+
+switch (lang) {
+    case "Stash": {
+        io.println("  The best scripting language");
+    }
+    case "Python": {
+        io.println("  Great for data science");
+    }
+    case "TypeScript": {
+        io.println("  Great for the web");
+    }
+    // No default — unmatched value is silently skipped
+}
+
+io.println("  After switch (no case matched, no error)");
+
+io.println();
+
+// ─── 5. Boolean and Null Matching ───────────────────────────────
+
+io.println("=== 5. Boolean and Null Matching ===");
+
+let flag = true;
+
+switch (flag) {
+    case true: {
+        io.println("  Flag is on");
+    }
+    case false: {
+        io.println("  Flag is off");
+    }
+}
+
+let value = null;
+
+switch (value) {
+    case null: {
+        io.println("  Value is null");
+    }
+    default: {
+        io.println($"  Value is: {value}");
+    }
+}
+
+io.println();
+
+// ─── 6. Switch Statement vs. Switch Expression ──────────────────
+
+io.println("=== 6. Switch Statement vs. Switch Expression ===");
+
+let grade = "B";
+
+// Switch expression — produces a value
+let gpa = grade switch {
+    "A" => 4.0,
+    "B" => 3.0,
+    "C" => 2.0,
+    "D" => 1.0,
+    _ => 0.0
+};
+
+io.println($"  Switch expression: grade {grade} -> GPA {gpa}");
+
+// Switch statement — executes side effects in each branch
+switch (grade) {
+    case "A": {
+        io.println("  Switch statement: Excellent work!");
+    }
+    case "B": {
+        io.println("  Switch statement: Good job!");
+    }
+    case "C": {
+        io.println("  Switch statement: Satisfactory.");
+    }
+    default: {
+        io.println("  Switch statement: Needs improvement.");
+    }
+}
+
+io.println();
+
+// ─── 7. Nested Switch Statements ────────────────────────────────
+
+io.println("=== 7. Nested Switch Statements ===");
+
+let platform = "linux";
+let arch = "arm64";
+
+switch (platform) {
+    case "linux": {
+        io.println("  Platform: Linux");
+        switch (arch) {
+            case "x86_64": {
+                io.println("  Arch: x86_64 — full support");
+            }
+            case "arm64": {
+                io.println("  Arch: arm64 — full support");
+            }
+            default: {
+                io.println($"  Arch: {arch} — best-effort support");
+            }
+        }
+    }
+    case "darwin": {
+        io.println("  Platform: macOS");
+    }
+    case "windows": {
+        io.println("  Platform: Windows");
+    }
+    default: {
+        io.println($"  Platform: {platform} — unsupported");
+    }
+}
+
+io.println();
+
+// ─── 8. Variable Subject Expressions ────────────────────────────
+
+io.println("=== 8. Variable Subject Expressions ===");
+
+fn classify(n) {
+    switch (n % 3) {
+        case 0: {
+            return "divisible by 3";
+        }
+        case 1: {
+            return "remainder 1";
+        }
+        case 2: {
+            return "remainder 2";
+        }
+    }
+}
+
+io.println($"  classify(9)  -> {classify(9)}");
+io.println($"  classify(10) -> {classify(10)}");
+io.println($"  classify(11) -> {classify(11)}");
+
+io.println();
+
+// ─── 9. Real-World: HTTP Status Handler ─────────────────────────
+
+io.println("=== 9. Real-World: HTTP Status Handler ===");
+
+fn handleStatus(status) {
+    switch (status) {
+        case 200, 201, 204: {
+            io.println($"  [{status}] Success — proceeding");
+        }
+        case 301, 302, 307, 308: {
+            io.println($"  [{status}] Redirect — following location header");
+        }
+        case 400: {
+            io.println($"  [{status}] Bad Request — check your parameters");
+        }
+        case 401, 403: {
+            io.println($"  [{status}] Auth error — check credentials/permissions");
+        }
+        case 404: {
+            io.println($"  [{status}] Not Found — resource does not exist");
+        }
+        case 429: {
+            io.println($"  [{status}] Rate Limited — back off and retry");
+        }
+        case 500, 502, 503: {
+            io.println($"  [{status}] Server Error — retry with backoff");
+        }
+        default: {
+            io.println($"  [{status}] Unexpected status — inspect manually");
+        }
+    }
+}
+
+handleStatus(201);
+handleStatus(302);
+handleStatus(401);
+handleStatus(429);
+handleStatus(503);
+
+io.println();
+
+// ─── 10. Real-World: CLI Command Dispatcher ─────────────────────
+
+io.println("=== 10. Real-World: CLI Command Dispatcher ===");
+
+fn dispatch(cmd) {
+    switch (cmd) {
+        case "help", "--help", "-h": {
+            io.println("  Usage: mytool <command> [options]");
+            io.println("  Commands: build, test, deploy, clean");
+        }
+        case "build": {
+            io.println("  Building project...");
+        }
+        case "test": {
+            io.println("  Running test suite...");
+        }
+        case "deploy": {
+            io.println("  Deploying to production...");
+        }
+        case "clean": {
+            io.println("  Cleaning build artifacts...");
+        }
+        default: {
+            io.println($"  Unknown command: '{cmd}'. Run with --help for usage.");
+        }
+    }
+}
+
+dispatch("build");
+dispatch("--help");
+dispatch("unknown");

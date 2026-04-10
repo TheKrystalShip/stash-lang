@@ -706,6 +706,13 @@ public class Parser
             case TokenType.Elevate:
                 Advance();
                 return ElevateStatement();
+            case TokenType.Switch:
+                if (_tokens[_current + 1].Type == TokenType.LeftParen)
+                {
+                    Advance();
+                    return SwitchStatement();
+                }
+                return ExpressionStatement();
             case TokenType.Try:
                 if (_tokens[_current + 1].Type == TokenType.LeftBrace)
                 {
@@ -1009,6 +1016,47 @@ public class Parser
         Token keyword = Previous();
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after 'continue'.");
         return new ContinueStmt(MakeSpan(keyword.Span, semi.Span));
+    }
+
+    private Stmt SwitchStatement()
+    {
+        Token switchKeyword = Previous();
+        Consume(TokenType.LeftParen, "Expected '(' after 'switch'.");
+        Expr subject = Expression();
+        Consume(TokenType.RightParen, "Expected ')' after switch subject.");
+        Consume(TokenType.LeftBrace, "Expected '{' before switch cases.");
+        List<SwitchCase> cases = new();
+        while (!Check(TokenType.RightBrace) && !IsAtEnd)
+        {
+            if (Match(TokenType.Case))
+            {
+                Token caseKeyword = Previous();
+                List<Expr> patterns = new();
+                patterns.Add(Expression());
+                while (Match(TokenType.Comma))
+                {
+                    if (Check(TokenType.Colon))
+                        break;
+                    patterns.Add(Expression());
+                }
+                Consume(TokenType.Colon, "Expected ':' after case patterns.");
+                Stmt body = ParseBlock();
+                cases.Add(new SwitchCase(patterns, false, body, MakeSpan(caseKeyword.Span, body.Span)));
+            }
+            else if (Match(TokenType.Default))
+            {
+                Token defaultKeyword = Previous();
+                Consume(TokenType.Colon, "Expected ':' after 'default'.");
+                Stmt body = ParseBlock();
+                cases.Add(new SwitchCase(new List<Expr>(), true, body, MakeSpan(defaultKeyword.Span, body.Span)));
+            }
+            else
+            {
+                throw Error(Peek(), "Expected 'case' or 'default' in switch statement.");
+            }
+        }
+        Token close = Consume(TokenType.RightBrace, "Expected '}' after switch cases.");
+        return new SwitchStmt(subject, cases, MakeSpan(switchKeyword.Span, close.Span));
     }
 
     /// <summary>

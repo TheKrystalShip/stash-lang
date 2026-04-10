@@ -294,8 +294,14 @@ public enum TokenType
     /// <summary>The <c>as</c> keyword. Aliases an import to a namespace name.</summary>
     As,
 
-    /// <summary>The <c>switch</c> keyword. Begins a switch expression (<c>subject switch { pattern => result }</c>).</summary>
+    /// <summary>The <c>switch</c> keyword. Begins a switch expression (<c>subject switch { pattern => result }</c>) or a switch statement (<c>switch (value) { case x: { ... } }</c>).</summary>
     Switch,
+
+    /// <summary>The <c>case</c> keyword. Begins a case arm in a switch statement (<c>case 1, 2: { ... }</c>).</summary>
+    Case,
+
+    /// <summary>The <c>default</c> keyword. Begins the default arm of a switch statement, matching any value not covered by a preceding case.</summary>
+    Default,
 
     /// <summary>The <c>is</c> keyword. Tests whether a value matches a specified type.</summary>
     Is,

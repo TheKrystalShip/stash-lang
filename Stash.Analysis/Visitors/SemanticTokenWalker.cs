@@ -379,6 +379,20 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitSwitchStmt(SwitchStmt stmt)
+    {
+        stmt.Subject.Accept(this);
+        foreach (SwitchCase @case in stmt.Cases)
+        {
+            foreach (Expr pattern in @case.Patterns)
+            {
+                pattern.Accept(this);
+            }
+            @case.Body.Accept(this);
+        }
+        return 0;
+    }
+
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
         EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);

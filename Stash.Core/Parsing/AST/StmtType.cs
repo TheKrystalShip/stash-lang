@@ -28,4 +28,5 @@ public enum StmtType : byte
     Destructure,
     Elevate,
     TryCatch,
+    Switch,
 }

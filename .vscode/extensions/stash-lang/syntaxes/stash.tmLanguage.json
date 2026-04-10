@@ -293,7 +293,7 @@
       "patterns": [
         {
           "name": "keyword.control.stash",
-          "match": "\\b(if|else|while|do|for|break|continue|try|catch|finally|throw|switch|as|elevate|retry|onRetry|until)\\b"
+          "match": "\\b(if|else|while|do|for|break|continue|try|catch|finally|throw|switch|case|default|as|elevate|retry|onRetry|until)\\b"
         }
       ]
     },

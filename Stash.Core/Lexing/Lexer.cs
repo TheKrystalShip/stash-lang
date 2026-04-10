@@ -76,7 +76,7 @@ public class Lexer
     /// as a static field shared across all <see cref="Lexer"/> instances.
     /// </remarks>
     private static readonly FrozenDictionary<string, TokenType> _keywords =
-        new Dictionary<string, TokenType>(32)
+        new Dictionary<string, TokenType>(36)
         {
             ["let"] = TokenType.Let,
             ["const"] = TokenType.Const,
@@ -103,6 +103,8 @@ public class Lexer
             ["import"] = TokenType.Import,
             ["as"] = TokenType.As,
             ["switch"] = TokenType.Switch,
+            ["case"] = TokenType.Case,
+            ["default"] = TokenType.Default,
             ["is"] = TokenType.Is,
             ["async"] = TokenType.Async,
             ["await"] = TokenType.Await,

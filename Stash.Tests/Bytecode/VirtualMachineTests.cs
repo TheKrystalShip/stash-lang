@@ -1229,6 +1229,17 @@ public class VirtualMachineTests : BytecodeTestBase
     }
 
     [Fact]
+    public void Switch_DiscardArmNotLast_DoesNotFallThrough()
+    {
+        object? result = Execute("""
+            let x = null; x = 2;
+            let r = null; r = x switch { _ => "default", 2 => "two" };
+            return r;
+            """);
+        Assert.Equal("default", result);
+    }
+
+    [Fact]
     public void Switch_FirstArm()
     {
         object? result = Execute("""
@@ -3827,5 +3838,196 @@ public class VirtualMachineTests : BytecodeTestBase
         }
 
         public object? Call(IInterpreterContext context, List<object?> arguments) => _impl(context, arguments);
+    }
+
+    // =========================================================================
+    // Switch statement
+    // =========================================================================
+
+    [Fact]
+    public void SwitchStmt_MatchesFirstCase()
+    {
+        Assert.Equal("one", Execute(@"
+            switch (1) {
+                case 1: { return ""one""; }
+                case 2: { return ""two""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_MatchesSecondCase()
+    {
+        Assert.Equal("two", Execute(@"
+            switch (2) {
+                case 1: { return ""one""; }
+                case 2: { return ""two""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_DefaultCase()
+    {
+        Assert.Equal("default", Execute(@"
+            switch (99) {
+                case 1: { return ""one""; }
+                default: { return ""default""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_MultiplePatterns()
+    {
+        Assert.Equal("match", Execute(@"
+            switch (2) {
+                case 1, 2, 3: { return ""match""; }
+                default: { return ""no match""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_MultiplePatterns_ThirdMatch()
+    {
+        Assert.Equal("match", Execute(@"
+            switch (3) {
+                case 1, 2, 3: { return ""match""; }
+                default: { return ""no match""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_NoMatchNoDefault_FallsThrough()
+    {
+        Assert.Equal("after", Execute(@"
+            switch (99) {
+                case 1: { return ""one""; }
+            }
+            return ""after"";
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_StringSubject()
+    {
+        Assert.Equal("hello", Execute(@"
+            switch (""hi"") {
+                case ""hi"": { return ""hello""; }
+                case ""bye"": { return ""goodbye""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_BoolSubject()
+    {
+        Assert.Equal("yes", Execute(@"
+            switch (true) {
+                case true: { return ""yes""; }
+                case false: { return ""no""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_NullSubject()
+    {
+        Assert.Equal("null", Execute(@"
+            switch (null) {
+                case null: { return ""null""; }
+                default: { return ""not null""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_VariableSubject()
+    {
+        Assert.Equal("two", Execute(@"
+            let x = 2;
+            switch (x) {
+                case 1: { return ""one""; }
+                case 2: { return ""two""; }
+                case 3: { return ""three""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_SideEffects_OnlyMatchedCaseRuns()
+    {
+        Assert.Equal("b", Execute(@"
+            let r = ""a"";
+            switch (2) {
+                case 1: { r = ""x""; }
+                case 2: { r = ""b""; }
+                case 3: { r = ""c""; }
+            }
+            return r;
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_FirstMatchWins()
+    {
+        Assert.Equal("first", Execute(@"
+            switch (1) {
+                case 1: { return ""first""; }
+                case 1: { return ""second""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_DefaultOnly()
+    {
+        Assert.Equal("default", Execute(@"
+            switch (42) {
+                default: { return ""default""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_ExpressionSubject()
+    {
+        Assert.Equal("three", Execute(@"
+            switch (1 + 2) {
+                case 3: { return ""three""; }
+                default: { return ""other""; }
+            }
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_NestedSwitch()
+    {
+        Assert.Equal("inner", Execute(@"
+            switch (1) {
+                case 1: {
+                    switch (2) {
+                        case 2: { return ""inner""; }
+                    }
+                }
+            }
+            return ""none"";
+        "));
+    }
+
+    [Fact]
+    public void SwitchStmt_DefaultNotLast_OnlyDefaultRuns()
+    {
+        Assert.Equal("default", Execute(@"
+            let r = """";
+            switch (2) {
+                case 1: { r = ""one""; }
+                default: { r = ""default""; }
+                case 2: { r = ""two""; }
+            }
+            return r;
+        "));
     }
 }

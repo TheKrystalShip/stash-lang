@@ -1,36 +1,21 @@
 #!/usr/bin/env stash
 
 const HOME_DIR: string = env.get("HOME");
-
 const RUNTIME: string = "linux-x64";
-
 const LSP_SOURCE: string = $"./Stash.Lsp/bin/Release/net10.0/{RUNTIME}/publish/StashLsp";
-
 const LSP_DEST: string = $"{HOME_DIR}/.local/bin/stash-lsp";
-
 const DAP_SOURCE: string = $"./Stash.Dap/bin/Release/net10.0/{RUNTIME}/publish/StashDap";
-
 const DAP_DEST: string = $"{HOME_DIR}/.local/bin/stash-dap";
-
 const INTERPRETER_SOURCE: string = $"./Stash.Cli/bin/Release/net10.0/{RUNTIME}/publish/Stash";
-
 const INTERPRETER_DEST: string = $"{HOME_DIR}/.local/bin/stash";
-
 const REGISTRY_SOURCE: string = $"./Stash.Registry/bin/Release/net10.0/{RUNTIME}/publish/StashRegistry";
-
 const REGISTRY_DEST: string = $"{HOME_DIR}/.local/bin/stash-registry";
-
 const CHECK_SOURCE: string = $"./Stash.Check/bin/Release/net10.0/{RUNTIME}/publish/StashCheck";
-
 const CHECK_DEST: string = $"{HOME_DIR}/.local/bin/stash-check";
-
 const FORMAT_SOURCE: string = $"./Stash.Format/bin/Release/net10.0/{RUNTIME}/publish/StashFormat";
-
 const FORMAT_DEST: string = $"{HOME_DIR}/.local/bin/stash-format";
-
 const VSCODE_EXTENSION_BUILD_SCRIPT: string = "./.vscode/extensions/stash-lang/build.stash";
-
-let artifacts: dict = dict.new();
+const artifacts: dict = dict.new();
 artifacts[$"{INTERPRETER_SOURCE}"] = $"{INTERPRETER_DEST}";
 artifacts[$"{LSP_SOURCE}"] = $"{LSP_DEST}";
 artifacts[$"{DAP_SOURCE}"] = $"{DAP_DEST}";
@@ -39,17 +24,11 @@ artifacts[$"{CHECK_SOURCE}"] = $"{CHECK_DEST}";
 artifacts[$"{FORMAT_SOURCE}"] = $"{FORMAT_DEST}";
 
 fn cleanBuildStash() {
-
   // Clean solution and build all projects
   io.println("Cleaning and building the project...");
-  let result: CommandResult = $(dotnet clean);
-  if (result.exitCode != 0) {
-    io.println($"Clean failed:\n{result.stderr}");
-    process.exit(1);
-  }
+  $!>(dotnet clean);
   io.println("Clean complete. Starting build...");
-
-  $>(dotnet publish -c Release -r ${RUNTIME} --self-contained);
+  $!>(dotnet publish -c Release -r ${RUNTIME} --self-contained);
   io.println("Build complete.");
 }
 
@@ -62,8 +41,7 @@ fn deploy() {
     }
     if (fs.exists(dest)) {
       try fs.delete(dest);
-
-      // unlink old binary (process keeps running fine)
+    // unlink old binary (process keeps running fine)
     }
     fs.copy(source, dest);
     io.println($"Copied {source} to {dest}");
@@ -74,7 +52,7 @@ fn deploy() {
 fn buildExtension() {
   // Build the VSCode extension
   io.println("Building VSCode extension...");
-  let result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
+  const result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
     return $(${path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});
   });
   if (result.exitCode != 0) {

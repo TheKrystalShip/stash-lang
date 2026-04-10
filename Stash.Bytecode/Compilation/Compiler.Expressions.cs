@@ -516,6 +516,7 @@ partial class Compiler
             {
                 hasDefault = true;
                 CompileExprTo(arm.Body, dest);
+                endJumps.Add(_builder.EmitJump(OpCode.Jmp));
             }
             else
             {

@@ -449,4 +449,81 @@ public sealed partial class Compiler
 
         return null;
     }
+
+    /// <inheritdoc />
+    public object? VisitSwitchStmt(SwitchStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+        byte subjectReg = CompileExpr(stmt.Subject);
+        var endJumps = new List<int>();
+
+        foreach (SwitchCase @case in stmt.Cases)
+        {
+            if (@case.IsDefault)
+            {
+                CompileStmt(@case.Body);
+                endJumps.Add(_builder.EmitJump(OpCode.Jmp));
+            }
+            else if (@case.Patterns.Count == 1)
+            {
+                // Single pattern: compare and jump past body if no match
+                byte patReg = CompileExpr(@case.Patterns[0]);
+                byte cmpReg = _scope.AllocTemp();
+                _builder.EmitABC(OpCode.Eq, cmpReg, subjectReg, patReg);
+                int nextCase = _builder.EmitJump(OpCode.JmpFalse, cmpReg);
+                _scope.FreeTemp(cmpReg);
+                _scope.FreeTemp(patReg);
+
+                CompileStmt(@case.Body);
+                endJumps.Add(_builder.EmitJump(OpCode.Jmp));
+                _builder.PatchJump(nextCase);
+            }
+            else
+            {
+                // Multiple patterns: try each in order; jump to body on first match
+                var bodyJumps = new List<int>();
+                int nextCaseJump = -1;
+
+                for (int i = 0; i < @case.Patterns.Count; i++)
+                {
+                    byte patReg = CompileExpr(@case.Patterns[i]);
+                    byte cmpReg = _scope.AllocTemp();
+                    _builder.EmitABC(OpCode.Eq, cmpReg, subjectReg, patReg);
+
+                    if (i < @case.Patterns.Count - 1)
+                    {
+                        // Not the last pattern — if no match, try next; if match, jump to body
+                        int tryNext = _builder.EmitJump(OpCode.JmpFalse, cmpReg);
+                        _scope.FreeTemp(cmpReg);
+                        _scope.FreeTemp(patReg);
+                        bodyJumps.Add(_builder.EmitJump(OpCode.Jmp)); // matched — go to body
+                        _builder.PatchJump(tryNext);
+                    }
+                    else
+                    {
+                        // Last pattern — if no match, skip to next case
+                        nextCaseJump = _builder.EmitJump(OpCode.JmpFalse, cmpReg);
+                        _scope.FreeTemp(cmpReg);
+                        _scope.FreeTemp(patReg);
+                    }
+                }
+
+                // Patch all "matched" jumps from earlier patterns to land here (body start)
+                foreach (int j in bodyJumps)
+                    _builder.PatchJump(j);
+
+                CompileStmt(@case.Body);
+                endJumps.Add(_builder.EmitJump(OpCode.Jmp));
+
+                if (nextCaseJump >= 0)
+                    _builder.PatchJump(nextCaseJump);
+            }
+        }
+
+        foreach (int j in endJumps)
+            _builder.PatchJump(j);
+
+        _scope.FreeTemp(subjectReg);
+        return null;
+    }
 }

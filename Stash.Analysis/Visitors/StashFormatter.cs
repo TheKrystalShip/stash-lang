@@ -823,6 +823,50 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitSwitchStmt(SwitchStmt stmt)
+    {
+        EmitToken(); // switch
+        Space();
+        EmitToken(); // (
+        stmt.Subject.Accept(this);
+        EmitToken(); // )
+        Space();
+        EmitToken(); // {
+        _indent++;
+        int mark = Mark();
+        foreach (SwitchCase @case in stmt.Cases)
+        {
+            NewLine();
+            if (@case.IsDefault)
+            {
+                EmitToken(); // default
+            }
+            else
+            {
+                EmitToken(); // case
+                Space();
+                for (int i = 0; i < @case.Patterns.Count; i++)
+                {
+                    @case.Patterns[i].Accept(this);
+                    if (i < @case.Patterns.Count - 1)
+                    {
+                        EmitToken(); // ,
+                        Space();
+                    }
+                }
+            }
+            Space();
+            EmitToken(); // :
+            Space();
+            @case.Body.Accept(this);
+        }
+        WrapFrom(mark, Doc.Indent);
+        _indent--;
+        NewLine();
+        EmitToken(); // }
+        return 0;
+    }
+
     public int VisitBreakStmt(BreakStmt stmt)
     {
         EmitToken(); // break

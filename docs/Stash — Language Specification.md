@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -3008,6 +3008,88 @@ let x = val switch {
 ### Implementation
 
 A switch expression is parsed as a **postfix operator** on the subject expression, at the same precedence level as `.` (member access), `()` (calls), and `[]` (indexing). The parser produces a `SwitchExpr` AST node containing the subject and a list of `SwitchArm` entries. At runtime, the interpreter evaluates the subject, walks the arms in order, and returns the body of the first arm whose pattern equals the subject.
+
+---
+
+## 7e. Switch Statements
+
+The switch **statement** provides multi-branch control flow for executing blocks of code based on a value. Unlike the switch expression (which returns a value), the switch statement executes statements in the matched case.
+
+### Syntax
+
+```stash
+switch (subject) {
+    case pattern1: {
+        // statements
+    }
+    case pattern2, pattern3: {
+        // multiple patterns - matches any
+    }
+    default: {
+        // optional default case
+    }
+}
+```
+
+### Semantics
+
+1. The subject expression is evaluated **once**.
+2. Cases are tested **in order** — the first matching case wins.
+3. Patterns use **value equality** (`==` semantics, no type coercion).
+4. Only the matched case body executes (no fallthrough).
+5. Each case requires a block body `{ ... }`.
+6. Multiple patterns per case are separated by commas — any match triggers the case.
+7. A `default` case matches any value not covered by preceding cases.
+8. If no case matches and there is no `default`, execution continues after the switch.
+
+### Examples
+
+```stash
+// Basic switch statement
+let status = "active";
+switch (status) {
+    case "active": {
+        io.println("User is active");
+    }
+    case "inactive": {
+        io.println("User is inactive");
+    }
+    default: {
+        io.println("Unknown status");
+    }
+}
+```
+
+```stash
+// Multiple patterns per case
+let day = "Saturday";
+switch (day) {
+    case "Monday", "Tuesday", "Wednesday", "Thursday", "Friday": {
+        io.println("Weekday");
+    }
+    case "Saturday", "Sunday": {
+        io.println("Weekend");
+    }
+}
+```
+
+```stash
+// Switch with numeric values
+let code = 404;
+switch (code) {
+    case 200: {
+        io.println("OK");
+    }
+    case 404: {
+        io.println("Not Found");
+    }
+    case 500: {
+        io.println("Server Error");
+    }
+}
+```
+
+> **Switch statement vs. switch expression:** Use the switch statement (`switch (x) { case ... }`) when you need to execute statements in each branch. Use the switch expression (`x switch { ... => ... }`) when you need to produce a value.
 
 ---
 

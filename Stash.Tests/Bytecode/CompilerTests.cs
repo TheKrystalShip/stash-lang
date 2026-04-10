@@ -985,4 +985,24 @@ public class CompilerTests : BytecodeTestBase
         var ex = Record.Exception(() => CompileSource("fn foo() { let a = [1]; a[0]++; }"));
         Assert.Null(ex);
     }
+
+    // =========================================================================
+    // Switch statement
+    // =========================================================================
+
+    [Fact]
+    public void SwitchStmt_EmitsEqAndJumps()
+    {
+        string disasm = Disassemble("switch (1) { case 1: { let x = 1; } case 2: { let y = 2; } }");
+        Assert.Contains("eq", disasm);
+        Assert.True(disasm.Contains("jmp.false") || disasm.Contains("jmp.eq.false"));
+    }
+
+    [Fact]
+    public void SwitchStmt_WithDefault_EmitsJump()
+    {
+        string disasm = Disassemble("switch (1) { case 1: { let x = 1; } default: { let y = 2; } }");
+        Assert.Contains("eq", disasm);
+        Assert.Contains("jmp", disasm);
+    }
 }

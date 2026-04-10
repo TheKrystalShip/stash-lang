@@ -401,6 +401,21 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitSwitchStmt(SwitchStmt stmt)
+    {
+        DispatchNodeRules(stmt);
+        stmt.Subject.Accept(this);
+        foreach (SwitchCase @case in stmt.Cases)
+        {
+            foreach (Expr pattern in @case.Patterns)
+            {
+                pattern.Accept(this);
+            }
+            @case.Body.Accept(this);
+        }
+        return null;
+    }
+
     public object? VisitExprStmt(ExprStmt stmt)
     {
         stmt.Expression.Accept(this);

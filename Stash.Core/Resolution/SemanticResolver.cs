@@ -341,6 +341,20 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
+    public object? VisitSwitchStmt(SwitchStmt stmt)
+    {
+        ResolveExpr(stmt.Subject);
+        foreach (SwitchCase @case in stmt.Cases)
+        {
+            foreach (Expr pattern in @case.Patterns)
+            {
+                ResolveExpr(pattern);
+            }
+            ResolveStmt(@case.Body);
+        }
+        return null;
+    }
+
     public object? VisitImportStmt(ImportStmt stmt)
     {
         ResolveExpr(stmt.Path);

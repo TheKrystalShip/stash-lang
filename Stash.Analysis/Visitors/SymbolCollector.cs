@@ -854,6 +854,20 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitSwitchStmt(SwitchStmt stmt)
+    {
+        stmt.Subject.Accept(this);
+        foreach (SwitchCase @case in stmt.Cases)
+        {
+            foreach (Expr pattern in @case.Patterns)
+            {
+                pattern.Accept(this);
+            }
+            @case.Body.Accept(this);
+        }
+        return null;
+    }
+
     /// <summary>No-op — <c>break</c> introduces no symbols.</summary>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitBreakStmt(BreakStmt stmt) => null;

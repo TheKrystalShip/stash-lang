@@ -127,4 +127,9 @@ public interface IStmtVisitor<T>
     /// Visits a <see cref="TryCatchStmt"/> node (<c>try { ... } catch(e) { ... } finally { ... }</c>).
     /// </summary>
     T VisitTryCatchStmt(TryCatchStmt stmt);
+
+    /// <summary>
+    /// Visits a <see cref="SwitchStmt"/> node (<c>switch (value) { case x: { ... } default: { ... } }</c>).
+    /// </summary>
+    T VisitSwitchStmt(SwitchStmt stmt);
 }
