@@ -4,6 +4,14 @@ using Stash.Common;
 namespace Stash.Analysis;
 
 /// <summary>
+/// A secondary source location referenced by a <see cref="SemanticDiagnostic"/>, such as
+/// the declaration site that conflicts with the primary diagnostic location.
+/// </summary>
+/// <param name="Message">Human-readable description of the relationship.</param>
+/// <param name="Span">The related source location.</param>
+public record RelatedLocation(string Message, SourceSpan Span);
+
+/// <summary>
 /// Represents a single diagnostic message produced by <see cref="SemanticValidator"/>,
 /// carrying a stable code, message text, severity, source location, and an optional
 /// "unnecessary code" flag.
@@ -36,10 +44,22 @@ public class SemanticDiagnostic
     public bool IsUnnecessary { get; }
 
     /// <summary>
+    /// Gets whether this diagnostic marks a deprecated API usage. When <see langword="true"/>
+    /// the LSP client may apply a strikethrough style in addition to the normal decoration.
+    /// </summary>
+    public bool IsDeprecated { get; init; }
+
+    /// <summary>
     /// Gets the list of automated code fixes available for this diagnostic.
     /// Empty when no fix is available.
     /// </summary>
     public IReadOnlyList<CodeFix> Fixes { get; init; } = [];
+
+    /// <summary>
+    /// Gets the list of related source locations for this diagnostic (e.g. conflicting declaration sites).
+    /// Empty when no related locations exist.
+    /// </summary>
+    public IReadOnlyList<RelatedLocation> RelatedLocations { get; init; } = [];
 
     /// <summary>
     /// Initializes a new <see cref="SemanticDiagnostic"/> with a stable diagnostic code.

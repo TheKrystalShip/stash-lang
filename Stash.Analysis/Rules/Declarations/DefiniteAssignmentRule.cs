@@ -149,6 +149,12 @@ public sealed class DefiniteAssignmentRule : IAnalysisRule
                 var doBodyAssigned = new HashSet<string>(definitelyAssigned);
                 AnalyzeBlock(doWhile.Body.Statements, doBodyAssigned, context);
                 CheckReadsInExpr(doWhile.Condition, uninitInBlock, context);
+                // Propagate assignments: do-while body runs at least once
+                foreach (var name in doBodyAssigned)
+                {
+                    definitelyAssigned.Add(name);
+                    uninitInBlock.Remove(name);
+                }
                 break;
 
             case ForStmt forStmt:

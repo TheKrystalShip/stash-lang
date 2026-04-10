@@ -21,15 +21,17 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0104 = new("SA0104", "Unreachable code", DiagnosticLevel.Information, "Control flow", "Unreachable code detected.");
     public static readonly DiagnosticDescriptor SA0105 = new("SA0105", "Empty block body", DiagnosticLevel.Information, "Control flow", "Empty {0} body.");
     public static readonly DiagnosticDescriptor SA0106 = new("SA0106", "Unreachable code after terminating branches", DiagnosticLevel.Information, "Control flow", "Unreachable code: all preceding branches unconditionally return or throw.");
+    public static readonly DiagnosticDescriptor SA0109 = new("SA0109", "Cyclomatic complexity too high", DiagnosticLevel.Information, "Control flow", "Cyclomatic complexity of function '{0}' is {1}, exceeds threshold of {2}.");
 
     // ── SA02xx — Declarations ────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0201 = new("SA0201", "Unused declaration", DiagnosticLevel.Information, "Declarations", "{0} '{1}' is declared but never used.");
     public static readonly DiagnosticDescriptor SA0202 = new("SA0202", "Undefined identifier", DiagnosticLevel.Warning, "Declarations", "'{0}' is not defined.");
-    public static readonly DiagnosticDescriptor SA0203 = new("SA0203", "Constant reassignment", DiagnosticLevel.Error, "Declarations", "Cannot reassign constant '{0}'.");
-    public static readonly DiagnosticDescriptor SA0205 = new("SA0205", "Variable could be constant", DiagnosticLevel.Information, "Declarations", "Variable '{0}' is never reassigned. Consider using 'const' instead of 'let'.");
+    public static readonly DiagnosticDescriptor SA0203 = new("SA0203", "Constant reassignment", DiagnosticLevel.Error, "Declarations", "Cannot reassign constant '{0}'.", FixApplicability.Unsafe);
+    public static readonly DiagnosticDescriptor SA0205 = new("SA0205", "Variable could be constant", DiagnosticLevel.Information, "Declarations", "Variable '{0}' is never reassigned. Consider using 'const' instead of 'let'.", FixApplicability.Safe);
     public static readonly DiagnosticDescriptor SA0206 = new("SA0206", "Unused parameter", DiagnosticLevel.Information, "Declarations", "Parameter '{0}' is declared but never used.");
     public static readonly DiagnosticDescriptor SA0207 = new("SA0207", "Shadow variable", DiagnosticLevel.Warning, "Declarations", "Variable '{0}' shadows an outer variable with the same name.");
     public static readonly DiagnosticDescriptor SA0208 = new("SA0208", "Dead store", DiagnosticLevel.Information, "Declarations", "Dead store: value assigned to '{0}' is overwritten before being read.");
+    public static readonly DiagnosticDescriptor SA0209 = new("SA0209", "Naming convention violation", DiagnosticLevel.Information, "Declarations", "Name '{0}' does not follow {1} convention.");
     public static readonly DiagnosticDescriptor SA0210 = new("SA0210", "Variable used before assignment on all paths", DiagnosticLevel.Warning, "Declarations", "Variable '{0}' may be used before it is assigned on all code paths.");
 
     // ── SA03xx — Type Safety ─────────────────────────────────────────
@@ -39,12 +41,14 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0304 = new("SA0304", "Field type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to field '{1}' of type '{2}'.");
     public static readonly DiagnosticDescriptor SA0305 = new("SA0305", "Variable assignment type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to variable '{1}' of type '{2}'.");
     public static readonly DiagnosticDescriptor SA0308 = new("SA0308", "Possible null access", DiagnosticLevel.Warning, "Type safety", "Possible null access: '{0}' may be null.");
+    public static readonly DiagnosticDescriptor SA0310 = new("SA0310", "Non-exhaustive switch on enum", DiagnosticLevel.Warning, "Type safety", "Switch on enum '{0}' does not cover all variants. Missing: {1}.");
 
     // ── SA04xx — Functions & Calls ───────────────────────────────────
     public static readonly DiagnosticDescriptor SA0401 = new("SA0401", "User function arity mismatch", DiagnosticLevel.Error, "Functions & calls", "Expected {0} arguments but got {1}.");
     public static readonly DiagnosticDescriptor SA0402 = new("SA0402", "Built-in function arity mismatch", DiagnosticLevel.Error, "Functions & calls", "Expected {0} arguments but got {1}.");
     public static readonly DiagnosticDescriptor SA0403 = new("SA0403", "Argument type mismatch", DiagnosticLevel.Warning, "Functions & calls", "Argument '{0}' expects type '{1}' but got '{2}'.");
     public static readonly DiagnosticDescriptor SA0404 = new("SA0404", "Missing return", DiagnosticLevel.Warning, "Functions & calls", "Not all code paths return a value in function '{0}'.");
+    public static readonly DiagnosticDescriptor SA0405 = new("SA0405", "Too many parameters", DiagnosticLevel.Information, "Functions & calls", "Function '{0}' has {1} parameters, exceeds threshold of {2}.");
 
     // ── SA05xx — Spread / Rest ───────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0501 = new("SA0501", "Spread type mismatch (array context)", DiagnosticLevel.Warning, "Spread / Rest", "Spread argument has type '{0}', expected 'array'.");
@@ -66,7 +70,9 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0709 = new("SA0709", "Retry no throwable operations", DiagnosticLevel.Information, "Commands", "Retry body contains no operations that can throw. The retry block will always succeed on the first attempt.");
 
     // ── SA08xx — Imports ─────────────────────────────────────────────
-    public static readonly DiagnosticDescriptor SA0801 = new("SA0801", "Dynamic import path", DiagnosticLevel.Information, "Imports", "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.");    public static readonly DiagnosticDescriptor SA0802 = new("SA0802", "Unused import", DiagnosticLevel.Warning, "Imports", "Import '{0}' is never used.", FixApplicability.Safe);
+    public static readonly DiagnosticDescriptor SA0801 = new("SA0801", "Dynamic import path", DiagnosticLevel.Information, "Imports", "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.");
+    public static readonly DiagnosticDescriptor SA0802 = new("SA0802", "Unused import", DiagnosticLevel.Warning, "Imports", "Import '{0}' is never used.", FixApplicability.Safe);
+    public static readonly DiagnosticDescriptor SA0804 = new("SA0804", "Import statements not in canonical order", DiagnosticLevel.Information, "Imports", "Import statements are not in canonical order.", FixApplicability.Safe);
     /// <summary>
     /// Lookup table from code string to descriptor for suppression validation.
     /// </summary>
@@ -85,6 +91,7 @@ public static class DiagnosticDescriptors
         dict[SA0104.Code] = SA0104;
         dict[SA0105.Code] = SA0105;
         dict[SA0106.Code] = SA0106;
+        dict[SA0109.Code] = SA0109;
         dict[SA0201.Code] = SA0201;
         dict[SA0202.Code] = SA0202;
         dict[SA0203.Code] = SA0203;
@@ -92,6 +99,7 @@ public static class DiagnosticDescriptors
         dict[SA0206.Code] = SA0206;
         dict[SA0207.Code] = SA0207;
         dict[SA0208.Code] = SA0208;
+        dict[SA0209.Code] = SA0209;
         dict[SA0210.Code] = SA0210;
         dict[SA0301.Code] = SA0301;
         dict[SA0302.Code] = SA0302;
@@ -99,10 +107,12 @@ public static class DiagnosticDescriptors
         dict[SA0304.Code] = SA0304;
         dict[SA0305.Code] = SA0305;
         dict[SA0308.Code] = SA0308;
+        dict[SA0310.Code] = SA0310;
         dict[SA0401.Code] = SA0401;
         dict[SA0402.Code] = SA0402;
         dict[SA0403.Code] = SA0403;
         dict[SA0404.Code] = SA0404;
+        dict[SA0405.Code] = SA0405;
         dict[SA0501.Code] = SA0501;
         dict[SA0502.Code] = SA0502;
         dict[SA0503.Code] = SA0503;
@@ -120,6 +130,7 @@ public static class DiagnosticDescriptors
         dict[SA0709.Code] = SA0709;
         dict[SA0801.Code] = SA0801;
         dict[SA0802.Code] = SA0802;
+        dict[SA0804.Code] = SA0804;
         return dict.ToFrozenDictionary();
     }
 }

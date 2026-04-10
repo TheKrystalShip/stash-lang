@@ -2,6 +2,7 @@ namespace Stash.Check;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -11,6 +12,12 @@ using Stash.Analysis;
 internal sealed class CheckRunner
 {
     private readonly CheckOptions _options;
+
+    /// <summary>
+    /// Timing data from the most recent <see cref="Run"/> call, or an empty list if not yet run
+    /// or timing was not enabled.
+    /// </summary>
+    public List<(string Pass, double Ms)> LastTiming { get; private set; } = new();
 
     public CheckRunner(CheckOptions options)
     {
@@ -23,12 +30,21 @@ internal sealed class CheckRunner
         if (_options.Paths.Contains("-"))
             return RunStdin();
 
+        var timing = new List<(string Pass, double Ms)>();
+        var totalSw = Stopwatch.StartNew();
+
+        var discoverSw = Stopwatch.StartNew();
         var files = DiscoverFiles();
+        discoverSw.Stop();
+        timing.Add(("FileDiscovery", discoverSw.Elapsed.TotalMilliseconds));
+
         var engine = new AnalysisEngine(NullLogger<AnalysisEngine>.Instance);
         var results = new List<FileResult>();
 
         // Cache ProjectConfig per directory (hierarchical load is expensive)
         var configCache = new Dictionary<string, ProjectConfig>(StringComparer.Ordinal);
+
+        double readMs = 0, analyzeMs = 0;
 
         foreach (string filePath in files)
         {
@@ -37,7 +53,10 @@ internal sealed class CheckRunner
             string source;
             try
             {
+                var readSw = Stopwatch.StartNew();
                 source = File.ReadAllText(absolutePath);
+                readSw.Stop();
+                readMs += readSw.Elapsed.TotalMilliseconds;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
@@ -54,9 +73,19 @@ internal sealed class CheckRunner
                 configCache[cacheKey] = config;
             }
 
+            var analyzeSw = Stopwatch.StartNew();
             var analysis = engine.Analyze(uri, source, _options.NoImports, config);
+            analyzeSw.Stop();
+            analyzeMs += analyzeSw.Elapsed.TotalMilliseconds;
+
             results.Add(new FileResult(uri, analysis));
         }
+
+        totalSw.Stop();
+        timing.Add(("FileRead", readMs));
+        timing.Add(("Analysis", analyzeMs));
+        timing.Add(("Total", totalSw.Elapsed.TotalMilliseconds));
+        LastTiming = timing;
 
         return new CheckResult(results);
     }

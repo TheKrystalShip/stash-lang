@@ -1,5 +1,6 @@
 namespace Stash.Analysis;
 
+using System.Collections.Generic;
 using Stash.Common;
 
 /// <summary>
@@ -78,6 +79,28 @@ public sealed class DiagnosticDescriptor
         return new SemanticDiagnostic(Code, FormatMessage(args), DefaultLevel, span, isUnnecessary: true)
         {
             Fixes = [fix]
+        };
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SemanticDiagnostic"/> with related locations from this descriptor.
+    /// </summary>
+    public SemanticDiagnostic CreateDiagnosticWithRelated(SourceSpan span, IReadOnlyList<RelatedLocation> relatedLocations, params object[] args)
+    {
+        return new SemanticDiagnostic(Code, FormatMessage(args), DefaultLevel, span)
+        {
+            RelatedLocations = relatedLocations
+        };
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SemanticDiagnostic"/> tagged as deprecated from this descriptor.
+    /// </summary>
+    public SemanticDiagnostic CreateDeprecatedDiagnostic(SourceSpan span, params object[] args)
+    {
+        return new SemanticDiagnostic(Code, FormatMessage(args), DefaultLevel, span)
+        {
+            IsDeprecated = true
         };
     }
 }

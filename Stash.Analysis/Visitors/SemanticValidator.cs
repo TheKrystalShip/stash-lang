@@ -355,7 +355,11 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
-    public object? VisitEnumDeclStmt(EnumDeclStmt stmt) => null;
+    public object? VisitEnumDeclStmt(EnumDeclStmt stmt)
+    {
+        DispatchNodeRules(stmt);
+        return null;
+    }
 
     public object? VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
@@ -466,6 +470,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitSwitchExpr(SwitchExpr expr)
     {
+        DispatchNodeRules(expr);
         expr.Subject.Accept(this);
         foreach (var arm in expr.Arms)
         {

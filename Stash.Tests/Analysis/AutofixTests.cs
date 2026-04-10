@@ -51,6 +51,20 @@ public class AutofixTests : AnalysisTestBase
         Assert.Equal(FixApplicability.Safe, DiagnosticDescriptors.SA0802.DefaultFixApplicability);
     }
 
+    [Fact]
+    public void DiagnosticDescriptor_SA0205_IsFixable()
+    {
+        Assert.True(DiagnosticDescriptors.SA0205.IsFixable);
+        Assert.Equal(FixApplicability.Safe, DiagnosticDescriptors.SA0205.DefaultFixApplicability);
+    }
+
+    [Fact]
+    public void DiagnosticDescriptor_SA0203_IsFixable()
+    {
+        Assert.True(DiagnosticDescriptors.SA0203.IsFixable);
+        Assert.Equal(FixApplicability.Unsafe, DiagnosticDescriptors.SA0203.DefaultFixApplicability);
+    }
+
     // ── SA0802 — Unused Import ────────────────────────────────────────
 
     [Fact]

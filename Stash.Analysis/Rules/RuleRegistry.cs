@@ -26,6 +26,7 @@ public static class RuleRegistry
             new UnreachableCodeRule(),
             new EmptyBlockRule(),
             new UnreachableBranchRule(),
+            new CyclomaticComplexityRule(),
 
             // Declarations (SA02xx)
             new UnusedDeclarationRule(),
@@ -36,6 +37,7 @@ public static class RuleRegistry
             new ShadowVariableRule(),
             new DeadStoreRule(),
             new DefiniteAssignmentRule(),
+            new NamingConventionRule(),
 
             // Type Safety (SA03xx)
             new VariableTypeMismatchRule(),
@@ -44,12 +46,14 @@ public static class RuleRegistry
             new FieldTypeMismatchRule(),
             new AssignmentTypeMismatchRule(),
             new PossibleNullAccessRule(),
+            new ExhaustiveMatchRule(),
 
             // Functions & Calls (SA04xx)
             new UserFunctionArityRule(),
             new BuiltInFunctionArityRule(),
             new ArgumentTypeMismatchRule(),
             new MissingReturnRule(),
+            new TooManyParametersRule(),
 
             // Spread / Rest (SA05xx)
             new SpreadDiagnosticsRule(),
@@ -60,6 +64,7 @@ public static class RuleRegistry
 
             // Imports (SA08xx)
             new UnusedImportRule(),
+            new ImportOrderingRule(),
         ];
     }
 }

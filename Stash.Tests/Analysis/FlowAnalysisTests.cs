@@ -358,6 +358,17 @@ public class FlowAnalysisTests : AnalysisTestBase
         Assert.Contains(diagnostics, d => d.Code == "SA0210" && d.Message.Contains("'flag'"));
     }
 
+    [Fact]
+    public void DefiniteAssignment_DoWhileAssigns_NoDiagnostic()
+    {
+        var diagnostics = Validate("""
+            let x;
+            do { x = 5; } while (false);
+            io.println(x);
+            """);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0210");
+    }
+
     // ── SA0308: Possible null access ─────────────────────────────────────────────────────
 
     [Fact]
@@ -608,6 +619,93 @@ public class FlowAnalysisTests : AnalysisTestBase
     {
         var cfg = BuildCfg("const items = [1, 2, 3]; for (let item in items) { io.println(item); } io.println(\"done\");");
         Assert.True(cfg.Blocks.Count >= 3);
+    }
+
+    // ── SA0310: Exhaustive match analysis ─────────────────────────────────────────────────
+
+    [Fact]
+    public void ExhaustiveMatch_AllCovered_NoDiagnostic()
+    {
+        var diagnostics = Validate("""
+            enum Color { Red, Green, Blue }
+            let c = Color.Red;
+            let name = c switch {
+                Color.Red => "red",
+                Color.Green => "green",
+                Color.Blue => "blue"
+            };
+            """);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0310");
+    }
+
+    [Fact]
+    public void ExhaustiveMatch_MissingVariant_ReportsDiagnostic()
+    {
+        var diagnostics = Validate("""
+            enum Color { Red, Green, Blue }
+            let c = Color.Red;
+            let name = c switch {
+                Color.Red => "red",
+                Color.Green => "green"
+            };
+            """);
+        Assert.Contains(diagnostics, d => d.Code == "SA0310" && d.Message.Contains("Blue"));
+    }
+
+    [Fact]
+    public void ExhaustiveMatch_DiscardArm_NoDiagnostic()
+    {
+        var diagnostics = Validate("""
+            enum Color { Red, Green, Blue }
+            let c = Color.Red;
+            let name = c switch {
+                Color.Red => "red",
+                _ => "other"
+            };
+            """);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0310");
+    }
+
+    [Fact]
+    public void ExhaustiveMatch_MultipleMissing_ReportsAll()
+    {
+        var diagnostics = Validate("""
+            enum Direction { North, South, East, West }
+            let d = Direction.North;
+            let name = d switch {
+                Direction.North => "n"
+            };
+            """);
+        var diag = Assert.Single(diagnostics, d => d.Code == "SA0310");
+        Assert.Contains("East", diag.Message);
+        Assert.Contains("South", diag.Message);
+        Assert.Contains("West", diag.Message);
+    }
+
+    [Fact]
+    public void ExhaustiveMatch_NonEnumSwitch_NoDiagnostic()
+    {
+        var diagnostics = Validate("""
+            let x = 5;
+            let name = x switch {
+                1 => "one",
+                2 => "two"
+            };
+            """);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0310");
+    }
+
+    [Fact]
+    public void ExhaustiveMatch_SingleMemberEnum_Covered_NoDiagnostic()
+    {
+        var diagnostics = Validate("""
+            enum Toggle { On }
+            let t = Toggle.On;
+            let name = t switch {
+                Toggle.On => "active"
+            };
+            """);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0310");
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────────────────

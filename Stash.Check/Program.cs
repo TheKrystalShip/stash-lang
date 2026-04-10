@@ -2,8 +2,10 @@ namespace Stash.Check;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using Stash.Analysis;
 
 internal static class Program
@@ -17,7 +19,7 @@ Arguments:
   -                          Read source from stdin (requires --stdin-filename)
 
 Options:
-  --format <fmt>             Output format: text, sarif (default: text)
+  --format <fmt>             Output format: text, sarif, json, github, grouped (default: text)
   --output <path>            Write output to a file instead of stdout
   --exclude <glob>           Glob pattern to exclude (repeatable)
   --severity <level>         Minimum severity: error, warning, information (default: information)
@@ -32,6 +34,8 @@ Options:
   --add-suppress             Insert suppression comments for all current diagnostics in-place
   --reason <text>            Reason text appended to auto-inserted suppression comments
   --stdin-filename <file>    Virtual filename for stdin diagnostics (used with -)
+  --watch                    Watch for file changes and re-analyze
+  --timing                   Print pass timing breakdown
   --version                  Print version and exit
   --help, -h                 Print this help and exit";
 
@@ -52,9 +56,9 @@ Options:
             return 0;
         }
 
-        if (options.Format is not ("text" or "sarif"))
+        if (options.Format is not ("text" or "sarif" or "json" or "github" or "grouped"))
         {
-            Console.Error.WriteLine($"Error: Unsupported output format '{options.Format}'. Supported: text, sarif.");
+            Console.Error.WriteLine($"Error: Unsupported output format '{options.Format}'. Supported: text, sarif, json, github, grouped.");
             return 2;
         }
 
@@ -93,7 +97,12 @@ Options:
             return 2;
         }
 
-        // --statistics: show summary table
+        // --watch: re-analyze on file changes
+        if (options.Watch)
+        {
+            RunWatchMode(runner, options, args, startTime, result);
+            return 0;
+        }
         if (options.ShowStatistics)
         {
             WriteStatistics(result);
@@ -133,9 +142,18 @@ Options:
             return 0;
         }
 
+        // --timing: print pass timing table
+        if (options.Timing)
+        {
+            WriteTiming(runner.LastTiming);
+        }
+
         IOutputFormatter formatter = options.Format switch
         {
             "sarif" => new SarifFormatter("stash-check " + string.Join(" ", args), startTime),
+            "json" => new JsonFormatter(),
+            "github" => new GitHubFormatter(),
+            "grouped" => new GroupedFormatter(),
             _ => new TextFormatter()
         };
 
@@ -232,5 +250,131 @@ Options:
         var assembly = typeof(Program).Assembly;
         var version = assembly.GetName().Version;
         return version != null ? $"stash-check {version.Major}.{version.Minor}.{version.Build}" : "stash-check 0.1.0";
+    }
+
+    private static void WriteTiming(List<(string Pass, double Ms)> timing)
+    {
+        if (timing.Count == 0)
+        {
+            Console.Error.WriteLine("No timing data available.");
+            return;
+        }
+
+        Console.Error.WriteLine();
+        Console.Error.WriteLine($"{"Pass",-18} | {"Time (ms)",9}");
+        Console.Error.WriteLine(new string('-', 18) + "-|-" + new string('-', 9));
+        foreach (var (pass, ms) in timing)
+        {
+            Console.Error.WriteLine($"{pass,-18} | {ms,9:F1}");
+        }
+        Console.Error.WriteLine();
+    }
+
+    /// <summary>
+    /// Runs in watch mode: prints initial results, then re-analyzes whenever .stash files change.
+    /// Press Ctrl+C to exit.
+    /// </summary>
+    private static void RunWatchMode(CheckRunner runner, CheckOptions options, string[] args, DateTime startTime, CheckResult initialResult)
+    {
+        IOutputFormatter formatter = options.Format switch
+        {
+            "sarif" => new SarifFormatter("stash-check " + string.Join(" ", args), startTime),
+            "json" => new JsonFormatter(),
+            "github" => new GitHubFormatter(),
+            "grouped" => new GroupedFormatter(),
+            _ => new TextFormatter()
+        };
+
+        // Print initial results
+        Console.Clear();
+        Console.Error.WriteLine("[stash-check] Watching for changes. Press Ctrl+C to exit.");
+        using (var stdout = Console.OpenStandardOutput())
+        {
+            formatter.Write(initialResult, stdout);
+        }
+
+        // Collect watch directories
+        var watchDirs = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (string path in options.Paths)
+        {
+            if (path == "-") continue;
+            string fullPath = Path.GetFullPath(path);
+            if (Directory.Exists(fullPath))
+                watchDirs.Add(fullPath);
+            else if (File.Exists(fullPath))
+            {
+                string? dir = Path.GetDirectoryName(fullPath);
+                if (dir != null) watchDirs.Add(dir);
+            }
+        }
+
+        if (watchDirs.Count == 0)
+        {
+            watchDirs.Add(Directory.GetCurrentDirectory());
+        }
+
+        // Track content hashes to skip unchanged files
+        var contentHashes = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        using var debounceTimer = new Timer(_ =>
+        {
+            try
+            {
+                Console.Clear();
+                Console.Error.WriteLine("[stash-check] Watching for changes. Press Ctrl+C to exit.");
+                var newResult = runner.Run();
+                if (options.Timing) WriteTiming(runner.LastTiming);
+                using var stdout = Console.OpenStandardOutput();
+                formatter.Write(newResult, stdout);
+            }
+            catch
+            {
+                // Swallow errors in watch mode
+            }
+        }, null, Timeout.Infinite, Timeout.Infinite);
+
+        var watchers = new List<FileSystemWatcher>();
+        foreach (string dir in watchDirs)
+        {
+            var watcher = new FileSystemWatcher(dir, "*.stash")
+            {
+                IncludeSubdirectories = true,
+                NotifyFilter = NotifyFilters.LastWrite | NotifyFilters.FileName | NotifyFilters.CreationTime,
+                EnableRaisingEvents = true
+            };
+
+            void OnChanged(object s, FileSystemEventArgs e)
+            {
+                // Debounce: reset timer on each change, fire after 300ms of quiet
+                debounceTimer.Change(300, Timeout.Infinite);
+            }
+
+            watcher.Changed += OnChanged;
+            watcher.Created += OnChanged;
+            watcher.Deleted += OnChanged;
+            watcher.Renamed += (s, e) => OnChanged(s, e);
+            watchers.Add(watcher);
+        }
+
+        // Block until Ctrl+C
+        using var cts = new CancellationTokenSource();
+        Console.CancelKeyPress += (_, e) =>
+        {
+            e.Cancel = true;
+            cts.Cancel();
+        };
+
+        try
+        {
+            cts.Token.WaitHandle.WaitOne();
+        }
+        catch (OperationCanceledException) { }
+        finally
+        {
+            foreach (var w in watchers)
+            {
+                w.EnableRaisingEvents = false;
+                w.Dispose();
+            }
+        }
     }
 }

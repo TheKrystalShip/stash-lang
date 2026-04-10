@@ -30,6 +30,10 @@ internal sealed class CheckOptions
     public string? Reason { get; init; }
     /// <summary>Virtual filename used for diagnostics when reading from stdin (<c>-</c>).</summary>
     public string? StdinFilename { get; init; }
+    /// <summary>Enables watch mode — re-analyze on file changes.</summary>
+    public bool Watch { get; init; }
+    /// <summary>Enables timing output — prints a breakdown of analysis pass durations.</summary>
+    public bool Timing { get; init; }
 
     public static CheckOptions Parse(string[] args)
     {
@@ -51,6 +55,8 @@ internal sealed class CheckOptions
         bool addSuppress = false;
         string? reason = null;
         string? stdinFilename = null;
+        bool watch = false;
+        bool timing = false;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -172,6 +178,14 @@ internal sealed class CheckOptions
                     stdinFilename = args[++i];
                     break;
 
+                case "--watch":
+                    watch = true;
+                    break;
+
+                case "--timing":
+                    timing = true;
+                    break;
+
                 default:
                     if (args[i].StartsWith('-') && args[i] != "-")
                     {
@@ -208,6 +222,8 @@ internal sealed class CheckOptions
             AddSuppress = addSuppress,
             Reason = reason,
             StdinFilename = stdinFilename,
+            Watch = watch,
+            Timing = timing,
         };
     }
 }

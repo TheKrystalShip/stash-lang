@@ -102,12 +102,22 @@ internal sealed class SarifFormatter : IOutputFormatter
                     }
                 };
 
-                if (diag.IsUnnecessary)
+                var tags = new List<string>();
+                if (diag.IsUnnecessary) tags.Add("unnecessary");
+                if (diag.IsDeprecated) tags.Add("deprecated");
+                if (tags.Count > 0)
                 {
                     sarifResult.Properties = new Dictionary<string, object>
                     {
-                        ["tags"] = new[] { "unnecessary" }
+                        ["tags"] = tags.ToArray()
                     };
+                }
+
+                if (diag.RelatedLocations.Count > 0)
+                {
+                    sarifResult.RelatedLocations = diag.RelatedLocations
+                        .Select(r => BuildRelatedLocation(file.Uri, r, cwd))
+                        .ToList();
                 }
 
                 results.Add(sarifResult);
@@ -178,6 +188,15 @@ internal sealed class SarifFormatter : IOutputFormatter
                     EndColumn = span.EndColumn
                 }
             }
+        };
+    }
+
+    private static SarifRelatedLocation BuildRelatedLocation(Uri fileUri, RelatedLocation related, string cwd)
+    {
+        return new SarifRelatedLocation
+        {
+            Message = new SarifMessage { Text = related.Message },
+            PhysicalLocation = BuildLocation(fileUri, related.Span, cwd)
         };
     }
 
@@ -286,6 +305,7 @@ internal sealed class SarifResult
     public string? Kind { get; set; }
     public SarifMessage? Message { get; set; }
     public List<SarifLocation>? Locations { get; set; }
+    public List<SarifRelatedLocation>? RelatedLocations { get; set; }
     public Dictionary<string, object>? Properties { get; set; }
 }
 
@@ -325,4 +345,10 @@ internal sealed class SarifInvocation
     public string? CommandLine { get; set; }
     public string? StartTimeUtc { get; set; }
     public string? EndTimeUtc { get; set; }
+}
+
+internal sealed class SarifRelatedLocation
+{
+    public SarifMessage? Message { get; set; }
+    public SarifLocation? PhysicalLocation { get; set; }
 }
