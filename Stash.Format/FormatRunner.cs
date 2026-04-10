@@ -40,7 +40,16 @@ internal sealed class FormatRunner
             {
                 var config = BuildConfig(absolutePath);
                 var formatter = new StashFormatter(config);
-                formatted = formatter.Format(source);
+                if (_options.RangeStart != null || _options.RangeEnd != null)
+                {
+                    int start = _options.RangeStart ?? 1;
+                    int end = _options.RangeEnd ?? int.MaxValue;
+                    formatted = formatter.FormatRange(source, start, end);
+                }
+                else
+                {
+                    formatted = formatter.Format(source);
+                }
             }
             catch (Exception ex)
             {
@@ -71,6 +80,7 @@ internal sealed class FormatRunner
             TrailingComma = _options.TrailingCommaOverride ?? fileConfig.TrailingComma,
             EndOfLine = _options.EndOfLineOverride ?? fileConfig.EndOfLine,
             BracketSpacing = _options.BracketSpacingOverride ?? fileConfig.BracketSpacing,
+            PrintWidth = _options.PrintWidthOverride ?? fileConfig.PrintWidth,
         };
     }
 

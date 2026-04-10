@@ -131,6 +131,22 @@ public class StashFormatTests
         Assert.True(opts.Diff);
     }
 
+    [Fact]
+    public void Parse_RangeStartEnd_ParsesCorrectly()
+    {
+        var opts = FormatOptions.Parse(new[] { "--range-start", "10", "--range-end", "20", "file.stash" });
+        Assert.Equal(10, opts.RangeStart);
+        Assert.Equal(20, opts.RangeEnd);
+    }
+
+    [Fact]
+    public void Parse_RangeStartOnly_EndIsNull()
+    {
+        var opts = FormatOptions.Parse(new[] { "--range-start", "5", "file.stash" });
+        Assert.Equal(5, opts.RangeStart);
+        Assert.Null(opts.RangeEnd);
+    }
+
     // ───────────────────────────────────────────────────────────────
     // FormatRunner tests
     // ───────────────────────────────────────────────────────────────

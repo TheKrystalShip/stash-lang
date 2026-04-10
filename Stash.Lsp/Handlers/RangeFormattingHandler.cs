@@ -78,15 +78,20 @@ public class RangeFormattingHandler : DocumentRangeFormattingHandlerBase
 
         var tabSize = request.Options.TabSize;
         var useTabs = request.Options.InsertSpaces == false;
+
+        // Extract the requested range (0-based LSP lines → 1-based formatter lines)
+        int startLine = (int)request.Range.Start.Line + 1;
+        int endLine = (int)request.Range.End.Line + 1;
+
         var formatter = new StashFormatter((int)tabSize, useTabs);
         string formatted;
         try
         {
-            formatted = formatter.Format(text);
+            formatted = formatter.FormatRange(text, startLine, endLine);
         }
         catch (System.Exception ex)
         {
-            _logger.LogWarning(ex, "Formatting failed for {Uri}", uri);
+            _logger.LogWarning(ex, "Range formatting failed for {Uri}", uri);
             return Task.FromResult(new TextEditContainer());
         }
 

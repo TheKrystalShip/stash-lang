@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Stash.Analysis.Formatting;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -31,7 +32,8 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     // ── Per-call state (reset in Format) ──────────────────────────────────────
 
-    private StringBuilder _sb = new();
+    private List<Doc> _docs = new();
+    private readonly int _printWidth;
     private int _indent;
     private Token[] _codeTokens = Array.Empty<Token>();
     private int _cursor;
@@ -56,6 +58,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         _trailingComma = cfg.TrailingComma;
         _endOfLine = cfg.EndOfLine;
         _bracketSpacing = cfg.BracketSpacing;
+        _printWidth = cfg.PrintWidth;
     }
 
     /// <summary>
@@ -70,6 +73,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         _trailingComma = TrailingCommaStyle.None;
         _endOfLine = EndOfLineStyle.Lf;
         _bracketSpacing = true;
+        _printWidth = 80;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -101,14 +105,11 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     // Indentation + pending flush
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    private void AppendIndent()
+    private string IndentString()
     {
         char ch = _useTabs ? '\t' : ' ';
         int count = _useTabs ? _indent : _indent * _indentSize;
-        if (count > 0)
-        {
-            _sb.Append(new string(ch, count));
-        }
+        return count > 0 ? new string(ch, count) : "";
     }
 
     private void WritePending()
@@ -116,16 +117,14 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         switch (_pending)
         {
             case PendingWs.BlankLine:
-                _sb.Append('\n');
-                _sb.Append('\n');
-                AppendIndent();
+                _docs.Add(Doc.HardLine);
+                _docs.Add(Doc.HardLine);
                 break;
             case PendingWs.NewLine:
-                _sb.Append('\n');
-                AppendIndent();
+                _docs.Add(Doc.HardLine);
                 break;
             case PendingWs.Space:
-                _sb.Append(' ');
+                _docs.Add(Doc.Text(" "));
                 break;
         }
         _pending = PendingWs.None;
@@ -143,9 +142,26 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         var token = _codeTokens[_cursor];
         FlushTriviaBefore(token);
         WritePending();
-        _sb.Append(token.Lexeme);
+        _docs.Add(Doc.Text(token.Lexeme));
         _lastCodeToken = token;
         _cursor++;
+    }
+
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // Doc IR mark/wrap helpers
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    private int Mark() => _docs.Count;
+
+    private void WrapFrom(int mark, Func<Doc, Doc> wrapper)
+    {
+        int count = _docs.Count - mark;
+        if (count == 0) return;
+        var slice = new Doc[count];
+        for (int i = 0; i < count; i++)
+            slice[i] = _docs[mark + i];
+        _docs.RemoveRange(mark, count);
+        _docs.Add(wrapper(Doc.Concat(slice)));
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -174,7 +190,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     {
         if (trivia.Type == TokenType.Shebang)
         {
-            _sb.Append(trivia.Lexeme);
+            _docs.Add(Doc.Text(trivia.Lexeme));
             _pending = PendingWs.BlankLine;
             return;
         }
@@ -186,8 +202,8 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         if (isInline)
         {
             // Attach comment to end of current line — no WritePending
-            _sb.Append(' ');
-            _sb.Append(trivia.Lexeme);
+            _docs.Add(Doc.Text(" "));
+            _docs.Add(Doc.Text(trivia.Lexeme));
             // After an inline comment restore at least a newline (blank line at top level)
             if (_indent == 0)
             {
@@ -208,7 +224,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             }
             else
             {
-                _sb.Append(trivia.Lexeme);
+                _docs.Add(Doc.Text(trivia.Lexeme));
             }
 
             // Determine whitespace after this trivia
@@ -272,13 +288,12 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         {
             if (i > 0)
             {
-                _sb.Append('\n');
-                AppendIndent();
-                _sb.Append(lines[i].TrimStart());
+                _docs.Add(Doc.HardLine);
+                _docs.Add(Doc.Text(lines[i].TrimStart()));
             }
             else
             {
-                _sb.Append(lines[i].TrimEnd());
+                _docs.Add(Doc.Text(lines[i].TrimEnd()));
             }
         }
     }
@@ -298,6 +313,19 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     private static bool IsDeclaration(Stmt stmt) =>
         stmt is FnDeclStmt or StructDeclStmt or EnumDeclStmt or InterfaceDeclStmt or ExtendStmt;
+
+    private bool WillExpandToMultiLine(Expr expr)
+    {
+        return expr switch
+        {
+            DictLiteralExpr dict => dict.Entries.Count >= 3 || dict.Span.EndLine > dict.Span.StartLine
+                || dict.Entries.Exists(e => WillExpandToMultiLine(e.Value)),
+            StructInitExpr init => init.FieldValues.Count >= 3 || init.Span.EndLine > init.Span.StartLine
+                || init.FieldValues.Exists(fv => WillExpandToMultiLine(fv.Value)),
+            ArrayExpr arr => arr.Span.EndLine > arr.Span.StartLine || arr.Elements.Exists(WillExpandToMultiLine),
+            _ => expr.Span.EndLine > expr.Span.StartLine
+        };
+    }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Public API
@@ -364,7 +392,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             throw new InvalidOperationException(parser.Errors[0]);
 
         // 4. Reset per-call state
-        _sb = new StringBuilder();
+        _docs = new List<Doc>();
         _indent = 0;
         _cursor = 0;
         _triviaCursor = 0;
@@ -405,9 +433,60 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         FlushRemainingTrivia();
 
         // 7. Normalise trailing whitespace and add exactly one trailing newline
-        var result = _sb.ToString().TrimEnd();
+        var doc = Doc.Concat(_docs.ToArray());
+        char indentChar = _useTabs ? '\t' : ' ';
+        int indentWidth = _useTabs ? 1 : _indentSize;
+        string result = DocPrinter.Print(doc, _printWidth, indentWidth, indentChar).TrimEnd();
         if (result.Length == 0) return "";
         return NormalizeEol(result + "\n");
+    }
+
+    /// <summary>
+    /// Formats the given <paramref name="source"/> but only applies changes within
+    /// the 1-based line range [<paramref name="startLine"/>, <paramref name="endLine"/>].
+    /// Lines outside the range are preserved unmodified.
+    /// </summary>
+    public string FormatRange(string source, int startLine, int endLine)
+    {
+        string fullyFormatted;
+        try
+        {
+            fullyFormatted = Format(source);
+        }
+        catch
+        {
+            return source;
+        }
+
+        if (fullyFormatted == source)
+            return source;
+
+        string[] originalLines = source.TrimEnd('\n').Split('\n');
+        string[] formattedLines = fullyFormatted.TrimEnd('\n').Split('\n');
+
+        // Clamp range (1-based inclusive)
+        startLine = Math.Max(1, startLine);
+        endLine = Math.Min(originalLines.Length, endLine);
+        if (startLine > endLine)
+            return source;
+
+        // If line counts match, simple line-by-line replacement within the range
+        if (originalLines.Length == formattedLines.Length)
+        {
+            var result = new string[originalLines.Length];
+            for (int i = 0; i < originalLines.Length; i++)
+            {
+                result[i] = (i + 1 >= startLine && i + 1 <= endLine)
+                    ? formattedLines[i]
+                    : originalLines[i];
+            }
+            string text = string.Join("\n", result);
+            if (source.EndsWith("\n")) text += "\n";
+            return text;
+        }
+
+        // If line counts differ, fall back to full format
+        return fullyFormatted;
     }
 
     private string NormalizeEol(string text)
@@ -437,12 +516,14 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         // Emit the source text verbatim for this statement's span
         int startLine = stmt.Span.StartLine; // 1-based
         int endLine = stmt.Span.EndLine;     // 1-based
+        var verbatim = new StringBuilder();
         for (int lineIdx = startLine; lineIdx <= endLine; lineIdx++)
         {
-            if (lineIdx > startLine) _sb.Append('\n');
+            if (lineIdx > startLine) verbatim.Append('\n');
             if (lineIdx - 1 < _sourceLines.Length)
-                _sb.Append(_sourceLines[lineIdx - 1]);
+                verbatim.Append(_sourceLines[lineIdx - 1]);
         }
+        _docs.Add(Doc.Text(verbatim.ToString()));
 
         // Advance code token cursor past all tokens belonging to this statement
         while (_cursor < _codeTokens.Length)
@@ -561,11 +642,13 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     {
         EmitToken(); // {
         _indent++;
+        int mark = Mark();
         foreach (var s in stmt.Statements)
         {
             NewLine();
             s.Accept(this);
         }
+        WrapFrom(mark, Doc.Indent);
         _indent--;
         NewLine();
         EmitToken(); // }
@@ -769,6 +852,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // {
         _indent++;
+        int mark = Mark();
         for (int i = 0; i < stmt.Methods.Count; i++)
         {
             if (i > 0)
@@ -781,6 +865,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             }
             stmt.Methods[i].Accept(this);
         }
+        WrapFrom(mark, Doc.Indent);
         _indent--;
         NewLine();
         EmitToken(); // }
@@ -810,6 +895,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // {
         _indent++;
+        int mark = Mark();
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             NewLine();
@@ -837,6 +923,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             }
             stmt.Methods[i].Accept(this);
         }
+        WrapFrom(mark, Doc.Indent);
         _indent--;
         NewLine();
         EmitToken(); // }
@@ -851,6 +938,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // {
         _indent++;
+        int mark = Mark();
         for (int i = 0; i < stmt.Members.Count; i++)
         {
             NewLine();
@@ -860,6 +948,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 EmitToken(); // ,
             }
         }
+        WrapFrom(mark, Doc.Indent);
         _indent--;
         NewLine();
         EmitToken(); // }
@@ -874,6 +963,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // {
         _indent++;
+        int mark = Mark();
 
         int totalMembers = stmt.Fields.Count + stmt.Methods.Count;
         int methodIndex = 0;
@@ -926,6 +1016,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             }
         }
 
+        WrapFrom(mark, Doc.Indent);
         _indent--;
         NewLine();
         EmitToken(); // }
@@ -1191,11 +1282,13 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitArrayExpr(ArrayExpr expr)
     {
-        bool multiLine = expr.Span.EndLine > expr.Span.StartLine;
+        bool multiLine = expr.Span.EndLine > expr.Span.StartLine
+            || expr.Elements.Exists(WillExpandToMultiLine);
         EmitToken(); // [
         if (multiLine)
         {
             _indent++;
+            int mark = Mark();
             for (int i = 0; i < expr.Elements.Count; i++)
             {
                 NewLine();
@@ -1206,9 +1299,10 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 }
                 else if (_trailingComma == TrailingCommaStyle.All && i == expr.Elements.Count - 1)
                 {
-                    _sb.Append(',');
+                    _docs.Add(Doc.Text(","));
                 }
             }
+            WrapFrom(mark, Doc.Indent);
             _indent--;
             NewLine();
         }
@@ -1226,7 +1320,8 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitStructInitExpr(StructInitExpr expr)
     {
-        bool multiLine = expr.FieldValues.Count >= 3 || expr.Span.EndLine > expr.Span.StartLine;
+        bool multiLine = expr.FieldValues.Count >= 3 || expr.Span.EndLine > expr.Span.StartLine
+            || expr.FieldValues.Exists(fv => WillExpandToMultiLine(fv.Value));
 
         if (expr.Target != null)
         {
@@ -1243,6 +1338,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         if (multiLine)
         {
             _indent++;
+            int mark = Mark();
             for (int i = 0; i < expr.FieldValues.Count; i++)
             {
                 NewLine();
@@ -1256,9 +1352,10 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 }
                 else if (_trailingComma == TrailingCommaStyle.All && i == expr.FieldValues.Count - 1)
                 {
-                    _sb.Append(',');
+                    _docs.Add(Doc.Text(","));
                 }
             }
+            WrapFrom(mark, Doc.Indent);
             _indent--;
             NewLine();
         }
@@ -1293,6 +1390,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // {
         _indent++;
+        int mark = Mark();
         for (int i = 0; i < expr.Arms.Count; i++)
         {
             NewLine();
@@ -1315,6 +1413,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 EmitToken(); // ,
             }
         }
+        WrapFrom(mark, Doc.Indent);
         _indent--;
         NewLine();
         EmitToken(); // }
@@ -1537,11 +1636,13 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitDictLiteralExpr(DictLiteralExpr expr)
     {
-        bool multiLine = expr.Entries.Count >= 3 || expr.Span.EndLine > expr.Span.StartLine;
+        bool multiLine = expr.Entries.Count >= 3 || expr.Span.EndLine > expr.Span.StartLine
+            || expr.Entries.Exists(e => WillExpandToMultiLine(e.Value));
         EmitToken(); // {
         if (multiLine)
         {
             _indent++;
+            int mark = Mark();
             for (int i = 0; i < expr.Entries.Count; i++)
             {
                 NewLine();
@@ -1558,9 +1659,10 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 }
                 else if (_trailingComma == TrailingCommaStyle.All && i == expr.Entries.Count - 1)
                 {
-                    _sb.Append(',');
+                    _docs.Add(Doc.Text(","));
                 }
             }
+            WrapFrom(mark, Doc.Indent);
             _indent--;
             NewLine();
         }

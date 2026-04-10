@@ -498,4 +498,76 @@ public class FormatterTests
         var result = Format("let x=1;\nfn foo(){return x;}\nlet y=2;");
         Assert.Equal("let x = 1;\n\nfn foo() {\n  return x;\n}\n\nlet y = 2;\n", result);
     }
+
+    // ───────────────────────────────────────────────────────────────
+    // FormatRange tests
+    // ───────────────────────────────────────────────────────────────
+
+    private static string FormatRange(string source, int startLine, int endLine) =>
+        new StashFormatter().FormatRange(source, startLine, endLine);
+
+    [Fact]
+    public void FormatRange_MiddleLine_OnlyMiddleFormatted()
+    {
+        var input = "let   x=5;\nlet   y=10;\nlet   z=15;\n";
+        var result = FormatRange(input, 2, 2);
+        Assert.Equal("let   x=5;\nlet y = 10;\nlet   z=15;\n", result);
+    }
+
+    [Fact]
+    public void FormatRange_EntireFile_SameAsFormat()
+    {
+        var input = "let   x=5;\nlet   y=10;\n";
+        var full = Format(input);
+        var ranged = FormatRange(input, 1, 2);
+        Assert.Equal(full, ranged);
+    }
+
+    [Fact]
+    public void FormatRange_FirstLine_OnlyFirstFormatted()
+    {
+        var input = "let   x=5;\nlet   y=10;\n";
+        var result = FormatRange(input, 1, 1);
+        Assert.Equal("let x = 5;\nlet   y=10;\n", result);
+    }
+
+    [Fact]
+    public void FormatRange_LastLine_OnlyLastFormatted()
+    {
+        var input = "let   x=5;\nlet   y=10;\n";
+        var result = FormatRange(input, 2, 2);
+        Assert.Equal("let   x=5;\nlet y = 10;\n", result);
+    }
+
+    [Fact]
+    public void FormatRange_OutOfBounds_ClampsToValid()
+    {
+        var input = "let   x=5;\n";
+        var result = FormatRange(input, 0, 100);
+        Assert.Equal("let x = 5;\n", result);
+    }
+
+    [Fact]
+    public void FormatRange_InvalidRange_ReturnsOriginal()
+    {
+        var input = "let   x=5;\n";
+        var result = FormatRange(input, 5, 3);
+        Assert.Equal(input, result);
+    }
+
+    [Fact]
+    public void FormatRange_ParseError_ReturnsOriginal()
+    {
+        var input = "let = ;\n";
+        var result = FormatRange(input, 1, 1);
+        Assert.Equal(input, result);
+    }
+
+    [Fact]
+    public void FormatRange_NoChangesInRange_ReturnsSame()
+    {
+        var input = "let x = 5;\nlet y = 10;\n";
+        var result = FormatRange(input, 1, 1);
+        Assert.Equal(input, result);
+    }
 }

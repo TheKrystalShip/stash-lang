@@ -20,9 +20,13 @@ internal sealed class FormatOptions
     public TrailingCommaStyle? TrailingCommaOverride { get; init; }
     public EndOfLineStyle? EndOfLineOverride { get; init; }
     public bool? BracketSpacingOverride { get; init; }
+    public int? PrintWidthOverride { get; init; }
 
     /// <summary>Explicit path to a <c>.stashformat</c> config file, or <see langword="null"/> to auto-discover.</summary>
     public string? ConfigPath { get; init; }
+
+    public int? RangeStart { get; init; }
+    public int? RangeEnd { get; init; }
 
     // Convenience properties used by consumers expecting plain values
     public int IndentSize => IndentSizeOverride ?? 2;
@@ -38,7 +42,10 @@ internal sealed class FormatOptions
         TrailingCommaStyle? trailingCommaOverride = null;
         EndOfLineStyle? endOfLineOverride = null;
         bool? bracketSpacingOverride = null;
+        int? printWidthOverride = null;
         string? configPath = null;
+        int? rangeStart = null;
+        int? rangeEnd = null;
         var excludeGlobs = new List<string>();
         bool showHelp = false;
         bool showVersion = false;
@@ -127,6 +134,22 @@ internal sealed class FormatOptions
                     }
                     break;
 
+                case "--print-width":
+                case "-pw":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine($"Error: {args[i]} requires a value.");
+                        Environment.Exit(2);
+                    }
+                    string pwArg = args[++i];
+                    if (!int.TryParse(pwArg, out int parsedPw) || parsedPw <= 0)
+                    {
+                        Console.Error.WriteLine($"Error: --print-width must be a positive integer, got '{pwArg}'.");
+                        Environment.Exit(2);
+                    }
+                    printWidthOverride = parsedPw;
+                    break;
+
                 case "--bracket-spacing":
                 case "-bs":
                     if (i + 1 >= args.Length)
@@ -152,6 +175,36 @@ internal sealed class FormatOptions
                         Environment.Exit(2);
                     }
                     configPath = args[++i];
+                    break;
+
+                case "--range-start":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine($"Error: {args[i]} requires a value.");
+                        Environment.Exit(2);
+                    }
+                    string rsArg = args[++i];
+                    if (!int.TryParse(rsArg, out int parsedRs) || parsedRs <= 0)
+                    {
+                        Console.Error.WriteLine($"Error: --range-start must be a positive integer, got '{rsArg}'.");
+                        Environment.Exit(2);
+                    }
+                    rangeStart = parsedRs;
+                    break;
+
+                case "--range-end":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine($"Error: {args[i]} requires a value.");
+                        Environment.Exit(2);
+                    }
+                    string reArg = args[++i];
+                    if (!int.TryParse(reArg, out int parsedRe) || parsedRe <= 0)
+                    {
+                        Console.Error.WriteLine($"Error: --range-end must be a positive integer, got '{reArg}'.");
+                        Environment.Exit(2);
+                    }
+                    rangeEnd = parsedRe;
                     break;
 
                 case "--exclude":
@@ -195,7 +248,10 @@ internal sealed class FormatOptions
             TrailingCommaOverride = trailingCommaOverride,
             EndOfLineOverride = endOfLineOverride,
             BracketSpacingOverride = bracketSpacingOverride,
+            PrintWidthOverride = printWidthOverride,
             ConfigPath = configPath,
+            RangeStart = rangeStart,
+            RangeEnd = rangeEnd,
             ExcludeGlobs = excludeGlobs,
             Paths = paths,
             ShowHelp = showHelp,

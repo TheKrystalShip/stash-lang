@@ -32,6 +32,7 @@ public sealed class FormatConfig
     public TrailingCommaStyle TrailingComma { get; init; } = TrailingCommaStyle.None;
     public EndOfLineStyle EndOfLine { get; init; } = EndOfLineStyle.Lf;
     public bool BracketSpacing { get; init; } = true;
+    public int PrintWidth { get; init; } = 80;
 
     /// <summary>A default <see cref="FormatConfig"/> with all settings at their defaults.</summary>
     public static FormatConfig Default { get; } = new();
@@ -73,6 +74,7 @@ public sealed class FormatConfig
         var trailingComma = TrailingCommaStyle.None;
         var endOfLine = EndOfLineStyle.Lf;
         bool bracketSpacing = true;
+        int printWidth = 80;
 
         foreach (string rawLine in content.Split('\n'))
         {
@@ -116,6 +118,11 @@ public sealed class FormatConfig
                 case "bracketSpacing":
                     bracketSpacing = !value.Equals("false", StringComparison.OrdinalIgnoreCase);
                     break;
+
+                case "printWidth":
+                    if (int.TryParse(value, out int parsedWidth) && parsedWidth > 0)
+                        printWidth = parsedWidth;
+                    break;
             }
         }
 
@@ -125,7 +132,8 @@ public sealed class FormatConfig
             UseTabs = useTabs,
             TrailingComma = trailingComma,
             EndOfLine = endOfLine,
-            BracketSpacing = bracketSpacing
+            BracketSpacing = bracketSpacing,
+            PrintWidth = printWidth,
         };
     }
 }
