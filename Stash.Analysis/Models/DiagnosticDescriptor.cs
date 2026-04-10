@@ -15,13 +15,24 @@ public sealed class DiagnosticDescriptor
     public string MessageFormat { get; }
     public string HelpUrl => $"https://stash-lang.dev/docs/rules/{Code}";
 
-    public DiagnosticDescriptor(string code, string title, DiagnosticLevel defaultLevel, string category, string messageFormat)
+    /// <summary>Gets whether this diagnostic has an associated code fix.</summary>
+    public bool IsFixable => DefaultFixApplicability.HasValue;
+
+    /// <summary>
+    /// Gets the default applicability of the automated fix for this diagnostic,
+    /// or <see langword="null"/> if no fix is available.
+    /// </summary>
+    public FixApplicability? DefaultFixApplicability { get; }
+
+    public DiagnosticDescriptor(string code, string title, DiagnosticLevel defaultLevel, string category, string messageFormat,
+        FixApplicability? defaultFixApplicability = null)
     {
         Code = code;
         Title = title;
         DefaultLevel = defaultLevel;
         Category = category;
         MessageFormat = messageFormat;
+        DefaultFixApplicability = defaultFixApplicability;
     }
 
     /// <summary>
@@ -46,5 +57,27 @@ public sealed class DiagnosticDescriptor
     public SemanticDiagnostic CreateUnnecessaryDiagnostic(SourceSpan span, params object[] args)
     {
         return new SemanticDiagnostic(Code, FormatMessage(args), DefaultLevel, span, isUnnecessary: true);
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SemanticDiagnostic"/> with an attached <see cref="CodeFix"/> from this descriptor.
+    /// </summary>
+    public SemanticDiagnostic CreateDiagnosticWithFix(SourceSpan span, CodeFix fix, params object[] args)
+    {
+        return new SemanticDiagnostic(Code, FormatMessage(args), DefaultLevel, span)
+        {
+            Fixes = [fix]
+        };
+    }
+
+    /// <summary>
+    /// Creates a <see cref="SemanticDiagnostic"/> marked as unnecessary with an attached <see cref="CodeFix"/>.
+    /// </summary>
+    public SemanticDiagnostic CreateUnnecessaryDiagnosticWithFix(SourceSpan span, CodeFix fix, params object[] args)
+    {
+        return new SemanticDiagnostic(Code, FormatMessage(args), DefaultLevel, span, isUnnecessary: true)
+        {
+            Fixes = [fix]
+        };
     }
 }

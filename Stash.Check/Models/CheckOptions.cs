@@ -15,6 +15,9 @@ internal sealed class CheckOptions
     public bool ShowHelp { get; init; }
     public bool ShowStatistics { get; init; }
     public bool ShowFiles { get; init; }
+    public bool Fix { get; init; }
+    public bool UnsafeFixes { get; init; }
+    public bool Diff { get; init; }
 
     public static CheckOptions Parse(string[] args)
     {
@@ -27,6 +30,9 @@ internal sealed class CheckOptions
         bool showHelp = false;
         bool showStatistics = false;
         bool showFiles = false;
+        bool fix = false;
+        bool unsafeFixes = false;
+        bool diff = false;
         var paths = new List<string>();
 
         for (int i = 0; i < args.Length; i++)
@@ -78,6 +84,18 @@ internal sealed class CheckOptions
                     noImports = true;
                     break;
 
+                case "--fix":
+                    fix = true;
+                    break;
+
+                case "--unsafe-fixes":
+                    unsafeFixes = true;
+                    break;
+
+                case "--diff":
+                    diff = true;
+                    break;
+
                 case "--statistics":
                     showStatistics = true;
                     break;
@@ -122,7 +140,10 @@ internal sealed class CheckOptions
             ShowVersion = showVersion,
             ShowHelp = showHelp,
             ShowStatistics = showStatistics,
-            ShowFiles = showFiles
+            ShowFiles = showFiles,
+            Fix = fix,
+            UnsafeFixes = unsafeFixes,
+            Diff = diff
         };
     }
 }

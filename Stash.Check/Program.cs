@@ -21,6 +21,9 @@ Options:
   --exclude <glob>      Glob pattern to exclude (repeatable)
   --severity <level>    Minimum severity: error, warning, information (default: information)
   --no-imports          Disable cross-file import resolution
+  --fix                 Apply safe fixes in-place
+  --unsafe-fixes        Apply safe and unsafe fixes in-place (implies --fix)
+  --diff                Show fixes as unified diff without applying
   --statistics          Show summary of diagnostics by rule
   --show-files          List files that would be analyzed
   --version             Print version and exit
@@ -89,6 +92,31 @@ Options:
         {
             WriteStatistics(result);
             return HasDiagnosticsAtOrAbove(result, GetMinLevel(options)) ? 1 : 0;
+        }
+
+        // --diff: show unified diff of fixes without applying
+        if (options.Diff)
+        {
+            bool allowUnsafe = options.UnsafeFixes;
+            var fixesByFile = FixApplier.CollectFixes(result, allowUnsafe);
+            if (fixesByFile.Count == 0)
+            {
+                Console.Error.WriteLine("No fixes available.");
+                return 0;
+            }
+            FixApplier.WriteDiff(result, fixesByFile, Console.Out);
+            return 0;
+        }
+
+        // --fix / --unsafe-fixes: apply fixes in-place
+        if (options.Fix || options.UnsafeFixes)
+        {
+            bool allowUnsafe = options.UnsafeFixes;
+            var fixesByFile = FixApplier.CollectFixes(result, allowUnsafe);
+            int fixedCount = FixApplier.ApplyFixes(fixesByFile);
+            int totalFixes = fixesByFile.Values.Sum(l => l.Count);
+            Console.Error.WriteLine($"Applied {totalFixes} fix(es) across {fixedCount} file(s).");
+            return 0;
         }
 
         IOutputFormatter formatter = options.Format switch

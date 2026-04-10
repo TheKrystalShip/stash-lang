@@ -1,7 +1,9 @@
 namespace Stash.Analysis;
 
+using System;
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
 using Stash.Runtime.Types;
@@ -88,6 +90,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         CheckLetCouldBeConst();
         CheckUnusedParameters();
         CheckShadowVariables();
+        CheckUnusedImports(statements);
 
         return _diagnostics;
     }
@@ -471,6 +474,12 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
                 continue;
             }
 
+            // Imported names (from ImportStmt) are handled separately by SA0802.
+            if (symbol.Detail?.StartsWith("imported from ", StringComparison.Ordinal) == true)
+            {
+                continue;
+            }
+
             string label = symbol.Kind switch
             {
                 SymbolKind.LoopVariable => "Loop variable",
@@ -505,7 +514,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
             if (!hasWrite)
             {
-                _diagnostics.Add(DiagnosticDescriptors.SA0205.CreateDiagnostic(symbol.Span, symbol.Name));
+                var fix = BuildLetToConstFix(symbol);
+                if (fix != null)
+                {
+                    _diagnostics.Add(DiagnosticDescriptors.SA0205.CreateDiagnosticWithFix(symbol.Span, fix, symbol.Name));
+                }
+                else
+                {
+                    _diagnostics.Add(DiagnosticDescriptors.SA0205.CreateDiagnostic(symbol.Span, symbol.Name));
+                }
             }
         }
     }
@@ -568,6 +585,101 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         {
             CheckShadowsInScope(child);
         }
+    }
+
+    private void CheckUnusedImports(List<Stmt> statements)
+    {
+        foreach (var stmt in statements)
+        {
+            if (stmt is not ImportStmt importStmt)
+            {
+                continue;
+            }
+
+            // Only flag imports where ALL names are unused (entire import can be removed).
+            bool allUnused = true;
+            foreach (var nameToken in importStmt.Names)
+            {
+                bool hasRead = false;
+                foreach (var r in _scopeTree.References)
+                {
+                    if (r.Name == nameToken.Lexeme
+                        && r.Kind == ReferenceKind.Read
+                        && r.ResolvedSymbol != null
+                        && r.ResolvedSymbol.Span.StartLine == nameToken.Span.StartLine
+                        && r.ResolvedSymbol.Span.StartColumn == nameToken.Span.StartColumn)
+                    {
+                        hasRead = true;
+                        break;
+                    }
+                }
+
+                if (hasRead)
+                {
+                    allUnused = false;
+                    break;
+                }
+            }
+
+            if (!allUnused)
+            {
+                continue;
+            }
+
+            // Emit one SA0802 per unused import statement.
+            string importedNames = string.Join(", ", importStmt.Names.ConvertAll(n => n.Lexeme));
+            var fix = new CodeFix(
+                "Remove unused import",
+                FixApplicability.Safe,
+                [new SourceEdit(importStmt.Span, "")]
+            );
+            _diagnostics.Add(DiagnosticDescriptors.SA0802.CreateUnnecessaryDiagnosticWithFix(
+                importStmt.Span, fix, importedNames));
+        }
+    }
+
+    private CodeFix? BuildLetToConstFix(SymbolInfo symbol)
+    {
+        if (symbol.FullSpan is not { } fullSpan)
+        {
+            return null;
+        }
+
+        // The "let" keyword occupies 3 characters starting at the full-span's start column.
+        // Replace just the keyword: "let" → "const"
+        var keywordSpan = new SourceSpan(
+            fullSpan.File,
+            fullSpan.StartLine,
+            fullSpan.StartColumn,
+            fullSpan.StartLine,
+            fullSpan.StartColumn + 2);  // 1-based inclusive: "let" = cols [N, N+2]
+
+        return new CodeFix(
+            "Change 'let' to 'const'",
+            FixApplicability.Safe,
+            [new SourceEdit(keywordSpan, "const")]);;
+    }
+
+    private CodeFix? BuildConstToLetFix(SymbolInfo definition)
+    {
+        if (definition.FullSpan is not { } fullSpan)
+        {
+            return null;
+        }
+
+        // The "const" keyword occupies 5 characters starting at the full-span's start column.
+        // Replace just the keyword: "const" → "let"
+        var keywordSpan = new SourceSpan(
+            fullSpan.File,
+            fullSpan.StartLine,
+            fullSpan.StartColumn,
+            fullSpan.StartLine,
+            fullSpan.StartColumn + 4);  // 1-based inclusive: "const" = cols [N, N+4]
+
+        return new CodeFix(
+            "Change 'const' to 'let' (may change semantics)",
+            FixApplicability.Unsafe,
+            [new SourceEdit(keywordSpan, "let")]);
     }
 
     /// <summary>Recurses into the condition and both branches of an if statement.</summary>
@@ -718,7 +830,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         var definition = _scopeTree.FindDefinition(expr.Name.Lexeme, line, col);
         if (definition != null && definition.Kind == SymbolKind.Constant)
         {
-            _diagnostics.Add(DiagnosticDescriptors.SA0203.CreateDiagnostic(expr.Name.Span, expr.Name.Lexeme));
+            var fix = BuildConstToLetFix(definition);
+            if (fix != null)
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0203.CreateDiagnosticWithFix(expr.Name.Span, fix, expr.Name.Lexeme));
+            }
+            else
+            {
+                _diagnostics.Add(DiagnosticDescriptors.SA0203.CreateDiagnostic(expr.Name.Span, expr.Name.Lexeme));
+            }
         }
         if (definition != null && definition.IsExplicitTypeHint && definition.TypeHint != null)
         {

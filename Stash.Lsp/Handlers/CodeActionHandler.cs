@@ -104,6 +104,56 @@ public class CodeActionHandler : CodeActionHandlerBase
 
         var actions = new List<CommandOrCodeAction>();
 
+        // Map CodeFix objects from SemanticDiagnostic to LSP CodeActions.
+        foreach (var diagnostic in request.Context.Diagnostics)
+        {
+            if (diagnostic.Source != "stash")
+            {
+                continue;
+            }
+
+            string diagnosticCode = diagnostic.Code?.String ?? string.Empty;
+
+            // Find the matching SemanticDiagnostic in the cached result.
+            int lspLine = diagnostic.Range.Start.Line + 1;
+            int lspCol = diagnostic.Range.Start.Character + 1;
+
+            foreach (var semanticDiag in result.SemanticDiagnostics)
+            {
+                if (semanticDiag.Code != diagnosticCode
+                    || semanticDiag.Span.StartLine != lspLine
+                    || semanticDiag.Span.StartColumn != lspCol)
+                {
+                    continue;
+                }
+
+                foreach (var fix in semanticDiag.Fixes)
+                {
+                    var lspEdits = BuildLspEdits(fix, request.TextDocument.Uri);
+                    if (lspEdits == null)
+                    {
+                        continue;
+                    }
+
+                    actions.Add(new CommandOrCodeAction(new CodeAction
+                    {
+                        Title = fix.Title,
+                        Kind = CodeActionKind.QuickFix,
+                        Diagnostics = new Container<Diagnostic>(diagnostic),
+                        IsPreferred = fix.Applicability == FixApplicability.Safe,
+                        Edit = new WorkspaceEdit
+                        {
+                            Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                            {
+                                [request.TextDocument.Uri] = lspEdits
+                            }
+                        }
+                    }));
+                }
+            }
+        }
+
+        // Legacy message-based quick fixes for existing diagnostics without CodeFix objects.
         foreach (var diagnostic in request.Context.Diagnostics)
         {
             if (diagnostic.Source != "stash")
@@ -211,6 +261,46 @@ public class CodeActionHandler : CodeActionHandlerBase
     /// <returns>The same <see cref="CodeAction"/> as received.</returns>
     public override Task<CodeAction> Handle(CodeAction request, CancellationToken cancellationToken)
         => Task.FromResult(request);
+
+    /// <summary>
+    /// Converts a <see cref="Stash.Analysis.CodeFix"/> to a list of LSP <see cref="TextEdit"/> objects.
+    /// Returns <see langword="null"/> if the fix contains no edits.
+    /// </summary>
+    private static IEnumerable<OmniSharp.Extensions.LanguageServer.Protocol.Models.TextEdit>? BuildLspEdits(Stash.Analysis.CodeFix fix, DocumentUri documentUri)
+    {
+        if (fix.Edits.Count == 0)
+        {
+            return null;
+        }
+
+        var lspEdits = new List<OmniSharp.Extensions.LanguageServer.Protocol.Models.TextEdit>(fix.Edits.Count);
+        foreach (var edit in fix.Edits)
+        {
+            // SourceSpan is 1-based inclusive; LSP Range is 0-based with exclusive end.
+            int startLine = edit.Span.StartLine - 1;
+            int startChar = edit.Span.StartColumn - 1;
+            int endLine = edit.Span.EndLine - 1;
+            int endChar = edit.Span.EndColumn;  // endCol is inclusive, so +0 makes it exclusive
+
+            // For import removal (NewText == ""), extend the range to the next line
+            // so the entire line including the newline is deleted by the editor.
+            if (edit.NewText == "")
+            {
+                endLine++;
+                endChar = 0;
+            }
+
+            lspEdits.Add(new OmniSharp.Extensions.LanguageServer.Protocol.Models.TextEdit
+            {
+                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(
+                    new Position(startLine, startChar),
+                    new Position(endLine, endChar)),
+                NewText = edit.NewText
+            });
+        }
+
+        return lspEdits;
+    }
 
     private CodeAction? BuildOrganizeImportsAction(Uri uri, AnalysisResult result, DocumentUri documentUri)
     {

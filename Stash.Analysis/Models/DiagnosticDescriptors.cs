@@ -61,8 +61,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0709 = new("SA0709", "Retry no throwable operations", DiagnosticLevel.Information, "Commands", "Retry body contains no operations that can throw. The retry block will always succeed on the first attempt.");
 
     // ── SA08xx — Imports ─────────────────────────────────────────────
-    public static readonly DiagnosticDescriptor SA0801 = new("SA0801", "Dynamic import path", DiagnosticLevel.Information, "Imports", "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.");
-
+    public static readonly DiagnosticDescriptor SA0801 = new("SA0801", "Dynamic import path", DiagnosticLevel.Information, "Imports", "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.");    public static readonly DiagnosticDescriptor SA0802 = new("SA0802", "Unused import", DiagnosticLevel.Warning, "Imports", "Import '{0}' is never used.", FixApplicability.Safe);
     /// <summary>
     /// Lookup table from code string to descriptor for suppression validation.
     /// </summary>
@@ -110,6 +109,7 @@ public static class DiagnosticDescriptors
         dict[SA0708.Code] = SA0708;
         dict[SA0709.Code] = SA0709;
         dict[SA0801.Code] = SA0801;
+        dict[SA0802.Code] = SA0802;
         return dict.ToFrozenDictionary();
     }
 }

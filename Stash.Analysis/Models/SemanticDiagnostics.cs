@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Stash.Common;
 
 namespace Stash.Analysis;
@@ -33,6 +34,12 @@ public class SemanticDiagnostic
     /// in addition to the normal diagnostic decoration.
     /// </summary>
     public bool IsUnnecessary { get; }
+
+    /// <summary>
+    /// Gets the list of automated code fixes available for this diagnostic.
+    /// Empty when no fix is available.
+    /// </summary>
+    public IReadOnlyList<CodeFix> Fixes { get; init; } = [];
 
     /// <summary>
     /// Initializes a new <see cref="SemanticDiagnostic"/> with a stable diagnostic code.
