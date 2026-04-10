@@ -161,17 +161,27 @@ public class AnalysisEngine
 
         DocCommentResolver.Resolve(tokens, symbols);
 
-        var validator = new SemanticValidator(symbols);
+        // Load project config early so disabled rules can be pre-filtered
+        var scriptDir = uri.IsFile ? Path.GetDirectoryName(uri.LocalPath) : null;
+        var projectConfig = ProjectConfig.Load(scriptDir);
+
+        var allRules = Rules.RuleRegistry.GetAllRules();
+        var enabledRules = new System.Collections.Generic.List<Rules.IAnalysisRule>(allRules.Count);
+        foreach (var rule in allRules)
+        {
+            if (!projectConfig.DisabledCodes.Contains(rule.Descriptor.Code))
+            {
+                enabledRules.Add(rule);
+            }
+        }
+
+        var validator = new SemanticValidator(symbols, enabledRules);
         var semanticDiagnostics = validator.Validate(statements);
         semanticDiagnostics.AddRange(importDiagnostics);
 
         // Parse suppression directives from trivia tokens
         var suppressionMap = SuppressionDirectiveParser.Parse(tokens);
         semanticDiagnostics = suppressionMap.Filter(semanticDiagnostics);
-
-        // Apply project-level configuration (.stashcheck file)
-        var scriptDir = uri.IsFile ? Path.GetDirectoryName(uri.LocalPath) : null;
-        var projectConfig = ProjectConfig.Load(scriptDir);
         semanticDiagnostics = projectConfig.Apply(semanticDiagnostics);
 
         var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors,
