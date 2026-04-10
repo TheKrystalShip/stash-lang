@@ -44,9 +44,9 @@ internal sealed class VMContext : IInterpreterContext
     }
 
     public string[]? ScriptArgs { get; set; }
-    public TextWriter Output { get; set; } = Console.Out;
-    public TextWriter ErrorOutput { get; set; } = Console.Error;
-    public TextReader Input { get; set; } = Console.In;
+    public TextWriter Output { get; set; } = TextWriter.Null;
+    public TextWriter ErrorOutput { get; set; } = TextWriter.Null;
+    public TextReader Input { get; set; } = TextReader.Null;
     public CancellationToken CancellationToken => _ct;
     public object? Debugger { get; set; }
 
@@ -281,4 +281,5 @@ internal sealed class VMContext : IInterpreterContext
         }
         return callable.CallDirect(Fork(), args);
     }
+
 }

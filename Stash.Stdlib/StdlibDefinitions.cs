@@ -12,7 +12,48 @@ using Stash.Stdlib.Registration;
 
 public static class StdlibDefinitions
 {
-    private static readonly Lazy<IReadOnlyList<NamespaceDefinition>> _namespaces = new(BuildNamespaces);
+    /// <summary>
+    /// Registry of all namespace factories with their required capabilities.
+    /// Lambdas ensure types are resolved lazily — platform-incompatible types
+    /// (e.g. Renci.SshNet in WASM) are never loaded when their capability is absent.
+    /// </summary>
+    private static readonly (Func<NamespaceDefinition> Factory, StashCapabilities Required)[] _registry =
+    [
+        (() => IoBuiltIns.Define(),       StashCapabilities.None),
+        (() => ConvBuiltIns.Define(),     StashCapabilities.None),
+        (() => EnvBuiltIns.Define(),      StashCapabilities.Environment),
+        (() => ProcessBuiltIns.Define(),  StashCapabilities.Process),
+        (() => FsBuiltIns.Define(),       StashCapabilities.FileSystem),
+        (() => PathBuiltIns.Define(),     StashCapabilities.None),
+        (() => ArrBuiltIns.Define(),      StashCapabilities.None),
+        (() => DictBuiltIns.Define(),     StashCapabilities.None),
+        (() => StrBuiltIns.Define(),      StashCapabilities.None),
+        (() => AssertBuiltIns.Define(),   StashCapabilities.None),
+        (() => TestBuiltIns.Define(),     StashCapabilities.None),
+        (() => MathBuiltIns.Define(),     StashCapabilities.None),
+        (() => TimeBuiltIns.Define(),     StashCapabilities.None),
+        (() => JsonBuiltIns.Define(),     StashCapabilities.None),
+        (() => HttpBuiltIns.Define(),     StashCapabilities.Network),
+        (() => IniBuiltIns.Define(),      StashCapabilities.None),
+        (() => YamlBuiltIns.Define(),     StashCapabilities.None),
+        (() => TomlBuiltIns.Define(),     StashCapabilities.None),
+        (() => ConfigBuiltIns.Define(),   StashCapabilities.None),
+        (() => TplBuiltIns.Define(),      StashCapabilities.None),
+        (() => ArgsBuiltIns.Define(),     StashCapabilities.Process),
+        (() => CryptoBuiltIns.Define(),   StashCapabilities.None),
+        (() => EncodingBuiltIns.Define(), StashCapabilities.None),
+        (() => TermBuiltIns.Define(),     StashCapabilities.None),
+        (() => SysBuiltIns.Define(),      StashCapabilities.None),
+        (() => PkgBuiltIns.Define(),      StashCapabilities.FileSystem),
+        (() => TaskBuiltIns.Define(),     StashCapabilities.None),
+        (() => SshBuiltIns.Define(),      StashCapabilities.Network),
+        (() => SftpBuiltIns.Define(),     StashCapabilities.Network),
+        (() => NetBuiltIns.Define(),      StashCapabilities.Network),
+    ];
+
+    private static readonly ConcurrentDictionary<StashCapabilities, IReadOnlyList<NamespaceDefinition>> _namespacesCache = new();
+    private static readonly ConcurrentDictionary<StashCapabilities, NamespaceDefinition> _globalsCache = new();
+    private static readonly ConcurrentDictionary<StashCapabilities, Dictionary<string, StashValue>> _vmGlobalsCache = new();
 
     private static readonly Lazy<IReadOnlyList<BuiltInStruct>> _structs =
         new(() => Namespaces.SelectMany(d => d.Structs).ToArray());
@@ -20,11 +61,15 @@ public static class StdlibDefinitions
     private static readonly Lazy<IReadOnlyList<BuiltInEnum>> _enums =
         new(() => Namespaces.SelectMany(d => d.Enums).ToArray());
 
-    // GetOrAdd may invoke the factory more than once under contention; Define() is pure so this is safe.
-    private static readonly ConcurrentDictionary<StashCapabilities, NamespaceDefinition> _globalsCache = new();
-    private static readonly ConcurrentDictionary<StashCapabilities, Dictionary<string, StashValue>> _vmGlobalsCache = new();
+    /// <summary>
+    /// All namespaces with full capabilities. Used by LSP, analysis, and registry
+    /// where the complete namespace catalogue is needed regardless of runtime platform.
+    /// </summary>
+    public static IReadOnlyList<NamespaceDefinition> Namespaces => GetNamespaces(StashCapabilities.All);
 
-    public static IReadOnlyList<NamespaceDefinition> Namespaces => _namespaces.Value;
+    /// <summary>Returns namespaces filtered by the given capabilities.</summary>
+    public static IReadOnlyList<NamespaceDefinition> GetNamespaces(StashCapabilities capabilities)
+        => _namespacesCache.GetOrAdd(capabilities, static caps => BuildNamespaces(caps));
 
     public static IReadOnlyList<BuiltInStruct> Structs => _structs.Value;
 
@@ -48,60 +93,33 @@ public static class StdlibDefinitions
     {
         var globals = new Dictionary<string, StashValue>();
 
-        // Spread global functions into the flat globals dictionary
         var globalNs = GetGlobalNamespace(capabilities);
         foreach (var (key, value) in globalNs.Namespace.GetAllMemberValues())
         {
             globals[key] = value;
         }
 
-        // Register namespaces (capability-filtered)
-        foreach (var nsDef in Namespaces)
+        // Namespace list is already capability-filtered by GetNamespaces
+        foreach (var nsDef in GetNamespaces(capabilities))
         {
-            if (nsDef.RequiredCapability != StashCapabilities.None && !capabilities.HasFlag(nsDef.RequiredCapability))
-            {
-                continue;
-            }
-
             globals[nsDef.Name] = StashValue.FromObj(nsDef.Namespace);
         }
 
         return globals;
     }
 
-    private static IReadOnlyList<NamespaceDefinition> BuildNamespaces()
+    private static IReadOnlyList<NamespaceDefinition> BuildNamespaces(StashCapabilities capabilities)
     {
-        return [
-            IoBuiltIns.Define(),
-            ConvBuiltIns.Define(),
-            EnvBuiltIns.Define(),
-            ProcessBuiltIns.Define(),
-            FsBuiltIns.Define(),
-            PathBuiltIns.Define(),
-            ArrBuiltIns.Define(),
-            DictBuiltIns.Define(),
-            StrBuiltIns.Define(),
-            AssertBuiltIns.Define(),
-            TestBuiltIns.Define(),
-            MathBuiltIns.Define(),
-            TimeBuiltIns.Define(),
-            JsonBuiltIns.Define(),
-            HttpBuiltIns.Define(),
-            IniBuiltIns.Define(),
-            YamlBuiltIns.Define(),
-            TomlBuiltIns.Define(),
-            ConfigBuiltIns.Define(),
-            TplBuiltIns.Define(),
-            ArgsBuiltIns.Define(),
-            CryptoBuiltIns.Define(),
-            EncodingBuiltIns.Define(),
-            TermBuiltIns.Define(),
-            SysBuiltIns.Define(),
-            PkgBuiltIns.Define(),
-            TaskBuiltIns.Define(),
-            SshBuiltIns.Define(),
-            SftpBuiltIns.Define(),
-            NetBuiltIns.Define(),
-        ];
+        var namespaces = new List<NamespaceDefinition>(_registry.Length);
+
+        foreach (var (factory, required) in _registry)
+        {
+            if (required != StashCapabilities.None && !capabilities.HasFlag(required))
+                continue;
+
+            namespaces.Add(factory());
+        }
+
+        return namespaces;
     }
 }

@@ -33,9 +33,9 @@ public class StashEngine
 {
     private readonly StashCapabilities _capabilities;
     private VirtualMachine? _vm;
-    private TextWriter _output = Console.Out;
-    private TextWriter _errorOutput = Console.Error;
-    private TextReader _input = Console.In;
+    private TextWriter _output = TextWriter.Null;
+    private TextWriter _errorOutput = TextWriter.Null;
+    private TextReader _input = TextReader.Null;
     private CancellationToken _cancellationToken;
     private long _stepLimit;
 
@@ -57,7 +57,7 @@ public class StashEngine
 
     /// <summary>
     /// Gets or sets the text writer used for script output (io.println, io.print).
-    /// Defaults to <see cref="Console.Out"/>.
+    /// Defaults to <see cref="TextWriter.Null"/>; set explicitly before execution.
     /// </summary>
     public TextWriter Output
     {
@@ -71,7 +71,7 @@ public class StashEngine
 
     /// <summary>
     /// Gets or sets the text writer used for error output.
-    /// Defaults to <see cref="Console.Error"/>.
+    /// Defaults to <see cref="TextWriter.Null"/>; set explicitly before execution.
     /// </summary>
     public TextWriter ErrorOutput
     {
@@ -85,7 +85,7 @@ public class StashEngine
 
     /// <summary>
     /// Gets or sets the text reader used for script input (io.readLine).
-    /// Defaults to <see cref="Console.In"/>.
+    /// Defaults to <see cref="TextReader.Null"/>; set explicitly before execution.
     /// </summary>
     public TextReader Input
     {

@@ -486,11 +486,11 @@ public class TestBuiltInsTests : StashTestBase
     }
 
     [Fact]
-    public void InterpreterOutput_DefaultsToConsoleOut()
+    public void InterpreterOutput_DefaultsToNull()
     {
         var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
-        Assert.Same(Console.Out, vm.Output);
-        Assert.Same(Console.Error, vm.ErrorOutput);
+        Assert.Same(TextWriter.Null, vm.Output);
+        Assert.Same(TextWriter.Null, vm.ErrorOutput);
     }
 
     [Fact]

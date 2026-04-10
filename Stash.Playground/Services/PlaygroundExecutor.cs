@@ -107,17 +107,5 @@ public sealed class PlaygroundExecutor
                 Success = false,
             };
         }
-        catch (PlatformNotSupportedException)
-        {
-            sw.Stop();
-            return new PlaygroundResult
-            {
-                Output = output.ToString(),
-                ErrorMessages = ["This feature is not available in the browser sandbox."],
-                ElapsedMs = sw.Elapsed.TotalMilliseconds,
-                StepCount = engine.StepCount,
-                Success = false,
-            };
-        }
     }
 }
