@@ -13,21 +13,27 @@ internal static class Program
 Runs Stash static analysis and outputs diagnostics.
 
 Arguments:
-  FILES/DIRS...         One or more .stash files or directories (default: .)
+  FILES/DIRS...              One or more .stash files or directories (default: .)
+  -                          Read source from stdin (requires --stdin-filename)
 
 Options:
-  --format <fmt>        Output format: text, sarif (default: text)
-  --output <path>       Write output to a file instead of stdout
-  --exclude <glob>      Glob pattern to exclude (repeatable)
-  --severity <level>    Minimum severity: error, warning, information (default: information)
-  --no-imports          Disable cross-file import resolution
-  --fix                 Apply safe fixes in-place
-  --unsafe-fixes        Apply safe and unsafe fixes in-place (implies --fix)
-  --diff                Show fixes as unified diff without applying
-  --statistics          Show summary of diagnostics by rule
-  --show-files          List files that would be analyzed
-  --version             Print version and exit
-  --help, -h            Print this help and exit";
+  --format <fmt>             Output format: text, sarif (default: text)
+  --output <path>            Write output to a file instead of stdout
+  --exclude <glob>           Glob pattern to exclude (repeatable)
+  --severity <level>         Minimum severity: error, warning, information (default: information)
+  --no-imports               Disable cross-file import resolution
+  --fix                      Apply safe fixes in-place
+  --unsafe-fixes             Apply safe and unsafe fixes in-place (implies --fix)
+  --diff                     Show fixes as unified diff without applying
+  --statistics               Show summary of diagnostics by rule
+  --show-files               List files that would be analyzed
+  --select <codes>           Only report these codes/prefixes (comma-separated, e.g. SA0201,SA03)
+  --ignore <codes>           Suppress these codes/prefixes (comma-separated, e.g. SA0201,SA03)
+  --add-suppress             Insert suppression comments for all current diagnostics in-place
+  --reason <text>            Reason text appended to auto-inserted suppression comments
+  --stdin-filename <file>    Virtual filename for stdin diagnostics (used with -)
+  --version                  Print version and exit
+  --help, -h                 Print this help and exit";
 
     internal static int Main(string[] args)
     {
@@ -92,6 +98,14 @@ Options:
         {
             WriteStatistics(result);
             return HasDiagnosticsAtOrAbove(result, GetMinLevel(options)) ? 1 : 0;
+        }
+
+        // --add-suppress: insert suppression comments in-place
+        if (options.AddSuppress)
+        {
+            int total = runner.AddSuppressions(result);
+            Console.Error.WriteLine($"Inserted {total} suppression comment(s).");
+            return 0;
         }
 
         // --diff: show unified diff of fixes without applying

@@ -14,6 +14,7 @@ public static partial class SuppressionDirectiveParser
 {
     private const string DisableNextLine = "stash-disable-next-line";
     private const string DisableLine = "stash-disable-line";
+    private const string DisableFile = "stash-disable-file";
     private const string Disable = "stash-disable";
     private const string Restore = "stash-restore";
 
@@ -55,6 +56,13 @@ public static partial class SuppressionDirectiveParser
                 var codesPart = content.Substring(DisableLine.Length);
                 var codes = ParseCodes(codesPart, token.Span, map);
                 map.AddLineSuppression(token.Span.StartLine, codes);
+            }
+            else if (content.StartsWith(DisableFile, StringComparison.Ordinal))
+            {
+                // File-level suppression: stash-disable-file or stash-disable-file SA0201, SA0202
+                var codesPart = content.Substring(DisableFile.Length);
+                var codes = ParseCodes(codesPart, token.Span, map);
+                map.SetFileLevelSuppression(codes);
             }
             else if (content.StartsWith(Disable, StringComparison.Ordinal))
             {

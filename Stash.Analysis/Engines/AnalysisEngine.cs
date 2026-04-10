@@ -51,7 +51,7 @@ public class AnalysisEngine
     /// An <see cref="AnalysisResult"/> containing tokens, AST statements, symbol table,
     /// diagnostics, and import information.
     /// </returns>
-    public AnalysisResult Analyze(Uri uri, string source, bool noImports = false)
+    public AnalysisResult Analyze(Uri uri, string source, bool noImports = false, ProjectConfig? configOverride = null)
     {
         _logger.LogDebug("Analyzing {Uri}", uri);
 
@@ -163,13 +163,13 @@ public class AnalysisEngine
 
         // Load project config early so disabled rules can be pre-filtered
         var scriptDir = uri.IsFile ? Path.GetDirectoryName(uri.LocalPath) : null;
-        var projectConfig = ProjectConfig.Load(scriptDir);
+        var projectConfig = configOverride ?? ProjectConfig.Load(scriptDir);
 
         var allRules = Rules.RuleRegistry.GetAllRules();
         var enabledRules = new System.Collections.Generic.List<Rules.IAnalysisRule>(allRules.Count);
         foreach (var rule in allRules)
         {
-            if (!projectConfig.DisabledCodes.Contains(rule.Descriptor.Code))
+            if (!projectConfig.IsCodeDisabled(rule.Descriptor.Code))
             {
                 enabledRules.Add(rule);
             }
@@ -182,7 +182,7 @@ public class AnalysisEngine
         // Parse suppression directives from trivia tokens
         var suppressionMap = SuppressionDirectiveParser.Parse(tokens);
         semanticDiagnostics = suppressionMap.Filter(semanticDiagnostics);
-        semanticDiagnostics = projectConfig.Apply(semanticDiagnostics);
+        semanticDiagnostics = projectConfig.Apply(semanticDiagnostics, uri.IsFile ? filePath : null);
 
         var result = new AnalysisResult(tokens, statements, lexErrors, parseErrors,
             lexer.StructuredErrors, parser.StructuredErrors, symbols, semanticDiagnostics,

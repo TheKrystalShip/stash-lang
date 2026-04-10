@@ -19,6 +19,18 @@ internal sealed class CheckOptions
     public bool UnsafeFixes { get; init; }
     public bool Diff { get; init; }
 
+    // Phase 4 — Advanced Configuration
+    /// <summary>Exclusive rule allow-list (--select). Only these codes/prefixes are reported.</summary>
+    public List<string> Select { get; init; } = new();
+    /// <summary>Additional codes/prefixes to suppress (--ignore).</summary>
+    public List<string> Ignore { get; init; } = new();
+    /// <summary>Inserts suppression comments for all current diagnostics in-place.</summary>
+    public bool AddSuppress { get; init; }
+    /// <summary>Optional reason text appended to auto-inserted suppression comments.</summary>
+    public string? Reason { get; init; }
+    /// <summary>Virtual filename used for diagnostics when reading from stdin (<c>-</c>).</summary>
+    public string? StdinFilename { get; init; }
+
     public static CheckOptions Parse(string[] args)
     {
         string format = "text";
@@ -34,6 +46,11 @@ internal sealed class CheckOptions
         bool unsafeFixes = false;
         bool diff = false;
         var paths = new List<string>();
+        var select = new List<string>();
+        var ignore = new List<string>();
+        bool addSuppress = false;
+        string? reason = null;
+        string? stdinFilename = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -113,8 +130,50 @@ internal sealed class CheckOptions
                     showHelp = true;
                     break;
 
+                case "--select":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("Error: --select requires a value.");
+                        Environment.Exit(2);
+                    }
+                    foreach (string code in args[++i].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                        select.Add(code);
+                    break;
+
+                case "--ignore":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("Error: --ignore requires a value.");
+                        Environment.Exit(2);
+                    }
+                    foreach (string code in args[++i].Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries))
+                        ignore.Add(code);
+                    break;
+
+                case "--add-suppress":
+                    addSuppress = true;
+                    break;
+
+                case "--reason":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("Error: --reason requires a value.");
+                        Environment.Exit(2);
+                    }
+                    reason = args[++i];
+                    break;
+
+                case "--stdin-filename":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("Error: --stdin-filename requires a value.");
+                        Environment.Exit(2);
+                    }
+                    stdinFilename = args[++i];
+                    break;
+
                 default:
-                    if (args[i].StartsWith('-'))
+                    if (args[i].StartsWith('-') && args[i] != "-")
                     {
                         Console.Error.WriteLine($"Error: Unknown option '{args[i]}'.");
                         Environment.Exit(2);
@@ -143,7 +202,12 @@ internal sealed class CheckOptions
             ShowFiles = showFiles,
             Fix = fix,
             UnsafeFixes = unsafeFixes,
-            Diff = diff
+            Diff = diff,
+            Select = select,
+            Ignore = ignore,
+            AddSuppress = addSuppress,
+            Reason = reason,
+            StdinFilename = stdinFilename,
         };
     }
 }

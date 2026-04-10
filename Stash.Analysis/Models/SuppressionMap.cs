@@ -121,6 +121,36 @@ public class SuppressionMap
         _directiveDiagnostics.Add(diagnostic);
     }
 
+    // ── File-Level Suppression ───────────────────────────────────────────────
+
+    /// <summary>When <see langword="true"/>, ALL diagnostics in the file are suppressed.</summary>
+    private bool _fileSuppressAll;
+
+    /// <summary>Specific codes suppressed for the entire file (populated by <c>stash-disable-file CODE</c>).</summary>
+    private readonly HashSet<string> _fileSuppressedCodes = new();
+
+    /// <summary>Gets whether any file-level suppression directive was encountered.</summary>
+    public bool HasFileLevelSuppression => _fileSuppressAll || _fileSuppressedCodes.Count > 0;
+
+    /// <summary>
+    /// Registers a file-level suppression directive.
+    /// </summary>
+    /// <param name="codes">The codes to suppress, or <see langword="null"/> to suppress all diagnostics.</param>
+    internal void SetFileLevelSuppression(HashSet<string>? codes)
+    {
+        if (codes == null)
+            _fileSuppressAll = true;
+        else
+            _fileSuppressedCodes.UnionWith(codes);
+    }
+
+    private bool IsFileLevelSuppressed(string? code)
+    {
+        if (!HasFileLevelSuppression) return false;
+        if (_fileSuppressAll) return true;
+        return code != null && _fileSuppressedCodes.Contains(code);
+    }
+
     /// <summary>
     /// Returns <see langword="true"/> if the given diagnostic code is suppressed at the given line.
     /// </summary>
@@ -162,6 +192,9 @@ public class SuppressionMap
         var result = new List<SemanticDiagnostic>(diagnostics.Count);
         foreach (var d in diagnostics)
         {
+            // File-level suppression is checked first and does not generate SA0003 warnings
+            if (IsFileLevelSuppressed(d.Code)) continue;
+
             if (IsSuppressedWithTracking(d.Code, d.Span.StartLine, usedLineSuppressions, usedRangeIndices))
             {
                 continue;
