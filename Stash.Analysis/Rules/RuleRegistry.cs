@@ -46,6 +46,7 @@ public static class RuleRegistry
             new FieldTypeMismatchRule(),
             new AssignmentTypeMismatchRule(),
             new PossibleNullAccessRule(),
+            new NullFlowRule(),
             new ExhaustiveMatchRule(),
 
             // Functions & Calls (SA04xx)
@@ -79,6 +80,13 @@ public static class RuleRegistry
             new NoSelfCompareRule(),
             new NoConstantConditionRule(),
             new NoUnreachableLoopRule(),
+
+            // Performance (SA12xx)
+            new NoAccumulatingSpreadRule(),
+
+            // Security (SA13xx)
+            new NoHardcodedCredentialsRule(),
+            new NoUnsafeCommandInterpolationRule(),
 
             // Suggestions (SA14xx)
             new UseOptionalChainingRule(),

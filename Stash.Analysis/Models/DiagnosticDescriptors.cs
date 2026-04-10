@@ -41,6 +41,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0304 = new("SA0304", "Field type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to field '{1}' of type '{2}'.");
     public static readonly DiagnosticDescriptor SA0305 = new("SA0305", "Variable assignment type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to variable '{1}' of type '{2}'.");
     public static readonly DiagnosticDescriptor SA0308 = new("SA0308", "Possible null access", DiagnosticLevel.Warning, "Type safety", "Possible null access: '{0}' may be null.");
+    public static readonly DiagnosticDescriptor SA0309 = new("SA0309", "Null access on unguarded path", DiagnosticLevel.Warning, "Type safety", "'{0}' may be null at this point. Assign a value or add a null check before accessing it.");
     public static readonly DiagnosticDescriptor SA0310 = new("SA0310", "Non-exhaustive switch on enum", DiagnosticLevel.Warning, "Type safety", "Switch on enum '{0}' does not cover all variants. Missing: {1}.");
 
     // ── SA04xx — Functions & Calls ───────────────────────────────────
@@ -88,6 +89,13 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA1107 = new("SA1107", "Constant condition", DiagnosticLevel.Warning, "Best Practices", "Constant condition: this {0} condition is always {1}.");
     public static readonly DiagnosticDescriptor SA1108 = new("SA1108", "Unreachable loop", DiagnosticLevel.Warning, "Best Practices", "Loop body always exits on first iteration. This loop will execute at most once.");
 
+    // ── SA12xx — Performance ─────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA1201 = new("SA1201", "Accumulating spread in loop", DiagnosticLevel.Warning, "Performance", "Spreading '{0}' into itself inside a loop creates a copy each iteration (O(n²)). Use arr.push() or dict.set() instead.");
+
+    // ── SA13xx — Security ────────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA1301 = new("SA1301", "Hardcoded credentials", DiagnosticLevel.Warning, "Security", "Variable '{0}' appears to contain hardcoded credentials. Use environment variables or a secrets manager instead.");
+    public static readonly DiagnosticDescriptor SA1302 = new("SA1302", "Unsafe command interpolation", DiagnosticLevel.Warning, "Security", "String interpolation in shell command may allow command injection. Validate or escape '{0}' before use.");
+
     // ── SA14xx — Suggestions ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA1401 = new("SA1401", "Use optional chaining", DiagnosticLevel.Information, "Suggestions", "Use optional chaining: '{0}?.{1}' instead of null check with member access.", FixApplicability.Unsafe);
     public static readonly DiagnosticDescriptor SA1402 = new("SA1402", "Use null coalescing", DiagnosticLevel.Information, "Suggestions", "Use null coalescing: '{0} ?? {1}' instead of null check with ternary.", FixApplicability.Unsafe);
@@ -125,6 +133,7 @@ public static class DiagnosticDescriptors
         dict[SA0304.Code] = SA0304;
         dict[SA0305.Code] = SA0305;
         dict[SA0308.Code] = SA0308;
+        dict[SA0309.Code] = SA0309;
         dict[SA0310.Code] = SA0310;
         dict[SA0401.Code] = SA0401;
         dict[SA0402.Code] = SA0402;
@@ -157,6 +166,9 @@ public static class DiagnosticDescriptors
         dict[SA1106.Code] = SA1106;
         dict[SA1107.Code] = SA1107;
         dict[SA1108.Code] = SA1108;
+        dict[SA1201.Code] = SA1201;
+        dict[SA1301.Code] = SA1301;
+        dict[SA1302.Code] = SA1302;
         dict[SA1401.Code] = SA1401;
         dict[SA1402.Code] = SA1402;
         return dict.ToFrozenDictionary();

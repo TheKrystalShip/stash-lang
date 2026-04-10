@@ -699,7 +699,9 @@ io.println(baz);";
     {
         var rules = Stash.Analysis.Rules.RuleRegistry.GetAllRules();
         // Was 33 before Analysis & Format spec; now 43 (added 10: SA0901, SA1002, SA1102-SA1108, SA1401, SA1402)
-        Assert.Equal(43, rules.Count);
+        // Now 46 (added SA1301, SA1302 security rules; NoAccumulatingSpreadRule previously added)
+        // Now 47 (added NullFlowRule SA0309)
+        Assert.Equal(47, rules.Count);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────

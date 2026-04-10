@@ -36,6 +36,7 @@ Options:
   --stdin-filename <file>    Virtual filename for stdin diagnostics (used with -)
   --watch                    Watch for file changes and re-analyze
   --timing                   Print pass timing breakdown
+  --generate-docs <dir>      Generate rule documentation pages into <dir> and exit
   --version                  Print version and exit
   --help, -h                 Print this help and exit";
 
@@ -53,6 +54,20 @@ Options:
         if (options.ShowVersion)
         {
             Console.WriteLine(GetVersion());
+            return 0;
+        }
+
+        if (options.GenerateDocsDir is not null)
+        {
+            try
+            {
+                RuleDocGenerator.GenerateDocs(options.GenerateDocsDir);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine($"Error generating docs: {ex.Message}");
+                return 2;
+            }
             return 0;
         }
 

@@ -175,6 +175,15 @@ public class AnalysisEngine
             }
         }
 
+        foreach (var rule in enabledRules)
+        {
+            if (rule is Rules.IConfigurableRule configurable &&
+                projectConfig.RuleOptions.TryGetValue(rule.Descriptor.Code, out var ruleOpts))
+            {
+                configurable.Configure(ruleOpts);
+            }
+        }
+
         var validator = new SemanticValidator(symbols, enabledRules);
         var semanticDiagnostics = validator.Validate(statements);
         semanticDiagnostics.AddRange(importDiagnostics);
@@ -249,6 +258,42 @@ public class AnalysisEngine
     public IReadOnlyCollection<Uri> GetDependents(string absolutePath)
     {
         return _importResolver.GetDependents(absolutePath);
+    }
+
+    /// <summary>
+    /// Returns all URIs that directly or transitively depend on the given file.
+    /// Uses breadth-first traversal to follow the import chain.
+    /// </summary>
+    public IReadOnlyCollection<Uri> GetTransitiveDependents(string absolutePath)
+    {
+        var result = new HashSet<Uri>();
+        var queue = new Queue<string>();
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        queue.Enqueue(absolutePath);
+        visited.Add(absolutePath);
+
+        while (queue.Count > 0)
+        {
+            string current = queue.Dequeue();
+            var directDeps = _importResolver.GetDependents(current);
+
+            foreach (var depUri in directDeps)
+            {
+                result.Add(depUri);
+
+                if (depUri.IsFile)
+                {
+                    string depPath = depUri.LocalPath;
+                    if (visited.Add(depPath))
+                    {
+                        queue.Enqueue(depPath);
+                    }
+                }
+            }
+        }
+
+        return result;
     }
 
     /// <summary>

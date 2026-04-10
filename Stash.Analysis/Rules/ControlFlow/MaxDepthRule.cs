@@ -8,15 +8,21 @@ using Stash.Parsing.AST;
 /// SA1002 — Emits an information diagnostic when a function's maximum nesting depth exceeds
 /// the configured threshold (default: 5).
 /// </summary>
-public sealed class MaxDepthRule : IAnalysisRule
+public sealed class MaxDepthRule : IAnalysisRule, IConfigurableRule
 {
     /// <summary>Default nesting depth threshold.</summary>
     public const int DefaultThreshold = 5;
 
     /// <summary>Configurable threshold; defaults to <see cref="DefaultThreshold"/>.</summary>
-    public int Threshold { get; init; } = DefaultThreshold;
+    public int Threshold { get; private set; } = DefaultThreshold;
 
     public DiagnosticDescriptor Descriptor => DiagnosticDescriptors.SA1002;
+
+    public void Configure(IReadOnlyDictionary<string, string> options)
+    {
+        if (options.TryGetValue("maxDepth", out string? val) && int.TryParse(val, out int v) && v > 0)
+            Threshold = v;
+    }
 
     /// <summary>Subscribed to FnDeclStmt — analyzed once per function declaration.</summary>
     public IReadOnlySet<Type> SubscribedNodeTypes { get; } = new HashSet<Type> { typeof(FnDeclStmt) };

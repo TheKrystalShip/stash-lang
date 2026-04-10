@@ -159,10 +159,10 @@ public class TextDocumentSyncHandler : TextDocumentSyncHandlerBase
             Diagnostics = new Container<Diagnostic>(diagnostics)
         });
 
-        // Re-analyze open files that import this file so they get updated diagnostics
+        // Re-analyze open files that directly or transitively import this file so they get updated diagnostics
         if (uri.IsFile)
         {
-            foreach (var depUri in _analysis.GetDependents(uri.LocalPath))
+            foreach (var depUri in _analysis.GetTransitiveDependents(uri.LocalPath))
             {
                 if (depUri == uri)
                 {

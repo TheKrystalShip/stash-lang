@@ -564,6 +564,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitCommandExpr(CommandExpr expr)
     {
+        DispatchNodeRules(expr);
         foreach (var part in expr.Parts)
         {
             part.Accept(this);

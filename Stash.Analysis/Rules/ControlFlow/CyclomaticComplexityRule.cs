@@ -21,15 +21,21 @@ using Stash.Parsing.AST;
 /// </list>
 /// The threshold is configurable via <see cref="CyclomaticComplexityRule.Threshold"/>.
 /// </remarks>
-public sealed class CyclomaticComplexityRule : IAnalysisRule
+public sealed class CyclomaticComplexityRule : IAnalysisRule, IConfigurableRule
 {
     /// <summary>Default cyclomatic complexity threshold.</summary>
     public const int DefaultThreshold = 10;
 
     /// <summary>Configurable threshold; defaults to <see cref="DefaultThreshold"/>.</summary>
-    public int Threshold { get; init; } = DefaultThreshold;
+    public int Threshold { get; private set; } = DefaultThreshold;
 
     public DiagnosticDescriptor Descriptor => DiagnosticDescriptors.SA0109;
+
+    public void Configure(IReadOnlyDictionary<string, string> options)
+    {
+        if (options.TryGetValue("maxComplexity", out string? val) && int.TryParse(val, out int v) && v > 0)
+            Threshold = v;
+    }
 
     /// <summary>Subscribed to FnDeclStmt — analyzed once per function declaration.</summary>
     public IReadOnlySet<Type> SubscribedNodeTypes { get; } = new HashSet<Type> { typeof(FnDeclStmt) };

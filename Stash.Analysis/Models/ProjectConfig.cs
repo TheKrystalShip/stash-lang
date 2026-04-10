@@ -34,6 +34,14 @@ public class ProjectConfig
     public IReadOnlyDictionary<string, PerFileOverride> PerFileOverrides => _perFileOverrides;
     private readonly Dictionary<string, PerFileOverride> _perFileOverrides = new();
 
+    /// <summary>Per-rule options parsed from <c>options.CODE.key = value</c> lines.</summary>
+    public IReadOnlyDictionary<string, Dictionary<string, string>> RuleOptions => _ruleOptions;
+    private readonly Dictionary<string, Dictionary<string, string>> _ruleOptions = new();
+
+    /// <summary>Domain name → profile map from the <c>[domains]</c> section.</summary>
+    public IReadOnlyDictionary<string, string> Domains => _domains;
+    private readonly Dictionary<string, string> _domains = new();
+
     /// <summary>
     /// CLI-supplied exclusive allow-list. When non-empty, only codes/prefixes in this set are
     /// reported; all others are suppressed.
@@ -172,6 +180,7 @@ public class ProjectConfig
     {
         var config = new ProjectConfig();
         bool inPerFileOverrides = false;
+        bool inDomains = false;
 
         foreach (string rawLine in content.Split('\n'))
         {
@@ -182,12 +191,26 @@ public class ProjectConfig
             if (line.StartsWith('['))
             {
                 inPerFileOverrides = line.Equals("[per-file-overrides]", StringComparison.OrdinalIgnoreCase);
+                inDomains = line.Equals("[domains]", StringComparison.OrdinalIgnoreCase);
                 continue;
             }
 
             if (inPerFileOverrides)
             {
                 ParsePerFileOverrideLine(config, line);
+                continue;
+            }
+
+            if (inDomains)
+            {
+                int eqIdx = line.IndexOf('=');
+                if (eqIdx > 0)
+                {
+                    string domainName = line[..eqIdx].Trim().ToLowerInvariant();
+                    string domainProfile = line[(eqIdx + 1)..].Trim().ToLowerInvariant();
+                    if (domainProfile is "recommended" or "strict" or "off")
+                        config._domains[domainName] = domainProfile;
+                }
                 continue;
             }
 
@@ -229,6 +252,22 @@ public class ProjectConfig
                         string code = key["severity.".Length..];
                         if (TryParseSeverity(value, out var level))
                             config._severityOverrides[code] = level;
+                    }
+                    else if (key.StartsWith("options."))
+                    {
+                        string rest = key["options.".Length..];
+                        int dotIndex = rest.IndexOf('.');
+                        if (dotIndex > 0)
+                        {
+                            string ruleCode = rest[..dotIndex];
+                            string optionName = rest[(dotIndex + 1)..];
+                            if (!config._ruleOptions.TryGetValue(ruleCode, out var opts))
+                            {
+                                opts = new Dictionary<string, string>();
+                                config._ruleOptions[ruleCode] = opts;
+                            }
+                            opts[optionName] = value;
+                        }
                     }
                     break;
             }
@@ -330,6 +369,34 @@ public class ProjectConfig
         foreach (var kv in child._perFileOverrides)
             merged._perFileOverrides[kv.Key] = kv.Value;
 
+        // Domains: child profile overrides parent for same domain name
+        foreach (var kv in parent._domains)
+            merged._domains[kv.Key] = kv.Value;
+        foreach (var kv in child._domains)
+            merged._domains[kv.Key] = kv.Value;
+
+        // Rule options: child overrides parent for same code+key
+        foreach (var (code, parentOpts) in parent._ruleOptions)
+        {
+            if (!merged._ruleOptions.TryGetValue(code, out var mergedOpts))
+            {
+                mergedOpts = new Dictionary<string, string>();
+                merged._ruleOptions[code] = mergedOpts;
+            }
+            foreach (var kv in parentOpts)
+                mergedOpts[kv.Key] = kv.Value;
+        }
+        foreach (var (code, childOpts) in child._ruleOptions)
+        {
+            if (!merged._ruleOptions.TryGetValue(code, out var mergedOpts))
+            {
+                mergedOpts = new Dictionary<string, string>();
+                merged._ruleOptions[code] = mergedOpts;
+            }
+            foreach (var kv in childOpts)
+                mergedOpts[kv.Key] = kv.Value;
+        }
+
         return merged;
     }
 
@@ -357,6 +424,9 @@ public class ProjectConfig
                 if (fileOverride.DisabledCodes.Contains(code)) continue;
             }
 
+            // Domain-based rule adjustment
+            if (code != null && filePath != null && IsDomainDisabled(code, filePath)) continue;
+
             // Global disable check (covers exact, prefix, select, preset)
             if (code != null && IsCodeDisabled(code)) continue;
 
@@ -374,6 +444,28 @@ public class ProjectConfig
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private bool IsDomainDisabled(string code, string filePath)
+    {
+        if (_domains.Count == 0) return false;
+        string normalizedPath = filePath.Replace('\\', '/');
+        foreach (var (domainName, profile) in _domains)
+        {
+            var domain = DomainRegistry.GetDomain(domainName, profile);
+            if (domain == null) continue;
+
+            foreach (string pattern in domain.FilePatterns)
+            {
+                if (GlobMatches(normalizedPath, pattern))
+                {
+                    if (domain.DisabledCodes.Contains(code))
+                        return true;
+                    break;
+                }
+            }
+        }
+        return false;
+    }
 
     private PerFileOverride? FindPerFileOverride(string? filePath)
     {
@@ -422,6 +514,10 @@ public class ProjectConfig
             result._severityOverrides[kv.Key] = kv.Value;
         foreach (var kv in _perFileOverrides)
             result._perFileOverrides[kv.Key] = kv.Value;
+        foreach (var (code, opts) in _ruleOptions)
+            result._ruleOptions[code] = new Dictionary<string, string>(opts);
+        foreach (var kv in _domains)
+            result._domains[kv.Key] = kv.Value;
         return result;
     }
 }

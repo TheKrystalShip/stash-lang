@@ -12,15 +12,21 @@ using Stash.Parsing.AST;
 /// Rest parameters are counted as one parameter. Lambda parameters are not checked because
 /// lambdas are commonly used as callbacks and often inherit callback signatures.
 /// </remarks>
-public sealed class TooManyParametersRule : IAnalysisRule
+public sealed class TooManyParametersRule : IAnalysisRule, IConfigurableRule
 {
     /// <summary>Default parameter count threshold.</summary>
     public const int DefaultThreshold = 5;
 
     /// <summary>Configurable threshold; defaults to <see cref="DefaultThreshold"/>.</summary>
-    public int Threshold { get; init; } = DefaultThreshold;
+    public int Threshold { get; private set; } = DefaultThreshold;
 
     public DiagnosticDescriptor Descriptor => DiagnosticDescriptors.SA0405;
+
+    public void Configure(IReadOnlyDictionary<string, string> options)
+    {
+        if (options.TryGetValue("maxParams", out string? val) && int.TryParse(val, out int v) && v > 0)
+            Threshold = v;
+    }
 
     /// <summary>Subscribed to FnDeclStmt — analyzed once per function declaration.</summary>
     public IReadOnlySet<Type> SubscribedNodeTypes { get; } = new HashSet<Type> { typeof(FnDeclStmt) };

@@ -34,6 +34,8 @@ internal sealed class CheckOptions
     public bool Watch { get; init; }
     /// <summary>Enables timing output — prints a breakdown of analysis pass durations.</summary>
     public bool Timing { get; init; }
+    /// <summary>Output directory for generated rule documentation pages (<c>--generate-docs</c>).</summary>
+    public string? GenerateDocsDir { get; init; }
 
     public static CheckOptions Parse(string[] args)
     {
@@ -57,6 +59,7 @@ internal sealed class CheckOptions
         string? stdinFilename = null;
         bool watch = false;
         bool timing = false;
+        string? generateDocsDir = null;
 
         for (int i = 0; i < args.Length; i++)
         {
@@ -186,6 +189,15 @@ internal sealed class CheckOptions
                     timing = true;
                     break;
 
+                case "--generate-docs":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine("Error: --generate-docs requires a directory path.");
+                        Environment.Exit(2);
+                    }
+                    generateDocsDir = args[++i];
+                    break;
+
                 default:
                     if (args[i].StartsWith('-') && args[i] != "-")
                     {
@@ -197,7 +209,7 @@ internal sealed class CheckOptions
             }
         }
 
-        if (paths.Count == 0 && !showVersion && !showHelp)
+        if (paths.Count == 0 && !showVersion && !showHelp && generateDocsDir is null)
         {
             paths.Add(".");
         }
@@ -224,6 +236,7 @@ internal sealed class CheckOptions
             StdinFilename = stdinFilename,
             Watch = watch,
             Timing = timing,
+            GenerateDocsDir = generateDocsDir,
         };
     }
 }

@@ -1,11 +1,13 @@
 namespace Stash.Check;
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
+using System.Threading;
 using Microsoft.Extensions.Logging.Abstractions;
 using Stash.Analysis;
 
@@ -42,48 +44,64 @@ internal sealed class CheckRunner
         var results = new List<FileResult>();
 
         // Cache ProjectConfig per directory (hierarchical load is expensive)
-        var configCache = new Dictionary<string, ProjectConfig>(StringComparer.Ordinal);
+        var configCache = new ConcurrentDictionary<string, ProjectConfig>(StringComparer.Ordinal);
 
-        double readMs = 0, analyzeMs = 0;
-
-        foreach (string filePath in files)
+        // Local function: read, configure, and analyze a single file. Returns null on read error.
+        FileResult? ProcessFile(string filePath)
         {
             string absolutePath = Path.GetFullPath(filePath);
             var uri = new Uri(absolutePath);
             string source;
             try
             {
-                var readSw = Stopwatch.StartNew();
                 source = File.ReadAllText(absolutePath);
-                readSw.Stop();
-                readMs += readSw.Elapsed.TotalMilliseconds;
             }
             catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
             {
                 Console.Error.WriteLine($"Warning: Cannot read '{absolutePath}': {ex.Message}");
-                continue;
+                return null;
             }
 
             // Load and cache per-directory config, merging CLI overrides
             string? scriptDir = Path.GetDirectoryName(absolutePath);
             string cacheKey = scriptDir ?? "";
-            if (!configCache.TryGetValue(cacheKey, out var config))
-            {
-                config = ProjectConfig.Load(scriptDir).WithCliOverrides(_options.Select, _options.Ignore);
-                configCache[cacheKey] = config;
-            }
+            var config = configCache.GetOrAdd(cacheKey,
+                key => ProjectConfig.Load(key.Length > 0 ? key : null).WithCliOverrides(_options.Select, _options.Ignore));
 
-            var analyzeSw = Stopwatch.StartNew();
             var analysis = engine.Analyze(uri, source, _options.NoImports, config);
-            analyzeSw.Stop();
-            analyzeMs += analyzeSw.Elapsed.TotalMilliseconds;
-
-            results.Add(new FileResult(uri, analysis));
+            return new FileResult(uri, analysis);
         }
 
+        var analysisSw = Stopwatch.StartNew();
+
+        if (_options.NoImports)
+        {
+            // Imports disabled: AnalysisEngine is safe to use concurrently
+            var resultsBag = new ConcurrentBag<FileResult>();
+            System.Threading.Tasks.Parallel.ForEach(files, filePath =>
+            {
+                var result = ProcessFile(filePath);
+                if (result is not null)
+                    resultsBag.Add(result);
+            });
+            // Sort results by file path for deterministic output
+            results = resultsBag.OrderBy(r => r.Uri.LocalPath, StringComparer.Ordinal).ToList();
+        }
+        else
+        {
+            // Imports enabled: ImportResolver uses a non-thread-safe HashSet — must run serially
+            foreach (string filePath in files)
+            {
+                var result = ProcessFile(filePath);
+                if (result is not null)
+                    results.Add(result);
+            }
+        }
+
+        analysisSw.Stop();
+
         totalSw.Stop();
-        timing.Add(("FileRead", readMs));
-        timing.Add(("Analysis", analyzeMs));
+        timing.Add(("Analysis", analysisSw.Elapsed.TotalMilliseconds));
         timing.Add(("Total", totalSw.Elapsed.TotalMilliseconds));
         LastTiming = timing;
 
