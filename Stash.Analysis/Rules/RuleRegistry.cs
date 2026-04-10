@@ -65,6 +65,24 @@ public static class RuleRegistry
             // Imports (SA08xx)
             new UnusedImportRule(),
             new ImportOrderingRule(),
+
+            // Style (SA09xx)
+            new NoUnnecessaryElseRule(),
+
+            // Complexity (SA10xx)
+            new MaxDepthRule(),
+
+            // Best Practices (SA11xx)
+            new NoSelfAssignRule(),
+            new NoDuplicateCaseRule(),
+            new NoLoneBlocksRule(),
+            new NoSelfCompareRule(),
+            new NoConstantConditionRule(),
+            new NoUnreachableLoopRule(),
+
+            // Suggestions (SA14xx)
+            new UseOptionalChainingRule(),
+            new UseNullCoalescingRule(),
         ];
     }
 }

@@ -38,7 +38,8 @@ internal sealed class FormatRunner
             string formatted;
             try
             {
-                var formatter = new StashFormatter(_options.IndentSize, _options.UseTabs);
+                var config = BuildConfig(absolutePath);
+                var formatter = new StashFormatter(config);
                 formatted = formatter.Format(source);
             }
             catch (Exception ex)
@@ -53,6 +54,24 @@ internal sealed class FormatRunner
         }
 
         return new FormatResult(results);
+    }
+
+    private FormatConfig BuildConfig(string filePath)
+    {
+        // Load .stashformat from the given explicit path, or walk up from the file's directory
+        var fileConfig = _options.ConfigPath != null
+            ? FormatConfig.LoadFromFile(Path.GetFullPath(_options.ConfigPath))
+            : FormatConfig.Load(Path.GetDirectoryName(filePath));
+
+        // Merge CLI overrides — any override explicitly set on the CLI takes precedence
+        return new FormatConfig
+        {
+            IndentSize = _options.IndentSizeOverride ?? fileConfig.IndentSize,
+            UseTabs = _options.UseTabsOverride ?? fileConfig.UseTabs,
+            TrailingComma = _options.TrailingCommaOverride ?? fileConfig.TrailingComma,
+            EndOfLine = _options.EndOfLineOverride ?? fileConfig.EndOfLine,
+            BracketSpacing = _options.BracketSpacingOverride ?? fileConfig.BracketSpacing,
+        };
     }
 
     internal List<string> DiscoverFiles()

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using Stash.Analysis;
 using Stash.Format;
 
 namespace Stash.Tests.Analysis;
@@ -199,7 +200,7 @@ public class StashFormatTests
         string filePath = CreateTempStashFile("fn foo(){\nreturn 1;\n}");
         try
         {
-            var options = new FormatOptions { Paths = new List<string> { filePath }, IndentSize = 4 };
+            var options = new FormatOptions { Paths = new List<string> { filePath }, IndentSizeOverride = 4 };
             var runner = new FormatRunner(options);
             FormatResult result = runner.Run();
             Assert.Contains("    return 1;", result.Files[0].Formatted);
@@ -382,7 +383,7 @@ public class StashFormatTests
         string filePath = CreateTempStashFile("fn foo(){\nreturn 1;\n}");
         try
         {
-            var options = new FormatOptions { Paths = new List<string> { filePath }, UseTabs = true };
+            var options = new FormatOptions { Paths = new List<string> { filePath }, UseTabsOverride = true };
             var runner = new FormatRunner(options);
             FormatResult result = runner.Run();
             Assert.Contains("\treturn 1;", result.Files[0].Formatted);
@@ -426,5 +427,151 @@ public class StashFormatTests
         {
             Directory.Delete(dir, true);
         }
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // StashFormatter — Ignore Comments
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void IgnoreAll_Format_ReturnsSourceUnchanged()
+    {
+        string source = "// stash-ignore-all format\nlet   x=5;\nlet   y=6;\n";
+        var formatter = new StashFormatter();
+        string result = formatter.Format(source);
+        Assert.Equal(source, result);
+    }
+
+    [Fact]
+    public void IgnoreNext_Format_PreservesNextStatement()
+    {
+        string source = "// stash-ignore format\nlet   x=5;\nlet   y=6;\n";
+        var formatter = new StashFormatter();
+        string result = formatter.Format(source);
+        Assert.Contains("let   x=5;", result);
+        Assert.Contains("let y = 6;", result);
+    }
+
+    [Fact]
+    public void IgnoreNext_Format_OnlyAffectsNextStatement()
+    {
+        string source = "// stash-ignore format\nlet   x=5;\nlet   y=6;\n";
+        var formatter = new StashFormatter();
+        string result = formatter.Format(source);
+        Assert.DoesNotContain("let   y=6;", result);
+        Assert.Contains("let y = 6;", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // StashFormatter — Trailing Commas
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void TrailingComma_All_ArrayMultiLine()
+    {
+        string source = "let arr = [\n  1,\n  2,\n  3\n];\n";
+        var formatter = new StashFormatter(new FormatConfig { TrailingComma = TrailingCommaStyle.All });
+        string result = formatter.Format(source);
+        Assert.Contains("3,", result);
+    }
+
+    [Fact]
+    public void TrailingComma_None_ArrayMultiLine()
+    {
+        string source = "let arr = [\n  1,\n  2,\n  3\n];\n";
+        var formatter = new StashFormatter(new FormatConfig { TrailingComma = TrailingCommaStyle.None });
+        string result = formatter.Format(source);
+        Assert.DoesNotContain("3,", result);
+    }
+
+    [Fact]
+    public void TrailingComma_All_SingleLine_NoEffect()
+    {
+        string source = "let arr = [1, 2, 3];\n";
+        var formatter = new StashFormatter(new FormatConfig { TrailingComma = TrailingCommaStyle.All });
+        string result = formatter.Format(source);
+        Assert.DoesNotContain("3,", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // StashFormatter — End of Line
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void EndOfLine_Crlf_OutputHasCrlf()
+    {
+        string source = "let x = 1;\nlet y = 2;\n";
+        var formatter = new StashFormatter(new FormatConfig { EndOfLine = EndOfLineStyle.Crlf });
+        string result = formatter.Format(source);
+        Assert.Contains("\r\n", result);
+        Assert.DoesNotContain("\r\r", result);
+    }
+
+    [Fact]
+    public void EndOfLine_Lf_OutputHasLf()
+    {
+        string source = "let x = 1;\nlet y = 2;\n";
+        var formatter = new StashFormatter(new FormatConfig { EndOfLine = EndOfLineStyle.Lf });
+        string result = formatter.Format(source);
+        Assert.DoesNotContain("\r\n", result);
+        Assert.Contains("\n", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // StashFormatter — Bracket Spacing
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void BracketSpacing_True_SpacesInsideBraces()
+    {
+        string source = "let d = {a: 1};\n";
+        var formatter = new StashFormatter(new FormatConfig { BracketSpacing = true });
+        string result = formatter.Format(source);
+        Assert.Contains("{ a: 1 }", result);
+    }
+
+    [Fact]
+    public void BracketSpacing_False_NoSpacesInsideBraces()
+    {
+        string source = "let d = {a: 1};\n";
+        var formatter = new StashFormatter(new FormatConfig { BracketSpacing = false });
+        string result = formatter.Format(source);
+        Assert.Contains("{a: 1}", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // FormatConfig
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void FormatConfig_Load_FindsFile()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(dir, ".stashformat"),
+                "indentSize=4\ntrailingComma=all\nendOfLine=crlf\nbracketSpacing=false\n");
+            var config = FormatConfig.Load(dir);
+            Assert.Equal(4, config.IndentSize);
+            Assert.Equal(TrailingCommaStyle.All, config.TrailingComma);
+            Assert.Equal(EndOfLineStyle.Crlf, config.EndOfLine);
+            Assert.False(config.BracketSpacing);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void FormatConfig_Default_HasExpectedValues()
+    {
+        var config = FormatConfig.Default;
+        Assert.Equal(2, config.IndentSize);
+        Assert.False(config.UseTabs);
+        Assert.Equal(TrailingCommaStyle.None, config.TrailingComma);
+        Assert.Equal(EndOfLineStyle.Lf, config.EndOfLine);
+        Assert.True(config.BracketSpacing);
     }
 }

@@ -13,17 +13,21 @@ internal static class Program
 Formats Stash source files.
 
 Arguments:
-  FILES/DIRS...          One or more .stash files or directories (default: .)
+  FILES/DIRS...              One or more .stash files or directories (default: .)
 
 Options:
-  -w, --write            Format files in place (overwrite)
-  -c, --check            Exit 1 if any file needs formatting (CI mode)
-  -d, --diff             Print unified diff of changes
-  -i, --indent-size <N>  Spaces per indent level (default: 2)
-  -t, --use-tabs         Use tabs instead of spaces
-  -e, --exclude <GLOB>   Exclude files matching glob (repeatable)
-  -h, --help             Print this help and exit
-  -v, --version          Print version and exit";
+  -w, --write                Format files in place (overwrite)
+  -c, --check                Exit 1 if any file needs formatting (CI mode)
+  -d, --diff                 Print unified diff of changes
+  -i, --indent-size <N>      Spaces per indent level (default: 2)
+  -t, --use-tabs             Use tabs instead of spaces
+  -tc, --trailing-comma <S>  Trailing commas: none|all (default: none)
+  -eol, --end-of-line <S>    Line endings: lf|crlf|auto (default: lf)
+  -bs, --bracket-spacing <B> Space inside {} in single-line dicts/structs: true|false (default: true)
+  -cfg, --config <FILE>      Path to .stashformat config file
+  -e, --exclude <GLOB>       Exclude files matching glob (repeatable)
+  -h, --help                 Print this help and exit
+  -v, --version              Print version and exit";
 
     internal static int Main(string[] args)
     {
@@ -134,7 +138,21 @@ Options:
         string formatted;
         try
         {
-            var formatter = new StashFormatter(options.IndentSize, options.UseTabs);
+            // For stdin, load config from current directory (or the explicit --config path)
+            var fileConfig = options.ConfigPath != null
+                ? FormatConfig.LoadFromFile(Path.GetFullPath(options.ConfigPath))
+                : FormatConfig.Load(Directory.GetCurrentDirectory());
+
+            var config = new FormatConfig
+            {
+                IndentSize = options.IndentSizeOverride ?? fileConfig.IndentSize,
+                UseTabs = options.UseTabsOverride ?? fileConfig.UseTabs,
+                TrailingComma = options.TrailingCommaOverride ?? fileConfig.TrailingComma,
+                EndOfLine = options.EndOfLineOverride ?? fileConfig.EndOfLine,
+                BracketSpacing = options.BracketSpacingOverride ?? fileConfig.BracketSpacing,
+            };
+
+            var formatter = new StashFormatter(config);
             formatted = formatter.Format(source);
         }
         catch (Exception ex)

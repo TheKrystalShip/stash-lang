@@ -698,8 +698,8 @@ io.println(baz);";
     public void RuleRegistry_CountIncreasedByFourNewRules()
     {
         var rules = Stash.Analysis.Rules.RuleRegistry.GetAllRules();
-        // Was 27 before Phase 6; now should be 31 (added: SA0109, SA0209, SA0405, SA0804)
-        Assert.Equal(33, rules.Count);
+        // Was 33 before Analysis & Format spec; now 43 (added 10: SA0901, SA1002, SA1102-SA1108, SA1401, SA1402)
+        Assert.Equal(43, rules.Count);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────

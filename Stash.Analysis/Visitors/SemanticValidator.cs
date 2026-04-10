@@ -180,11 +180,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         DispatchNodeRules(stmt);
 
         _functionDepth++;
+        var savedStatements = _allStatements;
+        _allStatements = stmt.Body.Statements;
         CheckUnreachableStatements(stmt.Body.Statements);
         foreach (var s in stmt.Body.Statements)
         {
             s.Accept(this);
         }
+        _allStatements = savedStatements;
         _functionDepth--;
 
         return null;
@@ -298,11 +301,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitBlockStmt(BlockStmt stmt)
     {
+        DispatchNodeRules(stmt);
+        var savedStatements = _allStatements;
+        _allStatements = stmt.Statements;
         CheckUnreachableStatements(stmt.Statements);
         foreach (var s in stmt.Statements)
         {
             s.Accept(this);
         }
+        _allStatements = savedStatements;
         return null;
     }
 
@@ -325,11 +332,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         foreach (var method in stmt.Methods)
         {
             DispatchNodeRules(method);
+            var savedStatements = _allStatements;
+            _allStatements = method.Body.Statements;
             CheckUnreachableStatements(method.Body.Statements);
             foreach (var s in method.Body.Statements)
             {
                 s.Accept(this);
             }
+            _allStatements = savedStatements;
         }
         _functionDepth--;
 
@@ -344,11 +354,14 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         foreach (var method in stmt.Methods)
         {
             DispatchNodeRules(method);
+            var savedStatements = _allStatements;
+            _allStatements = method.Body.Statements;
             CheckUnreachableStatements(method.Body.Statements);
             foreach (var s in method.Body.Statements)
             {
                 s.Accept(this);
             }
+            _allStatements = savedStatements;
         }
         _functionDepth--;
 
@@ -442,6 +455,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitBinaryExpr(BinaryExpr expr)
     {
+        DispatchNodeRules(expr);
         expr.Left.Accept(this);
         expr.Right.Accept(this);
         return null;
@@ -462,6 +476,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitTernaryExpr(TernaryExpr expr)
     {
+        DispatchNodeRules(expr);
         expr.Condition.Accept(this);
         expr.ThenBranch.Accept(this);
         expr.ElseBranch.Accept(this);

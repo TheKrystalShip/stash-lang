@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Diagnostic Codes & Suppression](#9c-diagnostic-codes--suppression)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -3930,7 +3930,67 @@ This is checked during the resolve/import phase, not at runtime.
 
 ---
 
-## 9c. Diagnostic Codes & Suppression
+## 9c. Code Formatter
+
+The `stash-format` tool reformats Stash source files to a consistent style. It is non-breaking: only whitespace and punctuation are modified — semantics are preserved.
+
+### Formatter Ignore Comments
+
+Two special single-line comments tell the formatter to leave code untouched:
+
+**File-level ignore** — place on the very first line of a file to skip the entire file:
+
+```stash
+// stash-ignore-all format
+```
+
+The formatter reads the first line only; if the directive is present it exits immediately without modifying the file.
+
+**Statement-level ignore** — place on the line immediately before a statement to preserve that statement's original formatting:
+
+```stash
+// stash-ignore format
+let ugly=1+2;   // this statement is left exactly as-is
+let normal = 3  // this one is still formatted
+```
+
+Only `//` single-line comments are recognised. `/* */` and `///` comments do not trigger either directive.
+
+### `.stashformat` Configuration File
+
+A `.stashformat` file at any directory level configures formatter behaviour for all files in that directory tree. The format is `key=value` (one per line); `#` begins a comment:
+
+```ini
+# .stashformat
+indentSize=2
+useTabs=false
+trailingComma=none
+endOfLine=lf
+bracketSpacing=true
+```
+
+**Options:**
+
+| Key              | Values                  | Default | Description                                                                              |
+| ---------------- | ----------------------- | ------- | ---------------------------------------------------------------------------------------- |
+| `indentSize`     | positive integer        | `4`     | Number of spaces per indent level (ignored when `useTabs=true`)                          |
+| `useTabs`        | `true` / `false`        | `false` | Use hard tab characters instead of spaces for indentation                                |
+| `trailingComma`  | `none` \| `all`         | `none`  | `all` adds a trailing comma after the last element in multi-line arrays/dicts/structs    |
+| `endOfLine`      | `lf` \| `crlf` \| `auto` | `lf`    | `auto` preserves the line ending style already used in the file                          |
+| `bracketSpacing` | `true` / `false`        | `true`  | When `true`, single-line dict/struct literals include a space inside braces: `{ a: 1 }` |
+
+**Config file discovery:** when formatting a file the formatter walks up the directory tree from the file's location toward the filesystem root, using the first `.stashformat` found. If no config file exists, built-in defaults are used.
+
+**CLI flags override config:** options passed on the command line always win over the config file:
+
+```bash
+stash-format --trailing-comma all --end-of-line crlf --bracket-spacing false file.stash
+stash-format --config path/to/.stashformat file.stash   # explicit config path
+```
+
+---
+
+## 9d. Diagnostic Codes & Suppression
 
 The static analysis engine emits **structured diagnostics** — each with a code, message, severity, and source span.
 
@@ -3953,11 +4013,16 @@ SA{CC}{NN}
 | `SA02xx` | Variables & names                             |
 | `SA03xx` | Types                                         |
 | `SA04xx` | Functions & calls                             |
-| `SA05xx` | _(reserved)_                                  |
+| `SA05xx` | Spread / rest                                 |
 | `SA06xx` | _(reserved)_                                  |
 | `SA07xx` | Shell / retry / elevate                       |
 | `SA08xx` | Modules & imports                             |
-| `SA09xx` | Structs & enums                               |
+| `SA09xx` | Style                                         |
+| `SA10xx` | Complexity                                    |
+| `SA11xx` | Best practices                                |
+| `SA12xx` | _(reserved)_                                  |
+| `SA13xx` | _(reserved)_                                  |
+| `SA14xx` | Suggestions                                   |
 
 ### Inline Suppression Directives
 

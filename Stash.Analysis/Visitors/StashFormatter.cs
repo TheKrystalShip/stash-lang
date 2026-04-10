@@ -25,6 +25,9 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 {
     private readonly int _indentSize;
     private readonly bool _useTabs;
+    private readonly TrailingCommaStyle _trailingComma;
+    private readonly EndOfLineStyle _endOfLine;
+    private readonly bool _bracketSpacing;
 
     // ── Per-call state (reset in Format) ──────────────────────────────────────
 
@@ -36,18 +39,37 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     private int _triviaCursor;
     private Token? _lastCodeToken;
     private PendingWs _pending;
+    private string _source = "";
+    private string[] _sourceLines = Array.Empty<string>();
+    private HashSet<int> _ignoreLines = new();
 
     private enum PendingWs { None, Space, NewLine, BlankLine }
 
     /// <summary>
+    /// Initializes a new <see cref="StashFormatter"/> with settings from the given <see cref="FormatConfig"/>.
+    /// </summary>
+    public StashFormatter(FormatConfig? config = null)
+    {
+        var cfg = config ?? FormatConfig.Default;
+        _indentSize = cfg.IndentSize;
+        _useTabs = cfg.UseTabs;
+        _trailingComma = cfg.TrailingComma;
+        _endOfLine = cfg.EndOfLine;
+        _bracketSpacing = cfg.BracketSpacing;
+    }
+
+    /// <summary>
     /// Initializes a new <see cref="StashFormatter"/> with the given indentation settings.
     /// </summary>
-    /// <param name="indentSize">Spaces per indent level (ignored when <paramref name="useTabs"/> is <see langword="true"/>). Defaults to 2.</param>
+    /// <param name="indentSize">Spaces per indent level (ignored when <paramref name="useTabs"/> is <see langword="true"/>).</param>
     /// <param name="useTabs">Use a tab per indent level. Defaults to <see langword="false"/>.</param>
-    public StashFormatter(int indentSize = 2, bool useTabs = false)
+    public StashFormatter(int indentSize, bool useTabs = false)
     {
         _indentSize = indentSize;
         _useTabs = useTabs;
+        _trailingComma = TrailingCommaStyle.None;
+        _endOfLine = EndOfLineStyle.Lf;
+        _bracketSpacing = true;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -314,6 +336,25 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         _codeTokens = code.ToArray();
         _triviaTokens = trivia.ToArray();
 
+        // 2b. Scan trivia for formatter ignore directives
+        _source = source;
+        _sourceLines = source.Split('\n');
+        _ignoreLines = new HashSet<int>();
+        foreach (var t in _triviaTokens)
+        {
+            if (t.Type != TokenType.SingleLineComment) continue;
+            string text = t.Lexeme.TrimEnd();
+            if (text.EndsWith("stash-ignore-all format", StringComparison.Ordinal))
+            {
+                // Entire file is exempt from formatting — return original source unchanged
+                return source;
+            }
+            if (text.EndsWith("stash-ignore format", StringComparison.Ordinal))
+            {
+                _ignoreLines.Add(t.Span.StartLine);
+            }
+        }
+
         // 3. Parse code tokens into an AST (re-attach the Eof token)
         var parserTokens = new List<Token>(code);
         parserTokens.Add(allTokens[^1]); // Eof
@@ -345,7 +386,19 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 }
             }
 
-            statements[i].Accept(this);
+            var stmt = statements[i];
+            if (_ignoreLines.Contains(stmt.Span.StartLine - 1))
+            {
+                // Flush any trivia before this statement (emits the // stash-ignore format comment)
+                if (_cursor < _codeTokens.Length)
+                    FlushTriviaBefore(_codeTokens[_cursor]);
+                WritePending();
+                EmitIgnoredStatement(stmt);
+            }
+            else
+            {
+                stmt.Accept(this);
+            }
         }
 
         // 6. Flush end-of-file trivia (trailing comments)
@@ -353,7 +406,64 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
         // 7. Normalise trailing whitespace and add exactly one trailing newline
         var result = _sb.ToString().TrimEnd();
-        return result.Length > 0 ? result + "\n" : "";
+        if (result.Length == 0) return "";
+        return NormalizeEol(result + "\n");
+    }
+
+    private string NormalizeEol(string text)
+    {
+        return _endOfLine switch
+        {
+            EndOfLineStyle.Crlf => text.Replace("\r\n", "\n").Replace("\n", "\r\n"),
+            EndOfLineStyle.Auto => DetectSourceEol(_source) == EndOfLineStyle.Crlf
+                ? text.Replace("\r\n", "\n").Replace("\n", "\r\n")
+                : text,
+            _ => text
+        };
+    }
+
+    private static EndOfLineStyle DetectSourceEol(string source)
+    {
+        foreach (char c in source)
+        {
+            if (c == '\r') return EndOfLineStyle.Crlf;
+            if (c == '\n') return EndOfLineStyle.Lf;
+        }
+        return EndOfLineStyle.Lf;
+    }
+
+    private void EmitIgnoredStatement(Stmt stmt)
+    {
+        // Emit the source text verbatim for this statement's span
+        int startLine = stmt.Span.StartLine; // 1-based
+        int endLine = stmt.Span.EndLine;     // 1-based
+        for (int lineIdx = startLine; lineIdx <= endLine; lineIdx++)
+        {
+            if (lineIdx > startLine) _sb.Append('\n');
+            if (lineIdx - 1 < _sourceLines.Length)
+                _sb.Append(_sourceLines[lineIdx - 1]);
+        }
+
+        // Advance code token cursor past all tokens belonging to this statement
+        while (_cursor < _codeTokens.Length)
+        {
+            Token t = _codeTokens[_cursor];
+            if (t.Span.StartLine > endLine) break;
+            if (t.Span.StartLine == endLine && t.Span.StartColumn > stmt.Span.EndColumn) break;
+            _cursor++;
+        }
+
+        // Advance trivia cursor past all trivia belonging to this statement
+        while (_triviaCursor < _triviaTokens.Length)
+        {
+            Token t = _triviaTokens[_triviaCursor];
+            if (t.Span.StartLine > endLine) break;
+            if (t.Span.StartLine == endLine && t.Span.StartColumn > stmt.Span.EndColumn) break;
+            _triviaCursor++;
+        }
+
+        _lastCodeToken = null;
+        _pending = PendingWs.None;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -1086,13 +1196,17 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         if (multiLine)
         {
             _indent++;
-            foreach (var elem in expr.Elements)
+            for (int i = 0; i < expr.Elements.Count; i++)
             {
                 NewLine();
-                elem.Accept(this);
+                expr.Elements[i].Accept(this);
                 if (NextIs(TokenType.Comma))
                 {
                     EmitToken(); // ,
+                }
+                else if (_trailingComma == TrailingCommaStyle.All && i == expr.Elements.Count - 1)
+                {
+                    _sb.Append(',');
                 }
             }
             _indent--;
@@ -1140,13 +1254,17 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 {
                     EmitToken(); // ,
                 }
+                else if (_trailingComma == TrailingCommaStyle.All && i == expr.FieldValues.Count - 1)
+                {
+                    _sb.Append(',');
+                }
             }
             _indent--;
             NewLine();
         }
         else
         {
-            Space();
+            if (_bracketSpacing) Space();
             for (int i = 0; i < expr.FieldValues.Count; i++)
             {
                 if (i > 0) { EmitToken(); Space(); } // ,
@@ -1161,7 +1279,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 _cursor++;
             }
 
-            Space();
+            if (_bracketSpacing) Space();
         }
         EmitToken(); // }
         return 0;
@@ -1438,13 +1556,17 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 {
                     EmitToken(); // ,
                 }
+                else if (_trailingComma == TrailingCommaStyle.All && i == expr.Entries.Count - 1)
+                {
+                    _sb.Append(',');
+                }
             }
             _indent--;
             NewLine();
         }
         else
         {
-            Space();
+            if (_bracketSpacing) Space();
             for (int i = 0; i < expr.Entries.Count; i++)
             {
                 if (i > 0) { EmitToken(); Space(); } // ,
@@ -1462,7 +1584,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
                 _cursor++;
             }
 
-            Space();
+            if (_bracketSpacing) Space();
         }
         EmitToken(); // }
         return 0;

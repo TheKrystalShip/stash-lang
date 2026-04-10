@@ -73,6 +73,24 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0801 = new("SA0801", "Dynamic import path", DiagnosticLevel.Information, "Imports", "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.");
     public static readonly DiagnosticDescriptor SA0802 = new("SA0802", "Unused import", DiagnosticLevel.Warning, "Imports", "Import '{0}' is never used.", FixApplicability.Safe);
     public static readonly DiagnosticDescriptor SA0804 = new("SA0804", "Import statements not in canonical order", DiagnosticLevel.Information, "Imports", "Import statements are not in canonical order.", FixApplicability.Safe);
+
+    // ── SA09xx — Style ───────────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
+
+    // ── SA10xx — Complexity ──────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA1002 = new("SA1002", "Nesting depth too high", DiagnosticLevel.Information, "Complexity", "Nesting depth of {0} exceeds threshold of {1} in function '{2}'.");
+
+    // ── SA11xx — Best Practices ─────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA1102 = new("SA1102", "Self-assignment", DiagnosticLevel.Warning, "Best Practices", "Self-assignment: '{0}' is assigned to itself.", FixApplicability.Safe);
+    public static readonly DiagnosticDescriptor SA1103 = new("SA1103", "Duplicate case value", DiagnosticLevel.Warning, "Best Practices", "Duplicate case value: '{0}'.");
+    public static readonly DiagnosticDescriptor SA1105 = new("SA1105", "Unnecessary block statement", DiagnosticLevel.Information, "Best Practices", "Unnecessary block statement. This block does not create a new scope and can be removed.");
+    public static readonly DiagnosticDescriptor SA1106 = new("SA1106", "Self-comparison", DiagnosticLevel.Warning, "Best Practices", "Self-comparison: '{0}' is compared to itself. This is always {1}.");
+    public static readonly DiagnosticDescriptor SA1107 = new("SA1107", "Constant condition", DiagnosticLevel.Warning, "Best Practices", "Constant condition: this {0} condition is always {1}.");
+    public static readonly DiagnosticDescriptor SA1108 = new("SA1108", "Unreachable loop", DiagnosticLevel.Warning, "Best Practices", "Loop body always exits on first iteration. This loop will execute at most once.");
+
+    // ── SA14xx — Suggestions ─────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA1401 = new("SA1401", "Use optional chaining", DiagnosticLevel.Information, "Suggestions", "Use optional chaining: '{0}?.{1}' instead of null check with member access.", FixApplicability.Unsafe);
+    public static readonly DiagnosticDescriptor SA1402 = new("SA1402", "Use null coalescing", DiagnosticLevel.Information, "Suggestions", "Use null coalescing: '{0} ?? {1}' instead of null check with ternary.", FixApplicability.Unsafe);
     /// <summary>
     /// Lookup table from code string to descriptor for suppression validation.
     /// </summary>
@@ -131,6 +149,16 @@ public static class DiagnosticDescriptors
         dict[SA0801.Code] = SA0801;
         dict[SA0802.Code] = SA0802;
         dict[SA0804.Code] = SA0804;
+        dict[SA0901.Code] = SA0901;
+        dict[SA1002.Code] = SA1002;
+        dict[SA1102.Code] = SA1102;
+        dict[SA1103.Code] = SA1103;
+        dict[SA1105.Code] = SA1105;
+        dict[SA1106.Code] = SA1106;
+        dict[SA1107.Code] = SA1107;
+        dict[SA1108.Code] = SA1108;
+        dict[SA1401.Code] = SA1401;
+        dict[SA1402.Code] = SA1402;
         return dict.ToFrozenDictionary();
     }
 }

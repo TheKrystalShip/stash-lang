@@ -98,6 +98,43 @@ fn describe(value) {
 }
 describe("test");
 
+// ─── New Best Practice & Style Rules ──────────────────────────────────────────
+
+// SA1102: Self-assignment — assigning a variable to itself has no effect
+let selfAssign = 1;
+selfAssign = selfAssign;  // SA1102: self-assignment
+
+// SA1106: Self-comparison — comparing a value to itself is always true or false
+let cmp = (selfAssign == selfAssign);  // SA1106: self-comparison
+
+// SA1107: Constant condition — condition is always true
+if (true) {  // SA1107: constant condition
+    io.println("always runs");
+}
+
+// SA1103: Duplicate case — two cases with the same value
+let grade = "A";
+switch (grade) {
+    case "A": io.println("excellent"); break;
+    case "B": io.println("good"); break;
+    case "A": io.println("duplicate");  // SA1103: duplicate case "A"
+}
+
+// SA1105: Lone block — standalone block statement with no controlling construct
+{  // SA1105: lone block
+    let temp = 42;
+    io.println(temp);
+}
+
+// SA0901: Unnecessary else — else after a then-branch that always returns
+fn unnecessaryElse(x) {
+    if (x > 0) {
+        return "positive";
+    } else {  // SA0901: unnecessary else after return
+        return "non-positive";
+    }
+}
+
 // SA0101: break outside a loop — break is only valid inside for/while
 break;
 

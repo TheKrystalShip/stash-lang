@@ -110,10 +110,10 @@ public class SemanticValidatorTests : AnalysisTestBase
     [Fact]
     public void NestedBreak_InLoop_NoError()
     {
-        // break inside if inside while — loopDepth is still 1, no error
+        // break inside if inside while — loopDepth is still 1, no SA0101 error
         var diagnostics = Validate("while (true) { if (true) { break; } }");
 
-        Assert.Empty(diagnostics);
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0101");
     }
 
     [Fact]
