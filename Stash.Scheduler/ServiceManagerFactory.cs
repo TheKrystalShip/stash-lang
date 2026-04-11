@@ -14,8 +14,11 @@ public static class ServiceManagerFactory
         if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
             return new LaunchdServiceManager(systemMode);
 
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return new WindowsTaskServiceManager(systemMode);
+
         throw new PlatformNotSupportedException(
             $"Stash.Scheduler does not yet support {RuntimeInformation.OSDescription}. " +
-            "Currently only Linux and macOS are supported.");
+            "Currently Linux, macOS, and Windows are supported.");
     }
 }
