@@ -2069,7 +2069,7 @@ public class Parser
             {
                 isDict = true;
             }
-            else if (Check(TokenType.Identifier))
+            else if (IsDictKeyToken(Peek().Type))
             {
                 int peekAhead = _current;
                 if (peekAhead + 1 < _tokens.Count &&
@@ -2092,7 +2092,9 @@ public class Parser
                     }
                     else
                     {
-                        Token key = Consume(TokenType.Identifier, "Expected identifier key in dict literal.");
+                        if (!IsDictKeyToken(Peek().Type))
+                            throw Error(Peek(), "Expected identifier key in dict literal.");
+                        Token key = Advance();
                         Consume(TokenType.Colon, "Expected ':' after dict key.");
                         Expr value = Expression();
                         entries.Add((key, value));
@@ -2665,6 +2667,9 @@ public class Parser
     /// <param name="token">The token where the error was detected.</param>
     /// <param name="message">A description of what went wrong.</param>
     /// <returns>A <see cref="ParseError"/> instance to be thrown by the caller.</returns>
+    private static bool IsDictKeyToken(TokenType type) =>
+        type == TokenType.Identifier || (type >= TokenType.Let && type <= TokenType.Retry);
+
     private ParseError Error(Token token, string message)
     {
         string location = token.Type == TokenType.Eof

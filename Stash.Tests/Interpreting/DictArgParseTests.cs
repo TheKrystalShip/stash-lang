@@ -30,12 +30,12 @@ public class DictArgParseTests : StashTestBase
     public void DictFlag_LongForm_SetsTrue()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags: {
                     verbose: { description: "Verbose" }
                 }
             });
-            let result = args.verbose;
+            let result = parsedArgs.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--verbose"]));
     }
@@ -44,12 +44,12 @@ public class DictArgParseTests : StashTestBase
     public void DictFlag_Absent_DefaultsFalse()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags: {
                     verbose: { description: "Verbose" }
                 }
             });
-            let result = args.verbose;
+            let result = parsedArgs.verbose;
             """;
         Assert.Equal(false, RunWithArgs(source, []));
     }
@@ -58,12 +58,12 @@ public class DictArgParseTests : StashTestBase
     public void DictFlag_ShortForm_SetsTrue()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags: {
                     verbose: { short: "v", description: "Verbose" }
                 }
             });
-            let result = args.verbose;
+            let result = parsedArgs.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["-v"]));
     }
@@ -72,13 +72,13 @@ public class DictArgParseTests : StashTestBase
     public void DictFlag_MultipleFlags_AllSet()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags: {
                     verbose: { short: "v", description: "Verbose" },
                     debug:   { short: "d", description: "Debug"   }
                 }
             });
-            let result = args.debug;
+            let result = parsedArgs.debug;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--verbose", "--debug"]));
     }
@@ -87,12 +87,12 @@ public class DictArgParseTests : StashTestBase
     public void DictFlag_NoShortName_OnlyLongForm()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags: {
                     dryrun: { description: "Dry run" }
                 }
             });
-            let result = args.dryrun;
+            let result = parsedArgs.dryrun;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--dryrun"]));
     }
@@ -105,12 +105,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_LongForm_SetsValue()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     port: { type: "int", description: "Port" }
                 }
             });
-            let result = args.port;
+            let result = parsedArgs.port;
             """;
         Assert.Equal(8080L, RunWithArgs(source, ["--port", "8080"]));
     }
@@ -119,12 +119,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_ShortForm_SetsValue()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     port: { short: "p", type: "int", description: "Port" }
                 }
             });
-            let result = args.port;
+            let result = parsedArgs.port;
             """;
         Assert.Equal(9000L, RunWithArgs(source, ["-p", "9000"]));
     }
@@ -133,12 +133,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_EqualsSyntax()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     host: { description: "Host" }
                 }
             });
-            let result = args.host;
+            let result = parsedArgs.host;
             """;
         Assert.Equal("localhost", RunWithArgs(source, ["--host=localhost"]));
     }
@@ -147,12 +147,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_DefaultValue()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     port: { type: "int", default: 8080, description: "Port" }
                 }
             });
-            let result = args.port;
+            let result = parsedArgs.port;
             """;
         Assert.Equal(8080L, RunWithArgs(source, []));
     }
@@ -161,12 +161,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_NoDefault_ReturnsNull()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     host: { description: "Host" }
                 }
             });
-            let result = args.host;
+            let result = parsedArgs.host;
             """;
         Assert.Null(RunWithArgs(source, []));
     }
@@ -175,12 +175,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_TypeInt_Coerces()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     count: { type: "int", description: "Count" }
                 }
             });
-            let result = args.count;
+            let result = parsedArgs.count;
             """;
         var result = RunWithArgs(source, ["--count", "42"]);
         Assert.IsType<long>(result);
@@ -191,12 +191,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_TypeFloat_Coerces()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     ratio: { type: "float", description: "Ratio" }
                 }
             });
-            let result = args.ratio;
+            let result = parsedArgs.ratio;
             """;
         var result = RunWithArgs(source, ["--ratio", "3.14"]);
         Assert.IsType<double>(result);
@@ -207,12 +207,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_TypeBool_Coerces()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     enabled: { type: "bool", description: "Enabled" }
                 }
             });
-            let result = args.enabled;
+            let result = parsedArgs.enabled;
             """;
         Assert.Equal(true,  RunWithArgs(source, ["--enabled", "true"]));
         Assert.Equal(false, RunWithArgs(source, ["--enabled", "false"]));
@@ -226,12 +226,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_TypeString_Keeps()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     name: { type: "string", description: "Name" }
                 }
             });
-            let result = args.name;
+            let result = parsedArgs.name;
             """;
         var result = RunWithArgs(source, ["--name", "alice"]);
         Assert.IsType<string>(result);
@@ -242,12 +242,12 @@ public class DictArgParseTests : StashTestBase
     public void DictOption_Required_Missing_Throws()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     host: { required: true, description: "Host" }
                 }
             });
-            let result = args.host;
+            let result = parsedArgs.host;
             """;
         RunWithArgsExpectingError(source, []);
     }
@@ -260,10 +260,10 @@ public class DictArgParseTests : StashTestBase
     public void DictPositional_Single_Captured()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 positionals: [{ name: "target", type: "string", description: "Target" }]
             });
-            let result = args.target;
+            let result = parsedArgs.target;
             """;
         Assert.Equal("example.com", RunWithArgs(source, ["example.com"]));
     }
@@ -272,13 +272,13 @@ public class DictArgParseTests : StashTestBase
     public void DictPositional_Multiple_InOrder()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 positionals: [
                     { name: "src", type: "string", description: "Source"      },
                     { name: "dst", type: "string", description: "Destination" }
                 ]
             });
-            let result = args.dst;
+            let result = parsedArgs.dst;
             """;
         Assert.Equal("/tmp/out", RunWithArgs(source, ["/home/user/file", "/tmp/out"]));
     }
@@ -287,10 +287,10 @@ public class DictArgParseTests : StashTestBase
     public void DictPositional_TypeCoercion()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 positionals: [{ name: "count", type: "int", description: "Count" }]
             });
-            let result = args.count;
+            let result = parsedArgs.count;
             """;
         Assert.Equal(5L, RunWithArgs(source, ["5"]));
     }
@@ -299,10 +299,10 @@ public class DictArgParseTests : StashTestBase
     public void DictPositional_Required_Missing_Throws()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 positionals: [{ name: "target", required: true, description: "Target" }]
             });
-            let result = args.target;
+            let result = parsedArgs.target;
             """;
         RunWithArgsExpectingError(source, []);
     }
@@ -311,10 +311,10 @@ public class DictArgParseTests : StashTestBase
     public void DictPositional_WithDefault()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 positionals: [{ name: "host", default: "localhost", description: "Host" }]
             });
-            let result = args.host;
+            let result = parsedArgs.host;
             """;
         Assert.Equal("localhost", RunWithArgs(source, []));
     }
@@ -327,13 +327,13 @@ public class DictArgParseTests : StashTestBase
     public void DictCommand_Name_Captured()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 commands: {
                     start: { description: "Start" },
                     stop:  { description: "Stop"  }
                 }
             });
-            let result = args.command;
+            let result = parsedArgs.command;
             """;
         Assert.Equal("start", RunWithArgs(source, ["start"]));
     }
@@ -342,12 +342,12 @@ public class DictArgParseTests : StashTestBase
     public void DictCommand_NoneProvided_Null()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 commands: {
                     start: { description: "Start" }
                 }
             });
-            let result = args.command;
+            let result = parsedArgs.command;
             """;
         Assert.Null(RunWithArgs(source, []));
     }
@@ -356,12 +356,12 @@ public class DictArgParseTests : StashTestBase
     public void DictCommand_LevelFlag_Works()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 commands: {
                     start: { description: "Start", flags: { detach: { short: "d", description: "Detach" } } }
                 }
             });
-            let result = args.start.detach;
+            let result = parsedArgs.start.detach;
             """;
         Assert.Equal(true, RunWithArgs(source, ["start", "--detach"]));
     }
@@ -370,12 +370,12 @@ public class DictArgParseTests : StashTestBase
     public void DictCommand_LevelOption_Works()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 commands: {
                     start: { description: "Start", options: { delay: { type: "int", default: 0, description: "Delay" } } }
                 }
             });
-            let result = args.start.delay;
+            let result = parsedArgs.start.delay;
             """;
         Assert.Equal(10L, RunWithArgs(source, ["start", "--delay", "10"]));
     }
@@ -384,12 +384,12 @@ public class DictArgParseTests : StashTestBase
     public void DictCommand_LevelPositional_Works()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 commands: {
                     deploy: { description: "Deploy", positionals: [{ name: "env", type: "string", description: "Environment" }] }
                 }
             });
-            let result = args.deploy.env;
+            let result = parsedArgs.deploy.env;
             """;
         Assert.Equal("production", RunWithArgs(source, ["deploy", "production"]));
     }
@@ -398,12 +398,12 @@ public class DictArgParseTests : StashTestBase
     public void DictCommand_LevelOption_EqualsSyntax()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 commands: {
                     start: { description: "Start", options: { port: { type: "int", default: 8080, description: "Port" } } }
                 }
             });
-            let result = args.start.port;
+            let result = parsedArgs.start.port;
             """;
         Assert.Equal(3000L, RunWithArgs(source, ["start", "--port=3000"]));
     }
@@ -412,12 +412,12 @@ public class DictArgParseTests : StashTestBase
     public void DictCommand_LevelRequiredOption_Missing_Throws()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 commands: {
                     deploy: { description: "Deploy", options: { env: { required: true, description: "Environment" } } }
                 }
             });
-            let result = args.command;
+            let result = parsedArgs.command;
             """;
         RunWithArgsExpectingError(source, ["deploy"]);
     }
@@ -430,12 +430,12 @@ public class DictArgParseTests : StashTestBase
     public void DictMixed_FlagsOptionsPositional()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags:      { verbose: { short: "v", description: "Verbose" } },
                 options:    { port:    { short: "p", type: "int", default: 80, description: "Port" } },
                 positionals: [{ name: "host", type: "string", description: "Host" }]
             });
-            let result = args.port;
+            let result = parsedArgs.port;
             """;
         Assert.Equal(9090L, RunWithArgs(source, ["-v", "--port", "9090", "myhost"]));
     }
@@ -444,11 +444,11 @@ public class DictArgParseTests : StashTestBase
     public void DictMixed_TopLevelFlagWithSubcommand()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags:    { verbose: { short: "v", description: "Verbose" } },
                 commands: { start:   { description: "Start" }                }
             });
-            let result = args.verbose;
+            let result = parsedArgs.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["--verbose", "start"]));
     }
@@ -457,7 +457,7 @@ public class DictArgParseTests : StashTestBase
     public void DictMixed_EmptySpec_NoArgs()
     {
         var source = """
-            let args = args.parse({ name: "mytool", description: "A tool" });
+            let parsedArgs = args.parse({ name: "mytool", description: "A tool" });
             let result = 42;
             """;
         Assert.Equal(42L, RunWithArgs(source, []));
@@ -471,12 +471,12 @@ public class DictArgParseTests : StashTestBase
     public void DictError_UnknownLongFlag_Throws()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags: {
                     verbose: { description: "Verbose" }
                 }
             });
-            let result = args.verbose;
+            let result = parsedArgs.verbose;
             """;
         RunWithArgsExpectingError(source, ["--unknown"]);
     }
@@ -485,12 +485,12 @@ public class DictArgParseTests : StashTestBase
     public void DictError_UnknownShortFlag_Throws()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 flags: {
                     verbose: { short: "v", description: "Verbose" }
                 }
             });
-            let result = args.verbose;
+            let result = parsedArgs.verbose;
             """;
         RunWithArgsExpectingError(source, ["-z"]);
     }
@@ -499,12 +499,12 @@ public class DictArgParseTests : StashTestBase
     public void DictError_OptionMissingValue_Throws()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     port: { type: "int", description: "Port" }
                 }
             });
-            let result = args.port;
+            let result = parsedArgs.port;
             """;
         RunWithArgsExpectingError(source, ["--port"]);
     }
@@ -513,12 +513,12 @@ public class DictArgParseTests : StashTestBase
     public void DictError_InvalidIntCoercion_Throws()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 options: {
                     port: { type: "int", description: "Port" }
                 }
             });
-            let result = args.port;
+            let result = parsedArgs.port;
             """;
         RunWithArgsExpectingError(source, ["--port", "abc"]);
     }
@@ -531,13 +531,13 @@ public class DictArgParseTests : StashTestBase
     public void DictMetadata_NameParses()
     {
         var source = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 name: "mytool",
                 flags: {
                     verbose: { description: "Verbose" }
                 }
             });
-            let result = args.verbose;
+            let result = parsedArgs.verbose;
             """;
         Assert.Equal(false, RunWithArgs(source, []));
     }
@@ -546,7 +546,7 @@ public class DictArgParseTests : StashTestBase
     public void DictMetadata_VersionParses()
     {
         var source = """
-            let args = args.parse({ name: "mytool", version: "2.0.0", description: "A tool" });
+            let parsedArgs = args.parse({ name: "mytool", version: "2.0.0", description: "A tool" });
             let result = 1;
             """;
         Assert.Equal(1L, RunWithArgs(source, []));
@@ -560,8 +560,8 @@ public class DictArgParseTests : StashTestBase
     public void DictInlineSpec_DirectCallNoVariable()
     {
         var source = """
-            let args = args.parse({ flags: { verbose: { short: "v", description: "Verbose" } } });
-            let result = args.verbose;
+            let parsedArgs = args.parse({ flags: { verbose: { short: "v", description: "Verbose" } } });
+            let result = parsedArgs.verbose;
             """;
         Assert.Equal(true, RunWithArgs(source, ["-v"]));
     }
@@ -574,7 +574,7 @@ public class DictArgParseTests : StashTestBase
     public void DictComplex_FullServiceCtlSpec()
     {
         var complexSpec = """
-            let args = args.parse({
+            let parsedArgs = args.parse({
                 name: "svc",
                 version: "1.0.0",
                 description: "Service controller",
@@ -603,27 +603,27 @@ public class DictArgParseTests : StashTestBase
         var scriptArgs = new[] { "-v", "--config", "/tmp/cfg", "start", "-d", "--port", "3000", "web" };
 
         // Test args.verbose == true
-        var verboseSource = complexSpec + "\nlet result = args.verbose;";
+        var verboseSource = complexSpec + "\nlet result = parsedArgs.verbose;";
         Assert.Equal(true, RunWithArgs(verboseSource, scriptArgs));
 
         // Test args.config == "/tmp/cfg"
-        var configSource = complexSpec + "\nlet result = args.config;";
+        var configSource = complexSpec + "\nlet result = parsedArgs.config;";
         Assert.Equal("/tmp/cfg", RunWithArgs(configSource, scriptArgs));
 
         // Test args.command == "start"
-        var commandSource = complexSpec + "\nlet result = args.command;";
+        var commandSource = complexSpec + "\nlet result = parsedArgs.command;";
         Assert.Equal("start", RunWithArgs(commandSource, scriptArgs));
 
         // Test args.start.detach == true
-        var detachSource = complexSpec + "\nlet result = args.start.detach;";
+        var detachSource = complexSpec + "\nlet result = parsedArgs.start.detach;";
         Assert.Equal(true, RunWithArgs(detachSource, scriptArgs));
 
         // Test args.start.port == 3000L
-        var portSource = complexSpec + "\nlet result = args.start.port;";
+        var portSource = complexSpec + "\nlet result = parsedArgs.start.port;";
         Assert.Equal(3000L, RunWithArgs(portSource, scriptArgs));
 
         // Test args.start.service == "web"
-        var serviceSource = complexSpec + "\nlet result = args.start.service;";
+        var serviceSource = complexSpec + "\nlet result = parsedArgs.start.service;";
         Assert.Equal("web", RunWithArgs(serviceSource, scriptArgs));
     }
 }
