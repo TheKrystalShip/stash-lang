@@ -11,10 +11,11 @@ public static class ServiceManagerFactory
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
             return new SystemdServiceManager(systemMode);
 
-        // Phase 1: only Linux/systemd backend
-        // Future phases add: LaunchdServiceManager (macOS), WindowsTaskServiceManager (Windows)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return new LaunchdServiceManager(systemMode);
+
         throw new PlatformNotSupportedException(
             $"Stash.Scheduler does not yet support {RuntimeInformation.OSDescription}. " +
-            "Currently only Linux (systemd) is supported.");
+            "Currently only Linux and macOS are supported.");
     }
 }
