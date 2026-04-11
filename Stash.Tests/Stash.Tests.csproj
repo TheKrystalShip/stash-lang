@@ -31,6 +31,7 @@
     <ProjectReference Include="..\Stash.Stdlib\Stash.Stdlib.csproj" />
     <ProjectReference Include="..\Stash.Tap\Stash.Tap.csproj" />
     <ProjectReference Include="..\Stash.Tpl\Stash.Tpl.csproj" />
+    <ProjectReference Include="..\Stash.Scheduler\Stash.Scheduler.csproj" />
   </ItemGroup>
 
 </Project>

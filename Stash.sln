@@ -31,6 +31,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Format", "Stash.Forma
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Bytecode", "Stash.Bytecode\Stash.Bytecode.csproj", "{AF7A1B04-41A4-4E6A-B667-AF7B6A616327}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Stash.Scheduler", "Stash.Scheduler\Stash.Scheduler.csproj", "{4F680223-9923-44D7-B3BF-242E93E05189}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -209,6 +211,18 @@ Global
 		{AF7A1B04-41A4-4E6A-B667-AF7B6A616327}.Release|x64.Build.0 = Release|Any CPU
 		{AF7A1B04-41A4-4E6A-B667-AF7B6A616327}.Release|x86.ActiveCfg = Release|Any CPU
 		{AF7A1B04-41A4-4E6A-B667-AF7B6A616327}.Release|x86.Build.0 = Release|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Debug|x64.Build.0 = Debug|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Debug|x86.Build.0 = Debug|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Release|Any CPU.Build.0 = Release|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Release|x64.ActiveCfg = Release|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Release|x64.Build.0 = Release|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Release|x86.ActiveCfg = Release|Any CPU
+		{4F680223-9923-44D7-B3BF-242E93E05189}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
