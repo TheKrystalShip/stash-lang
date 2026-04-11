@@ -376,14 +376,18 @@ public class FormatterTests
     [Fact]
     public void Format_MultiLineArray_Preserved()
     {
-        var result = Format("let arr = [\n  1,\n  2,\n  3\n];");
+        // With printWidth smaller than the inline length, the array expands to multi-line
+        var formatter = new StashFormatter(new FormatConfig { PrintWidth = 10 });
+        var result = formatter.Format("let arr = [1, 2, 3];");
         Assert.Equal("let arr = [\n  1,\n  2,\n  3\n];\n", result);
     }
 
     [Fact]
     public void Format_MultiLineNestedArray_Preserved()
     {
-        var result = Format("let users = [\n  [1, \"Alice\"],\n  [2, \"Bob\"]\n];");
+        // With printWidth smaller than the outer inline length, outer expands while inner arrays stay flat
+        var formatter = new StashFormatter(new FormatConfig { PrintWidth = 20 });
+        var result = formatter.Format("let users = [[1, \"Alice\"], [2, \"Bob\"]];\n");
         Assert.Equal("let users = [\n  [1, \"Alice\"],\n  [2, \"Bob\"]\n];\n", result);
     }
 

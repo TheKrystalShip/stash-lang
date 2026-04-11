@@ -68,9 +68,10 @@ internal sealed class FormatRunner
     private FormatConfig BuildConfig(string filePath)
     {
         // Load .stashformat from the given explicit path, or walk up from the file's directory
+        // falling back to .editorconfig if no .stashformat is found
         var fileConfig = _options.ConfigPath != null
             ? FormatConfig.LoadFromFile(Path.GetFullPath(_options.ConfigPath))
-            : FormatConfig.Load(Path.GetDirectoryName(filePath));
+            : FormatConfig.LoadWithEditorConfig(filePath);
 
         // Merge CLI overrides — any override explicitly set on the CLI takes precedence
         return new FormatConfig
@@ -81,6 +82,9 @@ internal sealed class FormatRunner
             EndOfLine = _options.EndOfLineOverride ?? fileConfig.EndOfLine,
             BracketSpacing = _options.BracketSpacingOverride ?? fileConfig.BracketSpacing,
             PrintWidth = _options.PrintWidthOverride ?? fileConfig.PrintWidth,
+            SortImports = _options.SortImportsOverride ?? fileConfig.SortImports,
+            BlankLinesBetweenBlocks = _options.BlankLinesBetweenBlocksOverride ?? fileConfig.BlankLinesBetweenBlocks,
+            SingleLineBlocks = _options.SingleLineBlocksOverride ?? fileConfig.SingleLineBlocks,
         };
     }
 

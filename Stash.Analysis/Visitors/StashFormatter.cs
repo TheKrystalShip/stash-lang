@@ -29,6 +29,9 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     private readonly TrailingCommaStyle _trailingComma;
     private readonly EndOfLineStyle _endOfLine;
     private readonly bool _bracketSpacing;
+    private readonly bool _sortImports;
+    private readonly int _blankLinesBetweenBlocks;
+    private readonly bool _singleLineBlocks;
 
     // ── Per-call state (reset in Format) ──────────────────────────────────────
 
@@ -45,7 +48,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     private string[] _sourceLines = Array.Empty<string>();
     private HashSet<int> _ignoreLines = new();
 
-    private enum PendingWs { None, Space, NewLine, BlankLine }
+    private enum PendingWs { None, Space, SoftLine, NewLine, BlankLine }
 
     /// <summary>
     /// Initializes a new <see cref="StashFormatter"/> with settings from the given <see cref="FormatConfig"/>.
@@ -59,6 +62,9 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         _endOfLine = cfg.EndOfLine;
         _bracketSpacing = cfg.BracketSpacing;
         _printWidth = cfg.PrintWidth;
+        _sortImports = cfg.SortImports;
+        _blankLinesBetweenBlocks = cfg.BlankLinesBetweenBlocks;
+        _singleLineBlocks = cfg.SingleLineBlocks;
     }
 
     /// <summary>
@@ -74,6 +80,9 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         _endOfLine = EndOfLineStyle.Lf;
         _bracketSpacing = true;
         _printWidth = 80;
+        _sortImports = false;
+        _blankLinesBetweenBlocks = 1;
+        _singleLineBlocks = false;
     }
 
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -85,6 +94,17 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         if (_pending < PendingWs.Space)
         {
             _pending = PendingWs.Space;
+        }
+    }
+
+    // Emits Doc.Line (space in flat, newline in break) — used between collection items.
+    // Trivia flushed by the next EmitToken can upgrade this to NewLine (forced break)
+    // which ensures inline comments remain on the correct line.
+    private void SoftNewLine()
+    {
+        if (_pending < PendingWs.SoftLine)
+        {
+            _pending = PendingWs.SoftLine;
         }
     }
 
@@ -117,11 +137,14 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         switch (_pending)
         {
             case PendingWs.BlankLine:
-                _docs.Add(Doc.HardLine);
-                _docs.Add(Doc.HardLine);
+                for (int bl = 0; bl <= _blankLinesBetweenBlocks; bl++)
+                    _docs.Add(Doc.HardLine);
                 break;
             case PendingWs.NewLine:
                 _docs.Add(Doc.HardLine);
+                break;
+            case PendingWs.SoftLine:
+                _docs.Add(Doc.Line); // space in flat mode, newline in break mode
                 break;
             case PendingWs.Space:
                 _docs.Add(Doc.Text(" "));
@@ -314,19 +337,6 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     private static bool IsDeclaration(Stmt stmt) =>
         stmt is FnDeclStmt or StructDeclStmt or EnumDeclStmt or InterfaceDeclStmt or ExtendStmt;
 
-    private bool WillExpandToMultiLine(Expr expr)
-    {
-        return expr switch
-        {
-            DictLiteralExpr dict => dict.Entries.Count >= 3 || dict.Span.EndLine > dict.Span.StartLine
-                || dict.Entries.Exists(e => WillExpandToMultiLine(e.Value)),
-            StructInitExpr init => init.FieldValues.Count >= 3 || init.Span.EndLine > init.Span.StartLine
-                || init.FieldValues.Exists(fv => WillExpandToMultiLine(fv.Value)),
-            ArrayExpr arr => arr.Span.EndLine > arr.Span.StartLine || arr.Elements.Exists(WillExpandToMultiLine),
-            _ => expr.Span.EndLine > expr.Span.StartLine
-        };
-    }
-
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
     // Public API
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -438,6 +448,8 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         int indentWidth = _useTabs ? 1 : _indentSize;
         string result = DocPrinter.Print(doc, _printWidth, indentWidth, indentChar).TrimEnd();
         if (result.Length == 0) return "";
+        if (_sortImports)
+            result = SortFormattedImports(result);
         return NormalizeEol(result + "\n");
     }
 
@@ -509,6 +521,66 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
             if (c == '\n') return EndOfLineStyle.Lf;
         }
         return EndOfLineStyle.Lf;
+    }
+
+    private static string SortFormattedImports(string formatted)
+    {
+        string[] lines = formatted.Split('\n');
+        var result = new List<string>(lines.Length);
+        int i = 0;
+
+        while (i < lines.Length)
+        {
+            string trimmed = lines[i].TrimStart();
+            if (!trimmed.StartsWith("import ", StringComparison.Ordinal))
+            {
+                result.Add(lines[i]);
+                i++;
+                continue;
+            }
+
+            // Collect contiguous import lines
+            var importGroup = new List<string>();
+            while (i < lines.Length && lines[i].TrimStart().StartsWith("import ", StringComparison.Ordinal))
+            {
+                importGroup.Add(lines[i]);
+                i++;
+            }
+
+            if (importGroup.Count > 1)
+            {
+                importGroup.Sort((a, b) =>
+                    string.Compare(ExtractImportPath(a), ExtractImportPath(b), StringComparison.OrdinalIgnoreCase));
+            }
+
+            for (int j = 0; j < importGroup.Count; j++)
+                importGroup[j] = SortImportNames(importGroup[j]);
+
+            result.AddRange(importGroup);
+        }
+
+        return string.Join("\n", result);
+    }
+
+    private static string ExtractImportPath(string importLine)
+    {
+        int fromIdx = importLine.IndexOf(" from ", StringComparison.Ordinal);
+        if (fromIdx < 0) return "";
+        return importLine[(fromIdx + 6)..].Trim().Trim('"', ';').Trim();
+    }
+
+    private static string SortImportNames(string importLine)
+    {
+        int braceOpen = importLine.IndexOf('{');
+        int braceClose = importLine.IndexOf('}');
+        if (braceOpen < 0 || braceClose < 0 || braceClose <= braceOpen + 1) return importLine;
+
+        string inside = importLine[(braceOpen + 1)..braceClose].Trim();
+        string[] names = inside.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (names.Length <= 1) return importLine;
+
+        Array.Sort(names, StringComparer.OrdinalIgnoreCase);
+        return importLine[..(braceOpen + 1)] + " " + string.Join(", ", names) + " " + importLine[braceClose..];
     }
 
     private void EmitIgnoredStatement(Stmt stmt)
@@ -641,6 +713,20 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     public int VisitBlockStmt(BlockStmt stmt)
     {
         EmitToken(); // {
+
+        if (_singleLineBlocks && stmt.Statements.Count == 1 && !BlockHasComments(stmt))
+        {
+            int outerMark = Mark();
+            int innerMark = Mark();
+            _docs.Add(Doc.Line);
+            stmt.Statements[0].Accept(this);
+            WrapFrom(innerMark, Doc.Indent);
+            _docs.Add(Doc.Line);
+            WrapFrom(outerMark, Doc.Group);
+            EmitToken(); // }
+            return 0;
+        }
+
         _indent++;
         int mark = Mark();
         foreach (var s in stmt.Statements)
@@ -653,6 +739,20 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         NewLine();
         EmitToken(); // }
         return 0;
+    }
+
+    private bool BlockHasComments(BlockStmt stmt)
+    {
+        int startLine = stmt.Span.StartLine;
+        int endLine = stmt.Span.EndLine;
+        for (int i = _triviaCursor; i < _triviaTokens.Length; i++)
+        {
+            Token t = _triviaTokens[i];
+            if (t.Span.StartLine > endLine) break;
+            if (t.Span.StartLine >= startLine && t.Span.StartLine <= endLine)
+                return true;
+        }
+        return false;
     }
 
     public int VisitIfStmt(IfStmt stmt)
@@ -1326,47 +1426,71 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitArrayExpr(ArrayExpr expr)
     {
-        bool multiLine = expr.Span.EndLine > expr.Span.StartLine
-            || expr.Elements.Exists(WillExpandToMultiLine);
         EmitToken(); // [
-        if (multiLine)
+        if (expr.Elements.Count == 0)
         {
-            _indent++;
-            int mark = Mark();
-            for (int i = 0; i < expr.Elements.Count; i++)
+            EmitToken(); // ]
+            return 0;
+        }
+
+        int groupMark = Mark();
+        _indent++;
+        int indentMark = Mark();
+        _docs.Add(Doc.SoftLine); // opening: nothing in flat, newline in break
+
+        for (int i = 0; i < expr.Elements.Count; i++)
+        {
+            // For i > 0, SoftNewLine() was called at end of previous iteration.
+            // The first EmitToken() inside Accept() will flush pending → Doc.Line.
+            expr.Elements[i].Accept(this);
+
+            bool isLast = i == expr.Elements.Count - 1;
+            if (!isLast)
             {
-                NewLine();
-                expr.Elements[i].Accept(this);
+                if (NextIs(TokenType.Comma)) EmitToken(); // consume source comma, emit ","
+                SoftNewLine(); // separator: Doc.Line in next EmitToken (space in flat, newline in break)
+            }
+            else
+            {
                 if (NextIs(TokenType.Comma))
                 {
-                    EmitToken(); // ,
+                    _lastCodeToken = _codeTokens[_cursor]; // update so trailing trivia detects inline correctly
+                    _cursor++; // silently consume trailing source comma
                 }
-                else if (_trailingComma == TrailingCommaStyle.All && i == expr.Elements.Count - 1)
+                if (_trailingComma == TrailingCommaStyle.All)
                 {
-                    _docs.Add(Doc.Text(","));
+                    _docs.Add(Doc.IfBreak(Doc.Text(","), Doc.Empty)); // trailing comma only in break mode
                 }
             }
-            WrapFrom(mark, Doc.Indent);
-            _indent--;
-            NewLine();
+        }
+
+        // Flush any trivia (e.g., inline comments) between the last item and the closing bracket
+        // BEFORE WrapFrom so they end up inside the IndentDoc with correct indentation.
+        if (_cursor < _codeTokens.Length) FlushTriviaBefore(_codeTokens[_cursor]);
+
+        WrapFrom(indentMark, Doc.Indent);
+        _indent--;
+
+        // Closing separator: if a comment was flushed (_pending was set), use HardLine
+        // (forces the Group to break and provides the newline before the closing bracket).
+        // Otherwise use SoftLine so DocPrinter decides based on printWidth.
+        if (_pending != PendingWs.None)
+        {
+            _pending = PendingWs.None;
+            _docs.Add(Doc.HardLine);
         }
         else
         {
-            for (int i = 0; i < expr.Elements.Count; i++)
-            {
-                if (i > 0) { EmitToken(); Space(); } // ,
-                expr.Elements[i].Accept(this);
-            }
+            _docs.Add(Doc.SoftLine);
         }
+
+        WrapFrom(groupMark, Doc.Group);
         EmitToken(); // ]
         return 0;
     }
 
     public int VisitStructInitExpr(StructInitExpr expr)
     {
-        bool multiLine = expr.FieldValues.Count >= 3 || expr.Span.EndLine > expr.Span.StartLine
-            || expr.FieldValues.Exists(fv => WillExpandToMultiLine(fv.Value));
-
         if (expr.Target != null)
         {
             expr.Target.Accept(this); // e.g. ns.StructName
@@ -1379,49 +1503,63 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         Space();
         EmitToken(); // {
 
-        if (multiLine)
+        if (expr.FieldValues.Count == 0)
         {
-            _indent++;
-            int mark = Mark();
-            for (int i = 0; i < expr.FieldValues.Count; i++)
+            EmitToken(); // }
+            return 0;
+        }
+
+        int groupMark = Mark();
+        _indent++;
+        int indentMark = Mark();
+        _docs.Add(_bracketSpacing ? Doc.Line : Doc.SoftLine); // opening
+
+        for (int i = 0; i < expr.FieldValues.Count; i++)
+        {
+            // For i > 0, SoftNewLine() was called at end of previous iteration.
+            // EmitToken() for field name flushes pending → Doc.Line.
+            EmitToken(); // field name
+            EmitToken(); // :
+            Space();
+            expr.FieldValues[i].Value.Accept(this);
+
+            bool isLast = i == expr.FieldValues.Count - 1;
+            if (!isLast)
             {
-                NewLine();
-                EmitToken(); // field name
-                EmitToken(); // :
-                Space();
-                expr.FieldValues[i].Value.Accept(this);
+                if (NextIs(TokenType.Comma)) EmitToken(); // consume source comma, emit ","
+                SoftNewLine(); // separator: Doc.Line in next EmitToken
+            }
+            else
+            {
                 if (NextIs(TokenType.Comma))
                 {
-                    EmitToken(); // ,
+                    _lastCodeToken = _codeTokens[_cursor]; // update so trailing trivia detects inline correctly
+                    _cursor++; // silently consume trailing source comma
                 }
-                else if (_trailingComma == TrailingCommaStyle.All && i == expr.FieldValues.Count - 1)
+                if (_trailingComma == TrailingCommaStyle.All)
                 {
-                    _docs.Add(Doc.Text(","));
+                    _docs.Add(Doc.IfBreak(Doc.Text(","), Doc.Empty)); // trailing comma only in break mode
                 }
             }
-            WrapFrom(mark, Doc.Indent);
-            _indent--;
-            NewLine();
+        }
+
+        // Flush any trivia between the last field and the closing bracket into the IndentDoc.
+        if (_cursor < _codeTokens.Length) FlushTriviaBefore(_codeTokens[_cursor]);
+
+        WrapFrom(indentMark, Doc.Indent);
+        _indent--;
+
+        if (_pending != PendingWs.None)
+        {
+            _pending = PendingWs.None;
+            _docs.Add(Doc.HardLine);
         }
         else
         {
-            if (_bracketSpacing) Space();
-            for (int i = 0; i < expr.FieldValues.Count; i++)
-            {
-                if (i > 0) { EmitToken(); Space(); } // ,
-                EmitToken(); // field name
-                EmitToken(); // :
-                Space();
-                expr.FieldValues[i].Value.Accept(this);
-            }
-            // Consume any trailing comma silently — not emitted in inline format
-            if (NextIs(TokenType.Comma))
-            {
-                _cursor++;
-            }
-
-            if (_bracketSpacing) Space();
+            _docs.Add(_bracketSpacing ? Doc.Line : Doc.SoftLine); // closing
         }
+
+        WrapFrom(groupMark, Doc.Group);
         EmitToken(); // }
         return 0;
     }
@@ -1680,58 +1818,67 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitDictLiteralExpr(DictLiteralExpr expr)
     {
-        bool multiLine = expr.Entries.Count >= 3 || expr.Span.EndLine > expr.Span.StartLine
-            || expr.Entries.Exists(e => WillExpandToMultiLine(e.Value));
         EmitToken(); // {
-        if (multiLine)
+        if (expr.Entries.Count == 0)
         {
-            _indent++;
-            int mark = Mark();
-            for (int i = 0; i < expr.Entries.Count; i++)
+            EmitToken(); // }
+            return 0;
+        }
+
+        int groupMark = Mark();
+        _indent++;
+        int indentMark = Mark();
+        _docs.Add(_bracketSpacing ? Doc.Line : Doc.SoftLine); // opening
+
+        for (int i = 0; i < expr.Entries.Count; i++)
+        {
+            // For i > 0, SoftNewLine() was called at end of previous iteration.
+            // The first EmitToken() below flushes pending → Doc.Line.
+            if (expr.Entries[i].Key != null)
             {
-                NewLine();
-                if (expr.Entries[i].Key != null)
-                {
-                    EmitToken(); // key
-                    EmitToken(); // :
-                    Space();
-                }
-                expr.Entries[i].Value.Accept(this);
+                EmitToken(); // key
+                EmitToken(); // :
+                Space();
+            }
+            expr.Entries[i].Value.Accept(this); // for Key==null (shorthand), this handles the pending
+
+            bool isLast = i == expr.Entries.Count - 1;
+            if (!isLast)
+            {
+                if (NextIs(TokenType.Comma)) EmitToken(); // consume source comma, emit ","
+                SoftNewLine(); // separator: Doc.Line in next EmitToken
+            }
+            else
+            {
                 if (NextIs(TokenType.Comma))
                 {
-                    EmitToken(); // ,
+                    _lastCodeToken = _codeTokens[_cursor]; // update so trailing trivia detects inline correctly
+                    _cursor++; // silently consume trailing source comma
                 }
-                else if (_trailingComma == TrailingCommaStyle.All && i == expr.Entries.Count - 1)
+                if (_trailingComma == TrailingCommaStyle.All)
                 {
-                    _docs.Add(Doc.Text(","));
+                    _docs.Add(Doc.IfBreak(Doc.Text(","), Doc.Empty)); // trailing comma only in break mode
                 }
             }
-            WrapFrom(mark, Doc.Indent);
-            _indent--;
-            NewLine();
+        }
+
+        // Flush any trivia between the last entry and the closing bracket into the IndentDoc.
+        if (_cursor < _codeTokens.Length) FlushTriviaBefore(_codeTokens[_cursor]);
+
+        WrapFrom(indentMark, Doc.Indent);
+        _indent--;
+
+        if (_pending != PendingWs.None)
+        {
+            _pending = PendingWs.None;
+            _docs.Add(Doc.HardLine);
         }
         else
         {
-            if (_bracketSpacing) Space();
-            for (int i = 0; i < expr.Entries.Count; i++)
-            {
-                if (i > 0) { EmitToken(); Space(); } // ,
-                if (expr.Entries[i].Key != null)
-                {
-                    EmitToken(); // key
-                    EmitToken(); // :
-                    Space();
-                }
-                expr.Entries[i].Value.Accept(this);
-            }
-            // Consume any trailing comma silently — not emitted in inline format
-            if (NextIs(TokenType.Comma))
-            {
-                _cursor++;
-            }
-
-            if (_bracketSpacing) Space();
+            _docs.Add(_bracketSpacing ? Doc.Line : Doc.SoftLine); // closing
         }
+
+        WrapFrom(groupMark, Doc.Group);
         EmitToken(); // }
         return 0;
     }

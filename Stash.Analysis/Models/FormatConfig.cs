@@ -33,9 +33,27 @@ public sealed class FormatConfig
     public EndOfLineStyle EndOfLine { get; init; } = EndOfLineStyle.Lf;
     public bool BracketSpacing { get; init; } = true;
     public int PrintWidth { get; init; } = 80;
+    public bool SortImports { get; init; } = false;
+    public int BlankLinesBetweenBlocks { get; init; } = 1;
+    public bool SingleLineBlocks { get; init; } = false;
 
     /// <summary>A default <see cref="FormatConfig"/> with all settings at their defaults.</summary>
     public static FormatConfig Default { get; } = new();
+
+    /// <summary>
+    /// Walks up the directory tree from the directory of <paramref name="filePath"/> searching
+    /// for a <c>.stashformat</c> file first, then falls back to <c>.editorconfig</c>.
+    /// Returns <see cref="Default"/> if neither is found.
+    /// </summary>
+    public static FormatConfig LoadWithEditorConfig(string filePath)
+    {
+        string? directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        var stashFormat = Load(directory);
+        if (!ReferenceEquals(stashFormat, Default))
+            return stashFormat;
+
+        return EditorConfigParser.LoadForFile(filePath) ?? Default;
+    }
 
     /// <summary>
     /// Walks up the directory tree from <paramref name="directory"/> searching for the first
@@ -75,6 +93,9 @@ public sealed class FormatConfig
         var endOfLine = EndOfLineStyle.Lf;
         bool bracketSpacing = true;
         int printWidth = 80;
+        bool sortImports = false;
+        int blankLinesBetweenBlocks = 1;
+        bool singleLineBlocks = false;
 
         foreach (string rawLine in content.Split('\n'))
         {
@@ -123,6 +144,19 @@ public sealed class FormatConfig
                     if (int.TryParse(value, out int parsedWidth) && parsedWidth > 0)
                         printWidth = parsedWidth;
                     break;
+
+                case "sortImports":
+                    sortImports = value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    break;
+
+                case "blankLinesBetweenBlocks":
+                    if (int.TryParse(value, out int parsedBlank) && parsedBlank >= 1 && parsedBlank <= 2)
+                        blankLinesBetweenBlocks = parsedBlank;
+                    break;
+
+                case "singleLineBlocks":
+                    singleLineBlocks = value.Equals("true", StringComparison.OrdinalIgnoreCase);
+                    break;
             }
         }
 
@@ -134,6 +168,9 @@ public sealed class FormatConfig
             EndOfLine = endOfLine,
             BracketSpacing = bracketSpacing,
             PrintWidth = printWidth,
+            SortImports = sortImports,
+            BlankLinesBetweenBlocks = blankLinesBetweenBlocks,
+            SingleLineBlocks = singleLineBlocks,
         };
     }
 }

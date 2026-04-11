@@ -21,6 +21,9 @@ internal sealed class FormatOptions
     public EndOfLineStyle? EndOfLineOverride { get; init; }
     public bool? BracketSpacingOverride { get; init; }
     public int? PrintWidthOverride { get; init; }
+    public bool? SortImportsOverride { get; init; }
+    public int? BlankLinesBetweenBlocksOverride { get; init; }
+    public bool? SingleLineBlocksOverride { get; init; }
 
     /// <summary>Explicit path to a <c>.stashformat</c> config file, or <see langword="null"/> to auto-discover.</summary>
     public string? ConfigPath { get; init; }
@@ -43,6 +46,9 @@ internal sealed class FormatOptions
         EndOfLineStyle? endOfLineOverride = null;
         bool? bracketSpacingOverride = null;
         int? printWidthOverride = null;
+        bool? sortImportsOverride = null;
+        int? blankLinesBetweenBlocksOverride = null;
+        bool? singleLineBlocksOverride = null;
         string? configPath = null;
         int? rangeStart = null;
         int? rangeEnd = null;
@@ -167,6 +173,32 @@ internal sealed class FormatOptions
                     }
                     break;
 
+                case "--sort-imports":
+                case "-si":
+                    sortImportsOverride = true;
+                    break;
+
+                case "--blank-lines-between-blocks":
+                case "-blb":
+                    if (i + 1 >= args.Length)
+                    {
+                        Console.Error.WriteLine($"Error: {args[i]} requires a value.");
+                        Environment.Exit(2);
+                    }
+                    string blbArg = args[++i];
+                    if (!int.TryParse(blbArg, out int parsedBlb) || parsedBlb < 1 || parsedBlb > 2)
+                    {
+                        Console.Error.WriteLine($"Error: --blank-lines-between-blocks must be 1 or 2, got '{blbArg}'.");
+                        Environment.Exit(2);
+                    }
+                    blankLinesBetweenBlocksOverride = parsedBlb;
+                    break;
+
+                case "--single-line-blocks":
+                case "-slb":
+                    singleLineBlocksOverride = true;
+                    break;
+
                 case "--config":
                 case "-cfg":
                     if (i + 1 >= args.Length)
@@ -249,6 +281,9 @@ internal sealed class FormatOptions
             EndOfLineOverride = endOfLineOverride,
             BracketSpacingOverride = bracketSpacingOverride,
             PrintWidthOverride = printWidthOverride,
+            SortImportsOverride = sortImportsOverride,
+            BlankLinesBetweenBlocksOverride = blankLinesBetweenBlocksOverride,
+            SingleLineBlocksOverride = singleLineBlocksOverride,
             ConfigPath = configPath,
             RangeStart = rangeStart,
             RangeEnd = rangeEnd,

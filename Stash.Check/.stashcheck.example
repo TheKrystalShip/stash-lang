@@ -1,0 +1,93 @@
+# ============================================================================
+# .stashcheck — Configuration for stash-check static analysis
+# ============================================================================
+#
+# Place this file in your project root (or any directory). stash-check walks
+# up the directory tree and merges all .stashcheck files it encounters,
+# with the root-most file applied first (child configs override parents).
+#
+# File format: key = value pairs, one per line. Lines starting with '#'
+# are comments. Section headers use [brackets].
+
+# ----------------------------------------------------------------------------
+# Presets
+# ----------------------------------------------------------------------------
+# Choose a base preset. Valid values: recommended, strict, minimal
+#   recommended — Default severity levels (balanced between noise and coverage)
+#   strict      — Enables all rules at their strictest severity
+#   minimal     — Only Error-level rules; silences all warnings and info
+#
+# preset = recommended
+
+# ----------------------------------------------------------------------------
+# Extend
+# ----------------------------------------------------------------------------
+# Inherit configuration from another .stashcheck file. The path is relative
+# to this config file. The extended config is applied first, then this file
+# overrides it.
+#
+# extend = ../base.stashcheck
+
+# ----------------------------------------------------------------------------
+# Disable / Enable Rules
+# ----------------------------------------------------------------------------
+# Comma-separated list of diagnostic codes or prefixes to disable or enable.
+# Prefixes match all codes that start with the prefix (e.g., SA02 matches
+# SA0201, SA0202, SA0203, etc.)
+#
+# disable = SA0201, SA0206, SA08
+# enable = SA0802
+
+# ----------------------------------------------------------------------------
+# Suppression Reasons
+# ----------------------------------------------------------------------------
+# When true, all inline suppression comments must include a reason.
+# e.g., // stash-disable-next-line SA0201 — this is intentionally unused
+#
+# require-suppression-reason = false
+
+# ----------------------------------------------------------------------------
+# Severity Overrides
+# ----------------------------------------------------------------------------
+# Override the severity of individual diagnostic codes.
+# Valid levels: error, warning, info, off
+#
+# severity.SA0201 = off          # Silence unused declaration warnings
+# severity.SA0207 = error        # Treat shadow variables as errors
+# severity.SA0104 = warning      # Promote unreachable code to warning
+# severity.SA1301 = error        # Treat hardcoded credentials as errors
+
+# ----------------------------------------------------------------------------
+# Rule-Specific Options
+# ----------------------------------------------------------------------------
+# Some rules accept configuration parameters via options.{CODE}.{key} = value
+#
+# options.SA0109.cyclomatic-threshold = 15     # Max cyclomatic complexity (default: 10)
+# options.SA1002.nesting-threshold = 5         # Max nesting depth (default: 4)
+# options.SA0405.parameter-threshold = 8       # Max function parameters (default: 5)
+
+# ============================================================================
+# Per-File Overrides
+# ============================================================================
+# Disable specific rules (or all rules) for files matching a glob pattern.
+# Glob patterns are matched against paths relative to the config file.
+#   *   — matches any sequence except /
+#   **  — matches directories recursively
+#
+[per-file-overrides]
+# "tests/**/*.stash" = disable SA0201, SA0206
+# "*.test.stash" = disable ALL
+# "generated/**" = disable ALL
+# "scripts/legacy/**/*.stash" = disable SA0207, SA0209
+
+# ============================================================================
+# Domains
+# ============================================================================
+# Assign analysis profiles to named domains. Valid profiles: recommended,
+# strict, off. Domains group related rules that can be enabled/disabled
+# together based on your project's needs.
+#
+[domains]
+# security = strict
+# performance = recommended
+# style = off

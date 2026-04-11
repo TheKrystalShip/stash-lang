@@ -485,8 +485,9 @@ public class StashFormatTests
     [Fact]
     public void TrailingComma_All_ArrayMultiLine()
     {
-        string source = "let arr = [\n  1,\n  2,\n  3\n];\n";
-        var formatter = new StashFormatter(new FormatConfig { TrailingComma = TrailingCommaStyle.All });
+        // Use a narrow printWidth to force multi-line expansion (the DocPrinter decides based on width)
+        string source = "let arr = [1, 2, 3];\n";
+        var formatter = new StashFormatter(new FormatConfig { TrailingComma = TrailingCommaStyle.All, PrintWidth = 10 });
         string result = formatter.Format(source);
         Assert.Contains("3,", result);
     }
@@ -494,8 +495,9 @@ public class StashFormatTests
     [Fact]
     public void TrailingComma_None_ArrayMultiLine()
     {
-        string source = "let arr = [\n  1,\n  2,\n  3\n];\n";
-        var formatter = new StashFormatter(new FormatConfig { TrailingComma = TrailingCommaStyle.None });
+        // Use a narrow printWidth to force multi-line expansion; verify no trailing comma is added
+        string source = "let arr = [1, 2, 3];\n";
+        var formatter = new StashFormatter(new FormatConfig { TrailingComma = TrailingCommaStyle.None, PrintWidth = 10 });
         string result = formatter.Format(source);
         Assert.DoesNotContain("3,", result);
     }
@@ -589,5 +591,499 @@ public class StashFormatTests
         Assert.Equal(TrailingCommaStyle.None, config.TrailingComma);
         Assert.Equal(EndOfLineStyle.Lf, config.EndOfLine);
         Assert.True(config.BracketSpacing);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // EditorConfig support tests
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void EditorConfig_LoadForFile_ParsesStandardProperties()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".editorconfig"),
+                "root = true\n\n[*.stash]\nindent_style = tab\nindent_size = 4\nend_of_line = crlf\nmax_line_length = 120\n");
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.True(config.UseTabs);
+            Assert.Equal(4, config.IndentSize);
+            Assert.Equal(EndOfLineStyle.Crlf, config.EndOfLine);
+            Assert.Equal(120, config.PrintWidth);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_LoadForFile_ParsesCustomProperties()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".editorconfig"),
+                "root = true\n\n[*.stash]\nstash_trailing_comma = all\nstash_bracket_spacing = false\n");
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(TrailingCommaStyle.All, config.TrailingComma);
+            Assert.False(config.BracketSpacing);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_StashFormatTakesPriority()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".stashformat"), "indentSize=8\n");
+            File.WriteAllText(Path.Combine(dir, ".editorconfig"),
+                "root = true\n\n[*.stash]\nindent_size = 4\n");
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(8, config.IndentSize);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_FallsBackWhenNoStashFormat()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".editorconfig"),
+                "root = true\n\n[*.stash]\nindent_size = 6\n");
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(6, config.IndentSize);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_RootStopsHierarchicalSearch()
+    {
+        string grandparentDir = CreateTempDir();
+        try
+        {
+            string parentDir = Path.Combine(grandparentDir, "parent");
+            string childDir = Path.Combine(parentDir, "child");
+            Directory.CreateDirectory(childDir);
+
+            File.WriteAllText(Path.Combine(grandparentDir, ".editorconfig"),
+                "[*.stash]\nindent_size = 8\n");
+            File.WriteAllText(Path.Combine(parentDir, ".editorconfig"),
+                "root = true\n\n[*.stash]\nindent_size = 4\n");
+
+            string filePath = Path.Combine(childDir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(4, config.IndentSize);
+        }
+        finally
+        {
+            Directory.Delete(grandparentDir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_StarGlobMatchesStashFiles()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".editorconfig"),
+                "root = true\n\n[*]\nindent_size = 3\n");
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(3, config.IndentSize);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_BraceGlobMatchesStashFiles()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".editorconfig"),
+                "root = true\n\n[*.{stash,js}]\nindent_size = 5\n");
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(5, config.IndentSize);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_ReturnsDefaultWhenNoEditorConfig()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            var def = FormatConfig.Default;
+            Assert.Equal(def.IndentSize, config.IndentSize);
+            Assert.Equal(def.UseTabs, config.UseTabs);
+            Assert.Equal(def.TrailingComma, config.TrailingComma);
+            Assert.Equal(def.EndOfLine, config.EndOfLine);
+            Assert.Equal(def.BracketSpacing, config.BracketSpacing);
+            Assert.Equal(def.PrintWidth, config.PrintWidth);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_NearestFileWinsPerProperty()
+    {
+        string parentDir = CreateTempDir();
+        try
+        {
+            string childDir = Path.Combine(parentDir, "child");
+            Directory.CreateDirectory(childDir);
+
+            File.WriteAllText(Path.Combine(parentDir, ".editorconfig"),
+                "root = true\n\n[*.stash]\nindent_size = 4\n");
+            File.WriteAllText(Path.Combine(childDir, ".editorconfig"),
+                "[*.stash]\nindent_size = 2\n");
+
+            string filePath = Path.Combine(childDir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(2, config.IndentSize);
+        }
+        finally
+        {
+            Directory.Delete(parentDir, true);
+        }
+    }
+
+    [Fact]
+    public void EditorConfig_MaxLineLengthOff()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(Path.Combine(dir, ".editorconfig"),
+                "root = true\n\n[*.stash]\nmax_line_length = off\n");
+            string filePath = Path.Combine(dir, "test.stash");
+            File.WriteAllText(filePath, "");
+            var config = FormatConfig.LoadWithEditorConfig(filePath);
+            Assert.Equal(int.MaxValue, config.PrintWidth);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // P0: printWidth-driven collection breaking
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void PrintWidth_ShortArray_StaysSingleLine()
+    {
+        string source = "let arr = [1, 2, 3];\n";
+        var formatter = new StashFormatter(new FormatConfig { PrintWidth = 80 });
+        string result = formatter.Format(source);
+        Assert.Equal("let arr = [1, 2, 3];\n", result);
+    }
+
+    [Fact]
+    public void PrintWidth_LongArray_BreaksToMultiLine()
+    {
+        string source = "let arr = [1, 2, 3];\n";
+        var formatter = new StashFormatter(new FormatConfig { PrintWidth = 10 });
+        string result = formatter.Format(source);
+        Assert.Contains("\n  1,", result);
+        Assert.Contains("\n  2,", result);
+    }
+
+    [Fact]
+    public void PrintWidth_ShortDict_StaysSingleLine()
+    {
+        // The old >=3 item heuristic would force this to multi-line; printWidth-based does not.
+        string source = "let d = {a: 1, b: 2, c: 3};\n";
+        var formatter = new StashFormatter(new FormatConfig { PrintWidth = 80 });
+        string result = formatter.Format(source);
+        Assert.Equal("let d = { a: 1, b: 2, c: 3 };\n", result);
+    }
+
+    [Fact]
+    public void PrintWidth_LongDict_BreaksToMultiLine()
+    {
+        string source = "let d = {alpha: \"longvalue\", beta: \"anotherlongvalue\"};\n";
+        var formatter = new StashFormatter(new FormatConfig { PrintWidth = 20 });
+        string result = formatter.Format(source);
+        Assert.Contains("\n  alpha:", result);
+    }
+
+    [Fact]
+    public void PrintWidth_ShortStructInit_StaysSingleLine()
+    {
+        string source = "struct Pt { x, y, z }\nlet p = Pt { x: 1, y: 2, z: 3 };\n";
+        var formatter = new StashFormatter(new FormatConfig { PrintWidth = 80 });
+        string result = formatter.Format(source);
+        Assert.Contains("Pt { x: 1, y: 2, z: 3 }", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // P1: sortImports
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SortImports_Disabled_PreservesOrder()
+    {
+        string source =
+            "import { readFile } from \"fs\";\n" +
+            "import { encrypt } from \"crypto\";\n";
+        var formatter = new StashFormatter(new FormatConfig { SortImports = false });
+        string result = formatter.Format(source);
+        Assert.True(result.IndexOf("\"fs\"", StringComparison.Ordinal)
+                   < result.IndexOf("\"crypto\"", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public void SortImports_SortsByPath()
+    {
+        string source =
+            "import { readFile } from \"fs\";\n" +
+            "import { parse } from \"json\";\n" +
+            "import { encrypt } from \"crypto\";\n";
+        var formatter = new StashFormatter(new FormatConfig { SortImports = true });
+        string result = formatter.Format(source);
+        string expected =
+            "import { encrypt } from \"crypto\";\n" +
+            "import { readFile } from \"fs\";\n" +
+            "import { parse } from \"json\";\n";
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void SortImports_SortsNamesWithinImport()
+    {
+        string source = "import { c, a, b } from \"mod\";\n";
+        var formatter = new StashFormatter(new FormatConfig { SortImports = true });
+        string result = formatter.Format(source);
+        Assert.Equal("import { a, b, c } from \"mod\";\n", result);
+    }
+
+    [Fact]
+    public void SortImports_PreservesGroups()
+    {
+        // A standalone comment between import groups creates a blank line in the formatted
+        // output; SortFormattedImports treats the comment + blank line as a group separator
+        // and sorts each group independently.
+        string source =
+            "import { b_fn } from \"b\";\n" +
+            "import { a_fn } from \"a\";\n" +
+            "// group 2\n" +
+            "import { d_fn } from \"d\";\n" +
+            "import { c_fn } from \"c\";\n";
+        var formatter = new StashFormatter(new FormatConfig { SortImports = true });
+        string result = formatter.Format(source);
+        string expected =
+            "import { a_fn } from \"a\";\n" +
+            "import { b_fn } from \"b\";\n" +
+            "// group 2\n" +
+            "\n" +
+            "import { c_fn } from \"c\";\n" +
+            "import { d_fn } from \"d\";\n";
+        Assert.Equal(expected, result);
+    }
+
+    [Fact]
+    public void SortImports_SingleImport_NoChange()
+    {
+        string source = "import { foo } from \"mod\";\n";
+        var formatter = new StashFormatter(new FormatConfig { SortImports = true });
+        string result = formatter.Format(source);
+        Assert.Equal("import { foo } from \"mod\";\n", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // P2: blankLinesBetweenBlocks
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void BlankLinesBetweenBlocks_Default_OneBlankLine()
+    {
+        string source = "fn foo() { return 1; }\nfn bar() { return 2; }\n";
+        var formatter = new StashFormatter(new FormatConfig());
+        string result = formatter.Format(source);
+        Assert.Contains("}\n\nfn", result);         // exactly one blank line between functions
+        Assert.DoesNotContain("}\n\n\nfn", result); // not two blank lines
+    }
+
+    [Fact]
+    public void BlankLinesBetweenBlocks_Two_TwoBlankLines()
+    {
+        string source = "fn foo() { return 1; }\nfn bar() { return 2; }\n";
+        var formatter = new StashFormatter(new FormatConfig { BlankLinesBetweenBlocks = 2 });
+        string result = formatter.Format(source);
+        Assert.Contains("}\n\n\nfn", result); // two blank lines (three newlines) between functions
+    }
+
+    [Fact]
+    public void BlankLinesBetweenBlocks_Two_AppliesBetweenStructs()
+    {
+        string source = "struct A { x }\nstruct B { y }\n";
+        var formatter = new StashFormatter(new FormatConfig { BlankLinesBetweenBlocks = 2 });
+        string result = formatter.Format(source);
+        Assert.Contains("}\n\n\nstruct", result); // two blank lines between struct declarations
+    }
+
+    [Fact]
+    public void BlankLinesBetweenBlocks_NonDeclarations_StillSingleNewline()
+    {
+        string source = "let x = 1;\nlet y = 2;\n";
+        var formatter = new StashFormatter(new FormatConfig { BlankLinesBetweenBlocks = 2 });
+        string result = formatter.Format(source);
+        Assert.Equal("let x = 1;\nlet y = 2;\n", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // P3: singleLineBlocks
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void SingleLineBlocks_Disabled_AlwaysExpands()
+    {
+        string source = "fn f() { return 1; }\n";
+        var formatter = new StashFormatter(new FormatConfig { SingleLineBlocks = false });
+        string result = formatter.Format(source);
+        Assert.Contains("\n  return 1;\n", result);
+    }
+
+    [Fact]
+    public void SingleLineBlocks_ShortFunction_StaysSingleLine()
+    {
+        string source = "fn f() { return 1; }\n";
+        var formatter = new StashFormatter(new FormatConfig { SingleLineBlocks = true, PrintWidth = 80 });
+        string result = formatter.Format(source);
+        Assert.Equal("fn f() { return 1; }\n", result);
+    }
+
+    [Fact]
+    public void SingleLineBlocks_LongFunction_BreaksToMultiLine()
+    {
+        string source = "fn f() { return 1; }\n";
+        var formatter = new StashFormatter(new FormatConfig { SingleLineBlocks = true, PrintWidth = 5 });
+        string result = formatter.Format(source);
+        Assert.Contains("\n  return 1;\n", result);
+    }
+
+    [Fact]
+    public void SingleLineBlocks_MultiStatement_AlwaysExpands()
+    {
+        string source = "fn f() { let x = 1; return x; }\n";
+        var formatter = new StashFormatter(new FormatConfig { SingleLineBlocks = true, PrintWidth = 80 });
+        string result = formatter.Format(source);
+        Assert.Contains("\n  let x = 1;\n", result);
+    }
+
+    [Fact]
+    public void SingleLineBlocks_IfStatement_StaysSingleLine()
+    {
+        string source = "fn check(x) { if (x > 0) { return x; } }\n";
+        var formatter = new StashFormatter(new FormatConfig { SingleLineBlocks = true, PrintWidth = 80 });
+        string result = formatter.Format(source);
+        Assert.Equal("fn check(x) { if (x > 0) { return x; } }\n", result);
+    }
+
+    [Fact]
+    public void SingleLineBlocks_WhileStatement_StaysSingleLine()
+    {
+        string source = "fn run(i) { while (i > 0) { i = i - 1; } }\n";
+        var formatter = new StashFormatter(new FormatConfig { SingleLineBlocks = true, PrintWidth = 80 });
+        string result = formatter.Format(source);
+        Assert.Equal("fn run(i) { while (i > 0) { i = i - 1; } }\n", result);
+    }
+
+    // ───────────────────────────────────────────────────────────────
+    // Config parsing for new options
+    // ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void FormatConfig_ParseContent_NewOptions()
+    {
+        string dir = CreateTempDir();
+        try
+        {
+            File.WriteAllText(
+                Path.Combine(dir, ".stashformat"),
+                "sortImports=true\nblankLinesBetweenBlocks=2\nsingleLineBlocks=true\n");
+            var config = FormatConfig.LoadFromFile(Path.Combine(dir, ".stashformat"));
+            Assert.True(config.SortImports);
+            Assert.Equal(2, config.BlankLinesBetweenBlocks);
+            Assert.True(config.SingleLineBlocks);
+        }
+        finally
+        {
+            Directory.Delete(dir, true);
+        }
+    }
+
+    [Fact]
+    public void Parse_SortImportsFlag()
+    {
+        var opts = FormatOptions.Parse(new[] { "--sort-imports" });
+        Assert.True(opts.SortImportsOverride);
+
+        var optsShort = FormatOptions.Parse(new[] { "-si" });
+        Assert.True(optsShort.SortImportsOverride);
+    }
+
+    [Fact]
+    public void Parse_BlankLinesBetweenBlocksFlag()
+    {
+        var opts = FormatOptions.Parse(new[] { "--blank-lines-between-blocks", "2" });
+        Assert.Equal(2, opts.BlankLinesBetweenBlocksOverride);
+
+        var optsShort = FormatOptions.Parse(new[] { "-blb", "2" });
+        Assert.Equal(2, optsShort.BlankLinesBetweenBlocksOverride);
+    }
+
+    [Fact]
+    public void Parse_SingleLineBlocksFlag()
+    {
+        var opts = FormatOptions.Parse(new[] { "--single-line-blocks" });
+        Assert.True(opts.SingleLineBlocksOverride);
+
+        var optsShort = FormatOptions.Parse(new[] { "-slb" });
+        Assert.True(optsShort.SingleLineBlocksOverride);
     }
 }

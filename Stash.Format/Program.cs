@@ -24,6 +24,9 @@ Options:
   -tc, --trailing-comma <S>  Trailing commas: none|all (default: none)
   -eol, --end-of-line <S>    Line endings: lf|crlf|auto (default: lf)
   -bs, --bracket-spacing <B> Space inside {} in single-line dicts/structs: true|false (default: true)
+  -si, --sort-imports        Sort import statements alphabetically
+  -blb, --blank-lines-between-blocks <N>  Blank lines between declarations: 1|2 (default: 1)
+  -slb, --single-line-blocks Allow single-line function/block bodies
   -cfg, --config <FILE>      Path to .stashformat config file
   -e, --exclude <GLOB>       Exclude files matching glob (repeatable)
   -h, --help                 Print this help and exit
@@ -139,9 +142,10 @@ Options:
         try
         {
             // For stdin, load config from current directory (or the explicit --config path)
+            // falling back to .editorconfig if no .stashformat is found
             var fileConfig = options.ConfigPath != null
                 ? FormatConfig.LoadFromFile(Path.GetFullPath(options.ConfigPath))
-                : FormatConfig.Load(Directory.GetCurrentDirectory());
+                : FormatConfig.LoadWithEditorConfig(Path.Combine(Directory.GetCurrentDirectory(), "stdin.stash"));
 
             var config = new FormatConfig
             {
@@ -150,6 +154,10 @@ Options:
                 TrailingComma = options.TrailingCommaOverride ?? fileConfig.TrailingComma,
                 EndOfLine = options.EndOfLineOverride ?? fileConfig.EndOfLine,
                 BracketSpacing = options.BracketSpacingOverride ?? fileConfig.BracketSpacing,
+                PrintWidth = options.PrintWidthOverride ?? fileConfig.PrintWidth,
+                SortImports = options.SortImportsOverride ?? fileConfig.SortImports,
+                BlankLinesBetweenBlocks = options.BlankLinesBetweenBlocksOverride ?? fileConfig.BlankLinesBetweenBlocks,
+                SingleLineBlocks = options.SingleLineBlocksOverride ?? fileConfig.SingleLineBlocks,
             };
 
             var formatter = new StashFormatter(config);

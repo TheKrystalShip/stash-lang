@@ -1,0 +1,29 @@
+# .stashformat — Stash formatter configuration reference
+# All options shown with their default values.
+
+# Number of spaces per indent level
+indentSize = 2
+
+# Use tabs instead of spaces for indentation
+useTabs = false
+
+# Target line width for wrapping decisions
+printWidth = 80
+
+# Trailing commas in multi-line collections: none | all
+trailingComma = none
+
+# Line ending style: lf | crlf | auto
+endOfLine = lf
+
+# Spaces inside {} in single-line dict/struct literals
+bracketSpacing = true
+
+# Sort import statements alphabetically at the top of each file
+sortImports = false
+
+# Number of blank lines to emit between top-level declarations (1 or 2)
+blankLinesBetweenBlocks = 1
+
+# Allow short function/block bodies to remain on a single line
+singleLineBlocks = false
