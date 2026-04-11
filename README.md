@@ -1,21 +1,42 @@
 # Stash
 
-A dynamically typed, interpreted scripting language that combines the **shell scripting power** of Bash, the **syntax familiarity** of C/C++/C#, and the **structured data** capabilities that shell languages have always lacked.
+A dynamically typed scripting language for system administration. Stash combines C-style syntax with first-class shell command execution, real data structures (structs, enums, interfaces), and 29 namespaces of standard library functions — compiled to a register-based bytecode VM for fast execution on Linux, macOS, and Windows.
+
+[**Try it in the Playground →**](https://playground.stash-lang.dev/)
+
+---
+
+## Table of Contents
+
+- [Why Stash?](#why-stash)
+- [Quick Tour](#quick-tour)
+- [Standard Library](#standard-library)
+- [Getting Started](#getting-started)
+- [Tooling](#tooling)
+- [Package Management](#package-management)
+- [Package Registry](#package-registry)
+- [Embedding](#embedding)
+- [Performance](#performance)
+- [Architecture](#architecture)
+- [Documentation](#documentation)
+- [License](#license)
 
 ---
 
 ## Why Stash?
 
-- **External programs as first-class citizens.** `$(ls -la)` just works — no subprocess imports, no string wrangling. Pipe chains with `|` short-circuit on failure.
-- **Real data structures.** Structs, enums, interfaces, and dictionaries let you model your domain instead of juggling parallel arrays and magic strings.
-- **C-style syntax.** If you know C, C++, C#, Java, or JavaScript, you can read Stash immediately — braces, semicolons, `if`/`else`/`while`/`for`.
-- **Sensible error handling.** `try` catches errors inline, `??` provides fallbacks, and `lastError()` gives you details — no ceremony.
-- **Built-in parallelism and async/await.** `task.run(() => work())` spawns isolated parallel tasks with snapshot semantics — no shared-state bugs. `arr.parMap`, `arr.parFilter`, and `arr.parForEach` parallelize data processing in one line. `async fn` and `await` provide non-blocking async programming.
-- **Modules.** `import { deploy, Server } from "utils.stash"` — selective imports with module caching and circular dependency detection.
-- **Lambdas and switch expressions.** `(x) => x * 2` for inline functions, `value switch { 1 => "one", _ => "other" }` for concise multi-way branching.
-- **Interfaces and type safety.** Define contracts with `interface`, check types with `is`, and extend types with `extend` blocks.
-- **Rich literal types.** Durations (`5s`, `100ms`), byte sizes (`1.5GB`, `512KB`), semver (`v1.2.3`), IP addresses (`192.168.1.0/24`), and hex/octal/binary numbers (`0xFF`, `0o755`, `0b1010`).
-- **System administration built-in.** SSH/SFTP for remote ops, `elevate` blocks for privilege escalation, `retry` blocks for transient failures, signal handling, file watching, and permissions management.
+- **Shell commands are first-class.** `$(ls -la)` just works — no subprocess imports, no string wrangling. Pipe chains short-circuit on failure.
+- **Real data structures.** Structs, enums, interfaces, and dictionaries — model your domain instead of juggling parallel arrays and magic strings.
+- **C-style syntax.** If you know C, C++, C#, Java, or JavaScript, you can read and write Stash immediately.
+- **Register-based bytecode VM.** Constant folding, dead branch elimination, peephole optimization, inline caching, and integer-specialized loop opcodes. No tree-walking overhead.
+- **Sensible error handling.** `try` expression with `??` fallback for inline errors. Full `try/catch/finally` also available.
+- **Built-in parallelism and async/await.** `task.run()`, `arr.parMap`, `arr.parForEach` — isolated tasks with snapshot semantics, no shared-state bugs.
+- **Interfaces and structural contracts.** Define with `interface`, check with `is`, extend any type with `extend` blocks.
+- **UFCS.** Call any function as a method on its first argument: `nums.sort()` instead of `arr.sort(nums)`.
+- **Rich literals.** Durations (`5s`), byte sizes (`1.5GB`), semver (`@v1.2.3`), IP addresses (`@192.168.1.0/24`), hex/octal/binary numbers.
+- **System administration built-in.** `elevate` for privilege escalation, `retry` for transient failures, signal handling, file watching, SSH/SFTP.
+- **29 stdlib namespaces, ~376 functions.** HTTP, crypto, YAML, TOML, JSON, INI, templating, encoding, networking, and more — all cross-platform.
+- **Full toolchain.** LSP, DAP, static analyzer (63 rules), formatter, TAP test runner, browser playground — no external tools required.
 
 ---
 
@@ -24,9 +45,9 @@ A dynamically typed, interpreted scripting language that combines the **shell sc
 #### Variables & Types
 
 ```stash
-let name = "deploy";          // mutable
-const MAX: int = 3;           // immutable, optional type hint
-let pending;                  // null until assigned
+let name = "deploy";       // mutable
+const MAX: int = 3;        // immutable with optional type hint
+let pending;               // null until assigned
 ```
 
 #### Structs & Enums
@@ -47,76 +68,86 @@ let srv = Server { host: @10.0.0.1/16, port: 22, status: Status.Active };
 
 ```stash
 let result = $(ping -c 1 ${srv.host});
-io.println(result);           // captured stdout
+io.println(result.stdout);    // captured stdout
 io.println(result.exitCode);  // 0 on success
 
-// Pipe chains — short-circuit on failure
-let count = $(cat /var/log/syslog | grep error | wc -l);
+let count = $(cat /var/log/syslog | grep error | wc -l);  // pipe chain
 ```
 
-#### Try expression
+#### Error Handling
 
 ```stash
-let content = try fs.readFile("/etc/missing.conf") ?? "fallback config";
-```
+// Inline — try expression with ?? fallback
+let config = try fs.readFile("/etc/app.conf") ?? "{}";
 
-#### Try / Catch / Finally
-
-```stash
+// Full try/catch/finally
 try {
-  let data = fs.readFile("/etc/app.conf");
-  let config = json.parse(data);
+  let data = json.parse(fs.readFile("/etc/app.conf"));
 } catch (e) {
   io.eprintln("Config failed: " + e.message);
 } finally {
-  io.println("Config loading complete");
+  io.println("Done");
 }
 ```
 
 #### Functions & Lambdas
 
 ```stash
-fn add(a: int, b: int) -> int {
-  return a + b;
-}
+fn add(a: int, b: int) -> int { return a + b; }
 
 let double = (x) => x * 2;
 let result = arr.map([1, 2, 3], double);  // [2, 4, 6]
 ```
 
-#### Parallelism
+#### Optional Chaining & Null Coalescing
 
 ```stash
-// Spawn isolated parallel tasks
-let h1 = task.run(() => crypto.sha256("file1"));
-let h2 = task.run(() => crypto.sha256("file2"));
-let results = task.awaitAll([h1, h2]);
-
-// Parallel data processing
-let hashes = arr.parMap(files, (f) => crypto.sha256(f));
+let port = config?.database?.port ?? 3306;
+let user = session?.user?.name ?? "anonymous";
 ```
 
-#### Switch Expressions
+#### Switch Expressions & Statements
 
 ```stash
+// Expression — inline value
 let label = srv.status switch {
     Status.Active   => "running",
     Status.Inactive => "stopped",
     _               => "unknown"
 };
+
+// Statement — with multi-pattern cases
+switch (status) {
+    case "active": { io.println("Active"); }
+    case "inactive", "banned": { io.println("Blocked"); }
+    default: { io.println("Unknown"); }
+}
+```
+
+#### Parallelism & Async/Await
+
+```stash
+// Parallel tasks with snapshot semantics
+let h1 = task.run(() => crypto.sha256("file1"));
+let h2 = task.run(() => crypto.sha256("file2"));
+let results = task.awaitAll([h1, h2]);
+
+// Async/await for non-blocking I/O
+async fn fetchStatus(host: string) -> string {
+  return $(curl -s ${host}/health).stdout;
+}
+let status = await fetchStatus("https://api.example.com");
 ```
 
 #### Imports
 
 ```stash
-import { deploy, Server } from "utils.stash"; // Individual components
-import "lib/utils.stash" as utils;            // Entire script, aliased to a namespace
-import $"{env.home()}/config.stash";          // Dynamic import paths
+import { deploy, Server } from "utils.stash";      // selective
+import "lib/utils.stash" as utils;                  // aliased namespace
+import $"{env.home()}/config.stash";               // dynamic path
 ```
 
 #### Interfaces
-
-Define contracts with `interface` and check structural conformance with `is`.
 
 ```stash
 interface Deployable {
@@ -126,124 +157,70 @@ interface Deployable {
 
 struct App : Deployable {
   name: string,
-  version: string
-
   fn deploy(target: string) -> bool {
-    let result = $(scp ${self.name}.tar.gz ${target}:/opt/);
-    return result.exitCode == 0;
+    return $(scp ${self.name}.tar.gz ${target}:/opt/).exitCode == 0;
   }
-
-  fn rollback() {
-    io.println("Rolling back " + self.name);
-  }
+  fn rollback() { io.println("Rolling back " + self.name); }
 }
 
-let app = App { name: "web-api", version: @v2.1.0 };
-if (app is Deployable) {
-  app.deploy("prod-server");
-}
+let app = App { name: "web-api" };
+if (app is Deployable) { app.deploy("prod-server"); }
 ```
 
-#### Async / Await
+#### Extend Blocks & UFCS
 
 ```stash
-async fn fetchStatus(host: string) -> string {
-  let result = $(curl -s ${host}/health);
-  return result.stdout;
+// Add methods to any existing type
+extend string {
+  fn shout() -> string { return str.upper(self) + "!!!"; }
 }
+"hello".shout();  // "HELLO!!!"
 
-let status = await fetchStatus("https://api.example.com");
-```
-
-#### Spread & Rest Parameters
-
-```stash
-fn log(level: string, ...messages) {
-  for (let msg in messages) {
-    io.println($"[{level}] {msg}");
-  }
-}
-
-log("INFO", "Starting", "server", "on port 8080");
-
-let base = [1, 2, 3];
-let extended = [...base, 4, 5];  // [1, 2, 3, 4, 5]
+// UFCS — any function callable as a method on its first argument
+let sorted = [3, 1, 2].sort();   // arr.sort([3, 1, 2])
+let upper  = "hello".upper();    // str.upper("hello")
 ```
 
 #### Rich Literals
 
 ```stash
-let timeout     = 30s;              // Duration
-let maxSize     = 1.5GB;            // ByteSize
-let appVersion  = @v2.1.0;          // SemVer
-let subnet      = @192.168.1.0/24;  // IP Address
-let perms       = 0o755;            // Octal number
-let mask        = 0xFF00;           // Hex number
-let flags       = 0b1010_0101;      // Binary with separators
+let timeout    = 30s;             // Duration
+let maxSize    = 1.5GB;           // ByteSize
+let version    = @v2.1.0;         // SemVer
+let subnet     = @192.168.1.0/24; // IP Address
+let perms      = 0o755;           // Octal
+let flags      = 0b1010_0101;     // Binary with separators
 ```
 
-#### Retry Blocks
+#### Regex Captures with Named Groups
 
 ```stash
+let m = str.capture("2026-04-08", "(?<year>\\d{4})-(?<month>\\d+)-(?<day>\\d+)");
+io.println(m.namedGroups["year"]);   // "2026"
+io.println(m.namedGroups["month"]);  // "04"
+```
+
+#### System Administration
+
+```stash
+// Retry with exponential backoff
 retry (maxAttempts: 3, delay: 2s, backoff: Backoff.Exponential) {
   $!(curl -f https://api.example.com/deploy);
 }
-```
 
-#### Elevate Blocks
-
-Escalate privileges for a scoped block — uses `sudo` on Linux/macOS and `gsudo` on Windows.
-
-```stash
+// Privilege escalation (sudo / gsudo)
 elevate {
   $(systemctl restart nginx);
   fs.writeFile("/etc/nginx/nginx.conf", newConfig);
 }
-```
 
-#### Extend Blocks
-
-Add methods to any existing type without inheritance.
-
-```stash
-extend string {
-  fn shout() -> string {
-    return str.upper(self) + "!!!";
-  }
-}
-
-let greeting = "hello";
-io.println(greeting.shout());  // "HELLO!!!"
-```
-
-#### UFCS (Uniform Function Call Syntax)
-
-Any named function can be called as a method on its first argument.
-
-```stash
-fn double(n: int) -> int { return n * 2; }
-
-let result = 5.double();       // Same as double(5) → 10
-
-// Works with stdlib too
-let nums = [3, 1, 2];
-let sorted = nums.sort();  // Same as arr.sort(nums)
-```
-
-#### File Watching
-
-```stash
+// File watching
 fs.watch("/etc/nginx/", (event) => {
-  io.println($"File {event.path} was {event.type}");
   $(nginx -t && nginx -s reload);
 });
-```
 
-#### Signal Handling
-
-```stash
+// Signal handling
 process.onSignal(process.SIGTERM, () => {
-  io.println("Shutting down gracefully...");
   cleanup();
   process.exit(0);
 });
@@ -251,17 +228,37 @@ process.onSignal(process.SIGTERM, () => {
 
 ---
 
+## Standard Library
+
+29 namespaces, ~376 functions. All cross-platform.
+
+| Category          | Namespaces                                          |
+| ----------------- | --------------------------------------------------- |
+| **I/O & System**  | `io`, `fs`, `path`, `env`, `sys`, `process`, `term` |
+| **Data**          | `str`, `arr`, `dict`, `math`, `conv`                |
+| **Time**          | `time`                                              |
+| **Serialization** | `json`, `yaml`, `toml`, `ini`, `config`             |
+| **Network**       | `http`, `net`, `ssh`, `sftp`                        |
+| **Security**      | `crypto`, `encoding`                                |
+| **Concurrency**   | `task`                                              |
+| **Tooling**       | `tpl`, `args`, `assert`, `test`                     |
+
+**Global functions:** `typeof()`, `nameof()`, `len()`
+
+See the [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md) for the full function list.
+
+---
+
 ## Getting Started
 
 ```bash
-dotnet build                                         # Build
+dotnet build                                         # Build all projects
 dotnet run --project Stash.Cli/                      # Start the REPL
 dotnet run --project Stash.Cli/ -- script.stash      # Run a script
-dotnet run --project Stash.Cli/ -- -c 'code'         # Run inline code
+dotnet run --project Stash.Cli/ -- -c 'io.println("hi");'
 echo 'code' | dotnet run --project Stash.Cli/        # Pipe from stdin
-dotnet test                                          # Run the test suite
+dotnet test                                          # Run 5,700+ tests
 stash-check .                                        # Lint all .stash files
-stash-format --check .                               # Check formatting
 stash-format --write .                               # Format all files
 ```
 
@@ -280,48 +277,50 @@ chmod +x hello.stash && ./hello.stash
 
 ## Tooling
 
-Stash ships with a full toolchain — no plugins or third-party tools required:
+Stash ships with a complete toolchain — no plugins or third-party tools required:
 
-- **Language Server (LSP)** — completions, hover, diagnostics, go-to-definition, rename, semantic token highlighting, workspace-level indexing, type narrowing with `is`, UFCS support, and range/on-type formatting for any LSP-compatible editor. Full analysis pipeline averages **1.2ms** per document change across real-world scripts. See [docs/LSP — Language Server Protocol.md](docs/LSP%20—%20Language%20Server%20Protocol.md).
+- **Language Server (LSP)** — completions, hover, diagnostics, go-to-definition, rename, semantic tokens, type narrowing, UFCS support, and range/on-type formatting. Full analysis pipeline averages **1.2ms** per document change. See [docs/LSP — Language Server Protocol.md](docs/LSP%20—%20Language%20Server%20Protocol.md).
 - **Debug Adapter (DAP)** — breakpoints, stepping, variable inspection for VS Code and other DAP clients. See [docs/DAP — Debug Adapter Protocol.md](docs/DAP%20—%20Debug%20Adapter%20Protocol.md).
-- **Built-in Test Runner** — `test()`, `describe()`, `assert.*` with TAP output. No external framework needed. See [docs/TAP — Testing Infrastructure.md](docs/TAP%20—%20Testing%20Infrastructure.md).
-- **CLI Debugger** — built-in step debugger with breakpoints, call stack inspection, and variable printing. Run any script with `--debug`.
-- **Templating Engine** — Jinja2-style templates with variable interpolation, filters, conditionals, loops, includes, and whitespace control via the `tpl` namespace. See [docs/TPL — Templating Engine.md](docs/TPL%20—%20Templating%20Engine.md).
-- **Static Analysis CLI (`stash-check`)** — Standalone linter with SARIF output for CI/CD pipelines. Runs the full analysis engine without requiring the interpreter or LSP.
-- **Code Formatter (`stash-format`)** — Standalone formatter with `--write`, `--check`, and `--diff` modes. Enforce consistent style in CI or format on save.
-- **Browser Playground** — Interactive WASM-based playground with Monaco editor for trying Stash in the browser. No installation required. See [docs/Playground — Browser Playground.md](docs/Playground%20—%20Browser%20Playground.md).
+- **Built-in Test Runner (TAP)** — `test.it()`, `test.describe()`, `assert.*` with lifecycle hooks (`beforeAll`, `afterAll`, `beforeEach`, `afterEach`) and TAP output. No external framework needed. See [docs/TAP — Testing Infrastructure.md](docs/TAP%20—%20Testing%20Infrastructure.md).
+- **Static Analysis CLI (`stash-check`)** — 63 diagnostic rules across 14 categories, autofix support (safe/unsafe classification), flow analysis, `.stashcheck` config with presets and per-file overrides, and 5 output formats: `text`, `grouped`, `json`, `github`, `sarif`. Watch mode for incremental re-analysis.
+- **Code Formatter (`stash-format`)** — `--write`, `--check`, and `--diff` modes. `.stashformat` config with 22+ options (indent style, print width, trailing commas, import sorting, etc.) and `.editorconfig` fallback.
+- **VS Code Extension** — LSP/DAP clients, TAP test runner integration, syntax highlighting, and a **bytecode disassembly visualizer**.
+- **Templating Engine** — Jinja2-style templates with filters, conditionals, loops, includes, and whitespace control via `tpl.render` / `tpl.renderFile`. See [docs/TPL — Templating Engine.md](docs/TPL%20—%20Templating%20Engine.md).
+- **Browser Playground** — Live at [playground.stash-lang.dev](https://playground.stash-lang.dev/). Monaco editor, WASM runtime, curated examples — no installation required. See [docs/Playground — Browser Playground.md](docs/Playground%20—%20Browser%20Playground.md).
 
 ---
 
 ## Package Management
 
-Stash includes a built-in package manager for sharing and reusing code. Packages are defined by a `stash.json` manifest, locked with `stash-lock.json`, and installed into a `stashes/` directory.
+Stash includes a built-in package manager. Packages are defined by a `stash.json` manifest, locked with `stash-lock.json`, and installed into a `stashes/` directory.
 
 ```bash
 stash pkg init                          # Create a new stash.json
 stash pkg install http-client@1.2.0     # Add and install a dependency
-stash pkg install                       # Install all dependencies from stash.json
+stash pkg install                       # Install all dependencies
 stash pkg update                        # Re-resolve to latest matching versions
-stash pkg search http-client            # Search a registry for packages
+stash pkg search http-client            # Search a registry
 stash pkg publish                       # Publish the current package
 stash pkg login --registry <url>        # Authenticate with a registry
 ```
 
 Dependencies support semver constraints (`^1.2.0`, `~1.0.0`, `*`) and Git sources (`git:https://github.com/user/repo.git#v1.0.0`).
 
-All registry commands accept `--registry <url>` to target a specific registry. Without it, the CLI uses the default registry from `~/.stash/config.json` (set automatically on first `stash pkg login`).
+All registry commands accept `--registry <url>`. Without it, the CLI uses the default registry from `~/.stash/config.json` (set automatically on first `stash pkg login`).
+
+See [docs/PKG — Package Manager CLI.md](docs/PKG%20—%20Package%20Manager%20CLI.md) for the full reference.
 
 ---
 
 ## Package Registry
 
-Stash ships with a self-hosted package registry server for teams and organizations. Run your own registry with zero external dependencies — SQLite and local filesystem storage work out of the box.
+Stash ships with a self-hosted package registry server. Run your own registry with zero external dependencies — SQLite and local filesystem storage work out of the box.
 
 ```bash
 dotnet run --project Stash.Registry/    # Start the registry server
 ```
 
-The registry provides a full REST API for publishing, installing, searching, and managing packages. It includes JWT authentication with scoped tokens, rate limiting, integrity verification, and audit logging. For larger deployments, PostgreSQL and S3 backends are supported.
+The registry provides a full REST API for publishing, installing, searching, and managing packages. It includes JWT authentication with scoped tokens, rate limiting, integrity verification, and audit logging. PostgreSQL and S3 backends are supported for larger deployments.
 
 See [docs/Registry — Package Registry.md](docs/Registry%20—%20Package%20Registry.md) for the full API reference, configuration options, and architecture details.
 
@@ -329,22 +328,17 @@ See [docs/Registry — Package Registry.md](docs/Registry%20—%20Package%20Regi
 
 ## Embedding
 
-Stash can be embedded into any .NET application as a scripting engine — similar to how Lua is embedded in games. The `Stash.Bytecode` library provides a clean `StashEngine` API:
+Stash can be embedded into any .NET application as a scripting engine. The `Stash.Bytecode` library exposes a clean `StashEngine` API:
 
 ```csharp
 using Stash.Interpreting;
 
 var engine = new StashEngine(StashCapabilities.None); // sandboxed
 
-// Inject host variables and functions
 engine.SetGlobal("playerName", "Alice");
-engine.SetGlobal("getHealth", engine.CreateFunction("getHealth", 0,
-    (args) => 100L));
+engine.SetGlobal("getHealth", engine.CreateFunction("getHealth", 0, (args) => 100L));
 
-// Run Stash code
 engine.Run("io.println(\"Hello, \" + playerName);");
-
-// Evaluate expressions and read values back
 var result = engine.Evaluate("playerName");
 ```
 
@@ -365,7 +359,7 @@ See the [embedding demo](examples/EmbeddingDemo/) for a full working example.
 
 ## Performance
 
-Stash uses a **bytecode VM** as its execution engine. The table below compares the VM against other languages to show its performance characteristics.
+Stash compiles to a **register-based bytecode VM** with constant folding, dead branch elimination, peephole optimization, superinstructions, inline caching, and integer-specialized loop opcodes.
 
 **What each benchmark tests**
 
@@ -393,29 +387,13 @@ Stash uses a **bytecode VM** as its execution engine. The table below compares t
 
 ---
 
-## Documentation
-
-| Document                                                                         | Description                                         |
-| -------------------------------------------------------------------------------- | --------------------------------------------------- |
-| [Language Specification](docs/Stash%20—%20Language%20Specification.md)           | Complete syntax, type system, and language design   |
-| [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md) | All built-in functions and namespaces               |
-| [Language Server Protocol](docs/LSP%20—%20Language%20Server%20Protocol.md)       | LSP architecture and supported features             |
-| [Debug Adapter Protocol](docs/DAP%20—%20Debug%20Adapter%20Protocol.md)           | DAP implementation and debugging support            |
-| [Testing Infrastructure](docs/TAP%20—%20Testing%20Infrastructure.md)             | Built-in test runner and TAP output                 |
-| [Templating Engine](docs/TPL%20—%20Templating%20Engine.md)                       | Jinja2-style template rendering and `tpl` namespace |
-| [Package Registry](docs/Registry%20—%20Package%20Registry.md)                    | Self-hosted registry server and CLI integration     |
-| [Package Manager CLI](docs/PKG%20—%20Package%20Manager%20CLI.md)                 | Package manager commands and manifest format        |
-| [Browser Playground](docs/Playground%20—%20Browser%20Playground.md)              | Interactive WASM-based playground                   |
-
----
-
 ## Architecture
 
 ```
 Stash.Core          → Lexer, Parser, 46 AST node types
-Stash.Stdlib        → Standard library metadata registry (30 namespaces)
-Stash.Bytecode      → Bytecode VM (compiler + stack-based VM)
-Stash.Analysis      → Static analysis engine, diagnostics, formatting
+Stash.Stdlib        → Standard library metadata registry (29 namespaces, ~376 functions)
+Stash.Bytecode      → Register-based bytecode VM (compiler + VM, 70+ opcodes)
+Stash.Analysis      → Static analysis engine (63 rules, autofix, flow analysis)
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol
 Stash.Dap           → Debug Adapter Protocol
@@ -425,8 +403,24 @@ Stash.Check         → Static analysis CLI (Native AOT)
 Stash.Format        → Code formatter CLI (Native AOT)
 Stash.Playground    → Browser playground (Blazor WASM)
 Stash.Registry      → Package registry server (ASP.NET Core)
-Stash.Tests         → 4,400+ xUnit tests
+Stash.Tests         → 5,700+ xUnit tests
 ```
+
+---
+
+## Documentation
+
+| Document                                                                         | Description                                         |
+| -------------------------------------------------------------------------------- | --------------------------------------------------- |
+| [Language Specification](docs/Stash%20—%20Language%20Specification.md)           | Complete syntax, type system, and language design   |
+| [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md) | All 29 namespaces and ~376 functions                |
+| [Language Server Protocol](docs/LSP%20—%20Language%20Server%20Protocol.md)       | LSP architecture and supported features             |
+| [Debug Adapter Protocol](docs/DAP%20—%20Debug%20Adapter%20Protocol.md)           | DAP implementation and debugging support            |
+| [Testing Infrastructure](docs/TAP%20—%20Testing%20Infrastructure.md)             | Built-in test runner and TAP output                 |
+| [Templating Engine](docs/TPL%20—%20Templating%20Engine.md)                       | Jinja2-style template rendering and `tpl` namespace |
+| [Package Registry](docs/Registry%20—%20Package%20Registry.md)                    | Self-hosted registry server and CLI integration     |
+| [Package Manager CLI](docs/PKG%20—%20Package%20Manager%20CLI.md)                 | Package manager commands and manifest format        |
+| [Browser Playground](docs/Playground%20—%20Browser%20Playground.md)              | Interactive WASM-based playground                   |
 
 ---
 
