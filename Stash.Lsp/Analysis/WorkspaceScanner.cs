@@ -49,6 +49,17 @@ public sealed class WorkspaceScanner : IDisposable
     }
 
     /// <summary>
+    /// Returns a snapshot of the current workspace root paths.
+    /// </summary>
+    public IReadOnlyList<string> GetRoots()
+    {
+        lock (_rootsLock)
+        {
+            return new List<string>(_workspaceRoots);
+        }
+    }
+
+    /// <summary>
     /// Sets workspace root paths and starts the background scan if indexing is enabled.
     /// </summary>
     public void SetRoots(IEnumerable<string> roots)

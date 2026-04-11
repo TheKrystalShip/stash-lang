@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Handlers;
 
 using System;
+using System.IO;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -47,6 +48,7 @@ public class CodeActionHandler : CodeActionHandlerBase
 {
     private readonly AnalysisEngine _analysis;
     private readonly DocumentManager _documents;
+    private readonly WorkspaceScanner _scanner;
 
     private readonly ILogger<CodeActionHandler> _logger;
 
@@ -55,10 +57,11 @@ public class CodeActionHandler : CodeActionHandlerBase
     /// </summary>
     /// <param name="analysis">The analysis engine that supplies cached per-document results.</param>
     /// <param name="documents">The document manager used to retrieve current document text.</param>
-    public CodeActionHandler(AnalysisEngine analysis, DocumentManager documents, ILogger<CodeActionHandler> logger)
+    public CodeActionHandler(AnalysisEngine analysis, DocumentManager documents, WorkspaceScanner scanner, ILogger<CodeActionHandler> logger)
     {
         _analysis = analysis;
         _documents = documents;
+        _scanner = scanner;
         _logger = logger;
     }
 
@@ -238,6 +241,150 @@ public class CodeActionHandler : CodeActionHandlerBase
                         }
                     }
                 }));
+            }
+        }
+
+        // Universal suppression quick-fixes for all SA-code diagnostics.
+        var suppressionText = _documents.GetText(uri);
+        string[] suppressionLines = suppressionText != null ? suppressionText.Split('\n') : Array.Empty<string>();
+        int fileInsertLine = suppressionLines.Length > 0 && suppressionLines[0].StartsWith("#!") ? 1 : 0;
+
+        foreach (var diagnostic in request.Context.Diagnostics)
+        {
+            if (diagnostic.Source != "stash")
+            {
+                continue;
+            }
+
+            var code = diagnostic.Code?.String;
+            if (string.IsNullOrEmpty(code))
+            {
+                continue;
+            }
+
+            int diagLine = diagnostic.Range.Start.Line;
+            string indent = "";
+            if (diagLine >= 0 && diagLine < suppressionLines.Length)
+            {
+                string diagLineText = suppressionLines[diagLine];
+                int i = 0;
+                while (i < diagLineText.Length && (diagLineText[i] == ' ' || diagLineText[i] == '\t'))
+                    i++;
+                indent = diagLineText[..i];
+            }
+
+            actions.Add(new CommandOrCodeAction(new CodeAction
+            {
+                Title = $"Disable {code} for this line",
+                Kind = CodeActionKind.QuickFix,
+                IsPreferred = false,
+                Diagnostics = new Container<Diagnostic>(diagnostic),
+                Edit = new WorkspaceEdit
+                {
+                    Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                    {
+                        [request.TextDocument.Uri] = new[]
+                        {
+                            new TextEdit
+                            {
+                                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(diagLine, 0, diagLine, 0),
+                                NewText = $"{indent}// stash-disable-next-line {code}\n"
+                            }
+                        }
+                    }
+                }
+            }));
+
+            actions.Add(new CommandOrCodeAction(new CodeAction
+            {
+                Title = $"Disable {code} for this file",
+                Kind = CodeActionKind.QuickFix,
+                IsPreferred = false,
+                Diagnostics = new Container<Diagnostic>(diagnostic),
+                Edit = new WorkspaceEdit
+                {
+                    Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                    {
+                        [request.TextDocument.Uri] = new[]
+                        {
+                            new TextEdit
+                            {
+                                Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(fileInsertLine, 0, fileInsertLine, 0),
+                                NewText = $"// stash-disable {code}\n"
+                            }
+                        }
+                    }
+                }
+            }));
+
+            var roots = _scanner.GetRoots();
+            if (roots.Count > 0)
+            {
+                string stashcheckPath = Path.Combine(roots[0], ".stashcheck");
+                var stashcheckUri = DocumentUri.From(new Uri(stashcheckPath));
+                string disableLine = $"disable = {code}\n";
+
+                if (File.Exists(stashcheckPath))
+                {
+                    string existingContent = File.ReadAllText(stashcheckPath);
+                    int lineCount = existingContent.Split('\n').Length;
+                    bool endsWithNewline = existingContent.Length > 0 && existingContent[^1] == '\n';
+                    int insertLine = endsWithNewline ? lineCount - 1 : lineCount;
+                    string insertText = endsWithNewline ? disableLine : "\n" + disableLine;
+
+                    actions.Add(new CommandOrCodeAction(new CodeAction
+                    {
+                        Title = $"Disable {code} for this project",
+                        Kind = CodeActionKind.QuickFix,
+                        IsPreferred = false,
+                        Diagnostics = new Container<Diagnostic>(diagnostic),
+                        Edit = new WorkspaceEdit
+                        {
+                            Changes = new Dictionary<DocumentUri, IEnumerable<TextEdit>>
+                            {
+                                [stashcheckUri] = new[]
+                                {
+                                    new TextEdit
+                                    {
+                                        Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(insertLine, 0, insertLine, 0),
+                                        NewText = insertText
+                                    }
+                                }
+                            }
+                        }
+                    }));
+                }
+                else
+                {
+                    actions.Add(new CommandOrCodeAction(new CodeAction
+                    {
+                        Title = $"Disable {code} for this project",
+                        Kind = CodeActionKind.QuickFix,
+                        IsPreferred = false,
+                        Diagnostics = new Container<Diagnostic>(diagnostic),
+                        Edit = new WorkspaceEdit
+                        {
+                            DocumentChanges = new Container<WorkspaceEditDocumentChange>(
+                                new WorkspaceEditDocumentChange(new CreateFile
+                                {
+                                    Uri = stashcheckUri,
+                                    Options = new CreateFileOptions { IgnoreIfExists = true }
+                                }),
+                                new WorkspaceEditDocumentChange(new TextDocumentEdit
+                                {
+                                    TextDocument = new OptionalVersionedTextDocumentIdentifier { Uri = stashcheckUri },
+                                    Edits = new TextEditContainer(
+                                        new TextEdit
+                                        {
+                                            Range = new OmniSharp.Extensions.LanguageServer.Protocol.Models.Range(0, 0, 0, 0),
+                                            NewText = disableLine
+                                        }
+                                    )
+                                })
+                            )
+                        }
+                    }));
+                }
             }
         }
 
