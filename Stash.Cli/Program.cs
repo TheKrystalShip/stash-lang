@@ -53,6 +53,13 @@ public class Program
             return;
         }
 
+        // Service manager subcommand
+        if (args.Length > 0 && args[0] is "service" or "svc")
+        {
+            Stash.Cli.ServiceManager.ServiceCommands.Run(args[1..]);
+            return;
+        }
+
         string? commandString = null;
         bool debug = false;
         bool disassemble = false;

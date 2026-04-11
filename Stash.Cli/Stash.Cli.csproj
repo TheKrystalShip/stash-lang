@@ -19,6 +19,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Stash.Bytecode\Stash.Bytecode.csproj" />
     <ProjectReference Include="..\Stash.Core\Stash.Core.csproj" />
+    <ProjectReference Include="..\Stash.Scheduler\Stash.Scheduler.csproj" />
     <ProjectReference Include="..\Stash.Tap\Stash.Tap.csproj" />
   </ItemGroup>
 

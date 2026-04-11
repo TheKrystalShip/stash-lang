@@ -5,6 +5,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text;
 using Stash.Scheduler;
 using Stash.Scheduler.Logging;
@@ -308,8 +309,30 @@ internal sealed class SystemdServiceManager : IServiceManager
 
     public IReadOnlyList<ExecutionRecord> GetHistory(string serviceName, int maxRecords = 20)
     {
-        // Phase 1 stub — full log parsing in Phase 2
-        return Array.Empty<ExecutionRecord>();
+        var records = new List<ExecutionRecord>();
+        string logDir = ServiceLogManager.GetLogDirectory(serviceName);
+        if (!Directory.Exists(logDir)) return records;
+
+        // Get all log files sorted by date descending
+        var logFiles = Directory.GetFiles(logDir, "*.log")
+            .OrderByDescending(f => f)
+            .ToList();
+
+        // Build basic records from log file modification times
+        foreach (string logFile in logFiles)
+        {
+            if (records.Count >= maxRecords) break;
+            var fi = new FileInfo(logFile);
+            records.Add(new ExecutionRecord
+            {
+                Timestamp = fi.LastWriteTimeUtc,
+                ExitCode = 0,
+                Duration = null,
+                Output = null,
+            });
+        }
+
+        return records;
     }
 
     // ── Unit file generation ──────────────────────────────────────────────────
