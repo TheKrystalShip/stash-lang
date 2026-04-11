@@ -114,7 +114,7 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
     }
 
     [Fact]
-    public void Watch_WithFilter_OnlyMatchingFilesTriggger()
+    public void Watch_WithFilter_OnlyMatchingFilesTrigger()
     {
         var dir = Path.Combine(TestDir, "watch_filter_dir").Replace("\\", "/");
         Directory.CreateDirectory(dir);
@@ -267,6 +267,33 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
         Assert.True((long)result! >= 1);
     }
 
+    [Fact]
+    public void Watch_MultipleWatchersDifferentPaths_IndependentFiring()
+    {
+        var dir1 = Path.Combine(TestDir, "multi_watch_a").Replace("\\", "/");
+        var dir2 = Path.Combine(TestDir, "multi_watch_b").Replace("\\", "/");
+        Directory.CreateDirectory(dir1);
+        Directory.CreateDirectory(dir2);
+
+        var result = Run($$"""
+            let state = {a: 0, b: 0};
+            let w1 = fs.watch("{{dir1}}", (event) => {
+                state.a = state.a + 1;
+            });
+            let w2 = fs.watch("{{dir2}}", (event) => {
+                state.b = state.b + 1;
+            });
+            fs.writeFile("{{dir1}}/file.txt", "hello");
+            fs.writeFile("{{dir2}}/file.txt", "world");
+            time.sleep(0.8);
+            fs.unwatch(w1);
+            fs.unwatch(w2);
+            let result = state.a >= 1 && state.b >= 1;
+            """);
+
+        Assert.Equal(true, result);
+    }
+
     // ── Options tests ────────────────────────────────────────────────────────
 
     [Fact]
@@ -309,6 +336,26 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
             """);
 
         Assert.Equal(0L, result);
+    }
+
+    [Fact]
+    public void Watch_CustomBufferSize_AcceptedWithoutError()
+    {
+        var filePath = Path.Combine(TestDir, "watch_bufsize.txt").Replace("\\", "/");
+        File.WriteAllText(filePath, "initial");
+
+        var result = Run($$"""
+            let state = {matched: false};
+            let w = fs.watch("{{filePath}}", (event) => {
+                state.matched = true;
+            }, fs.WatchOptions { bufferSize: 16384 });
+            fs.writeFile("{{filePath}}", "updated");
+            time.sleep(0.8);
+            fs.unwatch(w);
+            let result = state.matched;
+            """);
+
+        Assert.Equal(true, result);
     }
 
     // ── Debounce tests ───────────────────────────────────────────────────────
@@ -361,16 +408,85 @@ public class FsWatchBuiltInsTests : TempDirectoryFixture
         Assert.True((long)result! > 1);
     }
 
+    [Fact]
+    public void Watch_DebounceDifferentFiles_NoCoalescing()
+    {
+        var dir = Path.Combine(TestDir, "debounce_diff").Replace("\\", "/");
+        Directory.CreateDirectory(dir);
+
+        var result = Run($$"""
+            let state = {count: 0};
+            let w = fs.watch("{{dir}}", (event) => {
+                state.count = state.count + 1;
+            });
+            fs.writeFile("{{dir}}/a.txt", "1");
+            fs.writeFile("{{dir}}/b.txt", "2");
+            fs.writeFile("{{dir}}/c.txt", "3");
+            time.sleep(0.8);
+            fs.unwatch(w);
+            let result = state.count;
+            """);
+
+        Assert.True((long)result! >= 3);
+    }
+
+    [Fact]
+    public void Watch_RenameNotDebounced_EachFiresImmediately()
+    {
+        var dir = Path.Combine(TestDir, "debounce_rename").Replace("\\", "/");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText($"{dir}/r1.txt", "data");
+        File.WriteAllText($"{dir}/r2.txt", "data");
+
+        var result = Run($$"""
+            let state = {renames: 0};
+            let w = fs.watch("{{dir}}", (event) => {
+                if (event.type == fs.WatchEventType.Renamed) {
+                    state.renames = state.renames + 1;
+                }
+            });
+            fs.move("{{dir}}/r1.txt", "{{dir}}/r1_moved.txt");
+            fs.move("{{dir}}/r2.txt", "{{dir}}/r2_moved.txt");
+            time.sleep(0.8);
+            fs.unwatch(w);
+            let result = state.renames;
+            """);
+
+        Assert.True((long)result! >= 2);
+    }
+
+    [Fact]
+    public void Watch_CustomDebounceWindow_CoalescesWithinWindow()
+    {
+        var filePath = Path.Combine(TestDir, "custom_debounce.txt").Replace("\\", "/");
+        File.WriteAllText(filePath, "initial");
+
+        var result = Run($$"""
+            let state = {count: 0};
+            let w = fs.watch("{{filePath}}", (event) => {
+                state.count = state.count + 1;
+            }, fs.WatchOptions { debounce: 500 });
+            fs.writeFile("{{filePath}}", "1");
+            fs.writeFile("{{filePath}}", "2");
+            fs.writeFile("{{filePath}}", "3");
+            time.sleep(1.0);
+            fs.unwatch(w);
+            let result = state.count;
+            """);
+
+        Assert.Equal(1L, result);
+    }
+
     // ── Scope isolation tests ─────────────────────────────────────────────────
 
     [Fact]
-    public void Watch_ValueTypeNotShared_ForkSemantics()
+    public void Watch_GlobalVariableShared_ChildVMWritesBack()
     {
         var filePath = Path.Combine(TestDir, "watch_fork.txt").Replace("\\", "/");
         File.WriteAllText(filePath, "initial");
 
-        // Callbacks run with the original closure, so parent-scope variables are accessible.
-        // Primitive variable x assigned in callback is visible in parent after callback fires.
+        // Globals are shared between parent and child VM. The child VM writes to the same
+        // global dictionary and RefreshGlobalSlots() syncs modifications back to the parent.
         var result = Run($$"""
             let x = 0;
             let w = fs.watch("{{filePath}}", (event) => {
