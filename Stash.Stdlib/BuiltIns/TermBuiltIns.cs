@@ -46,13 +46,16 @@ public static class TermBuiltIns
         ns.Constant("WHITE", "white", "string", "white");
         ns.Constant("GRAY", "gray", "string", "gray");
 
-        // term.color(text, color) — Wraps 'text' in ANSI escape codes to display it in the specified foreground color.
-        //   'color' must be one of the term color constants (e.g. term.RED) or their string equivalents.
-        ns.Function("color", [Param("text", "string"), Param("color", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // term.color(text, color [, bgColor]) — Wraps 'text' in ANSI escape codes for the specified foreground color.
+        //   Optional 'bgColor' applies a background color (ANSI bg codes = fg code + 10).
+        ns.Function("color", [Param("text", "string"), Param("color", "string"), Param("bgColor", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'term.color' requires 2 or 3 arguments.");
+
             var text = SvArgs.String(args, 0, "term.color");
             var color = SvArgs.String(args, 1, "term.color");
-            string code = color.ToLowerInvariant() switch
+            string fgCode = color.ToLowerInvariant() switch
             {
                 "black" => "30",
                 "red" => "31",
@@ -65,8 +68,31 @@ public static class TermBuiltIns
                 "gray" or "grey" => "90",
                 _ => throw new RuntimeError($"Unknown color '{color}'. Use term color constants: term.BLACK, term.RED, term.GREEN, term.YELLOW, term.BLUE, term.MAGENTA, term.CYAN, term.WHITE, term.GRAY.")
             };
-            return StashValue.FromObj($"\x1b[{code}m{text}\x1b[0m");
-        }, returnType: "string");
+
+            if (args.Length == 3)
+            {
+                var bgColor = SvArgs.String(args, 2, "term.color");
+                string bgCode = bgColor.ToLowerInvariant() switch
+                {
+                    "black" => "40",
+                    "red" => "41",
+                    "green" => "42",
+                    "yellow" => "43",
+                    "blue" => "44",
+                    "magenta" => "45",
+                    "cyan" => "46",
+                    "white" => "47",
+                    "gray" or "grey" => "100",
+                    _ => throw new RuntimeError($"Unknown background color '{bgColor}'. Use term color constants: term.BLACK, term.RED, term.GREEN, term.YELLOW, term.BLUE, term.MAGENTA, term.CYAN, term.WHITE, term.GRAY.")
+                };
+                return StashValue.FromObj($"\x1b[{fgCode};{bgCode}m{text}\x1b[0m");
+            }
+
+            return StashValue.FromObj($"\x1b[{fgCode}m{text}\x1b[0m");
+        },
+            returnType: "string",
+            isVariadic: true,
+            documentation: "Wraps text in ANSI escape codes for terminal color.\n@param text The text to colorize\n@param color The foreground color name (e.g., term.RED)\n@param bgColor Optional background color name (e.g., term.BLUE)\n@return The ANSI-styled string");
 
         // term.bold(text) — Wraps 'text' in ANSI bold escape codes. Returns the styled string.
         ns.Function("bold", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>

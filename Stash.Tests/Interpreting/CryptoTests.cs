@@ -237,4 +237,22 @@ public class CryptoTests : StashTestBase
     {
         RunExpectingError(@"crypto.sha256(true);");
     }
+
+    // ── Optional Args ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void RandomBytes_WithBase64Encoding_ReturnsNonEmptyString()
+    {
+        var result = Run(@"let result = crypto.randomBytes(16, ""base64"");");
+        var encoded = Assert.IsType<string>(result);
+        Assert.NotEmpty(encoded);
+    }
+
+    [Fact]
+    public void RandomBytes_WithHexEncoding_Returns32CharString()
+    {
+        var result = Run(@"let result = crypto.randomBytes(16, ""hex"");");
+        var hex = Assert.IsType<string>(result);
+        Assert.Equal(32, hex.Length);
+    }
 }

@@ -17,13 +17,19 @@ public static class EnvBuiltIns
         var ns = new NamespaceBuilder("env");
         ns.RequiresCapability(StashCapabilities.Environment);
 
-        ns.Function("get", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("get", [Param("name", "string"), Param("default", "any")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'env.get' requires 1 or 2 arguments.");
             var name = SvArgs.String(args, 0, "env.get");
 
             var value = System.Environment.GetEnvironmentVariable(name);
-            return value is null ? StashValue.Null : StashValue.FromObj(value);
-        });
+            if (value is null)
+                return args.Length == 2 ? args[1] : StashValue.Null;
+            return StashValue.FromObj(value);
+        },
+            isVariadic: true,
+            documentation: "Returns the value of an environment variable, or null if not set. If a default is provided it is returned instead of null.\n@param name The environment variable name\n@param default Optional default value when the variable is not set\n@return The value, default, or null");
 
         ns.Function("set", [Param("name", "string"), Param("value", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {

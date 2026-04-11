@@ -210,33 +210,47 @@ public static class SysBuiltIns
             documentation: "Returns an array of objects describing each network interface.\n@return Array of interface dictionaries"
         );
 
-        // sys.which(name) — Searches the system PATH for an executable with the given name.
-        ns.Function("which", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // sys.which(name [, all]) — Searches the system PATH for an executable with the given name.
+        //   When 'all' is true, returns an array of all matches instead of only the first.
+        ns.Function("which", [Param("name", "string"), Param("all", "bool")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
             {
+                if (args.Length < 1 || args.Length > 2)
+                    throw new RuntimeError("'sys.which' requires 1 or 2 arguments.");
+
                 string name = SvArgs.String(args, 0, "sys.which");
 
+                bool all = false;
+                if (args.Length == 2)
+                    all = SvArgs.Bool(args, 1, "sys.which");
+
                 if (string.IsNullOrWhiteSpace(name))
-                    return StashValue.Null;
+                    return all ? StashValue.FromObj(new List<StashValue>()) : StashValue.Null;
 
                 // If it's already an absolute/rooted path, check directly
                 if (Path.IsPathRooted(name))
                 {
                     if (File.Exists(name) && IsExecutable(name))
-                        return StashValue.FromObj(Path.GetFullPath(name));
-                    return StashValue.Null;
+                    {
+                        string full = Path.GetFullPath(name);
+                        return all ? StashValue.FromObj(new List<StashValue> { StashValue.FromObj(full) }) : StashValue.FromObj(full);
+                    }
+                    return all ? StashValue.FromObj(new List<StashValue>()) : StashValue.Null;
                 }
 
                 // Names with path separators are not bare command names — match POSIX which behavior
                 if (name.Contains(Path.DirectorySeparatorChar) || name.Contains(Path.AltDirectorySeparatorChar))
                 {
                     if (File.Exists(name) && IsExecutable(name))
-                        return StashValue.FromObj(Path.GetFullPath(name));
-                    return StashValue.Null;
+                    {
+                        string full = Path.GetFullPath(name);
+                        return all ? StashValue.FromObj(new List<StashValue> { StashValue.FromObj(full) }) : StashValue.FromObj(full);
+                    }
+                    return all ? StashValue.FromObj(new List<StashValue>()) : StashValue.Null;
                 }
 
                 string? pathEnv = System.Environment.GetEnvironmentVariable("PATH");
                 if (string.IsNullOrEmpty(pathEnv))
-                    return StashValue.Null;
+                    return all ? StashValue.FromObj(new List<StashValue>()) : StashValue.Null;
 
                 string[] dirs = pathEnv.Split(Path.PathSeparator, StringSplitOptions.RemoveEmptyEntries);
 
@@ -252,6 +266,21 @@ public static class SysBuiltIns
                     extensions = [""];
                 }
 
+                if (all)
+                {
+                    var matches = new List<StashValue>();
+                    foreach (string dir in dirs)
+                    {
+                        foreach (string ext in extensions)
+                        {
+                            string candidate = Path.Combine(dir, name + ext);
+                            if (File.Exists(candidate) && IsExecutable(candidate))
+                                matches.Add(StashValue.FromObj(Path.GetFullPath(candidate)));
+                        }
+                    }
+                    return StashValue.FromObj(matches);
+                }
+
                 foreach (string dir in dirs)
                 {
                     foreach (string ext in extensions)
@@ -265,7 +294,8 @@ public static class SysBuiltIns
                 return StashValue.Null;
             },
             returnType: "string",
-            documentation: "Searches the system PATH for an executable with the given name.\nReturns the full path to the executable, or null if not found.\nOn Windows, also searches PATHEXT extensions (.exe, .cmd, .bat, etc.).\n\n@param name The command name to search for\n@return Full path to the executable, or null"
+            isVariadic: true,
+            documentation: "Searches the system PATH for an executable with the given name.\nReturns the full path to the first match, or null if not found.\nWhen 'all' is true, returns an array of all matching paths.\nOn Windows, also searches PATHEXT extensions (.exe, .cmd, .bat, etc.).\n\n@param name The command name to search for\n@param all Optional. When true, returns an array of all matches instead of just the first\n@return Full path to the executable (or null), or an array of paths when all=true"
         );
 
         // sys.onSignal(signal, handler) — Registers a callback for the given POSIX signal.

@@ -75,95 +75,156 @@ public static class StrBuiltIns
             returnType: "string",
             documentation: "Returns the string converted to lowercase.\n@param s The string\n@return Lowercase string");
 
-        // str.trim(s) — Returns a copy of s with leading and trailing whitespace removed.
+        // str.trim(s[, chars]) — Returns a copy of s with leading and trailing whitespace (or
+        // the specified chars) removed.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("trim", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("trim", [Param("s", "string"), Param("chars", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'str.trim' requires 1 or 2 arguments.");
             string s = SvArgs.String(args, 0, "str.trim");
+            if (args.Length == 2)
+            {
+                var chars = SvArgs.String(args, 1, "str.trim");
+                return StashValue.FromObj(s.Trim(chars.ToCharArray()));
+            }
             return StashValue.FromObj(s.Trim());
         },
             returnType: "string",
-            documentation: "Returns the string with leading and trailing whitespace removed.\n@param s The string\n@return Trimmed string");
+            isVariadic: true,
+            documentation: "Returns the string with leading and trailing whitespace (or specified chars) removed.\n@param s The string\n@param chars Optional string of characters to trim\n@return Trimmed string");
 
-        // str.trimStart(s) — Returns a copy of s with leading whitespace removed.
+        // str.trimStart(s[, chars]) — Returns a copy of s with leading whitespace (or the
+        // specified chars) removed.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("trimStart", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("trimStart", [Param("s", "string"), Param("chars", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'str.trimStart' requires 1 or 2 arguments.");
             string s = SvArgs.String(args, 0, "str.trimStart");
+            if (args.Length == 2)
+            {
+                var chars = SvArgs.String(args, 1, "str.trimStart");
+                return StashValue.FromObj(s.TrimStart(chars.ToCharArray()));
+            }
             return StashValue.FromObj(s.TrimStart());
         },
             returnType: "string",
-            documentation: "Returns the string with leading whitespace removed.\n@param s The string\n@return Left-trimmed string");
+            isVariadic: true,
+            documentation: "Returns the string with leading whitespace (or specified chars) removed.\n@param s The string\n@param chars Optional string of characters to trim\n@return Left-trimmed string");
 
-        // str.trimEnd(s) — Returns a copy of s with trailing whitespace removed.
+        // str.trimEnd(s[, chars]) — Returns a copy of s with trailing whitespace (or the
+        // specified chars) removed.
         // Throws RuntimeError if the argument is not a string.
-        ns.Function("trimEnd", [Param("s", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("trimEnd", [Param("s", "string"), Param("chars", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'str.trimEnd' requires 1 or 2 arguments.");
             string s = SvArgs.String(args, 0, "str.trimEnd");
+            if (args.Length == 2)
+            {
+                var chars = SvArgs.String(args, 1, "str.trimEnd");
+                return StashValue.FromObj(s.TrimEnd(chars.ToCharArray()));
+            }
             return StashValue.FromObj(s.TrimEnd());
         },
             returnType: "string",
-            documentation: "Returns the string with trailing whitespace removed.\n@param s The string\n@return Right-trimmed string");
+            isVariadic: true,
+            documentation: "Returns the string with trailing whitespace (or specified chars) removed.\n@param s The string\n@param chars Optional string of characters to trim\n@return Right-trimmed string");
 
-        // str.contains(s, substring) — Returns true if s contains substring using ordinal
-        // (case-sensitive) comparison, false otherwise.
-        // Throws RuntimeError if either argument is not a string.
-        ns.Function("contains", [Param("s", "string"), Param("substring", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // str.contains(s, substring[, ignoreCase]) — Returns true if s contains substring.
+        // When ignoreCase is true, uses case-insensitive ordinal comparison.
+        // Throws RuntimeError if either string argument is not a string.
+        ns.Function("contains", [Param("s", "string"), Param("substring", "string"), Param("ignoreCase", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.contains' requires 2 or 3 arguments.");
             string s = SvArgs.String(args, 0, "str.contains");
             string sub = SvArgs.String(args, 1, "str.contains");
-            return StashValue.FromBool(s.Contains(sub, StringComparison.Ordinal));
+            var comparison = args.Length == 3 && SvArgs.Bool(args, 2, "str.contains")
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return StashValue.FromBool(s.Contains(sub, comparison));
         },
             returnType: "bool",
-            documentation: "Returns true if the string contains the substring (case-sensitive).\n@param s The string\n@param substring The substring to search for\n@return true if found");
+            isVariadic: true,
+            documentation: "Returns true if the string contains the substring.\n@param s The string\n@param substring The substring to search for\n@param ignoreCase Optional; when true, comparison is case-insensitive\n@return true if found");
 
-        // str.startsWith(s, prefix) — Returns true if s begins with prefix using ordinal
-        // comparison, false otherwise.
-        // Throws RuntimeError if either argument is not a string.
-        ns.Function("startsWith", [Param("s", "string"), Param("prefix", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // str.startsWith(s, prefix[, ignoreCase]) — Returns true if s begins with prefix.
+        // When ignoreCase is true, uses case-insensitive ordinal comparison.
+        // Throws RuntimeError if either string argument is not a string.
+        ns.Function("startsWith", [Param("s", "string"), Param("prefix", "string"), Param("ignoreCase", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.startsWith' requires 2 or 3 arguments.");
             string s = SvArgs.String(args, 0, "str.startsWith");
             string prefix = SvArgs.String(args, 1, "str.startsWith");
-            return StashValue.FromBool(s.StartsWith(prefix, StringComparison.Ordinal));
+            var comparison = args.Length == 3 && SvArgs.Bool(args, 2, "str.startsWith")
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return StashValue.FromBool(s.StartsWith(prefix, comparison));
         },
             returnType: "bool",
-            documentation: "Returns true if the string starts with the prefix (case-sensitive).\n@param s The string\n@param prefix The prefix\n@return true if starts with prefix");
+            isVariadic: true,
+            documentation: "Returns true if the string starts with the prefix.\n@param s The string\n@param prefix The prefix\n@param ignoreCase Optional; when true, comparison is case-insensitive\n@return true if starts with prefix");
 
-        // str.endsWith(s, suffix) — Returns true if s ends with suffix using ordinal
-        // comparison, false otherwise.
-        // Throws RuntimeError if either argument is not a string.
-        ns.Function("endsWith", [Param("s", "string"), Param("suffix", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // str.endsWith(s, suffix[, ignoreCase]) — Returns true if s ends with suffix.
+        // When ignoreCase is true, uses case-insensitive ordinal comparison.
+        // Throws RuntimeError if either string argument is not a string.
+        ns.Function("endsWith", [Param("s", "string"), Param("suffix", "string"), Param("ignoreCase", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.endsWith' requires 2 or 3 arguments.");
             string s = SvArgs.String(args, 0, "str.endsWith");
             string suffix = SvArgs.String(args, 1, "str.endsWith");
-            return StashValue.FromBool(s.EndsWith(suffix, StringComparison.Ordinal));
+            var comparison = args.Length == 3 && SvArgs.Bool(args, 2, "str.endsWith")
+                ? StringComparison.OrdinalIgnoreCase
+                : StringComparison.Ordinal;
+            return StashValue.FromBool(s.EndsWith(suffix, comparison));
         },
             returnType: "bool",
-            documentation: "Returns true if the string ends with the suffix (case-sensitive).\n@param s The string\n@param suffix The suffix\n@return true if ends with suffix");
+            isVariadic: true,
+            documentation: "Returns true if the string ends with the suffix.\n@param s The string\n@param suffix The suffix\n@param ignoreCase Optional; when true, comparison is case-insensitive\n@return true if ends with suffix");
 
-        // str.indexOf(s, substring) — Returns the zero-based index of the first occurrence of
-        // substring in s using ordinal comparison, or -1 if not found.
-        // Throws RuntimeError if either argument is not a string.
-        ns.Function("indexOf", [Param("s", "string"), Param("substring", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // str.indexOf(s, substring[, startIndex]) — Returns the zero-based index of the first
+        // occurrence of substring in s at or after startIndex, or -1 if not found.
+        // Throws RuntimeError if either string argument is not a string.
+        ns.Function("indexOf", [Param("s", "string"), Param("substring", "string"), Param("startIndex", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.indexOf' requires 2 or 3 arguments.");
             string s = SvArgs.String(args, 0, "str.indexOf");
             string sub = SvArgs.String(args, 1, "str.indexOf");
+            if (args.Length == 3)
+            {
+                int startIndex = (int)SvArgs.Long(args, 2, "str.indexOf");
+                return StashValue.FromInt((long)s.IndexOf(sub, startIndex, StringComparison.Ordinal));
+            }
             return StashValue.FromInt((long)s.IndexOf(sub, StringComparison.Ordinal));
         },
             returnType: "int",
-            documentation: "Returns the index of the first occurrence of substring, or -1 if not found.\n@param s The string\n@param substring The substring\n@return Zero-based index or -1");
+            isVariadic: true,
+            documentation: "Returns the index of the first occurrence of substring at or after startIndex, or -1 if not found.\n@param s The string\n@param substring The substring\n@param startIndex Optional start position for the search\n@return Zero-based index or -1");
 
-        // str.lastIndexOf(s, substring) — Returns the zero-based index of the last occurrence
-        // of substring in s using ordinal comparison, or -1 if not found.
-        // Throws RuntimeError if either argument is not a string.
-        ns.Function("lastIndexOf", [Param("s", "string"), Param("substring", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // str.lastIndexOf(s, substring[, startIndex]) — Returns the zero-based index of the
+        // last occurrence of substring in s, searching backwards from startIndex, or -1 if
+        // not found. Throws RuntimeError if either string argument is not a string.
+        ns.Function("lastIndexOf", [Param("s", "string"), Param("substring", "string"), Param("startIndex", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.lastIndexOf' requires 2 or 3 arguments.");
             string s = SvArgs.String(args, 0, "str.lastIndexOf");
             string sub = SvArgs.String(args, 1, "str.lastIndexOf");
+            if (args.Length == 3)
+            {
+                int startIndex = (int)SvArgs.Long(args, 2, "str.lastIndexOf");
+                return StashValue.FromInt((long)s.LastIndexOf(sub, startIndex, StringComparison.Ordinal));
+            }
             return StashValue.FromInt((long)s.LastIndexOf(sub, StringComparison.Ordinal));
         },
             returnType: "int",
-            documentation: "Returns the index of the last occurrence of substring, or -1 if not found.\n@param s The string\n@param substring The substring\n@return Zero-based index or -1");
+            isVariadic: true,
+            documentation: "Returns the index of the last occurrence of substring, searching backwards from startIndex, or -1 if not found.\n@param s The string\n@param substring The substring\n@param startIndex Optional position to begin searching backwards from\n@return Zero-based index or -1");
 
         // str.substring(s, start[, end]) — Returns the portion of s from index start (inclusive)
         // to end (exclusive). When end is omitted, returns the remainder of the string from start.
@@ -189,20 +250,31 @@ public static class StrBuiltIns
             isVariadic: true,
             documentation: "Returns a portion of the string from start (inclusive) to end (exclusive).\n@param s The string\n@param start Start index (inclusive)\n@param end Optional end index (exclusive)\n@return Substring");
 
-        // str.replace(s, old, new) — Returns a copy of s with the first occurrence of old
-        // replaced by new using ordinal comparison. Returns s unchanged if old is not found.
-        // Throws RuntimeError if any argument is not a string.
-        ns.Function("replace", [Param("s", "string"), Param("old", "string"), Param("new", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // str.replace(s, old, new[, count]) — Returns a copy of s with up to count occurrences
+        // of old replaced by new using ordinal comparison. When count is omitted, replaces the
+        // first occurrence only. Throws RuntimeError if any string argument is not a string.
+        ns.Function("replace", [Param("s", "string"), Param("old", "string"), Param("new", "string"), Param("count", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 3 || args.Length > 4)
+                throw new RuntimeError("'str.replace' requires 3 or 4 arguments.");
             var s = SvArgs.String(args, 0, "str.replace");
             var oldStr = SvArgs.String(args, 1, "str.replace");
-            var newStr = SvArgs.String(args, 2, "str.replace");
-            int idx = s.IndexOf(oldStr, StringComparison.Ordinal);
-            if (idx < 0) return StashValue.FromObj(s);
-            return StashValue.FromObj(s.Substring(0, idx) + newStr + s.Substring(idx + oldStr.Length));
+            var newVal = SvArgs.String(args, 2, "str.replace");
+            int count = args.Length == 4 ? (int)SvArgs.Long(args, 3, "str.replace") : 1;
+            if (count <= 0) count = 1;
+            int startIndex = 0;
+            for (int i = 0; i < count; i++)
+            {
+                int pos = s.IndexOf(oldStr, startIndex, StringComparison.Ordinal);
+                if (pos < 0) break;
+                s = s.Substring(0, pos) + newVal + s.Substring(pos + oldStr.Length);
+                startIndex = pos + newVal.Length;
+            }
+            return StashValue.FromObj(s);
         },
             returnType: "string",
-            documentation: "Returns the string with the first occurrence of old replaced by new.\n@param s The string\n@param old The substring to replace\n@param new The replacement\n@return Modified string");
+            isVariadic: true,
+            documentation: "Returns the string with up to count occurrences of old replaced by new (default 1).\n@param s The string\n@param old The substring to replace\n@param new The replacement\n@param count Optional maximum number of replacements (default 1)\n@return Modified string");
 
         // str.replaceAll(s, old, new) — Returns a copy of s with all occurrences of old
         // replaced by new using ordinal comparison.
@@ -217,21 +289,35 @@ public static class StrBuiltIns
             returnType: "string",
             documentation: "Returns the string with all occurrences of old replaced by new.\n@param s The string\n@param old The substring to replace\n@param new The replacement\n@return Modified string");
 
-        // str.split(s, delimiter) — Splits s into an array of substrings around each
-        // occurrence of delimiter. Empty substrings are preserved.
-        // Throws RuntimeError if either argument is not a string.
-        ns.Function("split", [Param("s", "string"), Param("delimiter", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // str.split(s, delimiter[, limit]) — Splits s into an array of substrings around each
+        // occurrence of delimiter. When limit is positive, produces at most limit+1 pieces.
+        // Empty substrings are preserved. Throws RuntimeError if string arguments are not strings.
+        ns.Function("split", [Param("s", "string"), Param("delimiter", "string"), Param("limit", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'str.split' requires 2 or 3 arguments.");
             var s = SvArgs.String(args, 0, "str.split");
             var delimiter = SvArgs.String(args, 1, "str.split");
-            var parts = s.Split(new[] { delimiter }, StringSplitOptions.None);
+            string[] parts;
+            if (args.Length == 3)
+            {
+                int limit = (int)SvArgs.Long(args, 2, "str.split");
+                parts = limit > 0
+                    ? s.Split(new[] { delimiter }, limit + 1, StringSplitOptions.None)
+                    : s.Split(new[] { delimiter }, StringSplitOptions.None);
+            }
+            else
+            {
+                parts = s.Split(new[] { delimiter }, StringSplitOptions.None);
+            }
             var result = new List<StashValue>(parts.Length);
             foreach (var p in parts)
                 result.Add(StashValue.FromObj(p));
             return StashValue.FromObj(result);
         },
             returnType: "array",
-            documentation: "Splits the string by delimiter. Returns an array of strings.\n@param s The string\n@param delimiter The delimiter\n@return Array of substrings");
+            isVariadic: true,
+            documentation: "Splits the string by delimiter. When limit is positive, produces at most limit+1 pieces.\n@param s The string\n@param delimiter The delimiter\n@param limit Optional maximum number of splits\n@return Array of substrings");
 
         // str.repeat(s, count) — Returns s repeated count times. Count must be >= 0.
         // Throws RuntimeError if s is not a string, count is not a non-negative integer.

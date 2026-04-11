@@ -495,4 +495,100 @@ let result = arr.groupBy(words, (x) => conv.toStr(len(x)));
     {
         RunExpectingError("let result = arr.partition([1, 2], 42);");
     }
+
+    // ── Optional Args ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Sort_WithComparator_SortsNumericAscending()
+    {
+        var result = Run(@"
+let a = [3, 1, 2];
+arr.sort(a, (x, y) => x - y);
+let result = a;
+");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(2L, list[1]);
+        Assert.Equal(3L, list[2]);
+    }
+
+    [Fact]
+    public void Sort_WithComparator_SortsDescending()
+    {
+        var result = Run(@"
+let a = [1, 3, 2];
+arr.sort(a, (x, y) => y - x);
+let result = a;
+");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(3L, list[0]);
+        Assert.Equal(2L, list[1]);
+        Assert.Equal(1L, list[2]);
+    }
+
+    [Fact]
+    public void Flat_WithDepth2_FlattensMultipleLevels()
+    {
+        var result = Run("let result = arr.flat([[1, 2], [3, [4]]], 2);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(4, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(4L, list[3]);
+    }
+
+    [Fact]
+    public void Flat_WithDepthMinusOne_FullyFlattens()
+    {
+        var result = Run("let result = arr.flat([[1, [2, [3]]]], -1);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal(1L, list[0]);
+        Assert.Equal(2L, list[1]);
+        Assert.Equal(3L, list[2]);
+    }
+
+    [Fact]
+    public void Join_DefaultSeparator_UsesComma()
+    {
+        var result = Run(@"let result = arr.join([""a"", ""b"", ""c""]);");
+        Assert.Equal("a,b,c", result);
+    }
+
+    [Fact]
+    public void IndexOf_WithStartIndex_SkipsEarlierOccurrence()
+    {
+        var result = Run("let result = arr.indexOf([1, 2, 3, 2, 1], 2, 2);");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void LastIndexOf_FindsLastOccurrence()
+    {
+        var result = Run("let result = arr.lastIndexOf([1, 2, 3, 2, 1], 2);");
+        Assert.Equal(3L, result);
+    }
+
+    [Fact]
+    public void Unique_WithKeyFn_DeduplicatesByKey()
+    {
+        var result = Run("let result = arr.unique([1, 2, 2, 3], (x) => x % 2);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+    }
+
+    [Fact]
+    public void Includes_WithStartIndex_ReturnsFalseWhenNotInRange()
+    {
+        var result = Run("let result = arr.includes([1, 2, 3], 2, 2);");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void Includes_WithStartIndex_ReturnsTrueWhenInRange()
+    {
+        var result = Run("let result = arr.includes([1, 2, 3], 3, 2);");
+        Assert.Equal(true, result);
+    }
 }

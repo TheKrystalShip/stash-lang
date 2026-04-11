@@ -58,4 +58,30 @@ public class JsonBuiltInsTests : StashTestBase
     {
         RunExpectingError("json.valid(42);");
     }
+
+    // ── Optional Args ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Stringify_WithIndent_ProducesPrettyOutput()
+    {
+        var result = Run("let result = json.stringify({a: 1}, 2);");
+        var json = Assert.IsType<string>(result);
+        Assert.Contains("\n", json);
+    }
+
+    [Fact]
+    public void Stringify_NoIndent_ProducesCompactOutput()
+    {
+        var result = Run("let result = json.stringify({a: 1});");
+        var json = Assert.IsType<string>(result);
+        Assert.DoesNotContain("\n", json);
+    }
+
+    [Fact]
+    public void Pretty_WithCustomIndent_UsesFourSpaces()
+    {
+        var result = Run("let result = json.pretty({a: 1}, 4);");
+        var json = Assert.IsType<string>(result);
+        Assert.Contains("    ", json);
+    }
 }

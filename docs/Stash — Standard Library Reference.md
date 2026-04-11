@@ -64,52 +64,81 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 
 ## `io` — Standard I/O
 
-| Function               | Description                                           |
-| ---------------------- | ----------------------------------------------------- |
-| `io.println(val)`      | Print value followed by newline                       |
-| `io.print(val)`        | Print value without newline                           |
-| `io.eprintln(val)`     | Print value followed by newline to standard error     |
-| `io.eprint(val)`       | Print value without newline to standard error         |
-| `io.readLine(prompt?)` | Read a line from standard input, with optional prompt |
-| `io.confirm(prompt)`   | Display a [y/N] confirmation prompt, returns boolean  |
+| Function                       | Description                                                                                                                                    |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `io.println(val)`              | Print value followed by newline                                                                                                                |
+| `io.print(val)`                | Print value without newline                                                                                                                    |
+| `io.eprintln(val)`             | Print value followed by newline to standard error                                                                                              |
+| `io.eprint(val)`               | Print value without newline to standard error                                                                                                  |
+| `io.readLine(prompt?)`         | Read a line from standard input, with optional prompt                                                                                          |
+| `io.confirm(prompt, default?)` | Display a [y/N] confirmation prompt, returns boolean. Optional `default` is used when the user presses Enter without typing (default: `false`) |
+
+### Examples
+
+```stash
+// Default: Enter = false (no)
+let ok = io.confirm("Delete all logs?");      // [y/N]
+
+// Enter defaults to true (yes)
+let ok = io.confirm("Continue deployment?", true);   // [Y/n]
+
+// Enter defaults to false explicitly (same as omitting)
+let ok = io.confirm("Are you sure?", false);         // [y/N]
+```
 
 ---
 
 ## `conv` — Type Conversion
 
-| Function               | Description                                           |
-| ---------------------- | ----------------------------------------------------- |
-| `conv.toStr(val)`      | Convert value to string                               |
-| `conv.toInt(val)`      | Parse string to integer                               |
-| `conv.toFloat(val)`    | Parse string to float                                 |
-| `conv.toBool(val)`     | Convert a value to boolean using truthiness rules     |
-| `conv.toHex(val)`      | Convert an integer to hexadecimal string              |
-| `conv.toOct(val)`      | Convert an integer to octal string                    |
-| `conv.toBin(val)`      | Convert an integer to binary string                   |
-| `conv.fromHex(s)`      | Parse a hexadecimal string to integer (supports `0x`) |
-| `conv.fromOct(s)`      | Parse an octal string to integer (supports `0o`)      |
-| `conv.fromBin(s)`      | Parse a binary string to integer (supports `0b`)      |
-| `conv.charCode(c)`     | Return the Unicode code point of the first character  |
-| `conv.fromCharCode(n)` | Return a character from its Unicode code point        |
+| Function                  | Description                                                                                               |
+| ------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `conv.toStr(val)`         | Convert value to string                                                                                   |
+| `conv.toInt(val, base?)`  | Parse string to integer. Optional `base` selects the number base: `2`, `8`, `10`, or `16` (default: `10`) |
+| `conv.toFloat(val)`       | Parse string to float                                                                                     |
+| `conv.toBool(val)`        | Convert a value to boolean using truthiness rules                                                         |
+| `conv.toHex(n, padding?)` | Convert an integer to hexadecimal string. Optional `padding` sets the minimum zero-padded output width    |
+| `conv.toOct(val)`         | Convert an integer to octal string                                                                        |
+| `conv.toBin(val)`         | Convert an integer to binary string                                                                       |
+| `conv.fromHex(s)`         | Parse a hexadecimal string to integer (supports `0x`)                                                     |
+| `conv.fromOct(s)`         | Parse an octal string to integer (supports `0o`)                                                          |
+| `conv.fromBin(s)`         | Parse a binary string to integer (supports `0b`)                                                          |
+| `conv.charCode(c)`        | Return the Unicode code point of the first character                                                      |
+| `conv.fromCharCode(n)`    | Return a character from its Unicode code point                                                            |
+
+### Examples
+
+```stash
+// Parse integers with explicit base
+conv.toInt(0b1010, 2);   // 10  (binary)
+conv.toInt(0o17, 8);     // 15  (octal)
+conv.toInt("255", 10);     // 255 (decimal, default)
+conv.toInt("ff", 16);      // 255 (hex, without 0x prefix)
+conv.toInt(0xFF, 16);    // 255 (hex, with 0x prefix)
+
+// Zero-padded hex output
+conv.toHex(255);            // "ff"
+conv.toHex(255, 4);         // "00ff" (padded to 4 characters)
+conv.toHex(255, 8);         // "000000ff"
+```
 
 ---
 
 ## `env` — Environment Variables
 
-| Function                 | Description                                                           |
-| ------------------------ | --------------------------------------------------------------------- |
-| `env.get(name)`          | Read environment variable (null if unset)                             |
-| `env.set(name, value)`   | Set environment variable                                              |
-| `env.has(name)`          | Check if an environment variable exists                               |
-| `env.all()`              | Return all environment variables as a dictionary                      |
-| `env.withPrefix(prefix)` | Return all environment variables starting with prefix as a dictionary |
-| `env.remove(name)`       | Delete an environment variable                                        |
-| `env.cwd()`              | Return the current working directory                                  |
-| `env.home()`             | Return the user's home directory path                                 |
-| `env.hostname()`         | Return the machine hostname                                           |
-| `env.user()`             | Return the current username                                           |
-| `env.os()`               | Return the OS name (`"linux"`, `"macos"`, `"windows"`)                |
-| `env.arch()`             | Return the CPU architecture (`"x64"`, `"arm64"`, etc.)                |
+| Function                  | Description                                                           |
+| ------------------------- | --------------------------------------------------------------------- |
+| `env.get(name, default?)` | Read environment variable. Returns `default` (or `null`) if unset     |
+| `env.set(name, value)`    | Set environment variable                                              |
+| `env.has(name)`           | Check if an environment variable exists                               |
+| `env.all()`               | Return all environment variables as a dictionary                      |
+| `env.withPrefix(prefix)`  | Return all environment variables starting with prefix as a dictionary |
+| `env.remove(name)`        | Delete an environment variable                                        |
+| `env.cwd()`               | Return the current working directory                                  |
+| `env.home()`              | Return the user's home directory path                                 |
+| `env.hostname()`          | Return the machine hostname                                           |
+| `env.user()`              | Return the current username                                           |
+| `env.os()`                | Return the OS name (`"linux"`, `"macos"`, `"windows"`)                |
+| `env.arch()`              | Return the CPU architecture (`"x64"`, `"arm64"`, etc.)                |
 
 ### `env.withPrefix(prefix)`
 
@@ -127,6 +156,16 @@ let appVars = env.withPrefix("MYAPP_");
 for (let key in appVars) {
     io.println(key + " = " + appVars[key]);
 }
+```
+
+### `env.get(name, default?)`
+
+Returns the value of an environment variable, or `default` (or `null` when omitted) if the variable is not set.
+
+```stash
+let host = env.get("DB_HOST", "localhost");      // fallback to "localhost"
+let port = env.get("DB_PORT", "5432");           // fallback to "5432"
+let debug = env.get("DEBUG");                    // null if unset
 ```
 
 ### `env.loadFile(path, prefix?)`
@@ -157,41 +196,64 @@ let config = env.withPrefix("MYAPP_");
 
 ## `fs` — File System Operations
 
-| Function                               | Description                                                                       |
-| -------------------------------------- | --------------------------------------------------------------------------------- |
-| `fs.readFile(path)`                    | Read file contents as string                                                      |
-| `fs.writeFile(path, content)`          | Write string to file (creates or overwrites)                                      |
-| `fs.appendFile(path, content)`         | Append string to file                                                             |
-| `fs.readLines(path)`                   | Read file as array of lines                                                       |
-| `fs.exists(path)`                      | Check if a file exists (returns boolean)                                          |
-| `fs.dirExists(path)`                   | Check if a directory exists (returns boolean)                                     |
-| `fs.pathExists(path)`                  | Check if a file or directory exists                                               |
-| `fs.isFile(path)`                      | Check if path is a file (returns boolean)                                         |
-| `fs.isDir(path)`                       | Check if path is a directory (returns boolean)                                    |
-| `fs.isSymlink(path)`                   | Check if path is a symbolic link                                                  |
-| `fs.createDir(path)`                   | Create a directory (including parents)                                            |
-| `fs.delete(path)`                      | Delete a file or directory (recursive)                                            |
-| `fs.copy(src, dst)`                    | Copy a file (overwrites destination)                                              |
-| `fs.move(src, dst)`                    | Move/rename a file (overwrites destination)                                       |
-| `fs.size(path)`                        | Get file size in bytes                                                            |
-| `fs.listDir(path)`                     | List entries in a directory (returns array)                                       |
-| `fs.glob(pattern)`                     | Find files matching a glob pattern                                                |
-| `fs.walk(path)`                        | Recursively list all files under a directory                                      |
-| `fs.tempFile()`                        | Create a temporary file, returns its path                                         |
-| `fs.tempDir()`                         | Create a temporary directory, returns its path                                    |
-| `fs.modifiedAt(path)`                  | Get last modified time as Unix timestamp                                          |
-| `fs.createFile(path)`                  | Create an empty file or update modified time                                      |
-| `fs.symlink(target, path)`             | Create a symbolic link                                                            |
-| `fs.stat(path)`                        | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name) |
-| `fs.readable(path)`                    | Check if current process can read the path (returns boolean)                      |
-| `fs.writable(path)`                    | Check if current process can write to the path (returns boolean)                  |
-| `fs.executable(path)`                  | Check if a file is executable (Unix: mode bits, Windows: file extension)          |
-| `fs.getPermissions(path)`              | Get file permission details (returns `FilePermissions` struct)                    |
-| `fs.setPermissions(path, permissions)` | Set file permissions from a `FilePermissions` struct                              |
-| `fs.setReadOnly(path, readOnly)`       | Set or clear the read-only state of a file or directory                           |
-| `fs.setExecutable(path, executable)`   | Set or clear the executable bit (Unix) — no-op on Windows                         |
-| `fs.watch(path, callback, options?)`   | Watch a file or directory for changes, returns a `Watcher` handle                 |
-| `fs.unwatch(watcher)`                  | Stop a file watcher previously created by `fs.watch()`                            |
+| Function                                 | Description                                                                                                           |
+| ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `fs.readFile(path, encoding?)`           | Read file contents as string. Optional `encoding`: `"utf-8"` (default), `"ascii"`, `"latin1"`, `"utf-16"`, `"utf-32"` |
+| `fs.writeFile(path, content, encoding?)` | Write string to file (creates or overwrites). Optional `encoding` matches `fs.readFile` options                       |
+| `fs.appendFile(path, content)`           | Append string to file                                                                                                 |
+| `fs.readLines(path)`                     | Read file as array of lines                                                                                           |
+| `fs.exists(path)`                        | Check if a file exists (returns boolean)                                                                              |
+| `fs.dirExists(path)`                     | Check if a directory exists (returns boolean)                                                                         |
+| `fs.pathExists(path)`                    | Check if a file or directory exists                                                                                   |
+| `fs.isFile(path)`                        | Check if path is a file (returns boolean)                                                                             |
+| `fs.isDir(path)`                         | Check if path is a directory (returns boolean)                                                                        |
+| `fs.isSymlink(path)`                     | Check if path is a symbolic link                                                                                      |
+| `fs.createDir(path)`                     | Create a directory (including parents)                                                                                |
+| `fs.delete(path)`                        | Delete a file or directory (recursive)                                                                                |
+| `fs.copy(src, dst, overwrite?)`          | Copy a file. Optional `overwrite` controls whether an existing destination is replaced (default: `true`)              |
+| `fs.move(src, dst, overwrite?)`          | Move/rename a file. Optional `overwrite` controls whether an existing destination is replaced (default: `true`)       |
+| `fs.size(path)`                          | Get file size in bytes                                                                                                |
+| `fs.listDir(path, filter?)`              | List entries in a directory. Optional `filter` is a glob pattern (e.g., `"*.log"`)                                    |
+| `fs.glob(pattern)`                       | Find files matching a glob pattern                                                                                    |
+| `fs.walk(path)`                          | Recursively list all files under a directory                                                                          |
+| `fs.tempFile()`                          | Create a temporary file, returns its path                                                                             |
+| `fs.tempDir()`                           | Create a temporary directory, returns its path                                                                        |
+| `fs.modifiedAt(path)`                    | Get last modified time as Unix timestamp                                                                              |
+| `fs.createFile(path)`                    | Create an empty file or update modified time                                                                          |
+| `fs.symlink(target, path)`               | Create a symbolic link                                                                                                |
+| `fs.stat(path)`                          | Get full file info dict (size, isFile, isDir, isSymlink, modified, created, name)                                     |
+| `fs.readable(path)`                      | Check if current process can read the path (returns boolean)                                                          |
+| `fs.writable(path)`                      | Check if current process can write to the path (returns boolean)                                                      |
+| `fs.executable(path)`                    | Check if a file is executable (Unix: mode bits, Windows: file extension)                                              |
+| `fs.getPermissions(path)`                | Get file permission details (returns `FilePermissions` struct)                                                        |
+| `fs.setPermissions(path, permissions)`   | Set file permissions from a `FilePermissions` struct                                                                  |
+| `fs.setReadOnly(path, readOnly)`         | Set or clear the read-only state of a file or directory                                                               |
+| `fs.setExecutable(path, executable)`     | Set or clear the executable bit (Unix) — no-op on Windows                                                             |
+| `fs.watch(path, callback, options?)`     | Watch a file or directory for changes, returns a `Watcher` handle                                                     |
+| `fs.unwatch(watcher)`                    | Stop a file watcher previously created by `fs.watch()`                                                                |
+
+### File I/O Examples
+
+```stash
+// Read with explicit encoding
+let content = fs.readFile("data.txt");                       // UTF-8 (default)
+let latin = fs.readFile("legacy.txt", "latin1");             // Latin-1 encoding
+let utf16 = fs.readFile("windows.txt", "utf-16");            // UTF-16 (BOM detected)
+
+// Write with encoding
+fs.writeFile("output.txt", content);                         // UTF-8 (default)
+fs.writeFile("report.txt", reportText, "utf-16");            // UTF-16 output
+
+// Copy / move with overwrite control
+fs.copy("source.txt", "dest.txt");                           // overwrite = true (default)
+fs.copy("source.txt", "dest.txt", false);                    // error if dest exists
+fs.move("old.log", "archive/old.log", true);                 // overwrite existing
+
+// List directory with glob filter
+let logs = fs.listDir("/var/log", "*.log");                  // only .log files
+let all = fs.listDir("/var/log");                             // all entries
+let configs = fs.listDir("/etc", "*.conf");
+```
 
 ### Permission Types
 
@@ -309,11 +371,20 @@ fs.unwatch(watcher);
 | `path.base(p)`            | Get filename with extension                                        |
 | `path.name(p)`            | Get filename without extension                                     |
 | `path.ext(p)`             | Get file extension (including `.`)                                 |
-| `path.join(a, b)`         | Join two path segments                                             |
+| `path.join(...segments)`  | Join two or more path segments                                     |
 | `path.normalize(p)`       | Normalize path (resolve `.` and `..`, remove redundant separators) |
 | `path.isAbsolute(p)`      | Return `true` if path is absolute                                  |
 | `path.relative(from, to)` | Compute relative path from one path to another                     |
 | `path.separator()`        | Return the platform path separator (`/` on Unix, `\` on Windows)   |
+
+### Examples
+
+```stash
+// Variadic join — any number of segments
+path.join("/var", "log", "app", "server.log");  // "/var/log/app/server.log"
+path.join("~", ".config", "stash");             // "~/.config/stash"
+path.join("/usr", "local", "bin");              // "/usr/local/bin"
+```
 
 ---
 
@@ -323,26 +394,26 @@ All `str` functions take the target string as the first argument. Strings are im
 
 ### Case & Whitespace
 
-| Function            | Description                                    |
-| ------------------- | ---------------------------------------------- |
-| `str.upper(s)`      | Convert to uppercase                           |
-| `str.lower(s)`      | Convert to lowercase                           |
-| `str.trim(s)`       | Remove leading and trailing whitespace         |
-| `str.trimStart(s)`  | Remove leading whitespace                      |
-| `str.trimEnd(s)`    | Remove trailing whitespace                     |
-| `str.capitalize(s)` | Capitalize first character, lowercase the rest |
-| `str.title(s)`      | Convert to title case (capitalize each word)   |
+| Function                   | Description                                                          |
+| -------------------------- | -------------------------------------------------------------------- |
+| `str.upper(s)`             | Convert to uppercase                                                 |
+| `str.lower(s)`             | Convert to lowercase                                                 |
+| `str.trim(s, chars?)`      | Remove leading and trailing whitespace, or the specified `chars` set |
+| `str.trimStart(s, chars?)` | Remove leading whitespace, or the specified `chars` set              |
+| `str.trimEnd(s, chars?)`   | Remove trailing whitespace, or the specified `chars` set             |
+| `str.capitalize(s)`        | Capitalize first character, lowercase the rest                       |
+| `str.title(s)`             | Convert to title case (capitalize each word)                         |
 
 ### Search & Test
 
-| Function                    | Description                                              |
-| --------------------------- | -------------------------------------------------------- |
-| `str.contains(s, sub)`      | Return `true` if `s` contains `sub`                      |
-| `str.startsWith(s, prefix)` | Return `true` if `s` starts with `prefix`                |
-| `str.endsWith(s, suffix)`   | Return `true` if `s` ends with `suffix`                  |
-| `str.indexOf(s, sub)`       | Return index of first occurrence of `sub`, or `-1`       |
-| `str.lastIndexOf(s, sub)`   | Return index of last occurrence of `sub`, or `-1`        |
-| `str.count(s, sub)`         | Return the count of non-overlapping occurrences of `sub` |
+| Function                                 | Description                                                                                            |
+| ---------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `str.contains(s, sub, ignoreCase?)`      | Return `true` if `s` contains `sub`. When `ignoreCase` is `true`, comparison is case-insensitive       |
+| `str.startsWith(s, prefix, ignoreCase?)` | Return `true` if `s` starts with `prefix`. When `ignoreCase` is `true`, comparison is case-insensitive |
+| `str.endsWith(s, suffix, ignoreCase?)`   | Return `true` if `s` ends with `suffix`. When `ignoreCase` is `true`, comparison is case-insensitive   |
+| `str.indexOf(s, sub, startIndex?)`       | Return index of first occurrence of `sub` at or after `startIndex` (default: `0`), or `-1`             |
+| `str.lastIndexOf(s, sub, startIndex?)`   | Return index of last occurrence of `sub` at or before `startIndex` (default: end of string), or `-1`   |
+| `str.count(s, sub)`                      | Return the count of non-overlapping occurrences of `sub`                                               |
 
 ### Character Tests
 
@@ -357,23 +428,23 @@ All `str` functions take the target string as the first argument. Strings are im
 
 ### Extraction & Transformation
 
-| Function                           | Description                                                                          |
-| ---------------------------------- | ------------------------------------------------------------------------------------ |
-| `str.substring(s, start, end?)`    | Extract substring from `start` to `end` (exclusive); `end` defaults to string length |
-| `str.replace(s, old, new)`         | Replace first occurrence of `old` with `new`                                         |
-| `str.replaceAll(s, old, new)`      | Replace all occurrences of `old` with `new`                                          |
-| `str.split(s, delimiter)`          | Split string into array by `delimiter`                                               |
-| `str.repeat(s, count)`             | Repeat string `count` times                                                          |
-| `str.reverse(s)`                   | Reverse the string                                                                   |
-| `str.chars(s)`                     | Convert to array of single-character strings                                         |
-| `str.padStart(s, len, fill?)`      | Pad start to `len` characters with `fill` (default `" "`)                            |
-| `str.padEnd(s, len, fill?)`        | Pad end to `len` characters with `fill` (default `" "`)                              |
-| `str.format(template, ...args)`    | Replace `{0}`, `{1}`, etc. placeholders with arguments                               |
-| `str.lines(s)`                     | Split string into array of lines (handles `\r\n`, `\r`, `\n`)                        |
-| `str.words(s)`                     | Split string into array of whitespace-separated words                                |
-| `str.truncate(s, maxLen, suffix?)` | Truncate to `maxLen` characters with optional suffix (default `"..."`)               |
-| `str.slug(s)`                      | Convert to URL-friendly slug (lowercase, hyphens, no special chars)                  |
-| `str.wrap(s, width)`               | Word-wrap string to specified width, preserving paragraph breaks                     |
+| Function                           | Description                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------ |
+| `str.substring(s, start, end?)`    | Extract substring from `start` to `end` (exclusive); `end` defaults to string length       |
+| `str.replace(s, old, new, count?)` | Replace first (or up to `count`) occurrences of `old` with `new`                           |
+| `str.replaceAll(s, old, new)`      | Replace all occurrences of `old` with `new`                                                |
+| `str.split(s, delimiter, limit?)`  | Split string into array by `delimiter`. Optional `limit` caps the maximum number of splits |
+| `str.repeat(s, count)`             | Repeat string `count` times                                                                |
+| `str.reverse(s)`                   | Reverse the string                                                                         |
+| `str.chars(s)`                     | Convert to array of single-character strings                                               |
+| `str.padStart(s, len, fill?)`      | Pad start to `len` characters with `fill` (default `" "`)                                  |
+| `str.padEnd(s, len, fill?)`        | Pad end to `len` characters with `fill` (default `" "`)                                    |
+| `str.format(template, ...args)`    | Replace `{0}`, `{1}`, etc. placeholders with arguments                                     |
+| `str.lines(s)`                     | Split string into array of lines (handles `\r\n`, `\r`, `\n`)                              |
+| `str.words(s)`                     | Split string into array of whitespace-separated words                                      |
+| `str.truncate(s, maxLen, suffix?)` | Truncate to `maxLen` characters with optional suffix (default `"..."`)                     |
+| `str.slug(s)`                      | Convert to URL-friendly slug (lowercase, hyphens, no special chars)                        |
+| `str.wrap(s, width)`               | Word-wrap string to specified width, preserving paragraph breaks                           |
 
 ### Regex
 
@@ -392,13 +463,13 @@ All regex functions use a 5-second timeout to guard against catastrophic backtra
 
 Returned by `str.capture()` and `str.captureAll()`.
 
-| Field         | Type                   | Description                                            |
-| ------------- | ---------------------- | ------------------------------------------------------ |
-| `value`       | `string`               | The full matched text                                  |
-| `index`       | `int`                  | Start position of the match in the input string        |
-| `length`      | `int`                  | Length of the matched text                             |
-| `groups`      | `array<RegexGroup>`    | All capture groups (index 0 = full match)              |
-| `namedGroups` | `dict<string, string>` | Named capture group values keyed by group name         |
+| Field         | Type                   | Description                                     |
+| ------------- | ---------------------- | ----------------------------------------------- |
+| `value`       | `string`               | The full matched text                           |
+| `index`       | `int`                  | Start position of the match in the input string |
+| `length`      | `int`                  | Length of the matched text                      |
+| `groups`      | `array<RegexGroup>`    | All capture groups (index 0 = full match)       |
+| `namedGroups` | `dict<string, string>` | Named capture group values keyed by group name  |
 
 #### `RegexGroup` Struct
 
@@ -455,20 +526,29 @@ io.println(str.lower(name));           // "  hello, world!  "
 let trimmed = str.trim(name);          // "Hello, World!"
 
 // Search
-io.println(str.contains(trimmed, "World"));   // true
-io.println(str.indexOf(trimmed, "World"));    // 7
+io.println(str.contains(trimmed, "World"));           // true
+io.println(str.contains(trimmed, "world", true));     // true (case-insensitive)
+io.println(str.startsWith(trimmed, "hello", true));   // true (case-insensitive)
+io.println(str.indexOf(trimmed, "World"));            // 7
+io.println(str.indexOf(trimmed, "l", 4));             // 10 (search from index 4)
 
 // Extraction & transformation
-io.println(str.substring(trimmed, 0, 5));     // "Hello"
-io.println(str.replace(trimmed, "World", "Stash")); // "Hello, Stash!"
+io.println(str.substring(trimmed, 0, 5));             // "Hello"
+io.println(str.replace(trimmed, "l", "L"));           // "HeLlo, World!" (first only)
+io.println(str.replace(trimmed, "l", "L", 2));        // "HeLLo, World!" (up to 2)
 
 // Splitting & joining
-let parts = str.split("a,b,c", ",");          // ["a", "b", "c"]
-let repeated = str.repeat("ab", 3);           // "ababab"
+let parts = str.split("a,b,c,d", ",");                // ["a", "b", "c", "d"]
+let limited = str.split("a,b,c,d", ",", 2);           // ["a", "b,c,d"]
+let repeated = str.repeat("ab", 3);                    // "ababab"
+
+// Trimming specific characters
+let path = str.trim("/var/log/", "/");                 // "var/log"
+let tag = str.trim("<div>", "<>divDIV");               // ("div" may vary — trims char set)
 
 // Padding
-io.println(str.padStart("42", 5, "0"));       // "00042"
-io.println(str.padEnd("hi", 6));              // "hi    "
+io.println(str.padStart("42", 5, "0"));               // "00042"
+io.println(str.padEnd("hi", 6));                      // "hi    "
 ```
 
 ---
@@ -491,24 +571,26 @@ All `arr` functions take the target array as the first argument. Functions that 
 
 ### Searching
 
-| Function                     | Description                                                          |
-| ---------------------------- | -------------------------------------------------------------------- |
-| `arr.contains(array, value)` | Return `true` if value exists in array                               |
-| `arr.indexOf(array, value)`  | Return index of first occurrence, or `-1` if not found               |
-| `arr.findIndex(array, fn)`   | Return index of first element where `fn(element)` is truthy, or `-1` |
+| Function                                     | Description                                                                              |
+| -------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `arr.contains(array, value)`                 | Return `true` if value exists in array                                                   |
+| `arr.indexOf(array, value, startIndex?)`     | Return index of first occurrence at or after `startIndex` (default: `0`), or `-1`        |
+| `arr.lastIndexOf(array, value, startIndex?)` | Return index of last occurrence at or before `startIndex` (default: last index), or `-1` |
+| `arr.includes(array, value, startIndex?)`    | Return `true` if value exists at or after `startIndex` (default: `0`)                    |
+| `arr.findIndex(array, fn)`                   | Return index of first element where `fn(element)` is truthy, or `-1`                     |
 
 ### Transformation
 
-| Function                       | Description                                                            |
-| ------------------------------ | ---------------------------------------------------------------------- |
-| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)         |
-| `arr.concat(array1, array2)`   | Return new array combining both arrays                                 |
-| `arr.join(array, separator)`   | Join elements into a string with separator                             |
-| `arr.reverse(array)`           | Reverse array in-place                                                 |
-| `arr.sort(array)`              | Sort array in-place (numbers and strings; error on mixed types)        |
-| `arr.unique(array)`            | Return new array with duplicate values removed (first occurrence kept) |
-| `arr.flat(array)`              | Flatten one level of nesting into a new array                          |
-| `arr.flatMap(array, fn)`       | Map each element with `fn`, then flatten one level                     |
+| Function                       | Description                                                                                                                        |
+| ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `arr.slice(array, start, end)` | Return new sub-array from start (inclusive) to end (exclusive)                                                                     |
+| `arr.concat(array1, array2)`   | Return new array combining both arrays                                                                                             |
+| `arr.join(array, separator?)`  | Join elements into a string with separator (default `","`)                                                                         |
+| `arr.reverse(array)`           | Reverse array in-place                                                                                                             |
+| `arr.sort(array, comparator?)` | Sort array in-place (numbers and strings; error on mixed types). Optional `comparator` is `fn(a, b) → int` (negative = a before b) |
+| `arr.unique(array, fn?)`       | Return new array with duplicates removed (first occurrence kept). Optional `fn` provides the key to compare by                     |
+| `arr.flat(array, depth?)`      | Flatten nesting levels specified by `depth` (default: `1`; use `-1` for full flatten)                                              |
+| `arr.flatMap(array, fn)`       | Map each element with `fn`, then flatten one level                                                                                 |
 
 ### Higher-Order Functions
 
@@ -560,14 +642,31 @@ arr.insert(nums, 0, 0);         // [0, 3, 1, 4, 1, 5]
 arr.removeAt(nums, 0);          // [3, 1, 4, 1, 5]
 
 // Searching
-arr.contains(nums, 4);          // true
-arr.indexOf(nums, 1);           // 1
+arr.contains(nums, 4);              // true
+arr.indexOf(nums, 1);               // 1
+arr.indexOf(nums, 1, 2);            // 3 (search from index 2)
+arr.lastIndexOf(nums, 1);           // 3
+arr.lastIndexOf(nums, 1, 2);        // 1 (search backwards from index 2)
+arr.includes(nums, 4);              // true (alias for contains with optional startIndex)
+arr.includes(nums, 1, 2);           // true (checks from index 2)
 
 // Transformation
-let sub = arr.slice(nums, 1, 3);    // [1, 4]
-let all = arr.concat(nums, [6, 7]); // [3, 1, 4, 1, 5, 6, 7]
-arr.sort(nums);                     // [1, 1, 3, 4, 5]
-let csv = arr.join(nums, ", ");     // "1, 1, 3, 4, 5"
+let sub = arr.slice(nums, 1, 3);          // [1, 4]
+let all = arr.concat(nums, [6, 7]);       // [3, 1, 4, 1, 5, 6, 7]
+arr.sort(nums);                           // [1, 1, 3, 4, 5]
+arr.sort(nums, (a, b) => b - a);          // [5, 4, 3, 1, 1] (descending)
+let csv = arr.join(nums);                 // "1,1,3,4,5" (default separator)
+let pretty = arr.join(nums, ", ");        // "1, 1, 3, 4, 5"
+
+// Deduplication with key function
+let words = ["foo", "FOO", "bar", "BAR"];
+let unique = arr.unique(words, (s) => str.lower(s));  // ["foo", "bar"]
+
+// Deep flattening
+let nested = [[1, [2, 3]], [[4], 5]];
+arr.flat(nested);           // [1, [2, 3], [4], 5]   (depth 1, default)
+arr.flat(nested, 2);        // [1, 2, 3, 4, 5]       (depth 2)
+arr.flat(nested, -1);       // [1, 2, 3, 4, 5]       (full flatten)
 
 // Higher-order functions
 let doubled = arr.map(nums, (x) => x * 2);      // [2, 2, 6, 8, 10]
@@ -593,8 +692,9 @@ let evens = arr.count(nums, (x) => x % 2 == 0);     // 1
 let idx = arr.findIndex(nums, (x) => x > 3);        // 2
 
 // Deduplication and flattening
-let unique = arr.unique([1, 2, 2, 3, 1]);          // [1, 2, 3]
+let unique2 = arr.unique([1, 2, 2, 3, 1]);        // [1, 2, 3]
 let flat = arr.flat([[1, 2], [3, 4]]);             // [1, 2, 3, 4]
+let flat2 = arr.flat([[1, [2]], [3]], 2);          // [1, 2, 3]
 let expanded = arr.flatMap([1, 2, 3], (x) => [x, x * 10]); // [1, 10, 2, 20, 3, 30]
 
 // Aggregation and grouping
@@ -620,29 +720,29 @@ let byDept = arr.groupBy(people, (p) => p.dept);
 
 All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument. Functional operations (`map`, `filter`, `merge`) return **new** dictionaries — they do not mutate the original.
 
-| Function                  | Description                                                            |
-| ------------------------- | ---------------------------------------------------------------------- |
-| `dict.new()`              | Create an empty dictionary                                             |
-| `dict.get(d, key)`        | Get value for key, or `null` if not found                              |
-| `dict.set(d, key, value)` | Set key-value pair (mutates dictionary)                                |
-| `dict.has(d, key)`        | Return `true` if key exists                                            |
-| `dict.remove(d, key)`     | Remove key; returns `true` if found                                    |
-| `dict.clear(d)`           | Remove all entries                                                     |
-| `dict.keys(d)`            | Return array of all keys                                               |
-| `dict.values(d)`          | Return array of all values                                             |
-| `dict.size(d)`            | Return number of entries                                               |
-| `dict.pairs(d)`           | Return array of Pair structs (each with `.key` and `.value` fields)    |
-| `dict.forEach(d, fn)`     | Call `fn(key, value)` for each entry                                   |
-| `dict.map(d, fn)`         | Return new dictionary with values transformed by `fn(key, value)`      |
-| `dict.filter(d, fn)`      | Return new dictionary keeping entries where `fn(key, value)` is truthy |
-| `dict.merge(d1, d2)`      | Return new dictionary combining both (d2 wins on key conflicts)        |
-| `dict.fromPairs(pairs)`   | Create dictionary from array of `[key, value]` pairs                   |
-| `dict.pick(d, keys)`      | Return new dictionary with only the specified keys                     |
-| `dict.omit(d, keys)`      | Return new dictionary excluding the specified keys                     |
-| `dict.defaults(d, defs)`  | Return new dictionary with missing keys filled from defaults           |
-| `dict.any(d, fn)`         | Return `true` if any entry satisfies `fn(key, value)`                  |
-| `dict.every(d, fn)`       | Return `true` if all entries satisfy `fn(key, value)`                  |
-| `dict.find(d, fn)`        | Return first value where `fn(key, value)` is truthy, or `null`         |
+| Function                     | Description                                                                                                                                     |
+| ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `dict.new()`                 | Create an empty dictionary                                                                                                                      |
+| `dict.get(d, key, default?)` | Get value for key, or `default` (null if omitted) if not found                                                                                  |
+| `dict.set(d, key, value)`    | Set key-value pair (mutates dictionary)                                                                                                         |
+| `dict.has(d, key)`           | Return `true` if key exists                                                                                                                     |
+| `dict.remove(d, key)`        | Remove key; returns `true` if found                                                                                                             |
+| `dict.clear(d)`              | Remove all entries                                                                                                                              |
+| `dict.keys(d)`               | Return array of all keys                                                                                                                        |
+| `dict.values(d)`             | Return array of all values                                                                                                                      |
+| `dict.size(d)`               | Return number of entries                                                                                                                        |
+| `dict.pairs(d)`              | Return array of Pair structs (each with `.key` and `.value` fields)                                                                             |
+| `dict.forEach(d, fn)`        | Call `fn(key, value)` for each entry                                                                                                            |
+| `dict.map(d, fn)`            | Return new dictionary with values transformed by `fn(key, value)`                                                                               |
+| `dict.filter(d, fn)`         | Return new dictionary keeping entries where `fn(key, value)` is truthy                                                                          |
+| `dict.merge(d1, d2, deep?)`  | Return new dictionary combining both (d2 wins on key conflicts). When `deep` is `true`, nested dicts are merged recursively instead of replaced |
+| `dict.fromPairs(pairs)`      | Create dictionary from array of `[key, value]` pairs                                                                                            |
+| `dict.pick(d, keys)`         | Return new dictionary with only the specified keys                                                                                              |
+| `dict.omit(d, keys)`         | Return new dictionary excluding the specified keys                                                                                              |
+| `dict.defaults(d, defs)`     | Return new dictionary with missing keys filled from defaults                                                                                    |
+| `dict.any(d, fn)`            | Return `true` if any entry satisfies `fn(key, value)`                                                                                           |
+| `dict.every(d, fn)`          | Return `true` if all entries satisfy `fn(key, value)`                                                                                           |
+| `dict.find(d, fn)`           | Return first value where `fn(key, value)` is truthy, or `null`                                                                                  |
 
 ### Index Syntax
 
@@ -706,6 +806,17 @@ let merged = dict.merge(defaults, config);
 // merged has all keys from both; config values take priority
 // Note: dict.merge performs a shallow copy — nested arrays or
 // dictionaries in values are shared, not cloned.
+
+// Deep merge
+let base = { "db": { "host": "localhost", "port": 5432 } };
+let override = { "db": { "port": 3306 } };
+let shallow = dict.merge(base, override);
+// shallow["db"] = { "port": 3306 }   — "host" is lost
+let deep = dict.merge(base, override, true);
+// deep["db"] = { "host": "localhost", "port": 3306 }  — both keys kept
+
+// Default value on get
+let val = dict.get(config, "port", 8080);  // 8080 if "port" key absent
 ```
 
 ---
@@ -714,27 +825,27 @@ let merged = dict.merge(defaults, config);
 
 ### Core
 
-| Function                      | Description                                                               |
-| ----------------------------- | ------------------------------------------------------------------------- |
-| `math.abs(value)`             | Return the absolute value of a number                                     |
-| `math.ceil(value)`            | Round up to the nearest integer (type-preserving: float in → float out)   |
-| `math.floor(value)`           | Round down to the nearest integer (type-preserving: float in → float out) |
-| `math.round(value)`           | Round to the nearest integer (type-preserving: float in → float out)      |
-| `math.sign(value)`            | Return the sign: `-1`, `0`, or `1`                                        |
-| `math.min(a, b)`              | Return the smaller of two numbers                                         |
-| `math.max(a, b)`              | Return the larger of two numbers                                          |
-| `math.clamp(value, min, max)` | Constrain a number within a min/max range                                 |
+| Function                        | Description                                                                                                                                          |
+| ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `math.abs(value)`               | Return the absolute value of a number                                                                                                                |
+| `math.ceil(value)`              | Round up to the nearest integer (type-preserving: float in → float out)                                                                              |
+| `math.floor(value)`             | Round down to the nearest integer (type-preserving: float in → float out)                                                                            |
+| `math.round(value, precision?)` | Round to the nearest integer, or to `precision` decimal places when specified. Negative `precision` rounds to tens, hundreds, etc. (type-preserving) |
+| `math.sign(value)`              | Return the sign: `-1`, `0`, or `1`                                                                                                                   |
+| `math.min(a, b, ...args)`       | Return the smallest of two or more numbers                                                                                                           |
+| `math.max(a, b, ...args)`       | Return the largest of two or more numbers                                                                                                            |
+| `math.clamp(value, min, max)`   | Constrain a number within a min/max range                                                                                                            |
 
 ### Powers, Roots, and Logarithms
 
-| Function                   | Description                                         |
-| -------------------------- | --------------------------------------------------- |
-| `math.pow(base, exponent)` | Raise a number to a power                           |
-| `math.sqrt(value)`         | Return the square root of a number                  |
-| `math.exp(value)`          | Return _e_ raised to the given power                |
-| `math.log(value)`          | Return the natural logarithm (base _e_) of a number |
-| `math.log10(value)`        | Return the base-10 logarithm of a number            |
-| `math.log2(value)`         | Return the base-2 logarithm of a number             |
+| Function                   | Description                                                                                   |
+| -------------------------- | --------------------------------------------------------------------------------------------- |
+| `math.pow(base, exponent)` | Raise a number to a power                                                                     |
+| `math.sqrt(value)`         | Return the square root of a number                                                            |
+| `math.exp(value)`          | Return _e_ raised to the given power                                                          |
+| `math.log(value, base?)`   | Return the natural logarithm (base _e_) of a number, or the logarithm in the specified `base` |
+| `math.log10(value)`        | Return the base-10 logarithm of a number                                                      |
+| `math.log2(value)`         | Return the base-2 logarithm of a number                                                       |
 
 ### Trigonometry
 
@@ -750,10 +861,10 @@ let merged = dict.merge(defaults, config);
 
 ### Random Numbers
 
-| Function                   | Description                                                       |
-| -------------------------- | ----------------------------------------------------------------- |
-| `math.random()`            | Return a random float between 0.0 (inclusive) and 1.0 (exclusive) |
-| `math.randomInt(min, max)` | Return a random integer between min and max (inclusive)           |
+| Function                     | Description                                                                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `math.random()`              | Return a random float between 0.0 (inclusive) and 1.0 (exclusive)                                                                           |
+| `math.randomInt(min?, max?)` | Return a random integer. With no args: `0` to `Int.MaxValue`; with 1 arg: `0` to `max` (inclusive); with 2 args: `min` to `max` (inclusive) |
 
 ### Constants
 
@@ -761,6 +872,29 @@ let merged = dict.merge(defaults, config);
 | --------- | ------------------- | ----------------------------------------------------- |
 | `math.PI` | `3.141592653589793` | Ratio of a circle's circumference to its diameter (π) |
 | `math.E`  | `2.718281828459045` | Euler's number, base of natural logarithms            |
+
+### Examples
+
+```stash
+// Rounding with precision
+math.round(3.14159, 2);     // 3.14
+math.round(3.14159, 4);     // 3.1416
+math.round(1234.5, -2);     // 1200.0 (round to hundreds)
+
+// Variadic min/max
+math.min(3, 1, 4, 1, 5);   // 1
+math.max(3, 1, 4, 1, 5);   // 5
+
+// Logarithm with base
+math.log(8, 2);             // 3.0 (log base 2 of 8)
+math.log(1000, 10);         // 3.0 (same as math.log10)
+math.log(math.E);           // 1.0 (natural log, no base)
+
+// Random integers
+math.randomInt();           // random int between 0 and Int.MaxValue
+math.randomInt(10);         // random int between 0 and 10 (inclusive)
+math.randomInt(1, 6);       // random die roll: 1 to 6
+```
 
 ---
 
@@ -790,12 +924,12 @@ let merged = dict.merge(defaults, config);
 
 ## `json` — JSON
 
-| Function              | Description                                    |
-| --------------------- | ---------------------------------------------- |
-| `json.parse(text)`    | Parse a JSON string into Stash values          |
-| `json.stringify(val)` | Serialize a Stash value to compact JSON string |
-| `json.pretty(val)`    | Serialize a Stash value to pretty-printed JSON |
-| `json.valid(text)`    | Return `true` if the string is valid JSON      |
+| Function                       | Description                                                                                            |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| `json.parse(text)`             | Parse a JSON string into Stash values                                                                  |
+| `json.stringify(val, indent?)` | Serialize a Stash value to compact JSON string, or pretty-print with the given `indent` width          |
+| `json.pretty(val, indent?)`    | Serialize a Stash value to pretty-printed JSON. Optional `indent` sets the indent width (default: `2`) |
+| `json.valid(text)`             | Return `true` if the string is valid JSON                                                              |
 
 ### Type Mapping
 
@@ -810,6 +944,29 @@ let merged = dict.merge(defaults, config);
 | object         | `dict`           |
 
 Values that can be serialized: `null`, `bool`, `int`, `float`, `string`, arrays, dictionaries, and struct instances.
+
+### Examples
+
+```stash
+let data = { "name": "Alice", "scores": [95, 87, 92] };
+
+// Compact output (default)
+let compact = json.stringify(data);
+// {"name":"Alice","scores":[95,87,92]}
+
+// Pretty-print with indent width (via stringify or pretty)
+let pretty = json.stringify(data, 2);
+// {
+//   "name": "Alice",
+//   "scores": [
+//     95,
+//     87,
+//     92
+//   ]
+// }
+
+let pretty4 = json.pretty(data, 4);   // same but 4-space indent
+```
 
 ---
 
@@ -1147,15 +1304,22 @@ io.println("Configuration updated.");
 
 ## `http` — HTTP Requests
 
-| Function                   | Description                                           |
-| -------------------------- | ----------------------------------------------------- |
-| `http.get(url)`            | Send HTTP GET request and return response             |
-| `http.post(url, body)`     | Send HTTP POST request with body and return response  |
-| `http.put(url, body)`      | Send HTTP PUT request with body and return response   |
-| `http.delete(url)`         | Send HTTP DELETE request and return response          |
-| `http.request(options)`    | Send custom HTTP request with a dict of options       |
-| `http.patch(url, body)`    | Send HTTP PATCH request with body and return response |
-| `http.download(url, path)` | Download a file to disk (streaming, memory-efficient) |
+| Function                             | Description                                           |
+| ------------------------------------ | ----------------------------------------------------- |
+| `http.get(url, options?)`            | Send HTTP GET request and return response             |
+| `http.post(url, body, options?)`     | Send HTTP POST request with body and return response  |
+| `http.put(url, body, options?)`      | Send HTTP PUT request with body and return response   |
+| `http.delete(url, options?)`         | Send HTTP DELETE request and return response          |
+| `http.request(options)`              | Send custom HTTP request with a dict of options       |
+| `http.patch(url, body, options?)`    | Send HTTP PATCH request with body and return response |
+| `http.download(url, path, options?)` | Download a file to disk (streaming, memory-efficient) |
+
+The optional `options` dict for the above methods supports:
+
+| Key       | Type   | Description                                       |
+| --------- | ------ | ------------------------------------------------- |
+| `headers` | `dict` | Request headers (merged with any default headers) |
+| `timeout` | `int`  | Request timeout in milliseconds                   |
 
 ### Response Object
 
@@ -1177,6 +1341,32 @@ The `options` dict supports:
 | `method`  | `string` | HTTP method (default: `"GET"`) |
 | `headers` | `dict`   | Request headers                |
 | `body`    | `string` | Request body                   |
+
+### Examples
+
+```stash
+// Simple GET
+let resp = http.get("https://api.example.com/users");
+io.println(resp.status);   // 200
+io.println(resp.body);
+
+// GET with custom headers and timeout
+let resp = http.get("https://api.example.com/data", {
+    headers: { "Authorization": "Bearer " + token, "Accept": "application/json" },
+    timeout: 5000
+});
+
+// POST with options
+let resp = http.post("https://api.example.com/events", json.stringify(payload), {
+    headers: { "Content-Type": "application/json" },
+    timeout: 10000
+});
+
+// Download with timeout
+http.download("https://example.com/large-file.tar.gz", "/tmp/download.tar.gz", {
+    timeout: 60000
+});
+```
 
 ---
 
@@ -1955,19 +2145,25 @@ io.println("MD5: " + md5sum);
 
 ### UUID & Random
 
-| Function                | Description                                        |
-| ----------------------- | -------------------------------------------------- |
-| `crypto.uuid()`         | Generate a random UUID v4 string                   |
-| `crypto.randomBytes(n)` | Generate `n` cryptographically secure random bytes |
+| Function                           | Description                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `crypto.uuid()`                    | Generate a random UUID v4 string                                                                                       |
+| `crypto.randomBytes(n, encoding?)` | Generate `n` cryptographically secure random bytes. `encoding`: `"hex"` (default), `"base64"`, or `"raw"` (byte array) |
 
-`randomBytes` returns the bytes as a lowercase hexadecimal string (2 hex characters per byte).
+`randomBytes` returns the bytes as a lowercase hexadecimal string by default (2 hex characters per byte). Use `encoding: "base64"` for Base64 output, or `encoding: "raw"` to receive an array of integer byte values.
 
 ```stash
 let id = crypto.uuid();
 io.println(id);   // "550e8400-e29b-41d4-a716-446655440000"
 
 let token = crypto.randomBytes(32);
-io.println(token);  // 64 hex characters of random data
+io.println(token);  // 64 hex characters of random data (default "hex" encoding)
+
+let b64Token = crypto.randomBytes(32, "base64");
+io.println(b64Token);  // Base64-encoded 32 random bytes
+
+let rawBytes = crypto.randomBytes(8, "raw");
+io.println(rawBytes);  // array of 8 integers, e.g. [211, 47, 90, ...]
 ```
 
 ---
@@ -1978,10 +2174,10 @@ The `encoding` namespace provides Base64, URL, and hexadecimal encoding and deco
 
 ### Base64
 
-| Function                   | Description               |
-| -------------------------- | ------------------------- |
-| `encoding.base64Encode(s)` | Encode a string to Base64 |
-| `encoding.base64Decode(s)` | Decode a Base64 string    |
+| Function                             | Description                                                                                                               |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| `encoding.base64Encode(s, urlSafe?)` | Encode a string to Base64. When `urlSafe` is `true`, uses RFC 4648 URL-safe alphabet (`-` and `_` instead of `+` and `/`) |
+| `encoding.base64Decode(s, urlSafe?)` | Decode a Base64 string. Set `urlSafe` to `true` when decoding URL-safe encoded data                                       |
 
 ```stash
 let encoded = encoding.base64Encode("Hello, World!");
@@ -1989,6 +2185,12 @@ io.println(encoded);   // "SGVsbG8sIFdvcmxkIQ=="
 
 let decoded = encoding.base64Decode(encoded);
 io.println(decoded);   // "Hello, World!"
+
+// URL-safe Base64 (RFC 4648): uses - and _ instead of + and /
+let token = encoding.base64Encode(crypto.randomBytes(16, "raw"), true);
+io.println(token);     // e.g. "xKz4a-Bm_T2..." (no +, no /)
+
+let payload = encoding.base64Decode(token, true);
 ```
 
 ### URL Encoding
@@ -2043,14 +2245,14 @@ The `term` namespace provides ANSI terminal formatting, color output, and table 
 
 ### Text Formatting
 
-| Function                  | Description                                                |
-| ------------------------- | ---------------------------------------------------------- |
-| `term.color(text, color)` | Wrap text in ANSI color using `term` color constants       |
-| `term.bold(text)`         | Bold text                                                  |
-| `term.dim(text)`          | Dim text                                                   |
-| `term.underline(text)`    | Underlined text                                            |
-| `term.style(text, opts)`  | Combined styles via dict `{ color: term.RED, bold: true }` |
-| `term.strip(text)`        | Remove all ANSI escape codes from text                     |
+| Function                            | Description                                                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `term.color(text, color, bgColor?)` | Wrap text in ANSI foreground color using `term` color constants. Optional `bgColor` sets the background color |
+| `term.bold(text)`                   | Bold text                                                                                                     |
+| `term.dim(text)`                    | Dim text                                                                                                      |
+| `term.underline(text)`              | Underlined text                                                                                               |
+| `term.style(text, opts)`            | Combined styles via dict `{ color: term.RED, bold: true }`                                                    |
+| `term.strip(text)`                  | Remove all ANSI escape codes from text                                                                        |
 
 ### Terminal Info
 
@@ -2072,6 +2274,10 @@ The `term` namespace provides ANSI terminal formatting, color output, and table 
 // Colored output
 io.println(term.color("ERROR: file not found", term.RED));
 io.println(term.color("SUCCESS: deployed", term.GREEN));
+
+// Foreground + background color
+io.println(term.color(" PASS ", term.BLACK, term.GREEN));    // black text on green bg
+io.println(term.color(" FAIL ", term.WHITE, term.RED));      // white text on red bg
 
 // Bold and underline
 io.println(term.bold("Important Notice"));
@@ -2115,20 +2321,20 @@ io.println(term.table(data, ["ID", "Name", "Score"]));
 
 The `sys` namespace provides functions for querying system-level information: CPU, memory, disk, network interfaces, and process metadata. These are read-only introspection functions useful for server monitoring, health checks, and capacity planning scripts.
 
-| Function                        | Description                                                  |
-| ------------------------------- | ------------------------------------------------------------ |
-| `sys.cpuCount()`                | Number of logical CPU cores                                  |
-| `sys.totalMemory()`             | Total physical RAM in bytes                                  |
-| `sys.freeMemory()`              | Available free RAM in bytes                                  |
-| `sys.uptime()`                  | System uptime in seconds                                     |
-| `sys.loadAvg()`                 | CPU load averages as array `[1min, 5min, 15min]`             |
-| `sys.diskUsage(path?)`          | Disk usage dict with `total`, `used`, `free` keys (in bytes) |
-| `sys.pid()`                     | Current process ID                                           |
-| `sys.tempDir()`                 | OS temporary directory path                                  |
-| `sys.networkInterfaces()`       | Array of network interface dicts                             |
-| `sys.which(name)`               | Find an executable in PATH; returns full path or `null`      |
-| `sys.onSignal(signal, handler)` | Register a callback for a POSIX signal                       |
-| `sys.offSignal(signal)`         | Remove a previously registered signal handler                |
+| Function                        | Description                                                                                                                             |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `sys.cpuCount()`                | Number of logical CPU cores                                                                                                             |
+| `sys.totalMemory()`             | Total physical RAM in bytes                                                                                                             |
+| `sys.freeMemory()`              | Available free RAM in bytes                                                                                                             |
+| `sys.uptime()`                  | System uptime in seconds                                                                                                                |
+| `sys.loadAvg()`                 | CPU load averages as array `[1min, 5min, 15min]`                                                                                        |
+| `sys.diskUsage(path?)`          | Disk usage dict with `total`, `used`, `free` keys (in bytes)                                                                            |
+| `sys.pid()`                     | Current process ID                                                                                                                      |
+| `sys.tempDir()`                 | OS temporary directory path                                                                                                             |
+| `sys.networkInterfaces()`       | Array of network interface dicts                                                                                                        |
+| `sys.which(name, all?)`         | Find an executable in PATH. Returns the full path of the first match (or `null`). When `all` is `true`, returns an array of all matches |
+| `sys.onSignal(signal, handler)` | Register a callback for a POSIX signal                                                                                                  |
+| `sys.offSignal(signal)`         | Remove a previously registered signal handler                                                                                           |
 
 ### CPU & Memory
 
@@ -2196,9 +2402,9 @@ Each network interface dict contains:
 
 ### Command Path Resolution
 
-#### `sys.which(name)`
+#### `sys.which(name, all?)`
 
-Searches the system `PATH` for an executable with the given name. Returns the full absolute path to the first match, or `null` if not found.
+Searches the system `PATH` for an executable with the given name. Returns the full absolute path to the first match, or `null` if not found. When `all` is `true`, returns an array of all matching paths (one per `PATH` directory that contains the executable).
 
 - On **Linux/macOS**: searches each `PATH` directory for a file with execute permission
 - On **Windows**: additionally tries `PATHEXT` extensions (`.exe`, `.cmd`, `.bat`, `.com`, etc.)
@@ -2210,6 +2416,12 @@ if (docker != null) {
     $(docker compose up -d);
 } else {
     io.println("Docker is not installed");
+}
+
+// Find all copies of python3 in PATH
+let allPython = sys.which("python3", true);
+for (let p in allPython) {
+    io.println(p);
 }
 
 // Check multiple tools before starting

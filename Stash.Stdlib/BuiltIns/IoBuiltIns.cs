@@ -67,20 +67,39 @@ public static class IoBuiltIns
             return result is null ? StashValue.Null : StashValue.FromObj(result);
         }, returnType: "string", isVariadic: true);
 
-        ns.Function("confirm", [Param("prompt", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("confirm", [Param("prompt", "string"), Param("default", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'io.confirm' requires 1 or 2 arguments.");
+
             string prompt = RuntimeValues.Stringify(args[0].ToObject());
-            ctx.Output.Write(prompt + " [y/N] ");
+
+            bool? defaultValue = null;
+            if (args.Length == 2)
+                defaultValue = SvArgs.Bool(args, 1, "io.confirm");
+
+            string hint = defaultValue switch
+            {
+                true  => "[Y/n]",
+                false => "[y/N]",
+                null  => "[y/N]"
+            };
+
+            ctx.Output.Write(prompt + " " + hint + " ");
             ctx.Output.Flush();
             string? response = ctx.Input.ReadLine();
             if (response == null)
-            {
-                return StashValue.FromBool(false);
-            }
+                return StashValue.FromBool(defaultValue ?? false);
 
             response = response.Trim().ToLowerInvariant();
+            if (response == "")
+                return StashValue.FromBool(defaultValue ?? false);
+
             return StashValue.FromBool(response == "y" || response == "yes");
-        }, returnType: "bool");
+        },
+            returnType: "bool",
+            isVariadic: true,
+            documentation: "Prompts the user for a yes/no confirmation.\n@param prompt The prompt text to display\n@param default Optional default value: true shows [Y/n] (Enter = yes), false shows [y/N] (Enter = no)\n@return true if the user answered yes, false otherwise");
 
         return ns.Build();
     }

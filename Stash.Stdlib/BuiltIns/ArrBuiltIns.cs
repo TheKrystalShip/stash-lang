@@ -107,17 +107,60 @@ public static class ArrBuiltIns
             return StashValue.False;
         });
 
-        ns.Function("indexOf", [Param("array", "array"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("includes", [Param("array", "array"), Param("value"), Param("startIndex?", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'arr.includes' requires 2 or 3 arguments.");
+            var list = SvArgs.StashList(args, 0, "arr.includes");
+            var value = args[1].ToObject();
+            int start = args.Length == 3 ? (int)SvArgs.Long(args, 2, "arr.includes") : 0;
+            if (start < 0) start = Math.Max(0, list.Count + start);
+            for (int i = start; i < list.Count; i++)
+            {
+                if (RuntimeValues.IsEqual(list[i].ToObject(), value))
+                    return StashValue.True;
+            }
+            return StashValue.False;
+        },
+            isVariadic: true,
+            documentation: "Returns true if the array contains the given value. Optional startIndex (default 0) sets the starting search position.");
+
+        ns.Function("indexOf", [Param("array", "array"), Param("value"), Param("startIndex?", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'arr.indexOf' requires 2 or 3 arguments.");
             var list = SvArgs.StashList(args, 0, "arr.indexOf");
             var value = args[1].ToObject();
-            for (int i = 0; i < list.Count; i++)
+            int start = args.Length == 3 ? (int)SvArgs.Long(args, 2, "arr.indexOf") : 0;
+            if (start < 0) start = Math.Max(0, list.Count + start);
+            for (int i = start; i < list.Count; i++)
             {
                 if (RuntimeValues.IsEqual(list[i].ToObject(), value))
                     return StashValue.FromInt((long)i);
             }
             return StashValue.FromInt(-1L);
-        });
+        },
+            isVariadic: true,
+            documentation: "Returns the index of the first occurrence of value in the array. Optional startIndex (default 0) sets the starting search position. Returns -1 if not found.");
+
+        ns.Function("lastIndexOf", [Param("array", "array"), Param("value"), Param("startIndex?", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'arr.lastIndexOf' requires 2 or 3 arguments.");
+            var list = SvArgs.StashList(args, 0, "arr.lastIndexOf");
+            var value = args[1].ToObject();
+            int start = args.Length == 3 ? (int)SvArgs.Long(args, 2, "arr.lastIndexOf") : list.Count - 1;
+            if (start < 0) start = list.Count + start;
+            start = Math.Min(start, list.Count - 1);
+            for (int i = start; i >= 0; i--)
+            {
+                if (RuntimeValues.IsEqual(list[i].ToObject(), value))
+                    return StashValue.FromInt((long)i);
+            }
+            return StashValue.FromInt(-1L);
+        },
+            isVariadic: true,
+            documentation: "Returns the index of the last occurrence of value in the array, searching backwards from the end (or from startIndex if provided). Returns -1 if not found.");
 
         ns.Function("slice", [Param("array", "array"), Param("start", "int"), Param("end", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -140,15 +183,19 @@ public static class ArrBuiltIns
             return StashValue.FromObj(result);
         });
 
-        ns.Function("join", [Param("array", "array"), Param("separator", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("join", [Param("array", "array"), Param("separator?", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'arr.join' requires 1 or 2 arguments.");
             var list = SvArgs.StashList(args, 0, "arr.join");
-            var sep = SvArgs.String(args, 1, "arr.join");
+            string sep = args.Length == 2 ? SvArgs.String(args, 1, "arr.join") : ",";
             var parts = new string[list.Count];
             for (int i = 0; i < list.Count; i++)
                 parts[i] = RuntimeValues.Stringify(list[i].ToObject());
             return StashValue.FromObj(string.Join(sep, parts));
-        });
+        },
+            isVariadic: true,
+            documentation: "Joins array elements into a string. Optional separator defaults to \",\".");
 
         ns.Function("reverse", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -156,29 +203,47 @@ public static class ArrBuiltIns
             return StashValue.Null;
         });
 
-        ns.Function("sort", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("sort", [Param("array", "array"), Param("comparator?", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'arr.sort' requires 1 or 2 arguments.");
             var list = SvArgs.StashList(args, 0, "arr.sort");
             try
             {
-                list.Sort((a, b) =>
+                if (args.Length == 2)
                 {
-                    var ao = a.ToObject();
-                    var bo = b.ToObject();
-                    if (ao is long la && bo is long lb) return la.CompareTo(lb);
-                    if (ao is double da && bo is double db) return da.CompareTo(db);
-                    if (ao is long la2 && bo is double db2) return ((double)la2).CompareTo(db2);
-                    if (ao is double da2 && bo is long lb2) return da2.CompareTo((double)lb2);
-                    if (ao is string sa && bo is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
-                    throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.");
-                });
+                    var cmp = SvArgs.Callable(args, 1, "arr.sort");
+                    list.Sort((a, b) =>
+                    {
+                        var res = ctx.InvokeCallbackDirect(cmp, new StashValue[] { a, b }).ToObject();
+                        if (res is long l) return l < 0 ? -1 : l > 0 ? 1 : 0;
+                        if (res is double d) return d < 0 ? -1 : d > 0 ? 1 : 0;
+                        throw new RuntimeError("'arr.sort' comparator must return a number.");
+                    });
+                }
+                else
+                {
+                    list.Sort((a, b) =>
+                    {
+                        var ao = a.ToObject();
+                        var bo = b.ToObject();
+                        if (ao is long la && bo is long lb) return la.CompareTo(lb);
+                        if (ao is double da && bo is double db) return da.CompareTo(db);
+                        if (ao is long la2 && bo is double db2) return ((double)la2).CompareTo(db2);
+                        if (ao is double da2 && bo is long lb2) return da2.CompareTo((double)lb2);
+                        if (ao is string sa && bo is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
+                        throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.");
+                    });
+                }
             }
             catch (InvalidOperationException ex) when (ex.InnerException is RuntimeError re)
             {
                 throw re;
             }
             return StashValue.Null;
-        });
+        },
+            isVariadic: true,
+            documentation: "Sorts the array in place. When comparator is provided, it receives two elements and must return a negative number (a < b), zero (a == b), or positive number (a > b).");
 
         ns.Function("map", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -264,25 +329,55 @@ public static class ArrBuiltIns
             return accumulator;
         });
 
-        ns.Function("unique", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("unique", [Param("array", "array"), Param("fn?", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'arr.unique' requires 1 or 2 arguments.");
             var list = SvArgs.StashList(args, 0, "arr.unique");
             var result = new List<StashValue>();
-            foreach (var item in list)
+            if (args.Length == 2)
             {
-                bool found = false;
-                foreach (var existing in result)
+                var fn = SvArgs.Callable(args, 1, "arr.unique");
+                var seenKeys = new List<object?>();
+                foreach (var item in list)
                 {
-                    if (RuntimeValues.IsEqual(item.ToObject(), existing.ToObject()))
+                    var key = ctx.InvokeCallbackDirect(fn, new StashValue[] { item }).ToObject();
+                    bool found = false;
+                    foreach (var existingKey in seenKeys)
                     {
-                        found = true;
-                        break;
+                        if (RuntimeValues.IsEqual(key, existingKey))
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found)
+                    {
+                        seenKeys.Add(key);
+                        result.Add(item);
                     }
                 }
-                if (!found) result.Add(item);
+            }
+            else
+            {
+                foreach (var item in list)
+                {
+                    bool found = false;
+                    foreach (var existing in result)
+                    {
+                        if (RuntimeValues.IsEqual(item.ToObject(), existing.ToObject()))
+                        {
+                            found = true;
+                            break;
+                        }
+                    }
+                    if (!found) result.Add(item);
+                }
             }
             return StashValue.FromObj(result);
-        });
+        },
+            isVariadic: true,
+            documentation: "Returns a new array with duplicate values removed. When fn is provided, uses fn(element) as the uniqueness key — elements with the same key are considered duplicates; the first occurrence is kept.");
 
         ns.Function("any", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -312,19 +407,18 @@ public static class ArrBuiltIns
             return StashValue.True;
         });
 
-        ns.Function("flat", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("flat", [Param("array", "array"), Param("depth?", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'arr.flat' requires 1 or 2 arguments.");
             var list = SvArgs.StashList(args, 0, "arr.flat");
+            int depth = args.Length == 2 ? (int)SvArgs.Long(args, 1, "arr.flat") : 1;
             var result = new List<StashValue>();
-            foreach (var item in list)
-            {
-                if (item.AsObj is List<StashValue> inner)
-                    result.AddRange(inner);
-                else
-                    result.Add(item);
-            }
+            FlattenInto(list, result, depth);
             return StashValue.FromObj(result);
-        });
+        },
+            isVariadic: true,
+            documentation: "Returns a new array with nested arrays flattened. Optional depth (default 1) controls how many levels to flatten; use -1 to flatten completely.");
 
         ns.Function("flatMap", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -714,6 +808,17 @@ public static class ArrBuiltIns
         }
 
         throw new RuntimeError($"Third argument to '{fnName}' (maxConcurrency) must be an integer.");
+    }
+
+    private static void FlattenInto(List<StashValue> source, List<StashValue> result, int depth)
+    {
+        foreach (var item in source)
+        {
+            if (depth != 0 && item.AsObj is List<StashValue> inner)
+                FlattenInto(inner, result, depth == -1 ? -1 : depth - 1);
+            else
+                result.Add(item);
+        }
     }
 
     private static int CompareValues(object? a, object? b)

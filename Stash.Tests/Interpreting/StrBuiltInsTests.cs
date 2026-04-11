@@ -490,4 +490,94 @@ public class StrBuiltInsTests : StashTestBase
     {
         RunExpectingError("""str.captureAll("hello", "(unclosed");""");
     }
+
+    // ── Optional Args ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Split_WithLimit_LimitsSegments()
+    {
+        var result = Run("let result = str.split(\"a,b,c,d\", \",\", 2);");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(3, list.Count);
+        Assert.Equal("a", list[0]);
+        Assert.Equal("b", list[1]);
+        Assert.Equal("c,d", list[2]);
+    }
+
+    [Fact]
+    public void Replace_WithCount1_ReplacesOneOccurrence()
+    {
+        var result = Run("let result = str.replace(\"aaa\", \"a\", \"b\", 1);");
+        Assert.Equal("baa", result);
+    }
+
+    [Fact]
+    public void Replace_WithCount2_ReplacesTwoOccurrences()
+    {
+        var result = Run("let result = str.replace(\"aaa\", \"a\", \"b\", 2);");
+        Assert.Equal("bba", result);
+    }
+
+    [Fact]
+    public void Contains_IgnoreCase_True_Matches()
+    {
+        var result = Run("let result = str.contains(\"Hello\", \"hello\", true);");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Contains_IgnoreCase_False_NoMatch()
+    {
+        var result = Run("let result = str.contains(\"Hello\", \"hello\", false);");
+        Assert.Equal(false, result);
+    }
+
+    [Fact]
+    public void StartsWith_IgnoreCase_True_Matches()
+    {
+        var result = Run("let result = str.startsWith(\"Hello\", \"hello\", true);");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void EndsWith_IgnoreCase_True_Matches()
+    {
+        var result = Run("let result = str.endsWith(\"Hello.TXT\", \".txt\", true);");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void IndexOf_WithStartIndex_SkipsEarlierOccurrence()
+    {
+        var result = Run("let result = str.indexOf(\"hello world\", \"o\", 5);");
+        Assert.Equal(7L, result);
+    }
+
+    [Fact]
+    public void LastIndexOf_WithStartIndex_SearchesBackward()
+    {
+        var result = Run("let result = str.lastIndexOf(\"hello world\", \"o\", 6);");
+        Assert.Equal(4L, result);
+    }
+
+    [Fact]
+    public void Trim_WithChars_TrimsSpecifiedChars()
+    {
+        var result = Run("let result = str.trim(\"xxhelloxx\", \"x\");");
+        Assert.Equal("hello", result);
+    }
+
+    [Fact]
+    public void TrimStart_WithChars_TrimsLeadingChars()
+    {
+        var result = Run("let result = str.trimStart(\"xxhello\", \"x\");");
+        Assert.Equal("hello", result);
+    }
+
+    [Fact]
+    public void TrimEnd_WithChars_TrimsTrailingChars()
+    {
+        var result = Run("let result = str.trimEnd(\"helloxx\", \"x\");");
+        Assert.Equal("hello", result);
+    }
 }

@@ -619,4 +619,31 @@ public class FsBuiltInsTests : TempDirectoryFixture
         var missing = Path.Combine(TestDir, "setexec_missing.txt");
         RunExpectingError($"fs.setExecutable(\"{missing}\", true);");
     }
+
+    // ── Optional Args ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Copy_WithOverwriteFalse_ThrowsWhenDestinationExists()
+    {
+        var src = Path.Combine(TestDir, "copy_src.txt");
+        var dst = Path.Combine(TestDir, "copy_dst.txt");
+        File.WriteAllText(src, "source");
+        File.WriteAllText(dst, "existing");
+
+        RunExpectingError($"fs.copy(\"{src}\", \"{dst}\", false);");
+    }
+
+    [Fact]
+    public void ListDir_WithFilter_ReturnsOnlyMatchingFiles()
+    {
+        var dir = Path.Combine(TestDir, "listdir_filter");
+        Directory.CreateDirectory(dir);
+        File.WriteAllText(Path.Combine(dir, "a.txt"), "");
+        File.WriteAllText(Path.Combine(dir, "b.txt"), "");
+        File.WriteAllText(Path.Combine(dir, "c.log"), "");
+
+        var result = Run($"let result = fs.listDir(\"{dir}\", \"*.txt\");");
+        var list = Assert.IsType<List<object?>>(result);
+        Assert.Equal(2, list.Count);
+    }
 }

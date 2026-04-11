@@ -22,21 +22,46 @@ public static class ConvBuiltIns
             returnType: "string",
             documentation: "Converts any value to its string representation.\n@param value The value to convert\n@return The string representation of the value");
 
-        ns.Function("toInt", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("toInt", [Param("value"), Param("base", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'conv.toInt' requires 1 or 2 arguments.");
+            if (args.Length == 2)
+            {
+                int radix = (int)SvArgs.Long(args, 1, "conv.toInt");
+                if (radix != 2 && radix != 8 && radix != 10 && radix != 16)
+                    throw new RuntimeError($"conv.toInt: unsupported base {radix}. Must be 2, 8, 10, or 16.");
+                string s = SvArgs.String(args, 0, "conv.toInt");
+                string stripped = radix switch
+                {
+                    16 when s.StartsWith("0x", StringComparison.OrdinalIgnoreCase) => s[2..],
+                    2 when s.StartsWith("0b", StringComparison.OrdinalIgnoreCase) => s[2..],
+                    8 when s.StartsWith("0o", StringComparison.OrdinalIgnoreCase) => s[2..],
+                    _ => s
+                };
+                try
+                {
+                    return StashValue.FromInt(System.Convert.ToInt64(stripped, radix));
+                }
+                catch (Exception e) when (e is FormatException || e is OverflowException)
+                {
+                    throw new RuntimeError($"Cannot parse '{s}' as a base-{radix} integer.");
+                }
+            }
             StashValue val = args[0];
             if (val.IsInt) return val;
             if (val.IsFloat) return StashValue.FromInt((long)val.AsFloat);
-            if (val.IsObj && val.AsObj is string s)
+            if (val.IsObj && val.AsObj is string str)
             {
-                if (long.TryParse(s, out long result))
+                if (long.TryParse(str, out long result))
                     return StashValue.FromInt(result);
-                throw new RuntimeError($"Cannot parse '{s}' as integer.");
+                throw new RuntimeError($"Cannot parse '{str}' as integer.");
             }
             throw new RuntimeError("Argument to 'conv.toInt' must be a number or string.");
         },
             returnType: "int",
-            documentation: "Parses a string or converts a number to an integer. Floats are truncated. Returns null on failure.\n@param value A string or number to convert\n@return The integer value, or null if parsing fails");
+            isVariadic: true,
+            documentation: "Parses a string or converts a number to an integer. Supports optional base (2, 8, 10, 16). Handles \"0x\", \"0b\", \"0o\" prefixes automatically. Floats are truncated.\n@param value A string or number to convert\n@param base The numeric base (optional, default 10; must be 2, 8, 10, or 16)\n@return The integer value");
 
         ns.Function("toFloat", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -62,13 +87,21 @@ public static class ConvBuiltIns
             returnType: "bool",
             documentation: "Converts a value to boolean using truthiness rules. false, null, 0, 0.0, and \"\" are falsy; everything else is truthy.\n@param value The value to convert\n@return The boolean result");
 
-        ns.Function("toHex", [Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("toHex", [Param("n", "int"), Param("padding", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'conv.toHex' requires 1 or 2 arguments.");
             long n = SvArgs.Long(args, 0, "conv.toHex");
+            if (args.Length == 2)
+            {
+                int padding = (int)SvArgs.Long(args, 1, "conv.toHex");
+                return StashValue.FromObj(n.ToString($"x{padding}"));
+            }
             return StashValue.FromObj(n.ToString("x"));
         },
             returnType: "string",
-            documentation: "Converts an integer to its hexadecimal string representation.\n@param n The integer to convert\n@return The hexadecimal string (e.g., \"ff\")");
+            isVariadic: true,
+            documentation: "Converts an integer to its hexadecimal string representation with optional zero-padding.\n@param n The integer to convert\n@param padding Minimum number of characters (optional, zero-pads if needed)\n@return The hexadecimal string (e.g., \"ff\")");
 
         ns.Function("toOct", [Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {

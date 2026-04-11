@@ -53,13 +53,16 @@ public static class PathBuiltIns
 
         ns.Function("join", [Param("a", "string"), Param("b", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            var a = SvArgs.String(args, 0, "path.join");
-            var b = SvArgs.String(args, 1, "path.join");
-
-            return StashValue.FromObj(System.IO.Path.Combine(a, b));
+            if (args.Length < 2)
+                throw new RuntimeError("'path.join' requires at least 2 arguments.");
+            var accumulated = SvArgs.String(args, 0, "path.join");
+            for (int i = 1; i < args.Length; i++)
+                accumulated = System.IO.Path.Combine(accumulated, SvArgs.String(args, i, "path.join"));
+            return StashValue.FromObj(accumulated);
         },
             returnType: "string",
-            documentation: "Joins two path segments using the platform path separator.\n@param a The first path segment\n@param b The second path segment\n@return The combined path");
+            isVariadic: true,
+            documentation: "Joins two or more path segments using the platform path separator.\n@param a The first path segment\n@param b The second path segment\n@return The combined path");
 
         ns.Function("name", [Param("p", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {

@@ -243,4 +243,43 @@ public class DictBuiltInsTests : StashTestBase
     {
         RunExpectingError("dict.find(42, (k, v) => true);");
     }
+
+    // ── Optional Args ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Get_WithDefault_KeyExists_IgnoresDefault()
+    {
+        var result = Run("let result = dict.get({port: 8080}, \"port\", 3000);");
+        Assert.Equal(8080L, result);
+    }
+
+    [Fact]
+    public void Get_WithDefault_KeyMissing_ReturnsDefault()
+    {
+        var result = Run("let result = dict.get({}, \"port\", 3000);");
+        Assert.Equal(3000L, result);
+    }
+
+    [Fact]
+    public void Get_NoDefault_KeyMissing_ReturnsNull()
+    {
+        var result = Run("let result = dict.get({}, \"port\");");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Merge_Deep_MergesNestedDicts()
+    {
+        var resultX = Run(@"
+            let d = dict.merge({a: {x: 1}}, {a: {y: 2}}, true);
+            let result = d.a.x;
+        ");
+        Assert.Equal(1L, resultX);
+
+        var resultY = Run(@"
+            let d = dict.merge({a: {x: 1}}, {a: {y: 2}}, true);
+            let result = d.a.y;
+        ");
+        Assert.Equal(2L, resultY);
+    }
 }

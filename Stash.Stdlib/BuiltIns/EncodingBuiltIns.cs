@@ -14,20 +14,49 @@ public static class EncodingBuiltIns
     {
         var ns = new NamespaceBuilder("encoding");
 
-        // encoding.base64Encode(input) — Encodes the UTF-8 string 'input' to a Base64 string.
-        ns.Function("base64Encode", [Param("s", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // encoding.base64Encode(input [, urlSafe]) — Encodes the UTF-8 string 'input' to a Base64 string.
+        //   When urlSafe is true, uses RFC 4648 URL-safe alphabet (replaces +/= with -_).
+        ns.Function("base64Encode", [Param("s", "string"), Param("urlSafe", "bool")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'encoding.base64Encode' requires 1 or 2 arguments.");
+
             var s = SvArgs.String(args, 0, "encoding.base64Encode");
 
-            return StashValue.FromObj(Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s)));
+            bool urlSafe = false;
+            if (args.Length == 2)
+                urlSafe = SvArgs.Bool(args, 1, "encoding.base64Encode");
+
+            string encoded = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(s));
+            if (urlSafe)
+                encoded = encoded.Replace('+', '-').Replace('/', '_').TrimEnd('=');
+            return StashValue.FromObj(encoded);
         },
             returnType: "string",
-            documentation: "Encodes a string to Base64.\n@param s The string to encode\n@return The Base64-encoded string");
+            isVariadic: true,
+            documentation: "Encodes a string to Base64.\n@param s The string to encode\n@param urlSafe Optional. When true, uses RFC 4648 URL-safe encoding (replaces + with -, / with _, removes = padding)\n@return The Base64-encoded string");
 
-        // encoding.base64Decode(input) — Decodes a Base64 string to its original UTF-8 string. Throws on invalid input.
-        ns.Function("base64Decode", [Param("s", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // encoding.base64Decode(input [, urlSafe]) — Decodes a Base64 string to its original UTF-8 string. Throws on invalid input.
+        //   When urlSafe is true, reverses the URL-safe transform before decoding.
+        ns.Function("base64Decode", [Param("s", "string"), Param("urlSafe", "bool")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'encoding.base64Decode' requires 1 or 2 arguments.");
+
             var s = SvArgs.String(args, 0, "encoding.base64Decode");
+
+            bool urlSafe = false;
+            if (args.Length == 2)
+                urlSafe = SvArgs.Bool(args, 1, "encoding.base64Decode");
+
+            if (urlSafe)
+            {
+                s = s.Replace('-', '+').Replace('_', '/');
+                // Restore padding
+                int pad = s.Length % 4;
+                if (pad == 2) s += "==";
+                else if (pad == 3) s += "=";
+            }
 
             try
             {
@@ -39,7 +68,8 @@ public static class EncodingBuiltIns
             }
         },
             returnType: "string",
-            documentation: "Decodes a Base64 string back to its original string.\n@param s The Base64-encoded string\n@return The decoded string");
+            isVariadic: true,
+            documentation: "Decodes a Base64 string back to its original string.\n@param s The Base64-encoded string\n@param urlSafe Optional. When true, reverses RFC 4648 URL-safe encoding before decoding\n@return The decoded string");
 
         // encoding.urlEncode(input) — Percent-encodes 'input' for safe inclusion in a URL query string or path segment.
         ns.Function("urlEncode", [Param("s", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>

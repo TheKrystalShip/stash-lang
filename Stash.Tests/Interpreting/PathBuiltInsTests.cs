@@ -65,4 +65,23 @@ public class PathBuiltInsTests : StashTestBase
         var sep = (string)result!;
         Assert.True(sep == "/" || sep == "\\");
     }
-}
+    // ── Optional Args ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Join_ThreeSegments_CombinesAll()
+    {
+        var result = Run("let result = path.join(\"/usr\", \"local\", \"bin\");");
+        var p = Assert.IsType<string>(result);
+        Assert.Contains("usr", p);
+        Assert.Contains("local", p);
+        Assert.Contains("bin", p);
+    }
+
+    [Fact]
+    public void Join_FourSegments_CombinesAll()
+    {
+        var result = Run("let result = path.join(\"/usr\", \"local\", \"bin\", \"stash\");");
+        var p = Assert.IsType<string>(result);
+        Assert.Contains("usr", p);
+        Assert.Contains("stash", p);
+    }}

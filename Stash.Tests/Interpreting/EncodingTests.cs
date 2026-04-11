@@ -237,4 +237,23 @@ public class EncodingTests : StashTestBase
     {
         RunExpectingError(@"encoding.hexEncode(null);");
     }
+
+    // ── Optional Args ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Base64Encode_UrlSafe_NoStandardBase64Chars()
+    {
+        var result = Run(@"let result = encoding.base64Encode(""hello"", true);");
+        var encoded = Assert.IsType<string>(result);
+        Assert.DoesNotContain("+", encoded);
+        Assert.DoesNotContain("/", encoded);
+        Assert.DoesNotContain("=", encoded);
+    }
+
+    [Fact]
+    public void Base64_UrlSafe_Roundtrip()
+    {
+        var result = Run(@"let result = encoding.base64Decode(encoding.base64Encode(""hello"", true), true);");
+        Assert.Equal("hello", result);
+    }
 }

@@ -44,17 +44,24 @@ public static class DictBuiltIns
             returnType: "dict",
             documentation: "Creates and returns a new empty dictionary.\n@return An empty dictionary");
 
-        // dict.get(dict, key) — Returns the value associated with key in dict, or null
-        // if the key does not exist.
+        // dict.get(dict, key, default?) — Returns the value associated with key in dict, or
+        // null if the key does not exist. When an optional default is provided, it is returned
+        // instead of null when the key is missing.
         // Throws RuntimeError if the first argument is not a dictionary or the key is null.
-        ns.Function("get", [Param("dict", "dict"), Param("key", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("get", [Param("dict", "dict"), Param("key", "any"), Param("default", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'dict.get' requires 2 or 3 arguments.");
             var d = SvArgs.Dict(args, 0, "dict.get");
             var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.");
-            return d.Get(key);
+            var result = d.Get(key);
+            if (result.IsNull && args.Length == 3)
+                return args[2];
+            return result;
         },
             returnType: "any",
-            documentation: "Returns the value for key, or null if not found.\n@param dict The dictionary\n@param key The key\n@return The value or null");
+            isVariadic: true,
+            documentation: "Returns the value for key, or null if not found. If a default is provided it is returned instead of null for missing keys.\n@param dict The dictionary\n@param key The key\n@param default Optional default value when key is missing\n@return The value, default, or null");
 
         // dict.set(dict, key, value) — Sets the given key to value in dict in place.
         // Creates the key if it does not already exist. Returns null.
@@ -160,23 +167,23 @@ public static class DictBuiltIns
             returnType: "void",
             documentation: "Calls fn(key, value) for each entry. Returns null.\n@param dict The dictionary\n@param fn The callback function");
 
-        // dict.merge(dict1, dict2) — Returns a new dictionary containing all entries from
-        // dict1 followed by all entries from dict2. Keys in dict2 overwrite keys in dict1.
+        // dict.merge(dict1, dict2, deep?) — Returns a new dictionary containing all entries
+        // from dict1 followed by all entries from dict2. Keys in dict2 overwrite keys in dict1.
+        // When deep is true, nested dicts are merged recursively rather than replaced.
         // Does not modify either input dictionary.
         // Throws RuntimeError if either argument is not a dictionary.
-        ns.Function("merge", [Param("dict1", "dict"), Param("dict2", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        ns.Function("merge", [Param("dict1", "dict"), Param("dict2", "dict"), Param("deep", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'dict.merge' requires 2 or 3 arguments.");
             var d1 = SvArgs.Dict(args, 0, "dict.merge");
             var d2 = SvArgs.Dict(args, 1, "dict.merge");
-            var result = new StashDictionary();
-            foreach (var entry in d1.RawEntries())
-                result.Set(entry.Key, entry.Value);
-            foreach (var entry in d2.RawEntries())
-                result.Set(entry.Key, entry.Value);
-            return StashValue.FromObj(result);
+            bool deep = args.Length == 3 && SvArgs.Bool(args, 2, "dict.merge");
+            return StashValue.FromObj(MergeInternal(d1, d2, deep));
         },
             returnType: "dict",
-            documentation: "Returns a new dictionary merging dict1 and dict2. dict2 keys take precedence.\n@param dict1 The base dictionary\n@param dict2 The overriding dictionary\n@return Merged dictionary");
+            isVariadic: true,
+            documentation: "Returns a new dictionary merging dict1 and dict2. dict2 keys take precedence. When deep is true, nested dicts are merged recursively.\n@param dict1 The base dictionary\n@param dict2 The overriding dictionary\n@param deep Optional boolean; when true performs a deep recursive merge\n@return Merged dictionary");
 
         // dict.map(dict, fn) — Returns a new dictionary where each value is the result of
         // calling fn(key, value) for the corresponding entry in dict. Keys are preserved.
@@ -378,5 +385,26 @@ public static class DictBuiltIns
             documentation: "Returns the first [key, value] pair for which fn(key, value) is truthy, or null.\n@param dict The dictionary\n@param fn The predicate function\n@return [key, value] pair or null");
 
         return ns.Build();
+    }
+
+    private static StashDictionary MergeInternal(StashDictionary d1, StashDictionary d2, bool deep)
+    {
+        var result = new StashDictionary();
+        foreach (var entry in d1.RawEntries())
+            result.Set(entry.Key, entry.Value);
+        foreach (var entry in d2.RawEntries())
+        {
+            if (deep && entry.Value.IsObj && entry.Value.AsObj is StashDictionary nestedD2)
+            {
+                var existing = result.Get(entry.Key);
+                if (existing.IsObj && existing.AsObj is StashDictionary nestedD1)
+                {
+                    result.Set(entry.Key, StashValue.FromObj(MergeInternal(nestedD1, nestedD2, deep: true)));
+                    continue;
+                }
+            }
+            result.Set(entry.Key, entry.Value);
+        }
+        return result;
     }
 }

@@ -122,9 +122,13 @@ public static class CryptoBuiltIns
             returnType: "string",
             documentation: "Generates a random UUID v4 string.\n@return A UUID string in standard format (e.g., \"550e8400-e29b-41d4-a716-446655440000\")");
 
-        // crypto.randomBytes(n) — Generates 'n' cryptographically secure random bytes and returns them as a lowercase hex string.
-        ns.Function("randomBytes", [Param("n", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // crypto.randomBytes(n [, encoding]) — Generates 'n' cryptographically secure random bytes.
+        //   'encoding' can be "hex" (default), "base64", or "raw" (Latin-1 byte string).
+        ns.Function("randomBytes", [Param("n", "int"), Param("encoding", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'crypto.randomBytes' requires 1 or 2 arguments.");
+
             var n = SvArgs.Long(args, 0, "crypto.randomBytes");
 
             if (n <= 0)
@@ -137,11 +141,23 @@ public static class CryptoBuiltIns
                 throw new RuntimeError("Argument to 'crypto.randomBytes' is too large.");
             }
 
+            string encoding = "hex";
+            if (args.Length == 2)
+                encoding = SvArgs.String(args, 1, "crypto.randomBytes");
+
             var bytes = RandomNumberGenerator.GetBytes((int)n);
-            return StashValue.FromObj(HashToHex(bytes));
+            string result = encoding.ToLowerInvariant() switch
+            {
+                "hex"    => HashToHex(bytes),
+                "base64" => Convert.ToBase64String(bytes),
+                "raw"    => Encoding.Latin1.GetString(bytes),
+                _        => throw new RuntimeError($"Unknown encoding '{encoding}' in 'crypto.randomBytes'. Expected \"hex\", \"base64\", or \"raw\".")
+            };
+            return StashValue.FromObj(result);
         },
             returnType: "string",
-            documentation: "Generates cryptographically secure random bytes.\n@param n The number of random bytes to generate (must be > 0)\n@return The random bytes as a lowercase hexadecimal string");
+            isVariadic: true,
+            documentation: "Generates cryptographically secure random bytes.\n@param n The number of random bytes to generate (must be > 0)\n@param encoding Optional output encoding: \"hex\" (default), \"base64\", or \"raw\" (Latin-1 byte string)\n@return The random bytes encoded as specified");
 
         return ns.Build();
     }

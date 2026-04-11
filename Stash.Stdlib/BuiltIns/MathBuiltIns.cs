@@ -53,41 +53,64 @@ public static class MathBuiltIns
             returnType: "number",
             documentation: "Returns the largest integer less than or equal to a number (rounds down).\n@param n The number to round down\n@return The floor value");
 
-        // math.round(n) — Returns n rounded to the nearest integer.
-        ns.Function("round", [Param("n", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // math.round(n, precision?) — Returns n rounded to the nearest integer, or to precision decimal places.
+        ns.Function("round", [Param("n", "number"), Param("precision", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            if (args[0].IsInt) return args[0];
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'math.round' requires 1 or 2 arguments.");
+            if (args[0].IsInt && args.Length == 1) return args[0];
             double d = SvArgs.Numeric(args, 0, "math.round");
-            return StashValue.FromFloat(Math.Round(d, MidpointRounding.AwayFromZero));
+            if (args.Length == 1)
+                return StashValue.FromFloat(Math.Round(d, MidpointRounding.AwayFromZero));
+            long precision = SvArgs.Long(args, 1, "math.round");
+            if (precision >= 0)
+                return StashValue.FromFloat(Math.Round(d, (int)precision, MidpointRounding.AwayFromZero));
+            double factor = Math.Pow(10, -precision);
+            return StashValue.FromFloat(Math.Round(d / factor, MidpointRounding.AwayFromZero) * factor);
         },
             returnType: "number",
-            documentation: "Rounds a number to the nearest integer. Ties round away from zero.\n@param n The number to round\n@return The rounded value");
+            isVariadic: true,
+            documentation: "Rounds a number to the nearest integer, or to a specified number of decimal places. Ties round away from zero.\n@param n The number to round\n@param precision (optional) Number of decimal places (positive) or significant digits to the left of the decimal (negative). Defaults to 0\n@return The rounded value");
 
-        // math.min(a, b) — Returns the smaller of a and b.
+        // math.min(a, b, ...args) — Returns the smallest of two or more numbers.
         ns.Function("min", [Param("a", "number"), Param("b", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            double a = SvArgs.Numeric(args, 0, "math.min");
-            double b = SvArgs.Numeric(args, 1, "math.min");
-            double result = Math.Min(a, b);
-            if (args[0].IsInt && args[1].IsInt)
-                return StashValue.FromInt((long)result);
-            return StashValue.FromFloat(result);
+            if (args.Length < 2)
+                throw new RuntimeError("'math.min' requires at least 2 arguments.");
+            bool allInt = true;
+            double result = SvArgs.Numeric(args, 0, "math.min");
+            if (!args[0].IsInt) allInt = false;
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (!args[i].IsInt) allInt = false;
+                double val = SvArgs.Numeric(args, i, "math.min");
+                if (val < result) result = val;
+            }
+            return allInt ? StashValue.FromInt((long)result) : StashValue.FromFloat(result);
         },
             returnType: "number",
-            documentation: "Returns the smaller of two numbers.\n@param a The first number\n@param b The second number\n@return The smaller value");
+            isVariadic: true,
+            documentation: "Returns the smallest of two or more numbers.\n@param a The first number\n@param b The second number\n@param args Additional numbers to compare\n@return The smallest value");
 
-        // math.max(a, b) — Returns the larger of a and b.
+        // math.max(a, b, ...args) — Returns the largest of two or more numbers.
         ns.Function("max", [Param("a", "number"), Param("b", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            double a = SvArgs.Numeric(args, 0, "math.max");
-            double b = SvArgs.Numeric(args, 1, "math.max");
-            double result = Math.Max(a, b);
-            if (args[0].IsInt && args[1].IsInt)
-                return StashValue.FromInt((long)result);
-            return StashValue.FromFloat(result);
+            if (args.Length < 2)
+                throw new RuntimeError("'math.max' requires at least 2 arguments.");
+            bool allInt = true;
+            double result = SvArgs.Numeric(args, 0, "math.max");
+            if (!args[0].IsInt) allInt = false;
+            for (int i = 1; i < args.Length; i++)
+            {
+                if (!args[i].IsInt) allInt = false;
+                double val = SvArgs.Numeric(args, i, "math.max");
+                if (val > result) result = val;
+            }
+            return allInt ? StashValue.FromInt((long)result) : StashValue.FromFloat(result);
         },
             returnType: "number",
-            documentation: "Returns the larger of two numbers.\n@param a The first number\n@param b The second number\n@return The larger value");
+            isVariadic: true,
+            documentation: "Returns the largest of two or more numbers.\n@param a The first number\n@param b The second number\n@param args Additional numbers to compare\n@return The largest value");
 
         // math.pow(base, exponent) — Returns base raised to the power of exponent as a double.
         ns.Function("pow", [Param("base", "number"), Param("exp", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -108,14 +131,20 @@ public static class MathBuiltIns
             returnType: "float",
             documentation: "Returns the square root of a number.\n@param n The number (must be non-negative)\n@return The square root as a float");
 
-        // math.log(n) — Returns the natural logarithm (base e) of n as a double.
-        ns.Function("log", [Param("n", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // math.log(n, base?) — Returns the natural logarithm, or logarithm of the specified base, of n.
+        ns.Function("log", [Param("n", "number"), Param("base", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'math.log' requires 1 or 2 arguments.");
             double d = SvArgs.Numeric(args, 0, "math.log");
-            return StashValue.FromFloat(Math.Log(d));
+            if (args.Length == 1)
+                return StashValue.FromFloat(Math.Log(d));
+            double @base = SvArgs.Numeric(args, 1, "math.log");
+            return StashValue.FromFloat(Math.Log(d, @base));
         },
             returnType: "float",
-            documentation: "Returns the natural logarithm (base e) of a number.\n@param n The number (must be positive)\n@return The natural logarithm as a float");
+            isVariadic: true,
+            documentation: "Returns the logarithm of a number. When called with one argument, returns the natural logarithm (base e). When called with two arguments, returns the logarithm in the specified base.\n@param n The number (must be positive)\n@param base (optional) The logarithm base. Defaults to e (natural log)\n@return The logarithm as a float");
 
         // math.random() — Returns a random double in the range [0.0, 1.0).
         ns.Function("random", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -125,15 +154,25 @@ public static class MathBuiltIns
             returnType: "float",
             documentation: "Returns a random float between 0.0 (inclusive) and 1.0 (exclusive).\n@return A random float in [0.0, 1.0)");
 
-        // math.randomInt(min, max) — Returns a random integer in the inclusive range [min, max].
+        // math.randomInt(min?, max?) — Returns a random integer. With 0 args: [0, int.MaxValue]; 1 arg: [0, max]; 2 args: [min, max].
         ns.Function("randomInt", [Param("min", "int"), Param("max", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length > 2)
+                throw new RuntimeError("'math.randomInt' requires 0, 1, or 2 arguments.");
+            if (args.Length == 0)
+                return StashValue.FromInt(Random.Shared.NextInt64(0, (long)int.MaxValue + 1));
+            if (args.Length == 1)
+            {
+                long max = SvArgs.Long(args, 0, "math.randomInt");
+                return StashValue.FromInt(Random.Shared.NextInt64(0, max + 1));
+            }
             long min = SvArgs.Long(args, 0, "math.randomInt");
-            long max = SvArgs.Long(args, 1, "math.randomInt");
-            return StashValue.FromInt(Random.Shared.NextInt64(min, max + 1));
+            long maxVal = SvArgs.Long(args, 1, "math.randomInt");
+            return StashValue.FromInt(Random.Shared.NextInt64(min, maxVal + 1));
         },
             returnType: "int",
-            documentation: "Returns a random integer between min (inclusive) and max (inclusive).\n@param min The minimum value (inclusive)\n@param max The maximum value (inclusive)\n@return A random integer in [min, max]");
+            isVariadic: true,
+            documentation: "Returns a random integer. With no arguments, returns a random integer in [0, int.MaxValue]. With one argument, returns an integer in [0, max]. With two arguments, returns an integer in [min, max].\n@param min (optional) The minimum value (inclusive). Defaults to 0\n@param max (optional) The maximum value (inclusive). Defaults to int.MaxValue when no args given, otherwise required upper bound\n@return A random integer");
 
         // math.clamp(n, min, max) — Returns n clamped to the range [min, max].
         ns.Function("clamp", [Param("n", "number"), Param("min", "number"), Param("max", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

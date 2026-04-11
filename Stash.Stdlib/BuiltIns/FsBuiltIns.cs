@@ -4,6 +4,7 @@ using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Threading;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -129,27 +130,61 @@ public static class FsBuiltIns
         // fs.WatchEventType — Enum of file system event types
         ns.Enum("WatchEventType", ["Created", "Modified", "Deleted", "Renamed"]);
 
-        // fs.readFile(path) — Reads the entire contents of a file as a string. Throws on I/O error.
-        ns.Function("readFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // fs.readFile(path, encoding?) — Reads the entire contents of a file as a string. Throws on I/O error.
+        ns.Function("readFile", [Param("path", "string"), Param("encoding?", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'fs.readFile' requires 1 or 2 arguments.");
             var path = SvArgs.String(args, 0, "fs.readFile");
             path = ctx.ExpandTilde(path);
+            var enc = Encoding.UTF8;
+            if (args.Length == 2)
+            {
+                enc = SvArgs.String(args, 1, "fs.readFile") switch
+                {
+                    "utf-8"   => Encoding.UTF8,
+                    "ascii"   => Encoding.ASCII,
+                    "latin1"  => Encoding.Latin1,
+                    "utf-16"  => Encoding.Unicode,
+                    "utf-32"  => Encoding.UTF32,
+                    var e     => throw new RuntimeError($"fs.readFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\"."),
+                };
+            }
 
-            try { return StashValue.FromObj(System.IO.File.ReadAllText(path)); }
+            try { return StashValue.FromObj(System.IO.File.ReadAllText(path, enc)); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
-        });
+        },
+            isVariadic: true,
+            documentation: "Reads the entire contents of a file as a string. Throws on I/O error.\n@param path The file path to read.\n@param encoding Optional encoding name (default \"utf-8\"). Supported: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".");
 
-        // fs.writeFile(path, content) — Writes a string to a file, creating or overwriting it. Returns null.
-        ns.Function("writeFile", [Param("path", "string"), Param("content", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // fs.writeFile(path, content, encoding?) — Writes a string to a file, creating or overwriting it. Returns null.
+        ns.Function("writeFile", [Param("path", "string"), Param("content", "string"), Param("encoding?", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'fs.writeFile' requires 2 or 3 arguments.");
             var path = SvArgs.String(args, 0, "fs.writeFile");
             var content = SvArgs.String(args, 1, "fs.writeFile");
             path = ctx.ExpandTilde(path);
+            var enc = Encoding.UTF8;
+            if (args.Length == 3)
+            {
+                enc = SvArgs.String(args, 2, "fs.writeFile") switch
+                {
+                    "utf-8"   => Encoding.UTF8,
+                    "ascii"   => Encoding.ASCII,
+                    "latin1"  => Encoding.Latin1,
+                    "utf-16"  => Encoding.Unicode,
+                    "utf-32"  => Encoding.UTF32,
+                    var e     => throw new RuntimeError($"fs.writeFile: unsupported encoding '{e}'. Valid values: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\"."),
+                };
+            }
 
-            try { System.IO.File.WriteAllText(path, content); }
+            try { System.IO.File.WriteAllText(path, content, enc); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot write file '{path}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            isVariadic: true,
+            documentation: "Writes a string to a file, creating or overwriting it. Returns null.\n@param path The file path to write.\n@param content The string content to write.\n@param encoding Optional encoding name (default \"utf-8\"). Supported: \"utf-8\", \"ascii\", \"latin1\", \"utf-16\", \"utf-32\".");
 
         // fs.exists(path) — Returns true if the given path is an existing file, false otherwise.
         ns.Function("exists", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -214,31 +249,51 @@ public static class FsBuiltIns
             return StashValue.Null;
         });
 
-        // fs.copy(src, dst) — Copies a file from src to dst, overwriting dst if it exists. Returns null.
-        ns.Function("copy", [Param("src", "string"), Param("dst", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // fs.copy(src, dst, overwrite?) — Copies a file from src to dst. Returns null.
+        ns.Function("copy", [Param("src", "string"), Param("dst", "string"), Param("overwrite?", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'fs.copy' requires 2 or 3 arguments.");
             var src = SvArgs.String(args, 0, "fs.copy");
             var dst = SvArgs.String(args, 1, "fs.copy");
             src = ctx.ExpandTilde(src);
             dst = ctx.ExpandTilde(dst);
+            bool overwrite = true;
+            if (args.Length == 3)
+                overwrite = SvArgs.Bool(args, 2, "fs.copy");
 
-            try { System.IO.File.Copy(src, dst, overwrite: true); }
+            if (!overwrite && System.IO.File.Exists(dst))
+                throw new RuntimeError($"fs.copy: destination '{dst}' already exists. Pass overwrite: true to replace it.");
+
+            try { System.IO.File.Copy(src, dst, overwrite); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot copy '{src}' to '{dst}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            isVariadic: true,
+            documentation: "Copies a file from src to dst. Returns null.\n@param src The source file path.\n@param dst The destination file path.\n@param overwrite Optional bool (default true). When false and dst already exists, throws an error.");
 
-        // fs.move(src, dst) — Moves or renames a file from src to dst, overwriting dst if it exists. Returns null.
-        ns.Function("move", [Param("src", "string"), Param("dst", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // fs.move(src, dst, overwrite?) — Moves or renames a file from src to dst. Returns null.
+        ns.Function("move", [Param("src", "string"), Param("dst", "string"), Param("overwrite?", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'fs.move' requires 2 or 3 arguments.");
             var src = SvArgs.String(args, 0, "fs.move");
             var dst = SvArgs.String(args, 1, "fs.move");
             src = ctx.ExpandTilde(src);
             dst = ctx.ExpandTilde(dst);
+            bool overwrite = true;
+            if (args.Length == 3)
+                overwrite = SvArgs.Bool(args, 2, "fs.move");
 
-            try { System.IO.File.Move(src, dst, overwrite: true); }
+            if (!overwrite && System.IO.File.Exists(dst))
+                throw new RuntimeError($"fs.move: destination '{dst}' already exists. Pass overwrite: true to replace it.");
+
+            try { System.IO.File.Move(src, dst, overwrite); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot move '{src}' to '{dst}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            isVariadic: true,
+            documentation: "Moves or renames a file from src to dst. Returns null.\n@param src The source file path.\n@param dst The destination file path.\n@param overwrite Optional bool (default true). When false and dst already exists, throws an error.");
 
         // fs.size(path) — Returns the size of a file in bytes (integer).
         ns.Function("size", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -250,15 +305,18 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}"); }
         });
 
-        // fs.listDir(path) — Returns an array of all file and directory paths directly inside the given directory.
-        ns.Function("listDir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // fs.listDir(path, filter?) — Returns an array of file and directory paths directly inside the given directory.
+        ns.Function("listDir", [Param("path", "string"), Param("filter?", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'fs.listDir' requires 1 or 2 arguments.");
             var path = SvArgs.String(args, 0, "fs.listDir");
             path = ctx.ExpandTilde(path);
+            string filter = args.Length == 2 ? SvArgs.String(args, 1, "fs.listDir") : "*";
 
             try
             {
-                var entries = System.IO.Directory.GetFileSystemEntries(path);
+                var entries = System.IO.Directory.GetFileSystemEntries(path, filter);
                 var result = new List<StashValue>(entries.Length);
                 foreach (var entry in entries)
                 {
@@ -268,7 +326,9 @@ public static class FsBuiltIns
                 return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot list directory '{path}': {e.Message}"); }
-        });
+        },
+            isVariadic: true,
+            documentation: "Returns an array of file and directory paths directly inside the given directory.\n@param path The directory path to list.\n@param filter Optional glob pattern (e.g. \"*.txt\") to filter results. When omitted, all entries are returned.");
 
         // fs.appendFile(path, content) — Appends a string to the end of a file, creating it if it doesn't exist. Returns null.
         ns.Function("appendFile", [Param("path", "string"), Param("content", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

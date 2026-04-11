@@ -36,21 +36,35 @@ public static class JsonBuiltIns
         },
             documentation: "Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).\n@param str The JSON string to parse\n@return The parsed value");
 
-        // json.stringify(value) — Serializes a Stash value to a compact JSON string.
-        ns.Function("stringify", [Param("value")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // json.stringify(value, indent?) — Serializes a Stash value to a JSON string.
+        ns.Function("stringify", [Param("value"), Param("indent", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'json.stringify' requires 1 or 2 arguments.");
+            int indentWidth = 0;
+            if (args.Length == 2)
+                indentWidth = (int)SvArgs.Long(args, 1, "json.stringify");
+            if (indentWidth > 0)
+                return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0, indentWidth));
             return StashValue.FromObj(StringifyValue(args[0].ToObject()));
         },
             returnType: "string",
-            documentation: "Converts a Stash value to a compact JSON string.\n@param value The value to serialize\n@return The JSON string representation");
+            isVariadic: true,
+            documentation: "Converts a Stash value to a JSON string. When indent is 0 or omitted, outputs compact JSON; when positive, outputs pretty-printed JSON with that many spaces of indentation.\n@param value The value to serialize\n@param indent Number of spaces for indentation (optional, default 0 for compact)\n@return The JSON string representation");
 
-        // json.pretty(value) — Serializes a Stash value to an indented, human-readable JSON string.
-        ns.Function("pretty", [Param("value")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // json.pretty(value, indent?) — Serializes a Stash value to an indented, human-readable JSON string.
+        ns.Function("pretty", [Param("value"), Param("indent", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
-            return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0));
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'json.pretty' requires 1 or 2 arguments.");
+            int indentWidth = 2;
+            if (args.Length == 2)
+                indentWidth = (int)SvArgs.Long(args, 1, "json.pretty");
+            return StashValue.FromObj(PrettyValue(args[0].ToObject(), 0, indentWidth));
         },
             returnType: "string",
-            documentation: "Converts a Stash value to a formatted JSON string with indentation.\n@param value The value to serialize\n@return The pretty-printed JSON string");
+            isVariadic: true,
+            documentation: "Converts a Stash value to a formatted JSON string with indentation. Defaults to 2 spaces.\n@param value The value to serialize\n@param indent Number of spaces for indentation (optional, default 2)\n@return The pretty-printed JSON string");
 
         // json.valid(string) — Returns true if the given string is valid JSON, false otherwise.
         ns.Function("valid", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -223,7 +237,7 @@ public static class JsonBuiltIns
     /// <param name="value">The Stash value to serialize.</param>
     /// <param name="indent">The current indentation level.</param>
     /// <returns>A pretty-printed JSON string.</returns>
-    private static string PrettyValue(object? value, int indent)
+    private static string PrettyValue(object? value, int indent, int indentWidth)
     {
         return value switch
         {
@@ -232,9 +246,9 @@ public static class JsonBuiltIns
             long l => l.ToString(CultureInfo.InvariantCulture),
             double d => d.ToString("G", CultureInfo.InvariantCulture),
             string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
-            List<StashValue> arr => PrettyArray(arr, indent),
-            StashDictionary dict => PrettyDict(dict, indent),
-            StashInstance inst => PrettyInstance(inst, indent),
+            List<StashValue> arr => PrettyArray(arr, indent, indentWidth),
+            StashDictionary dict => PrettyDict(dict, indent, indentWidth),
+            StashInstance inst => PrettyInstance(inst, indent, indentWidth),
             _ => throw new RuntimeError($"json.pretty: cannot serialize value of type {value.GetType().Name}.")
         };
     }
@@ -243,7 +257,7 @@ public static class JsonBuiltIns
     /// <param name="arr">The array to pretty-print.</param>
     /// <param name="indent">The current indentation level.</param>
     /// <returns>A pretty-printed JSON array string.</returns>
-    private static string PrettyArray(List<StashValue> arr, int indent)
+    private static string PrettyArray(List<StashValue> arr, int indent, int indentWidth)
     {
         if (arr.Count == 0)
         {
@@ -251,12 +265,12 @@ public static class JsonBuiltIns
         }
 
         var sb = new StringBuilder("[\n");
-        string innerIndent = new string(' ', (indent + 1) * 2);
-        string closingIndent = new string(' ', indent * 2);
+        string innerIndent = new string(' ', (indent + 1) * indentWidth);
+        string closingIndent = new string(' ', indent * indentWidth);
         for (int i = 0; i < arr.Count; i++)
         {
             sb.Append(innerIndent);
-            sb.Append(PrettyValue(arr[i].ToObject(), indent + 1));
+            sb.Append(PrettyValue(arr[i].ToObject(), indent + 1, indentWidth));
             if (i < arr.Count - 1)
             {
                 sb.Append(',');
@@ -273,7 +287,7 @@ public static class JsonBuiltIns
     /// <param name="dict">The dictionary to pretty-print.</param>
     /// <param name="indent">The current indentation level.</param>
     /// <returns>A pretty-printed JSON object string.</returns>
-    private static string PrettyDict(StashDictionary dict, int indent)
+    private static string PrettyDict(StashDictionary dict, int indent, int indentWidth)
     {
         var keys = dict.RawKeys();
         if (keys.Count == 0)
@@ -282,8 +296,8 @@ public static class JsonBuiltIns
         }
 
         var sb = new StringBuilder("{\n");
-        string innerIndent = new string(' ', (indent + 1) * 2);
-        string closingIndent = new string(' ', indent * 2);
+        string innerIndent = new string(' ', (indent + 1) * indentWidth);
+        string closingIndent = new string(' ', indent * indentWidth);
         bool first = true;
         foreach (var key in keys)
         {
@@ -298,7 +312,7 @@ public static class JsonBuiltIns
             sb.Append(innerIndent);
             sb.Append(keyStr);
             sb.Append(": ");
-            sb.Append(PrettyValue(val, indent + 1));
+            sb.Append(PrettyValue(val, indent + 1, indentWidth));
         }
         sb.Append('\n');
         sb.Append(closingIndent);
@@ -310,7 +324,7 @@ public static class JsonBuiltIns
     /// <param name="inst">The struct instance to pretty-print.</param>
     /// <param name="indent">The current indentation level.</param>
     /// <returns>A pretty-printed JSON object string.</returns>
-    private static string PrettyInstance(StashInstance inst, int indent)
+    private static string PrettyInstance(StashInstance inst, int indent, int indentWidth)
     {
         var fields = inst.GetFields();
         if (fields.Count == 0)
@@ -319,8 +333,8 @@ public static class JsonBuiltIns
         }
 
         var sb = new StringBuilder("{\n");
-        string innerIndent = new string(' ', (indent + 1) * 2);
-        string closingIndent = new string(' ', indent * 2);
+        string innerIndent = new string(' ', (indent + 1) * indentWidth);
+        string closingIndent = new string(' ', indent * indentWidth);
         bool first = true;
         foreach (var kvp in fields)
         {
@@ -333,7 +347,7 @@ public static class JsonBuiltIns
             sb.Append(innerIndent);
             sb.Append(JsonSerializer.Serialize(kvp.Key, StashJsonContext.Default.String));
             sb.Append(": ");
-            sb.Append(PrettyValue(kvp.Value.ToObject(), indent + 1));
+            sb.Append(PrettyValue(kvp.Value.ToObject(), indent + 1, indentWidth));
         }
         sb.Append('\n');
         sb.Append(closingIndent);

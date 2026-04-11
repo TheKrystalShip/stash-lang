@@ -3,6 +3,7 @@ namespace Stash.Stdlib.BuiltIns;
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
+using System.Threading;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -44,16 +45,22 @@ public static class HttpBuiltIns
         var ns = new NamespaceBuilder("http");
         ns.RequiresCapability(StashCapabilities.Network);
 
-        // http.get(url) — Sends an HTTP GET request. Returns a HttpResponse struct with status, body, and headers.
-        ns.Function("get", [Param("url", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // http.get(url[, options]) — Sends an HTTP GET request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
+        ns.Function("get", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'http.get' requires 1 or 2 arguments.");
             var url = SvArgs.String(args, 0, "http.get");
 
             ValidateUrl(url, "http.get");
 
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            var timeout = ApplyOptions(request, args, 1, "http.get");
+            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+
             try
             {
-                var response = _client.GetAsync(url).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -64,20 +71,29 @@ public static class HttpBuiltIns
             {
                 throw new RuntimeError("http.get: request timed out.");
             }
-        }, returnType: "HttpResponse");
+        }, returnType: "HttpResponse", isVariadic: true,
+        documentation: "Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
-        // http.post(url, body) — Sends an HTTP POST request with a JSON body string. Returns a HttpResponse struct.
-        ns.Function("post", [Param("url", "string"), Param("body", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // http.post(url, body[, options]) — Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
+        ns.Function("post", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'http.post' requires 2 or 3 arguments.");
             var url = SvArgs.String(args, 0, "http.post");
             var body = SvArgs.String(args, 1, "http.post");
 
             ValidateUrl(url, "http.post");
 
+            var request = new HttpRequestMessage(HttpMethod.Post, url)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+            };
+            var timeout = ApplyOptions(request, args, 2, "http.post");
+            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+
             try
             {
-                var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
-                var response = _client.PostAsync(url, content).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -88,20 +104,29 @@ public static class HttpBuiltIns
             {
                 throw new RuntimeError("http.post: request timed out.");
             }
-        }, returnType: "HttpResponse");
+        }, returnType: "HttpResponse", isVariadic: true,
+        documentation: "Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
-        // http.put(url, body) — Sends an HTTP PUT request with a JSON body string. Returns a HttpResponse struct.
-        ns.Function("put", [Param("url", "string"), Param("body", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // http.put(url, body[, options]) — Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
+        ns.Function("put", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'http.put' requires 2 or 3 arguments.");
             var url = SvArgs.String(args, 0, "http.put");
             var body = SvArgs.String(args, 1, "http.put");
 
             ValidateUrl(url, "http.put");
 
+            var request = new HttpRequestMessage(HttpMethod.Put, url)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+            };
+            var timeout = ApplyOptions(request, args, 2, "http.put");
+            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+
             try
             {
-                var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
-                var response = _client.PutAsync(url, content).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -112,18 +137,25 @@ public static class HttpBuiltIns
             {
                 throw new RuntimeError("http.put: request timed out.");
             }
-        }, returnType: "HttpResponse");
+        }, returnType: "HttpResponse", isVariadic: true,
+        documentation: "Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
-        // http.delete(url) — Sends an HTTP DELETE request. Returns a HttpResponse struct with status, body, and headers.
-        ns.Function("delete", [Param("url", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // http.delete(url[, options]) — Sends an HTTP DELETE request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
+        ns.Function("delete", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'http.delete' requires 1 or 2 arguments.");
             var url = SvArgs.String(args, 0, "http.delete");
 
             ValidateUrl(url, "http.delete");
 
+            var request = new HttpRequestMessage(HttpMethod.Delete, url);
+            var timeout = ApplyOptions(request, args, 1, "http.delete");
+            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+
             try
             {
-                var response = _client.DeleteAsync(url).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -134,7 +166,8 @@ public static class HttpBuiltIns
             {
                 throw new RuntimeError("http.delete: request timed out.");
             }
-        }, returnType: "HttpResponse");
+        }, returnType: "HttpResponse", isVariadic: true,
+        documentation: "Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
         // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
         ns.Function("request", [Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -186,18 +219,26 @@ public static class HttpBuiltIns
             }
         }, returnType: "HttpResponse");
 
-        // http.patch(url, body) — Sends an HTTP PATCH request with a JSON body string. Returns a HttpResponse struct.
-        ns.Function("patch", [Param("url", "string"), Param("body", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        // http.patch(url, body[, options]) — Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
+        ns.Function("patch", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'http.patch' requires 2 or 3 arguments.");
             var url = SvArgs.String(args, 0, "http.patch");
             var body = SvArgs.String(args, 1, "http.patch");
 
             ValidateUrl(url, "http.patch");
 
+            var request = new HttpRequestMessage(HttpMethod.Patch, url)
+            {
+                Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
+            };
+            var timeout = ApplyOptions(request, args, 2, "http.patch");
+            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+
             try
             {
-                var content = new StringContent(body, System.Text.Encoding.UTF8, "application/json");
-                var response = _client.PatchAsync(url, content).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -208,20 +249,27 @@ public static class HttpBuiltIns
             {
                 throw new RuntimeError("http.patch: request timed out.");
             }
-        }, returnType: "HttpResponse");
+        }, returnType: "HttpResponse", isVariadic: true,
+        documentation: "Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
-        // http.download(url, path) — Downloads the response body of a GET request and writes it to the given file path. Returns null.
-        ns.Function("download", [Param("url", "string"), Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        // http.download(url, path[, options]) — Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns null.
+        ns.Function("download", [Param("url", "string"), Param("path", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'http.download' requires 2 or 3 arguments.");
             var url = SvArgs.String(args, 0, "http.download");
             var path = SvArgs.String(args, 1, "http.download");
 
             ValidateUrl(url, "http.download");
             path = ctx.ExpandTilde(path);
 
+            var request = new HttpRequestMessage(HttpMethod.Get, url);
+            var timeout = ApplyOptions(request, args, 2, "http.download");
+            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+
             try
             {
-                using var response = _client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).GetAwaiter().GetResult();
+                using var response = _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
                 response.EnsureSuccessStatusCode();
                 using var stream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
                 using var fileStream = System.IO.File.Create(path);
@@ -241,7 +289,8 @@ public static class HttpBuiltIns
                 throw new RuntimeError($"http.download: cannot write file '{path}': {e.Message}");
             }
             return StashValue.Null;
-        });
+        }, isVariadic: true,
+        documentation: "Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns null.");
 
         ns.Struct("HttpResponse", [
             new BuiltInField("status", "int"),
@@ -250,6 +299,36 @@ public static class HttpBuiltIns
         ]);
 
         return ns.Build();
+    }
+
+    /// <summary>
+    /// Extracts the optional <c>options</c> dict from <paramref name="args"/> at <paramref name="optionsIndex"/>,
+    /// applies any <c>headers</c> to the request message, and returns the requested timeout if provided.
+    /// </summary>
+    private static TimeSpan? ApplyOptions(HttpRequestMessage request, ReadOnlySpan<StashValue> args, int optionsIndex, string funcName)
+    {
+        if (args.Length <= optionsIndex) return null;
+
+        var options = SvArgs.Dict(args, optionsIndex, funcName);
+
+        var headersVal = options.Get("headers").ToObject();
+        if (headersVal is StashDictionary headersDict)
+        {
+            foreach (var key in headersDict.RawKeys())
+            {
+                var keyStr = RuntimeValues.Stringify(key);
+                var valStr = RuntimeValues.Stringify(headersDict.Get(key).ToObject());
+                request.Headers.TryAddWithoutValidation(keyStr, valStr);
+            }
+        }
+
+        var timeoutVal = options.Get("timeout").ToObject();
+        return timeoutVal switch
+        {
+            long ms => TimeSpan.FromMilliseconds((double)ms),
+            double dms => TimeSpan.FromMilliseconds(dms),
+            _ => null
+        };
     }
 
     /// <summary>
