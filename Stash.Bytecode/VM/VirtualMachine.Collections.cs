@@ -185,45 +185,86 @@ public sealed partial class VirtualMachine
         StashValue objVal = _stack[@base + b];
 
         // IC fast path: monomorphic hit
-        if (ic.State == 1 && objVal.AsObj == ic.Guard)
+        if (ic.State == 1)
         {
-            _stack[@base + a] = ic.CachedValue;
-            return;
+            // Namespace IC hit: guard is namespace reference
+            if (objVal.AsObj is StashNamespace && objVal.AsObj == ic.Guard)
+            {
+                _stack[@base + a] = ic.CachedValue;
+                return;
+            }
+
+            // Struct field IC hit: guard is StashStruct reference
+            if (objVal.AsObj is StashInstance si && si.Struct == ic.Guard)
+            {
+                _stack[@base + a] = si.FieldSlots![(int)ic.CachedValue.AsInt];
+                return;
+            }
+
+            // Guard mismatch → megamorphic
+            ic.State = 2;
         }
 
         // IC slow path: full lookup + populate/transition
         string fieldName = (string)frame.Chunk.Constants[c].AsObj!;
 
-        if (objVal.Tag == StashValueTag.Obj && objVal.AsObj is StashNamespace ns)
+        if (objVal.Tag == StashValueTag.Obj)
         {
-            StashValue result = ns.GetMemberValue(fieldName, null);
-            _stack[@base + a] = result;
+            object? rawObj = objVal.AsObj;
 
-            // Populate IC only for frozen namespaces
-            if (ns.IsFrozen)
+            // Namespace member access
+            if (rawObj is StashNamespace ns)
             {
-                if (ic.State == 0) // Uninitialized → Monomorphic
+                StashValue result = ns.GetMemberValue(fieldName, null);
+                _stack[@base + a] = result;
+
+                if (ns.IsFrozen)
                 {
-                    ic.Guard = ns;
-                    ic.CachedValue = result;
+                    if (ic.State == 0)
+                    {
+                        ic.Guard = ns;
+                        ic.CachedValue = result;
+                        ic.State = 1;
+                    }
+                    else if (ic.State == 1)
+                    {
+                        ic.State = 2;
+                    }
+                }
+                return;
+            }
+
+            // Struct field access
+            if (rawObj is StashInstance inst2 && inst2.FieldSlots is not null && inst2.Struct is not null)
+            {
+                StashValue result = inst2.GetField(fieldName, GetCurrentSpan(ref frame));
+                // Convert StashBoundMethod to VMBoundMethod for in-VM method dispatch
+                if (result.AsObj is StashBoundMethod bound2 && bound2.Method is VMFunction vmFunc2)
+                    result = StashValue.FromObj(new VMBoundMethod(bound2.Instance, vmFunc2));
+                _stack[@base + a] = result;
+
+                if (ic.State == 0 && inst2.Struct.FieldIndices.TryGetValue(fieldName, out int fieldIdx))
+                {
+                    ic.Guard = inst2.Struct;
+                    ic.CachedValue = StashValue.FromInt(fieldIdx);
                     ic.State = 1;
                 }
-                else if (ic.State == 1) // Monomorphic miss → Megamorphic
+                else if (ic.State <= 1)
                 {
                     ic.State = 2;
                 }
+                return;
             }
-            return;
         }
 
-        // Non-namespace receiver: fall back to full GetField logic
+        // General fallback (non-namespace, non-slot-struct)
         object? obj = objVal.ToObject();
         object? result2 = GetFieldValue(obj, fieldName, GetCurrentSpan(ref frame));
         if (result2 is StashBoundMethod bound && bound.Method is VMFunction vmFunc)
             result2 = new VMBoundMethod(bound.Instance, vmFunc);
         _stack[@base + a] = StashValue.FromObject(result2);
 
-        // Transition IC to megamorphic (receiver type changed)
+        // Transition IC to megamorphic for non-optimized receiver types
         if (ic.State <= 1) ic.State = 2;
     }
 

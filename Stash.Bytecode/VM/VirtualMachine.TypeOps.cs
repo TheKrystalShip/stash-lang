@@ -12,7 +12,7 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed partial class VirtualMachine
 {
-    private static readonly HashSet<string> s_knownTypeNames = new(StringComparer.Ordinal)
+    private static readonly HashSet<string> _knownTypeNames = new(StringComparer.Ordinal)
     {
         "int", "float", "string", "bool", "array", "dict", "null", "function",
         "range", "duration", "bytes", "semver", "ip", "Error", "struct", "enum",
@@ -92,7 +92,7 @@ public sealed partial class VirtualMachine
                     _ => false,
                 };
             }
-            else if (s_knownTypeNames.Contains(typeName))
+            else if (_knownTypeNames.Contains(typeName))
             {
                 result = CheckIsType(value, typeName);
             }
@@ -293,28 +293,25 @@ public sealed partial class VirtualMachine
             fieldOffset = a + 1;
         }
 
-        var fields = new Dictionary<string, StashValue>(fieldCount);
+        var fieldSlots = new StashValue[structDef.Fields.Count];
         for (int i = 0; i < fieldCount; i++)
         {
             string fieldName = meta.FieldNames[i];
 
-            if (fields.ContainsKey(fieldName))
-                throw new RuntimeError($"Duplicate field '{fieldName}' in struct literal.", span);
-
-            if (!structDef.Fields.Contains(fieldName))
+            if (!structDef.FieldIndices.TryGetValue(fieldName, out int slotIdx))
                 throw new RuntimeError($"Unknown field '{fieldName}' for struct '{structDef.Name}'.", span);
 
-            fields[fieldName] = _stack[@base + fieldOffset + i];
+            // Duplicate check: scan previous field names
+            for (int j = 0; j < i; j++)
+            {
+                if (meta.FieldNames[j] == fieldName)
+                    throw new RuntimeError($"Duplicate field '{fieldName}' in struct literal.", span);
+            }
+
+            fieldSlots[slotIdx] = _stack[@base + fieldOffset + i];
         }
 
-        // Default omitted fields to null
-        foreach (string declaredField in structDef.Fields)
-        {
-            if (!fields.ContainsKey(declaredField))
-                fields[declaredField] = StashValue.Null;
-        }
-
-        _stack[@base + a] = StashValue.FromObj(new StashInstance(structDef.Name, fields, structDef));
+        _stack[@base + a] = StashValue.FromObj(new StashInstance(structDef.Name, structDef, fieldSlots));
     }
 
     private void ExecuteTypeOf(ref CallFrame frame, uint inst)
