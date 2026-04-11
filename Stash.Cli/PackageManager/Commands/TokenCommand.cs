@@ -102,18 +102,18 @@ public static class TokenCommand
             throw new InvalidOperationException("Token creation failed.");
         }
 
-        Console.WriteLine($"Token created successfully.");
-        Console.WriteLine($"  Token:       {result.Token}");
+        Console.WriteLine("Token created.");
         Console.WriteLine($"  Token ID:    {result.TokenId}");
         Console.WriteLine($"  Scope:       {result.Scope}");
-        Console.WriteLine($"  Expires at:  {result.ExpiresAt:u}");
+        Console.WriteLine($"  Expires:     {result.ExpiresAt:u}");
         if (result.Description != null)
         {
             Console.WriteLine($"  Description: {result.Description}");
         }
+        Console.WriteLine($"  Token:       {result.Token}");
 
         Console.WriteLine();
-        Console.WriteLine("Save this token — it will not be shown again.");
+        Console.WriteLine("Save this token now — it will not be shown again.");
     }
 
     private static void ListTokens(string[] args)

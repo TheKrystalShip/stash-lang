@@ -260,7 +260,8 @@ public class AuthController : ControllerBase
 
         var response = new TokenListResponse
         {
-            Tokens = tokens.Select(t => new TokenListItem
+            Tokens = tokens.Where(t => t.ExpiresAt > DateTime.UtcNow)
+                .Select(t => new TokenListItem
             {
                 TokenId = t.Id,
                 Scope = t.Scope,
