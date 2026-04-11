@@ -34,6 +34,9 @@ public static class TaskBuiltIns
         ns.Function("race",    [Param("tasks", "array")], Race);
         ns.Function("resolve", [Param("value")], TaskResolve);
         ns.Function("delay",   [Param("seconds", "number")], Delay);
+        ns.Function("timeout", [Param("ms", "number"), Param("fn", "function")], Timeout,
+            returnType: "any",
+            documentation: "Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time.\n@param ms Timeout in milliseconds\n@param fn The function to execute\n@return The function's return value");
 
         ns.Enum("Status", ["Running", "Completed", "Failed", "Cancelled"]);
 
@@ -256,6 +259,61 @@ public static class TaskBuiltIns
         });
 
         return StashValue.FromObj(new StashFuture(delayTask, cts));
+    }
+
+    private static StashValue Timeout(IInterpreterContext ctx, ReadOnlySpan<StashValue> args)
+    {
+        double ms = SvArgs.Numeric(args, 0, "task.timeout");
+        var callable = SvArgs.Callable(args, 1, "task.timeout");
+
+        int timeoutMs = (int)ms;
+        var cts = new CancellationTokenSource(timeoutMs);
+
+        var task = Task.Run<object?>(() =>
+        {
+            IInterpreterContext child = ctx.Fork(cts.Token);
+            try
+            {
+                return child.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty).ToObject();
+            }
+            finally
+            {
+                child.CleanupTrackedProcesses();
+            }
+        });
+
+        try
+        {
+            bool completed = task.Wait(timeoutMs);
+            if (!completed)
+            {
+                cts.Cancel();
+                throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: "TimeoutError");
+            }
+
+            // Check if the task faulted
+            if (task.IsFaulted)
+            {
+                Exception inner = task.Exception!.InnerException!;
+                if (inner is RuntimeError re)
+                    throw re;
+                throw new RuntimeError(inner.Message);
+            }
+
+            return StashValue.FromObject(task.Result);
+        }
+        catch (AggregateException ae) when (ae.InnerException is OperationCanceledException)
+        {
+            throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: "TimeoutError");
+        }
+        catch (AggregateException ae) when (ae.InnerException is RuntimeError re)
+        {
+            throw re;
+        }
+        catch (AggregateException ae) when (ae.InnerException is not null)
+        {
+            throw new RuntimeError(ae.InnerException.Message);
+        }
     }
 }
 

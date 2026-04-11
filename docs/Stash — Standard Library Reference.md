@@ -919,6 +919,148 @@ math.randomInt(1, 6);       // random die roll: 1 to 6
 | `time.dayOfWeek(ts?)`         | Return day name (e.g., `"Monday"`) of timestamp (or now)       |
 | `time.add(ts, seconds)`       | Add seconds to a timestamp, return new timestamp               |
 | `time.diff(ts1, ts2)`         | Return difference in seconds between two timestamps (ts1-ts2)  |
+| `time.toTimezone(ts, tz)`     | Converts UTC timestamp to timezone-adjusted timestamp          |
+| `time.toUTC(ts, tz)`          | Converts timezone-local timestamp back to UTC                  |
+| `time.timezone()`             | Returns the local system timezone ID                           |
+| `time.timezones()`            | Returns all available timezone IDs                             |
+| `time.offset(ts, tz)`         | Returns UTC offset in hours for a timezone                     |
+| `time.seconds(n)`             | Returns `n` seconds (identity)                                 |
+| `time.minutes(n)`             | Returns `n × 60` seconds                                       |
+| `time.hours(n)`               | Returns `n × 3600` seconds                                     |
+| `time.days(n)`                | Returns `n × 86400` seconds                                    |
+| `time.weeks(n)`               | Returns `n × 604800` seconds                                   |
+| `time.startOf(ts, unit)`      | Truncates timestamp to start of unit (UTC)                     |
+| `time.endOf(ts, unit)`        | Returns end of unit (last millisecond, UTC)                    |
+| `time.isLeapYear(ts?)`        | Whether the year is a leap year                                |
+| `time.daysInMonth(ts?)`       | Number of days in the month                                    |
+
+### Timezone Functions
+
+| Function                               | Description                                           |
+| -------------------------------------- | ----------------------------------------------------- |
+| `time.toTimezone(timestamp, timezone)` | Converts UTC timestamp to timezone-adjusted timestamp |
+| `time.toUTC(timestamp, timezone)`      | Converts timezone-local timestamp back to UTC         |
+| `time.timezone()`                      | Returns the local system timezone ID                  |
+| `time.timezones()`                     | Returns all available timezone IDs                    |
+| `time.offset(timestamp, timezone)`     | Returns UTC offset in hours for a timezone            |
+
+#### `time.toTimezone(timestamp, timezone)`
+
+Converts a UTC Unix timestamp to the equivalent local time in a timezone by applying the UTC offset.
+
+- `timezone` — IANA timezone ID (e.g., `"America/New_York"`, `"Europe/London"`, `"Asia/Tokyo"`)
+
+```stash
+let now = time.now();
+let eastern = time.toTimezone(now, "America/New_York");
+io.println(time.format(eastern, "HH:mm"));  // local time in New York
+```
+
+#### `time.toUTC(timestamp, timezone)`
+
+Interprets a timestamp as local time in the given timezone and returns the UTC equivalent.
+
+```stash
+let localTime = time.toTimezone(time.now(), "Asia/Tokyo");
+let backToUtc = time.toUTC(localTime, "Asia/Tokyo");
+// backToUtc ≈ time.now()
+```
+
+#### `time.timezone()`
+
+Returns the local system timezone ID as a string.
+
+```stash
+io.println(time.timezone());  // e.g., "America/New_York" or "UTC"
+```
+
+#### `time.timezones()`
+
+Returns an array of all available timezone IDs on the system.
+
+```stash
+let zones = time.timezones();
+io.println(len(zones));  // typically 300+
+```
+
+#### `time.offset(timestamp, timezone)`
+
+Returns the UTC offset in hours (float) for a timezone at a specific timestamp.
+
+```stash
+let now = time.now();
+io.println(time.offset(now, "America/New_York"));   // -5.0 or -4.0 (DST)
+io.println(time.offset(now, "Asia/Kolkata"));        // 5.5
+io.println(time.offset(now, "UTC"));                 // 0.0
+```
+
+### Duration Helpers
+
+Convenience functions that return the number of seconds for a given duration. Use with `time.add()` and `time.diff()`.
+
+| Function          | Description                    |
+| ----------------- | ------------------------------ |
+| `time.seconds(n)` | Returns `n` seconds (identity) |
+| `time.minutes(n)` | Returns `n × 60` seconds       |
+| `time.hours(n)`   | Returns `n × 3600` seconds     |
+| `time.days(n)`    | Returns `n × 86400` seconds    |
+| `time.weeks(n)`   | Returns `n × 604800` seconds   |
+
+```stash
+let now = time.now();
+let oneHourAgo = time.add(now, -time.hours(1));
+let tomorrow = time.add(now, time.days(1));
+let isRecent = time.diff(fileTime, now) < time.minutes(5);
+```
+
+### Date Utilities
+
+| Function                        | Description                                 |
+| ------------------------------- | ------------------------------------------- |
+| `time.startOf(timestamp, unit)` | Truncates timestamp to start of unit (UTC)  |
+| `time.endOf(timestamp, unit)`   | Returns end of unit (last millisecond, UTC) |
+| `time.isLeapYear(timestamp?)`   | Whether the year is a leap year             |
+| `time.daysInMonth(timestamp?)`  | Number of days in the month                 |
+
+#### `time.startOf(timestamp, unit)`
+
+Truncates a timestamp to the start of the given unit in UTC.
+
+- `unit` — One of: `"year"`, `"month"`, `"day"`, `"hour"`, `"minute"`
+
+```stash
+let now = time.now();
+let startOfDay = time.startOf(now, "day");
+let startOfMonth = time.startOf(now, "month");
+```
+
+#### `time.endOf(timestamp, unit)`
+
+Returns the last millisecond of the given unit in UTC.
+
+```stash
+let endOfDay = time.endOf(now, "day");       // 23:59:59.999
+let endOfMonth = time.endOf(now, "month");   // last day, 23:59:59.999
+```
+
+#### `time.isLeapYear(timestamp?)`
+
+Returns whether the year of a timestamp is a leap year. Without arguments, checks the current year.
+
+```stash
+io.println(time.isLeapYear(time.parse("2024-01-01", "yyyy-MM-dd")));  // true
+io.println(time.isLeapYear(time.parse("2023-01-01", "yyyy-MM-dd")));  // false
+io.println(time.isLeapYear());  // current year
+```
+
+#### `time.daysInMonth(timestamp?)`
+
+Returns the number of days in the month of a timestamp. Without arguments, uses the current month.
+
+```stash
+io.println(time.daysInMonth(time.parse("2024-02-15", "yyyy-MM-dd")));  // 29 (leap year)
+io.println(time.daysInMonth());  // current month
+```
 
 ---
 
@@ -2534,6 +2676,7 @@ All task functions work with **`Future`** — the same type returned by `async f
 | `task.race(futures)`     | Return a Future that resolves to the first completed result               |
 | `task.resolve(value)`    | Create an already-resolved Future wrapping the given value                |
 | `task.delay(seconds)`    | Return a Future that resolves to `null` after the specified delay         |
+| `task.timeout(ms, fn)`   | Execute a function with a timeout; throws `TimeoutError` if it exceeds    |
 
 ### `task.run(fn)`
 
@@ -2701,6 +2844,28 @@ await task.delay(1.5);
 io.println("1.5 seconds later");
 ```
 
+### `task.timeout(ms, fn)`
+
+Executes a function with a timeout. If the function completes before the timeout expires, returns its result. Otherwise, throws a `TimeoutError`.
+
+- `ms` — Timeout in milliseconds
+- `fn` — The function to execute
+
+```stash
+// Fast operation — returns result
+let result = task.timeout(5000, () => {
+    return http.get("https://api.example.com/data").body;
+});
+
+// Slow operation — throws TimeoutError
+let result = try task.timeout(100, () => {
+    time.sleep(10);  // will time out
+});
+if (result is Error) {
+    io.println("Timed out: " + result.message);
+}
+```
+
 ### `Future` Type
 
 `Future` is a **built-in type** returned by async functions and `task.run()`, as well as by `task.all()`, `task.race()`, `task.resolve()`, and `task.delay()`. It represents an asynchronous computation that may not have completed yet.
@@ -2812,6 +2977,165 @@ let webOpen = net.isPortOpen("example.com", 443, 5000)  // 5s timeout
 ```
 
 > **Note**: On Linux, `net.ping` requires root privileges or the `CAP_NET_RAW` capability for raw ICMP sockets.
+
+### TCP Sockets
+
+| Function                               | Description                                                                    |
+| -------------------------------------- | ------------------------------------------------------------------------------ |
+| `net.tcpConnect(host, port, timeout?)` | Creates a TCP connection to a host. Returns a `TcpConnection` struct.          |
+| `net.tcpSend(conn, data)`              | Sends string data over a TCP connection. Returns bytes sent.                   |
+| `net.tcpRecv(conn, maxBytes?)`         | Receives data from a TCP connection. Returns string.                           |
+| `net.tcpClose(conn)`                   | Closes a TCP connection.                                                       |
+| `net.tcpListen(port, handler)`         | Listens on a port, accepts one connection, calls handler with `TcpConnection`. |
+
+#### `net.tcpConnect(host, port, timeout?)`
+
+Creates a TCP connection to a host and port. Returns a `TcpConnection` struct.
+
+- `host` — Hostname or IP address string
+- `port` — Port number (1–65535)
+- `timeout` — Optional connection timeout in milliseconds (default: 5000)
+
+```stash
+let conn = net.tcpConnect("example.com", 80);
+io.println(conn.host);       // "example.com"
+io.println(conn.port);       // 80
+io.println(conn.localPort);  // ephemeral port
+```
+
+#### `net.tcpSend(conn, data)`
+
+Sends UTF-8 string data over an open TCP connection.
+
+- Returns the number of bytes sent
+
+```stash
+let sent = net.tcpSend(conn, "GET / HTTP/1.0\r\nHost: example.com\r\n\r\n");
+io.println(sent);  // number of bytes written
+```
+
+#### `net.tcpRecv(conn, maxBytes?)`
+
+Receives data from a TCP connection.
+
+- `maxBytes` — Maximum bytes to read (default: 4096)
+- Returns the received data as a UTF-8 string
+
+```stash
+let response = net.tcpRecv(conn);
+io.println(response);
+```
+
+#### `net.tcpClose(conn)`
+
+Closes a TCP connection and releases resources.
+
+```stash
+net.tcpClose(conn);
+```
+
+#### `net.tcpListen(port, handler)`
+
+Starts a TCP listener on a port, accepts one connection, invokes the handler function with a `TcpConnection`, then stops listening. This is a blocking call.
+
+- `port` — Port to listen on (1–65535)
+- `handler` — Function that receives the `TcpConnection`
+
+```stash
+// Echo server (handles one connection)
+net.tcpListen(8080, (conn) => {
+    let data = net.tcpRecv(conn);
+    net.tcpSend(conn, "echo:" + data);
+    net.tcpClose(conn);
+});
+```
+
+#### `TcpConnection`
+
+| Field       | Type     | Description           |
+| ----------- | -------- | --------------------- |
+| `host`      | `string` | Remote hostname or IP |
+| `port`      | `int`    | Remote port           |
+| `localPort` | `int`    | Local ephemeral port  |
+
+### UDP Datagrams
+
+| Function                        | Description                                             |
+| ------------------------------- | ------------------------------------------------------- |
+| `net.udpSend(host, port, data)` | Sends a UDP datagram. Returns bytes sent.               |
+| `net.udpRecv(port, timeout?)`   | Receives one UDP datagram. Returns `UdpMessage` struct. |
+
+#### `net.udpSend(host, port, data)`
+
+Sends a UDP datagram to a host and port.
+
+- `host` — Destination hostname or IP address
+- `port` — Destination port (1–65535)
+- `data` — String data to send
+- Returns the number of bytes sent
+
+```stash
+let sent = net.udpSend("127.0.0.1", 514, "syslog message");
+```
+
+#### `net.udpRecv(port, timeout?)`
+
+Listens on a UDP port and receives one datagram. Returns a `UdpMessage` struct.
+
+- `port` — Port to listen on (1–65535)
+- `timeout` — Optional timeout in milliseconds (default: 5000)
+
+```stash
+let msg = net.udpRecv(9999, 3000);
+io.println(msg.data);  // received data
+io.println(msg.host);  // sender's IP
+io.println(msg.port);  // sender's port
+```
+
+#### `UdpMessage`
+
+| Field  | Type     | Description               |
+| ------ | -------- | ------------------------- |
+| `data` | `string` | Received datagram content |
+| `host` | `string` | Sender's IP address       |
+| `port` | `int`    | Sender's port             |
+
+### Advanced DNS
+
+| Function                 | Description                                               |
+| ------------------------ | --------------------------------------------------------- |
+| `net.resolveMx(domain)`  | Resolves MX records. Returns array of `MxRecord` structs. |
+| `net.resolveTxt(domain)` | Resolves TXT records. Returns array of strings.           |
+
+#### `net.resolveMx(domain)`
+
+Resolves MX (mail exchange) records for a domain via raw DNS query. Returns an array of `MxRecord` structs sorted by priority.
+
+```stash
+let records = net.resolveMx("google.com");
+for (let mx in records) {
+    io.println(mx.priority + " " + mx.exchange);
+}
+// 10 smtp.google.com
+```
+
+#### `net.resolveTxt(domain)`
+
+Resolves TXT records for a domain. Returns an array of strings.
+
+```stash
+let records = net.resolveTxt("google.com");
+for (let txt in records) {
+    io.println(txt);
+}
+```
+
+#### `MxRecord`
+
+| Field      | Type     | Description                     |
+| ---------- | -------- | ------------------------------- |
+| `priority` | `int`    | MX priority (lower = preferred) |
+| `exchange` | `string` | Mail server hostname            |
 
 ### Network Interfaces
 

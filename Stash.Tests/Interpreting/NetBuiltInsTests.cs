@@ -339,4 +339,232 @@ let result = info.hostCount;
 ");
         Assert.Equal(254L, result);
     }
+
+    // ── net.tcpConnect / tcpSend / tcpRecv / tcpClose ───────────────────────
+
+    [Fact]
+    public void TcpConnect_InvalidPort_ThrowsError()
+    {
+        RunExpectingError(@"
+            let result = net.tcpConnect(""localhost"", 99999);
+        ");
+    }
+
+    [Fact]
+    public void TcpConnect_InvalidHost_ThrowsError()
+    {
+        RunExpectingError(@"
+            let result = net.tcpConnect(""this.host.does.not.exist.invalid"", 80);
+        ");
+    }
+
+    [Fact]
+    public void TcpConnect_PortZero_ThrowsError()
+    {
+        RunExpectingError(@"
+            let result = net.tcpConnect(""localhost"", 0);
+        ");
+    }
+
+    [Fact]
+    public void TcpEcho_SendRecv_ReturnsData()
+    {
+        // Use task.run for the server, connect from main thread
+        var output = RunCapturingOutput(@"
+            let serverReady = false;
+            let port = 19876;
+
+            // Server task
+            let server = task.run(() => {
+                net.tcpListen(port, (conn) => {
+                    let data = net.tcpRecv(conn);
+                    net.tcpSend(conn, ""echo:"" + data);
+                    net.tcpClose(conn);
+                });
+            });
+
+            // Give server time to start
+            time.sleep(0.1);
+
+            // Client
+            let conn = net.tcpConnect(""127.0.0.1"", port);
+            net.tcpSend(conn, ""hello"");
+            let response = net.tcpRecv(conn);
+            net.tcpClose(conn);
+
+            io.println(response);
+            task.await(server);
+        ");
+        Assert.Contains("echo:hello", output.Trim());
+    }
+
+    [Fact]
+    public void TcpConnect_ReturnsStruct()
+    {
+        // Start a temp listener, connect, check fields
+        var output = RunCapturingOutput(@"
+            let port = 19877;
+            let server = task.run(() => {
+                net.tcpListen(port, (conn) => {
+                    net.tcpClose(conn);
+                });
+            });
+            time.sleep(0.1);
+            let conn = net.tcpConnect(""127.0.0.1"", port);
+            io.println(conn.host);
+            io.println(conn.port);
+            io.println(conn.localPort > 0);
+            net.tcpClose(conn);
+            task.await(server);
+        ");
+        var lines = output.Trim().Split('\n');
+        Assert.Equal("127.0.0.1", lines[0].Trim());
+        Assert.Equal("19877", lines[1].Trim());
+        Assert.Equal("true", lines[2].Trim());
+    }
+
+    [Fact]
+    public void TcpSend_ReturnsByteCount()
+    {
+        var output = RunCapturingOutput(@"
+            let port = 19878;
+            let server = task.run(() => {
+                net.tcpListen(port, (conn) => {
+                    net.tcpRecv(conn);
+                    net.tcpClose(conn);
+                });
+            });
+            time.sleep(0.1);
+            let conn = net.tcpConnect(""127.0.0.1"", port);
+            let sent = net.tcpSend(conn, ""hello"");
+            io.println(sent);
+            net.tcpClose(conn);
+            task.await(server);
+        ");
+        Assert.Equal("5", output.Trim());
+    }
+
+    // ── net.udpSend / udpRecv ──────────────────────────────────────────────
+
+    [Fact]
+    public void UdpSendRecv_Loopback_ReturnsData()
+    {
+        var output = RunCapturingOutput(@"
+            let port = 19879;
+
+            // Start receiver in a task
+            let receiver = task.run(() => {
+                let msg = net.udpRecv(port, 5000);
+                return msg.data;
+            });
+
+            // Give receiver time to bind
+            time.sleep(0.1);
+
+            net.udpSend(""127.0.0.1"", port, ""hello udp"");
+
+            let result = task.await(receiver);
+            io.println(result);
+        ");
+        Assert.Equal("hello udp", output.Trim());
+    }
+
+    [Fact]
+    public void UdpRecv_ReturnsUdpMessageStruct()
+    {
+        var output = RunCapturingOutput(@"
+            let port = 19880;
+            let receiver = task.run(() => {
+                let msg = net.udpRecv(port, 5000);
+                return msg;
+            });
+            time.sleep(0.1);
+            net.udpSend(""127.0.0.1"", port, ""test"");
+            let msg = task.await(receiver);
+            io.println(msg.data);
+            io.println(msg.host);
+            io.println(msg.port > 0);
+        ");
+        var lines = output.Trim().Split('\n');
+        Assert.Equal("test", lines[0].Trim());
+        Assert.Equal("127.0.0.1", lines[1].Trim());
+        Assert.Equal("true", lines[2].Trim());
+    }
+
+    [Fact]
+    public void UdpSend_ReturnsByteCount()
+    {
+        var result = Run(@"
+            let result = net.udpSend(""127.0.0.1"", 19881, ""hello"");
+        ");
+        Assert.Equal(5L, result);
+    }
+
+    [Fact]
+    public void UdpSend_InvalidPort_ThrowsError()
+    {
+        RunExpectingError(@"
+            net.udpSend(""127.0.0.1"", 0, ""data"");
+        ");
+    }
+
+    [Fact]
+    public void UdpRecv_InvalidPort_ThrowsError()
+    {
+        RunExpectingError(@"
+            net.udpRecv(0);
+        ");
+    }
+
+    // ── net.resolveMx ──────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResolveMx_GoogleCom_ReturnsRecords()
+    {
+        var result = Run(@"
+            let records = net.resolveMx(""google.com"");
+            let result = len(records) > 0;
+        ");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void ResolveMx_HasPriorityAndExchange()
+    {
+        var output = RunCapturingOutput(@"
+            let records = net.resolveMx(""google.com"");
+            let first = records[0];
+            io.println(typeof(first.priority));
+            io.println(typeof(first.exchange));
+            io.println(first.priority >= 0);
+            io.println(str.contains(first.exchange, "".""));
+        ");
+        var lines = output.Trim().Split('\n');
+        Assert.Equal("int", lines[0].Trim());
+        Assert.Equal("string", lines[1].Trim());
+        Assert.Equal("true", lines[2].Trim());
+        Assert.Equal("true", lines[3].Trim());
+    }
+
+    // ── net.resolveTxt ─────────────────────────────────────────────────────
+
+    [Fact]
+    public void ResolveTxt_GoogleCom_ReturnsRecords()
+    {
+        var result = Run(@"
+            let records = net.resolveTxt(""google.com"");
+            let result = len(records) > 0;
+        ");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void ResolveTxt_GoogleCom_RecordsAreStrings()
+    {
+        var result = Run(@"
+            let records = net.resolveTxt(""google.com"");
+            let result = typeof(records[0]);
+        ");
+        Assert.Equal("string", result);
+    }
 }

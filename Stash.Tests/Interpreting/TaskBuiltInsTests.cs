@@ -769,4 +769,70 @@ task.await(t2);
             System.IO.Directory.Delete(tmpDir, true);
         }
     }
+
+    // ── task.timeout ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void Timeout_FastFunction_ReturnsResult()
+    {
+        var result = Run(@"
+            fn fast() { return 42; }
+            let result = task.timeout(5000, fast);
+        ");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Timeout_SlowFunction_ThrowsTimeoutError()
+    {
+        var error = RunCapturingError(@"
+            fn slow() { time.sleep(10); return 1; }
+            task.timeout(100, slow);
+        ");
+        Assert.Contains("timed out", error.Message);
+    }
+
+    [Fact]
+    public void Timeout_FunctionThatThrows_PropagatesError()
+    {
+        RunExpectingError(@"
+            fn failing() { throw ""boom""; }
+            task.timeout(5000, failing);
+        ");
+    }
+
+    [Fact]
+    public void Timeout_Lambda_ReturnsResult()
+    {
+        var result = Run(@"
+            let result = task.timeout(5000, () => { return ""hello""; });
+        ");
+        Assert.Equal("hello", result);
+    }
+
+    [Fact]
+    public void Timeout_ReturnsNull_WhenFunctionReturnsNull()
+    {
+        var result = Run(@"
+            fn noop() { }
+            let result = task.timeout(5000, noop);
+        ");
+        Assert.Null(result);
+    }
+
+    [Fact]
+    public void Timeout_WithComputation_ReturnsCorrectResult()
+    {
+        var result = Run(@"
+            fn compute() {
+                let sum = 0;
+                for (let i in range(100)) {
+                    sum = sum + i;
+                }
+                return sum;
+            }
+            let result = task.timeout(5000, compute);
+        ");
+        Assert.Equal(4950L, result);
+    }
 }

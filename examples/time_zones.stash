@@ -1,0 +1,121 @@
+#!/usr/bin/env stash
+
+// examples/time_zones.stash
+// Time Zones, Durations & Date Utilities
+
+io.println("=" * 56);
+io.println("  Time Zones, Durations & Date Utilities");
+io.println("=" * 56);
+
+// ─── 1. Timezone Conversion ───────────────────────────────────────────────────
+
+io.println("\n-- 1. Timezone Conversion --");
+
+let now = time.now();
+io.println($"  UTC:       {time.format(now, \"yyyy-MM-dd HH:mm:ss\")}");
+
+// Convert the same UTC instant to several timezones
+
+let nyTime     = time.toTimezone(now, "America/New_York");
+let tokyoTime  = time.toTimezone(now, "Asia/Tokyo");
+let londonTime = time.toTimezone(now, "Europe/London");
+
+io.println($"  New York:  {time.format(nyTime,     \"yyyy-MM-dd HH:mm:ss\")}");
+io.println($"  Tokyo:     {time.format(tokyoTime,  \"yyyy-MM-dd HH:mm:ss\")}");
+io.println($"  London:    {time.format(londonTime, \"yyyy-MM-dd HH:mm:ss\")}");
+
+// Round-trip: toTimezone → toUTC should recover the original timestamp
+
+let backToUtc = time.toUTC(nyTime, "America/New_York");
+io.println($"  Round-trip matches: {math.abs(backToUtc - now) < 1}");
+
+// System timezone
+
+io.println($"  Local timezone: {time.timezone()}");
+
+// ─── 2. UTC Offsets ───────────────────────────────────────────────────────────
+
+io.println("\n-- 2. UTC Offsets --");
+
+// offset() returns a float — e.g. 5.5 for Asia/Kolkata (IST = UTC+5:30)
+
+io.println($"  New York:  {time.offset(now, \"America/New_York\")} hours");
+io.println($"  Tokyo:     {time.offset(now, \"Asia/Tokyo\")} hours");
+io.println($"  Kolkata:   {time.offset(now, \"Asia/Kolkata\")} hours");
+io.println($"  UTC:       {time.offset(now, \"UTC\")} hours");
+
+// ─── 3. Duration Helpers ──────────────────────────────────────────────────────
+
+io.println("\n-- 3. Duration Helpers --");
+
+// These return seconds — useful for time.add() and comparisons
+
+io.println($"  time.minutes(1) = {time.minutes(1)} s");
+io.println($"  time.hours(1)   = {time.hours(1)} s");
+io.println($"  time.days(1)    = {time.days(1)} s");
+io.println($"  time.weeks(1)   = {time.weeks(1)} s");
+
+// Practical usage: is this value fresher than 5 minutes?
+
+let fileTime = time.add(now, -time.minutes(3));    // simulates a file modified 3 min ago
+let age      = time.diff(fileTime, now);
+let isRecent = age < time.minutes(5);
+io.println($"  File age 3 min, recent (<5 min): {isRecent}");
+
+// Build future timestamps from durations
+
+let tomorrow = time.add(now, time.days(1));
+let nextWeek = time.add(now, time.weeks(1));
+io.println($"  Tomorrow:  {time.format(tomorrow, \"yyyy-MM-dd\")}");
+io.println($"  Next week: {time.format(nextWeek,  \"yyyy-MM-dd\")}");
+
+// ─── 4. Date Utilities ────────────────────────────────────────────────────────
+
+io.println("\n-- 4. Date Utilities --");
+
+// Snap to start/end of a time unit (all in UTC)
+
+let startOfDay   = time.startOf(now, "day");
+let endOfDay     = time.endOf(now, "day");
+let startOfMonth = time.startOf(now, "month");
+let startOfYear  = time.startOf(now, "year");
+
+io.println($"  Start of today:  {time.format(startOfDay,   \"HH:mm:ss\")}");
+io.println($"  End of today:    {time.format(endOfDay,     \"HH:mm:ss\")}");
+io.println($"  Start of month:  {time.format(startOfMonth, \"yyyy-MM-dd\")}");
+io.println($"  Start of year:   {time.format(startOfYear,  \"yyyy-MM-dd\")}");
+
+// Leap year detection and month length
+
+let ts2024 = time.parse("2024-02-15", "yyyy-MM-dd");
+let ts2023 = time.parse("2023-02-15", "yyyy-MM-dd");
+
+io.println($"  2024 is leap year: {time.isLeapYear(ts2024)}");
+io.println($"  2023 is leap year: {time.isLeapYear(ts2023)}");
+io.println($"  Days in Feb 2024:  {time.daysInMonth(ts2024)}");
+io.println($"  Days in Feb 2023:  {time.daysInMonth(ts2023)}");
+
+// ─── 5. Task Timeout ──────────────────────────────────────────────────────────
+
+io.println("\n-- 5. Task Timeout --");
+
+// task.timeout(ms, fn) runs fn with a deadline; raises TimeoutError if it exceeds
+
+let sum = task.timeout(5000, () => {
+    let total = 0;
+    for (let i in range(1000)) {
+        total = total + i;
+    }
+    return total;
+});
+io.println($"  Fast computation (limit 5s): {sum}");
+
+// When the deadline is too tight the call raises a TimeoutError
+
+let timedOut = try task.timeout(50, () => {
+    time.sleep(10);
+    return "never";
+});
+if (timedOut is Error) {
+    io.println($"  Short deadline triggered: {timedOut.message}");
+}
