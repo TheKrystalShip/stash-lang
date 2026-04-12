@@ -37,7 +37,8 @@ A dynamically typed scripting language for system administration. Stash combines
 - **Time-bounded execution.** `timeout 5s { ... }` cancels any operation — HTTP requests, shell commands, sleep, I/O — when the deadline expires. Composable with `try` and `retry`. No other scripting language has this as a language primitive.
 - **Secrets can't leak.** `secret(value)` wraps any value and makes accidental leakage impossible — `println`, string interpolation, error messages, and the REPL all print `******`. Taint propagates through concatenation.
 - **System administration built-in.** `elevate` for privilege escalation, `retry` for transient failures, signal handling, file watching, SSH/SFTP.
-- **29 stdlib namespaces, ~376 functions.** HTTP, crypto, YAML, TOML, JSON, INI, templating, encoding, networking, and more — all cross-platform.
+- **OS service management.** `scheduler.install()` installs any Stash script as an OS-managed service — systemd on Linux, launchd on macOS, Task Scheduler on Windows. The same `stash service` CLI commands and `scheduler.*` stdlib functions work on all three platforms. No daemon or IPC required.
+- **30 stdlib namespaces, ~387 functions.** HTTP, crypto, YAML, TOML, JSON, INI, templating, encoding, networking, and more — all cross-platform.
 - **Full toolchain.** LSP, DAP, static analyzer (63 rules), formatter, TAP test runner, browser playground — no external tools required.
 
 ---
@@ -226,6 +227,47 @@ apiKey is secret;                             // true
 len(apiKey);                                  // works — returns length of underlying value
 ```
 
+#### OS Service Management
+
+```stash
+// Install a Stash script as a persistent OS service (systemd / launchd / Task Scheduler)
+scheduler.install(scheduler.ServiceDef {
+  name: "health-check",
+  scriptPath: "./health_check.stash",
+  schedule: "*/5 * * * *",          // null = long-running daemon
+  description: "API health check every 5 minutes",
+  restartOnFailure: true,
+  maxRestarts: 5,
+})
+
+// Query and manage
+let status = scheduler.status("health-check");
+io.println(status.state);              // "active"
+io.println(status.nextRunTime);        // "2026-04-12 14:50:00"
+
+let services = scheduler.list();
+for (let svc in services) {
+  io.println(svc.name + " — " + svc.state);
+}
+
+scheduler.stop("health-check");
+scheduler.start("health-check");
+scheduler.uninstall("health-check");
+```
+
+Or from the CLI:
+
+```bash
+stash service install ./health_check.stash --name health-check --schedule "*/5 * * * *"
+stash service status
+stash service logs health-check --follow
+stash service uninstall health-check
+```
+
+Services survive reboots, get restarted on crashes, and are visible via the OS's native tooling (`systemctl`, `launchctl`, Task Scheduler). No sidecar daemon required.
+
+---
+
 #### System Administration
 
 ```stash
@@ -271,18 +313,19 @@ process.onSignal(process.SIGTERM, () => {
 
 ## Standard Library
 
-29 namespaces, ~376 functions. All cross-platform.
+30 namespaces, ~387 functions. All cross-platform.
 
-| Category          | Namespaces                                          |
-| ----------------- | --------------------------------------------------- |
-| **I/O & System**  | `io`, `fs`, `path`, `env`, `sys`, `process`, `term` |
-| **Data**          | `str`, `arr`, `dict`, `math`, `conv`                |
-| **Time**          | `time`                                              |
-| **Serialization** | `json`, `yaml`, `toml`, `ini`, `config`             |
-| **Network**       | `http`, `net`, `ssh`, `sftp`                        |
-| **Security**      | `crypto`, `encoding`                                |
-| **Concurrency**   | `task`                                              |
-| **Tooling**       | `tpl`, `args`, `assert`, `test`                     |
+| Category                | Namespaces                                          |
+| ----------------------- | --------------------------------------------------- |
+| **I/O & System**        | `io`, `fs`, `path`, `env`, `sys`, `process`, `term` |
+| **Data**                | `str`, `arr`, `dict`, `math`, `conv`                |
+| **Time**                | `time`                                              |
+| **Serialization**       | `json`, `yaml`, `toml`, `ini`, `config`             |
+| **Network**             | `http`, `net`, `ssh`, `sftp`                        |
+| **Security**            | `crypto`, `encoding`                                |
+| **Concurrency**         | `task`                                              |
+| **Service Management**  | `scheduler`                                         |
+| **Tooling**             | `tpl`, `args`, `assert`, `test`                     |
 
 **Global functions:** `typeof()`, `nameof()`, `len()`, `secret()`, `reveal()`
 
@@ -432,9 +475,10 @@ Stash compiles to a **register-based bytecode VM** with constant folding, dead b
 
 ```
 Stash.Core          → Lexer, Parser, 46 AST node types
-Stash.Stdlib        → Standard library metadata registry (29 namespaces, ~376 functions)
+Stash.Stdlib        → Standard library metadata registry (30 namespaces, ~387 functions)
 Stash.Bytecode      → Register-based bytecode VM (compiler + VM, 70+ opcodes)
 Stash.Analysis      → Static analysis engine (63 rules, autofix, flow analysis)
+Stash.Scheduler     → Cross-platform OS service management (systemd, launchd, Task Scheduler)
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol
 Stash.Dap           → Debug Adapter Protocol
@@ -444,7 +488,7 @@ Stash.Check         → Static analysis CLI (Native AOT)
 Stash.Format        → Code formatter CLI (Native AOT)
 Stash.Playground    → Browser playground (Blazor WASM)
 Stash.Registry      → Package registry server (ASP.NET Core)
-Stash.Tests         → 5,700+ xUnit tests
+Stash.Tests         → 5,800+ xUnit tests
 ```
 
 ---
@@ -454,7 +498,7 @@ Stash.Tests         → 5,700+ xUnit tests
 | Document                                                                         | Description                                         |
 | -------------------------------------------------------------------------------- | --------------------------------------------------- |
 | [Language Specification](docs/Stash%20—%20Language%20Specification.md)           | Complete syntax, type system, and language design   |
-| [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md) | All 29 namespaces and ~376 functions                |
+| [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md) | All 30 namespaces and ~387 functions                |
 | [Language Server Protocol](docs/LSP%20—%20Language%20Server%20Protocol.md)       | LSP architecture and supported features             |
 | [Debug Adapter Protocol](docs/DAP%20—%20Debug%20Adapter%20Protocol.md)           | DAP implementation and debugging support            |
 | [Testing Infrastructure](docs/TAP%20—%20Testing%20Infrastructure.md)             | Built-in test runner and TAP output                 |
