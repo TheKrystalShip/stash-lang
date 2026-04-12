@@ -35,6 +35,7 @@ A dynamically typed scripting language for system administration. Stash combines
 - **UFCS.** Call any function as a method on its first argument: `nums.sort()` instead of `arr.sort(nums)`.
 - **Rich literals.** Durations (`5s`), byte sizes (`1.5GB`), semver (`@v1.2.3`), IP addresses (`@192.168.1.0/24`), hex/octal/binary numbers.
 - **Time-bounded execution.** `timeout 5s { ... }` cancels any operation — HTTP requests, shell commands, sleep, I/O — when the deadline expires. Composable with `try` and `retry`. No other scripting language has this as a language primitive.
+- **Secrets can't leak.** `secret(value)` wraps any value and makes accidental leakage impossible — `println`, string interpolation, error messages, and the REPL all print `******`. Taint propagates through concatenation.
 - **System administration built-in.** `elevate` for privilege escalation, `retry` for transient failures, signal handling, file watching, SSH/SFTP.
 - **29 stdlib namespaces, ~376 functions.** HTTP, crypto, YAML, TOML, JSON, INI, templating, encoding, networking, and more — all cross-platform.
 - **Full toolchain.** LSP, DAP, static analyzer (63 rules), formatter, TAP test runner, browser playground — no external tools required.
@@ -201,6 +202,30 @@ io.println(m.namedGroups["year"]);   // "2026"
 io.println(m.namedGroups["month"]);  // "04"
 ```
 
+#### Secrets
+
+```stash
+let apiKey = secret(env.get("API_KEY"));
+let dbPass = secret(fs.readFile("/run/secrets/db_pass").trim());
+
+// Secrets auto-redact everywhere — println, interpolation, error messages
+io.println(apiKey);                           // ******
+io.println("Connecting with ${dbPass}");      // Connecting with ******
+
+// Taint propagates through string concatenation
+let header = "Bearer " + apiKey;              // header is also a secret
+typeof(header);                               // "secret"
+io.println(header);                           // ******
+
+// Explicit unwrap when you genuinely need the raw value (auditable in code review)
+let raw = reveal(apiKey);
+
+// Type checking
+typeof(apiKey);                               // "secret"
+apiKey is secret;                             // true
+len(apiKey);                                  // works — returns length of underlying value
+```
+
 #### System Administration
 
 ```stash
@@ -259,7 +284,7 @@ process.onSignal(process.SIGTERM, () => {
 | **Concurrency**   | `task`                                              |
 | **Tooling**       | `tpl`, `args`, `assert`, `test`                     |
 
-**Global functions:** `typeof()`, `nameof()`, `len()`
+**Global functions:** `typeof()`, `nameof()`, `len()`, `secret()`, `reveal()`
 
 See the [Standard Library Reference](docs/Stash%20—%20Standard%20Library%20Reference.md) for the full function list.
 
