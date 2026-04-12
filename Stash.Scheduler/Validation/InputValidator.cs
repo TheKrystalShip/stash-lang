@@ -223,11 +223,19 @@ public static class InputValidator
                 return ValidatePlatformExtrasResult.Fail(
                     $"Platform extra '{key}' is not permitted for user-mode installs.");
 
+            // Newlines in keys would enable directive injection in systemd INI format
+            if (key.Contains('\n') || key.Contains('\r'))
+                return ValidatePlatformExtrasResult.Fail(
+                    $"Platform extra key '{key.Replace("\n", "\\n").Replace("\r", "\\r")}' must not contain newline characters.");
+
             // Newlines in values would break systemd INI format
             if (value.Contains('\n') || value.Contains('\r'))
                 return ValidatePlatformExtrasResult.Fail(
                     $"Platform extra value for '{key}' must not contain newline characters.");
         }
+
+        if (extras.Count > 0)
+            warnings.Add("Platform-specific extras reduce cross-platform portability.");
 
         return ValidatePlatformExtrasResult.Ok(warnings);
     }

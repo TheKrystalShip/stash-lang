@@ -285,6 +285,16 @@ public class InputValidatorTests
     }
 
     [Fact]
+    public void ValidatePlatformExtras_NewlineInKey_Fails()
+    {
+        var extras = new Dictionary<string, string> { ["Key\nEvil"] = "value" };
+
+        ValidatePlatformExtrasResult result = InputValidator.ValidatePlatformExtras(extras, systemMode: true);
+
+        Assert.False(result.Success);
+    }
+
+    [Fact]
     public void ValidatePlatformExtras_NewlineInValue_Fails()
     {
         var extras = new Dictionary<string, string> { ["Key"] = "val\nue" };

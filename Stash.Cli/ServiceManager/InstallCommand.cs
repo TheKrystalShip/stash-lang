@@ -22,7 +22,7 @@ public static class InstallCommand
             Console.Error.WriteLine("  --user <user>               Run as this user");
             Console.Error.WriteLine("  --workdir <path>            Working directory");
             Console.Error.WriteLine("  --env KEY=VALUE             Environment variable (repeatable)");
-            Console.Error.WriteLine("  --restart-on-failure        Restart on failure");
+            Console.Error.WriteLine("  --no-restart-on-failure     Disable restart on failure (default: enabled)");
             Console.Error.WriteLine("  --max-restarts <n>          Max restart attempts (default 0 = unlimited)");
             Console.Error.WriteLine("  --restart-delay <n>         Seconds between restarts (default 5)");
             Console.Error.WriteLine("  --system                    Install as system service (requires root)");
@@ -38,7 +38,7 @@ public static class InstallCommand
         string? user = null;
         string? workdir = null;
         var env = new Dictionary<string, string>();
-        bool restartOnFailure = false;
+        bool restartOnFailure = true;
         int maxRestarts = 0;
         int restartDelay = 5;
         bool systemMode = false;
@@ -72,8 +72,8 @@ public static class InstallCommand
                     if (i + 1 >= args.Length) ExitMissingValue("--env");
                     ParseKeyValue("--env", args[++i], env);
                     break;
-                case "--restart-on-failure":
-                    restartOnFailure = true;
+                case "--no-restart-on-failure":
+                    restartOnFailure = false;
                     break;
                 case "--max-restarts":
                     if (i + 1 >= args.Length) ExitMissingValue("--max-restarts");

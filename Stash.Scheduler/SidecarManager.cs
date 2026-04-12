@@ -97,6 +97,7 @@ internal static class SidecarManager
 
 internal sealed class SidecarData
 {
+    public int Version { get; set; } = 1;
     public string Name { get; set; } = string.Empty;
     public string ScriptPath { get; set; } = string.Empty;
     public string? InstalledAt { get; set; }    // ISO 8601 UTC

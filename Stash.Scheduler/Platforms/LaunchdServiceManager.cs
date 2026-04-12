@@ -118,6 +118,7 @@ internal sealed class LaunchdServiceManager : IServiceManager
             InstalledAt = DateTime.UtcNow.ToString("O"),
             InstalledBy = Environment.UserName,
             Mode = _systemMode ? "system" : "user",
+            StashVersion = "1.0.0",
             Schedule = definition.Schedule,
             Description = definition.Description,
             PlatformExtras = definition.PlatformExtras is not null
