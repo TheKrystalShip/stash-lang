@@ -461,8 +461,20 @@ internal sealed class WindowsTaskServiceManager : IServiceManager
             }
             else
             {
-                // Non-step minute list with no other constraints: fall through to general case
-                goto generalCase;
+                // Case 1b: Hourly execution at specific minute(s) — generate PT60M repetition per minute offset
+                var hourlyTriggers = new List<XElement>();
+                foreach (int minute in expr.Minutes)
+                {
+                    hourlyTriggers.Add(new XElement(Ns + "CalendarTrigger",
+                        new XElement(Ns + "StartBoundary", $"2026-01-01T00:{minute:D2}:00"),
+                        new XElement(Ns + "Repetition",
+                            new XElement(Ns + "Interval", "PT60M"),
+                            new XElement(Ns + "Duration", "P1D"),
+                            new XElement(Ns + "StopAtDurationEnd", "false")),
+                        new XElement(Ns + "ScheduleByDay",
+                            new XElement(Ns + "DaysInterval", "1"))));
+                }
+                return hourlyTriggers;
             }
 
             return new[]
@@ -478,12 +490,11 @@ internal sealed class WindowsTaskServiceManager : IServiceManager
             };
         }
 
-        generalCase:
         {
             // Case 2: General expansion — generate one CalendarTrigger per (hour, minute) pair.
             // The schedule type (day/week/month) is determined by the DOW and DOM constraints.
-            int[] hoursToUse   = allHours   ? new[] { 0 } : expr.Hours;
-            int[] minutesToUse = allMinutes ? new[] { 0 } : expr.Minutes;
+            int[] hoursToUse   = expr.Hours;
+            int[] minutesToUse = expr.Minutes;
 
             var result = new List<XElement>();
 
@@ -570,9 +581,13 @@ internal sealed class WindowsTaskServiceManager : IServiceManager
         {
             foreach (var (key, value) in def.Environment)
             {
-                // Remove double quotes from key/value to avoid cmd.exe parsing issues
+                // Remove double quotes and newlines from key/value to avoid cmd.exe parsing issues
                 string safeKey = key.Replace("\"", "");
-                string safeValue = value.Replace("\"", "");
+                string safeValue = value
+                    .Replace("\"", "")
+                    .Replace("\r\n", " ")
+                    .Replace("\r", " ")
+                    .Replace("\n", " ");
                 sb.Append($"set \"{safeKey}={safeValue}\" && ");
             }
         }

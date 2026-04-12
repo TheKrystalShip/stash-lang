@@ -806,4 +806,76 @@ public class WindowsTaskXmlGenerationTests
         Assert.Equal(2, triggers.Count);
         Assert.All(triggers, t => Assert.NotNull(t.Element(Ns + "ScheduleByWeek")));
     }
+
+    // ── CronToTriggers: hourly repetition ─────────────────────────────────────
+
+    [Fact]
+    public void CronToTriggers_EveryHourAtMinute0_ReturnsSinglePT60MRepetitionTrigger()
+    {
+        // "0 * * * *" → single CalendarTrigger with PT60M Repetition
+        CronExpression expr = CronExpression.Parse("0 * * * *");
+
+        IReadOnlyList<XElement> triggers = WindowsTaskServiceManager.CronToTriggers(expr);
+
+        Assert.Single(triggers);
+        XElement? rep = triggers[0].Element(Ns + "Repetition");
+        Assert.NotNull(rep);
+        Assert.Equal("PT60M", rep!.Element(Ns + "Interval")?.Value);
+    }
+
+    [Fact]
+    public void CronToTriggers_EveryHourAtMinute0_StartsAtMinute0()
+    {
+        CronExpression expr = CronExpression.Parse("0 * * * *");
+
+        IReadOnlyList<XElement> triggers = WindowsTaskServiceManager.CronToTriggers(expr);
+
+        string? sb = triggers[0].Element(Ns + "StartBoundary")?.Value;
+        Assert.NotNull(sb);
+        Assert.Contains("00:00", sb!);
+    }
+
+    [Fact]
+    public void CronToTriggers_EveryHourAtMinute30_ReturnsSinglePT60MTrigger()
+    {
+        // "30 * * * *" → single CalendarTrigger with PT60M starting at :30
+        CronExpression expr = CronExpression.Parse("30 * * * *");
+
+        IReadOnlyList<XElement> triggers = WindowsTaskServiceManager.CronToTriggers(expr);
+
+        Assert.Single(triggers);
+        XElement? rep = triggers[0].Element(Ns + "Repetition");
+        Assert.NotNull(rep);
+        Assert.Equal("PT60M", rep!.Element(Ns + "Interval")?.Value);
+        Assert.Contains("00:30", triggers[0].Element(Ns + "StartBoundary")?.Value ?? "");
+    }
+
+    [Fact]
+    public void CronToTriggers_EveryHourAtMinutes5And35_ReturnsTwoPT60MTriggers()
+    {
+        // "5,35 * * * *" → two CalendarTriggers, each PT60M
+        CronExpression expr = CronExpression.Parse("5,35 * * * *");
+
+        IReadOnlyList<XElement> triggers = WindowsTaskServiceManager.CronToTriggers(expr);
+
+        Assert.Equal(2, triggers.Count);
+        Assert.All(triggers, t =>
+        {
+            XElement? rep = t.Element(Ns + "Repetition");
+            Assert.NotNull(rep);
+            Assert.Equal("PT60M", rep!.Element(Ns + "Interval")?.Value);
+        });
+    }
+
+    [Fact]
+    public void CronToTriggers_HourlyOnWeekdays_Returns24WeeklyTriggers()
+    {
+        // "0 * * * 1-5" → 24 CalendarTriggers (one per hour), each with ScheduleByWeek
+        CronExpression expr = CronExpression.Parse("0 * * * 1-5");
+
+        IReadOnlyList<XElement> triggers = WindowsTaskServiceManager.CronToTriggers(expr);
+
+        Assert.Equal(24, triggers.Count);
+        Assert.All(triggers, t => Assert.NotNull(t.Element(Ns + "ScheduleByWeek")));
+    }
 }
