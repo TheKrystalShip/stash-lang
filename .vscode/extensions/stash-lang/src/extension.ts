@@ -10,6 +10,7 @@ import {
 import { activateTesting } from "./testing";
 import { resolveBinary } from "./resolveBinary";
 import { StashBytecodeViewerProvider } from "./bytecodeViewer";
+import { StashInlineValuesProvider } from "./inlineValues";
 
 let client: LanguageClient | undefined;
 let debugOutput: vscode.OutputChannel | undefined;
@@ -103,6 +104,15 @@ export function activate(context: vscode.ExtensionContext) {
       bytecodeViewerProvider,
       { supportsMultipleEditorsPerDocument: false }
     )
+  );
+
+  // ── Inline Values ──────────────────────────────────────────────────────────
+
+  context.subscriptions.push(
+    vscode.languages.registerInlineValuesProvider(
+      { language: "stash", scheme: "file" },
+      new StashInlineValuesProvider(),
+    ),
   );
 }
 

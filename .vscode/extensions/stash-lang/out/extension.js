@@ -42,6 +42,7 @@ const node_1 = require("vscode-languageclient/node");
 const testing_1 = require("./testing");
 const resolveBinary_1 = require("./resolveBinary");
 const bytecodeViewer_1 = require("./bytecodeViewer");
+const inlineValues_1 = require("./inlineValues");
 let client;
 let debugOutput;
 let lspTrace;
@@ -97,6 +98,8 @@ function activate(context) {
     // ── Bytecode Viewer ────────────────────────────────────────────────────────
     const bytecodeViewerProvider = new bytecodeViewer_1.StashBytecodeViewerProvider();
     context.subscriptions.push(vscode.window.registerCustomEditorProvider(bytecodeViewer_1.StashBytecodeViewerProvider.viewType, bytecodeViewerProvider, { supportsMultipleEditorsPerDocument: false }));
+    // ── Inline Values ──────────────────────────────────────────────────────────
+    context.subscriptions.push(vscode.languages.registerInlineValuesProvider({ language: "stash", scheme: "file" }, new inlineValues_1.StashInlineValuesProvider()));
 }
 function deactivate() {
     lspTrace?.dispose();

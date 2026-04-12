@@ -652,4 +652,3 @@ The `Initialize` response declares the following capabilities:
 - **Exception info request**: Return structured exception details (type, message, stack) when paused on an exception.
 - **Distinguish caught vs. uncaught**: Track a try/catch depth counter in the interpreter to implement true `uncaught`-only filtering.
 - **Data breakpoints**: Pause when a specific variable's value changes.
-- **Inline values**: Report variable values as inline annotations in the editor (requires DAP `supportsInlineValues` capability).

@@ -53,6 +53,7 @@ fn buildExtension() {
   // Build the VSCode extension
   io.println("Building VSCode extension...");
   const result = process.withDir(path.dir(VSCODE_EXTENSION_BUILD_SCRIPT), () => {
+    // stash-disable-next-line SA1302
     return $(${path.base(VSCODE_EXTENSION_BUILD_SCRIPT)});
   });
   if (result.exitCode != 0) {
