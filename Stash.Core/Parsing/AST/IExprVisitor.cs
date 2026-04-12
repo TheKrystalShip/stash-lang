@@ -213,6 +213,11 @@ public interface IExprVisitor<T>
     T VisitRetryExpr(RetryExpr expr);
 
     /// <summary>
+    /// Visits a <see cref="TimeoutExpr"/> node (a timeout-bounded block).
+    /// </summary>
+    T VisitTimeoutExpr(TimeoutExpr expr);
+
+    /// <summary>
     /// Visits a <see cref="SpreadExpr"/> node (spread expression <c>...expr</c>).
     /// </summary>
     /// <param name="expr">The spread expression node to visit.</param>

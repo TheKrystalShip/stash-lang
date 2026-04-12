@@ -562,6 +562,12 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitTimeoutExpr(TimeoutExpr expr)
+    {
+        ExpressionFormatter.FormatTimeout(expr, _ctx, FormatStmt, FormatExpr);
+        return 0;
+    }
+
     public int VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         ExpressionFormatter.FormatNullCoalesce(expr, _ctx, FormatExpr);

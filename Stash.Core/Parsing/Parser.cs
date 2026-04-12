@@ -728,6 +728,12 @@ public class Parser
                 Match(TokenType.Semicolon);
                 return new ExprStmt(expr, expr.Span);
             }
+            case TokenType.Timeout:
+            {
+                Expr expr = Expression();
+                Match(TokenType.Semicolon);
+                return new ExprStmt(expr, expr.Span);
+            }
             default:
                 return ExpressionStatement();
         }
@@ -1903,6 +1909,21 @@ public class Parser
             MakeSpan(retryKeyword.Span, body.Span));
     }
 
+    private Expr ParseTimeoutExpr()
+    {
+        Token timeoutKeyword = Previous();
+
+        // Parse duration expression (e.g., 30s, 5m, durationVar, getDuration(), config.timeout).
+        // Use Call() to support function calls, member access, and indexing.
+        // Binary/ternary expressions require parentheses: timeout (base + extra) { ... }
+        Expr duration = Call();
+
+        // Parse body block.
+        BlockStmt body = ParseBlock();
+
+        return new TimeoutExpr(timeoutKeyword, duration, body, MakeSpan(timeoutKeyword.Span, body.Span));
+    }
+
     /// <summary>Parses the arms of a <c>switch</c> expression after the subject has been parsed.</summary>
     /// <param name="subject">The switch subject expression.</param>
     /// <returns>A <see cref="SwitchExpr"/> node containing all parsed arms.</returns>
@@ -2170,6 +2191,11 @@ public class Parser
         if (Match(TokenType.Retry))
         {
             return ParseRetryExpr();
+        }
+
+        if (Match(TokenType.Timeout))
+        {
+            return ParseTimeoutExpr();
         }
 
         if (Match(TokenType.Async))
@@ -2652,7 +2678,8 @@ public class Parser
             Check(TokenType.False) ||
             Check(TokenType.Null) ||
             Check(TokenType.Async) ||
-            Check(TokenType.Await))
+            Check(TokenType.Await) ||
+            Check(TokenType.Timeout))
         {
             return Advance();
         }
@@ -2668,7 +2695,7 @@ public class Parser
     /// <param name="message">A description of what went wrong.</param>
     /// <returns>A <see cref="ParseError"/> instance to be thrown by the caller.</returns>
     private static bool IsDictKeyToken(TokenType type) =>
-        type == TokenType.Identifier || (type >= TokenType.Let && type <= TokenType.Retry);
+        type == TokenType.Identifier || (type >= TokenType.Let && type <= TokenType.Timeout);
 
     private ParseError Error(Token token, string message)
     {

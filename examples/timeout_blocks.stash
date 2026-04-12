@@ -1,0 +1,70 @@
+// timeout_blocks.stash — Demonstrates timeout block usage
+
+// Basic timeout — body completes before timeout
+let result = timeout 5s {
+  "completed";
+};
+
+io.println("Result: ${result}");  // "completed"
+
+// Timeout with computation
+let answer = timeout 10s {
+  let sum = 0;
+  for (let i in 1..100) {
+    sum = sum + i;
+  }
+  sum;
+};
+
+io.println("Sum: ${answer}");  // 5050
+
+// Timeout errors are catchable
+let timedOut = try timeout 100ms {
+  time.sleep(5000);
+};
+
+if (timedOut is Error) {
+  io.println("Caught timeout: ${timedOut.message}");
+  io.println("Error type: ${timedOut.type}");  // "TimeoutError"
+}
+
+// Timeout with variable duration
+const dur = 5s;
+const fast = timeout dur {
+  "quick work";
+};
+
+io.println("Fast: ${fast}");
+
+// Nested timeouts
+const outer = timeout 10s {
+  const inner = try timeout 100ms {
+    time.sleep(5000);
+  };
+
+  let msg = "inner completed";
+  if (inner is Error) {
+    msg = "inner timed out";
+  }
+  msg;
+};
+
+io.println("Nested: ${outer}");  // "inner timed out"
+
+// Composition with retry
+const stable = retry (3) {
+  timeout 5s {
+    $!(echo "${attempt.current}/${attempt.max}: Attempting operation...");
+  }
+};
+
+io.println("Retry + timeout: ${stable}");
+
+// Practical: timeout on operations
+fn fetchWithTimeout(url, dur) {
+  return try timeout dur {
+    http.get(url);
+  };
+}
+
+io.println("Timeout blocks work!");

@@ -18,12 +18,14 @@ namespace Stash.Bytecode;
 /// </summary>
 internal sealed class VMContext : IInterpreterContext
 {
-    private readonly CancellationToken _ct;
+    private CancellationToken _ct;
 
     public VMContext(CancellationToken ct)
     {
         _ct = ct;
     }
+
+    internal void SetCancellationToken(CancellationToken ct) => _ct = ct;
 
     // --- Execution Context ---
 

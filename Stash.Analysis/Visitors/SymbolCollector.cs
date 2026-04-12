@@ -1239,6 +1239,16 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
 
     /// <summary>Recurses into both sides of a null-coalescing expression (<c>left ?? right</c>).</summary>
     /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitTimeoutExpr(TimeoutExpr expr)
+    {
+        expr.Duration.Accept(this);
+        PushScope(ScopeKind.Block, expr.Body.Span);
+        foreach (var s in expr.Body.Statements)
+            s.Accept(this);
+        PopScope();
+        return null;
+    }
+
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         expr.Left.Accept(this);

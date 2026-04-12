@@ -321,6 +321,9 @@ public enum TokenType
     /// <summary>The <c>retry</c> keyword. Begins a retry expression that re-executes a block on failure.</summary>
     Retry,
 
+    /// <summary>The <c>timeout</c> keyword. Begins a timeout expression that bounds execution time.</summary>
+    Timeout,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

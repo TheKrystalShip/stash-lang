@@ -55,7 +55,7 @@ public sealed partial class VirtualMachine
     private static readonly object _undefinedSentinel = new();
     internal static readonly StashValue UndefinedGlobal = StashValue.FromObj(_undefinedSentinel);
     private readonly List<Upvalue> _openUpvalues;
-    private readonly CancellationToken _ct;
+    private CancellationToken _ct;
 
     private readonly List<ExceptionHandler> _exceptionHandlers = new();
     private readonly VMContext _context;

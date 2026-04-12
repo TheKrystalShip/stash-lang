@@ -51,10 +51,19 @@ public static class TimeBuiltIns
             documentation: "Returns the current UTC time as Unix milliseconds.\n@return Current time in milliseconds");
 
         // time.sleep(seconds) — Suspends the current thread for the given number of seconds (float or int).
-        ns.Function("sleep", [Param("seconds", "number")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("sleep", [Param("seconds", "number")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             double seconds = SvArgs.Numeric(args, 0, "time.sleep");
-            Thread.Sleep((int)(seconds * 1000));
+            int ms = (int)(seconds * 1000);
+            if (ctx.CancellationToken.CanBeCanceled)
+            {
+                ctx.CancellationToken.WaitHandle.WaitOne(ms);
+                ctx.CancellationToken.ThrowIfCancellationRequested();
+            }
+            else
+            {
+                Thread.Sleep(ms);
+            }
             return StashValue.Null;
         },
             returnType: "void",

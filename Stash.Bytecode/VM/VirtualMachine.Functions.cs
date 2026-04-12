@@ -288,7 +288,7 @@ public sealed partial class VirtualMachine
                 if (callSpan is not null) _context.CurrentSpan = callSpan;
                 result = callable.CallDirect(_context, argSpan);
             }
-            catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
+            catch (Exception ex) when (ex is not RuntimeError and not OperationCanceledException and not Stash.Tpl.TemplateException)
             {
                 throw new RuntimeError($"Built-in function error: {ex.Message}",
                     callSpan ?? _context.CurrentSpan);
@@ -573,7 +573,7 @@ public sealed partial class VirtualMachine
             {
                 result = builtIn.CallDirect(_context, argSpan);
             }
-            catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
+            catch (Exception ex) when (ex is not RuntimeError and not OperationCanceledException and not Stash.Tpl.TemplateException)
             {
                 throw new RuntimeError($"Built-in function error: {ex.Message}", _context.CurrentSpan);
             }
@@ -600,7 +600,7 @@ public sealed partial class VirtualMachine
                 _context.CurrentSpan = callerSourceMap.GetSpan(callerIP);
                 result = callable.CallDirect(_context, argSpan);
             }
-            catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
+            catch (Exception ex) when (ex is not RuntimeError and not OperationCanceledException and not Stash.Tpl.TemplateException)
             {
                 throw new RuntimeError($"Built-in function error: {ex.Message}", _context.CurrentSpan);
             }
@@ -660,7 +660,7 @@ public sealed partial class VirtualMachine
             {
                 result = builtIn.CallDirect(_context, argSpan);
             }
-            catch (Exception ex) when (ex is not RuntimeError and not Stash.Tpl.TemplateException)
+            catch (Exception ex) when (ex is not RuntimeError and not OperationCanceledException and not Stash.Tpl.TemplateException)
             {
                 throw new RuntimeError($"Built-in function error: {ex.Message}", _context.CurrentSpan);
             }

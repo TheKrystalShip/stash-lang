@@ -174,7 +174,7 @@ public static class SshBuiltIns
         // ssh.shell(conn, commands) — Runs commands through an interactive shell stream.
         // Useful for commands requiring a TTY or stateful sessions (sudo, etc.).
         // Returns the combined shell output as a string.
-        ns.Function("shell", [Param("conn", "SshConnection"), Param("commands", "array")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("shell", [Param("conn", "SshConnection"), Param("commands", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             SshClient client = GetClient(args[0].ToObject(), "ssh.shell");
             var commands = SvArgs.StashList(args, 1, "ssh.shell");
@@ -194,7 +194,15 @@ public static class SshBuiltIns
                 }
 
                 // Allow time for commands to execute and output to arrive
-                Thread.Sleep(500);
+                if (ctx.CancellationToken.CanBeCanceled)
+                {
+                    ctx.CancellationToken.WaitHandle.WaitOne(500);
+                    ctx.CancellationToken.ThrowIfCancellationRequested();
+                }
+                else
+                {
+                    Thread.Sleep(500);
+                }
                 return StashValue.FromObj(stream.Read());
             }
             catch (SshException e)

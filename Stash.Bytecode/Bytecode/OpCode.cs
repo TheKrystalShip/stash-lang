@@ -195,6 +195,8 @@ public enum OpCode : byte
     ElevateEnd,
     /// <summary>ABx: Retry block with metadata K(Bx), body/until/onRetry from registers.</summary>
     Retry,
+    /// <summary>ABx: Timeout block. R(A)=duration, body closure at R(A+1). Returns result in R(A).</summary>
+    Timeout,
     /// <summary>ABC: R(A) = await R(B).</summary>
     Await,
     /// <summary>ABC: Call R(A) with spread arguments.</summary>
@@ -239,7 +241,7 @@ public static class OpCodeInfo
         or OpCode.Closure or OpCode.TryBegin
         or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl or OpCode.Extend
         or OpCode.Import or OpCode.ImportAs
-        or OpCode.Switch or OpCode.Destructure or OpCode.Retry
+        or OpCode.Switch or OpCode.Destructure or OpCode.Retry or OpCode.Timeout
             => OpCodeFormat.ABx,
 
         // Ax format: 24-bit payload

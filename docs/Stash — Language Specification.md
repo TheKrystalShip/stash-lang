@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [7f. Timeout Blocks](#7f-timeout-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -55,15 +55,15 @@
 
 ## 2. Language Design Decisions
 
-| Decision            | Choice                           | Rationale                                             |
-| ------------------- | -------------------------------- | ----------------------------------------------------- |
-| Typing              | Dynamic                          | Simpler to implement; appropriate for scripting       |
-| Syntax style        | C-style braces and semicolons    | Familiar to C/C++/C# developers                       |
-| Primary focus       | Shell scripting                  | Process execution, pipes, file I/O as first-class     |
-| Scoping             | Lexical                          | Predictable; standard in modern languages             |
-| Killer feature      | Structs/objects                  | Structured data manipulation missing from Bash        |
-| Implementation lang | C#                               | Leverages existing expertise; strong standard library |
-| Interpreter type    | Bytecode VM                      | Compiled AST to opcodes; stack-based dispatch         |
+| Decision            | Choice                        | Rationale                                             |
+| ------------------- | ----------------------------- | ----------------------------------------------------- |
+| Typing              | Dynamic                       | Simpler to implement; appropriate for scripting       |
+| Syntax style        | C-style braces and semicolons | Familiar to C/C++/C# developers                       |
+| Primary focus       | Shell scripting               | Process execution, pipes, file I/O as first-class     |
+| Scoping             | Lexical                       | Predictable; standard in modern languages             |
+| Killer feature      | Structs/objects               | Structured data manipulation missing from Bash        |
+| Implementation lang | C#                            | Leverages existing expertise; strong standard library |
+| Interpreter type    | Bytecode VM                   | Compiled AST to opcodes; stack-based dispatch         |
 
 ---
 
@@ -621,18 +621,21 @@ if (deployed in @v2.x && deployed >= @v2.4.0) {
 The `secret` type wraps any value and auto-redacts it when converted to a string. This prevents accidental credential leakage through `println()`, string interpolation, error messages, and log output.
 
 **Creating secrets:**
+
 ```stash
 let apiKey = secret("sk-abc123def456");
 let dbPassword = secret(env.get("DB_PASS"));
 ```
 
 **Auto-redaction:**
+
 ```stash
 println(apiKey);                    // prints: ******
 println("Key: ${apiKey}");          // prints: Key: ******
 ```
 
 **Taint propagation:** String concatenation involving a secret produces a new secret:
+
 ```stash
 let header = "Bearer " + apiKey;    // header is also a secret
 typeof(header);                     // "secret"
@@ -640,11 +643,13 @@ println(header);                    // prints: ******
 ```
 
 **Unwrapping with `reveal()`:** When the real value is needed (e.g., for HTTP requests or writing to authorized destinations), use `reveal()`:
+
 ```stash
 let raw = reveal(apiKey);           // returns the original string
 ```
 
 **Type operations:**
+
 ```stash
 typeof(apiKey);                     // "secret"
 apiKey is secret;                   // true
@@ -652,9 +657,10 @@ len(apiKey);                        // returns length of the underlying value
 ```
 
 **Design notes:**
+
 - `secret(secret(value))` does not double-wrap — the inner value is preserved.
 - Comparison (`==`, `!=`) and `len()` operate on the underlying value.
-- The goal is preventing *accidental* leakage, not adversarial extraction. Memory dumps can still access the raw value.
+- The goal is preventing _accidental_ leakage, not adversarial extraction. Memory dumps can still access the raw value.
 
 ### Type Coercion & Truthiness
 
@@ -3133,6 +3139,90 @@ switch (code) {
 
 ---
 
+## 7f. Timeout Blocks
+
+The `timeout` expression bounds the execution time of a block. If the block does not complete within the specified duration, a `TimeoutError` is thrown.
+
+### Syntax
+
+```
+timeout <duration> { <body> }
+```
+
+Where `<duration>` is any expression that evaluates to a duration value (e.g., `30s`, `5m`, `100ms`) or an integer number of milliseconds. The block returns the value of its last expression.
+
+### Basic Usage
+
+```stash
+let result = timeout 30s {
+  http.get("https://slow-api.example.com/data");
+}
+```
+
+### Error Handling
+
+Timeout errors are catchable with `try`:
+
+```stash
+let data = try timeout 10s {
+  json.parse(http.get(url).body);
+}
+if (data is Error) {
+  io.println("Request timed out or failed: ${data.message}");
+}
+```
+
+The error has type `"TimeoutError"` and a message like `"Operation timed out after 10000ms."`.
+
+### Nesting
+
+Timeout blocks can be nested. Inner timeouts create their own deadline, linked to the parent timeout. The inner timeout fires first if it's shorter:
+
+```stash
+timeout 60s {
+  for (let server in servers) {
+    timeout 10s {
+      healthCheck(server);
+    }
+  }
+}
+```
+
+### Composition
+
+Timeout composes naturally with `retry` and `try`:
+
+```stash
+retry (3, delay: 2s) {
+  timeout 5s {
+    $(ssh deploy@prod "systemctl status nginx");
+  }
+}
+```
+
+### Cleanup
+
+Use `try/finally` inside timeout blocks for cleanup:
+
+```stash
+timeout 30s {
+  try {
+    let conn = connect();
+    doWork(conn)
+  } finally {
+    conn.close();
+  }
+}
+```
+
+### Semantics
+
+- Timeout only guarantees interruption of I/O operations (`http.*`, `$()`, `process.*`, `time.sleep`, `fs.*`). CPU-bound code checks for cancellation at loop boundaries.
+- The duration must be positive. Zero or negative durations throw a `RuntimeError`.
+- The block executes in the same scope — closures and variable captures work normally.
+
+---
+
 ## 8. Functions
 
 ### Declaration
@@ -4093,13 +4183,13 @@ bracketSpacing=true
 
 **Options:**
 
-| Key              | Values                  | Default | Description                                                                              |
-| ---------------- | ----------------------- | ------- | ---------------------------------------------------------------------------------------- |
-| `indentSize`     | positive integer        | `4`     | Number of spaces per indent level (ignored when `useTabs=true`)                          |
-| `useTabs`        | `true` / `false`        | `false` | Use hard tab characters instead of spaces for indentation                                |
-| `trailingComma`  | `none` \| `all`         | `none`  | `all` adds a trailing comma after the last element in multi-line arrays/dicts/structs    |
-| `endOfLine`      | `lf` \| `crlf` \| `auto` | `lf`    | `auto` preserves the line ending style already used in the file                          |
-| `bracketSpacing` | `true` / `false`        | `true`  | When `true`, single-line dict/struct literals include a space inside braces: `{ a: 1 }` |
+| Key              | Values                   | Default | Description                                                                             |
+| ---------------- | ------------------------ | ------- | --------------------------------------------------------------------------------------- |
+| `indentSize`     | positive integer         | `4`     | Number of spaces per indent level (ignored when `useTabs=true`)                         |
+| `useTabs`        | `true` / `false`         | `false` | Use hard tab characters instead of spaces for indentation                               |
+| `trailingComma`  | `none` \| `all`          | `none`  | `all` adds a trailing comma after the last element in multi-line arrays/dicts/structs   |
+| `endOfLine`      | `lf` \| `crlf` \| `auto` | `lf`    | `auto` preserves the line ending style already used in the file                         |
+| `bracketSpacing` | `true` / `false`         | `true`  | When `true`, single-line dict/struct literals include a space inside braces: `{ a: 1 }` |
 
 **Config file discovery:** when formatting a file the formatter walks up the directory tree from the file's location toward the filesystem root, using the first `.stashformat` found. If no config file exists, built-in defaults are used.
 
@@ -4241,14 +4331,14 @@ Source Code → Lexer → Tokens → Parser → AST → Interpreter → Executio
 
 ### Components
 
-| Component       | Responsibility                                         |
-| --------------- | ------------------------------------------------------ |
-| **Lexer**       | Reads source text, produces stream of tokens           |
-| **Parser**      | Recursive descent; consumes tokens, produces AST       |
-| **Resolver**    | Post-parse pass; binds variables to scope depth/slot   |
+| Component       | Responsibility                                                             |
+| --------------- | -------------------------------------------------------------------------- |
+| **Lexer**       | Reads source text, produces stream of tokens                               |
+| **Parser**      | Recursive descent; consumes tokens, produces AST                           |
+| **Resolver**    | Post-parse pass; binds variables to scope depth/slot                       |
 | **Interpreter** | Bytecode VM; compiles AST to opcodes and executes via stack-based dispatch |
-| **Environment** | Stores variable bindings; supports lexical scope chain |
-| **REPL**        | Interactive read-eval-print loop                       |
+| **Environment** | Stores variable bindings; supports lexical scope chain                     |
+| **REPL**        | Interactive read-eval-print loop                                           |
 
 ### Token Types
 

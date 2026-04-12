@@ -378,4 +378,67 @@ public sealed partial class Compiler
         return null;
     }
 
+    public object? VisitTimeoutExpr(TimeoutExpr expr)
+    {
+        byte dest = _destReg;
+        _builder.AddSourceMapping(expr.Span);
+
+        // ── duration ─────────────────────────────────────────────────────
+        byte durationReg = _scope.AllocTemp();
+        CompileExprTo(expr.Duration, durationReg);
+
+        // ── body closure ─────────────────────────────────────────────────
+        byte bodyReg = _scope.AllocTemp();
+        {
+            var bodyChild = new Compiler(this, "<timeout_body>", _globalSlots);
+
+            // No parameters for timeout body
+            bodyChild._builder.Arity = 0;
+            bodyChild._builder.MinArity = 0;
+
+            var bodyStmts = expr.Body.Statements;
+            for (int i = 0; i < bodyStmts.Count; i++)
+            {
+                bool isLast = i == bodyStmts.Count - 1;
+                if (isLast && bodyStmts[i] is ExprStmt lastExprStmt)
+                {
+                    byte resultReg = bodyChild._scope.AllocTemp();
+                    bodyChild.CompileExprTo(lastExprStmt.Expression, resultReg);
+                    bodyChild._builder.EmitABC(OpCode.Return, resultReg, 1, 0);
+                    bodyChild._scope.FreeTemp(resultReg);
+                }
+                else
+                {
+                    bodyChild.CompileStmt(bodyStmts[i]);
+                }
+            }
+
+            // Implicit null return
+            byte bodyRetReg = bodyChild._scope.AllocTemp();
+            bodyChild._builder.EmitA(OpCode.LoadNull, bodyRetReg);
+            bodyChild._builder.EmitABC(OpCode.Return, bodyRetReg, 1, 0);
+            bodyChild._scope.FreeTemp(bodyRetReg);
+
+            bodyChild._builder.MaxRegs = bodyChild._scope.MaxRegs;
+            bodyChild._builder.LocalNames = bodyChild._scope.GetLocalNames();
+            bodyChild._builder.LocalIsConst = bodyChild._scope.GetLocalIsConst();
+            bodyChild._builder.UpvalueNames = bodyChild._upvalueNames?.ToArray();
+
+            Chunk bodyChunk = bodyChild._builder.Build();
+            ushort bodyChunkIdx = _builder.AddConstant(StashValue.FromObj(bodyChunk));
+            _builder.EmitABx(OpCode.Closure, bodyReg, bodyChunkIdx);
+            foreach (UpvalueDescriptor uv in bodyChunk.Upvalues)
+                _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
+        }
+
+        // ── emit Timeout instruction ──────────────────────────────────────
+        _builder.EmitABx(OpCode.Timeout, durationReg, 0);
+
+        // VM writes the result to R(durationReg)
+        if (durationReg != dest)
+            _builder.EmitAB(OpCode.Move, dest, durationReg);
+        _scope.FreeTempFrom(durationReg);
+
+        return null;
+    }
 }

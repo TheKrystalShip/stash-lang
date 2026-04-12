@@ -37,8 +37,9 @@ public sealed partial class VirtualMachine
                 _sp = handler.StackLevel;
                 var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
                 _context.LastError = stashError;
-                Push(StashValue.FromObj(stashError));
-                _frames[_frameCount - 1].IP = handler.CatchIP;
+                ref CallFrame hf1 = ref _frames[_frameCount - 1];
+                _stack[hf1.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
+                hf1.IP = handler.CatchIP;
             }
             catch (RuntimeError ex)
             {
@@ -132,8 +133,9 @@ public sealed partial class VirtualMachine
                 _sp = handler.StackLevel;
                 var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
                 _context.LastError = stashError;
-                Push(StashValue.FromObj(stashError));
-                _frames[_frameCount - 1].IP = handler.CatchIP;
+                ref CallFrame hf2 = ref _frames[_frameCount - 1];
+                _stack[hf2.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
+                hf2.IP = handler.CatchIP;
             }
             catch (RuntimeError ex)
             {
@@ -186,8 +188,9 @@ public sealed partial class VirtualMachine
                 _sp = handler.StackLevel;
                 var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
                 _context.LastError = stashError;
-                Push(StashValue.FromObj(stashError));
-                _frames[_frameCount - 1].IP = handler.CatchIP;
+                ref CallFrame handlerFrame = ref _frames[_frameCount - 1];
+                _stack[handlerFrame.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
+                handlerFrame.IP = handler.CatchIP;
             }
         }
     }

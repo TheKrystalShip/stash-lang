@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Threading;
 using System.Threading.Tasks;
 using Stash.Common;
 using Stash.Runtime;
@@ -13,7 +14,7 @@ namespace Stash.Bytecode;
 public sealed partial class VirtualMachine
 {
     private static (string Stdout, string Stderr, int ExitCode) ExecCaptured(
-        string program, List<string> arguments, string? stdin, SourceSpan? span)
+        string program, List<string> arguments, string? stdin, SourceSpan? span, CancellationToken ct = default)
     {
         try
         {
@@ -42,9 +43,19 @@ public sealed partial class VirtualMachine
 
             var stdoutTask = Task.Run(() => process.StandardOutput.ReadToEnd());
             var stderrTask = Task.Run(() => process.StandardError.ReadToEnd());
-            Task.WaitAll(stdoutTask, stderrTask);
-            process.WaitForExit();
 
+            try
+            {
+                process.WaitForExitAsync(ct).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                try { Task.WaitAll(stdoutTask, stderrTask); } catch { }
+                throw;
+            }
+
+            Task.WaitAll(stdoutTask, stderrTask);
             return (stdoutTask.Result, stderrTask.Result, process.ExitCode);
         }
         catch (RuntimeError)
@@ -58,7 +69,7 @@ public sealed partial class VirtualMachine
     }
 
     private static (string Stdout, string Stderr, int ExitCode) ExecPassthrough(
-        string program, List<string> arguments, SourceSpan? span)
+        string program, List<string> arguments, SourceSpan? span, CancellationToken ct = default)
     {
         try
         {
@@ -78,7 +89,16 @@ public sealed partial class VirtualMachine
 
             using var process = Process.Start(psi)
                 ?? throw new RuntimeError("Failed to start process.", span);
-            process.WaitForExit();
+
+            try
+            {
+                process.WaitForExitAsync(ct).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { }
+                throw;
+            }
 
             return ("", "", process.ExitCode);
         }

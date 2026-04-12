@@ -633,6 +633,16 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
         return null;
     }
 
+    public object? VisitTimeoutExpr(TimeoutExpr expr)
+    {
+        ResolveExpr(expr.Duration);
+        BeginScope();
+        foreach (var stmt in expr.Body.Statements)
+            ResolveStmt(stmt);
+        EndScope();
+        return null;
+    }
+
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         ResolveExpr(expr.Left);

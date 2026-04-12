@@ -99,7 +99,15 @@ public static class ProcessBuiltIns
                 {
                     using var child = System.Diagnostics.Process.Start(psi)
                         ?? throw new RuntimeError("Failed to start process.");
-                    child.WaitForExit();
+                    try
+                    {
+                        child.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
+                    }
+                    catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested)
+                    {
+                        try { child.Kill(entireProcessTree: true); } catch { }
+                        throw;
+                    }
                     System.Environment.Exit(child.ExitCode);
                 }
                 catch (RuntimeError) { throw; }
@@ -172,8 +180,16 @@ public static class ProcessBuiltIns
             var osProcess = entry.Process;
             var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
             var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
-            osProcess.WaitForExit();
-            Task.WaitAll(stdoutTask, stderrTask);
+            try
+            {
+                osProcess.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested)
+            {
+                try { osProcess.Kill(entireProcessTree: true); } catch { }
+                throw;
+            }
+            Task.WaitAll(new[] { stdoutTask, stderrTask }, ctx.CancellationToken);
 
             var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
 
@@ -205,14 +221,20 @@ public static class ProcessBuiltIns
             }
 
             var osProcess = entry.Process;
-            if (!osProcess.WaitForExit((int)ms))
+            try
             {
-                return StashValue.Null; // timed out
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+                cts.CancelAfter((int)ms);
+                osProcess.WaitForExitAsync(cts.Token).GetAwaiter().GetResult();
+            }
+            catch (OperationCanceledException) when (!ctx.CancellationToken.IsCancellationRequested)
+            {
+                return StashValue.Null; // our own CancelAfter fired — timed out
             }
 
             var stdoutTask = Task.Run(() => osProcess.StandardOutput.ReadToEnd());
             var stderrTask = Task.Run(() => osProcess.StandardError.ReadToEnd());
-            Task.WaitAll(stdoutTask, stderrTask);
+            Task.WaitAll(new[] { stdoutTask, stderrTask }, ctx.CancellationToken);
 
             var result = RuntimeValues.CreateCommandResult(stdoutTask.Result, stderrTask.Result, (long)osProcess.ExitCode);
 

@@ -9,6 +9,12 @@ public class Program
 
     public static async Task Main(string[] args)
     {
+        if (args.Length == 0 || args.Contains("--stdio"))
+        {
+            await StashLanguageServer.RunAsync();
+            return;
+        }
+
         foreach (string arg in args)
         {
             if (arg is "--version" or "-v")
@@ -44,7 +50,5 @@ public class Program
                 Environment.Exit(64);
             }
         }
-
-        await StashLanguageServer.RunAsync();
     }
 }

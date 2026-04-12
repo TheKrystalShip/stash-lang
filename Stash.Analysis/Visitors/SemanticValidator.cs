@@ -640,6 +640,13 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitTimeoutExpr(TimeoutExpr expr)
+    {
+        expr.Duration.Accept(this);
+        expr.Body.Accept(this);
+        return null;
+    }
+
     public object? VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         expr.Left.Accept(this);

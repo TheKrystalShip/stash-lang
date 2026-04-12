@@ -733,6 +733,15 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitTimeoutExpr(TimeoutExpr expr)
+    {
+        EmitFromToken(expr.TimeoutKeyword, TokenTypeKeyword, 0);
+        expr.Duration.Accept(this);
+        foreach (var stmt in expr.Body.Statements)
+            stmt.Accept(this);
+        return 0;
+    }
+
     public int VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
         expr.Left.Accept(this);

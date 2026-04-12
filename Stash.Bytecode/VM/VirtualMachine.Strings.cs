@@ -64,7 +64,7 @@ public sealed partial class VirtualMachine
 
         if (isPassthrough)
         {
-            var (_, _, exitCode) = ExecPassthrough(program, arguments, span);
+            var (_, _, exitCode) = ExecPassthrough(program, arguments, span, _ct);
             if (isStrict && exitCode != 0)
             {
                 throw new RuntimeError(
@@ -89,7 +89,7 @@ public sealed partial class VirtualMachine
         }
         else
         {
-            var (stdout, stderr, exitCode) = ExecCaptured(program, arguments, null, span);
+            var (stdout, stderr, exitCode) = ExecCaptured(program, arguments, null, span, _ct);
             if (isStrict && exitCode != 0)
             {
                 throw new RuntimeError(

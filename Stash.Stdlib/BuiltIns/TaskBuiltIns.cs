@@ -47,7 +47,9 @@ public static class TaskBuiltIns
     {
         var callable = SvArgs.Callable(args, 0, "task.run");
 
-        var cts = new CancellationTokenSource();
+        var cts = ctx.CancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken)
+            : new CancellationTokenSource();
 
         var dotnetTask = Task.Run<object?>(() =>
         {
@@ -194,7 +196,9 @@ public static class TaskBuiltIns
             }
         }
 
-        var cts = new CancellationTokenSource();
+        var cts = ctx.CancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken)
+            : new CancellationTokenSource();
         var combinedTask = Task.Run(async () =>
         {
             await Task.WhenAll(tasks);
@@ -231,7 +235,9 @@ public static class TaskBuiltIns
             }
         }
 
-        var cts = new CancellationTokenSource();
+        var cts = ctx.CancellationToken.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken)
+            : new CancellationTokenSource();
         var raceTask = Task.Run(async () =>
         {
             Task<object?> winner = await Task.WhenAny(tasks);

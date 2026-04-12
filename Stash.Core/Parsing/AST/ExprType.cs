@@ -33,5 +33,6 @@ public enum ExprType : byte
     Is,
     Await,
     Retry,
+    Timeout,
     Spread,
 }

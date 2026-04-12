@@ -58,7 +58,9 @@ public sealed partial class VirtualMachine
         TextReader capturedInput = _context.Input;
         bool capturedEmbedded = EmbeddedMode;
 
-        var cts = new CancellationTokenSource();
+        var cts = _ct.CanBeCanceled
+            ? CancellationTokenSource.CreateLinkedTokenSource(_ct)
+            : new CancellationTokenSource();
         var task = Task.Run(() =>
         {
             var childVM = new VirtualMachine(capturedGlobals, cts.Token)

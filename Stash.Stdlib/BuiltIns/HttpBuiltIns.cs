@@ -46,7 +46,7 @@ public static class HttpBuiltIns
         ns.RequiresCapability(StashCapabilities.Network);
 
         // http.get(url[, options]) — Sends an HTTP GET request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("get", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("get", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("'http.get' requires 1 or 2 arguments.");
@@ -56,11 +56,12 @@ public static class HttpBuiltIns
 
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             var timeout = ApplyOptions(request, args, 1, "http.get");
-            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+            var requestCt = cts?.Token ?? ctx.CancellationToken;
 
             try
             {
-                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -75,7 +76,7 @@ public static class HttpBuiltIns
         documentation: "Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
         // http.post(url, body[, options]) — Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("post", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("post", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("'http.post' requires 2 or 3 arguments.");
@@ -89,11 +90,12 @@ public static class HttpBuiltIns
                 Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
             };
             var timeout = ApplyOptions(request, args, 2, "http.post");
-            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+            var requestCt = cts?.Token ?? ctx.CancellationToken;
 
             try
             {
-                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -108,7 +110,7 @@ public static class HttpBuiltIns
         documentation: "Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
         // http.put(url, body[, options]) — Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("put", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("put", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("'http.put' requires 2 or 3 arguments.");
@@ -122,11 +124,12 @@ public static class HttpBuiltIns
                 Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
             };
             var timeout = ApplyOptions(request, args, 2, "http.put");
-            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+            var requestCt = cts?.Token ?? ctx.CancellationToken;
 
             try
             {
-                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -141,7 +144,7 @@ public static class HttpBuiltIns
         documentation: "Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
         // http.delete(url[, options]) — Sends an HTTP DELETE request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("delete", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("delete", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("'http.delete' requires 1 or 2 arguments.");
@@ -151,11 +154,12 @@ public static class HttpBuiltIns
 
             var request = new HttpRequestMessage(HttpMethod.Delete, url);
             var timeout = ApplyOptions(request, args, 1, "http.delete");
-            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+            var requestCt = cts?.Token ?? ctx.CancellationToken;
 
             try
             {
-                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -170,7 +174,7 @@ public static class HttpBuiltIns
         documentation: "Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
 
         // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
-        ns.Function("request", [Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("request", [Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var options = SvArgs.Dict(args, 0, "http.request");
 
@@ -206,7 +210,7 @@ public static class HttpBuiltIns
 
             try
             {
-                var response = _client.SendAsync(requestMessage).GetAwaiter().GetResult();
+                var response = _client.SendAsync(requestMessage, ctx.CancellationToken).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -220,7 +224,7 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse");
 
         // http.patch(url, body[, options]) — Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
-        ns.Function("patch", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("patch", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("'http.patch' requires 2 or 3 arguments.");
@@ -234,11 +238,12 @@ public static class HttpBuiltIns
                 Content = new StringContent(body, System.Text.Encoding.UTF8, "application/json")
             };
             var timeout = ApplyOptions(request, args, 2, "http.patch");
-            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+            var requestCt = cts?.Token ?? ctx.CancellationToken;
 
             try
             {
-                var response = _client.SendAsync(request, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
+                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
                 return StashValue.FromObj(MakeResponse(response));
             }
             catch (HttpRequestException e)
@@ -265,11 +270,12 @@ public static class HttpBuiltIns
 
             var request = new HttpRequestMessage(HttpMethod.Get, url);
             var timeout = ApplyOptions(request, args, 2, "http.download");
-            using var cts = timeout.HasValue ? new CancellationTokenSource(timeout.Value) : null;
+            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+            var requestCt = cts?.Token ?? ctx.CancellationToken;
 
             try
             {
-                using var response = _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cts?.Token ?? CancellationToken.None).GetAwaiter().GetResult();
+                using var response = _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, requestCt).GetAwaiter().GetResult();
                 response.EnsureSuccessStatusCode();
                 using var stream = response.Content.ReadAsStreamAsync().GetAwaiter().GetResult();
                 using var fileStream = System.IO.File.Create(path);
@@ -358,6 +364,25 @@ public static class HttpBuiltIns
             ["body"] = StashValue.FromObj(body),
             ["headers"] = StashValue.FromObj(headers)
         });
+    }
+
+    /// <summary>
+    /// Creates a <see cref="CancellationTokenSource"/> that combines an outer cancellation token
+    /// with an optional per-request timeout. Returns <c>null</c> when neither is active.
+    /// </summary>
+    private static CancellationTokenSource? MakeLinkedCts(CancellationToken outer, TimeSpan? timeout)
+    {
+        if (timeout.HasValue && outer.CanBeCanceled)
+        {
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(outer);
+            cts.CancelAfter(timeout.Value);
+            return cts;
+        }
+        if (timeout.HasValue)
+            return new CancellationTokenSource(timeout.Value);
+        if (outer.CanBeCanceled)
+            return CancellationTokenSource.CreateLinkedTokenSource(outer);
+        return null;
     }
 
     /// <summary>

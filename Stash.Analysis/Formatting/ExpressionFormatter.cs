@@ -437,6 +437,15 @@ internal static class ExpressionFormatter
         formatExpr(expr.Expression);
     }
 
+    internal static void FormatTimeout(TimeoutExpr expr, FormatterContext ctx, Action<Stmt> formatStmt, Action<Expr> formatExpr)
+    {
+        ctx.EmitToken(); // timeout
+        ctx.Space();
+        formatExpr(expr.Duration);
+        ctx.Space();
+        StatementFormatter.FormatBlock(expr.Body, ctx, formatStmt);
+    }
+
     internal static void FormatRetry(RetryExpr expr, FormatterContext ctx, Action<Stmt> formatStmt, Action<Expr> formatExpr)
     {
         ctx.EmitToken(); // retry

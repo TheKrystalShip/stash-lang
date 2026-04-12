@@ -121,6 +121,7 @@ public static class Disassembler
         [OpCode.ElevateBegin]   = "elevate.begin",
         [OpCode.ElevateEnd]     = "elevate.end",
         [OpCode.Retry]          = "retry",
+        [OpCode.Timeout]        = "timeout",
         [OpCode.Await]          = "await",
         [OpCode.CallSpread]     = "call.spread",
         [OpCode.CheckNumeric]   = "check.numeric",
@@ -140,7 +141,7 @@ public static class Disassembler
         OpCode.LoadK or OpCode.GetGlobal or OpCode.SetGlobal or OpCode.InitConstGlobal
             or OpCode.Closure or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl
             or OpCode.Extend or OpCode.Import or OpCode.ImportAs or OpCode.Switch
-            or OpCode.Destructure or OpCode.Retry or OpCode.TryBegin => InstrFmt.ABx,
+            or OpCode.Destructure or OpCode.Retry or OpCode.Timeout or OpCode.TryBegin => InstrFmt.ABx,
 
         // AsBx (signed offset)
         OpCode.AddI or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
@@ -472,6 +473,7 @@ public static class Disassembler
             OpCode.ElevateBegin=> ($"r{a}, r{b}", null),
             OpCode.ElevateEnd  => ("", null),
             OpCode.Retry       => ($"k{bx}", null),
+            OpCode.Timeout     => ($"r{a}, r{(byte)(a+1)}", null),
             OpCode.Await       => ($"r{a}, r{b}", null),
 
             _ => (fmt switch

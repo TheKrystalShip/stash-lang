@@ -335,6 +335,9 @@ public sealed partial class VirtualMachine
                 // ==================== Retry ====================
                 case OpCode.Retry: ExecuteRetry(ref frame, inst); break;
 
+                // ==================== Timeout ====================
+                case OpCode.Timeout: ExecuteTimeout(ref frame, inst); break;
+
                 // ==================== Async ====================
                 case OpCode.Await: ExecuteAwait(ref frame, inst); break;
 

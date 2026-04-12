@@ -263,7 +263,17 @@ public sealed partial class VirtualMachine
             }
 
             if (retryDelayMs > 0 && attempt < maxAttempts)
-                Thread.Sleep((int)retryDelayMs);
+            {
+                if (_ct.CanBeCanceled)
+                {
+                    _ct.WaitHandle.WaitOne((int)retryDelayMs);
+                    _ct.ThrowIfCancellationRequested();
+                }
+                else
+                {
+                    Thread.Sleep((int)retryDelayMs);
+                }
+            }
 
             if (attempt == maxAttempts)
             {
@@ -278,6 +288,62 @@ public sealed partial class VirtualMachine
 
         // Unreachable — loop always returns or throws on the last attempt.
         throw new RuntimeError("Internal error: retry exhausted without result.", span);
+    }
+
+    // ══════════════════════════ Timeout ══════════════════════════
+
+    private void ExecuteTimeout(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        int @base = frame.BaseSlot;
+        SourceSpan? span = GetCurrentSpan(ref frame);
+
+        // Read duration from R(A)
+        object? durationObj = _stack[@base + a].ToObject();
+        long timeoutMs;
+        if (durationObj is StashDuration sd)
+            timeoutMs = (long)sd.TotalMilliseconds;
+        else if (durationObj is long ms)
+            timeoutMs = ms;
+        else if (durationObj is double dms)
+            timeoutMs = (long)dms;
+        else
+            throw new RuntimeError("Timeout duration must be a duration or number of milliseconds.", span);
+
+        if (timeoutMs <= 0)
+            throw new RuntimeError("Timeout duration must be positive.", span);
+
+        // Body closure at R(A+1)
+        object? bodyObj = _stack[@base + a + 1].ToObject();
+        VMFunction bodyFn = bodyObj as VMFunction
+            ?? throw new RuntimeError("Timeout body must be a function.", span);
+
+        // Create a CancellationTokenSource linked to the outer _ct with the timeout applied
+        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(_ct);
+        timeoutCts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
+
+        // Swap in the timeout-aware token for the duration of the body
+        CancellationToken oldCt = _ct;
+        _ct = timeoutCts.Token;
+        _context.SetCancellationToken(timeoutCts.Token);
+
+        try
+        {
+            StashValue result = ExecuteVMFunctionInlineDirect(bodyFn, ReadOnlySpan<StashValue>.Empty, span);
+            _stack[@base + a] = result;
+        }
+        catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !oldCt.IsCancellationRequested)
+        {
+            // The timeout fired — not an external cancellation
+            throw new RuntimeError(
+                $"Operation timed out after {timeoutMs}ms.",
+                span, "TimeoutError");
+        }
+        finally
+        {
+            _ct = oldCt;
+            _context.SetCancellationToken(oldCt);
+        }
     }
 
     // ══════════════════════════ Numeric For ══════════════════════════

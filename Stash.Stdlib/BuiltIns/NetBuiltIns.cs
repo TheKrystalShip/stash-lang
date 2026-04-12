@@ -168,7 +168,7 @@ public static class NetBuiltIns
         }, returnType: "PingResult", documentation: "Sends an ICMP ping to a host and returns the result. On Linux, requires root or CAP_NET_RAW capability.\n@param host The IP address to ping.\n@return A PingResult with alive, latency, and ttl fields.");
 
         // net.isPortOpen(host, port, ?timeout) — Checks if a TCP port is open on a host.
-        ns.Function("isPortOpen", [Param("host", "string|ip"), Param("port", "int"), Param("timeout", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("isPortOpen", [Param("host", "string|ip"), Param("port", "int"), Param("timeout", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("net.isPortOpen: expected 2 or 3 arguments.");
@@ -180,7 +180,8 @@ public static class NetBuiltIns
 
             try
             {
-                using var cts = new CancellationTokenSource(timeout);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+                cts.CancelAfter(timeout);
                 using var client = new TcpClient();
                 if (hostArg is StashIpAddress ip)
                     client.ConnectAsync(ip.Address, (int)port, cts.Token).GetAwaiter().GetResult();
@@ -191,6 +192,7 @@ public static class NetBuiltIns
                 return StashValue.FromBool(client.Connected);
             }
             catch (RuntimeError) { throw; }
+            catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
             catch
             {
                 return StashValue.False;
@@ -214,7 +216,7 @@ public static class NetBuiltIns
         }, returnType: "InterfaceInfo", documentation: "Returns information about a specific network interface.\n@param name The interface name (e.g., \"eth0\", \"wlan0\").\n@return An InterfaceInfo struct.");
 
         // net.tcpConnect(host, port, ?timeout) — Creates a TCP connection. Returns a TcpConnection struct.
-        ns.Function("tcpConnect", [Param("host", "string"), Param("port", "int"), Param("timeout", "int")], (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("tcpConnect", [Param("host", "string"), Param("port", "int"), Param("timeout", "int")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("net.tcpConnect: expected 2 or 3 arguments.");
@@ -226,7 +228,8 @@ public static class NetBuiltIns
 
             try
             {
-                using var cts = new CancellationTokenSource(timeout);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+                cts.CancelAfter(timeout);
                 var client = new TcpClient();
                 client.ConnectAsync(host, (int)port, cts.Token).GetAwaiter().GetResult();
                 int localPort = ((IPEndPoint)client.Client.LocalEndPoint!).Port;
@@ -240,6 +243,7 @@ public static class NetBuiltIns
                 return StashValue.FromObj(conn);
             }
             catch (RuntimeError) { throw; }
+            catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 throw new RuntimeError($"net.tcpConnect: failed to connect to '{host}:{port}': {ex.Message}");
@@ -375,7 +379,7 @@ public static class NetBuiltIns
         }, returnType: "int", documentation: "Sends a UDP datagram to a host and port.\n@param host The destination hostname or IP address.\n@param port The destination port (1-65535).\n@param data The string data to send.\n@return The number of bytes sent.");
 
         // net.udpRecv(port, ?timeout) — Listens for one UDP datagram on a port.
-        ns.Function("udpRecv", [Param("port", "int"), Param("timeout", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        ns.Function("udpRecv", [Param("port", "int"), Param("timeout", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("net.udpRecv: expected 1 or 2 arguments.");
@@ -387,11 +391,9 @@ public static class NetBuiltIns
             try
             {
                 using var udp = new UdpClient((int)port);
-                using var cts = new CancellationTokenSource(timeout);
-                var receiveTask = udp.ReceiveAsync(cts.Token).AsTask();
-                if (!receiveTask.Wait(timeout))
-                    throw new RuntimeError($"net.udpRecv: timed out waiting for datagram on port {port}.");
-                var result = receiveTask.GetAwaiter().GetResult();
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+                cts.CancelAfter(timeout);
+                var result = udp.ReceiveAsync(cts.Token).AsTask().GetAwaiter().GetResult();
                 string data = Encoding.UTF8.GetString(result.Buffer);
                 string senderHost = result.RemoteEndPoint.Address.ToString();
                 int senderPort = result.RemoteEndPoint.Port;
@@ -403,6 +405,7 @@ public static class NetBuiltIns
                 }));
             }
             catch (RuntimeError) { throw; }
+            catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
                 throw new RuntimeError($"net.udpRecv: receive failed: {ex.Message}");
