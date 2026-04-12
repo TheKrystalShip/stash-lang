@@ -126,6 +126,14 @@ public static class SvArgs
         throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a {typeName} enum value.");
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StashSecret Secret(ReadOnlySpan<StashValue> args, int index, string funcName)
+    {
+        StashValue v = args[index];
+        if (v.IsObj && v.AsObj is StashSecret sec) return sec;
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a secret.");
+    }
+
     /// <summary>
     /// Returns the raw StashValue at the given index — for functions that accept any type.
     /// </summary>

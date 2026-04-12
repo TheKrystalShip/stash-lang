@@ -32,6 +32,7 @@ public static class GlobalBuiltIns
                 null => "null",
                 string => "string",
                 List<StashValue> => "array",
+                StashSecret => "secret",
                 StashError => "Error",
                 StashInstance => "struct",
                 StashStruct => "struct",
@@ -79,6 +80,7 @@ public static class GlobalBuiltIns
                 null => "null",
                 string => "string",
                 List<StashValue> => "array",
+                StashSecret => "secret",
                 StashError => "Error",
                 StashInstance inst => inst.TypeName,
                 StashStruct s => s.Name,
@@ -101,6 +103,14 @@ public static class GlobalBuiltIns
             if (val.IsObj)
             {
                 object? obj = val.AsObj;
+                if (obj is StashSecret sec)
+                {
+                    object? inner = sec.InnerValue.IsObj ? sec.InnerValue.AsObj : null;
+                    if (inner is string innerStr) return StashValue.FromInt((long)innerStr.Length);
+                    if (inner is List<StashValue> innerList) return StashValue.FromInt((long)innerList.Count);
+                    if (inner is StashDictionary innerDict) return StashValue.FromInt((long)innerDict.Count);
+                    throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
+                }
                 if (obj is string s) return StashValue.FromInt((long)s.Length);
                 if (obj is List<StashValue> svList) return StashValue.FromInt((long)svList.Count);
                 if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
@@ -174,6 +184,21 @@ public static class GlobalBuiltIns
             if (args[0].IsNull) return StashValue.FromInt(0L);
             return StashValue.FromInt((long)args[0].ToObject()!.GetHashCode());
         }, returnType: "int");
+
+        b.Function("secret", [Param("value")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            return StashValue.FromObj(new StashSecret(args[0]));
+        }, returnType: "secret", documentation: "Wraps a value as a secret. Secrets auto-redact when printed or interpolated.\n@param value The value to protect.\n@return A secret-wrapped value.");
+
+        b.Function("reveal", [Param("value", "secret")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            StashValue val = args[0];
+            if (val.IsObj && val.AsObj is StashSecret sec)
+            {
+                return sec.Reveal();
+            }
+            throw new RuntimeError("Argument to 'reveal' must be a secret.");
+        }, returnType: "any", documentation: "Unwraps a secret value, returning the real underlying value.\n@param value The secret to unwrap.\n@return The original value.");
 
         // Enums
         b.Enum("Backoff", ["Fixed", "Linear", "Exponential"]);

@@ -60,7 +60,8 @@ internal static class RuntimeOps
         StashValueTag.Bool => value.AsBool ? "true" : "false",
         StashValueTag.Int => value.AsInt.ToString(),
         StashValueTag.Float => value.AsFloat.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        StashValueTag.Obj => value.AsObj is string s ? s : RuntimeValues.Stringify(value.AsObj),
+        StashValueTag.Obj => value.AsObj is StashSecret ? StashSecret.RedactedText
+            : value.AsObj is string s ? s : RuntimeValues.Stringify(value.AsObj),
         _ => "null",
     };
 
@@ -81,6 +82,14 @@ internal static class RuntimeOps
         // String concatenation — if either side is a string
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
+        // Secret taint propagation — any concat involving a secret produces a secret
+        if (lObj is StashSecret || rObj is StashSecret)
+        {
+            StashValue realL = lObj is StashSecret secL ? secL.InnerValue : left;
+            StashValue realR = rObj is StashSecret secR ? secR.InnerValue : right;
+            string concatResult = string.Concat(Stringify(realL), Stringify(realR));
+            return StashValue.FromObj(new StashSecret(StashValue.FromObj(concatResult)));
+        }
         if (lObj is string ls && rObj is string rs)
         {
             return StashValue.FromObj(string.Concat(ls, rs));

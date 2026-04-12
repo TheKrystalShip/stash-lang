@@ -616,6 +616,46 @@ if (deployed in @v2.x && deployed >= @v2.4.0) {
 }
 ```
 
+### Secret
+
+The `secret` type wraps any value and auto-redacts it when converted to a string. This prevents accidental credential leakage through `println()`, string interpolation, error messages, and log output.
+
+**Creating secrets:**
+```stash
+let apiKey = secret("sk-abc123def456");
+let dbPassword = secret(env.get("DB_PASS"));
+```
+
+**Auto-redaction:**
+```stash
+println(apiKey);                    // prints: ******
+println("Key: ${apiKey}");          // prints: Key: ******
+```
+
+**Taint propagation:** String concatenation involving a secret produces a new secret:
+```stash
+let header = "Bearer " + apiKey;    // header is also a secret
+typeof(header);                     // "secret"
+println(header);                    // prints: ******
+```
+
+**Unwrapping with `reveal()`:** When the real value is needed (e.g., for HTTP requests or writing to authorized destinations), use `reveal()`:
+```stash
+let raw = reveal(apiKey);           // returns the original string
+```
+
+**Type operations:**
+```stash
+typeof(apiKey);                     // "secret"
+apiKey is secret;                   // true
+len(apiKey);                        // returns length of the underlying value
+```
+
+**Design notes:**
+- `secret(secret(value))` does not double-wrap — the inner value is preserved.
+- Comparison (`==`, `!=`) and `len()` operate on the underlying value.
+- The goal is preventing *accidental* leakage, not adversarial extraction. Memory dumps can still access the raw value.
+
 ### Type Coercion & Truthiness
 
 **Truthiness:** The following values are **falsy**: `false`, `null`, `0` (integer zero), `0.0` (float zero), `""` (empty string), and **error values** (see [Section 7b](#7b-error-handling)). All other values are **truthy** (including empty arrays and struct instances).

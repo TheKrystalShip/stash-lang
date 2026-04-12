@@ -86,6 +86,7 @@ public static partial class StdlibRegistry
         ["namespace"] = new("namespace", "Namespace type. Built-in module namespaces like `io`, `fs`."),
         ["Error"] = new("Error", "Error type. Returned by `try` on failure. Has `.message`, `.type`, and `.stack` fields."),
         ["Future"] = new("Future", "Represents an asynchronous computation that may not have completed yet. Returned by async functions. Use `await` to get the resolved value."),
+        ["secret"] = new("secret", "Secret type. Auto-redacts when printed or interpolated. Use `reveal()` to access the underlying value."),
         ["RetryOptions"] = new("RetryOptions", "Options for `retry` blocks. Fields: `delay` (duration), `backoff` (Backoff), `maxDelay` (duration), `jitter` (bool), `timeout` (duration), `on` (array of error type names)."),
         ["RetryContext"] = new("RetryContext", "Attempt context available inside `retry` blocks via `attempt`. Fields: `current` (int), `max` (int), `remaining` (int), `elapsed` (duration), `errors` (array)."),
         ["Backoff"] = new("Backoff", "Backoff strategy enum for `retry` blocks. Members: `Fixed`, `Linear`, `Exponential`."),

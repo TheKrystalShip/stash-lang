@@ -60,6 +60,26 @@ Namespaces are first-class values — `typeof(fs)` returns `"namespace"`. Assign
 | `nameof(val)` | Return the declared name of a value — struct/enum/interface names instead of meta-type string |
 | `len(val)`    | Length of a string or array                                                                   |
 | `lastError()` | Last error value (Error object with `.message`, `.type`, `.stack`) or null                    |
+| `secret(val)` | Wrap a value as a secret — auto-redacts when printed, interpolated, or concatenated           |
+| `reveal(val)` | Unwrap a secret, returning the real underlying value                                          |
+
+#### `secret(value) -> secret`
+
+Wraps a value as a secret. Secrets auto-redact when printed, interpolated, or concatenated with strings. Wrapping a secret in `secret()` does not double-wrap — the inner value is preserved.
+
+```stash
+let apiKey = secret("sk-abc123def456");
+io.println(apiKey);    // ******
+```
+
+#### `reveal(value: secret) -> any`
+
+Unwraps a secret value, returning the real underlying value. Use this when the actual value is needed (e.g., for HTTP requests).
+
+```stash
+let key = secret("abc123");
+let raw = reveal(key);    // "abc123"
+```
 
 ---
 

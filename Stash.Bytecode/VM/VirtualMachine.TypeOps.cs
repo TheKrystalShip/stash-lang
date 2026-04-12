@@ -15,7 +15,7 @@ public sealed partial class VirtualMachine
     private static readonly HashSet<string> _knownTypeNames = new(StringComparer.Ordinal)
     {
         "int", "float", "string", "bool", "array", "dict", "null", "function",
-        "range", "duration", "bytes", "semver", "ip", "Error", "struct", "enum",
+        "range", "duration", "bytes", "semver", "secret", "ip", "Error", "struct", "enum",
         "interface", "namespace", "Future"
     };
 
@@ -50,6 +50,7 @@ public sealed partial class VirtualMachine
         "duration"  => value is StashDuration,
         "bytes"     => value is StashByteSize,
         "semver"    => value is StashSemVer,
+        "secret"    => value is StashSecret,
         "ip"        => value is StashIpAddress,
         "Error"     => value is StashError,
         "struct"    => value is StashInstance,
@@ -333,6 +334,7 @@ public sealed partial class VirtualMachine
             StashDuration       => "duration",
             StashByteSize       => "bytes",
             StashSemVer         => "semver",
+            StashSecret         => "secret",
             StashIpAddress      => "ip",
             StashError          => "Error",
             StashInstance si    => si.TypeName,

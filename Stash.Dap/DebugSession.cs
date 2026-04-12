@@ -1818,6 +1818,11 @@ public class DebugSession : IDebugger
                 displayValue = $"<interface {iface.Name}> ({iface.RequiredFields.Count} field(s), {iface.RequiredMethods.Count} method(s))";
                 break;
 
+            case StashSecret:
+                type = "secret";
+                displayValue = StashSecret.RedactedText;
+                break;
+
             default:
                 type = value.GetType().Name;
                 displayValue = RuntimeValues.Stringify(value);

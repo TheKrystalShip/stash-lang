@@ -28,7 +28,7 @@ function registerStashLanguage() {
             'test', 'assert'
         ],
 
-        builtinFunctions: ['println', 'print', 'input', 'sleep', 'exit', 'error'],
+        builtinFunctions: ['println', 'print', 'input', 'sleep', 'exit', 'error', 'secret', 'reveal'],
 
         operators: [
             '??=', '&&', '||', '??', '?.', '=>', '...', '..', '|>',
@@ -93,7 +93,7 @@ function registerStashLanguage() {
                 [/\battempt\b/, 'variable.language'],
 
                 // is TYPE pattern
-                [/\b(is\s+)(int|float|string|bool|null|array|dict|struct|enum|function|range|namespace|Error|duration|bytes|ip|semver|Future)\b/, ['keyword', 'type']],
+                [/\b(is\s+)(int|float|string|bool|null|array|dict|struct|enum|function|range|namespace|Error|duration|bytes|ip|semver|Future|secret)\b/, ['keyword', 'type']],
 
                 // Identifiers and keywords
                 [/\b[a-zA-Z_]\w*(?=\s*\()/, {

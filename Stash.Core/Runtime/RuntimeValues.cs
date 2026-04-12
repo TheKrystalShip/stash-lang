@@ -58,6 +58,11 @@ public static class RuntimeValues
             return "null";
         }
 
+        if (value is StashSecret)
+        {
+            return StashSecret.RedactedText;
+        }
+
         if (value is bool b)
         {
             return b ? "true" : "false";
