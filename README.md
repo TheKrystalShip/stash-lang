@@ -34,6 +34,7 @@ A dynamically typed scripting language for system administration. Stash combines
 - **Interfaces and structural contracts.** Define with `interface`, check with `is`, extend any type with `extend` blocks.
 - **UFCS.** Call any function as a method on its first argument: `nums.sort()` instead of `arr.sort(nums)`.
 - **Rich literals.** Durations (`5s`), byte sizes (`1.5GB`), semver (`@v1.2.3`), IP addresses (`@192.168.1.0/24`), hex/octal/binary numbers.
+- **Time-bounded execution.** `timeout 5s { ... }` cancels any operation — HTTP requests, shell commands, sleep, I/O — when the deadline expires. Composable with `try` and `retry`. No other scripting language has this as a language primitive.
 - **System administration built-in.** `elevate` for privilege escalation, `retry` for transient failures, signal handling, file watching, SSH/SFTP.
 - **29 stdlib namespaces, ~376 functions.** HTTP, crypto, YAML, TOML, JSON, INI, templating, encoding, networking, and more — all cross-platform.
 - **Full toolchain.** LSP, DAP, static analyzer (63 rules), formatter, TAP test runner, browser playground — no external tools required.
@@ -203,9 +204,24 @@ io.println(m.namedGroups["month"]);  // "04"
 #### System Administration
 
 ```stash
-// Retry with exponential backoff
+// Time-bounded execution — cancels anything when the deadline expires
+let data = timeout 30s {
+  http.get("https://api.example.com/large-dataset");
+};
+
+// Compose with try for safe error handling
+let result = try timeout 5s {
+  $(curl -sf https://api.example.com/health).stdout;
+};
+if (result is Error) {
+  io.eprintln("Request timed out: " + result.message);
+}
+
+// Compose with retry for resilient operations
 retry (maxAttempts: 3, delay: 2s, backoff: Backoff.Exponential) {
-  $!(curl -f https://api.example.com/deploy);
+  timeout 10s {
+    $!(curl -f https://api.example.com/deploy);
+  }
 }
 
 // Privilege escalation (sudo / gsudo)
