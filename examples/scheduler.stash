@@ -1,0 +1,55 @@
+// Stash Scheduler — OS Service Management
+// Demonstrates installing and managing OS services from Stash scripts
+
+// Check if the service manager is available on this platform
+
+if (!scheduler.available()) {
+  io.println("Service manager not available on this platform.");
+  process.exit(1);
+}
+// Define a periodic health check service
+
+let healthCheck = scheduler.ServiceDef {
+  name: "health-check",
+  scriptPath: "./health_check.stash",
+  schedule: "*/5 * * * *",
+  description: "API health check every 5 minutes",
+  restartOnFailure: true,
+  maxRestarts: 5,
+  restartDelaySec: 10,
+  system: false
+};
+// Install the service
+
+scheduler.install(healthCheck);
+io.println("Service installed!");
+// Check status
+
+let status = scheduler.status("health-check");
+io.println("Status: " + status.state);
+io.println("Schedule: " + status.schedule);
+// List all services
+
+let services = scheduler.list();
+for (let svc in services) {
+  io.println(svc.name + " - " + svc.state);
+}
+// Read logs
+
+let logs = scheduler.logs("health-check", 20);
+for (let line in logs) {
+  io.println(line);
+}
+// Manage lifecycle
+
+scheduler.stop("health-check");
+scheduler.start("health-check");
+scheduler.restart("health-check");
+// Enable/disable auto-start
+
+scheduler.disable("health-check");
+scheduler.enable("health-check");
+// Clean up
+
+scheduler.uninstall("health-check");
+io.println("Service uninstalled!");

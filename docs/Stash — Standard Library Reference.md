@@ -42,6 +42,7 @@
 26. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
 27. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
 28. [Argument Parsing](#argument-parsing)
+29. [`scheduler` — OS Service Management](#scheduler--os-service-management)
 
 ---
 
@@ -3455,6 +3456,155 @@ When omitted, the runtime uses all available processor cores. Set `maxConcurrenc
 | Mutable objects     | Each task gets its own copy   | No\*  |
 
 \* Mutations are safe within each task's copy, but changes are not visible to other tasks or the caller.
+
+---
+
+## `scheduler` — OS Service Management
+
+The `scheduler` namespace provides cross-platform OS service management, enabling Stash scripts to install, manage, and monitor services through systemd (Linux), launchd (macOS), and Task Scheduler (Windows).
+
+### Quick Reference
+
+| Function                              | Description                                     |
+| ------------------------------------- | ----------------------------------------------- |
+| `scheduler.install(def)`              | Install a Stash script as an OS-managed service |
+| `scheduler.uninstall(name, system?)`  | Remove an installed service                     |
+| `scheduler.start(name, system?)`      | Start a stopped service                         |
+| `scheduler.stop(name, system?)`       | Stop a running service                          |
+| `scheduler.restart(name, system?)`    | Restart a service                               |
+| `scheduler.enable(name, system?)`     | Enable auto-start on boot                       |
+| `scheduler.disable(name, system?)`    | Disable auto-start on boot                      |
+| `scheduler.status(name, system?)`     | Get detailed service status                     |
+| `scheduler.list(system?)`             | List all Stash-managed services                 |
+| `scheduler.logs(name, lines?, date?)` | Read service log lines                          |
+| `scheduler.available()`               | Check if the OS service manager is available    |
+
+### Types
+
+#### `scheduler.ServiceDef`
+
+```stash
+struct ServiceDef {
+    name: string,
+    scriptPath: string,
+    description: string,
+    schedule: string,
+    workingDir: string,
+    env: dict,
+    user: string,
+    autoStart: bool,
+    restartOnFailure: bool,
+    maxRestarts: int,
+    restartDelaySec: int,
+    platformExtras: dict,
+    system: bool
+}
+```
+
+#### `scheduler.ServiceStatus`
+
+```stash
+struct ServiceStatus {
+    name: string,
+    state: string,
+    schedule: string,
+    scriptPath: string,
+    workingDir: string,
+    user: string,
+    lastRunTime: string,
+    nextRunTime: string,
+    lastExitCode: int,
+    restartCount: int,
+    mode: string,
+    platform: string
+}
+```
+
+#### `scheduler.ServiceInfo`
+
+```stash
+struct ServiceInfo {
+    name: string,
+    state: string,
+    schedule: string,
+    lastRunTime: string,
+    nextRunTime: string
+}
+```
+
+### scheduler.install(def)
+
+Installs a Stash script as an OS-managed service. Accepts a `ServiceDef` struct and delegates to the platform-native service manager (systemd, launchd, or Windows Task Scheduler).
+
+```stash
+let svc = scheduler.ServiceDef {
+    name: "my-service",
+    scriptPath: "/opt/scripts/worker.stash",
+    description: "Background worker",
+    schedule: "*/10 * * * *",
+    restartOnFailure: true,
+    maxRestarts: 3,
+    restartDelaySec: 5,
+    system: false
+}
+scheduler.install(svc)
+```
+
+### scheduler.uninstall(name, system?)
+
+Removes an installed service and all its generated artifacts (unit files, plist, scheduled task). The optional `system` boolean (default `false`) selects system-wide vs. user-mode management.
+
+### scheduler.start(name, system?) / scheduler.stop(name, system?) / scheduler.restart(name, system?)
+
+Starts, stops, or restarts a named service. Throws a `RuntimeError` if the operation fails.
+
+### scheduler.enable(name, system?) / scheduler.disable(name, system?)
+
+Enables or disables a service's auto-start behaviour on system/user login.
+
+### scheduler.status(name, system?)
+
+Returns a `ServiceStatus` struct with detailed information about the service.
+
+```stash
+let s = scheduler.status("my-service")
+io.println(s.state)        // "running", "stopped", "failed", etc.
+io.println(s.restartCount) // number of automatic restarts
+```
+
+### scheduler.list(system?)
+
+Returns an array of `ServiceInfo` structs for all Stash-managed services on the current platform.
+
+```stash
+let svcs = scheduler.list()
+for s in svcs {
+    io.println(s.name + " [" + s.state + "]")
+}
+```
+
+### scheduler.logs(name, lines?, date?)
+
+Returns an array of strings containing the most recent log lines (default 50). Pass a `date` string in `YYYY-MM-DD` format to read from a rotated log file.
+
+```stash
+let lines = scheduler.logs("my-service", 100)
+for line in lines {
+    io.println(line)
+}
+```
+
+### scheduler.available()
+
+Returns `true` if the current platform has a supported and reachable service manager. Useful for graceful cross-platform scripts.
+
+```stash
+if scheduler.available() {
+    scheduler.install(myServiceDef)
+} else {
+    io.println("Unsupported platform — skipping service installation.")
+}
+```
 
 ---
 
