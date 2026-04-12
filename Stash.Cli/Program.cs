@@ -42,6 +42,7 @@ public class Program
     private static VirtualMachine? _activeVM;
     private static bool _optimize = true;
     private static bool _disassemble = false;
+    private const string Version = "0.5.0";
     /// <summary>Parses CLI arguments and dispatches to the appropriate execution mode.</summary>
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
@@ -57,6 +58,19 @@ public class Program
         if (args.Length > 0 && args[0] is "service" or "svc")
         {
             Stash.Cli.ServiceManager.ServiceCommands.Run(args[1..]);
+            return;
+        }
+
+        // Early exit flags
+        if (args.Length > 0 && args[0] is "--help" or "-h")
+        {
+            PrintHelp();
+            return;
+        }
+
+        if (args.Length > 0 && args[0] is "--version" or "-v")
+        {
+            Console.WriteLine($"stash {Version}");
             return;
         }
 
@@ -142,6 +156,13 @@ public class Program
                 // Everything after -- becomes script args (for stdin piping)
                 scriptArgStart = i + 1;
                 break;
+            }
+            else if (args[i].StartsWith('-') && scriptPath is null && commandString is null)
+            {
+                Console.Error.WriteLine($"Error: Unknown option '{args[i]}'.");
+                Console.Error.WriteLine("Run 'stash --help' for usage information.");
+                System.Environment.Exit(64);
+                return;
             }
             else if (scriptPath is null && commandString is null)
             {
@@ -300,6 +321,52 @@ public class Program
     /// <param name="source">The source code to execute.</param>
     /// <param name="sourceName">Diagnostic name for the source (e.g., "&lt;command&gt;" or "&lt;stdin&gt;").</param>
     /// <param name="scriptArgs">Arguments to pass to the script.</param>
+    private static void PrintHelp()
+    {
+        Console.WriteLine($"Stash v{Version} \u2014 A scripting language for system administration");
+        Console.WriteLine();
+        Console.WriteLine("Usage:");
+        Console.WriteLine("  stash [options] [script.stash] [args...]");
+        Console.WriteLine("  stash -c '<code>' [args...]");
+        Console.WriteLine("  stash pkg <command> [options]");
+        Console.WriteLine("  stash service <command> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  -h, --help                Show this help message");
+        Console.WriteLine("  -v, --version             Show version information");
+        Console.WriteLine("  -c, --command <code>      Execute code from argument");
+        Console.WriteLine("      --test                Run script with TAP test harness");
+        Console.WriteLine("      --test-list           List test names without running");
+        Console.WriteLine("      --test-filter=<pat>   Filter tests by semicolon-separated names");
+        Console.WriteLine("      --debug               Run script with debugger attached");
+        Console.WriteLine("      --compile             Compile script to .stashc bytecode");
+        Console.WriteLine("      --strip               Strip debug info from compiled bytecode");
+        Console.WriteLine("      --verify              Verify bytecode file integrity");
+        Console.WriteLine("      --disassemble         Print bytecode disassembly");
+        Console.WriteLine("      --no-optimize         Disable bytecode optimizations");
+        Console.WriteLine("  -o, --output <path>       Output path for compiled bytecode");
+        Console.WriteLine();
+        Console.WriteLine("Subcommands:");
+        Console.WriteLine("  pkg, p                    Package manager (stash pkg --help)");
+        Console.WriteLine("  service, svc              Service manager (stash service --help)");
+        Console.WriteLine();
+        Console.WriteLine("Modes:");
+        Console.WriteLine("  stash                     Start interactive REPL");
+        Console.WriteLine("  stash <file.stash>        Execute a Stash script");
+        Console.WriteLine("  stash <file.stashc>       Execute compiled bytecode");
+        Console.WriteLine("  stash -c '<code>'         Execute code string");
+        Console.WriteLine("  echo '<code>' | stash     Execute code from stdin");
+        Console.WriteLine();
+        Console.WriteLine("Examples:");
+        Console.WriteLine("  stash script.stash                Run a script");
+        Console.WriteLine("  stash -c 'io.println(\"hello\")'    Execute inline code");
+        Console.WriteLine("  stash --test tests.stash          Run tests in a file");
+        Console.WriteLine("  stash --compile app.stash         Compile to app.stashc");
+        Console.WriteLine("  stash pkg install                 Install package dependencies");
+        Console.WriteLine();
+        Console.WriteLine("Documentation: https://stash-lang.dev/docs");
+    }
+
     private static void RunSource(string source, string sourceName, string[] scriptArgs, bool disassemble = false)
     {
         // Stage 1: Lex
@@ -706,7 +773,7 @@ public class Program
     /// <summary>Starts the interactive REPL.</summary>
     private static void RunRepl()
     {
-        Console.WriteLine("Stash v0.5 — Type statements or expressions, or 'exit' to quit.");
+        Console.WriteLine($"Stash v{Version} \u2014 Type statements or expressions, or 'exit' to quit.");
 
         var editor = new LineEditor();
 
