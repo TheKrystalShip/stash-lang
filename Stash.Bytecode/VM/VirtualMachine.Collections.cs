@@ -89,7 +89,6 @@ public sealed partial class VirtualMachine
         throw new RuntimeError($"Cannot index-assign into {RuntimeValues.Stringify(obj)}.", GetCurrentSpan(ref frame));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteGetTable(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -118,7 +117,6 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObject(GetIndexValue(obj.ToObject(), idx.ToObject(), ref frame));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteSetTable(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -147,7 +145,6 @@ public sealed partial class VirtualMachine
         SetIndexValue(obj.ToObject(), idx.ToObject(), val.ToObject(), ref frame);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteGetField(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -204,6 +201,14 @@ public sealed partial class VirtualMachine
             // Guard mismatch → megamorphic
             ic.State = 2;
         }
+
+        ExecuteGetFieldICSlow(ref frame, a, b, c, icIdx, @base, objVal);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteGetFieldICSlow(ref CallFrame frame, byte a, byte b, byte c, int icIdx, int @base, StashValue objVal)
+    {
+        ref ICSlot ic = ref frame.Chunk.ICSlots![icIdx];
 
         // IC slow path: full lookup + populate/transition
         string fieldName = (string)frame.Chunk.Constants[c].AsObj!;
@@ -298,6 +303,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObject(method);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteNewArray(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -322,6 +328,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(list);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteNewDict(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -365,6 +372,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(dict);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteNewRange(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -394,6 +402,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(new StashRange(start, end, step));
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteSpread(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -403,6 +412,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(new SpreadMarker(iterable!));
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteDestructure(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

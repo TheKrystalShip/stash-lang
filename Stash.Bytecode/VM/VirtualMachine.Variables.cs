@@ -10,7 +10,6 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed partial class VirtualMachine
 {
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteGetGlobal(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -41,7 +40,6 @@ public sealed partial class VirtualMachine
         throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteSetGlobal(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -67,7 +65,6 @@ public sealed partial class VirtualMachine
         }
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteInitConstGlobal(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

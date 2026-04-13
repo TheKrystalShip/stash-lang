@@ -93,7 +93,7 @@ public sealed partial class VirtualMachine
     }
 
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteAwait(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

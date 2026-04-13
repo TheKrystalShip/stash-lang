@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Debugging;
 using Stash.Lexing;
@@ -296,6 +297,7 @@ public sealed partial class VirtualMachine
         throw new RuntimeError($"Package '{packageName}' has no entry point (no index.stash or main field).", span);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteImport(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -320,6 +322,7 @@ public sealed partial class VirtualMachine
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteImportAs(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

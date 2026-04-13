@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -62,6 +63,7 @@ public sealed partial class VirtualMachine
                      : value is StashInstance inst && inst.TypeName == typeName,
     };
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteIs(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -133,6 +135,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromBool(result);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteStructDecl(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -197,6 +200,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(structDef);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteEnumDecl(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -209,6 +213,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(enumDef);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteIfaceDecl(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -222,6 +227,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(interfaceDef);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteExtend(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -263,6 +269,7 @@ public sealed partial class VirtualMachine
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteNewStruct(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -315,6 +322,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(new StashInstance(structDef.Name, structDef, fieldSlots));
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteTypeOf(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

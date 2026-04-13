@@ -13,6 +13,7 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed partial class VirtualMachine
 {
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteCommand(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -114,6 +115,7 @@ public sealed partial class VirtualMachine
         }
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecutePipe(ref CallFrame frame, uint inst)
     {
         // ABC: R(A) = pipe(R(B), R(C)) — both sides already evaluated
@@ -134,6 +136,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = _stack[@base + c]; // result is the right side
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteRedirect(ref CallFrame frame, uint inst)
     {
         // ABC: Redirect R(A) stream (B=flags) to file R(C); result back in R(A)
@@ -188,7 +191,7 @@ public sealed partial class VirtualMachine
         _stack[@base + a] = StashValue.FromObj(new StashInstance("CommandResult", newFields) { StringifyField = "stdout" });
     }
 
-    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteInterpolate(ref CallFrame frame, uint inst)
     {
         // ABC: R(A) = interpolate B parts from R(A+1)..R(A+B)

@@ -15,6 +15,7 @@ public sealed partial class VirtualMachine
 {
     // ══════════════════════════ Exception Handling ══════════════════════════
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteThrow(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -65,7 +66,7 @@ public sealed partial class VirtualMachine
 
     // ══════════════════════════ Switch ══════════════════════════
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteSwitch(ref CallFrame frame, uint inst)
     {
         // Switch is compiled to basic comparison + jump opcodes; this opcode is a no-op.
@@ -74,6 +75,7 @@ public sealed partial class VirtualMachine
 
     // ══════════════════════════ Elevation ══════════════════════════
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteElevateBegin(ref CallFrame frame, uint inst)
     {
         if (_context.EmbeddedMode)
@@ -100,6 +102,7 @@ public sealed partial class VirtualMachine
 
     // ══════════════════════════ Retry ══════════════════════════
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteRetry(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -292,6 +295,7 @@ public sealed partial class VirtualMachine
 
     // ══════════════════════════ Timeout ══════════════════════════
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteTimeout(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

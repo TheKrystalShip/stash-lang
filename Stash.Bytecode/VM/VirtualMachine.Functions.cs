@@ -355,6 +355,62 @@ public sealed partial class VirtualMachine
         return StashValue.FromObject(result);
     }
 
+    /// <summary>
+    /// Validates argument count and handles rest parameters and default argument padding
+    /// in the register window starting at newBase.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ValidateAndPadArgsRegWindow(
+        Chunk fnChunk, int provided, int newBase,
+        SourceSpan? callSpan, int arityDisplayAdjust = 0)
+    {
+        int expected = fnChunk.Arity;
+        int minArity = fnChunk.MinArity;
+
+        if (fnChunk.HasRestParam)
+        {
+            int nonRestCount = expected - 1;
+            int minRequired = Math.Min(minArity, nonRestCount);
+
+            if (provided < minRequired)
+                throw new RuntimeError(
+                    $"Expected at least {minRequired - arityDisplayAdjust} arguments but got {provided - arityDisplayAdjust}.",
+                    callSpan);
+
+            if (provided < nonRestCount)
+            {
+                for (int i = provided; i < nonRestCount; i++)
+                    _stack[newBase + i] = StashValue.FromObj(NotProvided);
+                provided = nonRestCount;
+            }
+
+            int restCount = Math.Max(0, provided - nonRestCount);
+            var restList = new List<StashValue>(restCount);
+            for (int i = nonRestCount; i < provided; i++)
+                restList.Add(_stack[newBase + i]);
+            _stack[newBase + nonRestCount] = StashValue.FromObj(restList);
+        }
+        else
+        {
+            if (provided < minArity || provided > expected)
+            {
+                string expectedStr = minArity == expected
+                    ? $"{expected - arityDisplayAdjust}"
+                    : $"{minArity - arityDisplayAdjust} to {expected - arityDisplayAdjust}";
+                throw new RuntimeError(
+                    $"Expected {expectedStr} arguments but got {provided - arityDisplayAdjust}.",
+                    callSpan);
+            }
+
+            if (provided < expected)
+            {
+                for (int i = provided; i < expected; i++)
+                    _stack[newBase + i] = StashValue.FromObj(NotProvided);
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteCall<TDebugMode>(ref CallFrame frame, uint inst) where TDebugMode : struct
     {
         byte a = Instruction.GetA(inst);
@@ -379,50 +435,7 @@ public sealed partial class VirtualMachine
             }
             else
             {
-                int provided = argc;
-                int expected = fnChunk.Arity;
-                int minArity = fnChunk.MinArity;
-
-                if (fnChunk.HasRestParam)
-                {
-                    int nonRestCount = expected - 1;
-                    int minRequired = Math.Min(minArity, nonRestCount);
-                    if (provided < minRequired)
-                        throw new RuntimeError(
-                            $"Expected at least {minRequired} arguments but got {provided}.",
-                            callerSourceMap.GetSpan(callerIP));
-
-                    // Pad missing non-rest params in the register window.
-                    if (provided < nonRestCount)
-                    {
-                        for (int i = provided; i < nonRestCount; i++)
-                            _stack[newBase + i] = StashValue.FromObj(NotProvided);
-                        provided = nonRestCount;
-                    }
-
-                    // Collect rest args into a list, place it at the rest slot.
-                    int restCount = Math.Max(0, provided - nonRestCount);
-                    var restList = new List<StashValue>(restCount);
-                    for (int i = nonRestCount; i < provided; i++)
-                        restList.Add(_stack[newBase + i]);
-                    _stack[newBase + nonRestCount] = StashValue.FromObj(restList);
-                }
-                else
-                {
-                    if (provided < minArity || provided > expected)
-                    {
-                        string expectedStr = minArity == expected ? $"{expected}" : $"{minArity} to {expected}";
-                        throw new RuntimeError(
-                            $"Expected {expectedStr} arguments but got {provided}.",
-                            callerSourceMap.GetSpan(callerIP));
-                    }
-                    // Pad missing optional args in the register window.
-                    if (provided < expected)
-                    {
-                        for (int i = provided; i < expected; i++)
-                            _stack[newBase + i] = StashValue.FromObj(NotProvided);
-                    }
-                }
+                ValidateAndPadArgsRegWindow(fnChunk, argc, newBase, callerSourceMap.GetSpan(callerIP));
 
                 if (fnChunk.IsAsync)
                     _stack[@base + a] = StashValue.FromObject(SpawnAsyncFunction(
@@ -446,47 +459,7 @@ public sealed partial class VirtualMachine
                 _stack[newBase + i + 1] = _stack[newBase + i];
             _stack[newBase] = StashValue.FromObj(bound.Instance);
 
-            int provided = argc + 1;
-            int expected = fnChunk.Arity;
-            int minArity = fnChunk.MinArity;
-
-            if (fnChunk.HasRestParam)
-            {
-                int nonRestCount = expected - 1;
-                int minRequired = Math.Min(minArity, nonRestCount);
-                if (provided < minRequired)
-                    throw new RuntimeError(
-                        $"Expected at least {minRequired - 1} arguments but got {argc}.",
-                        callerSourceMap.GetSpan(callerIP));
-
-                if (provided < nonRestCount)
-                {
-                    for (int i = provided; i < nonRestCount; i++)
-                        _stack[newBase + i] = StashValue.FromObj(NotProvided);
-                    provided = nonRestCount;
-                }
-
-                int restCount = Math.Max(0, provided - nonRestCount);
-                var restList = new List<StashValue>(restCount);
-                for (int i = nonRestCount; i < provided; i++)
-                    restList.Add(_stack[newBase + i]);
-                _stack[newBase + nonRestCount] = StashValue.FromObj(restList);
-            }
-            else
-            {
-                if (provided < minArity || provided > expected)
-                {
-                    string expectedStr = minArity == expected ? $"{expected - 1}" : $"{minArity - 1} to {expected - 1}";
-                    throw new RuntimeError(
-                        $"Expected {expectedStr} arguments but got {argc}.",
-                        callerSourceMap.GetSpan(callerIP));
-                }
-                if (provided < expected)
-                {
-                    for (int i = provided; i < expected; i++)
-                        _stack[newBase + i] = StashValue.FromObj(NotProvided);
-                }
-            }
+            ValidateAndPadArgsRegWindow(fnChunk, argc + 1, newBase, callerSourceMap.GetSpan(callerIP), 1);
 
             if (fnChunk.IsAsync)
                 _stack[@base + a] = StashValue.FromObject(SpawnAsyncFunction(
@@ -507,47 +480,7 @@ public sealed partial class VirtualMachine
                 _stack[newBase + i + 1] = _stack[newBase + i];
             _stack[newBase] = StashValue.FromObject(extBound.Receiver);
 
-            int provided = argc + 1;
-            int expected = fnChunk.Arity;
-            int minArity = fnChunk.MinArity;
-
-            if (fnChunk.HasRestParam)
-            {
-                int nonRestCount = expected - 1;
-                int minRequired = Math.Min(minArity, nonRestCount);
-                if (provided < minRequired)
-                    throw new RuntimeError(
-                        $"Expected at least {minRequired - 1} arguments but got {argc}.",
-                        callerSourceMap.GetSpan(callerIP));
-
-                if (provided < nonRestCount)
-                {
-                    for (int i = provided; i < nonRestCount; i++)
-                        _stack[newBase + i] = StashValue.FromObj(NotProvided);
-                    provided = nonRestCount;
-                }
-
-                int restCount = Math.Max(0, provided - nonRestCount);
-                var restList = new List<StashValue>(restCount);
-                for (int i = nonRestCount; i < provided; i++)
-                    restList.Add(_stack[newBase + i]);
-                _stack[newBase + nonRestCount] = StashValue.FromObj(restList);
-            }
-            else
-            {
-                if (provided < minArity || provided > expected)
-                {
-                    string expectedStr = minArity == expected ? $"{expected - 1}" : $"{minArity - 1} to {expected - 1}";
-                    throw new RuntimeError(
-                        $"Expected {expectedStr} arguments but got {argc}.",
-                        callerSourceMap.GetSpan(callerIP));
-                }
-                if (provided < expected)
-                {
-                    for (int i = provided; i < expected; i++)
-                        _stack[newBase + i] = StashValue.FromObj(NotProvided);
-                }
-            }
+            ValidateAndPadArgsRegWindow(fnChunk, argc + 1, newBase, callerSourceMap.GetSpan(callerIP), 1);
 
             if (fnChunk.IsAsync)
                 _stack[@base + a] = StashValue.FromObject(SpawnAsyncFunction(

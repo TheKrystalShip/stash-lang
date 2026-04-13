@@ -253,13 +253,61 @@ public sealed partial class VirtualMachine
                 }
 
                 // ==================== Functions ====================
-                case OpCode.Call: ExecuteCall<TDebugMode>(ref frame, inst); break;
+                case OpCode.Call:
+                {
+                    byte a = Instruction.GetA(inst);
+                    byte argc = Instruction.GetC(inst);
+                    int @base = frame.BaseSlot;
+                    object? callee = _stack[@base + a].AsObj;
+
+                    // Ultra-fast path: VMFunction, exact arity, no rest, no async, no debug
+                    if (typeof(TDebugMode) == typeof(DebugOff)
+                        && callee is VMFunction fn && argc == fn.Chunk.Arity
+                        && !fn.Chunk.HasRestParam && !fn.Chunk.IsAsync)
+                    {
+                        PushFrame(fn.Chunk, @base + a + 1, fn.Upvalues, fn.Chunk.Name, fn.ModuleGlobals);
+                        if (StepLimit > 0 && ++StepCount >= StepLimit)
+                            throw new Stash.Runtime.StepLimitExceededException(StepLimit);
+                    }
+                    else
+                    {
+                        ExecuteCall<TDebugMode>(ref frame, inst);
+                    }
+                    break;
+                }
                 case OpCode.CallSpread: ExecuteCallSpread<TDebugMode>(ref frame, inst); break;
                 case OpCode.CallBuiltIn: ExecuteCallBuiltIn<TDebugMode>(ref frame, inst); break;
                 case OpCode.Return:
-                    if (ExecuteReturn<TDebugMode>(ref frame, inst, targetFrameCount, out object? retResult))
-                        return retResult;
+                {
+                    byte a = Instruction.GetA(inst);
+                    byte b = Instruction.GetB(inst);
+                    StashValue retVal = b != 0 ? _stack[frame.BaseSlot + a] : StashValue.Null;
+
+                    // Ultra-fast return: no debug, no captured locals
+                    if (typeof(TDebugMode) == typeof(DebugOff) && !frame.Chunk.MayHaveCapturedLocals)
+                    {
+                        _frameCount--;
+
+                        if (_frameCount == 0)
+                        {
+                            _sp = 0;
+                            return retVal.ToObject();
+                        }
+
+                        _stack[frame.BaseSlot - 1] = retVal;
+                        ref CallFrame caller = ref _frames[_frameCount - 1];
+                        _sp = caller.BaseSlot + caller.Chunk.MaxRegs;
+
+                        if (_frameCount <= targetFrameCount)
+                            return retVal.ToObject();
+                    }
+                    else
+                    {
+                        if (ExecuteReturn<TDebugMode>(ref frame, inst, targetFrameCount, out object? retResult))
+                            return retResult;
+                    }
                     break;
+                }
                 case OpCode.Closure: ExecuteClosure(ref frame, inst); break;
 
                 // ==================== Iteration ====================
