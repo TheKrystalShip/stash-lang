@@ -59,6 +59,9 @@ public sealed class Chunk
     /// <summary>Inline cache slots for GetField operations.</summary>
     internal ICSlot[]? ICSlots { get; set; }
 
+    /// <summary>Metadata-based const global initializations: (Slot, ConstIndex) pairs processed before execution.</summary>
+    public (ushort Slot, ushort ConstIndex)[]? ConstGlobalInits { get; }
+
     internal Chunk(
         uint[] code,
         StashValue[] constants,
@@ -76,7 +79,8 @@ public sealed class Chunk
         string[]? upvalueNames,
         string[]? globalNameTable,
         int globalSlotCount,
-        ICSlot[]? icSlots)
+        ICSlot[]? icSlots,
+        (ushort Slot, ushort ConstIndex)[]? constGlobalInits = null)
     {
         Code = code;
         Constants = constants;
@@ -95,6 +99,7 @@ public sealed class Chunk
         GlobalNameTable = globalNameTable;
         GlobalSlotCount = globalSlotCount;
         ICSlots = icSlots;
+        ConstGlobalInits = constGlobalInits;
     }
 
     // Overload with bool[] for LocalIsConst directly
@@ -115,7 +120,8 @@ public sealed class Chunk
         string[]? upvalueNames,
         string[]? globalNameTable,
         int globalSlotCount,
-        ICSlot[]? icSlots)
+        ICSlot[]? icSlots,
+        (ushort Slot, ushort ConstIndex)[]? constGlobalInits = null)
     {
         Code = code;
         Constants = constants;
@@ -134,5 +140,6 @@ public sealed class Chunk
         GlobalNameTable = globalNameTable;
         GlobalSlotCount = globalSlotCount;
         ICSlots = icSlots;
+        ConstGlobalInits = constGlobalInits;
     }
 }

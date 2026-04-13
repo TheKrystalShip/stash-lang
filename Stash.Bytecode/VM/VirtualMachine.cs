@@ -299,6 +299,22 @@ public sealed partial class VirtualMachine
                 _constGlobalSlots[i] = false;
             }
         }
+
+        // OPT: Metadata-based const global initialization — pre-populate slots
+        // from the constant pool without executing any bytecode instructions.
+        if (chunk.ConstGlobalInits is { } inits)
+        {
+            for (int i = 0; i < inits.Length; i++)
+            {
+                var (slot, constIdx) = inits[i];
+                StashValue val = chunk.Constants[constIdx];
+                _globalSlots[slot] = val;
+                _constGlobalSlots[slot] = true;
+                string name = nameTable[slot];
+                _globals[name] = val;
+                _constGlobals.Add(name);
+            }
+        }
     }
 
     /// <summary>

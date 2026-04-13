@@ -227,6 +227,7 @@ public static class Disassembler
 
             EmitConstSection(chunk, options, sb);
             EmitGlobalsSection(chunk, options, sb);
+            EmitConstGlobalInitsSection(chunk, options, sb);
         }
 
         var labels = CollectLabels(chunk);
@@ -315,6 +316,25 @@ public static class Disassembler
                 ? chunk.GlobalNameTable[i]
                 : i.ToString();
             sb.AppendLine($"  [g{i}] {gname}");
+        }
+        sb.AppendLine();
+    }
+
+    private static void EmitConstGlobalInitsSection(Chunk chunk, DisassemblerOptions options, StringBuilder sb)
+    {
+        if (chunk.ConstGlobalInits is not { Length: > 0 })
+            return;
+        sb.AppendLine(Col(options, ".const_global_inits:", Ansi.BoldMagenta));
+        for (int i = 0; i < chunk.ConstGlobalInits.Length; i++)
+        {
+            var (slot, constIdx) = chunk.ConstGlobalInits[i];
+            string gname = chunk.GlobalNameTable != null && slot < chunk.GlobalNameTable.Length
+                ? chunk.GlobalNameTable[slot]
+                : slot.ToString();
+            string constVal = constIdx < chunk.Constants.Length
+                ? FormatConstant(chunk.Constants[constIdx])
+                : $"k{constIdx}";
+            sb.AppendLine($"  [g{slot}] = [{constIdx}]  ; {gname} = {constVal}");
         }
         sb.AppendLine();
     }

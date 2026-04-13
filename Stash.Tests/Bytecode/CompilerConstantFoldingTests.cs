@@ -1,3 +1,6 @@
+using Stash.Bytecode;
+using Stash.Runtime;
+
 namespace Stash.Tests.Bytecode;
 
 public class CompilerConstantFoldingTests : BytecodeTestBase
@@ -272,5 +275,136 @@ public class CompilerConstantFoldingTests : BytecodeTestBase
         Assert.Equal(false, result);
         string disasm = Disassemble("true == false;");
         Assert.DoesNotContain("eq", disasm);
+    }
+
+    // =========================================================================
+    // 6. Const Dead Init Elimination
+    // =========================================================================
+
+    [Fact]
+    public void ConstDeadInit_LiteralInt_NoInitConstGlobal()
+    {
+        // Literal int const should use metadata init, not bytecode
+        string disasm = Disassemble("const X = 42; println(X);");
+        Assert.DoesNotContain("init.const.global", disasm);
+        Assert.Contains(".const_global_inits:", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_LiteralString_NoInitConstGlobal()
+    {
+        string disasm = Disassemble("const S = \"hello\"; println(S);");
+        Assert.DoesNotContain("init.const.global", disasm);
+        Assert.Contains(".const_global_inits:", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_LiteralBool_NoInitConstGlobal()
+    {
+        string disasm = Disassemble("const B = true; println(B);");
+        Assert.DoesNotContain("init.const.global", disasm);
+        Assert.Contains(".const_global_inits:", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_FoldableExpr_NoInitConstGlobal()
+    {
+        // Binary expression on literals should also be eliminated
+        string disasm = Disassemble("const X = 1 + 2; println(X);");
+        Assert.DoesNotContain("init.const.global", disasm);
+        Assert.Contains(".const_global_inits:", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_ChainedConsts_BothEliminated()
+    {
+        string disasm = Disassemble("const A = 10; const B = A + 5; println(B);");
+        Assert.DoesNotContain("init.const.global", disasm);
+        Assert.Contains(".const_global_inits:", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_RuntimeConst_StillEmitsInit()
+    {
+        // Non-foldable const must still use InitConstGlobal
+        string disasm = Disassemble("fn getVal() { return 5; } const X = getVal(); println(X);");
+        Assert.Contains("init.const.global", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_Mixed_CorrectBehavior()
+    {
+        // Mix of foldable and non-foldable consts
+        string disasm = Disassemble("const A = 42; fn getVal() { return 5; } const B = getVal(); println(A); println(B);");
+        // A should be metadata-inited, B should use init.const.global
+        Assert.Contains(".const_global_inits:", disasm);
+        Assert.Contains("init.const.global", disasm); // B still needs it
+    }
+
+    [Fact]
+    public void ConstDeadInit_LiteralInt_CorrectValue()
+    {
+        // Verify runtime correctness
+        object? result = Execute("const X = 42; return X;");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void ConstDeadInit_ChainedConsts_CorrectValue()
+    {
+        object? result = Execute("const A = 10; const B = A + 5; return B;");
+        Assert.Equal(15L, result);
+    }
+
+    [Fact]
+    public void ConstDeadInit_InterpolatedString_Eliminated()
+    {
+        // All-constant interpolated string should be metadata-inited
+        string disasm = Disassemble("const S = $\"hello {'world'}\"; println(S);");
+        Assert.DoesNotContain("init.const.global", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_InterpolatedString_CorrectValue()
+    {
+        object? result = Execute("const S = $\"val:{42}\"; return S;");
+        Assert.Equal("val:42", result);
+    }
+
+    [Fact]
+    public void ConstDeadInit_ConstAssignment_StillProtected()
+    {
+        // Metadata-inited consts should still be protected from reassignment
+        Assert.Throws<RuntimeError>(() => Execute("const X = 5; X = 10;"));
+    }
+
+    [Fact]
+    public void ConstDeadInit_Null_NoInitConstGlobal()
+    {
+        string disasm = Disassemble("const X = null; println(X);");
+        Assert.DoesNotContain("init.const.global", disasm);
+    }
+
+    [Fact]
+    public void ConstDeadInit_SerializationRoundTrip_PreservesMetadata()
+    {
+        // Compile, serialize, deserialize — verify ConstGlobalInits survive
+        Chunk chunk = CompileSource("const X = 42; const Y = \"hello\"; println(X); println(Y);");
+        Assert.NotNull(chunk.ConstGlobalInits);
+        Assert.True(chunk.ConstGlobalInits.Length >= 2);
+
+        // Serialize and deserialize
+        using var stream = new System.IO.MemoryStream();
+        BytecodeWriter.Write(stream, chunk);
+        stream.Position = 0;
+        Chunk deserialized = BytecodeReader.Read(stream);
+
+        Assert.NotNull(deserialized.ConstGlobalInits);
+        Assert.Equal(chunk.ConstGlobalInits.Length, deserialized.ConstGlobalInits.Length);
+        for (int i = 0; i < chunk.ConstGlobalInits.Length; i++)
+        {
+            Assert.Equal(chunk.ConstGlobalInits[i].Slot, deserialized.ConstGlobalInits[i].Slot);
+            Assert.Equal(chunk.ConstGlobalInits[i].ConstIndex, deserialized.ConstGlobalInits[i].ConstIndex);
+        }
     }
 }

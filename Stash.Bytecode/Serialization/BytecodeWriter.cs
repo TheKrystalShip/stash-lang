@@ -198,6 +198,18 @@ public static class BytecodeWriter
                 writer.Write(icSlots[i].ConstantIndex);
         }
 
+        // ConstGlobalInits: u16 count + [(u16 slot, u16 constIndex)] pairs
+        ushort constGlobalInitCount = (ushort)(chunk.ConstGlobalInits?.Length ?? 0);
+        writer.Write(constGlobalInitCount);
+        if (chunk.ConstGlobalInits is { } constInits)
+        {
+            for (int i = 0; i < constInits.Length; i++)
+            {
+                writer.Write(constInits[i].Slot);
+                writer.Write(constInits[i].ConstIndex);
+            }
+        }
+
         // Debug info (only if flag was set in header)
         if (includeDebugInfo)
         {

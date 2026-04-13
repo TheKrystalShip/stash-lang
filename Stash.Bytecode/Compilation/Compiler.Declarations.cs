@@ -59,20 +59,48 @@ partial class Compiler
     {
         _builder.AddSourceMapping(stmt.Span);
 
+        // Check if this is a top-level const with a foldable initializer
+        bool isTopLevelGlobal = _enclosing == null && _scope.ScopeDepth == 0;
+        bool useMetadataInit = false;
+        object? foldedValue = null;
+
+        if (isTopLevelGlobal && TryEvaluateConstant(stmt.Initializer, out foldedValue))
+            useMetadataInit = true;
+
         byte reg = _scope.DeclareLocal(stmt.Name.Lexeme, isConst: true);
-        CompileExprTo(stmt.Initializer, reg);
+
+        if (useMetadataInit)
+        {
+            // OPT: Metadata-based init — emit a LoadK into the local register so subsequent
+            // same-scope reads work, but skip InitConstGlobal (the VM pre-populates the slot).
+            EmitFoldedConstant(foldedValue, reg);
+        }
+        else
+        {
+            CompileExprTo(stmt.Initializer, reg);
+        }
         _scope.MarkInitialized();
 
         // OPT-10: Track numeric locals
         if (IsNumericExpr(stmt.Initializer))
             _scope.MarkNumeric(reg);
 
-        if (_enclosing == null && _scope.ScopeDepth == 0)
+        if (isTopLevelGlobal)
         {
-            ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
-            _builder.EmitABx(OpCode.InitConstGlobal, reg, gslot);
-            if (TryEvaluateConstant(stmt.Initializer, out object? constVal))
-                _globalSlots.TrackConstValue(stmt.Name.Lexeme, constVal);
+            if (useMetadataInit)
+            {
+                // Metadata-based init: record (slot, constIndex) pair — no InitConstGlobal emitted
+                _globalSlots.TrackConstValue(stmt.Name.Lexeme, foldedValue);
+                ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+                StashValue sv = StashValue.FromObject(foldedValue);
+                ushort constIdx = _builder.AddConstant(sv);
+                _builder.AddConstGlobalInit(gslot, constIdx);
+            }
+            else
+            {
+                ushort gslot = _globalSlots.GetOrAllocate(stmt.Name.Lexeme);
+                _builder.EmitABx(OpCode.InitConstGlobal, reg, gslot);
+            }
         }
         else if (TryEvaluateConstant(stmt.Initializer, out object? constVal))
         {

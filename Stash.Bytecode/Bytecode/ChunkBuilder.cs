@@ -16,6 +16,7 @@ public sealed class ChunkBuilder
     private readonly List<SourceMapEntry> _sourceEntries = new();
     private readonly List<UpvalueDescriptor> _upvalues = new();
     private int _icSlotCount;
+    private List<(ushort Slot, ushort ConstIndex)>? _constGlobalInits;
 
     // ---- Metadata (set by Compiler before Build) ----
     public int Arity { get; set; }
@@ -184,6 +185,17 @@ public sealed class ChunkBuilder
     }
 
     // ==================================================================
+    // Const Global Metadata Init
+    // ==================================================================
+
+    /// <summary>Record a const global that should be initialized from the constant pool (metadata-based, no bytecode).</summary>
+    public void AddConstGlobalInit(ushort slot, ushort constIndex)
+    {
+        _constGlobalInits ??= new();
+        _constGlobalInits.Add((slot, constIndex));
+    }
+
+    // ==================================================================
     // Source Mapping
     // ==================================================================
 
@@ -228,7 +240,8 @@ public sealed class ChunkBuilder
             upvalueNames: UpvalueNames,
             globalNameTable: globalNameTable,
             globalSlotCount: globalSlotCount,
-            icSlots: icSlots);
+            icSlots: icSlots,
+            constGlobalInits: _constGlobalInits?.ToArray());
     }
 
     // ==================================================================
