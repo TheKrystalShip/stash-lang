@@ -15,13 +15,38 @@ public sealed partial class Compiler
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
         byte dest = _destReg;
+        bool isVoid = _voidContext;      // NEW
+        _voidContext = false;             // NEW — consume, sub-expressions are not void
         _builder.AddSourceMapping(expr.Span);
 
         int sign = expr.Operator.Type == TokenType.PlusPlus ? 1 : -1;
 
-        // ── Identifier operand: x++ / ++x ──────────────────────────────
+        // ── Identifier operand: x++ / ++x ─────────────────────────────────────────────────
         if (expr.Operand is IdentifierExpr id)
         {
+            // ── VOID CONTEXT: just increment, don't produce a result ──
+            if (isVoid)
+            {
+                int localReg = (id.ResolvedDistance >= 0) ? _scope.ResolveLocal(id.Name.Lexeme) : -1;
+                if (localReg >= 0 && !_scope.IsLocalConst(localReg))
+                {
+                    // Local: increment in-place, skip saving old value
+                    if (!_scope.IsKnownNumeric(localReg))
+                        _builder.EmitA(OpCode.CheckNumeric, (byte)localReg);
+                    _builder.EmitAsBx(OpCode.AddI, (byte)localReg, sign);
+                    _scope.MarkNumeric(localReg);
+                }
+                else
+                {
+                    // Global/upvalue: load → increment → store
+                    EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: true, dest);
+                    _builder.EmitA(OpCode.CheckNumeric, dest);
+                    _builder.EmitAsBx(OpCode.AddI, dest, sign);
+                    EmitVariable(id.Name.Lexeme, id.ResolvedDistance, id.ResolvedSlot, isLoad: false, dest);
+                }
+                return null;
+            }
+
             if (expr.IsPrefix)
             {
                 // OPT-4: For local variables, operate directly on the local's register

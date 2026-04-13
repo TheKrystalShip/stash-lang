@@ -97,11 +97,25 @@ public sealed partial class Compiler
         byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
 
-        int partCount = expr.Parts.Count;
+        // OPT: Merge consecutive constant parts (same as interpolated strings)
+        var mergedParts = MergeInterpolationParts(expr.Parts);
+        int partCount = mergedParts.Count;
         byte baseReg = _scope.ReserveRegs(1 + partCount);
 
         for (int i = 0; i < partCount; i++)
-            CompileExprTo(expr.Parts[i], (byte)(baseReg + 1 + i));
+        {
+            byte partReg = (byte)(baseReg + 1 + i);
+            var (originalExpr, folded) = mergedParts[i];
+            if (folded is not null)
+            {
+                ushort idx = _builder.AddConstant(folded);
+                _builder.EmitABx(OpCode.LoadK, partReg, idx);
+            }
+            else
+            {
+                CompileExprTo(originalExpr!, partReg);
+            }
+        }
 
         byte flags = 0;
         if (expr.IsPassthrough) flags |= 0x01;

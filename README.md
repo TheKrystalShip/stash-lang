@@ -315,17 +315,17 @@ process.onSignal(process.SIGTERM, () => {
 
 30 namespaces, ~387 functions. All cross-platform.
 
-| Category                | Namespaces                                          |
-| ----------------------- | --------------------------------------------------- |
-| **I/O & System**        | `io`, `fs`, `path`, `env`, `sys`, `process`, `term` |
-| **Data**                | `str`, `arr`, `dict`, `math`, `conv`                |
-| **Time**                | `time`                                              |
-| **Serialization**       | `json`, `yaml`, `toml`, `ini`, `config`             |
-| **Network**             | `http`, `net`, `ssh`, `sftp`                        |
-| **Security**            | `crypto`, `encoding`                                |
-| **Concurrency**         | `task`                                              |
-| **Service Management**  | `scheduler`                                         |
-| **Tooling**             | `tpl`, `args`, `assert`, `test`                     |
+| Category               | Namespaces                                          |
+| ---------------------- | --------------------------------------------------- |
+| **I/O & System**       | `io`, `fs`, `path`, `env`, `sys`, `process`, `term` |
+| **Data**               | `str`, `arr`, `dict`, `math`, `conv`                |
+| **Time**               | `time`                                              |
+| **Serialization**      | `json`, `yaml`, `toml`, `ini`, `config`             |
+| **Network**            | `http`, `net`, `ssh`, `sftp`                        |
+| **Security**           | `crypto`, `encoding`                                |
+| **Concurrency**        | `task`                                              |
+| **Service Management** | `scheduler`                                         |
+| **Tooling**            | `tpl`, `args`, `assert`, `test`                     |
 
 **Global functions:** `typeof()`, `nameof()`, `len()`, `secret()`, `reveal()`
 
@@ -459,11 +459,11 @@ Stash compiles to a **register-based bytecode VM** with constant folding, dead b
 
 | Benchmark                 |  Stash | Python | Node.js |   Ruby |   Perl |    Lua |      Bash |
 | ------------------------- | -----: | -----: | ------: | -----: | -----: | -----: | --------: |
-| **Algorithms**            | 162 ms |  88 ms |    7 ms |  56 ms | 208 ms |  34 ms | 10,412 ms |
-| **Function Calls**        |  93 ms |  84 ms |    3 ms |  17 ms | 101 ms |  13 ms |  3,743 ms |
-| **Expression Throughput** | 165 ms | 181 ms |   18 ms | 188 ms | 131 ms |  85 ms |  4,955 ms |
-| **Built-in Functions**    | 202 ms | 319 ms |   29 ms | 347 ms | 341 ms | 207 ms | 23,508 ms |
-| **Scope Lookup**          | 111 ms | 103 ms |    5 ms | 124 ms | 241 ms |  58 ms |  3,307 ms |
+| **Algorithms**            | 108 ms |  79 ms |    7 ms |  63 ms | 200 ms |  33 ms | 10,511 ms |
+| **Function Calls**        |  70 ms |  77 ms |    3 ms |  17 ms | 102 ms |  13 ms |  3,632 ms |
+| **Expression Throughput** | 184 ms | 179 ms |   15 ms | 189 ms | 131 ms |  85 ms |  4,992 ms |
+| **Built-in Functions**    | 189 ms | 296 ms |   27 ms | 351 ms | 339 ms | 204 ms | 23,076 ms |
+| **Scope Lookup**          |  95 ms |  92 ms |    4 ms | 136 ms | 273 ms |  58 ms |  3,260 ms |
 
 > Measured on the same machine, same workload, identical algorithms and iteration counts across all languages. Median of 3 runs.
 >

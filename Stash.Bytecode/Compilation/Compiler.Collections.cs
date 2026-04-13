@@ -42,11 +42,13 @@ public sealed partial class Compiler
     {
         byte dest = _destReg;
         _builder.AddSourceMapping(expr.BracketSpan);
-        byte objReg = CompileExpr(expr.Object);
-        byte indexReg = CompileExpr(expr.Index);
+        bool objIsLocal = TryGetLocalReg(expr.Object, out byte objLocalReg);
+        byte objReg = objIsLocal ? objLocalReg : CompileExpr(expr.Object);
+        bool idxIsLocal = TryGetLocalReg(expr.Index, out byte idxLocalReg);
+        byte indexReg = idxIsLocal ? idxLocalReg : CompileExpr(expr.Index);
         _builder.EmitABC(OpCode.GetTable, dest, objReg, indexReg);
-        _scope.FreeTemp(indexReg);
-        _scope.FreeTemp(objReg);
+        if (!idxIsLocal) _scope.FreeTemp(indexReg);
+        if (!objIsLocal) _scope.FreeTemp(objReg);
         return null;
     }
 
@@ -55,13 +57,15 @@ public sealed partial class Compiler
     {
         byte dest = _destReg;
         _builder.AddSourceMapping(expr.BracketSpan);
-        byte objReg = CompileExpr(expr.Object);
-        byte indexReg = CompileExpr(expr.Index);
+        bool objIsLocal = TryGetLocalReg(expr.Object, out byte objLocalReg);
+        byte objReg = objIsLocal ? objLocalReg : CompileExpr(expr.Object);
+        bool idxIsLocal = TryGetLocalReg(expr.Index, out byte idxLocalReg);
+        byte indexReg = idxIsLocal ? idxLocalReg : CompileExpr(expr.Index);
         // Value compiles into dest — the assignment expression result is the stored value.
         CompileExprTo(expr.Value, dest);
         _builder.EmitABC(OpCode.SetTable, objReg, indexReg, dest);
-        _scope.FreeTemp(indexReg);
-        _scope.FreeTemp(objReg);
+        if (!idxIsLocal) _scope.FreeTemp(indexReg);
+        if (!objIsLocal) _scope.FreeTemp(objReg);
         return null;
     }
 

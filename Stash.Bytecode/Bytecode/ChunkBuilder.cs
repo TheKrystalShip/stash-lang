@@ -214,6 +214,8 @@ public sealed class ChunkBuilder
     /// </summary>
     public Chunk Build()
     {
+        Peephole();
+
         string[]? globalNameTable = _globalSlots?.BuildNameTable();
         int globalSlotCount = _globalSlots?.Count ?? 0;
         ICSlot[]? icSlots = _icSlotCount > 0 ? new ICSlot[_icSlotCount] : null;
@@ -242,6 +244,180 @@ public sealed class ChunkBuilder
             globalSlotCount: globalSlotCount,
             icSlots: icSlots,
             constGlobalInits: _constGlobalInits?.ToArray());
+    }
+
+    // ==================================================================
+    // Peephole Optimizer
+    // ==================================================================
+
+    private void Peephole()
+    {
+        if (_code.Count < 2) return;
+
+        // Build the set of jump targets so we don't optimize across basic block boundaries.
+        var jumpTargets = new HashSet<int>();
+        for (int i = 0; i < _code.Count; i++)
+        {
+            uint inst = _code[i];
+            OpCode op = Instruction.GetOp(inst);
+            switch (op)
+            {
+                case OpCode.Jmp:
+                case OpCode.JmpFalse:
+                case OpCode.JmpTrue:
+                case OpCode.Loop:
+                case OpCode.ForPrep:
+                case OpCode.ForLoop:
+                case OpCode.ForPrepII:
+                case OpCode.ForLoopII:
+                case OpCode.IterLoop:
+                case OpCode.TryBegin:
+                {
+                    int target = i + 1 + Instruction.GetSBx(inst);
+                    jumpTargets.Add(target);
+                    break;
+                }
+                case OpCode.GetFieldIC:
+                case OpCode.CallBuiltIn:
+                    i++; // skip companion word
+                    break;
+            }
+        }
+
+        var removals = new List<int>();
+
+        for (int i = 0; i < _code.Count - 1; i++)
+        {
+            if (jumpTargets.Contains(i)) continue;
+            if (jumpTargets.Contains(i + 1)) continue;
+
+            uint inst0 = _code[i];
+            if (Instruction.GetOp(inst0) != OpCode.Move) continue;
+
+            byte moveA = Instruction.GetA(inst0);  // destination
+            byte moveB = Instruction.GetB(inst0);  // source
+
+            uint inst1 = _code[i + 1];
+            OpCode op1 = Instruction.GetOp(inst1);
+
+            // Pattern 1: Move(A,B) + JmpFalse/JmpTrue(A, offset) → JmpFalse/JmpTrue(B, offset)
+            if ((op1 == OpCode.JmpFalse || op1 == OpCode.JmpTrue) && Instruction.GetA(inst1) == moveA)
+            {
+                _code[i + 1] = Instruction.EncodeAsBx(op1, moveB, Instruction.GetSBx(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 2: Move(A,B) + Return(A, C, 0) → Return(B, C, 0)
+            if (op1 == OpCode.Return && Instruction.GetA(inst1) == moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABC(OpCode.Return, moveB, Instruction.GetB(inst1), Instruction.GetC(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Pattern 5: Move(A,B) + SetGlobal(A, slotBx) → SetGlobal(B, slotBx)
+            if (op1 == OpCode.SetGlobal && Instruction.GetA(inst1) == moveA)
+            {
+                _code[i + 1] = Instruction.EncodeABx(OpCode.SetGlobal, moveB, Instruction.GetBx(inst1));
+                removals.Add(i);
+                continue;
+            }
+
+            // Patterns 3 & 4: Move + Move + GetTable/SetTable
+            if (i + 2 < _code.Count && op1 == OpCode.Move && !jumpTargets.Contains(i + 2))
+            {
+                byte move2A = Instruction.GetA(inst1);
+                byte move2B = Instruction.GetB(inst1);
+                uint inst2 = _code[i + 2];
+                OpCode op2 = Instruction.GetOp(inst2);
+
+                // Pattern 3: Move(A,B) + Move(C,D) + GetTable(X, A, C) → GetTable(X, B, D)
+                if (op2 == OpCode.GetTable && Instruction.GetB(inst2) == moveA && Instruction.GetC(inst2) == move2A)
+                {
+                    _code[i + 2] = Instruction.EncodeABC(OpCode.GetTable, Instruction.GetA(inst2), moveB, move2B);
+                    removals.Add(i);
+                    removals.Add(i + 1);
+                    i++; // skip the second Move
+                    continue;
+                }
+
+                // Pattern 4: Move(A,B) + Move(C,D) + SetTable(A, C, E) → SetTable(B, D, E)
+                if (op2 == OpCode.SetTable && Instruction.GetA(inst2) == moveA && Instruction.GetB(inst2) == move2A)
+                {
+                    _code[i + 2] = Instruction.EncodeABC(OpCode.SetTable, moveB, move2B, Instruction.GetC(inst2));
+                    removals.Add(i);
+                    removals.Add(i + 1);
+                    i++;
+                    continue;
+                }
+            }
+        }
+
+        if (removals.Count == 0) return;
+
+        ApplyRemovals(removals);
+    }
+
+    private void ApplyRemovals(List<int> removals)
+    {
+        var removeSet = new HashSet<int>(removals);
+
+        // Build mapping: old index → new index
+        int[] indexMap = new int[_code.Count];
+        int newIdx = 0;
+        for (int oldIdx = 0; oldIdx < _code.Count; oldIdx++)
+        {
+            indexMap[oldIdx] = newIdx;
+            if (!removeSet.Contains(oldIdx))
+                newIdx++;
+        }
+        int newCount = newIdx;
+
+        // Patch all jump offsets before compacting (while indices are still original)
+        for (int oldIdx = 0; oldIdx < _code.Count; oldIdx++)
+        {
+            if (removeSet.Contains(oldIdx)) continue;
+
+            uint inst = _code[oldIdx];
+            OpCode op = Instruction.GetOp(inst);
+
+            bool isJump = op == OpCode.Jmp || op == OpCode.JmpFalse || op == OpCode.JmpTrue
+                       || op == OpCode.Loop || op == OpCode.ForPrep || op == OpCode.ForLoop
+                       || op == OpCode.ForPrepII || op == OpCode.ForLoopII
+                       || op == OpCode.IterLoop || op == OpCode.TryBegin;
+
+            if (isJump)
+            {
+                int oldSBx = Instruction.GetSBx(inst);
+                int oldTarget = oldIdx + 1 + oldSBx;
+                int newTarget = (oldTarget >= 0 && oldTarget < indexMap.Length) ? indexMap[oldTarget] : newCount;
+                int newSBx = newTarget - indexMap[oldIdx] - 1;
+                _code[oldIdx] = Instruction.PatchSBx(inst, newSBx);
+            }
+
+            // Skip companion words — they are raw data, not opcodes
+            if (op == OpCode.GetFieldIC || op == OpCode.CallBuiltIn)
+                oldIdx++;
+        }
+
+        // Compact _code in-place
+        newIdx = 0;
+        for (int oldIdx = 0; oldIdx < _code.Count; oldIdx++)
+        {
+            if (!removeSet.Contains(oldIdx))
+                _code[newIdx++] = _code[oldIdx];
+        }
+        _code.RemoveRange(newIdx, _code.Count - newIdx);
+
+        // Patch source map entries
+        for (int i = 0; i < _sourceEntries.Count; i++)
+        {
+            SourceMapEntry entry = _sourceEntries[i];
+            int oldOffset = entry.BytecodeOffset;
+            int newOffset = (oldOffset < indexMap.Length) ? indexMap[oldOffset] : oldOffset;
+            _sourceEntries[i] = new SourceMapEntry(newOffset, entry.Span);
+        }
     }
 
     // ==================================================================

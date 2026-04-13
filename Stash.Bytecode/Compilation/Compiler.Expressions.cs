@@ -116,6 +116,55 @@ partial class Compiler
         }
 
         _builder.AddSourceMapping(expr.Span);
+
+        // OPT-11: AddK/SubK fusion — expr ± literal when constant index fits in C byte
+        if (expr.Operator.Type == TokenType.Plus || expr.Operator.Type == TokenType.Minus)
+        {
+            // Try right operand as constant
+            if (expr.Right is LiteralExpr rightLit && rightLit.Value is int or long or double)
+            {
+                ushort constIdx = _builder.AddConstant(StashValue.FromObject(rightLit.Value));
+                if (constIdx <= 255)
+                {
+                    bool lhsIsLocal = TryGetLocalReg(expr.Left, out byte lhsReg);
+                    byte lhs = lhsIsLocal ? lhsReg : CompileExpr(expr.Left);
+                    OpCode fusedOp = expr.Operator.Type == TokenType.Plus ? OpCode.AddK : OpCode.SubK;
+                    _builder.EmitABC(fusedOp, dest, lhs, (byte)constIdx);
+                    if (!lhsIsLocal) _scope.FreeTemp(lhs);
+                    return null;
+                }
+            }
+        }
+
+        // OPT-CmpK: Comparison with constant fusion — cmp with literal when constant index fits in C byte
+        if (expr.Operator.Type is TokenType.EqualEqual or TokenType.BangEqual
+            or TokenType.Less or TokenType.LessEqual
+            or TokenType.Greater or TokenType.GreaterEqual)
+        {
+            if (expr.Right is LiteralExpr rightCmpLit && rightCmpLit.Value is not null)
+            {
+                ushort constIdx = _builder.AddConstant(StashValue.FromObject(rightCmpLit.Value));
+                if (constIdx <= 255)
+                {
+                    bool lhsIsLocal = TryGetLocalReg(expr.Left, out byte lhsReg);
+                    byte lhs = lhsIsLocal ? lhsReg : CompileExpr(expr.Left);
+                    OpCode cmpOp = expr.Operator.Type switch
+                    {
+                        TokenType.EqualEqual   => OpCode.EqK,
+                        TokenType.BangEqual    => OpCode.NeK,
+                        TokenType.Less         => OpCode.LtK,
+                        TokenType.LessEqual    => OpCode.LeK,
+                        TokenType.Greater      => OpCode.GtK,
+                        TokenType.GreaterEqual => OpCode.GeK,
+                        _ => throw new CompileError($"Unknown comparison operator '{expr.Operator.Lexeme}'.", expr.Operator.Span),
+                    };
+                    _builder.EmitABC(cmpOp, dest, lhs, (byte)constIdx);
+                    if (!lhsIsLocal) _scope.FreeTemp(lhs);
+                    return null;
+                }
+            }
+        }
+
         bool leftIsLocal = TryGetLocalReg(expr.Left, out byte leftReg);
         byte left = leftIsLocal ? leftReg : CompileExpr(expr.Left);
         bool rightIsLocal = TryGetLocalReg(expr.Right, out byte rightReg);
@@ -171,6 +220,8 @@ partial class Compiler
     public object? VisitAssignExpr(AssignExpr expr)
     {
         byte dest = _destReg;
+        bool isVoid = _voidContext;      // NEW
+        _voidContext = false;             // NEW — consume
         _builder.AddSourceMapping(expr.Span);
 
         // OPT-8: Compound assignment with integer constant → AddI
@@ -189,7 +240,7 @@ partial class Compiler
                 {
                     _builder.EmitAsBx(OpCode.AddI, (byte)localReg, (int)intVal);
                     _scope.MarkNumeric(localReg);
-                    if ((byte)localReg != dest)
+                    if ((byte)localReg != dest && !isVoid)
                         _builder.EmitAB(OpCode.Move, dest, (byte)localReg);
                     return null;
                 }
@@ -199,7 +250,7 @@ partial class Compiler
                 {
                     _builder.EmitAsBx(OpCode.AddI, (byte)localReg, -(int)intVal);
                     _scope.MarkNumeric(localReg);
-                    if ((byte)localReg != dest)
+                    if ((byte)localReg != dest && !isVoid)
                         _builder.EmitAB(OpCode.Move, dest, (byte)localReg);
                     return null;
                 }
@@ -220,7 +271,7 @@ partial class Compiler
                     _scope.ClearNumeric(localReg);
                 // If the assignment result is needed (e.g., chained: a = b = 1),
                 // copy from local to the expected dest
-                if ((byte)localReg != dest)
+                if ((byte)localReg != dest && !isVoid)
                     _builder.EmitAB(OpCode.Move, dest, (byte)localReg);
                 return null;
             }

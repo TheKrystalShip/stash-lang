@@ -60,6 +60,32 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteAddK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromInt(rb.AsInt + kc.AsInt);
+        else
+            ExecuteAddSlow(ref frame, a, @base, rb, kc);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteSubK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromInt(rb.AsInt - kc.AsInt);
+        else
+            ExecuteSubSlow(ref frame, a, @base, rb, kc);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteMul(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
@@ -398,6 +424,86 @@ public sealed partial class VirtualMachine
                 (rc.IsInt ? (double)rc.AsInt : rc.AsFloat));
         else
             _stack[@base + a] = StashValue.FromBool(RuntimeOps.GreaterEqual(rb, rc, GetCurrentSpan(ref frame)));
+    }
+
+    // ═══════════════════════ Comparison-with-Constant ═══════════════════════
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteEqK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromBool(rb.AsInt == kc.AsInt);
+        else
+            _stack[@base + a] = StashValue.FromBool(RuntimeOps.IsEqual(rb, kc));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteNeK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromBool(rb.AsInt != kc.AsInt);
+        else
+            _stack[@base + a] = StashValue.FromBool(!RuntimeOps.IsEqual(rb, kc));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteLtK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromBool(rb.AsInt < kc.AsInt);
+        else
+            ExecuteLtSlow(ref frame, a, @base, rb, kc);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteLeK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromBool(rb.AsInt <= kc.AsInt);
+        else
+            ExecuteLeSlow(ref frame, a, @base, rb, kc);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGtK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromBool(rb.AsInt > kc.AsInt);
+        else
+            ExecuteGtSlow(ref frame, a, @base, rb, kc);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteGeK(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        StashValue rb = _stack[@base + b];
+        StashValue kc = frame.Chunk.Constants[c];
+        if (rb.IsInt && kc.IsInt)
+            _stack[@base + a] = StashValue.FromBool(rb.AsInt >= kc.AsInt);
+        else
+            ExecuteGeSlow(ref frame, a, @base, rb, kc);
     }
 
     private void ExecuteIn(ref CallFrame frame, uint inst)

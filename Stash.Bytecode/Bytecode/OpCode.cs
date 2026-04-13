@@ -213,6 +213,24 @@ public enum OpCode : byte
     ForPrepII,                  // 81
     /// <summary>AsBx: Integer-specialized ForLoop. Guard-free: R(A) += R(A+2); if in-bounds: IP += sBx; R(A+3) = R(A).</summary>
     ForLoopII,                  // 82
+
+    // === Constant Fusion ===
+    /// <summary>ABC: R(A) = R(B) + K(C) — add constant from pool.</summary>
+    AddK,                       // 83
+    /// <summary>ABC: R(A) = R(B) - K(C) — subtract constant from pool.</summary>
+    SubK,                       // 84
+    /// <summary>ABC: R(A) = (R(B) == K(C)) — equality with constant from pool.</summary>
+    EqK,                        // 85
+    /// <summary>ABC: R(A) = (R(B) != K(C)) — inequality with constant from pool.</summary>
+    NeK,                        // 86
+    /// <summary>ABC: R(A) = (R(B) &lt; K(C)) — less-than with constant from pool.</summary>
+    LtK,                        // 87
+    /// <summary>ABC: R(A) = (R(B) &lt;= K(C)) — less-or-equal with constant from pool.</summary>
+    LeK,                        // 88
+    /// <summary>ABC: R(A) = (R(B) &gt; K(C)) — greater-than with constant from pool.</summary>
+    GtK,                        // 89
+    /// <summary>ABC: R(A) = (R(B) &gt;= K(C)) — greater-or-equal with constant from pool.</summary>
+    GeK,                        // 90
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>

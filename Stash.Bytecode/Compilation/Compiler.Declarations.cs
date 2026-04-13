@@ -17,10 +17,9 @@ partial class Compiler
 
     public object? VisitExprStmt(ExprStmt stmt)
     {
-        // Only set void context when the expression is directly a call — not an
-        // assignment, binary, or other expression that may contain nested calls
-        // whose results ARE used (e.g., result = result + conv.toStr(i)).
-        if (stmt.Expression is CallExpr)
+        // OPT: Set void context for expressions used as statements where the
+        // result is discarded — calls, updates (x++), and assignments (x = ...).
+        if (stmt.Expression is CallExpr or UpdateExpr or AssignExpr)
             _voidContext = true;
         byte reg = CompileExpr(stmt.Expression);
         _voidContext = false;

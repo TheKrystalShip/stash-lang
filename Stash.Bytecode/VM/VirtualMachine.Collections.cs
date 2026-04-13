@@ -89,6 +89,7 @@ public sealed partial class VirtualMachine
         throw new RuntimeError($"Cannot index-assign into {RuntimeValues.Stringify(obj)}.", GetCurrentSpan(ref frame));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteGetTable(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -98,25 +99,39 @@ public sealed partial class VirtualMachine
         StashValue obj = _stack[@base + b];
         StashValue idx = _stack[@base + c];
 
-        // Fast path: array[int]
+        // Fast path: array[non-negative int]
         if (obj.Tag == StashValueTag.Obj && obj.AsObj is List<StashValue> list && idx.IsInt)
         {
             long i = idx.AsInt;
-            if (i < 0) i += list.Count;
             if ((ulong)i < (ulong)list.Count)
             {
                 _stack[@base + a] = list[(int)i];
                 return;
             }
-            throw new RuntimeError(
-                $"Index {idx.AsInt} out of bounds for array of length {list.Count}.",
-                GetCurrentSpan(ref frame));
+            ExecuteGetTableOutOfRange(ref frame, a, @base, list, i);
+            return;
         }
 
         // General path
         _stack[@base + a] = StashValue.FromObject(GetIndexValue(obj.ToObject(), idx.ToObject(), ref frame));
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteGetTableOutOfRange(ref CallFrame frame, byte a, int @base, List<StashValue> list, long i)
+    {
+        // Handle negative indexing
+        if (i < 0) i += list.Count;
+        if ((ulong)i < (ulong)list.Count)
+        {
+            _stack[@base + a] = list[(int)i];
+            return;
+        }
+        throw new RuntimeError(
+            $"Index {i} out of bounds for array of length {list.Count}.",
+            GetCurrentSpan(ref frame));
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteSetTable(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -127,22 +142,35 @@ public sealed partial class VirtualMachine
         StashValue idx = _stack[@base + b];
         StashValue val = _stack[@base + c];
 
-        // Fast path: array[int] = val
+        // Fast path: array[non-negative int] = val
         if (obj.Tag == StashValueTag.Obj && obj.AsObj is List<StashValue> list && idx.IsInt)
         {
             long i = idx.AsInt;
-            if (i < 0) i += list.Count;
             if ((ulong)i < (ulong)list.Count)
             {
                 list[(int)i] = val;
                 return;
             }
-            throw new RuntimeError(
-                $"Index {idx.AsInt} out of bounds for array of length {list.Count}.",
-                GetCurrentSpan(ref frame));
+            ExecuteSetTableOutOfRange(ref frame, list, idx.AsInt, val);
+            return;
         }
 
         SetIndexValue(obj.ToObject(), idx.ToObject(), val.ToObject(), ref frame);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteSetTableOutOfRange(ref CallFrame frame, List<StashValue> list, long i, StashValue val)
+    {
+        // Handle negative indexing
+        if (i < 0) i += list.Count;
+        if ((ulong)i < (ulong)list.Count)
+        {
+            list[(int)i] = val;
+            return;
+        }
+        throw new RuntimeError(
+            $"Index {i} out of bounds for array of length {list.Count}.",
+            GetCurrentSpan(ref frame));
     }
 
     private void ExecuteGetField(ref CallFrame frame, uint inst)

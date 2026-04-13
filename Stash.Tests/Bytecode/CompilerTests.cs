@@ -702,7 +702,21 @@ public class CompilerTests : BytecodeTestBase
             if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
         Assert.NotNull(fnChunk);
         string fnDisasm = Disassembler.Disassemble(fnChunk);
-        // In register VM, prefix increment uses addi and stores back via move
+        // In register VM, prefix increment on a local uses addi in-place.
+        // When used as a statement (void context), no move is emitted.
+        Assert.True(fnDisasm.Contains("addi") || fnDisasm.Contains("add"), "Expected addi or add for increment");
+    }
+
+    [Fact]
+    public void Update_PrefixIncrement_NonVoid_EmitsMove()
+    {
+        // When result IS used (e.g., assigned), move is still emitted
+        Chunk chunk = CompileSource("fn foo() { let x = 0; let y = ++x; }");
+        Chunk? fnChunk = null;
+        foreach (StashValue c in chunk.Constants)
+            if (c.AsObj is Chunk fc) { fnChunk = fc; break; }
+        Assert.NotNull(fnChunk);
+        string fnDisasm = Disassembler.Disassemble(fnChunk);
         Assert.True(fnDisasm.Contains("addi") || fnDisasm.Contains("add"), "Expected addi or add for increment");
         Assert.Contains("move", fnDisasm);
     }

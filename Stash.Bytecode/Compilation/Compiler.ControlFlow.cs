@@ -31,17 +31,20 @@ public sealed partial class Compiler
         // OPT-5: Negation inversion — if (!x) → compile x, JmpTrue (skip Not + JmpFalse)
         byte condReg;
         int elseJump;
+        bool condIsLocal = false;
         if (stmt.Condition is UnaryExpr { Operator.Type: TokenType.Bang } negation)
         {
-            condReg = CompileExpr(negation.Right);
+            condIsLocal = TryGetLocalReg(negation.Right, out byte negLocalReg);
+            condReg = condIsLocal ? negLocalReg : CompileExpr(negation.Right);
             elseJump = _builder.EmitJump(OpCode.JmpTrue, condReg);
         }
         else
         {
-            condReg = CompileExpr(stmt.Condition);
+            condIsLocal = TryGetLocalReg(stmt.Condition, out byte condLocalReg);
+            condReg = condIsLocal ? condLocalReg : CompileExpr(stmt.Condition);
             elseJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
         }
-        _scope.FreeTemp(condReg);
+        if (!condIsLocal) _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.ThenBranch);
 
@@ -77,17 +80,20 @@ public sealed partial class Compiler
         // OPT-5: Negation inversion — while (!x) → compile x, JmpTrue (skip Not + JmpFalse)
         byte condReg;
         int exitJump;
+        bool condIsLocal = false;
         if (stmt.Condition is UnaryExpr { Operator.Type: TokenType.Bang } negation)
         {
-            condReg = CompileExpr(negation.Right);
+            condIsLocal = TryGetLocalReg(negation.Right, out byte negLocalReg);
+            condReg = condIsLocal ? negLocalReg : CompileExpr(negation.Right);
             exitJump = _builder.EmitJump(OpCode.JmpTrue, condReg);
         }
         else
         {
-            condReg = CompileExpr(stmt.Condition);
+            condIsLocal = TryGetLocalReg(stmt.Condition, out byte condLocalReg);
+            condReg = condIsLocal ? condLocalReg : CompileExpr(stmt.Condition);
             exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
         }
-        _scope.FreeTemp(condReg);
+        if (!condIsLocal) _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.Body);
 
@@ -120,9 +126,10 @@ public sealed partial class Compiler
         loopCtx.ContinueJumps.Clear();
 
         // Condition: if true, loop back; if false, fall through to exit
-        byte condReg = CompileExpr(stmt.Condition);
+        bool condIsLocal = TryGetLocalReg(stmt.Condition, out byte condLocalReg);
+        byte condReg = condIsLocal ? condLocalReg : CompileExpr(stmt.Condition);
         int exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
-        _scope.FreeTemp(condReg);
+        if (!condIsLocal) _scope.FreeTemp(condReg);
         _builder.EmitLoop(0, loopStart);
         _builder.PatchJump(exitJump);
 
@@ -155,9 +162,10 @@ public sealed partial class Compiler
         int exitJump = -1;
         if (stmt.Condition != null)
         {
-            byte condReg = CompileExpr(stmt.Condition);
+            bool condIsLocal = TryGetLocalReg(stmt.Condition, out byte condLocalReg);
+            byte condReg = condIsLocal ? condLocalReg : CompileExpr(stmt.Condition);
             exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
-            _scope.FreeTemp(condReg);
+            if (!condIsLocal) _scope.FreeTemp(condReg);
         }
 
         CompileStmt(stmt.Body);

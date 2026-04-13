@@ -129,6 +129,14 @@ public static class Disassembler
         [OpCode.CallBuiltIn]    = "call.builtin",
         [OpCode.ForPrepII]      = "for.prepII",
         [OpCode.ForLoopII]      = "for.loopII",
+        [OpCode.AddK]           = "addk",
+        [OpCode.SubK]           = "subk",
+        [OpCode.EqK]            = "eq.k",
+        [OpCode.NeK]            = "ne.k",
+        [OpCode.LtK]            = "lt.k",
+        [OpCode.LeK]            = "le.k",
+        [OpCode.GtK]            = "gt.k",
+        [OpCode.GeK]            = "ge.k",
     };
 
     // ─── Instruction Format Classification ───────────────────────────────────
@@ -402,6 +410,14 @@ public static class Disassembler
             OpCode.Pow         => ($"r{a}, r{b}, r{c}", null),
             OpCode.Neg         => ($"r{a}, r{b}", null),
             OpCode.AddI        => ($"r{a}, {sbx}", null),
+            OpCode.AddK        => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
+            OpCode.SubK        => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
+            OpCode.EqK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
+            OpCode.NeK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
+            OpCode.LtK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
+            OpCode.LeK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
+            OpCode.GtK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
+            OpCode.GeK         => ($"r{a}, r{b}, k{c}", FormatConstant(c < chunk.Constants.Length ? chunk.Constants[c] : default)),
 
             // Bitwise
             OpCode.BAnd        => ($"r{a}, r{b}, r{c}", null),

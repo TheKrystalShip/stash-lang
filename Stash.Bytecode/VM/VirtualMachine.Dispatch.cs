@@ -74,9 +74,11 @@ public sealed partial class VirtualMachine
         while (true)
         {
             ref CallFrame frame = ref _frames[_frameCount - 1];
+            uint[] code = frame.Chunk.Code;
+            int @base = frame.BaseSlot;
 
             // Fetch the 32-bit instruction and advance the instruction pointer.
-            uint inst = frame.Chunk.Code[frame.IP++];
+            uint inst = code[frame.IP++];
 
             // ── Debug hook: check for breakpoints/stepping at statement boundaries ──
             // In the DebugOff specialization, this entire block is eliminated at JIT/AOT time.
@@ -117,13 +119,13 @@ public sealed partial class VirtualMachine
                 {
                     byte a = Instruction.GetA(inst);
                     ushort bx = Instruction.GetBx(inst);
-                    _stack[frame.BaseSlot + a] = frame.Chunk.Constants[bx];
+                    _stack[@base + a] = frame.Chunk.Constants[bx];
                     break;
                 }
                 case OpCode.LoadNull:
                 {
                     byte a = Instruction.GetA(inst);
-                    _stack[frame.BaseSlot + a] = StashValue.Null;
+                    _stack[@base + a] = StashValue.Null;
                     break;
                 }
                 case OpCode.LoadBool:
@@ -131,7 +133,7 @@ public sealed partial class VirtualMachine
                     byte a = Instruction.GetA(inst);
                     byte b = Instruction.GetB(inst);
                     byte c = Instruction.GetC(inst);
-                    _stack[frame.BaseSlot + a] = StashValue.FromBool(b != 0);
+                    _stack[@base + a] = StashValue.FromBool(b != 0);
                     if (c != 0) frame.IP++;
                     break;
                 }
@@ -139,7 +141,7 @@ public sealed partial class VirtualMachine
                 {
                     byte a = Instruction.GetA(inst);
                     byte b = Instruction.GetB(inst);
-                    _stack[frame.BaseSlot + a] = _stack[frame.BaseSlot + b];
+                    _stack[@base + a] = _stack[@base + b];
                     break;
                 }
 
@@ -161,6 +163,8 @@ public sealed partial class VirtualMachine
                 case OpCode.Pow: ExecutePow(ref frame, inst); break;
                 case OpCode.Neg: ExecuteNeg(ref frame, inst); break;
                 case OpCode.AddI: ExecuteAddI(ref frame, inst); break;
+                case OpCode.AddK: ExecuteAddK(ref frame, inst); break;
+                case OpCode.SubK: ExecuteSubK(ref frame, inst); break;
 
                 // ==================== Bitwise ====================
                 case OpCode.BAnd: ExecuteBAnd(ref frame, inst); break;
@@ -177,6 +181,12 @@ public sealed partial class VirtualMachine
                 case OpCode.Le: ExecuteLe(ref frame, inst); break;
                 case OpCode.Gt: ExecuteGt(ref frame, inst); break;
                 case OpCode.Ge: ExecuteGe(ref frame, inst); break;
+                case OpCode.EqK: ExecuteEqK(ref frame, inst); break;
+                case OpCode.NeK: ExecuteNeK(ref frame, inst); break;
+                case OpCode.LtK: ExecuteLtK(ref frame, inst); break;
+                case OpCode.LeK: ExecuteLeK(ref frame, inst); break;
+                case OpCode.GtK: ExecuteGtK(ref frame, inst); break;
+                case OpCode.GeK: ExecuteGeK(ref frame, inst); break;
 
                 // ==================== Logic ====================
                 case OpCode.Not:
@@ -184,7 +194,7 @@ public sealed partial class VirtualMachine
                     // ABC: R(A) = !IsTruthy(R(B))
                     byte a = Instruction.GetA(inst);
                     byte b = Instruction.GetB(inst);
-                    _stack[frame.BaseSlot + a] = StashValue.FromBool(RuntimeOps.IsFalsy(_stack[frame.BaseSlot + b]));
+                    _stack[@base + a] = StashValue.FromBool(RuntimeOps.IsFalsy(_stack[@base + b]));
                     break;
                 }
                 case OpCode.TestSet:
@@ -193,10 +203,10 @@ public sealed partial class VirtualMachine
                     byte a = Instruction.GetA(inst);
                     byte b = Instruction.GetB(inst);
                     byte c = Instruction.GetC(inst);
-                    StashValue rb = _stack[frame.BaseSlot + b];
+                    StashValue rb = _stack[@base + b];
                     bool truthy = !RuntimeOps.IsFalsy(rb);
                     if (truthy == (c != 0))
-                        _stack[frame.BaseSlot + a] = rb;
+                        _stack[@base + a] = rb;
                     else
                         frame.IP++;
                     break;
@@ -206,7 +216,7 @@ public sealed partial class VirtualMachine
                     // ABC: if IsTruthy(R(A)) != C then skip next
                     byte a = Instruction.GetA(inst);
                     byte c = Instruction.GetC(inst);
-                    bool truthy = !RuntimeOps.IsFalsy(_stack[frame.BaseSlot + a]);
+                    bool truthy = !RuntimeOps.IsFalsy(_stack[@base + a]);
                     if (truthy != (c != 0))
                         frame.IP++;
                     break;
@@ -222,14 +232,14 @@ public sealed partial class VirtualMachine
                 case OpCode.JmpFalse:
                 {
                     byte a = Instruction.GetA(inst);
-                    if (RuntimeOps.IsFalsy(_stack[frame.BaseSlot + a]))
+                    if (RuntimeOps.IsFalsy(_stack[@base + a]))
                         frame.IP += Instruction.GetSBx(inst);
                     break;
                 }
                 case OpCode.JmpTrue:
                 {
                     byte a = Instruction.GetA(inst);
-                    if (!RuntimeOps.IsFalsy(_stack[frame.BaseSlot + a]))
+                    if (!RuntimeOps.IsFalsy(_stack[@base + a]))
                         frame.IP += Instruction.GetSBx(inst);
                     break;
                 }
@@ -257,7 +267,6 @@ public sealed partial class VirtualMachine
                 {
                     byte a = Instruction.GetA(inst);
                     byte argc = Instruction.GetC(inst);
-                    int @base = frame.BaseSlot;
                     object? callee = _stack[@base + a].AsObj;
 
                     // Ultra-fast path: VMFunction, exact arity, no rest, no async, no debug
@@ -281,7 +290,7 @@ public sealed partial class VirtualMachine
                 {
                     byte a = Instruction.GetA(inst);
                     byte b = Instruction.GetB(inst);
-                    StashValue retVal = b != 0 ? _stack[frame.BaseSlot + a] : StashValue.Null;
+                    StashValue retVal = b != 0 ? _stack[@base + a] : StashValue.Null;
 
                     // Ultra-fast return: no debug, no captured locals
                     if (typeof(TDebugMode) == typeof(DebugOff) && !frame.Chunk.MayHaveCapturedLocals)
@@ -294,7 +303,7 @@ public sealed partial class VirtualMachine
                             return retVal.ToObject();
                         }
 
-                        _stack[frame.BaseSlot - 1] = retVal;
+                        _stack[@base - 1] = retVal;
                         ref CallFrame caller = ref _frames[_frameCount - 1];
                         _sp = caller.BaseSlot + caller.Chunk.MaxRegs;
 
