@@ -18,6 +18,9 @@ public sealed partial class Compiler
             return null;
         }
 
+        // NOTE: Single-expression elision (OPT-3) was considered but rejected — skipping
+        // Interpolate bypasses Stringify, causing $"{42}" to return int 42 instead of "42".
+
         int partCount = mergedParts.Count;
         byte baseReg = _scope.ReserveRegs(1 + partCount);
 

@@ -203,11 +203,18 @@ public sealed partial class Compiler
                 child.CompileStmt(s);
         }
 
-        // Implicit return null at function end (unreachable for expression bodies)
-        byte retReg = child._scope.AllocTemp();
-        child._builder.EmitA(OpCode.LoadNull, retReg);
-        child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
-        child._scope.FreeTemp(retReg);
+        // OPT-4: Only emit implicit return null if the body doesn't unconditionally return/throw
+        bool alwaysReturns = expr.ExpressionBody != null; // Expression bodies always return
+        if (!alwaysReturns && expr.BlockBody != null)
+            alwaysReturns = BodyAlwaysReturns(expr.BlockBody.Statements);
+
+        if (!alwaysReturns)
+        {
+            byte retReg = child._scope.AllocTemp();
+            child._builder.EmitA(OpCode.LoadNull, retReg);
+            child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
+            child._scope.FreeTemp(retReg);
+        }
 
         // Finalize chunk metadata
         child._builder.Arity = paramCount;

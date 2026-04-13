@@ -2190,6 +2190,30 @@ public class InterpreterTests : StashTestBase
         Assert.Equal("12", Eval("$\"{1}{2}\""));
     }
 
+    [Fact]
+    public void Interpolation_SingleInteger_ReturnsString()
+    {
+        Assert.Equal("42", Eval("$\"{42}\""));
+    }
+
+    [Fact]
+    public void Interpolation_SingleBool_ReturnsString()
+    {
+        Assert.Equal("true", Eval("$\"{true}\""));
+    }
+
+    [Fact]
+    public void Interpolation_SingleFloat_ReturnsString()
+    {
+        Assert.Equal("3.14", Eval("$\"{3.14}\""));
+    }
+
+    [Fact]
+    public void Interpolation_SingleNull_ReturnsString()
+    {
+        Assert.Equal("null", Eval("$\"{null}\""));
+    }
+
     // ===== Phase 4: Command Execution =====
 
     [Fact]

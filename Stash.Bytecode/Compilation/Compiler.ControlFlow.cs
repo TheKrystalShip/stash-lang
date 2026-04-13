@@ -27,8 +27,20 @@ public sealed partial class Compiler
         }
 
         _builder.AddSourceMapping(stmt.Span);
-        byte condReg = CompileExpr(stmt.Condition);
-        int elseJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+
+        // OPT-5: Negation inversion — if (!x) → compile x, JmpTrue (skip Not + JmpFalse)
+        byte condReg;
+        int elseJump;
+        if (stmt.Condition is UnaryExpr { Operator.Type: TokenType.Bang } negation)
+        {
+            condReg = CompileExpr(negation.Right);
+            elseJump = _builder.EmitJump(OpCode.JmpTrue, condReg);
+        }
+        else
+        {
+            condReg = CompileExpr(stmt.Condition);
+            elseJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+        }
         _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.ThenBranch);
@@ -62,8 +74,19 @@ public sealed partial class Compiler
         };
         (_loops ??= new()).Push(loopCtx);
 
-        byte condReg = CompileExpr(stmt.Condition);
-        int exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+        // OPT-5: Negation inversion — while (!x) → compile x, JmpTrue (skip Not + JmpFalse)
+        byte condReg;
+        int exitJump;
+        if (stmt.Condition is UnaryExpr { Operator.Type: TokenType.Bang } negation)
+        {
+            condReg = CompileExpr(negation.Right);
+            exitJump = _builder.EmitJump(OpCode.JmpTrue, condReg);
+        }
+        else
+        {
+            condReg = CompileExpr(stmt.Condition);
+            exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
+        }
         _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.Body);

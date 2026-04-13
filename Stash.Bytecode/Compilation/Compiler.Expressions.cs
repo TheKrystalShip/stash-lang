@@ -235,6 +235,8 @@ partial class Compiler
     public object? VisitCallExpr(CallExpr expr)
     {
         byte dest = _destReg;
+        bool isVoid = _voidContext;
+        _voidContext = false;  // Sub-expressions are not in void context
         _builder.AddSourceMapping(expr.Span);
 
         int argc = expr.Arguments.Count;
@@ -247,8 +249,18 @@ partial class Compiler
             ushort nameIdx = _builder.AddConstant(dot.Name.Lexeme);
             if (nameIdx <= 255)
             {
-                // Reserve contiguous window first: [result/callee, arg0, ..., argN]
-                byte calleeReg = _scope.ReserveRegs(1 + argc);
+                // OPT-1: If dest is a temp at the allocation frontier, reuse it as the window base
+                byte calleeReg;
+                if (dest >= _scope.LocalCount && dest + 1 == _scope.NextFreeReg)
+                {
+                    calleeReg = dest;
+                    if (argc > 0)
+                        _scope.ReserveRegs(argc); // Only reserve arg slots; dest already allocated
+                }
+                else
+                {
+                    calleeReg = _scope.ReserveRegs(1 + argc);
+                }
 
                 // Compile the receiver (namespace) into a temp ABOVE the call window
                 // so FreeTemp works correctly (stack-based register allocator)
@@ -266,9 +278,13 @@ partial class Compiler
                 _scope.FreeTemp(nsReg);
 
                 // Move result to dest and free call window
-                if (calleeReg != dest)
+                if (!isVoid && calleeReg != dest)
                 {
                     _builder.EmitAB(OpCode.Move, dest, calleeReg);
+                    _scope.FreeTempFrom(calleeReg);
+                }
+                else if (isVoid)
+                {
                     _scope.FreeTempFrom(calleeReg);
                 }
                 else if (argc > 0)
@@ -281,7 +297,18 @@ partial class Compiler
         }
 
         // Generic path: reserve window, compile callee+args, emit Call
-        byte calleeReg2 = _scope.ReserveRegs(1 + argc);
+        // OPT-1: If dest is a temp at the allocation frontier, reuse it as the window base
+        byte calleeReg2;
+        if (dest >= _scope.LocalCount && dest + 1 == _scope.NextFreeReg)
+        {
+            calleeReg2 = dest;
+            if (argc > 0)
+                _scope.ReserveRegs(argc);
+        }
+        else
+        {
+            calleeReg2 = _scope.ReserveRegs(1 + argc);
+        }
 
         // Compile callee into calleeReg
         CompileExprTo(expr.Callee, calleeReg2);
@@ -319,9 +346,13 @@ partial class Compiler
         }
 
         // Move result to dest and free call window
-        if (calleeReg2 != dest)
+        if (!isVoid && calleeReg2 != dest)
         {
             _builder.EmitAB(OpCode.Move, dest, calleeReg2);
+            _scope.FreeTempFrom(calleeReg2);
+        }
+        else if (isVoid)
+        {
             _scope.FreeTempFrom(calleeReg2);
         }
         else if (argc > 0)

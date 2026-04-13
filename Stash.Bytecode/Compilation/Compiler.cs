@@ -21,6 +21,9 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     /// <summary>Target register for the current expression being compiled.</summary>
     private byte _destReg;
 
+    /// <summary>When true, the current expression's result is unused (expression statement context).</summary>
+    private bool _voidContext;
+
     /// <summary>Loop context for break/continue patching.</summary>
     private sealed class LoopContext
     {

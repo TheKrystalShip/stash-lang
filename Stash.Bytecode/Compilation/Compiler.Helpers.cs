@@ -220,11 +220,20 @@ partial class Compiler
             child.CompileStmt(body);
         }
 
-        // Implicit return null at end of function
-        byte retReg = child._scope.AllocTemp();
-        child._builder.EmitA(OpCode.LoadNull, retReg);
-        child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
-        child._scope.FreeTemp(retReg);
+        // OPT-4: Only emit implicit return null if the body doesn't unconditionally return/throw
+        bool alwaysReturns = false;
+        if (body is BlockStmt blk)
+            alwaysReturns = BodyAlwaysReturns(blk.Statements);
+        else
+            alwaysReturns = StmtAlwaysReturns(body);
+
+        if (!alwaysReturns)
+        {
+            byte retReg = child._scope.AllocTemp();
+            child._builder.EmitA(OpCode.LoadNull, retReg);
+            child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
+            child._scope.FreeTemp(retReg);
+        }
 
         child._builder.Arity = paramCount;
         child._builder.MinArity = minArity;
@@ -286,5 +295,34 @@ partial class Compiler
             return IsNumericExpr(g.Expression);
         return false;
     }
+
+    // ==================================================================
+    // OPT-4: Dead Epilogue Elimination
+    // ==================================================================
+
+    /// <summary>
+    /// Check if a statement list unconditionally returns or throws.
+    /// Used to suppress the implicit return-null epilogue when it's unreachable.
+    /// Conservative: false negatives are safe (just emits dead code).
+    /// </summary>
+    private static bool BodyAlwaysReturns(List<Stmt> statements)
+    {
+        if (statements.Count == 0) return false;
+        return StmtAlwaysReturns(statements[^1]);
+    }
+
+    private static bool StmtAlwaysReturns(Stmt stmt) => stmt switch
+    {
+        ReturnStmt => true,
+        ThrowStmt => true,
+        BlockStmt block => block.Statements.Count > 0 && StmtAlwaysReturns(block.Statements[^1]),
+        IfStmt ifs => ifs.ElseBranch != null
+                      && StmtAlwaysReturns(ifs.ThenBranch)
+                      && StmtAlwaysReturns(ifs.ElseBranch),
+        TryCatchStmt tc => tc.CatchBody != null
+                           && StmtAlwaysReturns(tc.TryBody)
+                           && StmtAlwaysReturns(tc.CatchBody),
+        _ => false,
+    };
 
 }
