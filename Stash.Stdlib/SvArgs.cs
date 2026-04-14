@@ -48,8 +48,21 @@ public static class SvArgs
     public static List<StashValue> StashList(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
         StashValue v = args[index];
-        if (v.IsObj && v.AsObj is List<StashValue> l) return l;
+        if (v.IsObj)
+        {
+            if (v.AsObj is List<StashValue> l) return l;
+            if (v.AsObj is StashTypedArray ta) return MaterializeTypedArray(ta);
+        }
         throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an array.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static List<StashValue> MaterializeTypedArray(StashTypedArray ta)
+    {
+        var list = new List<StashValue>(ta.Count);
+        for (int i = 0; i < ta.Count; i++)
+            list.Add(ta.Get(i));
+        return list;
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

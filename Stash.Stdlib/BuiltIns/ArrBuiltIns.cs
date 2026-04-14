@@ -31,12 +31,25 @@ public static class ArrBuiltIns
 
         ns.Function("push", [Param("array", "array"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taPush)
+            {
+                taPush.Add(args[1]);
+                return StashValue.Null;
+            }
             SvArgs.StashList(args, 0, "arr.push").Add(args[1]);
             return StashValue.Null;
         });
 
         ns.Function("pop", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taPop)
+            {
+                if (taPop.Count == 0)
+                    throw new RuntimeError("Cannot pop from an empty array.");
+                return taPop.RemoveLast();
+            }
             var list = SvArgs.StashList(args, 0, "arr.pop");
             if (list.Count == 0)
                 throw new RuntimeError("Cannot pop from an empty array.");
@@ -55,8 +68,17 @@ public static class ArrBuiltIns
 
         ns.Function("insert", [Param("array", "array"), Param("index", "int"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = SvArgs.StashList(args, 0, "arr.insert");
             var idx = SvArgs.Long(args, 1, "arr.insert");
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taInsert)
+            {
+                int i = (int)(idx < 0 ? idx + taInsert.Count : idx);
+                if (i < 0 || i > taInsert.Count)
+                    throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.");
+                taInsert.Insert(i, args[2]);
+                return StashValue.Null;
+            }
+            var list = SvArgs.StashList(args, 0, "arr.insert");
             if (idx < 0 || idx > list.Count)
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.");
             list.Insert((int)idx, args[2]);
@@ -65,17 +87,40 @@ public static class ArrBuiltIns
 
         ns.Function("removeAt", [Param("array", "array"), Param("index", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
-            var list = SvArgs.StashList(args, 0, "arr.removeAt");
             var idx = SvArgs.Long(args, 1, "arr.removeAt");
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taRemoveAt)
+            {
+                int i = (int)(idx < 0 ? idx + taRemoveAt.Count : idx);
+                taRemoveAt.CheckBounds(i, "removeAt");
+                StashValue removed = taRemoveAt.Get(i);
+                taRemoveAt.RemoveAt(i);
+                return removed;
+            }
+            var list = SvArgs.StashList(args, 0, "arr.removeAt");
             if (idx < 0 || idx >= list.Count)
                 throw new RuntimeError($"Index {idx} is out of bounds for 'arr.removeAt'.");
-            var removed = list[(int)idx];
+            var removedVal = list[(int)idx];
             list.RemoveAt((int)idx);
-            return removed;
+            return removedVal;
         });
 
         ns.Function("remove", [Param("array", "array"), Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taRemove)
+            {
+                object? target = args[1].ToObject();
+                for (int i = 0; i < taRemove.Count; i++)
+                {
+                    if (RuntimeValues.IsEqual(taRemove.Get(i).ToObject(), target))
+                    {
+                        taRemove.RemoveAt(i);
+                        return StashValue.True;
+                    }
+                }
+                return StashValue.False;
+            }
             var list = SvArgs.StashList(args, 0, "arr.remove");
             var value = args[1].ToObject();
             for (int i = 0; i < list.Count; i++)
@@ -91,6 +136,12 @@ public static class ArrBuiltIns
 
         ns.Function("clear", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taClear)
+            {
+                taClear.Clear();
+                return StashValue.Null;
+            }
             SvArgs.StashList(args, 0, "arr.clear").Clear();
             return StashValue.Null;
         });
@@ -164,23 +215,31 @@ public static class ArrBuiltIns
 
         ns.Function("slice", [Param("array", "array"), Param("start", "int"), Param("end", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcSl ? srcSl.ElementTypeName : null;
             var list = SvArgs.StashList(args, 0, "arr.slice");
             var start = SvArgs.Long(args, 1, "arr.slice");
             var end = SvArgs.Long(args, 2, "arr.slice");
             int s = (int)Math.Max(0, Math.Min(start, list.Count));
             int e = (int)Math.Max(0, Math.Min(end, list.Count));
             if (e < s) e = s;
-            return StashValue.FromObj(list.GetRange(s, e - s));
+            var result = list.GetRange(s, e - s);
+            return elementType != null
+                ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
+                : StashValue.FromObj(result);
         });
 
         ns.Function("concat", [Param("a", "array"), Param("b", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            string? et1 = args[0].IsObj && args[0].AsObj is StashTypedArray srcCa ? srcCa.ElementTypeName : null;
+            string? et2 = args[1].IsObj && args[1].AsObj is StashTypedArray srcCb ? srcCb.ElementTypeName : null;
             var list1 = SvArgs.StashList(args, 0, "arr.concat");
             var list2 = SvArgs.StashList(args, 1, "arr.concat");
             var result = new List<StashValue>(list1.Count + list2.Count);
             result.AddRange(list1);
             result.AddRange(list2);
-            return StashValue.FromObj(result);
+            return et1 != null && et1 == et2
+                ? StashValue.FromObj(StashTypedArray.Create(et1, result))
+                : StashValue.FromObj(result);
         });
 
         ns.Function("join", [Param("array", "array"), Param("separator?", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -199,6 +258,17 @@ public static class ArrBuiltIns
 
         ns.Function("reverse", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taReverse)
+            {
+                for (int i = 0, j = taReverse.Count - 1; i < j; i++, j--)
+                {
+                    StashValue tmp = taReverse.Get(i);
+                    taReverse.Set(i, taReverse.Get(j));
+                    taReverse.Set(j, tmp);
+                }
+                return StashValue.Null;
+            }
             SvArgs.StashList(args, 0, "arr.reverse").Reverse();
             return StashValue.Null;
         });
@@ -207,6 +277,46 @@ public static class ArrBuiltIns
         {
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("'arr.sort' requires 1 or 2 arguments.");
+            StashValue arrSortVal = args[0];
+            if (arrSortVal.IsObj && arrSortVal.AsObj is StashTypedArray taSort)
+            {
+                var tempList = new List<StashValue>(taSort.Count);
+                for (int i = 0; i < taSort.Count; i++) tempList.Add(taSort.Get(i));
+                try
+                {
+                    if (args.Length == 2)
+                    {
+                        var cmp = SvArgs.Callable(args, 1, "arr.sort");
+                        tempList.Sort((a, b) =>
+                        {
+                            var res = ctx.InvokeCallbackDirect(cmp, new StashValue[] { a, b }).ToObject();
+                            if (res is long l) return l < 0 ? -1 : l > 0 ? 1 : 0;
+                            if (res is double d) return d < 0 ? -1 : d > 0 ? 1 : 0;
+                            throw new RuntimeError("'arr.sort' comparator must return a number.");
+                        });
+                    }
+                    else
+                    {
+                        tempList.Sort((a, b) =>
+                        {
+                            var ao = a.ToObject();
+                            var bo = b.ToObject();
+                            if (ao is long la && bo is long lb) return la.CompareTo(lb);
+                            if (ao is double da && bo is double db) return da.CompareTo(db);
+                            if (ao is long la2 && bo is double db2) return ((double)la2).CompareTo(db2);
+                            if (ao is double da2 && bo is long lb2) return da2.CompareTo((double)lb2);
+                            if (ao is string sa && bo is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
+                            throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.");
+                        });
+                    }
+                }
+                catch (InvalidOperationException ex) when (ex.InnerException is RuntimeError re)
+                {
+                    throw re;
+                }
+                for (int i = 0; i < tempList.Count; i++) taSort.Set(i, tempList[i]);
+                return StashValue.Null;
+            }
             var list = SvArgs.StashList(args, 0, "arr.sort");
             try
             {
@@ -260,6 +370,7 @@ public static class ArrBuiltIns
 
         ns.Function("filter", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcFl ? srcFl.ElementTypeName : null;
             var list = SvArgs.StashList(args, 0, "arr.filter");
             var fn = SvArgs.Callable(args, 1, "arr.filter");
             var result = new List<StashValue>(list.Count);
@@ -270,7 +381,9 @@ public static class ArrBuiltIns
                     result.Add(item);
                 }
             }
-            return StashValue.FromObj(result);
+            return elementType != null
+                ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
+                : StashValue.FromObj(result);
         });
 
         ns.Function("forEach", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -333,6 +446,7 @@ public static class ArrBuiltIns
         {
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("'arr.unique' requires 1 or 2 arguments.");
+            string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcUniq ? srcUniq.ElementTypeName : null;
             var list = SvArgs.StashList(args, 0, "arr.unique");
             var result = new List<StashValue>();
             if (args.Length == 2)
@@ -374,7 +488,9 @@ public static class ArrBuiltIns
                     if (!found) result.Add(item);
                 }
             }
-            return StashValue.FromObj(result);
+            return elementType != null
+                ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
+                : StashValue.FromObj(result);
         },
             isVariadic: true,
             documentation: "Returns a new array with duplicate values removed. When fn is provided, uses fn(element) as the uniqueness key — elements with the same key are considered duplicates; the first occurrence is kept.");
@@ -471,6 +587,7 @@ public static class ArrBuiltIns
 
         ns.Function("sortBy", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcSby ? srcSby.ElementTypeName : null;
             var list = SvArgs.StashList(args, 0, "arr.sortBy");
             var fn = SvArgs.Callable(args, 1, "arr.sortBy");
             var sorted = new List<StashValue>(list);
@@ -487,7 +604,9 @@ public static class ArrBuiltIns
             {
                 throw re;
             }
-            return StashValue.FromObj(sorted);
+            return elementType != null
+                ? StashValue.FromObj(StashTypedArray.Create(elementType, sorted))
+                : StashValue.FromObj(sorted);
         });
 
         ns.Function("groupBy", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -590,11 +709,24 @@ public static class ArrBuiltIns
 
         ns.Function("shuffle", [Param("array", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            StashValue arrVal = args[0];
+            if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taShuffle)
+            {
+                var rng = new Random();
+                for (int i = taShuffle.Count - 1; i > 0; i--)
+                {
+                    int j = rng.Next(i + 1);
+                    StashValue tmp = taShuffle.Get(i);
+                    taShuffle.Set(i, taShuffle.Get(j));
+                    taShuffle.Set(j, tmp);
+                }
+                return StashValue.Null;
+            }
             var list = SvArgs.StashList(args, 0, "arr.shuffle");
-            var rng = new Random();
+            var rng2 = new Random();
             for (int i = list.Count - 1; i > 0; i--)
             {
-                int j = rng.Next(i + 1);
+                int j = rng2.Next(i + 1);
                 (list[i], list[j]) = (list[j], list[i]);
             }
             return StashValue.Null;
@@ -602,18 +734,26 @@ public static class ArrBuiltIns
 
         ns.Function("take", [Param("array", "array"), Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcTk ? srcTk.ElementTypeName : null;
             var list = SvArgs.StashList(args, 0, "arr.take");
             var n = SvArgs.Long(args, 1, "arr.take");
             int count = (int)Math.Max(0, Math.Min(n, list.Count));
-            return StashValue.FromObj(list.GetRange(0, count));
+            var result = list.GetRange(0, count);
+            return elementType != null
+                ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
+                : StashValue.FromObj(result);
         });
 
         ns.Function("drop", [Param("array", "array"), Param("n", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
+            string? elementType = args[0].IsObj && args[0].AsObj is StashTypedArray srcDp ? srcDp.ElementTypeName : null;
             var list = SvArgs.StashList(args, 0, "arr.drop");
             var n = SvArgs.Long(args, 1, "arr.drop");
             int skip = (int)Math.Max(0, Math.Min(n, list.Count));
-            return StashValue.FromObj(list.GetRange(skip, list.Count - skip));
+            var result = list.GetRange(skip, list.Count - skip);
+            return elementType != null
+                ? StashValue.FromObj(StashTypedArray.Create(elementType, result))
+                : StashValue.FromObj(result);
         });
 
         ns.Function("partition", [Param("array", "array"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

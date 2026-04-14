@@ -114,6 +114,7 @@ public static class GlobalBuiltIns
                 }
                 if (obj is string s) return StashValue.FromInt((long)s.Length);
                 if (obj is List<StashValue> svList) return StashValue.FromInt((long)svList.Count);
+                if (obj is StashTypedArray typedArr) return StashValue.FromInt((long)typedArr.Count);
                 if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
             }
             throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
