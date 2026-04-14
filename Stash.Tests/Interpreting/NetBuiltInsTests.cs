@@ -1,3 +1,4 @@
+using System.Net;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Bytecode;
@@ -567,4 +568,330 @@ let result = info.hostCount;
         ");
         Assert.Equal("string", result);
     }
+
+    #region WebSocket
+
+    private static (HttpListener listener, Task serverTask) StartWsEchoServer(int port)
+    {
+        var listener = new HttpListener();
+        listener.Prefixes.Add($"http://localhost:{port}/");
+        listener.Start();
+
+        var serverTask = Task.Run(async () =>
+        {
+            while (listener.IsListening)
+            {
+                HttpListenerContext context;
+                try { context = await listener.GetContextAsync(); }
+                catch (ObjectDisposedException) { break; }
+                catch (HttpListenerException) { break; }
+
+                if (context.Request.IsWebSocketRequest)
+                {
+                    var wsContext = await context.AcceptWebSocketAsync(subProtocol: null);
+                    var ws = wsContext.WebSocket;
+                    var buffer = new byte[4096];
+                    try
+                    {
+                        while (ws.State == System.Net.WebSockets.WebSocketState.Open)
+                        {
+                            var result = await ws.ReceiveAsync(new ArraySegment<byte>(buffer), CancellationToken.None);
+                            if (result.MessageType == System.Net.WebSockets.WebSocketMessageType.Close)
+                            {
+                                await ws.CloseAsync(System.Net.WebSockets.WebSocketCloseStatus.NormalClosure, "", CancellationToken.None);
+                                break;
+                            }
+                            // Echo back
+                            await ws.SendAsync(new ArraySegment<byte>(buffer, 0, result.Count), result.MessageType, result.EndOfMessage, CancellationToken.None);
+                        }
+                    }
+                    catch (System.Net.WebSockets.WebSocketException) { }
+                }
+                else
+                {
+                    context.Response.StatusCode = 400;
+                    context.Response.Close();
+                }
+            }
+        });
+
+        return (listener, serverTask);
+    }
+
+    private static void StopWsEchoServer(HttpListener listener, Task serverTask)
+    {
+        listener.Stop();
+        listener.Close();
+        try { serverTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+    }
+
+    [Fact]
+    public void WsConnect_ValidUrl_ReturnsWsConnection()
+    {
+        int port = 19900;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                io.println(ws.url);
+                io.println(typeof(ws.protocol));
+                await net.wsClose(ws);
+            ");
+            var lines = output.Trim().Split('\n');
+            Assert.Equal($"ws://localhost:{port}/", lines[0].Trim());
+            Assert.Equal("string", lines[1].Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsSend_TextMessage_ReturnsByteCount()
+    {
+        int port = 19901;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                let bytes = await net.wsSend(ws, ""hello"");
+                io.println(bytes);
+                await net.wsClose(ws);
+            ");
+            Assert.Equal("5", output.Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsRecv_EchoServer_ReturnsTextMessage()
+    {
+        int port = 19902;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                await net.wsSend(ws, ""hello world"");
+                let msg = await net.wsRecv(ws, 5s);
+                io.println(msg.data);
+                io.println(msg.type);
+                io.println(msg.close);
+                await net.wsClose(ws);
+            ");
+            var lines = output.Trim().Split('\n');
+            Assert.Equal("hello world", lines[0].Trim());
+            Assert.Equal("text", lines[1].Trim());
+            Assert.Equal("false", lines[2].Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsRecv_Timeout_ReturnsNull()
+    {
+        int port = 19903;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                let msg = await net.wsRecv(ws, 100ms);
+                io.println(msg == null);
+                await net.wsClose(ws);
+            ");
+            Assert.Equal("true", output.Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsClose_GracefulClose_Succeeds()
+    {
+        int port = 19904;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                await net.wsClose(ws);
+                io.println(net.wsState(ws));
+            ");
+            Assert.Equal("WsConnectionState.Closed", output.Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsClose_Idempotent_NoError()
+    {
+        int port = 19905;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                await net.wsClose(ws);
+                await net.wsClose(ws);
+            ");
+            // No exception = pass
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsState_Open_ReturnsEnumValue()
+    {
+        int port = 19906;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                io.println(net.wsState(ws));
+                io.println(net.wsState(ws) == net.WsConnectionState.Open);
+                await net.wsClose(ws);
+            ");
+            var lines = output.Trim().Split('\n');
+            Assert.Equal("WsConnectionState.Open", lines[0].Trim());
+            Assert.Equal("true", lines[1].Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsIsOpen_Open_ReturnsTrue()
+    {
+        int port = 19907;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                io.println(net.wsIsOpen(ws));
+                await net.wsClose(ws);
+                io.println(net.wsIsOpen(ws));
+            ");
+            var lines = output.Trim().Split('\n');
+            Assert.Equal("true", lines[0].Trim());
+            Assert.Equal("false", lines[1].Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsSendBinary_Base64Data_Succeeds()
+    {
+        int port = 19908;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                let payload = encoding.base64Encode(""binary data"");
+                let bytes = await net.wsSendBinary(ws, payload);
+                io.println(bytes > 0);
+                let msg = await net.wsRecv(ws, 5s);
+                io.println(msg.type);
+                await net.wsClose(ws);
+            ");
+            var lines = output.Trim().Split('\n');
+            Assert.Equal("true", lines[0].Trim());
+            Assert.Equal("binary", lines[1].Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsConnect_InvalidScheme_ThrowsError()
+    {
+        var ex = RunCapturingError(@"
+            let ws = await net.wsConnect(""http://localhost:8080"");
+        ");
+        Assert.Contains("ws://", ex.Message);
+    }
+
+    [Fact]
+    public void WsConnect_Unreachable_ThrowsError()
+    {
+        RunExpectingError(@"
+            let ws = await net.wsConnect(""ws://localhost:1"", { timeout: 1s });
+        ");
+    }
+
+    [Fact]
+    public void WsSend_WrongType_ThrowsError()
+    {
+        RunExpectingError(@"
+            await net.wsSend(""not a connection"", ""data"");
+        ");
+    }
+
+    [Fact]
+    public void WsSendBinary_InvalidBase64_ThrowsError()
+    {
+        int port = 19909;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            RunExpectingError($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                await net.wsSendBinary(ws, ""not-valid-base64!!!"");
+            ");
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsClose_InvalidCode_ThrowsError()
+    {
+        int port = 19910;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            RunExpectingError($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                await net.wsClose(ws, 999);
+            ");
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsRecv_DurationLiteral_Accepted()
+    {
+        int port = 19911;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"");
+                await net.wsSend(ws, ""ping"");
+                let msg = await net.wsRecv(ws, 5s);
+                io.println(msg.data);
+                await net.wsClose(ws);
+            ");
+            Assert.Equal("ping", output.Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    [Fact]
+    public void WsConnect_DurationTimeout_Accepted()
+    {
+        int port = 19912;
+        var (listener, serverTask) = StartWsEchoServer(port);
+        try
+        {
+            var output = RunCapturingOutput($@"
+                let ws = await net.wsConnect(""ws://localhost:{port}/"", {{ timeout: 5s }});
+                io.println(net.wsIsOpen(ws));
+                await net.wsClose(ws);
+            ");
+            Assert.Equal("true", output.Trim());
+        }
+        finally { StopWsEchoServer(listener, serverTask); }
+    }
+
+    #endregion
 }

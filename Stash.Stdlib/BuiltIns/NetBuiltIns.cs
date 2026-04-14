@@ -8,6 +8,8 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.Net.WebSockets;
+using System.Runtime.CompilerServices;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -17,8 +19,12 @@ using static Stash.Stdlib.Registration.P;
 
 public static class NetBuiltIns
 {
+    /// <summary>Maps WsConnection instances to their underlying ClientWebSocket. Uses weak references to allow GC.</summary>
+    private static readonly ConditionalWeakTable<StashInstance, ClientWebSocket> _wsClients = new();
+
     public static NamespaceDefinition Define()
     {
+        var wsStateEnum = new StashEnum("WsConnectionState", new List<string> { "Connecting", "Open", "Closing", "Closed" });
         var ns = new NamespaceBuilder("net");
         ns.RequiresCapability(StashCapabilities.Network);
 
@@ -454,6 +460,240 @@ public static class NetBuiltIns
             }
         }, returnType: "array", documentation: "Resolves TXT records for a domain.\n@param domain The domain to query.\n@return An array of strings containing the TXT record values.");
 
+        // net.wsConnect(url, ?options) — Async. Opens a WebSocket connection.
+        ns.Function("wsConnect", [Param("url", "string"), Param("options", "dict")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("net.wsConnect: expected 1 or 2 arguments.");
+            var url = SvArgs.String(args, 0, "net.wsConnect");
+            if (!url.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
+                throw new RuntimeError("net.wsConnect: url must start with 'ws://' or 'wss://'.");
+
+            StashDictionary? options = args.Length > 1 ? SvArgs.Dict(args, 1, "net.wsConnect") : null;
+
+            long timeoutMs = 10_000;
+            string? subprotocol = null;
+            StashDictionary? headers = null;
+
+            if (options is not null)
+            {
+                var timeoutVal = options.Get("timeout");
+                if (!timeoutVal.IsNull && timeoutVal.IsObj && timeoutVal.AsObj is StashDuration td)
+                    timeoutMs = td.TotalMilliseconds;
+                var spVal = options.Get("subprotocol");
+                if (!spVal.IsNull && spVal.IsObj && spVal.AsObj is string sp)
+                    subprotocol = sp;
+                var headersVal = options.Get("headers");
+                if (!headersVal.IsNull && headersVal.IsObj && headersVal.AsObj is StashDictionary hd)
+                    headers = hd;
+            }
+
+            var capturedUrl = url;
+            var capturedSubprotocol = subprotocol;
+            var capturedHeaders = headers;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+            if (timeoutMs > 0)
+                cts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                var client = new ClientWebSocket();
+                if (capturedSubprotocol is not null)
+                    client.Options.AddSubProtocol(capturedSubprotocol);
+                if (capturedHeaders is not null)
+                {
+                    foreach (var rawKey in capturedHeaders.RawKeys())
+                    {
+                        var val = capturedHeaders.Get(rawKey);
+                        if (rawKey is string headerName && val.IsObj && val.AsObj is string headerVal)
+                            client.Options.SetRequestHeader(headerName, headerVal);
+                    }
+                }
+                await client.ConnectAsync(new Uri(capturedUrl), cts.Token);
+                var instance = new StashInstance("WsConnection", new Dictionary<string, StashValue>
+                {
+                    ["url"] = StashValue.FromObj(capturedUrl),
+                    ["protocol"] = StashValue.FromObj(client.SubProtocol ?? ""),
+                });
+                _wsClients.Add(instance, client);
+                return (object?)instance;
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "WsConnection", isVariadic: true, documentation: "Opens a WebSocket connection to the given URL.\n@param url The WebSocket URL (must start with 'ws://' or 'wss://').\n@param options Optional dict with 'headers' (dict), 'timeout' (duration), 'subprotocol' (string).\n@return A Future resolving to a WsConnection.");
+
+        // net.wsSend(conn, data) — Async. Sends a UTF-8 text message.
+        ns.Function("wsSend", [Param("conn", "WsConnection"), Param("data", "string")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 2)
+                throw new RuntimeError("net.wsSend: expected 2 arguments.");
+            var client = GetWsClient(args[0].ToObject(), "net.wsSend");
+            var data = SvArgs.String(args, 1, "net.wsSend");
+
+            var capturedData = data;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                byte[] bytes = Encoding.UTF8.GetBytes(capturedData);
+                await client.SendAsync(new ArraySegment<byte>(bytes), WebSocketMessageType.Text, endOfMessage: true, cts.Token);
+                return (object?)(long)bytes.Length;
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "int", documentation: "Sends a UTF-8 text message over a WebSocket connection.\n@param conn The WsConnection.\n@param data The string data to send.\n@return A Future resolving to the number of bytes sent.");
+
+        // net.wsSendBinary(conn, data) — Async. Sends binary data (base64-encoded string decoded to bytes).
+        ns.Function("wsSendBinary", [Param("conn", "WsConnection"), Param("data", "string")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 2)
+                throw new RuntimeError("net.wsSendBinary: expected 2 arguments.");
+            var client = GetWsClient(args[0].ToObject(), "net.wsSendBinary");
+            var data = SvArgs.String(args, 1, "net.wsSendBinary");
+
+            byte[] bytes;
+            try
+            {
+                bytes = Convert.FromBase64String(data);
+            }
+            catch (FormatException)
+            {
+                throw new RuntimeError("net.wsSendBinary: invalid base64 data");
+            }
+
+            var capturedBytes = bytes;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                await client.SendAsync(new ArraySegment<byte>(capturedBytes), WebSocketMessageType.Binary, endOfMessage: true, cts.Token);
+                return (object?)(long)capturedBytes.Length;
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "int", documentation: "Sends binary data (base64-encoded) over a WebSocket connection.\n@param conn The WsConnection.\n@param data Base64-encoded string of bytes to send.\n@return A Future resolving to the number of bytes sent.");
+
+        // net.wsRecv(conn, ?timeout) — Async. Receives the next complete message.
+        ns.Function("wsRecv", [Param("conn", "WsConnection"), Param("timeout", "duration")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("net.wsRecv: expected 1 or 2 arguments.");
+            var client = GetWsClient(args[0].ToObject(), "net.wsRecv");
+            long timeoutMs = 30_000;
+            if (args.Length > 1)
+                timeoutMs = SvArgs.Duration(args, 1, "net.wsRecv").TotalMilliseconds;
+
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                using var recvCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+                if (timeoutMs > 0)
+                    recvCts.CancelAfter(TimeSpan.FromMilliseconds(timeoutMs));
+                try
+                {
+                    var buffer = new byte[4096];
+                    using var ms = new System.IO.MemoryStream();
+                    WebSocketReceiveResult result;
+                    do
+                    {
+                        result = await client.ReceiveAsync(new ArraySegment<byte>(buffer), recvCts.Token);
+                        if (result.MessageType == WebSocketMessageType.Close)
+                        {
+                            return (object?)new StashInstance("WsMessage", new Dictionary<string, StashValue>
+                            {
+                                ["data"] = StashValue.FromObj(result.CloseStatusDescription ?? ""),
+                                ["type"] = StashValue.FromObj("text"),
+                                ["close"] = StashValue.True,
+                            });
+                        }
+                        ms.Write(buffer, 0, result.Count);
+                        if (ms.Length > 16 * 1024 * 1024)
+                            throw new RuntimeError("net.wsRecv: message exceeds maximum size of 16MB.");
+                    } while (!result.EndOfMessage);
+
+                    string msgType;
+                    string msgData;
+                    if (result.MessageType == WebSocketMessageType.Binary)
+                    {
+                        msgType = "binary";
+                        msgData = Convert.ToBase64String(ms.ToArray());
+                    }
+                    else
+                    {
+                        msgType = "text";
+                        msgData = Encoding.UTF8.GetString(ms.ToArray());
+                    }
+
+                    return (object?)new StashInstance("WsMessage", new Dictionary<string, StashValue>
+                    {
+                        ["data"] = StashValue.FromObj(msgData),
+                        ["type"] = StashValue.FromObj(msgType),
+                        ["close"] = StashValue.False,
+                    });
+                }
+                catch (OperationCanceledException) when (!cts.Token.IsCancellationRequested)
+                {
+                    return null; // per-recv timeout → return null
+                }
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "WsMessage", isVariadic: true, documentation: "Receives the next complete message from a WebSocket connection.\n@param conn The WsConnection.\n@param timeout Optional timeout duration (default 30s). Returns null on timeout.\n@return A Future resolving to a WsMessage or null on timeout.");
+
+        // net.wsClose(conn, ?code, ?reason) — Async. Graceful WebSocket close handshake.
+        ns.Function("wsClose", [Param("conn", "WsConnection"), Param("code", "int"), Param("reason", "string")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 3)
+                throw new RuntimeError("net.wsClose: expected 1 to 3 arguments.");
+            var client = GetWsClient(args[0].ToObject(), "net.wsClose");
+            long code = args.Length > 1 ? SvArgs.Long(args, 1, "net.wsClose") : 1000;
+            if (code < 1000 || code > 4999)
+                throw new RuntimeError("net.wsClose: close code must be between 1000 and 4999.");
+            string reason = args.Length > 2 ? SvArgs.String(args, 2, "net.wsClose") : "";
+
+            var capturedReason = reason;
+            var capturedCode = (int)code;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                if (client.State == WebSocketState.Closed || client.State == WebSocketState.Aborted)
+                    return null;
+                try
+                {
+                    using var closeCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token);
+                    closeCts.CancelAfter(TimeSpan.FromSeconds(5));
+                    await client.CloseAsync((WebSocketCloseStatus)capturedCode, capturedReason, closeCts.Token);
+                }
+                catch (OperationCanceledException)
+                {
+                    client.Abort();
+                }
+                catch (WebSocketException)
+                {
+                    client.Abort();
+                }
+                return null;
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "null", isVariadic: true, documentation: "Performs a graceful WebSocket close handshake.\n@param conn The WsConnection.\n@param code Optional close code (1000-4999, default 1000).\n@param reason Optional close reason string (default empty).\n@return A Future resolving to null.");
+
+        // net.wsState(conn) — Sync. Returns the WsConnectionState enum value.
+        ns.Function("wsState", [Param("conn", "WsConnection")], (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 1)
+                throw new RuntimeError("net.wsState: expected 1 argument.");
+            var client = GetWsClient(args[0].ToObject(), "net.wsState");
+            var member = wsStateEnum.GetMember(MapWsState(client.State));
+            return member is not null ? StashValue.FromObj(member) : StashValue.Null;
+        }, returnType: "WsConnectionState", documentation: "Returns the current connection state of a WebSocket.\n@param conn The WsConnection.\n@return A WsConnectionState enum value.");
+
+        // net.wsIsOpen(conn) — Sync. Returns true if the WebSocket is in the Open state.
+        ns.Function("wsIsOpen", [Param("conn", "WsConnection")], (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 1)
+                throw new RuntimeError("net.wsIsOpen: expected 1 argument.");
+            var client = GetWsClient(args[0].ToObject(), "net.wsIsOpen");
+            return StashValue.FromBool(client.State == WebSocketState.Open);
+        }, returnType: "bool", documentation: "Returns true if the WebSocket connection is open.\n@param conn The WsConnection.\n@return True if the connection state is Open.");
+
         // Struct definitions
         ns.Struct("SubnetInfo", [
             new BuiltInField("network", "ip"),
@@ -500,6 +740,19 @@ public static class NetBuiltIns
             new BuiltInField("exchange", "string"),
         ]);
 
+        ns.Struct("WsConnection", [
+            new BuiltInField("url", "string"),
+            new BuiltInField("protocol", "string"),
+        ]);
+
+        ns.Struct("WsMessage", [
+            new BuiltInField("data", "string"),
+            new BuiltInField("type", "string"),
+            new BuiltInField("close", "bool"),
+        ]);
+
+        ns.Enum("WsConnectionState", ["Connecting", "Open", "Closing", "Closed"]);
+
         return ns.Build();
     }
 
@@ -533,6 +786,24 @@ public static class NetBuiltIns
 
         return (maskBytes, networkBytes, broadcastBytes, wildcardBytes);
     }
+
+    private static ClientWebSocket GetWsClient(object? arg, string funcName)
+    {
+        if (arg is not StashInstance inst || inst.TypeName != "WsConnection")
+            throw new RuntimeError($"First argument to '{funcName}' must be a WsConnection.");
+        if (!_wsClients.TryGetValue(inst, out ClientWebSocket? ws))
+            throw new RuntimeError($"{funcName}: connection is invalid or closed.");
+        return ws;
+    }
+
+    private static string MapWsState(WebSocketState state) => state switch
+    {
+        WebSocketState.None or WebSocketState.Connecting => "Connecting",
+        WebSocketState.Open => "Open",
+        WebSocketState.CloseSent or WebSocketState.CloseReceived => "Closing",
+        WebSocketState.Closed or WebSocketState.Aborted => "Closed",
+        _ => "Closed",
+    };
 
     private static long ComputeHostCount(StashIpAddress ip)
     {

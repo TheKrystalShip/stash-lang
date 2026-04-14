@@ -99,6 +99,14 @@ public static class SvArgs
         throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a future.");
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StashDuration Duration(ReadOnlySpan<StashValue> args, int index, string funcName)
+    {
+        StashValue v = args[index];
+        if (v.IsObj && v.AsObj is StashDuration d) return d;
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a duration.");
+    }
+
     /// <summary>
     /// Accepts both long and double, returning double. Used by math functions.
     /// </summary>

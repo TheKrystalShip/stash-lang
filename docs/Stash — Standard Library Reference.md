@@ -3121,6 +3121,127 @@ io.println(msg.port);  // sender's port
 | `host` | `string` | Sender's IP address       |
 | `port` | `int`    | Sender's port             |
 
+### WebSocket Client
+
+| Function                            | Description                                                           |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `net.wsConnect(url, options?)`      | Async. Opens a WebSocket connection. Returns `Future<WsConnection>`.  |
+| `net.wsSend(conn, data)`            | Async. Sends a text message. Returns `Future<int>` (bytes sent).      |
+| `net.wsSendBinary(conn, data)`      | Async. Sends binary data (base64-encoded). Returns `Future<int>`.     |
+| `net.wsRecv(conn, timeout?)`        | Async. Receives next message. Returns `Future<WsMessage\|null>`.      |
+| `net.wsClose(conn, code?, reason?)` | Async. Initiates graceful close handshake.                            |
+| `net.wsState(conn)`                 | Returns `WsConnectionState` enum value.                               |
+| `net.wsIsOpen(conn)`                | Returns `true` if connection is `WsConnectionState.Open`.             |
+
+#### `net.wsConnect(url, options?)`
+
+Async. Opens a WebSocket connection to a `ws://` or `wss://` URL.
+
+- `url` — WebSocket URL (must start with `ws://` or `wss://`)
+- `options` — Optional dict:
+
+| Key           | Type       | Default | Description                                 |
+| ------------- | ---------- | ------- | ------------------------------------------- |
+| `headers`     | `dict`     | `{}`    | Custom HTTP headers for the upgrade request |
+| `timeout`     | `duration` | `10s`   | Connection timeout                          |
+| `subprotocol` | `string`   | `null`  | Requested WebSocket subprotocol             |
+
+```stash
+let ws = await net.wsConnect("ws://localhost:8080/events");
+
+// With auth and subprotocol
+let ws = await net.wsConnect("wss://broker.example.com/ws", {
+    headers: { "Authorization": "Bearer " + token },
+    subprotocol: "stomp",
+    timeout: 5s
+});
+```
+
+#### `net.wsSend(conn, data)`
+
+Async. Sends a UTF-8 text message over an open WebSocket connection.
+
+- Returns `Future<int>` — bytes sent
+
+```stash
+let bytes = await net.wsSend(ws, json.stringify({ event: "deploy", app: "web-api" }));
+```
+
+#### `net.wsSendBinary(conn, data)`
+
+Async. Sends binary data. The `data` parameter must be base64-encoded; it is decoded to raw bytes before sending.
+
+```stash
+let payload = encoding.base64Encode(rawBytes);
+await net.wsSendBinary(ws, payload);
+```
+
+#### `net.wsRecv(conn, timeout?)`
+
+Async. Receives the next complete message. Blocks until a message arrives or the timeout (default: `30s`) expires.
+
+- Returns `Future<WsMessage|null>` — `WsMessage` struct or `null` on timeout
+- Fragmented frames are reassembled internally
+
+```stash
+let msg = await net.wsRecv(ws, 5s);
+if (msg == null) {
+    io.println("Timed out");
+} else if (msg.close) {
+    io.println("Server closed: " + msg.data);
+} else {
+    io.println(msg.type + ": " + msg.data);
+}
+```
+
+#### `net.wsClose(conn, code?, reason?)`
+
+Async. Initiates the WebSocket close handshake.
+
+- `code` — Close status code (default: `1000`)
+- `reason` — Close reason (default: `""`)
+- Idempotent — safe to call on already-closed connections
+
+```stash
+await net.wsClose(ws);
+await net.wsClose(ws, 1001, "going away");
+```
+
+#### `net.wsState(conn)` / `net.wsIsOpen(conn)`
+
+Sync. Query connection state. Returns `WsConnectionState` enum value or `bool`.
+
+```stash
+if (net.wsIsOpen(ws)) {
+    await net.wsSend(ws, "ping");
+}
+io.println(net.wsState(ws));  // WsConnectionState.Open, .Closing, or .Closed
+```
+
+#### `WsConnectionState` Enum
+
+| Value        | Description                                   |
+| ------------ | --------------------------------------------- |
+| `Connecting` | Handshake in progress                         |
+| `Open`       | Connection established, ready to send/receive |
+| `Closing`    | Close handshake initiated                     |
+| `Closed`     | Connection fully closed                       |
+
+#### `WsConnection`
+
+| Field      | Type     | Description                                   |
+| ---------- | -------- | --------------------------------------------- |
+| `url`      | `string` | The URL connected to                          |
+| `protocol` | `string` | Negotiated subprotocol (empty string if none) |
+
+#### `WsMessage`
+
+| Field   | Type     | Description                                               |
+| ------- | -------- | --------------------------------------------------------- |
+| `data`  | `string` | Message payload (UTF-8 text, or base64-encoded if binary) |
+| `type`  | `string` | `"text"` or `"binary"`                                    |
+| `close` | `bool`   | `true` if this is a close frame                           |
+
 ### Advanced DNS
 
 | Function                 | Description                                               |
