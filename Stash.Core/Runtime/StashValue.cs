@@ -18,11 +18,12 @@ public readonly struct StashValue : IEquatable<StashValue>
     }
 
     // Pre-allocated singletons
-    public static readonly StashValue Null  = new(StashValueTag.Null,  0, null);
-    public static readonly StashValue True  = new(StashValueTag.Bool,  1, null);
-    public static readonly StashValue False = new(StashValueTag.Bool,  0, null);
-    public static readonly StashValue Zero  = new(StashValueTag.Int,   0, null);
-    public static readonly StashValue One   = new(StashValueTag.Int,   1, null);
+    public static readonly StashValue Null     = new(StashValueTag.Null,  0, null);
+    public static readonly StashValue True     = new(StashValueTag.Bool,  1, null);
+    public static readonly StashValue False    = new(StashValueTag.Bool,  0, null);
+    public static readonly StashValue Zero     = new(StashValueTag.Int,   0, null);
+    public static readonly StashValue One      = new(StashValueTag.Int,   1, null);
+    public static readonly StashValue ByteZero = new(StashValueTag.Byte,  0, null);
 
     // Factory methods
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -36,6 +37,9 @@ public readonly struct StashValue : IEquatable<StashValue>
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static StashValue FromObj(object value) => new(StashValueTag.Obj, 0, value);
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StashValue FromByte(byte value) => new(StashValueTag.Byte, (long)value, null);
 
     // Inline accessors
     public long AsInt
@@ -62,12 +66,19 @@ public readonly struct StashValue : IEquatable<StashValue>
         get => _obj;
     }
 
+    public byte AsByte
+    {
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get => (byte)_data;
+    }
+
     // Type check properties
     public bool IsNull    => Tag == StashValueTag.Null;
     public bool IsInt     => Tag == StashValueTag.Int;
     public bool IsFloat   => Tag == StashValueTag.Float;
     public bool IsBool    => Tag == StashValueTag.Bool;
     public bool IsObj     => Tag == StashValueTag.Obj;
+    public bool IsByte    => Tag == StashValueTag.Byte;
     public bool IsNumeric => Tag == StashValueTag.Int || Tag == StashValueTag.Float;
 
     /// <summary>
@@ -82,6 +93,7 @@ public readonly struct StashValue : IEquatable<StashValue>
             StashValueTag.Int   => _data,
             StashValueTag.Float => AsFloat,
             StashValueTag.Obj   => _obj,
+            StashValueTag.Byte  => (byte)_data,
             _                   => null,
         };
     }
@@ -97,6 +109,7 @@ public readonly struct StashValue : IEquatable<StashValue>
             bool b => FromBool(b),
             long l => FromInt(l),
             double d => FromFloat(d),
+            byte by => FromByte(by),
             _ => FromObj(value),
         };
     }
@@ -110,6 +123,7 @@ public readonly struct StashValue : IEquatable<StashValue>
             StashValueTag.Int   => AsInt.ToString(),
             StashValueTag.Float => AsFloat.ToString("G"),
             StashValueTag.Obj   => _obj?.ToString() ?? "null",
+            StashValueTag.Byte  => AsByte.ToString(),
             _                   => "??",
         };
     }
@@ -120,7 +134,7 @@ public readonly struct StashValue : IEquatable<StashValue>
         return Tag switch
         {
             StashValueTag.Null => true,
-            StashValueTag.Bool or StashValueTag.Int => _data == other._data,
+            StashValueTag.Bool or StashValueTag.Int or StashValueTag.Byte => _data == other._data,
             StashValueTag.Float => _data == other._data, // bit-level: NaN equals itself for collection ops
             StashValueTag.Obj => object.Equals(_obj, other._obj),
             _ => false,
@@ -132,7 +146,7 @@ public readonly struct StashValue : IEquatable<StashValue>
     public override int GetHashCode() => Tag switch
     {
         StashValueTag.Null => 0,
-        StashValueTag.Bool or StashValueTag.Int => HashCode.Combine(Tag, _data),
+        StashValueTag.Bool or StashValueTag.Int or StashValueTag.Byte => HashCode.Combine(Tag, _data),
         StashValueTag.Float => HashCode.Combine(Tag, _data),
         StashValueTag.Obj => HashCode.Combine(Tag, _obj is not null ? _obj.GetHashCode() : 0),
         _ => 0,

@@ -25,6 +25,7 @@ public static class GlobalBuiltIns
             if (val.IsInt) return StashValue.FromObj("int");
             if (val.IsFloat) return StashValue.FromObj("float");
             if (val.IsBool) return StashValue.FromObj("bool");
+            if (val.IsByte) return StashValue.FromObj("byte");
 
             object? obj = val.AsObj;
             return StashValue.FromObj(obj switch
@@ -74,6 +75,7 @@ public static class GlobalBuiltIns
             if (val.IsInt) return StashValue.FromObj("int");
             if (val.IsFloat) return StashValue.FromObj("float");
             if (val.IsBool) return StashValue.FromObj("bool");
+            if (val.IsByte) return StashValue.FromObj("byte");
 
             object? obj = val.AsObj;
             return StashValue.FromObj(obj switch

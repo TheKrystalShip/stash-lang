@@ -324,6 +324,7 @@ public static class BytecodeReader
             13 => StashValue.FromObj(ReadDestructureMetadata(reader)),
             14 => StashValue.FromObj(ReadRetryMetadata(reader)),
             15 => StashValue.FromObj(ReadStructInitMetadata(reader)),
+            16 => StashValue.FromByte(reader.ReadByte()),
             _ => throw new InvalidDataException($"Unknown constant tag {tag} in .stashc constant pool.")
         };
     }

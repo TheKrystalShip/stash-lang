@@ -35,6 +35,11 @@ public static class RuntimeValues
             return i != 0;
         }
 
+        if (value is byte by)
+        {
+            return by != 0;
+        }
+
         if (value is double d)
         {
             return d != 0.0;
@@ -61,6 +66,11 @@ public static class RuntimeValues
         if (value is StashSecret)
         {
             return StashSecret.RedactedText;
+        }
+
+        if (value is byte by)
+        {
+            return by.ToString();
         }
 
         if (value is bool b)

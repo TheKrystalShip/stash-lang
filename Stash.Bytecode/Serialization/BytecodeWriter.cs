@@ -249,6 +249,11 @@ public static class BytecodeWriter
                 writer.Write(BitConverter.DoubleToInt64Bits(value.AsFloat));
                 break;
 
+            case StashValueTag.Byte:
+                writer.Write((byte)16);
+                writer.Write(value.AsByte);
+                break;
+
             case StashValueTag.Obj:
                 object? obj = value.AsObj;
                 if (obj is string str)

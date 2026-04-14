@@ -45,6 +45,19 @@ public static class SvArgs
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static byte Byte(ReadOnlySpan<StashValue> args, int index, string funcName)
+    {
+        StashValue v = args[index];
+        if (v.IsByte) return v.AsByte;
+        if (v.IsInt)
+        {
+            long n = v.AsInt;
+            if (n >= 0 && n <= 255) return (byte)n;
+        }
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a byte (0-255).");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static List<StashValue> StashList(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
         StashValue v = args[index];

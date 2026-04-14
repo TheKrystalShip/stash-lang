@@ -23,6 +23,7 @@ internal static class RuntimeOps
         StashValueTag.Null => true,
         StashValueTag.Bool => !value.AsBool,
         StashValueTag.Int => value.AsInt == 0,
+        StashValueTag.Byte => value.AsByte == 0,
         StashValueTag.Float => value.AsFloat == 0.0,
         StashValueTag.Obj => value.AsObj switch
         {
@@ -44,7 +45,7 @@ internal static class RuntimeOps
         {
             StashValueTag.Null => true,
             StashValueTag.Bool => left.AsBool == right.AsBool,
-            StashValueTag.Int => left.AsInt == right.AsInt,
+            StashValueTag.Int or StashValueTag.Byte => left.AsInt == right.AsInt,
             StashValueTag.Float => left.AsFloat == right.AsFloat,
             StashValueTag.Obj => RuntimeValues.IsEqual(left.AsObj, right.AsObj),
             _ => false,
@@ -59,6 +60,7 @@ internal static class RuntimeOps
         StashValueTag.Null => "null",
         StashValueTag.Bool => value.AsBool ? "true" : "false",
         StashValueTag.Int => value.AsInt.ToString(),
+        StashValueTag.Byte => value.AsByte.ToString(),
         StashValueTag.Float => value.AsFloat.ToString(System.Globalization.CultureInfo.InvariantCulture),
         StashValueTag.Obj => value.AsObj is StashSecret ? StashSecret.RedactedText
             : value.AsObj is string s ? s : RuntimeValues.Stringify(value.AsObj),
@@ -69,6 +71,9 @@ internal static class RuntimeOps
 
     public static StashValue Add(StashValue left, StashValue right, SourceSpan? span)
     {
+        // Byte → Int promotion for arithmetic
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         // Fast paths first
         if (left.IsInt && right.IsInt)
         {
@@ -133,6 +138,8 @@ internal static class RuntimeOps
 
     public static StashValue Subtract(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             return StashValue.FromInt(left.AsInt - right.AsInt);
@@ -175,6 +182,8 @@ internal static class RuntimeOps
 
     public static StashValue Multiply(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
         // String repeat: "abc" * 3 or 3 * "abc"
@@ -237,6 +246,8 @@ internal static class RuntimeOps
 
     public static StashValue Divide(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
         // Duration / duration or Duration / number
@@ -295,6 +306,8 @@ internal static class RuntimeOps
 
     public static StashValue Modulo(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (!left.IsNumeric || !right.IsNumeric)
         {
             throw new RuntimeError("Operands must be numbers.", span);
@@ -320,6 +333,8 @@ internal static class RuntimeOps
 
     public static StashValue Power(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             return StashValue.FromInt((long)Math.Pow(left.AsInt, right.AsInt));
@@ -365,6 +380,7 @@ internal static class RuntimeOps
 
     public static StashValue Negate(StashValue value, SourceSpan? span)
     {
+        if (value.IsByte) return StashValue.FromInt(-value.AsByte);
         if (value.IsInt)
         {
             return StashValue.FromInt(-value.AsInt);
@@ -392,6 +408,8 @@ internal static class RuntimeOps
 
     public static StashValue BitAnd(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             return StashValue.FromInt(left.AsInt & right.AsInt);
@@ -407,6 +425,8 @@ internal static class RuntimeOps
 
     public static StashValue BitOr(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             return StashValue.FromInt(left.AsInt | right.AsInt);
@@ -422,6 +442,8 @@ internal static class RuntimeOps
 
     public static StashValue BitXor(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             return StashValue.FromInt(left.AsInt ^ right.AsInt);
@@ -432,6 +454,7 @@ internal static class RuntimeOps
 
     public static StashValue BitNot(StashValue value, SourceSpan? span)
     {
+        if (value.IsByte) value = StashValue.FromInt(value.AsByte);
         if (value.IsInt)
         {
             return StashValue.FromInt(~value.AsInt);
@@ -447,6 +470,8 @@ internal static class RuntimeOps
 
     public static StashValue ShiftLeft(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             if (right.AsInt < 0 || right.AsInt > 63)
@@ -461,6 +486,8 @@ internal static class RuntimeOps
 
     public static StashValue ShiftRight(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             if (right.AsInt < 0 || right.AsInt > 63)
@@ -490,6 +517,8 @@ internal static class RuntimeOps
 
     private static int Compare(StashValue left, StashValue right, SourceSpan? span)
     {
+        if (left.IsByte) left = StashValue.FromInt(left.AsByte);
+        if (right.IsByte) right = StashValue.FromInt(right.AsByte);
         if (left.IsInt && right.IsInt)
         {
             return left.AsInt.CompareTo(right.AsInt);

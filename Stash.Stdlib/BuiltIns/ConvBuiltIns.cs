@@ -49,6 +49,7 @@ public static class ConvBuiltIns
                 }
             }
             StashValue val = args[0];
+            if (val.IsByte) return StashValue.FromInt(val.AsByte);
             if (val.IsInt) return val;
             if (val.IsFloat) return StashValue.FromInt((long)val.AsFloat);
             if (val.IsObj && val.AsObj is string str)
@@ -67,6 +68,7 @@ public static class ConvBuiltIns
         {
             StashValue val = args[0];
             if (val.IsFloat) return val;
+            if (val.IsByte) return StashValue.FromFloat((double)val.AsByte);
             if (val.IsInt) return StashValue.FromFloat((double)val.AsInt);
             if (val.IsObj && val.AsObj is string s)
             {
@@ -86,6 +88,63 @@ public static class ConvBuiltIns
         },
             returnType: "bool",
             documentation: "Converts a value to boolean using truthiness rules. false, null, 0, 0.0, and \"\" are falsy; everything else is truthy.\n@param value The value to convert\n@return The boolean result");
+
+        ns.Function("toByte", [Param("value"), Param("base", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'conv.toByte' requires 1 or 2 arguments.");
+            if (args.Length == 2)
+            {
+                int radix = (int)SvArgs.Long(args, 1, "conv.toByte");
+                if (radix != 2 && radix != 8 && radix != 10 && radix != 16)
+                    throw new RuntimeError($"conv.toByte: unsupported base {radix}. Must be 2, 8, 10, or 16.");
+                string s = SvArgs.String(args, 0, "conv.toByte");
+                string stripped = radix switch
+                {
+                    16 when s.StartsWith("0x", StringComparison.OrdinalIgnoreCase) => s[2..],
+                    2 when s.StartsWith("0b", StringComparison.OrdinalIgnoreCase) => s[2..],
+                    8 when s.StartsWith("0o", StringComparison.OrdinalIgnoreCase) => s[2..],
+                    _ => s
+                };
+                try
+                {
+                    long parsed = System.Convert.ToInt64(stripped, radix);
+                    if (parsed < 0 || parsed > 255)
+                        throw new RuntimeError($"Value {parsed} is out of byte range [0, 255].");
+                    return StashValue.FromByte((byte)parsed);
+                }
+                catch (Exception e) when (e is FormatException || e is OverflowException)
+                {
+                    throw new RuntimeError($"Cannot parse '{s}' as a base-{radix} byte value.");
+                }
+            }
+            StashValue val = args[0];
+            if (val.IsByte) return val;
+            if (val.IsInt)
+            {
+                long n = val.AsInt;
+                if (n < 0 || n > 255)
+                    throw new RuntimeError($"Value {n} is out of byte range [0, 255].");
+                return StashValue.FromByte((byte)n);
+            }
+            if (val.IsFloat)
+            {
+                long n = (long)val.AsFloat;
+                if (n < 0 || n > 255)
+                    throw new RuntimeError($"Value {n} is out of byte range [0, 255].");
+                return StashValue.FromByte((byte)n);
+            }
+            if (val.IsObj && val.AsObj is string str)
+            {
+                if (byte.TryParse(str, out byte result))
+                    return StashValue.FromByte(result);
+                throw new RuntimeError($"Cannot parse '{str}' as byte.");
+            }
+            throw new RuntimeError("Argument to 'conv.toByte' must be a number or string.");
+        },
+            returnType: "byte",
+            isVariadic: true,
+            documentation: "Converts a value to a byte (0-255). Supports optional base (2, 8, 10, 16). Throws if out of range.\n@param value A string or number to convert\n@param base The numeric base (optional, default 10)\n@return The byte value");
 
         ns.Function("toHex", [Param("n", "int"), Param("padding", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {

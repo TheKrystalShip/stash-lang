@@ -12,4 +12,5 @@ public enum StashValueTag : byte
     Int = 2,
     Float = 3,
     Obj = 4,
+    Byte = 5,  // unsigned 8-bit integer (0-255)
 }
