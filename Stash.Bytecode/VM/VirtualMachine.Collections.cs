@@ -507,6 +507,30 @@ public sealed partial class VirtualMachine
         if (source.IsNull)
             return; // null stays null — runtime will catch type errors later
 
+        // Scalar byte narrowing: let b: byte = 42 → narrow int to byte
+        if (elementType == "byte" && !source.IsObj)
+        {
+            if (source.IsByte)
+                return; // already a byte, nothing to do
+            if (source.IsInt)
+            {
+                long val = source.AsInt;
+                if (val < 0 || val > 255)
+                    throw new RuntimeError($"Value {val} is out of byte range [0, 255].", GetCurrentSpan(ref frame));
+                _stack[@base + a] = StashValue.FromByte((byte)val);
+                return;
+            }
+            if (source.IsFloat)
+            {
+                long val = (long)source.AsFloat;
+                if (val < 0 || val > 255)
+                    throw new RuntimeError($"Value {val} is out of byte range [0, 255].", GetCurrentSpan(ref frame));
+                _stack[@base + a] = StashValue.FromByte((byte)val);
+                return;
+            }
+            throw new RuntimeError($"Cannot narrow {source.Tag} to byte.", GetCurrentSpan(ref frame));
+        }
+
         if (source.IsObj && source.AsObj is List<StashValue> list)
         {
             StashTypedArray typed = StashTypedArray.Create(elementType, list);

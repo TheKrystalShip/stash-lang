@@ -52,6 +52,12 @@ partial class Compiler
             ushort typeIdx = _builder.AddConstant(StashValue.FromObj(stmt.TypeHint.Name.Lexeme));
             _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
         }
+        // Scalar byte narrowing: if the type hint is byte (not byte[]), emit TypedWrap to narrow int→byte
+        else if (stmt.TypeHint is { IsArray: false } && stmt.TypeHint.Name.Lexeme == "byte")
+        {
+            ushort typeIdx = _builder.AddConstant(StashValue.FromObj("byte"));
+            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
+        }
 
         _scope.MarkInitialized();
 
@@ -97,6 +103,12 @@ partial class Compiler
         if (stmt.TypeHint is { IsArray: true })
         {
             ushort typeIdx = _builder.AddConstant(StashValue.FromObj(stmt.TypeHint.Name.Lexeme));
+            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
+        }
+        // Scalar byte narrowing: if the type hint is byte (not byte[]), emit TypedWrap to narrow int→byte
+        else if (stmt.TypeHint is { IsArray: false } && stmt.TypeHint.Name.Lexeme == "byte")
+        {
+            ushort typeIdx = _builder.AddConstant(StashValue.FromObj("byte"));
             _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
         }
 

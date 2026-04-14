@@ -150,8 +150,17 @@ public static class JsonBuiltIns
             StashDictionary dict => StringifyDict(dict),
             StashInstance inst => StringifyInstance(inst),
             StashByteArray ba => JsonSerializer.Serialize(Convert.ToBase64String(ba.AsSpan()), StashJsonContext.Default.String),
+            StashTypedArray ta => StringifyTypedArray(ta),
             _ => throw new RuntimeError($"json.stringify: cannot serialize value of type {value.GetType().Name}.")
         };
+    }
+
+    private static string StringifyTypedArray(StashTypedArray ta)
+    {
+        var list = new List<StashValue>(ta.Count);
+        for (int i = 0; i < ta.Count; i++)
+            list.Add(ta.Get(i));
+        return StringifyArray(list);
     }
 
     /// <summary>Serializes a Stash array to a compact JSON array string.</summary>
@@ -251,8 +260,18 @@ public static class JsonBuiltIns
             List<StashValue> arr => PrettyArray(arr, indent, indentWidth),
             StashDictionary dict => PrettyDict(dict, indent, indentWidth),
             StashInstance inst => PrettyInstance(inst, indent, indentWidth),
+            StashByteArray ba => JsonSerializer.Serialize(Convert.ToBase64String(ba.AsSpan()), StashJsonContext.Default.String),
+            StashTypedArray ta => PrettyTypedArray(ta, indent, indentWidth),
             _ => throw new RuntimeError($"json.pretty: cannot serialize value of type {value.GetType().Name}.")
         };
+    }
+
+    private static string PrettyTypedArray(StashTypedArray ta, int indent, int indentWidth)
+    {
+        var list = new List<StashValue>(ta.Count);
+        for (int i = 0; i < ta.Count; i++)
+            list.Add(ta.Get(i));
+        return PrettyArray(list, indent, indentWidth);
     }
 
     /// <summary>Pretty-prints a Stash array as a JSON array with indentation.</summary>

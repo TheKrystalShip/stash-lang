@@ -258,6 +258,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | Type        | Examples                                   | Notes                                         |
 | ----------- | ------------------------------------------ | --------------------------------------------- |
 | `int`       | `42`, `-7`, `0`, `0xFF`, `0o755`, `0b1010` | Integer numbers (decimal, hex, octal, binary) |
+| `byte`      | `let b: byte = 0xFF`                       | Unsigned 8-bit integer (0–255)                |
 | `float`     | `3.14`, `-0.5`                             | Floating-point numbers                        |
 | `string`    | `"hello"`, `""`                            | Immutable strings                             |
 | `bool`      | `true`, `false`                            |                                               |
@@ -267,6 +268,7 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `float[]`   | `let a: float[] = [1.0, 2.5]`               | Typed array — homogeneous floats              |
 | `string[]`  | `let a: string[] = ["a", "b"]`              | Typed array — homogeneous strings             |
 | `bool[]`    | `let a: bool[] = [true, false]`             | Typed array — homogeneous booleans            |
+| `byte[]`    | `let a: byte[] = buf.from("hello")`         | Typed array — homogeneous bytes (0–255)       |
 | `struct`    | `Server { host: "...", ... }`              | Named structured data (see Section 5)         |
 | `enum`      | `Status.Active`, `Color.Red`               | Named constants (see Section 5b)              |
 | `dict`      | `{ key: value }`, `dict.new()`             | Key-value map (see Section 5c)                |
@@ -291,6 +293,7 @@ let scores: int[] = [90, 85, 100];
 let prices: float[] = [9.99, 14.50, 3.25];
 let names: string[] = ["Alice", "Bob"];
 let flags: bool[] = [true, false, true];
+let data: byte[] = [0x48, 0x65, 0x6C, 0x6C, 0x6F];
 const PRIMES: int[] = [2, 3, 5, 7, 11];
 ```
 
@@ -312,6 +315,13 @@ let a: int[] = [1, 2.5];   // Runtime error: expected int, got float
 let a: float[] = [1, 2.5, 3];  // OK: stored as [1.0, 2.5, 3.0]
 ```
 
+**`byte[]` accepts integers in the range 0–255** — they are narrowed to bytes:
+
+```stash
+let a: byte[] = [0x48, 0x65, 255];  // OK: stored as byte[0x48, 0x65, 0xff]
+let b: byte[] = [1, 256];           // Runtime error: 256 out of byte range (0–255)
+```
+
 #### Type Checking
 
 `typeof()` returns the typed array name. The `is` operator supports both generic `array` and specific `T[]` checks:
@@ -323,6 +333,11 @@ a is int[]      // true
 a is array      // true  (typed arrays are arrays)
 a is string[]   // false
 [1, 2] is int[] // false (generic arrays are not typed)
+
+let b: byte[] = [0x48, 0x65];
+typeof(b)       // "byte[]"
+b is byte[]     // true
+b is array      // true
 ```
 
 #### Mutation
@@ -354,6 +369,44 @@ Create a zero-initialized typed array with a given size:
 
 ```stash
 let buf: int[] = arr.new("int", 100);    // zero-initialized int[] with 100 elements
+```
+
+### The `byte` Type
+
+The `byte` type represents an unsigned 8-bit integer in the range 0–255. Byte values are created using a type annotation:
+
+```stash
+let b: byte = 0xFF;          // 255
+let zero: byte = 0;          // 0
+const MAX_BYTE: byte = 255;  // maximum byte value
+```
+
+The type annotation narrows an integer value to a byte at runtime. Values outside the range 0–255 produce a runtime error:
+
+```stash
+let b: byte = 256;   // Runtime error: value 256 out of byte range (0-255)
+let c: byte = -1;    // Runtime error: value -1 out of byte range (0-255)
+```
+
+#### Byte Arithmetic
+
+Byte values are promoted to `int` when used in arithmetic, comparison, or bitwise operations:
+
+```stash
+let a: byte = 100;
+let b: byte = 200;
+let sum = a + b;       // 300 (int, not byte)
+let product = a * 3;   // 300 (int)
+typeof(sum)            // "int"
+```
+
+#### Truthiness
+
+A byte value of `0` is falsy; all other byte values are truthy:
+
+```stash
+let b: byte = 0;
+if (b) { io.println("truthy"); } else { io.println("falsy"); }  // "falsy"
 ```
 
 ### Number Literals
@@ -1172,7 +1225,7 @@ Destructuring is a dedicated AST node (`DestructureStmt`) with a `PatternKind` (
 
 ## 3g. Bitwise Operators
 
-Bitwise operators perform bit-level manipulation on integer values. All bitwise operators require integer (`long`) operands — applying them to any other type produces a runtime error.
+Bitwise operators perform bit-level manipulation on integer values. All bitwise operators require integer (`long`) or byte operands — byte values are promoted to `int` before the operation. Applying them to any other type produces a runtime error.
 
 ### Binary Operators
 
@@ -1242,7 +1295,7 @@ let y = 128 >> 3;          // right shift: left is an integer expression
 
 ### Type Restrictions
 
-Bitwise operators require integer or IP address operands. Both operands must be the same type — mixing integers with IP addresses is a runtime error. Applying bitwise operators to floats, strings, booleans, or any other type produces a runtime error:
+Bitwise operators require integer, byte, or IP address operands. Byte values are promoted to `int` before the operation. Both integer/byte operands are compatible; both IP address operands must be the same type — mixing integers with IP addresses is a runtime error. Applying bitwise operators to floats, strings, booleans, or any other type produces a runtime error:
 
 ```stash
 let x = 5 & 3;                        // OK: both integers
@@ -1344,6 +1397,8 @@ When the RHS identifier is immediately followed by `(`, `[`, or `.`, or when the
 | `float[]`       | Typed float arrays                                                |
 | `string[]`      | Typed string arrays                                               |
 | `bool[]`        | Typed boolean arrays                                              |
+| `byte`          | Byte values (0–255)                                               |
+| `byte[]`        | Typed byte arrays                                                 |
 | `dict`          | Dictionary values                                                 |
 | `struct`        | Struct instances (any struct type)                                |
 | `enum`          | Enum values (any enum type)                                       |

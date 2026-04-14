@@ -22,27 +22,28 @@
 6. [`path` — Path Manipulation](#path--path-manipulation)
 7. [`str` — String Operations](#str--string-operations)
 8. [`arr` — Array Operations](#arr--array-operations)
-9. [`dict` — Dictionary Operations](#dict--dictionary-operations)
-10. [`math` — Math Functions](#math--math-functions)
-11. [`time` — Time & Date](#time--time--date)
-12. [`json` — JSON](#json--json)
-13. [`ini` — INI Configuration](#ini--ini-configuration)
-14. [`yaml` — YAML](#yaml--yaml)
-15. [`toml` — TOML](#toml--toml)
-16. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
-17. [`http` — HTTP Requests](#http--http-requests)
-18. [`process` — Process Management](#process--process-management)
-19. [`tpl` — Templating](#tpl--templating)
-20. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-21. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-22. [`term` — Terminal Formatting](#term--terminal-formatting)
-23. [`sys` — System Information](#sys--system-information)
-24. [`task` — Parallel Tasks](#task--parallel-tasks)
-25. [`net` — Networking](#net--networking)
-26. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-27. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-28. [Argument Parsing](#argument-parsing)
-29. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+9. [`buf` — Byte Array Operations](#buf--byte-array-operations)
+10. [`dict` — Dictionary Operations](#dict--dictionary-operations)
+11. [`math` — Math Functions](#math--math-functions)
+12. [`time` — Time & Date](#time--time--date)
+13. [`json` — JSON](#json--json)
+14. [`ini` — INI Configuration](#ini--ini-configuration)
+15. [`yaml` — YAML](#yaml--yaml)
+16. [`toml` — TOML](#toml--toml)
+17. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
+18. [`http` — HTTP Requests](#http--http-requests)
+19. [`process` — Process Management](#process--process-management)
+20. [`tpl` — Templating](#tpl--templating)
+21. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+22. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+23. [`term` — Terminal Formatting](#term--terminal-formatting)
+24. [`sys` — System Information](#sys--system-information)
+25. [`task` — Parallel Tasks](#task--parallel-tasks)
+26. [`net` — Networking](#net--networking)
+27. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+28. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+29. [Argument Parsing](#argument-parsing)
+30. [`scheduler` — OS Service Management](#scheduler--os-service-management)
 
 ---
 
@@ -117,6 +118,7 @@ let ok = io.confirm("Are you sure?", false);         // [y/N]
 | `conv.toInt(val, base?)`  | Parse string to integer. Optional `base` selects the number base: `2`, `8`, `10`, or `16` (default: `10`) |
 | `conv.toFloat(val)`       | Parse string to float                                                                                     |
 | `conv.toBool(val)`        | Convert a value to boolean using truthiness rules                                                         |
+| `conv.toByte(val, base?)` | Convert a value to byte (0–255). Optional `base` for string parsing. Runtime error if out of range        |
 | `conv.toHex(n, padding?)` | Convert an integer to hexadecimal string. Optional `padding` sets the minimum zero-padded output width    |
 | `conv.toOct(val)`         | Convert an integer to octal string                                                                        |
 | `conv.toBin(val)`         | Convert an integer to binary string                                                                       |
@@ -220,8 +222,11 @@ let config = env.withPrefix("MYAPP_");
 | Function                                 | Description                                                                                                           |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
 | `fs.readFile(path, encoding?)`           | Read file contents as string. Optional `encoding`: `"utf-8"` (default), `"ascii"`, `"latin1"`, `"utf-16"`, `"utf-32"` |
+| `fs.readBytes(path)`                     | Read file contents as a byte array (`byte[]`)                                                                         |
 | `fs.writeFile(path, content, encoding?)` | Write string to file (creates or overwrites). Optional `encoding` matches `fs.readFile` options                       |
+| `fs.writeBytes(path, data)`              | Write a byte array to file (creates or overwrites)                                                                    |
 | `fs.appendFile(path, content)`           | Append string to file                                                                                                 |
+| `fs.appendBytes(path, data)`             | Append a byte array to file                                                                                           |
 | `fs.readLines(path)`                     | Read file as array of lines                                                                                           |
 | `fs.exists(path)`                        | Check if a file exists (returns boolean)                                                                              |
 | `fs.dirExists(path)`                     | Check if a directory exists (returns boolean)                                                                         |
@@ -761,6 +766,141 @@ arr.push(buf, "hello");                    // ["hello"]
 // Derived arrays preserve type
 let high = arr.filter(scores, (s) => s >= 90);  // int[] — [90, 100, 95]
 let top3 = arr.take(scores, 3);                  // int[] — [90, 85, 100]
+```
+
+---
+
+## `buf` — Byte Array Operations
+
+The `buf` namespace provides functions for creating, inspecting, manipulating, and performing binary I/O on byte arrays (`byte[]`). Byte arrays are backed by native `byte[]` storage for efficient binary data handling.
+
+### Construction
+
+| Function                           | Description                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `buf.from(s, encoding?)`          | Encode a string to a byte array. Default encoding: `"utf-8"`. Supported: `"utf-8"`, `"ascii"`, `"latin1"`, `"utf-16"`, `"utf-32"` |
+| `buf.fromHex(hex)`                | Decode a hexadecimal string to a byte array (accepts optional `0x` prefix)      |
+| `buf.fromBase64(b64)`             | Decode a Base64 string to a byte array                                          |
+| `buf.alloc(size, fill?)`          | Create a byte array of `size` bytes, optionally filled with `fill` value (0–255). Default fill: `0` |
+| `buf.of(values...)`               | Create a byte array from individual byte values (variadic)                      |
+
+### Conversion
+
+| Function                           | Description                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `buf.toString(b, encoding?)`      | Decode a byte array to a string. Default encoding: `"utf-8"`. Supported: same as `buf.from` |
+| `buf.toHex(b)`                    | Encode a byte array as a lowercase hexadecimal string                           |
+| `buf.toBase64(b)`                 | Encode a byte array as a Base64 string                                          |
+
+### Inspection
+
+| Function                           | Description                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `buf.len(b)`                      | Return the length of a byte array                                               |
+| `buf.get(b, index)`               | Get the byte at the given index (returns `byte`)                                |
+| `buf.indexOf(b, value, start?)`   | Find the first index of a byte value. Returns `-1` if not found                 |
+| `buf.includes(b, value)`          | Check if a byte array contains a value (returns `bool`)                         |
+| `buf.equals(a, b)`                | Compare two byte arrays for element-wise equality                               |
+
+### Manipulation
+
+| Function                           | Description                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `buf.slice(b, start, end?)`       | Return a new byte array from `start` to `end` (exclusive). Default `end`: length |
+| `buf.concat(a, b)`                | Concatenate two byte arrays into a new byte array                               |
+| `buf.copy(src, dst, offset?)`     | Copy bytes from `src` into `dst` starting at `offset` (default: `0`). Mutates `dst` |
+| `buf.fill(b, value, start?, end?)`| Fill a byte array (or range) with a value. Mutates `b`                          |
+| `buf.reverse(b)`                  | Reverse a byte array in place. Mutates `b`                                      |
+
+### Binary Read (Big-Endian / Little-Endian)
+
+| Function                           | Description                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| `buf.readUint8(b, offset)`        | Read an unsigned 8-bit integer at offset                                        |
+| `buf.readUint16BE(b, offset)`     | Read an unsigned 16-bit integer (big-endian) at offset                          |
+| `buf.readUint16LE(b, offset)`     | Read an unsigned 16-bit integer (little-endian) at offset                       |
+| `buf.readUint32BE(b, offset)`     | Read an unsigned 32-bit integer (big-endian) at offset                          |
+| `buf.readUint32LE(b, offset)`     | Read an unsigned 32-bit integer (little-endian) at offset                       |
+| `buf.readInt8(b, offset)`         | Read a signed 8-bit integer at offset                                           |
+| `buf.readInt16BE(b, offset)`      | Read a signed 16-bit integer (big-endian) at offset                             |
+| `buf.readInt16LE(b, offset)`      | Read a signed 16-bit integer (little-endian) at offset                          |
+| `buf.readInt32BE(b, offset)`      | Read a signed 32-bit integer (big-endian) at offset                             |
+| `buf.readInt32LE(b, offset)`      | Read a signed 32-bit integer (little-endian) at offset                          |
+| `buf.readInt64BE(b, offset)`      | Read a signed 64-bit integer (big-endian) at offset                             |
+| `buf.readInt64LE(b, offset)`      | Read a signed 64-bit integer (little-endian) at offset                          |
+| `buf.readFloatBE(b, offset)`      | Read a 32-bit float (big-endian) at offset                                      |
+| `buf.readFloatLE(b, offset)`      | Read a 32-bit float (little-endian) at offset                                   |
+| `buf.readDoubleBE(b, offset)`     | Read a 64-bit double (big-endian) at offset                                     |
+| `buf.readDoubleLE(b, offset)`     | Read a 64-bit double (little-endian) at offset                                  |
+
+### Binary Write (Big-Endian / Little-Endian)
+
+| Function                                 | Description                                                                 |
+| ---------------------------------------- | --------------------------------------------------------------------------- |
+| `buf.writeUint8(b, offset, value)`       | Write an unsigned 8-bit integer at offset. Mutates `b`                      |
+| `buf.writeUint16BE(b, offset, value)`    | Write an unsigned 16-bit integer (big-endian) at offset. Mutates `b`        |
+| `buf.writeUint16LE(b, offset, value)`    | Write an unsigned 16-bit integer (little-endian) at offset. Mutates `b`     |
+| `buf.writeUint32BE(b, offset, value)`    | Write an unsigned 32-bit integer (big-endian) at offset. Mutates `b`        |
+| `buf.writeUint32LE(b, offset, value)`    | Write an unsigned 32-bit integer (little-endian) at offset. Mutates `b`     |
+| `buf.writeInt8(b, offset, value)`        | Write a signed 8-bit integer at offset. Mutates `b`                         |
+| `buf.writeInt16BE(b, offset, value)`     | Write a signed 16-bit integer (big-endian) at offset. Mutates `b`           |
+| `buf.writeInt16LE(b, offset, value)`     | Write a signed 16-bit integer (little-endian) at offset. Mutates `b`        |
+| `buf.writeInt32BE(b, offset, value)`     | Write a signed 32-bit integer (big-endian) at offset. Mutates `b`           |
+| `buf.writeInt32LE(b, offset, value)`     | Write a signed 32-bit integer (little-endian) at offset. Mutates `b`        |
+| `buf.writeInt64BE(b, offset, value)`     | Write a signed 64-bit integer (big-endian) at offset. Mutates `b`           |
+| `buf.writeInt64LE(b, offset, value)`     | Write a signed 64-bit integer (little-endian) at offset. Mutates `b`        |
+| `buf.writeFloatBE(b, offset, value)`     | Write a 32-bit float (big-endian) at offset. Mutates `b`                    |
+| `buf.writeFloatLE(b, offset, value)`     | Write a 32-bit float (little-endian) at offset. Mutates `b`                 |
+| `buf.writeDoubleBE(b, offset, value)`    | Write a 64-bit double (big-endian) at offset. Mutates `b`                   |
+| `buf.writeDoubleLE(b, offset, value)`    | Write a 64-bit double (little-endian) at offset. Mutates `b`                |
+
+### Examples
+
+```stash
+// Create byte arrays
+let hello = buf.from("Hello, World!");
+let hex = buf.fromHex("48656c6c6f");
+let b64 = buf.fromBase64("SGVsbG8=");
+let zeros = buf.alloc(16);
+let manual = buf.of(0x48, 0x65, 0x6C, 0x6C, 0x6F);
+
+// Conversion
+io.println(buf.toString(hello));   // "Hello, World!"
+io.println(buf.toHex(hex));        // "48656c6c6f"
+io.println(buf.toBase64(hello));   // "SGVsbG8sIFdvcmxkIQ=="
+
+// Inspection
+io.println(buf.len(hello));        // 13
+io.println(buf.get(hello, 0));     // 72 (0x48 = 'H')
+io.println(buf.indexOf(hello, 0x6F));  // 4
+io.println(buf.includes(hello, 0x48)); // true
+io.println(buf.equals(hex, manual));   // true
+
+// Manipulation
+let slice = buf.slice(hello, 0, 5);  // byte[] with "Hello"
+let joined = buf.concat(hex, b64);   // concatenated
+buf.fill(zeros, 0xFF);               // fill with 0xFF
+buf.reverse(manual);                 // [0x6F, 0x6C, 0x6C, 0x65, 0x48]
+
+// Binary read/write (network packet example)
+let packet = buf.alloc(12);
+buf.writeUint16BE(packet, 0, 0x0800);  // EtherType: IPv4
+buf.writeUint32BE(packet, 2, 3232235777);  // Source IP: 192.168.1.1
+buf.writeUint32BE(packet, 6, 167772161);   // Dest IP: 10.0.0.1
+buf.writeUint16BE(packet, 10, 8080);       // Port
+
+let etherType = buf.readUint16BE(packet, 0);  // 0x0800
+let srcIp = buf.readUint32BE(packet, 2);      // 3232235777
+let port = buf.readUint16BE(packet, 10);       // 8080
+
+// Integration with crypto and fs
+let hash = crypto.sha256Bytes("hello");
+io.println(buf.toHex(hash));        // SHA-256 hash as hex
+
+let data = buf.from("binary data");
+fs.writeBytes("/tmp/data.bin", data);
+let loaded = fs.readBytes("/tmp/data.bin");
+io.println(buf.equals(data, loaded));   // true
 ```
 
 ---
@@ -2292,10 +2432,14 @@ The `crypto` namespace provides cryptographic hash functions, HMAC signatures, U
 
 | Function              | Description                                   |
 | --------------------- | --------------------------------------------- |
-| `crypto.md5(data)`    | Compute MD5 hash of a string (hex string)     |
-| `crypto.sha1(data)`   | Compute SHA-1 hash of a string (hex string)   |
-| `crypto.sha256(data)` | Compute SHA-256 hash of a string (hex string) |
-| `crypto.sha512(data)` | Compute SHA-512 hash of a string (hex string) |
+| `crypto.md5(data)`         | Compute MD5 hash of a string (hex string)         |
+| `crypto.md5Bytes(data)`    | Compute MD5 hash as a byte array                  |
+| `crypto.sha1(data)`        | Compute SHA-1 hash of a string (hex string)       |
+| `crypto.sha1Bytes(data)`   | Compute SHA-1 hash as a byte array                |
+| `crypto.sha256(data)`      | Compute SHA-256 hash of a string (hex string)     |
+| `crypto.sha256Bytes(data)` | Compute SHA-256 hash as a byte array              |
+| `crypto.sha512(data)`      | Compute SHA-512 hash of a string (hex string)     |
+| `crypto.sha512Bytes(data)` | Compute SHA-512 hash as a byte array              |
 
 ```stash
 let hash = crypto.sha256("hello");
@@ -2310,7 +2454,8 @@ io.println(md5);   // "5d41402abc4b2a76b9719d911017c592"
 
 | Function                       | Description                                        |
 | ------------------------------ | -------------------------------------------------- |
-| `crypto.hmac(algo, key, data)` | Compute HMAC with specified algorithm (hex string) |
+| `crypto.hmac(algo, key, data)`      | Compute HMAC with specified algorithm (hex string)  |
+| `crypto.hmacBytes(algo, key, data)` | Compute HMAC as a byte array                        |
 
 The `algo` parameter accepts `"md5"`, `"sha1"`, `"sha256"`, or `"sha512"`.
 
@@ -2339,22 +2484,25 @@ io.println("MD5: " + md5sum);
 | Function                           | Description                                                                                                            |
 | ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
 | `crypto.uuid()`                    | Generate a random UUID v4 string                                                                                       |
-| `crypto.randomBytes(n, encoding?)` | Generate `n` cryptographically secure random bytes. `encoding`: `"hex"` (default), `"base64"`, or `"raw"` (byte array) |
+| `crypto.randomBytes(n, encoding?)` | Generate `n` cryptographically secure random bytes. With no encoding: returns `byte[]`. With `encoding`: `"hex"` or `"base64"` returns a string |
 
-`randomBytes` returns the bytes as a lowercase hexadecimal string by default (2 hex characters per byte). Use `encoding: "base64"` for Base64 output, or `encoding: "raw"` to receive an array of integer byte values.
+`randomBytes` returns a native byte array by default. Pass `encoding: "hex"` for a lowercase hexadecimal string, or `encoding: "base64"` for Base64 output.
 
 ```stash
 let id = crypto.uuid();
 io.println(id);   // "550e8400-e29b-41d4-a716-446655440000"
 
 let token = crypto.randomBytes(32);
-io.println(token);  // 64 hex characters of random data (default "hex" encoding)
+io.println(typeof(token));  // "byte[]" — native byte array
+
+let hexToken = crypto.randomBytes(32, "hex");
+io.println(hexToken);  // 64 hex character string
 
 let b64Token = crypto.randomBytes(32, "base64");
-io.println(b64Token);  // Base64-encoded 32 random bytes
+io.println(b64Token);  // Base64-encoded string
 
-let rawBytes = crypto.randomBytes(8, "raw");
-io.println(rawBytes);  // array of 8 integers, e.g. [211, 47, 90, ...]
+// Convert byte array to hex if needed
+let hexStr = buf.toHex(token);
 ```
 
 ---
@@ -2367,8 +2515,9 @@ The `encoding` namespace provides Base64, URL, and hexadecimal encoding and deco
 
 | Function                             | Description                                                                                                               |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
-| `encoding.base64Encode(s, urlSafe?)` | Encode a string to Base64. When `urlSafe` is `true`, uses RFC 4648 URL-safe alphabet (`-` and `_` instead of `+` and `/`) |
-| `encoding.base64Decode(s, urlSafe?)` | Decode a Base64 string. Set `urlSafe` to `true` when decoding URL-safe encoded data                                       |
+| `encoding.base64Encode(s, urlSafe?)`      | Encode a string to Base64. When `urlSafe` is `true`, uses RFC 4648 URL-safe alphabet (`-` and `_` instead of `+` and `/`) |
+| `encoding.base64Decode(s, urlSafe?)`      | Decode a Base64 string to a string. Set `urlSafe` to `true` when decoding URL-safe encoded data                           |
+| `encoding.base64DecodeBytes(s, urlSafe?)` | Decode a Base64 string to a byte array (`byte[]`)                                                                         |
 
 ```stash
 let encoded = encoding.base64Encode("Hello, World!");
@@ -2403,8 +2552,9 @@ io.println(decoded);   // "hello world&key=value"
 
 | Function                | Description                                   |
 | ----------------------- | --------------------------------------------- |
-| `encoding.hexEncode(s)` | Encode a string's UTF-8 bytes as hexadecimal  |
-| `encoding.hexDecode(s)` | Decode a hexadecimal string to a UTF-8 string |
+| `encoding.hexEncode(s)`      | Encode a string's UTF-8 bytes as hexadecimal          |
+| `encoding.hexDecode(s)`      | Decode a hexadecimal string to a UTF-8 string         |
+| `encoding.hexDecodeBytes(s)` | Decode a hexadecimal string to a byte array (`byte[]`) |
 
 ```stash
 let hex = encoding.hexEncode("hello");

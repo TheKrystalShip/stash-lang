@@ -303,6 +303,7 @@ public static class BufBuiltIns
             if (end < 0) end = Math.Max(0, len + end);
             start = Math.Min(start, len);
             end = Math.Min(end, len);
+            if (start >= end) return StashValue.FromObj(ba);
             byte[] data = ba.GetBackingArray(out int _);
             Array.Fill(data, fillVal, start, end - start);
             return StashValue.FromObj(ba);

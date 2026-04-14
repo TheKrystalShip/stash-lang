@@ -1,0 +1,135 @@
+#!/usr/bin/env stash
+
+// examples/binary_data.stash
+// Binary Data — byte type, byte arrays, and the buf namespace
+
+io.println("=" * 56);
+io.println("  Binary Data");
+io.println("=" * 56);
+
+// ─── Byte Type Basics ─────────────────────────────────────────────────────────
+
+io.println("\n-- Byte Type Basics --");
+
+let b: byte = 0xFF;
+let zero: byte = 0;
+let mid: byte = 127;
+
+io.println($"  b:    {b}   (0xFF decimal)");
+io.println($"  zero: {zero}");
+io.println($"  mid:  {mid}");
+io.println($"  typeof b:    {typeof(b)}");
+io.println($"  b is byte:   {b is byte}");
+io.println($"  zero is truthy: {zero ? true : false}");
+io.println($"  mid  is truthy: {mid  ? true : false}");
+
+// conv.toByte — converts numbers to byte, errors on out-of-range
+
+let from_int = conv.toByte(200);
+io.println($"  conv.toByte(200): {from_int}");
+let from_hex = conv.toByte("ff", 16);
+io.println($"  conv.toByte(\"ff\", 16): {from_hex}");
+let err = try conv.toByte(300);
+io.println($"  conv.toByte(300): {err}  (out of range)");
+
+// ─── Byte Array Creation ──────────────────────────────────────────────────────
+
+io.println("\n-- Byte Array Creation --");
+
+// buf.from — from a UTF-8 string
+let hello = buf.from("Hello");
+io.println($"  buf.from(\"Hello\"):        {hello}");
+
+// buf.fromHex — from hex string
+let from_hex = buf.fromHex("DEADBEEF");
+io.println($"  buf.fromHex(\"DEADBEEF\"): {from_hex}");
+
+// buf.fromBase64 — from base64 string
+let from_b64 = buf.fromBase64("SGVsbG8=");
+io.println($"  buf.fromBase64(\"SGVsbG8=\"): {from_b64}");
+
+// buf.alloc — zeroed buffer of N bytes
+let zeroed = buf.alloc(4);
+io.println($"  buf.alloc(4):  {zeroed}");
+
+// buf.of — from individual byte values
+let magic = buf.of(0x89, 0x50, 0x4E, 0x47);
+io.println($"  buf.of(PNG magic bytes): {magic}");
+io.println($"  {hello} is byte[]:  {hello is byte[]}");
+
+// ─── Conversion ───────────────────────────────────────────────────────────────
+
+io.println("\n-- Conversion --");
+
+let data = buf.from("Stash");
+io.println($"  buf.toString(data):   \"{buf.toString(data)}\"");
+io.println($"  buf.toHex(data):      {buf.toHex(data)}");
+io.println($"  buf.toBase64(data):   {buf.toBase64(data)}");
+
+// ─── Inspection ───────────────────────────────────────────────────────────────
+
+io.println("\n-- Inspection --");
+
+let haystack = buf.from("find the needle here");
+let needle = buf.from("needle");
+
+io.println($"  buf.len(haystack):              {buf.len(haystack)}");
+io.println($"  buf.get(haystack, 0):           {buf.get(haystack, 0)}   ('{conv.fromCharCode(conv.toInt(buf.get(haystack, 0)))}')");io.println($"  buf.indexOf(haystack, needle):  {buf.indexOf(haystack, needle)}");
+io.println($"  buf.includes(haystack, needle): {buf.includes(haystack, needle)}");
+
+let copy_a = buf.from("abc");
+let copy_b = buf.from("abc");
+io.println($"  buf.equals(\"abc\", \"abc\"):  {buf.equals(copy_a, copy_b)}");
+
+// ─── Manipulation ─────────────────────────────────────────────────────────────
+
+io.println("\n-- Manipulation --");
+
+let src = buf.from("Hello, World!");
+
+let sliced = buf.slice(src, 0, 5);
+io.println($"  buf.slice(src, 0, 5):    {buf.toString(sliced)}");
+
+let prefix = buf.from("[");
+let suffix = buf.from("]");
+let wrapped = buf.concat(buf.concat(prefix, src), suffix);
+io.println($"  buf.concat:              {buf.toString(wrapped)}");
+
+let pattern = buf.alloc(6);
+buf.fill(pattern, 0xAB);
+io.println($"  buf.fill(6, 0xAB):       {pattern}");
+
+let rev = buf.of(1, 2, 3, 4, 5);
+buf.reverse(rev);
+io.println($"  buf.reverse([1..5]):     {rev}");
+
+// ─── Binary Protocol Encoding ─────────────────────────────────────────────────
+
+io.println("\n-- Binary Protocol Encoding --");
+
+// Write a simple 8-byte packet: [uint16BE version][uint32LE payload_len][uint16BE checksum]
+let packet = buf.alloc(8);
+buf.writeUint16BE(packet, 0, 0x0001);    // version = 1
+buf.writeUint32LE(packet, 2, 1024);      // payload_len = 1024
+buf.writeUint16BE(packet, 6, 0xF00D);    // checksum
+
+io.println($"  packet (8 bytes): {packet}");
+io.println($"  version (uint16BE @ 0): {buf.readUint16BE(packet, 0)}");
+io.println($"  payload_len (uint32LE @ 2): {buf.readUint32LE(packet, 2)}");
+io.println($"  checksum (uint16BE @ 6): {conv.toHex(buf.readUint16BE(packet, 6), 4)}");
+
+// ─── Crypto Integration ───────────────────────────────────────────────────────
+
+io.println("\n-- Crypto Integration --");
+
+let secret = buf.from("my secret payload");
+let digest = crypto.sha256Bytes(secret);
+io.println($"  sha256Bytes result is byte[]: {digest is byte[]}");
+io.println($"  SHA-256 (hex): {buf.toHex(digest)}");
+io.println($"  SHA-256 len:   {buf.len(digest)} bytes");
+
+let rand_bytes = crypto.randomBytes(16);
+io.println($"  randomBytes(16): {rand_bytes}");
+io.println($"  as base64: {buf.toBase64(rand_bytes)}");
+
+io.println("\n" + "=" * 56);

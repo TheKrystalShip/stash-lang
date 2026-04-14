@@ -352,6 +352,26 @@ public class TypedArrayTests : BytecodeTestBase
         Assert.Equal("[1,2,3]", result);
     }
 
+    [Fact]
+    public void TypedArray_JsonStringify_DirectTypedArray()
+    {
+        var result = Execute(@"
+            let nums: int[] = [1, 2, 3];
+            return json.stringify(nums);
+        ");
+        Assert.Equal("[1,2,3]", result);
+    }
+
+    [Fact]
+    public void TypedArray_JsonPretty_DirectTypedArray()
+    {
+        var result = Execute(@"
+            let names: string[] = [""alice"", ""bob""];
+            return json.stringify(names);
+        ");
+        Assert.Equal("[\"alice\",\"bob\"]", result);
+    }
+
     // ─── Type System Tests ────────────────────────────────────────────────────
 
     [Fact]
