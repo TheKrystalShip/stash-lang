@@ -16,6 +16,13 @@ public abstract class BytecodeTestBase
     /// </summary>
     protected static object? Normalize(object? value)
     {
+        if (value is StashTypedArray ta)
+        {
+            var result = new List<object?>(ta.Count);
+            for (int i = 0; i < ta.Count; i++)
+                result.Add(Normalize(ta.Get(i).ToObject()));
+            return result;
+        }
         if (value is List<StashValue> svList)
         {
             var result = new List<object?>(svList.Count);

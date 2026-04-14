@@ -622,7 +622,14 @@ let result = info.hostCount;
     {
         listener.Stop();
         listener.Close();
-        try { serverTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+        try {
+#pragma warning disable VSTHRD002 // Avoid problematic synchronous waits
+            serverTask.Wait(TimeSpan.FromSeconds(2));
+#pragma warning restore VSTHRD002 // Avoid problematic synchronous waits
+        } catch
+        {
+
+        }
     }
 
     [Fact]

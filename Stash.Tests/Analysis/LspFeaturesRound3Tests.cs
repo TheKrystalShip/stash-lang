@@ -30,7 +30,6 @@ public class LspFeaturesRound3Tests : AnalysisTestBase
         var parser = new Parser(tokens);
         parser.ParseProgram();
         Assert.NotEmpty(parser.StructuredErrors);
-        Assert.All(parser.StructuredErrors, e => Assert.NotNull(e.Span));
     }
 
     [Fact]

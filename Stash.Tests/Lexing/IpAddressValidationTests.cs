@@ -134,7 +134,6 @@ public class IpAddressValidationTests
         Assert.NotEmpty(structured);
 
         var diag = structured[0];
-        Assert.NotNull(diag.Span);
         Assert.Equal(1, diag.Span.StartLine);    // Starts on line 1
         Assert.Equal(1, diag.Span.StartColumn);  // Starts at column 1
     }

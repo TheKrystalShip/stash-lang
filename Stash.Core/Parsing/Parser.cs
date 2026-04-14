@@ -1555,9 +1555,24 @@ public class Parser
             }
             else if (Check(TokenType.Identifier))
             {
-                // Peek ahead: if followed by [, (, or . → complex expression
-                if (_current + 1 < _tokens.Count &&
-                    _tokens[_current + 1].Type is TokenType.LeftParen or TokenType.LeftBracket or TokenType.Dot)
+                // Check for typed array pattern: identifier followed by []
+                if (_current + 2 < _tokens.Count &&
+                    _tokens[_current + 1].Type is TokenType.LeftBracket &&
+                    _tokens[_current + 2].Type is TokenType.RightBracket)
+                {
+                    // T[] pattern: consume identifier, [, ]
+                    Token baseType = Advance();
+                    Advance(); // [
+                    Token closeBracket = Advance(); // ]
+                    // Create a synthetic token with combined lexeme "int[]"
+                    var syntheticToken = new Token(TokenType.Identifier, $"{baseType.Lexeme}[]", null,
+                        new SourceSpan(baseType.Span.File, baseType.Span.StartLine, baseType.Span.StartColumn,
+                            closeBracket.Span.EndLine, closeBracket.Span.EndColumn));
+                    expr = new IsExpr(expr, isKeyword, syntheticToken, MakeSpan(expr.Span, closeBracket.Span));
+                }
+                // Peek ahead: if followed by (, ., or [ → complex expression (array index, call, member access)
+                else if (_current + 1 < _tokens.Count &&
+                    _tokens[_current + 1].Type is TokenType.LeftParen or TokenType.Dot or TokenType.LeftBracket)
                 {
                     Expr typeExpr = Call();
                     expr = new IsExpr(expr, isKeyword, typeExpr, MakeSpan(expr.Span, typeExpr.Span));

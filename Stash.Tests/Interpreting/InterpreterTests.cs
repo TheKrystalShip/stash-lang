@@ -594,7 +594,7 @@ public class InterpreterTests : StashTestBase
     /// named 'result' (the last variable defined at global scope).
     /// Since Interpret(List&lt;Stmt&gt;) returns void, we evaluate the variable 'result' after execution.
     /// </summary>
-    private static object? Run(string source)
+    private static new object? Run(string source)
     {
         string full = source + "\nreturn result;";
         var lexer = new Lexer(full, "<test>");
@@ -607,7 +607,7 @@ public class InterpreterTests : StashTestBase
         return Normalize(vm.Execute(chunk));
     }
 
-    private static void RunExpectingError(string source)
+    private static new void RunExpectingError(string source)
     {
         var lexer = new Lexer(source, "<test>");
         var tokens = lexer.ScanTokens();
@@ -3050,7 +3050,7 @@ public class InterpreterTests : StashTestBase
         return Compiler.Compile(stmts);
     }
 
-    private static object? RunWithFile(string source, string filePath)
+    private static new object? RunWithFile(string source, string filePath)
     {
         string full = source + "\nreturn result;";
         var lexer = new Lexer(full, filePath);

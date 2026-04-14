@@ -17,7 +17,8 @@ public sealed partial class VirtualMachine
     {
         "int", "float", "string", "bool", "array", "dict", "null", "function",
         "range", "duration", "bytes", "semver", "secret", "ip", "Error", "struct", "enum",
-        "interface", "namespace", "Future"
+        "interface", "namespace", "Future",
+        "int[]", "float[]", "string[]", "bool[]"
     };
 
     private static bool InstanceImplementsInterfaceName(StashInstance inst, string ifaceName)

@@ -263,6 +263,10 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `bool`      | `true`, `false`                            |                                               |
 | `null`      | `null`                                     | Absence of value                              |
 | `array`     | `[1, 2, 3]`, `["a", 42, true]`             | Ordered, mixed-type, dynamic-size             |
+| `int[]`     | `let a: int[] = [1, 2, 3]`                  | Typed array — homogeneous integers            |
+| `float[]`   | `let a: float[] = [1.0, 2.5]`               | Typed array — homogeneous floats              |
+| `string[]`  | `let a: string[] = ["a", "b"]`              | Typed array — homogeneous strings             |
+| `bool[]`    | `let a: bool[] = [true, false]`             | Typed array — homogeneous booleans            |
 | `struct`    | `Server { host: "...", ... }`              | Named structured data (see Section 5)         |
 | `enum`      | `Status.Active`, `Color.Red`               | Named constants (see Section 5b)              |
 | `dict`      | `{ key: value }`, `dict.new()`             | Key-value map (see Section 5c)                |
@@ -273,6 +277,84 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `ip`        | `@192.168.1.1`, `@::1`, `@10.0.0.0/24`     | IP address — IPv4/IPv6 with optional CIDR     |
 | `duration`  | `5s`, `500ms`, `2h30m`, `1.5h`             | Time duration with unit suffixes              |
 | `bytes`     | `100B`, `1.5KB`, `256MB`, `2GB`            | Byte size with binary unit suffixes           |
+
+### Typed Arrays
+
+Typed arrays are **homogeneous arrays** — every element must be the same primitive type. They provide type safety by validating elements on insertion and use native backing arrays for performance.
+
+#### Declaration Syntax
+
+Use a type annotation with the `T[]` suffix on variable or constant declarations:
+
+```stash
+let scores: int[] = [90, 85, 100];
+let prices: float[] = [9.99, 14.50, 3.25];
+let names: string[] = ["Alice", "Bob"];
+let flags: bool[] = [true, false, true];
+const PRIMES: int[] = [2, 3, 5, 7, 11];
+```
+
+The initializer must be an array literal (or any expression that evaluates to an array). The runtime wraps the generic array into a typed array, validating each element. If any element does not match the declared type, a runtime error is raised:
+
+```stash
+let nums: int[] = [1, "two", 3];  // Runtime error: expected int, got string
+```
+
+**`int[]` accepts only integers.** Floats are not silently truncated:
+
+```stash
+let a: int[] = [1, 2.5];   // Runtime error: expected int, got float
+```
+
+**`float[]` accepts integers** — they are promoted to floats automatically:
+
+```stash
+let a: float[] = [1, 2.5, 3];  // OK: stored as [1.0, 2.5, 3.0]
+```
+
+#### Type Checking
+
+`typeof()` returns the typed array name. The `is` operator supports both generic `array` and specific `T[]` checks:
+
+```stash
+let a: int[] = [1, 2, 3];
+typeof(a)       // "int[]"
+a is int[]      // true
+a is array      // true  (typed arrays are arrays)
+a is string[]   // false
+[1, 2] is int[] // false (generic arrays are not typed)
+```
+
+#### Mutation
+
+All `arr.*` mutation functions work transparently on typed arrays, with type validation:
+
+```stash
+let a: int[] = [1, 2, 3];
+arr.push(a, 4);       // OK: [1, 2, 3, 4]
+arr.push(a, "five");  // Runtime error: expected int, got string
+arr.insert(a, 0, 0);  // OK: [0, 1, 2, 3, 4]
+```
+
+Functions that return new arrays (`arr.filter`, `arr.slice`, `arr.unique`, `arr.sortBy`, `arr.take`, `arr.drop`, `arr.concat`) preserve the typed array type in the result.
+
+#### Conversion
+
+Convert between typed and generic arrays using `arr.typed()` and `arr.untyped()`:
+
+```stash
+let generic = [1, 2, 3];
+let typed = arr.typed(generic, "int");    // int[]
+let back = arr.untyped(typed);            // generic array
+arr.elementType(typed);                   // "int"
+arr.elementType(generic);                 // null
+```
+
+Create a zero-initialized typed array with a given size:
+
+```stash
+let buf: int[] = arr.new("int", 100);    // zero-initialized int[] with 100 elements
+```
 
 ### Number Literals
 
@@ -1258,6 +1340,10 @@ When the RHS identifier is immediately followed by `(`, `[`, or `.`, or when the
 | `bool`          | Boolean values (`true` / `false`)                                 |
 | `null`          | The `null` value                                                  |
 | `array`         | Array values                                                      |
+| `int[]`         | Typed integer arrays                                              |
+| `float[]`       | Typed float arrays                                                |
+| `string[]`      | Typed string arrays                                               |
+| `bool[]`        | Typed boolean arrays                                              |
 | `dict`          | Dictionary values                                                 |
 | `struct`        | Struct instances (any struct type)                                |
 | `enum`          | Enum values (any enum type)                                       |
@@ -1298,6 +1384,13 @@ The companion `nameof()` function returns the **declared name** rather than the 
 3.14 is int        // false
 null is null       // true
 [1, 2] is array    // true
+
+// Typed arrays
+let nums: int[] = [1, 2, 3];
+nums is int[]      // true
+nums is array      // true  (typed arrays match 'array')
+nums is string[]   // false
+[1, 2] is int[]    // false (generic arrays are not typed)
 
 // User-defined struct types
 struct Point { x: int, y: int }
@@ -1392,6 +1485,7 @@ for (let item in inventory) {
 | ---------------------------- | ------------- | ------------- |
 | `42`                         | `"int"`       | `"int"`       |
 | `"hi"`                       | `"string"`    | `"string"`    |
+| `let a: int[] = [1]`             | `"int[]"`   | `"int[]"`   |
 | `null`                       | `"null"`      | `"null"`      |
 | `Printable` (interface)      | `"interface"` | `"Printable"` |
 | `Product` (struct def)       | `"struct"`    | `"Product"`   |

@@ -651,6 +651,17 @@ All `arr` functions take the target array as the first argument. Functions that 
 | `arr.partition(array, fn)` | Split into `[matching, non-matching]` arrays based on predicate          |
 | `arr.shuffle(array)`       | Randomly shuffle array in-place (Fisher-Yates algorithm)                 |
 
+### Typed Arrays
+
+Typed arrays (`int[]`, `float[]`, `string[]`, `bool[]`) are homogeneous arrays backed by native arrays. All `arr.*` functions work transparently on typed arrays — mutation functions validate element types, and functions that return new arrays preserve the typed array type.
+
+| Function                             | Description                                                                 |
+| ------------------------------------ | --------------------------------------------------------------------------- |
+| `arr.typed(array, elementType)`      | Convert a generic array to a typed array. `elementType` is `"int"`, `"float"`, `"string"`, or `"bool"` |
+| `arr.untyped(typedArray)`            | Convert a typed array back to a generic array                               |
+| `arr.elementType(array)`             | Return the element type name (`"int"`, `"float"`, etc.) or `null` for generic arrays |
+| `arr.new(elementType, size)`         | Create a zero-initialized typed array with the given number of elements     |
+
 ### Examples
 
 ```stash
@@ -733,6 +744,23 @@ let people = [
 ];
 let byDept = arr.groupBy(people, (p) => p.dept);
 // { "eng": [Alice, Charlie], "sales": [Bob] }
+
+// Typed arrays
+let scores: int[] = [90, 85, 100];
+arr.push(scores, 95);                      // [90, 85, 100, 95]
+// arr.push(scores, "A");                  // Runtime error: expected int
+
+let typed = arr.typed([1, 2, 3], "int");   // int[]
+let generic = arr.untyped(typed);          // generic array
+arr.elementType(typed);                    // "int"
+arr.elementType(generic);                  // null
+
+let buf = arr.new("string", 10);           // zero-initialized string[] with 10 elements
+arr.push(buf, "hello");                    // ["hello"]
+
+// Derived arrays preserve type
+let high = arr.filter(scores, (s) => s >= 90);  // int[] — [90, 100, 95]
+let top3 = arr.take(scores, 3);                  // int[] — [90, 85, 100]
 ```
 
 ---
