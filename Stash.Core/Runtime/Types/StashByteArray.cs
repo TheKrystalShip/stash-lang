@@ -33,8 +33,8 @@ public sealed class StashByteArray : StashTypedArray
         _count = capacity;  // all zeros
     }
 
-    // Internal: from raw byte array (no copy — caller transfers ownership)
-    internal StashByteArray(byte[] data)
+    // From raw byte array (no copy — caller transfers ownership)
+    public StashByteArray(byte[] data)
     {
         _data = data;
         _count = data.Length;

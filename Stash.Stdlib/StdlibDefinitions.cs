@@ -42,6 +42,7 @@ public static class StdlibDefinitions
         (() => ArgsBuiltIns.Define(),     StashCapabilities.Process),
         (() => CryptoBuiltIns.Define(),   StashCapabilities.None),
         (() => EncodingBuiltIns.Define(), StashCapabilities.None),
+        (() => BufBuiltIns.Define(),      StashCapabilities.None),
         (() => TermBuiltIns.Define(),     StashCapabilities.None),
         (() => SysBuiltIns.Define(),      StashCapabilities.None),
         (() => PkgBuiltIns.Define(),      StashCapabilities.FileSystem),
