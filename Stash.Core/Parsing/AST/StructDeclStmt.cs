@@ -18,8 +18,8 @@ public class StructDeclStmt : Stmt
     public Token Name { get; }
     /// <summary>Gets the list of field name tokens.</summary>
     public List<Token> Fields { get; }
-    /// <summary>Gets the list of optional type hint tokens for each field. Each entry is <c>null</c> if no type was annotated.</summary>
-    public List<Token?> FieldTypes { get; }
+    /// <summary>Gets the list of optional type hints for each field. Each entry is <c>null</c> if no type was annotated.</summary>
+    public List<TypeHint?> FieldTypes { get; }
     /// <summary>Gets the list of method declarations defined inside the struct body.</summary>
     public List<FnDeclStmt> Methods { get; }
     /// <summary>Gets the list of interface name tokens this struct declares conformance with.</summary>
@@ -28,11 +28,11 @@ public class StructDeclStmt : Stmt
     /// <summary>Initializes a new instance of <see cref="StructDeclStmt"/>.</summary>
     /// <param name="name">The struct name token.</param>
     /// <param name="fields">The list of field name tokens.</param>
-    /// <param name="fieldTypes">The list of optional type hint tokens for each field.</param>
+    /// <param name="fieldTypes">The list of optional type hints for each field.</param>
     /// <param name="methods">The list of method declarations defined inside the struct body.</param>
     /// <param name="interfaces">The list of interface name tokens this struct declares conformance with.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public StructDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, List<FnDeclStmt> methods, List<Token> interfaces, SourceSpan span) : base(span, StmtType.StructDecl)
+    public StructDeclStmt(Token name, List<Token> fields, List<TypeHint?> fieldTypes, List<FnDeclStmt> methods, List<Token> interfaces, SourceSpan span) : base(span, StmtType.StructDecl)
     {
         Name = name;
         Fields = fields;
@@ -44,10 +44,10 @@ public class StructDeclStmt : Stmt
     /// <summary>Initializes a new instance of <see cref="StructDeclStmt"/> with no interface declarations.</summary>
     /// <param name="name">The struct name token.</param>
     /// <param name="fields">The list of field name tokens.</param>
-    /// <param name="fieldTypes">The list of optional type hint tokens for each field.</param>
+    /// <param name="fieldTypes">The list of optional type hints for each field.</param>
     /// <param name="methods">The list of method declarations defined inside the struct body.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public StructDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, List<FnDeclStmt> methods, SourceSpan span)
+    public StructDeclStmt(Token name, List<Token> fields, List<TypeHint?> fieldTypes, List<FnDeclStmt> methods, SourceSpan span)
         : this(name, fields, fieldTypes, methods, new List<Token>(), span) { }
 
     /// <inheritdoc />

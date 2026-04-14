@@ -29,10 +29,10 @@ public class LambdaExpr : Expr
     public List<Token> Parameters { get; }
 
     /// <summary>
-    /// Gets the list of optional type hint tokens for each parameter.
+    /// Gets the list of optional type hints for each parameter.
     /// Each entry is <c>null</c> if no type hint was provided for that parameter.
     /// </summary>
-    public List<Token?> ParameterTypes { get; }
+    public List<TypeHint?> ParameterTypes { get; }
 
     /// <summary>
     /// Gets the list of optional default value expressions for each parameter.
@@ -80,7 +80,7 @@ public class LambdaExpr : Expr
     /// <param name="span">The source span covering the entire lambda expression.</param>
     /// <param name="isAsync">Whether this lambda was declared with the <c>async</c> keyword.</param>
     /// <param name="asyncKeyword">The <c>async</c> keyword token, or <c>null</c>.</param>
-    public LambdaExpr(List<Token> parameters, List<Token?> parameterTypes, List<Expr?> defaultValues,
+    public LambdaExpr(List<Token> parameters, List<TypeHint?> parameterTypes, List<Expr?> defaultValues,
                       Expr? expressionBody, BlockStmt? blockBody, SourceSpan span, bool isAsync = false, Token? asyncKeyword = null, bool hasRestParam = false) : base(span, ExprType.Lambda)
     {
         Parameters = parameters;

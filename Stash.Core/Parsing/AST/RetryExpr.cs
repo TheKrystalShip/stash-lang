@@ -11,9 +11,9 @@ using Stash.Lexing;
 /// <param name="OnRetryKeyword">The <c>onRetry</c> keyword token.</param>
 /// <param name="IsReference"><see langword="true"/> when a named function reference is used; <see langword="false"/> for an inline block.</param>
 /// <param name="ParamAttempt">The parameter token for the attempt number (inline block only).</param>
-/// <param name="ParamAttemptTypeHint">The optional type hint token for the attempt parameter (inline block only).</param>
+/// <param name="ParamAttemptTypeHint">The optional type hint for the attempt parameter (inline block only).</param>
 /// <param name="ParamError">The parameter token for the error value (inline block only).</param>
-/// <param name="ParamErrorTypeHint">The optional type hint token for the error parameter (inline block only).</param>
+/// <param name="ParamErrorTypeHint">The optional type hint for the error parameter (inline block only).</param>
 /// <param name="Body">The inline block body (<see cref="IsReference"/> is <see langword="false"/>).</param>
 /// <param name="Reference">The function reference expression (<see cref="IsReference"/> is <see langword="true"/>).</param>
 /// <param name="Span">The source span covering the entire onRetry clause.</param>
@@ -21,9 +21,9 @@ public record OnRetryNode(
     Token OnRetryKeyword,
     bool IsReference,
     Token? ParamAttempt,
-    Token? ParamAttemptTypeHint,
+    TypeHint? ParamAttemptTypeHint,
     Token? ParamError,
-    Token? ParamErrorTypeHint,
+    TypeHint? ParamErrorTypeHint,
     BlockStmt? Body,
     Expr? Reference,
     SourceSpan Span);

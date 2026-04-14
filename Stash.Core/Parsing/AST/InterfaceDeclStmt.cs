@@ -9,9 +9,9 @@ using Stash.Lexing;
 /// </summary>
 /// <param name="Name">The method name token.</param>
 /// <param name="Parameters">The list of parameter name tokens.</param>
-/// <param name="ParameterTypes">The list of optional type hint tokens for each parameter. Each entry is <c>null</c> if no type hint was provided.</param>
-/// <param name="ReturnType">The optional return type hint token, or <c>null</c>.</param>
-public record InterfaceMethodSignature(Token Name, List<Token> Parameters, List<Token?> ParameterTypes, Token? ReturnType);
+/// <param name="ParameterTypes">The list of optional type hints for each parameter. Each entry is <c>null</c> if no type hint was provided.</param>
+/// <param name="ReturnType">The optional return type hint, or <c>null</c>.</param>
+public record InterfaceMethodSignature(Token Name, List<Token> Parameters, List<TypeHint?> ParameterTypes, TypeHint? ReturnType);
 
 /// <summary>
 /// An interface declaration: <c>interface Name { field1, method1(), ... }</c>
@@ -27,18 +27,18 @@ public class InterfaceDeclStmt : Stmt
     public Token Name { get; }
     /// <summary>Gets the list of required field name tokens.</summary>
     public List<Token> Fields { get; }
-    /// <summary>Gets the list of optional type hint tokens for each required field. Each entry is <c>null</c> if no type was annotated.</summary>
-    public List<Token?> FieldTypes { get; }
+    /// <summary>Gets the list of optional type hints for each required field. Each entry is <c>null</c> if no type was annotated.</summary>
+    public List<TypeHint?> FieldTypes { get; }
     /// <summary>Gets the list of method signatures declared in the interface.</summary>
     public List<InterfaceMethodSignature> Methods { get; }
 
     /// <summary>Initializes a new instance of <see cref="InterfaceDeclStmt"/>.</summary>
     /// <param name="name">The interface name token.</param>
     /// <param name="fields">The list of required field name tokens.</param>
-    /// <param name="fieldTypes">The list of optional type hint tokens for each required field.</param>
+    /// <param name="fieldTypes">The list of optional type hints for each required field.</param>
     /// <param name="methods">The list of method signatures declared in the interface.</param>
     /// <param name="span">The source location of this declaration.</param>
-    public InterfaceDeclStmt(Token name, List<Token> fields, List<Token?> fieldTypes, List<InterfaceMethodSignature> methods, SourceSpan span) : base(span, StmtType.InterfaceDecl)
+    public InterfaceDeclStmt(Token name, List<Token> fields, List<TypeHint?> fieldTypes, List<InterfaceMethodSignature> methods, SourceSpan span) : base(span, StmtType.InterfaceDecl)
     {
         Name = name;
         Fields = fields;

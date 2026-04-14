@@ -150,11 +150,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// Records a type-use reference for the given type-hint token, if it refers to a user-defined type.
     /// Built-in types (int, string, bool, etc.) are filtered out via <see cref="StdlibRegistry.ValidTypes"/>.
     /// </summary>
-    private void RecordTypeReference(Token? typeHint)
+    private void RecordTypeReference(TypeHint? typeHint)
     {
-        if (typeHint != null && typeHint.Type == TokenType.Identifier && !StdlibRegistry.ValidTypes.Contains(typeHint.Lexeme))
+        if (typeHint != null && typeHint.Name.Type == TokenType.Identifier && !StdlibRegistry.ValidTypes.Contains(typeHint.Name.Lexeme))
         {
-            RecordReference(typeHint.Lexeme, typeHint.Span, ReferenceKind.TypeUse);
+            RecordReference(typeHint.Name.Lexeme, typeHint.Name.Span, ReferenceKind.TypeUse);
         }
     }
 

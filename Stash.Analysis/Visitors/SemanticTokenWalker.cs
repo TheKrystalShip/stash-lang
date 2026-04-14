@@ -218,7 +218,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration);
         if (stmt.TypeHint is not null)
         {
-            EmitFromToken(stmt.TypeHint, TokenTypeType, 0);
+            EmitFromToken(stmt.TypeHint.Name, TokenTypeType, 0);
         }
 
         stmt.Initializer?.Accept(this);
@@ -231,7 +231,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         EmitFromToken(stmt.Name, TokenTypeVariable, ModifierDeclaration | ModifierReadonly);
         if (stmt.TypeHint is not null)
         {
-            EmitFromToken(stmt.TypeHint, TokenTypeType, 0);
+            EmitFromToken(stmt.TypeHint.Name, TokenTypeType, 0);
         }
 
         stmt.Initializer.Accept(this);
@@ -306,7 +306,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         EmitFromToken(stmt.VariableName, TokenTypeVariable, ModifierDeclaration);
         if (stmt.TypeHint is not null)
         {
-            EmitFromToken(stmt.TypeHint, TokenTypeType, 0);
+            EmitFromToken(stmt.TypeHint.Name, TokenTypeType, 0);
         }
 
         stmt.Iterable.Accept(this);
@@ -328,9 +328,9 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
             EmitFromToken(stmt.Parameters[i], TokenTypeParameter, ModifierDeclaration);
-            if (stmt.ParameterTypes[i] is Token paramType)
+            if (stmt.ParameterTypes[i] is TypeHint paramType)
             {
-                EmitFromToken(paramType, TokenTypeType, 0);
+                EmitFromToken(paramType.Name, TokenTypeType, 0);
             }
 
             if (stmt.DefaultValues[i] is Expr defaultVal)
@@ -338,9 +338,9 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                 defaultVal.Accept(this);
             }
         }
-        if (stmt.ReturnType is Token returnType)
+        if (stmt.ReturnType is TypeHint returnType)
         {
-            EmitFromToken(returnType, TokenTypeType, 0);
+            EmitFromToken(returnType.Name, TokenTypeType, 0);
         }
 
         stmt.Body.Accept(this);
@@ -399,9 +399,9 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
-            if (stmt.FieldTypes[i] is Token fieldType)
+            if (stmt.FieldTypes[i] is TypeHint fieldType)
             {
-                EmitFromToken(fieldType, TokenTypeType, 0);
+                EmitFromToken(fieldType.Name, TokenTypeType, 0);
             }
         }
         foreach (var method in stmt.Methods)
@@ -442,9 +442,9 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
-            if (i < stmt.FieldTypes.Count && stmt.FieldTypes[i] is Token fieldType)
+            if (i < stmt.FieldTypes.Count && stmt.FieldTypes[i] is TypeHint fieldType)
             {
-                EmitFromToken(fieldType, TokenTypeType, 0);
+                EmitFromToken(fieldType.Name, TokenTypeType, 0);
             }
         }
         foreach (var method in stmt.Methods)
@@ -453,14 +453,14 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 EmitFromToken(method.Parameters[i], TokenTypeParameter, ModifierDeclaration);
-                if (i < method.ParameterTypes.Count && method.ParameterTypes[i] is Token paramType)
+                if (i < method.ParameterTypes.Count && method.ParameterTypes[i] is TypeHint paramType)
                 {
-                    EmitFromToken(paramType, TokenTypeType, 0);
+                    EmitFromToken(paramType.Name, TokenTypeType, 0);
                 }
             }
-            if (method.ReturnType is Token returnType)
+            if (method.ReturnType is TypeHint returnType)
             {
-                EmitFromToken(returnType, TokenTypeType, 0);
+                EmitFromToken(returnType.Name, TokenTypeType, 0);
             }
         }
         return 0;
@@ -716,11 +716,11 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                 if (expr.OnRetryClause.ParamAttempt is not null)
                     EmitFromToken(expr.OnRetryClause.ParamAttempt, TokenTypeVariable, ModifierDeclaration);
                 if (expr.OnRetryClause.ParamAttemptTypeHint is not null)
-                    EmitFromToken(expr.OnRetryClause.ParamAttemptTypeHint, TokenTypeType, 0);
+                    EmitFromToken(expr.OnRetryClause.ParamAttemptTypeHint.Name, TokenTypeType, 0);
                 if (expr.OnRetryClause.ParamError is not null)
                     EmitFromToken(expr.OnRetryClause.ParamError, TokenTypeVariable, ModifierDeclaration);
                 if (expr.OnRetryClause.ParamErrorTypeHint is not null)
-                    EmitFromToken(expr.OnRetryClause.ParamErrorTypeHint, TokenTypeType, 0);
+                    EmitFromToken(expr.OnRetryClause.ParamErrorTypeHint.Name, TokenTypeType, 0);
                 expr.OnRetryClause.Body.Accept(this);
             }
         }
@@ -770,9 +770,9 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
             EmitFromToken(expr.Parameters[i], TokenTypeParameter, ModifierDeclaration);
-            if (expr.ParameterTypes[i] is Token paramType)
+            if (expr.ParameterTypes[i] is TypeHint paramType)
             {
-                EmitFromToken(paramType, TokenTypeType, 0);
+                EmitFromToken(paramType.Name, TokenTypeType, 0);
             }
 
             if (expr.DefaultValues[i] is Expr defaultVal)

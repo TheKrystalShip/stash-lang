@@ -17,8 +17,8 @@ public class ForInStmt : Stmt
     public Token? IndexName { get; }
     /// <summary>Gets the loop variable token that receives each element.</summary>
     public Token VariableName { get; }
-    /// <summary>Gets the optional type hint token for the loop variable. <c>null</c> if no type annotation was provided.</summary>
-    public Token? TypeHint { get; }
+    /// <summary>Gets the optional type hint for the loop variable. <c>null</c> if no type annotation was provided.</summary>
+    public TypeHint? TypeHint { get; }
     /// <summary>Gets the expression that produces the iterable collection.</summary>
     public Expr Iterable { get; }
     /// <summary>Gets the block of statements executed for each element.</summary>
@@ -27,11 +27,11 @@ public class ForInStmt : Stmt
     /// <summary>Initializes a new instance of <see cref="ForInStmt"/>.</summary>
     /// <param name="indexName">The optional index variable token, or <c>null</c>.</param>
     /// <param name="variableName">The loop variable token that receives each element.</param>
-    /// <param name="typeHint">The optional type hint token for the loop variable, or <c>null</c>.</param>
+    /// <param name="typeHint">The optional type hint for the loop variable, or <c>null</c>.</param>
     /// <param name="iterable">The expression that produces the iterable collection.</param>
     /// <param name="body">The block of statements executed for each element.</param>
     /// <param name="span">The source location of this statement.</param>
-    public ForInStmt(Token? indexName, Token variableName, Token? typeHint, Expr iterable, BlockStmt body, SourceSpan span) : base(span, StmtType.ForIn)
+    public ForInStmt(Token? indexName, Token variableName, TypeHint? typeHint, Expr iterable, BlockStmt body, SourceSpan span) : base(span, StmtType.ForIn)
     {
         IndexName = indexName;
         VariableName = variableName;

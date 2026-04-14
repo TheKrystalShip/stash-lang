@@ -103,21 +103,21 @@ public sealed class UnknownTypeRule : IAnalysisRule
         }
     }
 
-    private static void ValidateTypeHint(Token? typeHint, RuleContext context)
+    private static void ValidateTypeHint(TypeHint? typeHint, RuleContext context)
     {
         if (typeHint == null)
         {
             return;
         }
 
-        var typeName = typeHint.Lexeme;
+        var typeName = typeHint.Name.Lexeme;
 
         if (context.ValidBuiltInTypes.Contains(typeName))
         {
             return;
         }
 
-        var definition = context.ScopeTree.FindDefinition(typeName, typeHint.Span.StartLine, typeHint.Span.StartColumn);
+        var definition = context.ScopeTree.FindDefinition(typeName, typeHint.Name.Span.StartLine, typeHint.Name.Span.StartColumn);
         if (definition != null && (definition.Kind == SymbolKind.Struct || definition.Kind == SymbolKind.Enum || definition.Kind == SymbolKind.Interface))
         {
             return;

@@ -210,10 +210,10 @@ public class Parser
 
         // Normal variable declaration
         Token name = Consume(TokenType.Identifier, "Expected variable name.");
-        Token? typeHint = null;
+        TypeHint? typeHint = null;
         if (Match(TokenType.Colon))
         {
-            typeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+            typeHint = ParseTypeHint();
         }
         Expr? initializer = null;
         if (Match(TokenType.Equal))
@@ -246,10 +246,10 @@ public class Parser
 
         // Normal constant declaration
         Token name = Consume(TokenType.Identifier, "Expected constant name.");
-        Token? typeHint = null;
+        TypeHint? typeHint = null;
         if (Match(TokenType.Colon))
         {
-            typeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+            typeHint = ParseTypeHint();
         }
         Consume(TokenType.Equal, "Expected '=' after constant name (constants must be initialized).");
         Expr initializer = Expression();
@@ -350,7 +350,7 @@ public class Parser
         Consume(TokenType.LeftParen, "Expected '(' after function name.");
 
         List<Token> parameters = new();
-        List<Token?> parameterTypes = new();
+        List<TypeHint?> parameterTypes = new();
         List<Expr?> defaultValues = new();
         bool hasSeenDefault = false;
         bool hasRestParam = false;
@@ -367,10 +367,10 @@ public class Parser
                     }
                     hasRestParam = true;
                     Token restParamName = Consume(TokenType.Identifier, "Expected parameter name.");
-                    Token? restParamType = null;
+                    TypeHint? restParamType = null;
                     if (Match(TokenType.Colon))
                     {
-                        restParamType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                        restParamType = ParseTypeHint();
                     }
                     if (Check(TokenType.Equal))
                     {
@@ -387,10 +387,10 @@ public class Parser
                 }
 
                 parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
-                Token? paramType = null;
+                TypeHint? paramType = null;
                 if (Match(TokenType.Colon))
                 {
-                    paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    paramType = ParseTypeHint();
                 }
                 parameterTypes.Add(paramType);
 
@@ -409,10 +409,10 @@ public class Parser
         }
 
         Consume(TokenType.RightParen, "Expected ')' after parameters.");
-        Token? returnType = null;
+        TypeHint? returnType = null;
         if (Match(TokenType.Arrow))
         {
-            returnType = Consume(TokenType.Identifier, "Expected return type after '->'.");
+            returnType = ParseTypeHint();
         }
         BlockStmt body = ParseBlock();
         return new FnDeclStmt(name, parameters, parameterTypes, defaultValues, returnType, body, MakeSpan(startSpan, body.Span), isAsync, asyncToken, hasRestParam);
@@ -437,7 +437,7 @@ public class Parser
         Consume(TokenType.LeftBrace, "Expected '{' after struct name.");
 
         List<Token> fields = new();
-        List<Token?> fieldTypes = new();
+        List<TypeHint?> fieldTypes = new();
         List<FnDeclStmt> methods = new();
 
         // Parse fields (comma-separated, stop when we hit fn, async, or })
@@ -451,10 +451,10 @@ public class Parser
                 }
 
                 fields.Add(Consume(TokenType.Identifier, "Expected field name."));
-                Token? fieldType = null;
+                TypeHint? fieldType = null;
                 if (Match(TokenType.Colon))
                 {
-                    fieldType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    fieldType = ParseTypeHint();
                 }
                 fieldTypes.Add(fieldType);
             } while (Match(TokenType.Comma));
@@ -513,7 +513,7 @@ public class Parser
         Consume(TokenType.LeftBrace, "Expected '{' after interface name.");
 
         List<Token> fields = new();
-        List<Token?> fieldTypes = new();
+        List<TypeHint?> fieldTypes = new();
         List<InterfaceMethodSignature> methods = new();
         HashSet<string> memberNames = new();
 
@@ -541,17 +541,17 @@ public class Parser
                 {
                     // Method signature: name(param1, param2, ...) -> ReturnType
                     List<Token> parameters = new();
-                    List<Token?> parameterTypes = new();
+                    List<TypeHint?> parameterTypes = new();
 
                     if (!Check(TokenType.RightParen))
                     {
                         do
                         {
                             parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
-                            Token? paramType = null;
+                            TypeHint? paramType = null;
                             if (Match(TokenType.Colon))
                             {
-                                paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                                paramType = ParseTypeHint();
                             }
                             parameterTypes.Add(paramType);
                         } while (Match(TokenType.Comma));
@@ -559,10 +559,10 @@ public class Parser
 
                     Consume(TokenType.RightParen, "Expected ')' after interface method parameters.");
 
-                    Token? returnType = null;
+                    TypeHint? returnType = null;
                     if (Match(TokenType.Arrow))
                     {
-                        returnType = Consume(TokenType.Identifier, "Expected return type after '->'.");
+                        returnType = ParseTypeHint();
                     }
 
                     methods.Add(new InterfaceMethodSignature(memberName, parameters, parameterTypes, returnType));
@@ -570,10 +570,10 @@ public class Parser
                 else
                 {
                     // Field requirement: name or name: Type
-                    Token? fieldType = null;
+                    TypeHint? fieldType = null;
                     if (Match(TokenType.Colon))
                     {
-                        fieldType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                        fieldType = ParseTypeHint();
                     }
                     fields.Add(memberName);
                     fieldTypes.Add(fieldType);
@@ -913,10 +913,10 @@ public class Parser
             varName = Consume(TokenType.Identifier, "Expected variable name after ',' in for-in loop.");
         }
 
-        Token? typeHint = null;
+        TypeHint? typeHint = null;
         if (Match(TokenType.Colon))
         {
-            typeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+            typeHint = ParseTypeHint();
         }
         Consume(TokenType.In, "Expected 'in' after variable name in for-in loop.");
         Expr iterable = Expression();
@@ -1871,14 +1871,14 @@ public class Parser
                 // Inline block: onRetry (n, err) { ... }
                 Advance(); // consume '('
                 Token paramAttempt = Consume(TokenType.Identifier, "Expected parameter name for attempt number.");
-                Token? paramAttemptTypeHint = null;
+                TypeHint? paramAttemptTypeHint = null;
                 if (Match(TokenType.Colon))
-                    paramAttemptTypeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    paramAttemptTypeHint = ParseTypeHint();
                 Consume(TokenType.Comma, "Expected ',' between onRetry parameters.");
                 Token paramError = Consume(TokenType.Identifier, "Expected parameter name for error.");
-                Token? paramErrorTypeHint = null;
+                TypeHint? paramErrorTypeHint = null;
                 if (Match(TokenType.Colon))
-                    paramErrorTypeHint = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    paramErrorTypeHint = ParseTypeHint();
                 Consume(TokenType.RightParen, "Expected ')' after onRetry parameters.");
                 BlockStmt hookBody = ParseBlock();
                 onRetryClause = new OnRetryNode(onRetryToken, false, paramAttempt, paramAttemptTypeHint, paramError, paramErrorTypeHint, hookBody, null, MakeSpan(onRetryStart, hookBody.Span));
@@ -2344,7 +2344,7 @@ public class Parser
     private Expr ParseLambda(Token open, bool isAsync = false, Token? asyncToken = null)
     {
         List<Token> parameters = new();
-        List<Token?> parameterTypes = new();
+        List<TypeHint?> parameterTypes = new();
         List<Expr?> defaultValues = new();
         bool hasSeenDefault = false;
         bool hasRestParam = false;
@@ -2362,10 +2362,10 @@ public class Parser
                     }
                     hasRestParam = true;
                     Token restParamName = Consume(TokenType.Identifier, "Expected parameter name.");
-                    Token? restParamType = null;
+                    TypeHint? restParamType = null;
                     if (Match(TokenType.Colon))
                     {
-                        restParamType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                        restParamType = ParseTypeHint();
                     }
                     if (Check(TokenType.Equal))
                     {
@@ -2382,10 +2382,10 @@ public class Parser
                 }
 
                 parameters.Add(Consume(TokenType.Identifier, "Expected parameter name."));
-                Token? paramType = null;
+                TypeHint? paramType = null;
                 if (Match(TokenType.Colon))
                 {
-                    paramType = Consume(TokenType.Identifier, "Expected type name after ':'.");
+                    paramType = ParseTypeHint();
                 }
                 parameterTypes.Add(paramType);
 
@@ -2648,6 +2648,20 @@ public class Parser
     /// Gets a value indicating whether the parser has reached the end-of-file sentinel token.
     /// </summary>
     private bool IsAtEnd => Peek().Type == TokenType.Eof;
+
+    /// <summary>Parses an optional type hint after a colon: <c>: TypeName</c> or <c>: TypeName[]</c>.</summary>
+    private TypeHint ParseTypeHint()
+    {
+        Token typeName = Consume(TokenType.Identifier, "Expected type name after ':'.");
+        if (Match(TokenType.LeftBracket))
+        {
+            Consume(TokenType.RightBracket, "Expected ']' after '[' in typed array type.");
+            var span = new SourceSpan(typeName.Span.File, typeName.Span.StartLine, typeName.Span.StartColumn,
+                Previous().Span.EndLine, Previous().Span.EndColumn);
+            return new TypeHint(typeName, true, span);
+        }
+        return new TypeHint(typeName, false, typeName.Span);
+    }
 
     /// <summary>
     /// Consumes the current token if it matches <paramref name="type"/>; otherwise reports
