@@ -995,6 +995,59 @@ public static class FsBuiltIns
 
         ns.Struct("Watcher", []);
 
+        ns.Function("readBytes", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            string path = SvArgs.String(args, 0, "fs.readBytes");
+            path = ctx.ExpandTilde(path);
+            try
+            {
+                return StashValue.FromObj(new StashByteArray(System.IO.File.ReadAllBytes(path)));
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError($"Cannot read file '{path}': {e.Message}");
+            }
+        },
+            returnType: "byte[]",
+            documentation: "Reads the entire contents of a file as a byte array.\n@param path The file path\n@return The file contents as byte[]");
+
+        ns.Function("writeBytes", [Param("path", "string"), Param("data", "byte[]")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            string path = SvArgs.String(args, 0, "fs.writeBytes");
+            path = ctx.ExpandTilde(path);
+            StashByteArray ba = SvArgs.ByteArray(args, 1, "fs.writeBytes");
+            try
+            {
+                System.IO.File.WriteAllBytes(path, ba.AsSpan().ToArray());
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError($"Cannot write file '{path}': {e.Message}");
+            }
+            return StashValue.Null;
+        },
+            returnType: "null",
+            documentation: "Writes raw bytes to a file, creating or overwriting it.\n@param path The file path\n@param data The byte array to write");
+
+        ns.Function("appendBytes", [Param("path", "string"), Param("data", "byte[]")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            string path = SvArgs.String(args, 0, "fs.appendBytes");
+            path = ctx.ExpandTilde(path);
+            StashByteArray ba = SvArgs.ByteArray(args, 1, "fs.appendBytes");
+            try
+            {
+                using var stream = new System.IO.FileStream(path, System.IO.FileMode.Append, System.IO.FileAccess.Write);
+                stream.Write(ba.AsSpan());
+            }
+            catch (System.IO.IOException e)
+            {
+                throw new RuntimeError($"Cannot append to file '{path}': {e.Message}");
+            }
+            return StashValue.Null;
+        },
+            returnType: "null",
+            documentation: "Appends raw bytes to a file.\n@param path The file path\n@param data The byte array to append");
+
         return ns.Build();
     }
 }

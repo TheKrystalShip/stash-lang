@@ -2,6 +2,7 @@ namespace Stash.Stdlib.BuiltIns;
 
 using System;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -118,6 +119,47 @@ public static class EncodingBuiltIns
         },
             returnType: "string",
             documentation: "Decodes a hexadecimal string back to a UTF-8 string.\n@param s The hexadecimal string to decode\n@return The decoded string");
+
+        ns.Function("base64DecodeBytes", [Param("s", "string"), Param("urlSafe", "bool")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'encoding.base64DecodeBytes' requires 1 or 2 arguments.");
+            string s = SvArgs.String(args, 0, "encoding.base64DecodeBytes");
+            bool urlSafe = args.Length == 2 && SvArgs.Bool(args, 1, "encoding.base64DecodeBytes");
+            if (urlSafe)
+            {
+                s = s.Replace('-', '+').Replace('_', '/');
+                int pad = s.Length % 4;
+                if (pad == 2) s += "==";
+                else if (pad == 3) s += "=";
+            }
+            try
+            {
+                return StashValue.FromObj(new StashByteArray(Convert.FromBase64String(s)));
+            }
+            catch (FormatException ex)
+            {
+                throw new RuntimeError($"Invalid Base64 string in 'encoding.base64DecodeBytes': {ex.Message}");
+            }
+        },
+            returnType: "byte[]",
+            isVariadic: true,
+            documentation: "Decodes a Base64 string to a byte array (raw bytes, not string).\n@param s The Base64 string to decode\n@param urlSafe Optional. When true, reverses URL-safe encoding\n@return The decoded byte array");
+
+        ns.Function("hexDecodeBytes", [Param("s", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            string s = SvArgs.String(args, 0, "encoding.hexDecodeBytes");
+            try
+            {
+                return StashValue.FromObj(new StashByteArray(Convert.FromHexString(s)));
+            }
+            catch (FormatException ex)
+            {
+                throw new RuntimeError($"Invalid hex string in 'encoding.hexDecodeBytes': {ex.Message}");
+            }
+        },
+            returnType: "byte[]",
+            documentation: "Decodes a hexadecimal string to a byte array (raw bytes, not string).\n@param s The hex string to decode\n@return The decoded byte array");
 
         return ns.Build();
     }

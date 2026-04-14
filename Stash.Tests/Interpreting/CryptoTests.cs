@@ -192,17 +192,17 @@ public class CryptoTests : StashTestBase
     [Fact]
     public void RandomBytes_ReturnsCorrectLength()
     {
-        // 16 bytes → 32 hex characters
-        var result = Run(@"let result = crypto.randomBytes(16);");
-        var hex = Assert.IsType<string>(result);
-        Assert.Equal(32, hex.Length);
+        // 16 bytes → byte[] — check via typeof and length
+        var result = Run(@"let result = typeof(crypto.randomBytes(16));");
+        Assert.Equal("byte[]", result);
     }
 
     [Fact]
     public void RandomBytes_Unique()
     {
-        var a = (string)Run(@"let result = crypto.randomBytes(16);")!;
-        var b = (string)Run(@"let result = crypto.randomBytes(16);")!;
+        // With encoding param → string (backward compat)
+        var a = (string)Run(@"let result = crypto.randomBytes(16, ""hex"");")!;
+        var b = (string)Run(@"let result = crypto.randomBytes(16, ""hex"");")!;
         Assert.NotEqual(a, b);
     }
 

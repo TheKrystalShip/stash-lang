@@ -5,6 +5,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -123,7 +124,8 @@ public static class CryptoBuiltIns
             documentation: "Generates a random UUID v4 string.\n@return A UUID string in standard format (e.g., \"550e8400-e29b-41d4-a716-446655440000\")");
 
         // crypto.randomBytes(n [, encoding]) — Generates 'n' cryptographically secure random bytes.
-        //   'encoding' can be "hex" (default), "base64", or "raw" (Latin-1 byte string).
+        //   When called with 1 argument, returns byte[] directly.
+        //   When called with 2 arguments, 'encoding' can be "hex", "base64", or "raw" (Latin-1 byte string).
         ns.Function("randomBytes", [Param("n", "int"), Param("encoding", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             if (args.Length < 1 || args.Length > 2)
@@ -132,20 +134,19 @@ public static class CryptoBuiltIns
             var n = SvArgs.Long(args, 0, "crypto.randomBytes");
 
             if (n <= 0)
-            {
                 throw new RuntimeError("Argument to 'crypto.randomBytes' must be greater than 0.");
-            }
 
             if (n > int.MaxValue)
-            {
                 throw new RuntimeError("Argument to 'crypto.randomBytes' is too large.");
-            }
-
-            string encoding = "hex";
-            if (args.Length == 2)
-                encoding = SvArgs.String(args, 1, "crypto.randomBytes");
 
             var bytes = RandomNumberGenerator.GetBytes((int)n);
+
+            // No encoding param → return byte[] directly
+            if (args.Length == 1)
+                return StashValue.FromObj(new StashByteArray(bytes));
+
+            // With encoding param → return encoded string (backward compat)
+            string encoding = SvArgs.String(args, 1, "crypto.randomBytes");
             string result = encoding.ToLowerInvariant() switch
             {
                 "hex"    => HashToHex(bytes),
@@ -155,9 +156,61 @@ public static class CryptoBuiltIns
             };
             return StashValue.FromObj(result);
         },
-            returnType: "string",
+            returnType: "byte[]",
             isVariadic: true,
-            documentation: "Generates cryptographically secure random bytes.\n@param n The number of random bytes to generate (must be > 0)\n@param encoding Optional output encoding: \"hex\" (default), \"base64\", or \"raw\" (Latin-1 byte string)\n@return The random bytes encoded as specified");
+            documentation: "Generates cryptographically secure random bytes. Returns byte[] when called with 1 argument, or an encoded string when called with 2.\n@param n The number of random bytes to generate (must be > 0)\n@param encoding Optional output encoding: \"hex\", \"base64\", or \"raw\" (Latin-1). If omitted, returns byte[]\n@return A byte[] or encoded string depending on arguments");
+
+        ns.Function("md5Bytes", [Param("data", "byte[]")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            StashByteArray ba = SvArgs.ByteArray(args, 0, "crypto.md5Bytes");
+            return StashValue.FromObj(new StashByteArray(MD5.HashData(ba.AsSpan())));
+        },
+            returnType: "byte[]",
+            documentation: "Computes the MD5 hash of a byte array.\n@param data The byte array to hash\n@return The 16-byte hash as a byte array");
+
+        ns.Function("sha1Bytes", [Param("data", "byte[]")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            StashByteArray ba = SvArgs.ByteArray(args, 0, "crypto.sha1Bytes");
+            return StashValue.FromObj(new StashByteArray(SHA1.HashData(ba.AsSpan())));
+        },
+            returnType: "byte[]",
+            documentation: "Computes the SHA-1 hash of a byte array.\n@param data The byte array to hash\n@return The 20-byte hash as a byte array");
+
+        ns.Function("sha256Bytes", [Param("data", "byte[]")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            StashByteArray ba = SvArgs.ByteArray(args, 0, "crypto.sha256Bytes");
+            return StashValue.FromObj(new StashByteArray(SHA256.HashData(ba.AsSpan())));
+        },
+            returnType: "byte[]",
+            documentation: "Computes the SHA-256 hash of a byte array.\n@param data The byte array to hash\n@return The 32-byte hash as a byte array");
+
+        ns.Function("sha512Bytes", [Param("data", "byte[]")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            StashByteArray ba = SvArgs.ByteArray(args, 0, "crypto.sha512Bytes");
+            return StashValue.FromObj(new StashByteArray(SHA512.HashData(ba.AsSpan())));
+        },
+            returnType: "byte[]",
+            documentation: "Computes the SHA-512 hash of a byte array.\n@param data The byte array to hash\n@return The 64-byte hash as a byte array");
+
+        ns.Function("hmacBytes", [Param("algo", "string"), Param("key", "byte[]"), Param("data", "byte[]")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            string algo = SvArgs.String(args, 0, "crypto.hmacBytes");
+            StashByteArray key = SvArgs.ByteArray(args, 1, "crypto.hmacBytes");
+            StashByteArray data = SvArgs.ByteArray(args, 2, "crypto.hmacBytes");
+            byte[] keyArr = key.AsSpan().ToArray();
+            byte[] dataArr = data.AsSpan().ToArray();
+            using HMAC hmac = algo.ToLowerInvariant() switch
+            {
+                "md5"    => (HMAC)new HMACMD5(keyArr),
+                "sha1"   => new HMACSHA1(keyArr),
+                "sha256" => new HMACSHA256(keyArr),
+                "sha512" => new HMACSHA512(keyArr),
+                _        => throw new RuntimeError("crypto.hmacBytes: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.")
+            };
+            return StashValue.FromObj(new StashByteArray(hmac.ComputeHash(dataArr)));
+        },
+            returnType: "byte[]",
+            documentation: "Computes an HMAC signature using byte arrays for key and data.\n@param algo The hash algorithm: \"md5\", \"sha1\", \"sha256\", or \"sha512\"\n@param key The secret key as byte[]\n@param data The data to sign as byte[]\n@return The HMAC as a byte array");
 
         return ns.Build();
     }
