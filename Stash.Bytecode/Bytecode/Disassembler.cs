@@ -137,6 +137,7 @@ public static class Disassembler
         [OpCode.LeK]            = "le.k",
         [OpCode.GtK]            = "gt.k",
         [OpCode.GeK]            = "ge.k",
+        [OpCode.TypedWrap]      = "typed.wrap",
     };
 
     // ─── Instruction Format Classification ───────────────────────────────────
@@ -149,7 +150,8 @@ public static class Disassembler
         OpCode.LoadK or OpCode.GetGlobal or OpCode.SetGlobal or OpCode.InitConstGlobal
             or OpCode.Closure or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl
             or OpCode.Extend or OpCode.Import or OpCode.ImportAs or OpCode.Switch
-            or OpCode.Destructure or OpCode.Retry or OpCode.Timeout or OpCode.TryBegin => InstrFmt.ABx,
+            or OpCode.Destructure or OpCode.Retry or OpCode.Timeout or OpCode.TryBegin
+            or OpCode.TypedWrap => InstrFmt.ABx,
 
         // AsBx (signed offset)
         OpCode.AddI or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
@@ -511,6 +513,7 @@ public static class Disassembler
             OpCode.Retry       => ($"k{bx}", null),
             OpCode.Timeout     => ($"r{a}, r{(byte)(a+1)}", null),
             OpCode.Await       => ($"r{a}, r{b}", null),
+            OpCode.TypedWrap   => ($"r{a}, k{bx}", FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)),
 
             _ => (fmt switch
             {

@@ -346,6 +346,7 @@ public sealed partial class VirtualMachine
                 case OpCode.NewStruct: ExecuteNewStruct(ref frame, inst); break;
                 case OpCode.TypeOf: ExecuteTypeOf(ref frame, inst); break;
                 case OpCode.Is: ExecuteIs(ref frame, inst); break;
+                case OpCode.TypedWrap: ExecuteTypedWrap(ref frame, inst); break;
                 case OpCode.StructDecl: ExecuteStructDecl(ref frame, inst); break;
                 case OpCode.EnumDecl: ExecuteEnumDecl(ref frame, inst); break;
                 case OpCode.IfaceDecl: ExecuteIfaceDecl(ref frame, inst); break;

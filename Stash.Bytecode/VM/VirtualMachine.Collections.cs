@@ -15,6 +15,15 @@ public sealed partial class VirtualMachine
 {
     private object? GetIndexValue(object? obj, object? index, ref CallFrame frame)
     {
+        if (obj is StashTypedArray ta)
+        {
+            if (index is not long tIdx)
+                throw new RuntimeError("Array index must be an integer.", GetCurrentSpan(ref frame));
+            if (tIdx < 0) tIdx += ta.Count;
+            if (tIdx < 0 || tIdx >= ta.Count)
+                throw new RuntimeError($"Index {index} out of bounds for {ta.ElementTypeName}[] of length {ta.Count}.", GetCurrentSpan(ref frame));
+            return ta.Get((int)tIdx).ToObject();
+        }
         if (obj is List<StashValue> svList)
         {
             if (index is not long i)
@@ -62,6 +71,16 @@ public sealed partial class VirtualMachine
 
     private void SetIndexValue(object? obj, object? index, object? value, ref CallFrame frame)
     {
+        if (obj is StashTypedArray ta)
+        {
+            if (index is not long tIdx)
+                throw new RuntimeError("Array index must be an integer.", GetCurrentSpan(ref frame));
+            if (tIdx < 0) tIdx += ta.Count;
+            if (tIdx < 0 || tIdx >= ta.Count)
+                throw new RuntimeError($"Index {index} out of bounds for {ta.ElementTypeName}[] of length {ta.Count}.", GetCurrentSpan(ref frame));
+            ta.Set((int)tIdx, StashValue.FromObject(value));
+            return;
+        }
         if (obj is List<StashValue> svList)
         {
             if (index is not long i)
@@ -112,6 +131,21 @@ public sealed partial class VirtualMachine
             return;
         }
 
+        // Fast path: typed array[int]
+        if (obj.Tag == StashValueTag.Obj && obj.AsObj is StashTypedArray ta && idx.IsInt)
+        {
+            long i = idx.AsInt;
+            if (i < 0) i += ta.Count;
+            if (i >= 0 && i < ta.Count)
+            {
+                _stack[@base + a] = ta.Get((int)i);
+                return;
+            }
+            throw new RuntimeError(
+                $"Index {idx.AsInt} out of bounds for {ta.ElementTypeName}[] of length {ta.Count}.",
+                GetCurrentSpan(ref frame));
+        }
+
         // General path
         _stack[@base + a] = StashValue.FromObject(GetIndexValue(obj.ToObject(), idx.ToObject(), ref frame));
     }
@@ -153,6 +187,21 @@ public sealed partial class VirtualMachine
             }
             ExecuteSetTableOutOfRange(ref frame, list, idx.AsInt, val);
             return;
+        }
+
+        // Fast path: typed array[int] = val (validates element type via Set)
+        if (obj.Tag == StashValueTag.Obj && obj.AsObj is StashTypedArray ta && idx.IsInt)
+        {
+            long i = idx.AsInt;
+            if (i < 0) i += ta.Count;
+            if (i >= 0 && i < ta.Count)
+            {
+                ta.Set((int)i, val);
+                return;
+            }
+            throw new RuntimeError(
+                $"Index {idx.AsInt} out of bounds for {ta.ElementTypeName}[] of length {ta.Count}.",
+                GetCurrentSpan(ref frame));
         }
 
         SetIndexValue(obj.ToObject(), idx.ToObject(), val.ToObject(), ref frame);
@@ -345,6 +394,11 @@ public sealed partial class VirtualMachine
             {
                 if (sm.Items is List<StashValue> items)
                     list.AddRange(items);
+                else if (sm.Items is StashTypedArray typedItems)
+                {
+                    for (int j = 0; j < typedItems.Count; j++)
+                        list.Add(typedItems.Get(j));
+                }
                 else
                     throw new RuntimeError("Spread operator requires an array.", GetCurrentSpan(ref frame));
             }
@@ -438,6 +492,40 @@ public sealed partial class VirtualMachine
         int @base = frame.BaseSlot;
         object? iterable = _stack[@base + b].ToObject();
         _stack[@base + a] = StashValue.FromObj(new SpreadMarker(iterable!));
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteTypedWrap(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        ushort bx = Instruction.GetBx(inst);
+        int @base = frame.BaseSlot;
+
+        string elementType = (string)frame.Chunk.Constants[bx].AsObj!;
+        StashValue source = _stack[@base + a];
+
+        if (source.IsNull)
+            return; // null stays null — runtime will catch type errors later
+
+        if (source.IsObj && source.AsObj is List<StashValue> list)
+        {
+            StashTypedArray typed = StashTypedArray.Create(elementType, list);
+            _stack[@base + a] = StashValue.FromObj(typed);
+            return;
+        }
+
+        if (source.IsObj && source.AsObj is StashTypedArray existing)
+        {
+            if (existing.ElementTypeName != elementType)
+                throw new RuntimeError(
+                    $"Cannot assign {existing.ElementTypeName}[] to variable of type {elementType}[].",
+                    GetCurrentSpan(ref frame));
+            return; // Already the right type
+        }
+
+        throw new RuntimeError(
+            $"Cannot create {elementType}[] \u2014 value is not an array.",
+            GetCurrentSpan(ref frame));
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

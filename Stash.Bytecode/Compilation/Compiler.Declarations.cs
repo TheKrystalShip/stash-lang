@@ -45,6 +45,14 @@ partial class Compiler
             CompileExprTo(stmt.Initializer, reg);
         else
             _builder.EmitA(OpCode.LoadNull, reg);
+
+        // Typed array wrapping: if the type hint is T[], emit TypedWrap to convert the array
+        if (stmt.TypeHint is { IsArray: true })
+        {
+            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(stmt.TypeHint.Name.Lexeme));
+            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
+        }
+
         _scope.MarkInitialized();
 
         // OPT-10: Track numeric locals
@@ -84,6 +92,14 @@ partial class Compiler
         {
             CompileExprTo(stmt.Initializer, reg);
         }
+
+        // Typed array wrapping: if the type hint is T[], emit TypedWrap to convert the array
+        if (stmt.TypeHint is { IsArray: true })
+        {
+            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(stmt.TypeHint.Name.Lexeme));
+            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
+        }
+
         _scope.MarkInitialized();
 
         // OPT-10: Track numeric locals

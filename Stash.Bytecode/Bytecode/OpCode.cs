@@ -231,6 +231,10 @@ public enum OpCode : byte
     GtK,                        // 89
     /// <summary>ABC: R(A) = (R(B) &gt;= K(C)) — greater-or-equal with constant from pool.</summary>
     GeK,                        // 90
+
+    // === Typed Arrays ===
+    /// <summary>ABx: R(A) = TypedArray(elementType=K(Bx), elements=R(A)).</summary>
+    TypedWrap,                  // 91
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>
@@ -260,6 +264,7 @@ public static class OpCodeInfo
         or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl or OpCode.Extend
         or OpCode.Import or OpCode.ImportAs
         or OpCode.Switch or OpCode.Destructure or OpCode.Retry or OpCode.Timeout
+        or OpCode.TypedWrap
             => OpCodeFormat.ABx,
 
         // Ax format: 24-bit payload

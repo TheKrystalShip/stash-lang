@@ -43,7 +43,7 @@ public sealed partial class VirtualMachine
         "float"     => value is double,
         "string"    => value is string,
         "bool"      => value is bool,
-        "array"     => value is List<StashValue>,
+        "array"     => value is List<StashValue> or StashTypedArray,
         "dict"      => value is StashDictionary,
         "null"      => value is null,
         "function"  => value is VMFunction or IStashCallable,
@@ -59,6 +59,7 @@ public sealed partial class VirtualMachine
         "interface" => value is StashInterface,
         "namespace" => value is StashNamespace,
         "Future"    => value is StashFuture,
+        _ when typeName.EndsWith("[]") => value is StashTypedArray ta2 && ta2.ElementTypeName == typeName[..^2],
         _           => value is StashEnumValue ev ? ev.TypeName == typeName
                      : value is StashInstance inst && inst.TypeName == typeName,
     };
@@ -337,6 +338,7 @@ public sealed partial class VirtualMachine
             double              => "float",
             string              => "string",
             List<StashValue>    => "array",
+            StashTypedArray sta => sta.ElementTypeName + "[]",
             StashDictionary     => "dict",
             StashRange          => "range",
             StashDuration       => "duration",

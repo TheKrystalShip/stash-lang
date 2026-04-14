@@ -483,7 +483,15 @@ public sealed partial class VirtualMachine
 
         IteratorState iterState;
 
-        if (val is List<StashValue> list)
+        if (val is StashTypedArray typedArr)
+        {
+            // Snapshot as List<StashValue> for iteration — reuses the existing list iteration path
+            var snapshot = new List<StashValue>(typedArr.Count);
+            for (int i = 0; i < typedArr.Count; i++)
+                snapshot.Add(typedArr.Get(i));
+            iterState = new IteratorState { Collection = snapshot };
+        }
+        else if (val is List<StashValue> list)
         {
             // Snapshot the list so mutations during iteration don't cause infinite loops
             iterState = new IteratorState { Collection = new List<StashValue>(list) };
