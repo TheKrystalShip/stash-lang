@@ -761,6 +761,14 @@ public class DebugSession : IDebugger
         {
             switch (container.Value)
             {
+                case StashTypedArray ta:
+                    for (int i = 0; i < ta.Count; i++)
+                    {
+                        variables.Add(FormatVariable($"[{i}]", ta.Get(i).ToObject()));
+                    }
+
+                    break;
+
                 case List<StashValue> svList:
                     for (int i = 0; i < svList.Count; i++)
                     {
@@ -1753,6 +1761,12 @@ public class DebugSession : IDebugger
             case string s:
                 type = "string";
                 displayValue = $"\"{s}\"";
+                break;
+
+            case StashTypedArray ta:
+                type = $"{ta.ElementTypeName}[]";
+                displayValue = $"{ta.ElementTypeName}[{ta.Count}]";
+                variablesReference = AllocateExpansion(name, value);
                 break;
 
             case List<StashValue> svList:

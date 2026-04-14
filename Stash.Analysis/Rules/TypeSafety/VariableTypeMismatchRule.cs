@@ -31,6 +31,11 @@ public sealed class VariableTypeMismatchRule : IAnalysisRule
         var actualType = TypeInferenceEngine.InferExpressionType(context.ScopeTree, stmt.Initializer, stmt.Name.Span.StartLine, stmt.Name.Span.StartColumn);
         if (actualType != null && actualType != "null" && actualType != expectedType)
         {
+            // Don't warn when expected is a typed array and actual is generic array —
+            // the TypedWrap opcode validates element types at runtime.
+            if (expectedType.EndsWith("[]") && actualType == "array")
+                return;
+
             context.ReportDiagnostic(DiagnosticDescriptors.SA0301.CreateDiagnostic(stmt.Initializer.Span, stmt.Name.Lexeme, expectedType, actualType));
         }
     }

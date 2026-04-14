@@ -92,7 +92,8 @@ function registerStashLanguage() {
                 // attempt keyword (retry block implicit variable)
                 [/\battempt\b/, 'variable.language'],
 
-                // is TYPE pattern
+                // is TYPE pattern (typed arrays first, then scalar types)
+                [/\b(is\s+)(int\[\]|float\[\]|string\[\]|bool\[\])/, ['keyword', 'type']],
                 [/\b(is\s+)(int|float|string|bool|null|array|dict|struct|enum|function|range|namespace|Error|duration|bytes|ip|semver|Future|secret)\b/, ['keyword', 'type']],
 
                 // Identifiers and keywords
