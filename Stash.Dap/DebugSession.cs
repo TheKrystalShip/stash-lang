@@ -1743,6 +1743,11 @@ public class DebugSession : IDebugger
                 displayValue = "null";
                 break;
 
+            case byte b:
+                type = "byte";
+                displayValue = $"0x{b:x2} ({b})";
+                break;
+
             case long l:
                 type = "int";
                 displayValue = l.ToString();

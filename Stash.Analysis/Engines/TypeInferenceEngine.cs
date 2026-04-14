@@ -210,6 +210,7 @@ public static class TypeInferenceEngine
                     double => "float",
                     string => "string",
                     bool => "bool",
+                    byte => "byte",
                     null => "null",
                     StashDuration => "duration",
                     StashByteSize => "bytes",

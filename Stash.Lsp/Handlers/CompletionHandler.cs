@@ -356,7 +356,7 @@ public class CompletionHandler : CompletionHandlerBase
         var items = new List<CompletionItem>();
 
         // Built-in extendable types
-        string[] builtInTypes = ["string", "array", "dict", "int", "float"];
+        string[] builtInTypes = ["string", "array", "dict", "int", "float", "byte"];
         foreach (var typeName in builtInTypes)
         {
             items.Add(new CompletionItem

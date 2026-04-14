@@ -17,7 +17,7 @@ function registerStashLanguage() {
         builtinConstants: ['true', 'false', 'null'],
 
         typeKeywords: [
-            'int', 'float', 'string', 'bool', 'array', 'dict',
+            'int', 'float', 'string', 'bool', 'byte', 'array', 'dict',
             'function', 'range', 'namespace', 'Error'
         ],
 
@@ -25,7 +25,7 @@ function registerStashLanguage() {
             'arr', 'dict', 'str', 'math', 'time', 'json', 'fs', 'path',
             'env', 'sys', 'http', 'crypto', 'io', 'conv', 'process',
             'term', 'encoding', 'ini', 'config', 'args', 'tpl',
-            'test', 'assert'
+            'test', 'assert', 'buf'
         ],
 
         builtinFunctions: ['println', 'print', 'input', 'sleep', 'exit', 'error', 'secret', 'reveal'],
@@ -93,8 +93,8 @@ function registerStashLanguage() {
                 [/\battempt\b/, 'variable.language'],
 
                 // is TYPE pattern (typed arrays first, then scalar types)
-                [/\b(is\s+)(int\[\]|float\[\]|string\[\]|bool\[\])/, ['keyword', 'type']],
-                [/\b(is\s+)(int|float|string|bool|null|array|dict|struct|enum|function|range|namespace|Error|duration|bytes|ip|semver|Future|secret)\b/, ['keyword', 'type']],
+                [/\b(is\s+)(int\[\]|float\[\]|string\[\]|bool\[\]|byte\[\])/, ['keyword', 'type']],
+                [/\b(is\s+)(int|float|string|bool|byte|null|array|dict|struct|enum|function|range|namespace|Error|duration|bytes|ip|semver|Future|secret)\b/, ['keyword', 'type']],
 
                 // Identifiers and keywords
                 [/\b[a-zA-Z_]\w*(?=\s*\()/, {

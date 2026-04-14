@@ -40,6 +40,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0303 = new("SA0303", "Unknown type", DiagnosticLevel.Warning, "Type safety", "Unknown type '{0}'.");
     public static readonly DiagnosticDescriptor SA0304 = new("SA0304", "Field type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to field '{1}' of type '{2}'.");
     public static readonly DiagnosticDescriptor SA0305 = new("SA0305", "Variable assignment type mismatch", DiagnosticLevel.Warning, "Type safety", "Cannot assign value of type '{0}' to variable '{1}' of type '{2}'.");
+    public static readonly DiagnosticDescriptor SA0306 = new("SA0306", "Byte-int equality always false", DiagnosticLevel.Warning, "Type Safety", "Byte value compared with `==` to int \u2014 types differ, comparison will always be false. Use `conv.toInt(byte_val) == int_val` instead.");
     public static readonly DiagnosticDescriptor SA0308 = new("SA0308", "Possible null access", DiagnosticLevel.Warning, "Type safety", "Possible null access: '{0}' may be null.");
     public static readonly DiagnosticDescriptor SA0309 = new("SA0309", "Null access on unguarded path", DiagnosticLevel.Warning, "Type safety", "'{0}' may be null at this point. Assign a value or add a null check before accessing it.");
     public static readonly DiagnosticDescriptor SA0310 = new("SA0310", "Non-exhaustive switch on enum", DiagnosticLevel.Warning, "Type safety", "Switch on enum '{0}' does not cover all variants. Missing: {1}.");
@@ -132,6 +133,7 @@ public static class DiagnosticDescriptors
         dict[SA0303.Code] = SA0303;
         dict[SA0304.Code] = SA0304;
         dict[SA0305.Code] = SA0305;
+        dict[SA0306.Code] = SA0306;
         dict[SA0308.Code] = SA0308;
         dict[SA0309.Code] = SA0309;
         dict[SA0310.Code] = SA0310;
