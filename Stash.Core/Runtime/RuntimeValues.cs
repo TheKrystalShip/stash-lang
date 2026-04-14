@@ -118,6 +118,11 @@ public static class RuntimeValues
             return ns.ToString();
         }
 
+        if (value is StashByteArray ba)
+        {
+            return ba.Stringify();
+        }
+
         if (value is StashTypedArray ta)
         {
             return ta.Stringify();

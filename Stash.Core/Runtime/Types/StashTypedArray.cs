@@ -43,7 +43,8 @@ public abstract class StashTypedArray
             "float" => new StashFloatArray(source),
             "string" => new StashStringArray(source),
             "bool" => new StashBoolArray(source),
-            _ => throw new RuntimeError($"Unknown typed array element type: '{elementType}'. Valid types are: int, float, string, bool.")
+            "byte" => new StashByteArray(source),
+            _ => throw new RuntimeError($"Unknown typed array element type: '{elementType}'. Valid types are: int, float, string, bool, byte.")
         };
     }
 
@@ -56,7 +57,8 @@ public abstract class StashTypedArray
             "float" => new StashFloatArray(capacity),
             "string" => new StashStringArray(capacity),
             "bool" => new StashBoolArray(capacity),
-            _ => throw new RuntimeError($"Unknown typed array element type: '{elementType}'. Valid types are: int, float, string, bool.")
+            "byte" => new StashByteArray(capacity),
+            _ => throw new RuntimeError($"Unknown typed array element type: '{elementType}'. Valid types are: int, float, string, bool, byte.")
         };
     }
 

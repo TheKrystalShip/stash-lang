@@ -144,10 +144,12 @@ public static class JsonBuiltIns
             bool b => b ? "true" : "false",
             long l => l.ToString(CultureInfo.InvariantCulture),
             double d => d.ToString("G", CultureInfo.InvariantCulture),
+            byte b => b.ToString(CultureInfo.InvariantCulture),
             string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
             List<StashValue> arr => StringifyArray(arr),
             StashDictionary dict => StringifyDict(dict),
             StashInstance inst => StringifyInstance(inst),
+            StashByteArray ba => JsonSerializer.Serialize(Convert.ToBase64String(ba.AsSpan()), StashJsonContext.Default.String),
             _ => throw new RuntimeError($"json.stringify: cannot serialize value of type {value.GetType().Name}.")
         };
     }

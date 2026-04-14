@@ -87,6 +87,14 @@ public static class SvArgs
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StashByteArray ByteArray(ReadOnlySpan<StashValue> args, int index, string funcName)
+    {
+        StashValue v = args[index];
+        if (v.IsObj && v.AsObj is StashByteArray ba) return ba;
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a byte[].");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static object AnyArray(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
         StashValue v = args[index];
