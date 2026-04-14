@@ -53,6 +53,26 @@ public static class SvArgs
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static StashTypedArray TypedArray(ReadOnlySpan<StashValue> args, int index, string funcName)
+    {
+        StashValue v = args[index];
+        if (v.IsObj && v.AsObj is StashTypedArray ta) return ta;
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be a typed array.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    public static object AnyArray(ReadOnlySpan<StashValue> args, int index, string funcName)
+    {
+        StashValue v = args[index];
+        if (v.IsObj)
+        {
+            object obj = v.AsObj!;
+            if (obj is List<StashValue> || obj is StashTypedArray) return obj;
+        }
+        throw new RuntimeError($"{Ordinal(index)} argument to '{funcName}' must be an array.");
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static StashDictionary Dict(ReadOnlySpan<StashValue> args, int index, string funcName)
     {
         StashValue v = args[index];

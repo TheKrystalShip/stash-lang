@@ -108,6 +108,11 @@ public static class RuntimeValues
             return ns.ToString();
         }
 
+        if (value is StashTypedArray ta)
+        {
+            return ta.Stringify();
+        }
+
         if (value is List<StashValue> svList)
         {
             var elements = new StringBuilder("[");

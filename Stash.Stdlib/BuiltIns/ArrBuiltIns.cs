@@ -636,6 +636,40 @@ public static class ArrBuiltIns
             return StashValue.FromObj(new List<StashValue> { StashValue.FromObj(matching), StashValue.FromObj(nonMatching) });
         });
 
+        ns.Function("typed", [Param("source", "array"), Param("elementType", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            List<StashValue> source = SvArgs.StashList(args, 0, "arr.typed");
+            string elementType = SvArgs.String(args, 1, "arr.typed");
+            StashTypedArray result = StashTypedArray.Create(elementType, source);
+            return StashValue.FromObj(result);
+        }, returnType: "array", documentation: "Creates a typed array from a generic array. Validates all elements match the specified type.\n@param source The source array to convert\n@param elementType The element type: \"int\", \"float\", \"string\", or \"bool\"\n@return A new typed array");
+
+        ns.Function("untyped", [Param("source", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            StashTypedArray ta = SvArgs.TypedArray(args, 0, "arr.untyped");
+            var result = new List<StashValue>(ta.Count);
+            for (int i = 0; i < ta.Count; i++)
+                result.Add(ta.Get(i));
+            return StashValue.FromObj(result);
+        }, returnType: "array", documentation: "Converts a typed array to a generic array.\n@param source The typed array to convert\n@return A new generic array with the same elements");
+
+        ns.Function("elementType", [Param("source", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            StashValue v = args[0];
+            if (v.IsObj && v.AsObj is StashTypedArray ta)
+                return StashValue.FromObj(ta.ElementTypeName);
+            return StashValue.Null;
+        }, returnType: "string", documentation: "Returns the element type name of a typed array, or null for generic arrays.\n@param source The array to inspect\n@return The element type (\"int\", \"float\", \"string\", \"bool\") or null");
+
+        ns.Function("new", [Param("elementType", "string"), Param("size", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            string elementType = SvArgs.String(args, 0, "arr.new");
+            long size = SvArgs.Long(args, 1, "arr.new");
+            if (size < 0) throw new RuntimeError("Array size cannot be negative.");
+            StashTypedArray result = StashTypedArray.CreateWithCapacity(elementType, (int)size);
+            return StashValue.FromObj(result);
+        }, returnType: "array", documentation: "Creates a new zero-initialized typed array with the specified size.\n@param elementType The element type: \"int\", \"float\", \"string\", or \"bool\"\n@param size The number of elements (zero-initialized)\n@return A new typed array");
+
         return ns.Build();
     }
 

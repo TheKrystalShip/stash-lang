@@ -32,6 +32,7 @@ public static class GlobalBuiltIns
                 null => "null",
                 string => "string",
                 List<StashValue> => "array",
+                StashTypedArray ta => $"{ta.ElementTypeName}[]",
                 StashSecret => "secret",
                 StashError => "Error",
                 StashInstance => "struct",
