@@ -5,15 +5,15 @@ namespace Stash.Analysis.Formatting;
 
 /// <summary>
 /// Handles interleaving of trivia (comments, shebang) at appropriate positions
-/// during formatting. Owned by <see cref="FormatterContext"/>.
+/// during formatting. Owned by <see cref="FormatContext"/>.
 /// </summary>
 internal sealed class TriviaHandler
 {
-    private readonly FormatterContext _ctx;
+    private readonly FormatContext _ctx;
     internal Token[] Tokens = Array.Empty<Token>();
     internal int CursorPosition;
 
-    internal TriviaHandler(FormatterContext ctx)
+    internal TriviaHandler(FormatContext ctx)
     {
         _ctx = ctx;
     }
@@ -46,7 +46,7 @@ internal sealed class TriviaHandler
         if (trivia.Type == TokenType.Shebang)
         {
             _ctx.Docs.Add(Doc.Text(trivia.Lexeme));
-            _ctx.Pending = FormatterContext.PendingWs.BlankLine;
+            _ctx.Pending = FormatContext.PendingWs.BlankLine;
             return;
         }
 
@@ -59,11 +59,11 @@ internal sealed class TriviaHandler
             _ctx.Docs.Add(Doc.Text(trivia.Lexeme));
             if (_ctx.Indent == 0)
             {
-                _ctx.Pending = FormatterContext.PendingWs.BlankLine;
+                _ctx.Pending = FormatContext.PendingWs.BlankLine;
             }
-            else if (_ctx.Pending < FormatterContext.PendingWs.NewLine)
+            else if (_ctx.Pending < FormatContext.PendingWs.NewLine)
             {
-                _ctx.Pending = FormatterContext.PendingWs.NewLine;
+                _ctx.Pending = FormatContext.PendingWs.NewLine;
             }
         }
         else
@@ -94,23 +94,23 @@ internal sealed class TriviaHandler
 
             if (nextFollowsImmediately)
             {
-                if (_ctx.Pending < FormatterContext.PendingWs.NewLine)
-                    _ctx.Pending = FormatterContext.PendingWs.NewLine;
+                if (_ctx.Pending < FormatContext.PendingWs.NewLine)
+                    _ctx.Pending = FormatContext.PendingWs.NewLine;
             }
             else if (trivia.Type == TokenType.BlockComment)
             {
-                if (_ctx.Pending < FormatterContext.PendingWs.NewLine)
-                    _ctx.Pending = FormatterContext.PendingWs.NewLine;
+                if (_ctx.Pending < FormatContext.PendingWs.NewLine)
+                    _ctx.Pending = FormatContext.PendingWs.NewLine;
             }
             else
             {
                 if (_ctx.Indent == 0)
                 {
-                    _ctx.Pending = FormatterContext.PendingWs.BlankLine;
+                    _ctx.Pending = FormatContext.PendingWs.BlankLine;
                 }
-                else if (_ctx.Pending < FormatterContext.PendingWs.NewLine)
+                else if (_ctx.Pending < FormatContext.PendingWs.NewLine)
                 {
-                    _ctx.Pending = FormatterContext.PendingWs.NewLine;
+                    _ctx.Pending = FormatContext.PendingWs.NewLine;
                 }
             }
         }

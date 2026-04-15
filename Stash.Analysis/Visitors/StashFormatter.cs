@@ -2,6 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Text;
 using Stash.Analysis.Formatting;
+using Stash.Analysis.Formatting.Printers;
+using Stash.Analysis.Formatting.Rules;
 using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
@@ -18,13 +20,13 @@ namespace Stash.Analysis;
 /// Architecture: the formatter lexes with <c>preserveTrivia: true</c>, separates code tokens
 /// from trivia, parses code tokens into an AST, then walks the AST via the Visitor pattern
 /// (<see cref="IStmtVisitor{T}"/> and <see cref="IExprVisitor{T}"/>). Each visitor method
-/// delegates to <see cref="StatementFormatter"/> or <see cref="ExpressionFormatter"/> which
-/// emit tokens via a shared <see cref="FormatterContext"/>.
+/// delegates to printers in <c>Formatting/Printers/</c> which consult rules in
+/// <c>Formatting/Rules/</c> and emit tokens via a shared <see cref="FormatContext"/>.
 /// </para>
 /// </remarks>
 public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 {
-    private readonly FormatterContext _ctx;
+    private readonly FormatContext _ctx;
     private readonly int _printWidth;
     private readonly EndOfLineStyle _endOfLine;
     private readonly bool _sortImports;
@@ -38,7 +40,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     public StashFormatter(FormatConfig? config = null)
     {
         var cfg = config ?? FormatConfig.Default;
-        _ctx = new FormatterContext(cfg);
+        _ctx = new FormatContext(cfg);
         _printWidth = cfg.PrintWidth;
         _endOfLine = cfg.EndOfLine;
         _sortImports = cfg.SortImports;
@@ -52,7 +54,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
     public StashFormatter(int indentSize, bool useTabs = false)
     {
         var cfg = new FormatConfig { IndentSize = indentSize, UseTabs = useTabs };
-        _ctx = new FormatterContext(cfg);
+        _ctx = new FormatContext(cfg);
         _printWidth = cfg.PrintWidth;
         _endOfLine = cfg.EndOfLine;
         _sortImports = cfg.SortImports;
@@ -134,7 +136,8 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         {
             if (i > 0)
             {
-                if (FormatterContext.IsDeclaration(statements[i]) || FormatterContext.IsDeclaration(statements[i - 1]))
+                int blankLines = _ctx.BlankLinesBetween(statements[i - 1], statements[i]);
+                if (blankLines > 0)
                 {
                     _ctx.BlankLine();
                 }
@@ -278,145 +281,145 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitVarDeclStmt(VarDeclStmt stmt)
     {
-        StatementFormatter.FormatVarDecl(stmt, _ctx, FormatExpr);
+        DeclarationPrinter.PrintVarDecl(stmt, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitConstDeclStmt(ConstDeclStmt stmt)
     {
-        StatementFormatter.FormatConstDecl(stmt, _ctx, FormatExpr);
+        DeclarationPrinter.PrintConstDecl(stmt, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitFnDeclStmt(FnDeclStmt stmt)
     {
-        StatementFormatter.FormatFnDecl(stmt, _ctx, FormatStmt, FormatExpr);
+        DeclarationPrinter.PrintFnDecl(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitBlockStmt(BlockStmt stmt)
     {
-        StatementFormatter.FormatBlock(stmt, _ctx, FormatStmt);
+        BlockPrinter.Print(stmt, _ctx, FormatStmt);
         return 0;
     }
 
     public int VisitIfStmt(IfStmt stmt)
     {
-        StatementFormatter.FormatIf(stmt, _ctx, FormatStmt, FormatExpr);
+        ControlFlowPrinter.PrintIf(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitWhileStmt(WhileStmt stmt)
     {
-        StatementFormatter.FormatWhile(stmt, _ctx, FormatStmt, FormatExpr);
+        ControlFlowPrinter.PrintWhile(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitElevateStmt(ElevateStmt stmt)
     {
-        StatementFormatter.FormatElevate(stmt, _ctx, FormatStmt, FormatExpr);
+        ControlFlowPrinter.PrintElevate(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitDoWhileStmt(DoWhileStmt stmt)
     {
-        StatementFormatter.FormatDoWhile(stmt, _ctx, FormatStmt, FormatExpr);
+        ControlFlowPrinter.PrintDoWhile(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitForStmt(ForStmt stmt)
     {
-        StatementFormatter.FormatFor(stmt, _ctx, FormatStmt, FormatExpr);
+        ControlFlowPrinter.PrintFor(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitForInStmt(ForInStmt stmt)
     {
-        StatementFormatter.FormatForIn(stmt, _ctx, FormatStmt, FormatExpr);
+        ControlFlowPrinter.PrintForIn(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitReturnStmt(ReturnStmt stmt)
     {
-        StatementFormatter.FormatReturn(stmt, _ctx, FormatExpr);
+        ControlFlowPrinter.PrintReturn(stmt, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitThrowStmt(ThrowStmt stmt)
     {
-        StatementFormatter.FormatThrow(stmt, _ctx, FormatExpr);
+        ControlFlowPrinter.PrintThrow(stmt, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitTryCatchStmt(TryCatchStmt stmt)
     {
-        StatementFormatter.FormatTryCatch(stmt, _ctx, FormatStmt);
+        ControlFlowPrinter.PrintTryCatch(stmt, _ctx, FormatStmt);
         return 0;
     }
 
     public int VisitSwitchStmt(SwitchStmt stmt)
     {
-        StatementFormatter.FormatSwitch(stmt, _ctx, FormatStmt, FormatExpr);
+        ControlFlowPrinter.PrintSwitch(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitBreakStmt(BreakStmt stmt)
     {
-        StatementFormatter.FormatBreak(_ctx);
+        ControlFlowPrinter.PrintBreak(_ctx);
         return 0;
     }
 
     public int VisitContinueStmt(ContinueStmt stmt)
     {
-        StatementFormatter.FormatContinue(_ctx);
+        ControlFlowPrinter.PrintContinue(_ctx);
         return 0;
     }
 
     public int VisitExprStmt(ExprStmt stmt)
     {
-        StatementFormatter.FormatExprStmt(stmt, _ctx, FormatExpr);
+        ControlFlowPrinter.PrintExprStmt(stmt, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitExtendStmt(ExtendStmt stmt)
     {
-        StatementFormatter.FormatExtend(stmt, _ctx, FormatStmt);
+        DeclarationPrinter.PrintExtend(stmt, _ctx, FormatStmt);
         return 0;
     }
 
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
-        StatementFormatter.FormatStructDecl(stmt, _ctx, FormatStmt);
+        DeclarationPrinter.PrintStructDecl(stmt, _ctx, FormatStmt);
         return 0;
     }
 
     public int VisitEnumDeclStmt(EnumDeclStmt stmt)
     {
-        StatementFormatter.FormatEnumDecl(stmt, _ctx);
+        DeclarationPrinter.PrintEnumDecl(stmt, _ctx);
         return 0;
     }
 
     public int VisitInterfaceDeclStmt(InterfaceDeclStmt stmt)
     {
-        StatementFormatter.FormatInterfaceDecl(stmt, _ctx);
+        DeclarationPrinter.PrintInterfaceDecl(stmt, _ctx);
         return 0;
     }
 
     public int VisitImportAsStmt(ImportAsStmt stmt)
     {
-        StatementFormatter.FormatImportAs(stmt, _ctx, FormatExpr);
+        DeclarationPrinter.PrintImportAs(stmt, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitImportStmt(ImportStmt stmt)
     {
-        StatementFormatter.FormatImport(stmt, _ctx, FormatExpr);
+        DeclarationPrinter.PrintImport(stmt, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitDestructureStmt(DestructureStmt stmt)
     {
-        StatementFormatter.FormatDestructure(stmt, _ctx, FormatExpr);
+        DeclarationPrinter.PrintDestructure(stmt, _ctx, FormatExpr);
         return 0;
     }
 
@@ -426,181 +429,181 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitLiteralExpr(LiteralExpr expr)
     {
-        ExpressionFormatter.FormatLiteral(_ctx);
+        ExpressionPrinter.PrintLiteral(_ctx);
         return 0;
     }
 
     public int VisitIdentifierExpr(IdentifierExpr expr)
     {
-        ExpressionFormatter.FormatIdentifier(_ctx);
+        ExpressionPrinter.PrintIdentifier(_ctx);
         return 0;
     }
 
     public int VisitBinaryExpr(BinaryExpr expr)
     {
-        ExpressionFormatter.FormatBinary(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintBinary(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitIsExpr(IsExpr expr)
     {
-        ExpressionFormatter.FormatIs(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintIs(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitUnaryExpr(UnaryExpr expr)
     {
-        ExpressionFormatter.FormatUnary(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintUnary(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitGroupingExpr(GroupingExpr expr)
     {
-        ExpressionFormatter.FormatGrouping(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintGrouping(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitTernaryExpr(TernaryExpr expr)
     {
-        ExpressionFormatter.FormatTernary(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintTernary(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitAssignExpr(AssignExpr expr)
     {
-        ExpressionFormatter.FormatAssign(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintAssign(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitDotExpr(DotExpr expr)
     {
-        ExpressionFormatter.FormatDot(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintDot(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitDotAssignExpr(DotAssignExpr expr)
     {
-        ExpressionFormatter.FormatDotAssign(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintDotAssign(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitCallExpr(CallExpr expr)
     {
-        ExpressionFormatter.FormatCall(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintCall(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitIndexExpr(IndexExpr expr)
     {
-        ExpressionFormatter.FormatIndex(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintIndex(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitIndexAssignExpr(IndexAssignExpr expr)
     {
-        ExpressionFormatter.FormatIndexAssign(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintIndexAssign(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitArrayExpr(ArrayExpr expr)
     {
-        ExpressionFormatter.FormatArray(expr, _ctx, FormatExpr);
+        CollectionPrinter.PrintArray(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitStructInitExpr(StructInitExpr expr)
     {
-        ExpressionFormatter.FormatStructInit(expr, _ctx, FormatExpr);
+        CollectionPrinter.PrintStructInit(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitSwitchExpr(SwitchExpr expr)
     {
-        ExpressionFormatter.FormatSwitchExpr(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintSwitchExpr(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitInterpolatedStringExpr(InterpolatedStringExpr expr)
     {
-        ExpressionFormatter.FormatInterpolatedString(_ctx);
+        ExpressionPrinter.PrintInterpolatedString(_ctx);
         return 0;
     }
 
     public int VisitCommandExpr(CommandExpr expr)
     {
-        ExpressionFormatter.FormatCommand(_ctx);
+        ExpressionPrinter.PrintCommand(_ctx);
         return 0;
     }
 
     public int VisitLambdaExpr(LambdaExpr expr)
     {
-        ExpressionFormatter.FormatLambda(expr, _ctx, FormatStmt, FormatExpr);
+        ExpressionPrinter.PrintLambda(expr, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitUpdateExpr(UpdateExpr expr)
     {
-        ExpressionFormatter.FormatUpdate(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintUpdate(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitTryExpr(TryExpr expr)
     {
-        ExpressionFormatter.FormatTry(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintTry(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitAwaitExpr(AwaitExpr expr)
     {
-        ExpressionFormatter.FormatAwait(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintAwait(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitRetryExpr(RetryExpr expr)
     {
-        ExpressionFormatter.FormatRetry(expr, _ctx, FormatStmt, FormatExpr);
+        ExpressionPrinter.PrintRetry(expr, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitTimeoutExpr(TimeoutExpr expr)
     {
-        ExpressionFormatter.FormatTimeout(expr, _ctx, FormatStmt, FormatExpr);
+        ExpressionPrinter.PrintTimeout(expr, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 
     public int VisitNullCoalesceExpr(NullCoalesceExpr expr)
     {
-        ExpressionFormatter.FormatNullCoalesce(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintNullCoalesce(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitPipeExpr(PipeExpr expr)
     {
-        ExpressionFormatter.FormatPipe(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintPipe(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitRedirectExpr(RedirectExpr expr)
     {
-        ExpressionFormatter.FormatRedirect(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintRedirect(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitRangeExpr(RangeExpr expr)
     {
-        ExpressionFormatter.FormatRange(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintRange(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitDictLiteralExpr(DictLiteralExpr expr)
     {
-        ExpressionFormatter.FormatDictLiteral(expr, _ctx, FormatExpr);
+        CollectionPrinter.PrintDictLiteral(expr, _ctx, FormatExpr);
         return 0;
     }
 
     public int VisitSpreadExpr(SpreadExpr expr)
     {
-        ExpressionFormatter.FormatSpread(expr, _ctx, FormatExpr);
+        ExpressionPrinter.PrintSpread(expr, _ctx, FormatExpr);
         return 0;
     }
 }

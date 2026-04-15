@@ -9,17 +9,16 @@ namespace Stash.Analysis.Formatting;
 /// Encapsulates the emission state and primitives used during formatting.
 /// Created per format call; statement and expression formatters operate on this context.
 /// </summary>
-public sealed class FormatterContext
+public sealed class FormatContext
 {
-    // ── Configuration (read-only) ─────────────────────────────────
     internal readonly int IndentSize;
     internal readonly bool UseTabs;
     internal readonly TrailingCommaStyle TrailingComma;
     internal readonly bool BracketSpacing;
     internal readonly int BlankLinesBetweenBlocks;
     internal readonly bool SingleLineBlocks;
+    internal readonly FormatConfig Config;
 
-    // ── Per-call mutable state ────────────────────────────────────
     internal List<Doc> Docs = new();
     internal int Indent;
     internal Token[] CodeTokens = Array.Empty<Token>();
@@ -27,14 +26,16 @@ public sealed class FormatterContext
     internal Token? LastCodeToken;
     internal PendingWs Pending;
 
-    // ── Trivia handler ────────────────────────────────────────────
     internal readonly TriviaHandler Trivia;
+
+    private readonly Stack<ScopeKind> _scopes = new();
 
     internal enum PendingWs { None, Space, SoftLine, NewLine, BlankLine }
 
-    public FormatterContext(FormatConfig? config = null)
+    public FormatContext(FormatConfig? config = null)
     {
         var cfg = config ?? FormatConfig.Default;
+        Config = cfg;
         IndentSize = cfg.IndentSize;
         UseTabs = cfg.UseTabs;
         TrailingComma = cfg.TrailingComma;
@@ -44,7 +45,16 @@ public sealed class FormatterContext
         Trivia = new TriviaHandler(this);
     }
 
-    /// <summary>Resets all per-call state for a new format operation.</summary>
+    internal ScopeKind CurrentScope =>
+        _scopes.Count > 0 ? _scopes.Peek() : ScopeKind.TopLevel;
+
+    internal void PushScope(ScopeKind kind) => _scopes.Push(kind);
+
+    internal void PopScope() => _scopes.Pop();
+
+    internal int BlankLinesBetween(Stmt prev, Stmt current) =>
+        Rules.SpacingRules.BlankLinesBetween(prev, current, CurrentScope, Config);
+
     internal void Reset(Token[] codeTokens, Token[] triviaTokens)
     {
         Docs = new List<Doc>();
@@ -53,10 +63,9 @@ public sealed class FormatterContext
         Cursor = 0;
         LastCodeToken = null;
         Pending = PendingWs.None;
+        _scopes.Clear();
         Trivia.Reset(triviaTokens);
     }
-
-    // ── Whitespace control — max-upgrade semantics ────────────────
 
     public void Space()
     {
@@ -80,8 +89,6 @@ public sealed class FormatterContext
     {
         Pending = PendingWs.BlankLine;
     }
-
-    // ── Indentation + pending flush ───────────────────────────────
 
     internal string IndentString()
     {
@@ -111,8 +118,6 @@ public sealed class FormatterContext
         Pending = PendingWs.None;
     }
 
-    // ── Token cursor ──────────────────────────────────────────────
-
     public bool NextIs(TokenType t) =>
         Cursor < CodeTokens.Length && CodeTokens[Cursor].Type == t;
 
@@ -125,8 +130,6 @@ public sealed class FormatterContext
         LastCodeToken = token;
         Cursor++;
     }
-
-    // ── Doc IR mark/wrap helpers ──────────────────────────────────
 
     public int Mark() => Docs.Count;
 
@@ -141,22 +144,14 @@ public sealed class FormatterContext
         Docs.Add(wrapper(Doc.Concat(slice)));
     }
 
-    // ── Direct Doc emission ───────────────────────────────────────
-
     public void AddDoc(Doc doc) => Docs.Add(doc);
-
-    // ── Token access for advanced patterns ────────────────────────
 
     public bool HasMoreTokens => Cursor < CodeTokens.Length;
     public Token CurrentToken => CodeTokens[Cursor];
     public void SkipToken() => Cursor++;
 
-    // ── Pending whitespace access ─────────────────────────────────
-
     public bool HasPendingWhitespace => Pending != PendingWs.None;
     public void ResetPending() => Pending = PendingWs.None;
-
-    // ── Compound-operator detection ───────────────────────────────
 
     public bool NextIsCompoundOperator() =>
         Cursor < CodeTokens.Length && IsCompoundOperator(CodeTokens[Cursor].Type);
@@ -167,21 +162,12 @@ public sealed class FormatterContext
         TokenType.AmpersandEqual or TokenType.PipeEqual or TokenType.CaretEqual or
         TokenType.LessLessEqual or TokenType.GreaterGreaterEqual;
 
-    // ── Declaration detection ─────────────────────────────────────
-
-    public static bool IsDeclaration(Stmt stmt) =>
-        stmt is FnDeclStmt or StructDeclStmt or EnumDeclStmt or InterfaceDeclStmt or ExtendStmt;
-
-    // ── Trivia delegation ─────────────────────────────────────────
-
     public void FlushTriviaBeforeCurrentToken()
     {
         if (HasMoreTokens) Trivia.FlushTriviaBefore(CurrentToken);
     }
 
     public void FlushRemainingTrivia() => Trivia.FlushRemainingTrivia();
-
-    // ── Trivia access (for BlockHasComments) ──────────────────────
 
     internal bool BlockHasComments(int startLine, int endLine)
     {
