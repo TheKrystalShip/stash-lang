@@ -1,6 +1,7 @@
 namespace Stash.Lsp.Handlers;
 
 using System;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using MediatR;
@@ -49,6 +50,7 @@ public class DidChangeWatchedFilesHandler : DidChangeWatchedFilesHandlerBase
     public override Task<Unit> Handle(DidChangeWatchedFilesParams request, CancellationToken cancellationToken)
     {
         bool packageFilesChanged = false;
+        bool configFilesChanged = false;
 
         foreach (var change in request.Changes)
         {
@@ -76,6 +78,12 @@ public class DidChangeWatchedFilesHandler : DidChangeWatchedFilesHandlerBase
                         break;
                 }
 
+                string fileName = Path.GetFileName(path);
+                if (fileName is ".stashcheck" or ".stashformat")
+                {
+                    configFilesChanged = true;
+                }
+
                 if (change.Type is FileChangeType.Created or FileChangeType.Deleted
                     && IsInsideStashesDirectory(path))
                 {
@@ -100,6 +108,20 @@ public class DidChangeWatchedFilesHandler : DidChangeWatchedFilesHandlerBase
             }
         }
 
+        if (configFilesChanged)
+        {
+            try
+            {
+                _logger.LogInformation("Config files changed — invalidating caches and re-analyzing open documents");
+                _analysis.InvalidateAllContentCaches();
+                ReAnalyzeOpenDocuments();
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning("Error re-analyzing open documents after config change: {Error}", ex.Message);
+            }
+        }
+
         return Unit.Task;
     }
 
@@ -111,6 +133,16 @@ public class DidChangeWatchedFilesHandler : DidChangeWatchedFilesHandlerBase
                 new OmniSharp.Extensions.LanguageServer.Protocol.Models.FileSystemWatcher
                 {
                     GlobPattern = new GlobPattern("**/*.stash"),
+                    Kind = WatchKind.Create | WatchKind.Change | WatchKind.Delete
+                },
+                new OmniSharp.Extensions.LanguageServer.Protocol.Models.FileSystemWatcher
+                {
+                    GlobPattern = new GlobPattern("**/.stashcheck"),
+                    Kind = WatchKind.Create | WatchKind.Change | WatchKind.Delete
+                },
+                new OmniSharp.Extensions.LanguageServer.Protocol.Models.FileSystemWatcher
+                {
+                    GlobPattern = new GlobPattern("**/.stashformat"),
                     Kind = WatchKind.Create | WatchKind.Change | WatchKind.Delete
                 })
         };

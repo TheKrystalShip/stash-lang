@@ -62,6 +62,13 @@
           ".tpl"
         ],
         "configuration": "./tpl-language-configuration.json"
+      },
+      {
+        "id": "ini",
+        "filenames": [
+          ".stashcheck",
+          ".stashformat"
+        ]
       }
     ],
     "grammars": [

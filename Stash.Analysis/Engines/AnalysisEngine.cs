@@ -253,6 +253,16 @@ public class AnalysisEngine
     }
 
     /// <summary>
+    /// Clears all cached analysis results so that the next call to <see cref="Analyze"/>
+    /// performs a full re-analysis. Used when external configuration (e.g. <c>.stashcheck</c>) changes.
+    /// </summary>
+    public void InvalidateAllContentCaches()
+    {
+        _contentHashCache.Clear();
+        _cache.Clear();
+    }
+
+    /// <summary>
     /// Returns document URIs that import the given file and should be re-analyzed.
     /// </summary>
     public IReadOnlyCollection<Uri> GetDependents(string absolutePath)
