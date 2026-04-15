@@ -1,0 +1,280 @@
+{
+  "name": "debug-agent-tools",
+  "displayName": "Debug Agent Tools",
+  "description": "Exposes debugging capabilities as Language Model Tools, enabling AI agents to start debug sessions, set breakpoints, step through code, inspect variables, and evaluate expressions",
+  "version": "0.1.0",
+  "publisher": "TheKrystalShip",
+  "license": "GPL-3.0",
+  "main": "./out/extension.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TheKrystalShip/stash-lang"
+  },
+  "homepage": "https://github.com/TheKrystalShip/stash-lang",
+  "bugs": {
+    "url": "https://github.com/TheKrystalShip/stash-lang/issues"
+  },
+  "keywords": [
+    "debug",
+    "debugger",
+    "ai",
+    "agent",
+    "copilot",
+    "language-model-tools",
+    "dap",
+    "breakpoints",
+    "debugging"
+  ],
+  "engines": {
+    "vscode": "^1.99.0"
+  },
+  "activationEvents": ["onStartupFinished"],
+  "categories": ["Debuggers", "Other"],
+  "contributes": {
+    "languageModelTools": [
+      {
+        "name": "debug_startSession",
+        "displayName": "Start Debug Session",
+        "modelDescription": "Launch a debug session for a program file. Supports any language with a debug adapter installed in VS Code (Stash, Python, Node.js, etc.). Returns a debug snapshot if stopOnEntry is true, or a running status confirmation. Use this before any other debug tools. Only one agent debug session can be active at a time — starting a new one terminates the previous.",
+        "toolReferenceName": "debug_startSession",
+        "icon": "$(debug-start)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Start a debug session for a program",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "program": {
+              "type": "string",
+              "description": "Absolute path to the file to debug"
+            },
+            "debugType": {
+              "type": "string",
+              "description": "DAP debug type (e.g. 'python', 'node', 'stash'). If omitted, automatically detected from the file's language by scanning installed debug adapters."
+            },
+            "args": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Command-line arguments to pass to the program"
+            },
+            "cwd": {
+              "type": "string",
+              "description": "Working directory. Defaults to workspace root."
+            },
+            "env": {
+              "type": "object",
+              "additionalProperties": { "type": "string" },
+              "description": "Additional environment variables"
+            },
+            "stopOnEntry": {
+              "type": "boolean",
+              "description": "Pause on the first line of the program. Default: false."
+            },
+            "exceptionBreakpoints": {
+              "type": "string",
+              "enum": ["none", "uncaught", "all"],
+              "description": "Exception breakpoint filter. Default: 'uncaught'."
+            },
+            "noDebug": {
+              "type": "boolean",
+              "description": "Run without debugging (no breakpoints, no stepping). Default: false."
+            },
+            "configuration": {
+              "type": "string",
+              "description": "Name of a launch.json configuration to use instead of building an ad-hoc config."
+            }
+          },
+          "required": ["program"]
+        }
+      },
+      {
+        "name": "debug_setBreakpoints",
+        "displayName": "Set Breakpoints",
+        "modelDescription": "Set breakpoints in a source file. Uses replace semantics — all existing agent-managed breakpoints in the specified file are replaced with the new set. Supports conditional breakpoints, hit count conditions, and logpoints. Works both before and during a debug session. An empty breakpoints array clears all agent breakpoints in the file. Never affects user-set breakpoints.",
+        "toolReferenceName": "debug_setBreakpoints",
+        "icon": "$(debug-breakpoint)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Set breakpoints in a source file",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "Absolute path to the source file"
+            },
+            "breakpoints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "line": { "type": "integer", "description": "1-based line number" },
+                  "condition": { "type": "string", "description": "Conditional expression (e.g., 'x > 5')" },
+                  "hitCondition": { "type": "string", "description": "Hit count condition (e.g., '== 3', '>= 10')" },
+                  "logMessage": { "type": "string", "description": "Log message template (logpoint). Use {expr} for interpolation." }
+                },
+                "required": ["line"]
+              },
+              "description": "Breakpoints to set. Empty array clears all breakpoints in the file."
+            }
+          },
+          "required": ["file", "breakpoints"]
+        }
+      },
+      {
+        "name": "debug_removeBreakpoints",
+        "displayName": "Remove Breakpoints",
+        "modelDescription": "Remove agent-managed breakpoints. If a file path is provided, removes only breakpoints in that file. If no file is specified, removes ALL agent-managed breakpoints across all files. Never removes user-set breakpoints.",
+        "toolReferenceName": "debug_removeBreakpoints",
+        "icon": "$(debug-breakpoint-unverified)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Remove agent-managed breakpoints",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string",
+              "description": "Absolute path to the source file. If omitted, removes ALL agent-managed breakpoints."
+            }
+          }
+        }
+      },
+      {
+        "name": "debug_continue",
+        "displayName": "Continue Execution",
+        "modelDescription": "Resume program execution. Blocks until the program pauses again (breakpoint hit, exception, or program exits), or until timeout. Returns a debug snapshot with current file, line, call stack, local variables, and captured output. If the program terminates, returns exit status and output. If timeout is reached, returns a running status.",
+        "toolReferenceName": "debug_continue",
+        "icon": "$(debug-continue)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Continue program execution until next pause",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "threadId": {
+              "type": "integer",
+              "description": "Thread to continue. If omitted, continues the currently stopped thread."
+            },
+            "timeout": {
+              "type": "integer",
+              "description": "Maximum milliseconds to wait for the program to pause. Default: 10000 (10s)."
+            }
+          }
+        }
+      },
+      {
+        "name": "debug_step",
+        "displayName": "Step Execution",
+        "modelDescription": "Execute a step operation (over, in, or out) and return the resulting debug snapshot. Step over advances to the next line in the current function. Step in enters a function call. Step out returns to the caller. Can perform multiple steps (up to 20) in one call. Returns a debug snapshot with current file, line, call stack, local variables, and captured output.",
+        "toolReferenceName": "debug_step",
+        "icon": "$(debug-step-over)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Step through code (over, in, or out)",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "action": {
+              "type": "string",
+              "enum": ["over", "in", "out"],
+              "description": "Step type: 'over' (next line), 'in' (enter function), 'out' (exit function)"
+            },
+            "threadId": {
+              "type": "integer",
+              "description": "Thread to step. If omitted, steps the currently stopped thread."
+            },
+            "count": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "description": "Number of steps to perform. Default: 1. Max: 20."
+            }
+          },
+          "required": ["action"]
+        }
+      },
+      {
+        "name": "debug_getSnapshot",
+        "displayName": "Get Debug Snapshot",
+        "modelDescription": "Read the current debug state without modifying execution. Returns the current file, line, source context (2 lines before/after), call stack, local variables, closure variables, and captured output. Use variableDepth to expand nested structures (0-3 levels), stackDepth to control stack frame count (1-20), and includeGlobals to see global scope variables.",
+        "toolReferenceName": "debug_getSnapshot",
+        "icon": "$(debug-stackframe)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Get current debug state snapshot",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "variableDepth": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 3,
+              "description": "How many levels deep to expand nested variables. Default: 1."
+            },
+            "stackDepth": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 20,
+              "description": "Maximum stack frames to include. Default: 5."
+            },
+            "includeGlobals": {
+              "type": "boolean",
+              "description": "Include global scope variables. Default: false."
+            }
+          }
+        }
+      },
+      {
+        "name": "debug_evaluate",
+        "displayName": "Evaluate Expression",
+        "modelDescription": "Evaluate an expression in the context of the current stack frame. Returns the result value and type. Use frameIndex to evaluate in a different stack frame (0 = top/current). The default context is 'watch' (side-effect-free); use 'repl' for expressions that may have side effects (requires user confirmation). If the result is a structured value, it is expanded up to 1 level deep.",
+        "toolReferenceName": "debug_evaluate",
+        "icon": "$(symbol-variable)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Evaluate an expression in the debugger",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "expression": {
+              "type": "string",
+              "description": "Expression to evaluate in the current frame context"
+            },
+            "frameIndex": {
+              "type": "integer",
+              "description": "Stack frame index (0 = top/current). Default: 0."
+            },
+            "context": {
+              "type": "string",
+              "enum": ["watch", "repl", "hover"],
+              "description": "Evaluation context. 'watch' for side-effect-free, 'repl' for interactive. Default: 'watch'."
+            }
+          },
+          "required": ["expression"]
+        }
+      },
+      {
+        "name": "debug_stopSession",
+        "displayName": "Stop Debug Session",
+        "modelDescription": "Terminate the active agent-managed debug session. Returns a session summary including duration, captured output, and breakpoints hit count. Cleans up all agent-managed breakpoints and event listeners. If no session is active, returns a no_session status.",
+        "toolReferenceName": "debug_stopSession",
+        "icon": "$(debug-stop)",
+        "canBeReferencedInPrompt": true,
+        "userDescription": "Stop the debug session",
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "captureOutput": {
+              "type": "boolean",
+              "description": "Return stdout/stderr output captured during the session. Default: true."
+            }
+          }
+        }
+      }
+    ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/vscode": "^1.99.0",
+    "typescript": "^5.9.3"
+  }
+}
