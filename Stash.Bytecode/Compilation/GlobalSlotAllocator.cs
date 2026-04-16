@@ -8,7 +8,7 @@ namespace Stash.Bytecode;
 /// Shared across all Compiler instances in a single compilation unit so that
 /// all chunks (top-level script + nested functions) use consistent slot assignments.
 /// </summary>
-internal sealed class GlobalSlotAllocator
+public sealed class GlobalSlotAllocator
 {
     private readonly Dictionary<string, ushort> _nameToSlot = new(StringComparer.Ordinal);
     private ushort _nextSlot;

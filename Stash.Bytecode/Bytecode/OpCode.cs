@@ -10,231 +10,231 @@ public enum OpCode : byte
 {
     // === Loads & Constants ===
     /// <summary>ABx: R(A) = K(Bx) — load constant from pool.</summary>
-    LoadK,
+    LoadK = 0,
     /// <summary>ABC: R(A) = null.</summary>
-    LoadNull,
+    LoadNull = 1,
     /// <summary>ABC: R(A) = (B != 0); if C != 0, skip next instruction.</summary>
-    LoadBool,
+    LoadBool = 2,
     /// <summary>ABC: R(A) = R(B) — copy register.</summary>
-    Move,
+    Move = 3,
 
     // === Global Variables ===
     /// <summary>ABx: R(A) = Globals[Bx].</summary>
-    GetGlobal,
+    GetGlobal = 4,
     /// <summary>ABx: Globals[Bx] = R(A).</summary>
-    SetGlobal,
+    SetGlobal = 5,
     /// <summary>ABx: Globals[Bx] = R(A), mark as const.</summary>
-    InitConstGlobal,
+    InitConstGlobal = 6,
 
     // === Upvalues ===
     /// <summary>ABC: R(A) = Upvalues[B].</summary>
-    GetUpval,
+    GetUpval = 7,
     /// <summary>ABC: Upvalues[B] = R(A).</summary>
-    SetUpval,
+    SetUpval = 8,
     /// <summary>ABC: Close upvalue for register A.</summary>
-    CloseUpval,
+    CloseUpval = 9,
 
     // === Arithmetic ===
     /// <summary>ABC: R(A) = R(B) + R(C).</summary>
-    Add,
+    Add = 10,
     /// <summary>ABC: R(A) = R(B) - R(C).</summary>
-    Sub,
+    Sub = 11,
     /// <summary>ABC: R(A) = R(B) * R(C).</summary>
-    Mul,
+    Mul = 12,
     /// <summary>ABC: R(A) = R(B) / R(C).</summary>
-    Div,
+    Div = 13,
     /// <summary>ABC: R(A) = R(B) % R(C).</summary>
-    Mod,
+    Mod = 14,
     /// <summary>ABC: R(A) = R(B) ** R(C).</summary>
-    Pow,
+    Pow = 15,
     /// <summary>ABC: R(A) = -R(B).</summary>
-    Neg,
+    Neg = 16,
     /// <summary>AsBx: R(A) = R(A) + sBx — add signed immediate.</summary>
-    AddI,
+    AddI = 17,
 
     // === Bitwise ===
     /// <summary>ABC: R(A) = R(B) &amp; R(C).</summary>
-    BAnd,
+    BAnd = 18,
     /// <summary>ABC: R(A) = R(B) | R(C).</summary>
-    BOr,
+    BOr = 19,
     /// <summary>ABC: R(A) = R(B) ^ R(C).</summary>
-    BXor,
+    BXor = 20,
     /// <summary>ABC: R(A) = ~R(B).</summary>
-    BNot,
+    BNot = 21,
     /// <summary>ABC: R(A) = R(B) &lt;&lt; R(C).</summary>
-    Shl,
+    Shl = 22,
     /// <summary>ABC: R(A) = R(B) &gt;&gt; R(C).</summary>
-    Shr,
+    Shr = 23,
 
     // === Comparison (produce bool in R(A)) ===
     /// <summary>ABC: R(A) = (R(B) == R(C)).</summary>
-    Eq,
+    Eq = 24,
     /// <summary>ABC: R(A) = (R(B) != R(C)).</summary>
-    Ne,
+    Ne = 25,
     /// <summary>ABC: R(A) = (R(B) &lt; R(C)).</summary>
-    Lt,
+    Lt = 26,
     /// <summary>ABC: R(A) = (R(B) &lt;= R(C)).</summary>
-    Le,
+    Le = 27,
     /// <summary>ABC: R(A) = (R(B) &gt; R(C)).</summary>
-    Gt,
+    Gt = 28,
     /// <summary>ABC: R(A) = (R(B) &gt;= R(C)).</summary>
-    Ge,
+    Ge = 29,
 
     // === Logic ===
     /// <summary>ABC: R(A) = !IsTruthy(R(B)).</summary>
-    Not,
+    Not = 30,
     /// <summary>ABC: if IsTruthy(R(B)) == C then R(A) = R(B) else skip next. For &amp;&amp;/||.</summary>
-    TestSet,
+    TestSet = 31,
     /// <summary>ABC: if IsTruthy(R(A)) != C then skip next instruction.</summary>
-    Test,
+    Test = 32,
 
     // === Control Flow ===
     /// <summary>AsBx: IP += sBx — unconditional jump.</summary>
-    Jmp,
+    Jmp = 33,
     /// <summary>AsBx: if !IsTruthy(R(A)) then IP += sBx.</summary>
-    JmpFalse,
+    JmpFalse = 34,
     /// <summary>AsBx: if IsTruthy(R(A)) then IP += sBx.</summary>
-    JmpTrue,
+    JmpTrue = 35,
     /// <summary>AsBx: IP += sBx — backward jump with cancellation check.</summary>
-    Loop,
+    Loop = 36,
     /// <summary>ABC: Call R(A) with C args starting at R(A+1); result in R(A).</summary>
-    Call,
+    Call = 37,
     /// <summary>ABC: Return R(A). B=0 means return null.</summary>
-    Return,
+    Return = 38,
 
     // === Iteration ===
     /// <summary>AsBx: Numeric for init: R(A) -= R(A+2); IP += sBx.</summary>
-    ForPrep,
+    ForPrep = 39,
     /// <summary>AsBx: R(A) += R(A+2); if R(A) &lt;= R(A+1) then { IP += sBx; R(A+3) = R(A) }.</summary>
-    ForLoop,
+    ForLoop = 40,
     /// <summary>ABC: Create iterator from R(A), store state in R(A)..R(A+2).</summary>
-    IterPrep,
+    IterPrep = 41,
     /// <summary>AsBx: Advance iterator; if exhausted, continue; else set values and IP += sBx.</summary>
-    IterLoop,
+    IterLoop = 42,
 
     // === Tables & Fields ===
     /// <summary>ABC: R(A) = R(B)[R(C)] — array index or dict key lookup.</summary>
-    GetTable,
+    GetTable = 43,
     /// <summary>ABC: R(A)[R(B)] = R(C) — array/dict element store.</summary>
-    SetTable,
+    SetTable = 44,
     /// <summary>ABC: R(A) = R(B).K(C) — field access by constant key.</summary>
-    GetField,
+    GetField = 45,
     /// <summary>ABC: R(A).K(B) = R(C) — field store by constant key.</summary>
-    SetField,
+    SetField = 46,
     /// <summary>ABC: R(A+1) = R(B); R(A) = R(B)[K(C)] — method lookup + self.</summary>
-    Self,
+    Self = 47,
 
     // === Collections ===
     /// <summary>ABC: R(A) = new array with B elements from R(A+1)..R(A+B).</summary>
-    NewArray,
+    NewArray = 48,
     /// <summary>ABC: R(A) = new dict with B key-value pairs from R(A+1)..R(A+2*B).</summary>
-    NewDict,
+    NewDict = 49,
     /// <summary>ABC: R(A) = range(R(B), R(C)).</summary>
-    NewRange,
+    NewRange = 50,
     /// <summary>ABC: Expand R(B) into sequential registers starting at R(A).</summary>
-    Spread,
+    Spread = 51,
 
     // === Closures & Types ===
     /// <summary>ABx: R(A) = new closure from Prototype[Bx], followed by upvalue descriptors.</summary>
-    Closure,
+    Closure = 52,
     /// <summary>ABC: R(A) = new instance of struct K(B) with C field values from R(A+1).</summary>
-    NewStruct,
+    NewStruct = 53,
     /// <summary>ABC: R(A) = typeof(R(B)) as string.</summary>
-    TypeOf,
+    TypeOf = 54,
     /// <summary>ABC: R(A) = (R(B) is type K(C)).</summary>
-    Is,
+    Is = 55,
 
     // === Error Handling ===
     /// <summary>ABx: Push exception handler; catch at IP + Bx; error value → R(A).</summary>
-    TryBegin,
+    TryBegin = 56,
     /// <summary>Ax: Pop exception handler (no operands needed, Ax unused).</summary>
-    TryEnd,
+    TryEnd = 57,
     /// <summary>ABC: Throw R(A) as error.</summary>
-    Throw,
+    Throw = 58,
     /// <summary>ABC: R(A) = try evaluate R(B); null on error.</summary>
-    TryExpr,
+    TryExpr = 59,
 
     // === Type Declarations ===
     /// <summary>ABx: R(A) = declare struct with metadata K(Bx), methods from following registers.</summary>
-    StructDecl,
+    StructDecl = 60,
     /// <summary>ABx: R(A) = declare enum with metadata K(Bx).</summary>
-    EnumDecl,
+    EnumDecl = 61,
     /// <summary>ABx: R(A) = declare interface with metadata K(Bx).</summary>
-    IfaceDecl,
+    IfaceDecl = 62,
     /// <summary>ABx: Extend type with metadata K(Bx), methods from registers.</summary>
-    Extend,
+    Extend = 63,
 
     // === Shell ===
     /// <summary>ABC: R(A) = execute command with B parts from R(A+1)..R(A+B).</summary>
-    Command,
+    Command = 64,
     /// <summary>ABC: R(A) = pipe(R(B), R(C)).</summary>
-    Pipe,
+    Pipe = 65,
     /// <summary>ABC: Redirect R(A) stream (B flags) to file R(C).</summary>
-    Redirect,
+    Redirect = 66,
 
     // === Modules ===
     /// <summary>ABx: R(A) = import module with metadata K(Bx).</summary>
-    Import,
+    Import = 67,
     /// <summary>ABx: R(A) = import module as alias, metadata K(Bx).</summary>
-    ImportAs,
+    ImportAs = 68,
 
     // === Strings ===
     /// <summary>ABC: R(A) = interpolate B parts from R(A+1)..R(A+B).</summary>
-    Interpolate,
+    Interpolate = 69,
 
     // === Misc ===
     /// <summary>ABC: R(A) = R(B) in R(C) — containment check.</summary>
-    In,
+    In = 70,
     /// <summary>ABx: Switch on R(A) with jump table K(Bx).</summary>
-    Switch,
+    Switch = 71,
     /// <summary>ABx: Destructure R(A) per metadata K(Bx) into registers.</summary>
-    Destructure,
+    Destructure = 72,
     /// <summary>ABC: R(A) = begin elevation from R(B).</summary>
-    ElevateBegin,
+    ElevateBegin = 73,
     /// <summary>Ax: End elevation.</summary>
-    ElevateEnd,
+    ElevateEnd = 74,
     /// <summary>ABx: Retry block with metadata K(Bx), body/until/onRetry from registers.</summary>
-    Retry,
+    Retry = 75,
     /// <summary>ABx: Timeout block. R(A)=duration, body closure at R(A+1). Returns result in R(A).</summary>
-    Timeout,
+    Timeout = 76,
     /// <summary>ABC: R(A) = await R(B).</summary>
-    Await,
+    Await = 77,
     /// <summary>ABC: Call R(A) with spread arguments.</summary>
-    CallSpread,
+    CallSpread = 78,
     /// <summary>ABC: Check that R(A) is numeric, throw if not.</summary>
-    CheckNumeric,
+    CheckNumeric = 79,
     /// <summary>ABC+companion: R(A) = R(B).K(C) with inline cache; companion word = IC slot index.</summary>
-    GetFieldIC,                 // 79
+    GetFieldIC = 80,
     /// <summary>ABC+companion: Fused GetField+Call for namespace built-ins; R(A) = R(B).K[ic.ConstantIndex](R(A+1)..R(A+C)); companion = IC slot.</summary>
-    CallBuiltIn,                // 80
+    CallBuiltIn = 81,
 
     // === Specialized Iteration (compile-time) ===
     /// <summary>AsBx: Integer-specialized ForPrep. R(A) -= R(A+2); IP += sBx. Skips type checks when counter/step are compile-time integers.</summary>
-    ForPrepII,                  // 81
+    ForPrepII = 82,
     /// <summary>AsBx: Integer-specialized ForLoop. Guard-free: R(A) += R(A+2); if in-bounds: IP += sBx; R(A+3) = R(A).</summary>
-    ForLoopII,                  // 82
+    ForLoopII = 83,
 
     // === Constant Fusion ===
     /// <summary>ABC: R(A) = R(B) + K(C) — add constant from pool.</summary>
-    AddK,                       // 83
+    AddK = 84,
     /// <summary>ABC: R(A) = R(B) - K(C) — subtract constant from pool.</summary>
-    SubK,                       // 84
+    SubK = 85,
     /// <summary>ABC: R(A) = (R(B) == K(C)) — equality with constant from pool.</summary>
-    EqK,                        // 85
+    EqK = 86,
     /// <summary>ABC: R(A) = (R(B) != K(C)) — inequality with constant from pool.</summary>
-    NeK,                        // 86
+    NeK = 87,
     /// <summary>ABC: R(A) = (R(B) &lt; K(C)) — less-than with constant from pool.</summary>
-    LtK,                        // 87
+    LtK = 88,
     /// <summary>ABC: R(A) = (R(B) &lt;= K(C)) — less-or-equal with constant from pool.</summary>
-    LeK,                        // 88
+    LeK = 89,
     /// <summary>ABC: R(A) = (R(B) &gt; K(C)) — greater-than with constant from pool.</summary>
-    GtK,                        // 89
+    GtK = 90,
     /// <summary>ABC: R(A) = (R(B) &gt;= K(C)) — greater-or-equal with constant from pool.</summary>
-    GeK,                        // 90
+    GeK = 91,
 
     // === Typed Arrays ===
     /// <summary>ABx: R(A) = TypedArray(elementType=K(Bx), elements=R(A)).</summary>
-    TypedWrap,                  // 91
+    TypedWrap = 92,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>

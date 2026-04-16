@@ -133,6 +133,78 @@ Callee frame:        [ callee | arg0 | arg1 | arg2 | locals... | temps... ]
 
 The callee's `BaseSlot` is set to `caller.BaseSlot + A + 1` (one past the callee register). Arguments are already positioned in the correct slots. The return value is written back to `R(A)` in the **caller's** frame (overwriting the callee reference).
 
+#### `call` — Standard Function Call (ABC)
+
+```
+Emission:    call R(A), 0, C
+Layout:      R(A)=callee  R(A+1)=arg0  R(A+2)=arg1  ...  R(A+C)=argC-1
+```
+
+- **C** = argument count
+- **A** = callee register (overwritten with return value after call)
+- Callee's new frame: `BaseSlot = caller.BaseSlot + A + 1`
+- Arguments occupy `R(0)..R(C-1)` in the callee's frame (they're already in position)
+- Return: `return R(A)` in the callee writes the value back to `caller.R(A)` via `frame.BaseSlot - 1`
+
+**Arity handling:**
+
+- If `argc == chunk.Arity` and no rest param / async: fast path (no arg validation)
+- If `argc < chunk.MinArity`: runtime error ("Expected at least N arguments")
+- If `argc < chunk.Arity`: default parameter values are loaded for missing args
+- If `chunk.HasRestParam`: excess arguments are collected into a rest array at `R(Arity-1)`
+
+#### `call.builtin` — Built-In Namespace Call (ABC + companion)
+
+```
+Emission:    call.builtin R(A), R(B), C    + companion(icSlot)
+Layout:      R(A)=result  R(B)=namespace  R(A+1)=arg0  ...  R(A+C)=argC-1
+```
+
+- **A** = destination register for the result
+- **B** = register holding the namespace object (used as IC guard)
+- **C** = argument count
+- Arguments are in `R(A+1)..R(A+C)`
+- The companion word holds the IC slot index
+
+**Fast path (IC hit):** Guard check `R(B) == ic.Guard` succeeds → call cached `BuiltInFunction` delegate directly with a `ReadOnlySpan<StashValue>` view over the argument registers. No field lookup overhead.
+
+**Slow path (IC miss):** Resolve the field name (from `K(ic.ConstantIndex)`) on the object in `R(B)`, call the resolved callable, then populate the IC if the receiver is a frozen namespace.
+
+#### `call.spread` — Call with Spread Arguments
+
+```
+Emission:    call.spread R(A), B
+```
+
+- **A** = callee register
+- **B** = total argument register count (including spread markers)
+- Arguments at `R(A+1)..R(A+B)` may include `SpreadMarker` sentinel values
+- The VM expands spread markers: arrays/iterables are flattened into the argument list
+- After expansion, the call proceeds as a standard `call`
+
+#### `self` — Method Binding (ABC)
+
+```
+Emission:    self R(A), R(B), K(C)
+Effect:      R(A) = R(B).K(C)  (the method/callable)
+             R(A+1) = R(B)      (the receiver, for subsequent call)
+```
+
+- **B** = receiver register
+- **C** = constant index of the method name
+- After `self`, a `call R(A), 0, N` follows, where `R(A+1)` is already the `self` receiver
+
+#### `closure` — Create Closure (ABx + N companions)
+
+```
+Emission:    closure R(A), K(Bx)   + N companion words
+```
+
+- **Bx** = constant pool index of the sub-chunk (`Chunk` object)
+- **N** = `Constants[Bx].Upvalues.Length`
+- Each companion word encodes one upvalue capture (see Companion Words section)
+- Creates a `VMFunction` with the captured upvalues attached
+
 ---
 
 ## 4. Notation Conventions
@@ -1600,7 +1672,54 @@ Each IC slot contains:
 
 ### Companion Words
 
-Both `get.field.ic` and `call.builtin` consume the **next instruction word** as a companion — this word holds the IC slot index, not an executable instruction. The disassembler and IP counter account for this by skipping the companion.
+Several opcodes consume **companion words** — additional 32-bit words that immediately follow the primary instruction in the code array. Companion words are NOT executable instructions; they carry metadata that the opcode's handler reads by advancing IP.
+
+**Key rule:** When walking the code array (for disassembly, verification, or analysis), companion words must be skipped. They will not decode as valid instructions.
+
+#### Opcodes with Companion Words
+
+| Opcode              | Companion Count                 | Companion Encoding       | IP Advancement               |
+| ------------------- | ------------------------------- | ------------------------ | ---------------------------- |
+| `get.field.ic` (80) | 1                               | IC slot index (u32)      | +2 (instruction + companion) |
+| `call.builtin` (81) | 1                               | IC slot index (u32)      | +2 (instruction + companion) |
+| `closure` (52)      | N (= sub-chunk's upvalue count) | Upvalue descriptor (u32) | +1+N                         |
+
+#### IC Slot Companion (get.field.ic, call.builtin)
+
+```
+Primary:    [op:8][A:8][B:8][C:8]    ← the opcode instruction
+Companion:  [        icSlot:32     ]  ← IC slot array index
+```
+
+The companion is read by the handler as `frame.Chunk.Code[frame.IP++]`, which:
+
+1. Reads the IC slot index
+2. Advances IP past the companion, so the next fetch gets the next real instruction
+
+The IC slot index references `Chunk.ICSlots[icSlot]`. Each IC slot stores:
+
+- `Guard` — object reference for identity check (e.g., the namespace object)
+- `CachedValue` — the resolved field/function value
+- `State` — 0 (uninitialized), 1 (monomorphic), 2 (megamorphic)
+- `ConstantIndex` — constant pool index of the field name (for slow-path fallback)
+
+#### Upvalue Descriptor Companion (closure)
+
+```
+Primary:    [op:8][A:8][   Bx:16  ]    ← Closure instruction, Bx = sub-chunk constant index
+Word 1:     [isLocal:8][index:8][ unused:16 ]  ← upvalue 0
+Word 2:     [isLocal:8][index:8][ unused:16 ]  ← upvalue 1
+...
+Word N:     [isLocal:8][index:8][ unused:16 ]  ← upvalue N-1
+```
+
+Each companion word encodes one upvalue capture:
+
+- **Bits 0–7 (`isLocal`):** 1 = capture a local variable from the immediately enclosing function's register window. 0 = inherit an upvalue from the enclosing closure's upvalue array.
+- **Bits 8–15 (`index`):** If `isLocal=1`, the register index in the enclosing frame. If `isLocal=0`, the upvalue array index in the enclosing closure.
+- **Bits 16–31:** Unused (zero).
+
+The number of companion words N equals the length of the sub-chunk's `Upvalues` array (`Constants[Bx].Upvalues.Length`).
 
 ---
 
