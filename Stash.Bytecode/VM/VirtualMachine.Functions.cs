@@ -562,8 +562,8 @@ public sealed partial class VirtualMachine
                 CallSite = callSpan,
                 LocalScope = scope,
             });
-            if (debugger.ShouldBreakOnFunctionEntry(funcName))
-                debugger.OnFunctionEnter(funcName, callSpan!.Value, scope, _debugThreadId);
+            if (callSpan is not null && debugger.ShouldBreakOnFunctionEntry(funcName))
+                debugger.OnFunctionEnter(funcName, callSpan.Value, scope, _debugThreadId);
         }
     }
 
@@ -720,8 +720,8 @@ public sealed partial class VirtualMachine
                 CallSite = callSpan,
                 LocalScope = scope,
             });
-            if (debugger.ShouldBreakOnFunctionEntry(funcName))
-                debugger.OnFunctionEnter(funcName, callSpan!.Value, scope, _debugThreadId);
+            if (callSpan is not null && debugger.ShouldBreakOnFunctionEntry(funcName))
+                debugger.OnFunctionEnter(funcName, callSpan.Value, scope, _debugThreadId);
         }
     }
 
