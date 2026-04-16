@@ -98,16 +98,22 @@ export class CallHierarchyTool implements vscode.LanguageModelTool<CallHierarchy
         }
 
         try {
+            // Ensure the document is visible — some LSPs need this for call hierarchy
+            await vscode.window.showTextDocument(resolved.document, {
+                preview: true,
+                preserveFocus: true,
+            });
+
             const rootItems = await vscode.commands.executeCommand<vscode.CallHierarchyItem[]>(
                 "vscode.prepareCallHierarchy",
-                resolved.uri,
+                resolved.document.uri,
                 resolved.position
             );
 
             if (!rootItems || rootItems.length === 0) {
                 return new vscode.LanguageModelToolResult([
                     new vscode.LanguageModelTextPart(
-                        `No call hierarchy information available for '${input.symbol}'.`
+                        `No call hierarchy information available for '${input.symbol}'. The language server may not support call hierarchy for this file type.`
                     ),
                 ]);
             }

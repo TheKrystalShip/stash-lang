@@ -122,6 +122,7 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
 
         foreach (var docUri in _documents.GetOpenDocumentUris())
         {
+            if (docUri.Scheme != "file") continue;
             var docResult = _analysis.GetCachedResult(docUri);
             if (docResult == null)
             {
@@ -142,18 +143,35 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
             var allSymbols = docResult.Symbols.All;
             var callerGroups = new Dictionary<SymbolInfo, List<ReferenceInfo>>();
 
+            // Create a synthetic <module> symbol for top-level call sites in this document
+            SymbolInfo? moduleSymbol = null;
+
             foreach (var callSite in callSites)
             {
                 var enclosingFn = FindEnclosingFunction(allSymbols, callSite.Span.StartLine, callSite.Span.StartColumn);
-                if (enclosingFn == null)
+
+                SymbolInfo callerKey;
+                if (enclosingFn != null)
                 {
-                    continue;
+                    callerKey = enclosingFn;
+                }
+                else
+                {
+                    // Lazily create a single <module> symbol for all top-level calls in this document
+                    moduleSymbol ??= new SymbolInfo(
+                        "<module>",
+                        StashSymbolKind.Function,
+                        new Stash.Common.SourceSpan(callSite.Span.File, 1, 1, 1, 1),
+                        new Stash.Common.SourceSpan(callSite.Span.File, 1, 1, callSite.Span.EndLine, callSite.Span.EndColumn),
+                        detail: "<module>"
+                    );
+                    callerKey = moduleSymbol;
                 }
 
-                if (!callerGroups.TryGetValue(enclosingFn, out var siteList))
+                if (!callerGroups.TryGetValue(callerKey, out var siteList))
                 {
                     siteList = new List<ReferenceInfo>();
-                    callerGroups[enclosingFn] = siteList;
+                    callerGroups[callerKey] = siteList;
                 }
                 siteList.Add(callSite);
             }
@@ -243,7 +261,21 @@ public class CallHierarchyHandler : CallHierarchyHandlerBase
 
             if (calleeSymbol == null)
             {
-                continue;
+                // For dotted calls (e.g., utils.log, arr.push), create a synthetic symbol
+                // since they can't be resolved from local scope
+                if (calleeName.Contains('.'))
+                {
+                    calleeSymbol = new SymbolInfo(
+                        calleeName,
+                        StashSymbolKind.Function,
+                        firstSite.Span,
+                        detail: calleeName
+                    );
+                }
+                else
+                {
+                    continue;
+                }
             }
 
             var fromRanges = sites.Select(s => s.Span.ToLspRange()).ToArray();

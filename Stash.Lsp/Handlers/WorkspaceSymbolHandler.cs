@@ -2,6 +2,7 @@ namespace Stash.Lsp.Handlers;
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using OmniSharp.Extensions.LanguageServer.Protocol;
@@ -78,10 +79,16 @@ public class WorkspaceSymbolHandler : WorkspaceSymbolsHandlerBase
         var symbols = new List<WorkspaceSymbol>();
 
         // Combine open document URIs with background-indexed URIs
-        var uris = new HashSet<Uri>(_documents.GetOpenDocumentUris());
+        // Filter to file: scheme and .stash extension to exclude git-scheme duplicates (S3)
+        // and non-Stash files like markdown (S4)
+        var uris = new HashSet<Uri>(_documents.GetOpenDocumentUris()
+            .Where(u => u.Scheme == "file" && u.AbsolutePath.EndsWith(".stash", StringComparison.OrdinalIgnoreCase)));
         foreach (var cachedUri in _analysis.GetAllCachedUris())
         {
-            uris.Add(cachedUri);
+            if (cachedUri.Scheme == "file" && cachedUri.AbsolutePath.EndsWith(".stash", StringComparison.OrdinalIgnoreCase))
+            {
+                uris.Add(cachedUri);
+            }
         }
 
         foreach (var uri in uris)

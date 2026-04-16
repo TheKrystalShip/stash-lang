@@ -1027,6 +1027,23 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         {
             RecordReference(id.Name.Lexeme, id.Span, ReferenceKind.Call);
         }
+        else if (expr.Callee is DotExpr dot && dot.Object is IdentifierExpr dotId)
+        {
+            // Only record dotted calls as Call references when the receiver is a namespace
+            var receiverSymbol = FindSymbolInScopeChain(dotId.Name.Lexeme, dotId.Span.StartLine, dotId.Span.StartColumn);
+            if (receiverSymbol?.Kind == SymbolKind.Namespace)
+            {
+                // Record qualified call for namespace/module calls (e.g., io.println(), arr.push())
+                var qualifiedName = $"{dotId.Name.Lexeme}.{dot.Name.Lexeme}";
+                _references.Add(new ReferenceInfo(qualifiedName, dot.Name.Span, ReferenceKind.Call, receiverSymbol));
+                dot.Object.Accept(this);
+            }
+            else
+            {
+                // For typed variables (UFCS) or unresolved names, use existing VisitDotExpr path
+                expr.Callee.Accept(this);
+            }
+        }
         else
         {
             expr.Callee.Accept(this);

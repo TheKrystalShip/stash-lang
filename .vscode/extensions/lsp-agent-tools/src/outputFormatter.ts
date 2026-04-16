@@ -74,8 +74,10 @@ function renderDocumentSymbol(
         count.value++;
     }
 
+    // Only increase indent if this symbol was rendered
+    const childIndent = include ? indent + "  " : indent;
     for (const child of symbol.children) {
-        renderDocumentSymbol(child, kindFilter, indent + "  ", collected, count);
+        renderDocumentSymbol(child, kindFilter, childIndent, collected, count);
     }
 }
 

@@ -70,8 +70,13 @@ export class TypeDefinitionTool implements vscode.LanguageModelTool<TypeDefiniti
             );
 
             if (hovers && hovers.length > 0) {
-                const text = formatHover(hovers, input.symbol);
-                return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]);
+                const hoverText = formatHover(hovers, input.symbol);
+                // Replace the "## Hover:" header with "## Type Definition of" for consistency
+                const reframed = hoverText.replace(
+                    `## Hover: \`${input.symbol}\``,
+                    `## Type Definition of \`${input.symbol}\` (from hover)`
+                );
+                return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(reframed)]);
             }
 
             return new vscode.LanguageModelToolResult([

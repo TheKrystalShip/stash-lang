@@ -299,4 +299,130 @@ public class CallHierarchyAndLinkedEditingTests : AnalysisTestBase
         var refs = tree.FindReferences("item", 3, 11);
         Assert.True(refs.Count >= 2);
     }
+
+    // -------------------------------------------------------------------------
+    // LSP Bug Fix Tests (S1, S2, S5)
+    // -------------------------------------------------------------------------
+
+    // S1: Top-level call sites are tracked as Call references
+    // Line 1: fn deploy_to() {
+    // Line 2: }
+    // Line 3: deploy_to();  <- top-level call, outside any function
+    [Fact]
+    public void CallHierarchy_TopLevelCallSite_IsRecordedAsCallReference()
+    {
+        const string src = "fn deploy_to() {\n}\ndeploy_to();\n";
+        var tree = Analyze(src);
+        var refs = tree.References.Where(r => r.Kind == ReferenceKind.Call && r.Name == "deploy_to").ToList();
+        Assert.Single(refs);
+        Assert.Equal(3, refs[0].Span.StartLine);
+    }
+
+    // S1: Top-level call has no enclosing function
+    [Fact]
+    public void CallHierarchy_TopLevelCallSite_HasNoEnclosingFunction()
+    {
+        const string src = "fn deploy_to() {\n}\ndeploy_to();\n";
+        var tree = Analyze(src);
+        var callRef = tree.References.First(r => r.Kind == ReferenceKind.Call && r.Name == "deploy_to");
+        // The call site should not be inside any function's FullSpan
+        var functions = tree.All.Where(s => s.Kind == SymbolKind.Function).ToList();
+        foreach (var fn in functions)
+        {
+            Assert.False(IsInsideSpan(fn.FullSpan, callRef.Span),
+                $"Top-level call should not be inside function '{fn.Name}'");
+        }
+    }
+
+    // S1: Function called from both top-level and inside another function
+    [Fact]
+    public void CallHierarchy_TopLevelAndFunctionCallers_BothRecorded()
+    {
+        const string src = "fn target() {\n}\nfn wrapper() {\n  target();\n}\ntarget();\n";
+        var tree = Analyze(src);
+        var refs = tree.References.Where(r => r.Kind == ReferenceKind.Call && r.Name == "target").ToList();
+        Assert.Equal(2, refs.Count);
+        // One call from inside wrapper (line 4), one from top-level (line 6)
+        Assert.Contains(refs, r => r.Span.StartLine == 4);
+        Assert.Contains(refs, r => r.Span.StartLine == 6);
+    }
+
+    // S2: FullAnalyze produces an AnalysisResult that can be used for hover resolution
+    // When a built-in namespace like "arr" is used as a prefix, ResolveNamespaceMember
+    // may return a Namespace symbol — the hover handler should fall through to stdlib
+    [Fact]
+    public void Hover_BuiltInNamespacePrefix_IsNamespaceKind()
+    {
+        // Verify that built-in namespaces resolve as Namespace kind (not Function)
+        // This validates the fix: the hover handler now checks Kind != Namespace before using Tier 1
+        var tree = Analyze("let x = 1;\n", includeBuiltIns: true);
+        var arrSymbol = tree.All.FirstOrDefault(s => s.Name == "arr");
+        Assert.NotNull(arrSymbol);
+        Assert.Equal(SymbolKind.Namespace, arrSymbol.Kind);
+    }
+
+    // S5: Dotted namespace calls are recorded as Call references with qualified names
+    // Line 1: fn deploy() {
+    // Line 2:   io.println("deploying");
+    // Line 3: }
+    [Fact]
+    public void CallHierarchy_DottedCall_RecordedAsCallReference()
+    {
+        const string src = "fn deploy() {\n  io.println(\"deploying\");\n}\n";
+        var tree = Analyze(src, includeBuiltIns: true);
+        var refs = tree.References.Where(r => r.Kind == ReferenceKind.Call && r.Name == "io.println").ToList();
+        Assert.Single(refs);
+        Assert.Equal(2, refs[0].Span.StartLine);
+    }
+
+    // S5: Multiple dotted calls within a function body
+    // Line 1: fn process(items) {
+    // Line 2:   arr.push(items, 1);
+    // Line 3:   arr.push(items, 2);
+    // Line 4:   io.println("done");
+    // Line 5: }
+    [Fact]
+    public void CallHierarchy_MultipleDottedCalls_AllRecorded()
+    {
+        const string src = "fn process(items) {\n  arr.push(items, 1);\n  arr.push(items, 2);\n  io.println(\"done\");\n}\n";
+        var tree = Analyze(src, includeBuiltIns: true);
+        var arrPushCalls = tree.References.Where(r => r.Kind == ReferenceKind.Call && r.Name == "arr.push").ToList();
+        Assert.Equal(2, arrPushCalls.Count);
+        var printlnCalls = tree.References.Where(r => r.Kind == ReferenceKind.Call && r.Name == "io.println").ToList();
+        Assert.Single(printlnCalls);
+    }
+
+    // S5: Outgoing calls include both plain and dotted calls
+    // Line 1: fn helper() {
+    // Line 2: }
+    // Line 3: fn main() {
+    // Line 4:   helper();
+    // Line 5:   io.println("hello");
+    // Line 6: }
+    [Fact]
+    public void CallHierarchy_OutgoingCalls_IncludesBothPlainAndDottedCalls()
+    {
+        const string src = "fn helper() {\n}\nfn main() {\n  helper();\n  io.println(\"hello\");\n}\n";
+        var tree = Analyze(src, includeBuiltIns: true);
+        var mainSymbol = tree.All.FirstOrDefault(s => s.Kind == SymbolKind.Function && s.Name == "main");
+        Assert.NotNull(mainSymbol);
+        Assert.NotNull(mainSymbol.FullSpan);
+        var callsInMain = tree.References
+            .Where(r => r.Kind == ReferenceKind.Call && IsInsideSpan(mainSymbol.FullSpan, r.Span))
+            .ToList();
+        Assert.Equal(2, callsInMain.Count);
+        Assert.Contains(callsInMain, r => r.Name == "helper");
+        Assert.Contains(callsInMain, r => r.Name == "io.println");
+    }
+
+    // S5: Dotted call at top-level is also recorded
+    [Fact]
+    public void CallHierarchy_TopLevelDottedCall_RecordedAsCallReference()
+    {
+        const string src = "io.println(\"hello\");\n";
+        var tree = Analyze(src, includeBuiltIns: true);
+        var refs = tree.References.Where(r => r.Kind == ReferenceKind.Call && r.Name == "io.println").ToList();
+        Assert.Single(refs);
+        Assert.Equal(1, refs[0].Span.StartLine);
+    }
 }

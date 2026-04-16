@@ -104,7 +104,7 @@ public class HoverHandler : HoverHandlerBase
         if (symbol == null)
         {
             var nsMember = result.ResolveNamespaceMember(text!, (int)request.Position.Line, (int)request.Position.Character, word);
-            if (nsMember != null)
+            if (nsMember != null && nsMember.Value.Symbol.Kind != StashSymbolKind.Namespace)
             {
                 var (nsSym, _) = nsMember.Value;
                 var markdown = $"```stash\n{nsSym.Detail ?? nsSym.Name}\n```\n*{nsSym.Kind}* — from `{dotPrefix}`";

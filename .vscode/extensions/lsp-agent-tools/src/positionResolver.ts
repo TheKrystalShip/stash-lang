@@ -36,7 +36,17 @@ async function resolveUri(filePath: string): Promise<vscode.Uri> {
 function findSymbolInLine(lineText: string, symbol: string): number {
     const pattern = new RegExp(`\\b${escapeRegex(symbol)}\\b`);
     const match = pattern.exec(lineText);
-    return match ? match.index : -1;
+    if (!match) {
+        return -1;
+    }
+    // For dotted symbols (e.g., "arr.push"), return the column of the member
+    // part (after the last dot) so the LSP hover/signature lands on the member,
+    // not the namespace prefix.
+    const lastDot = symbol.lastIndexOf(".");
+    if (lastDot !== -1) {
+        return match.index + lastDot + 1;
+    }
+    return match.index;
 }
 
 function escapeRegex(s: string): string {

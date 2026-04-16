@@ -38,19 +38,20 @@ async function queryActions(
     }
 
     const codeActionKind = resolveKind(input.kind);
-    const kindStr = codeActionKind?.value;
 
+    // Don't pass kind to the command — do client-side filtering only
+    // Server-side kind filtering is inconsistent across LSPs
     const actions = await vscode.commands.executeCommand<vscode.CodeAction[]>(
         "vscode.executeCodeActionProvider",
         uri,
-        range,
-        kindStr
+        range
     );
 
     const results = actions ?? [];
 
     if (codeActionKind) {
-        return results.filter(a => a.kind && a.kind.contains(codeActionKind));
+        // codeActionKind.contains(a.kind) — "is this action a sub-kind of the filter?"
+        return results.filter(a => a.kind && codeActionKind.contains(a.kind));
     }
 
     return results;
