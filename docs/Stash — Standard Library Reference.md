@@ -660,12 +660,12 @@ All `arr` functions take the target array as the first argument. Functions that 
 
 Typed arrays (`int[]`, `float[]`, `string[]`, `bool[]`) are homogeneous arrays backed by native arrays. All `arr.*` functions work transparently on typed arrays — mutation functions validate element types, and functions that return new arrays preserve the typed array type.
 
-| Function                             | Description                                                                 |
-| ------------------------------------ | --------------------------------------------------------------------------- |
-| `arr.typed(array, elementType)`      | Convert a generic array to a typed array. `elementType` is `"int"`, `"float"`, `"string"`, or `"bool"` |
-| `arr.untyped(typedArray)`            | Convert a typed array back to a generic array                               |
-| `arr.elementType(array)`             | Return the element type name (`"int"`, `"float"`, etc.) or `null` for generic arrays |
-| `arr.new(elementType, size)`         | Create a zero-initialized typed array with the given number of elements     |
+| Function                        | Description                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `arr.typed(array, elementType)` | Convert a generic array to a typed array. `elementType` is `"int"`, `"float"`, `"string"`, or `"bool"` |
+| `arr.untyped(typedArray)`       | Convert a typed array back to a generic array                                                          |
+| `arr.elementType(array)`        | Return the element type name (`"int"`, `"float"`, etc.) or `null` for generic arrays                   |
+| `arr.new(elementType, size)`    | Create a zero-initialized typed array with the given number of elements                                |
 
 ### Examples
 
@@ -776,83 +776,83 @@ The `buf` namespace provides functions for creating, inspecting, manipulating, a
 
 ### Construction
 
-| Function                           | Description                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------- |
-| `buf.from(s, encoding?)`          | Encode a string to a byte array. Default encoding: `"utf-8"`. Supported: `"utf-8"`, `"ascii"`, `"latin1"`, `"utf-16"`, `"utf-32"` |
-| `buf.fromHex(hex)`                | Decode a hexadecimal string to a byte array (accepts optional `0x` prefix)      |
-| `buf.fromBase64(b64)`             | Decode a Base64 string to a byte array                                          |
-| `buf.alloc(size, fill?)`          | Create a byte array of `size` bytes, optionally filled with `fill` value (0–255). Default fill: `0` |
-| `buf.of(values...)`               | Create a byte array from individual byte values (variadic)                      |
+| Function                 | Description                                                                                                                       |
+| ------------------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `buf.from(s, encoding?)` | Encode a string to a byte array. Default encoding: `"utf-8"`. Supported: `"utf-8"`, `"ascii"`, `"latin1"`, `"utf-16"`, `"utf-32"` |
+| `buf.fromHex(hex)`       | Decode a hexadecimal string to a byte array (accepts optional `0x` prefix)                                                        |
+| `buf.fromBase64(b64)`    | Decode a Base64 string to a byte array                                                                                            |
+| `buf.alloc(size, fill?)` | Create a byte array of `size` bytes, optionally filled with `fill` value (0–255). Default fill: `0`                               |
+| `buf.of(values...)`      | Create a byte array from individual byte values (variadic)                                                                        |
 
 ### Conversion
 
-| Function                           | Description                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------- |
-| `buf.toString(b, encoding?)`      | Decode a byte array to a string. Default encoding: `"utf-8"`. Supported: same as `buf.from` |
-| `buf.toHex(b)`                    | Encode a byte array as a lowercase hexadecimal string                           |
-| `buf.toBase64(b)`                 | Encode a byte array as a Base64 string                                          |
+| Function                     | Description                                                                                 |
+| ---------------------------- | ------------------------------------------------------------------------------------------- |
+| `buf.toString(b, encoding?)` | Decode a byte array to a string. Default encoding: `"utf-8"`. Supported: same as `buf.from` |
+| `buf.toHex(b)`               | Encode a byte array as a lowercase hexadecimal string                                       |
+| `buf.toBase64(b)`            | Encode a byte array as a Base64 string                                                      |
 
 ### Inspection
 
-| Function                           | Description                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------- |
-| `buf.len(b)`                      | Return the length of a byte array                                               |
-| `buf.get(b, index)`               | Get the byte at the given index (returns `byte`)                                |
-| `buf.indexOf(b, value, start?)`   | Find the first index of a byte value. Returns `-1` if not found                 |
-| `buf.includes(b, value)`          | Check if a byte array contains a value (returns `bool`)                         |
-| `buf.equals(a, b)`                | Compare two byte arrays for element-wise equality                               |
+| Function                        | Description                                                     |
+| ------------------------------- | --------------------------------------------------------------- |
+| `buf.len(b)`                    | Return the length of a byte array                               |
+| `buf.get(b, index)`             | Get the byte at the given index (returns `byte`)                |
+| `buf.indexOf(b, value, start?)` | Find the first index of a byte value. Returns `-1` if not found |
+| `buf.includes(b, value)`        | Check if a byte array contains a value (returns `bool`)         |
+| `buf.equals(a, b)`              | Compare two byte arrays for element-wise equality               |
 
 ### Manipulation
 
-| Function                           | Description                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------- |
-| `buf.slice(b, start, end?)`       | Return a new byte array from `start` to `end` (exclusive). Default `end`: length |
-| `buf.concat(a, b)`                | Concatenate two byte arrays into a new byte array                               |
-| `buf.copy(src, dst, offset?)`     | Copy bytes from `src` into `dst` starting at `offset` (default: `0`). Mutates `dst` |
-| `buf.fill(b, value, start?, end?)`| Fill a byte array (or range) with a value. Mutates `b`                          |
-| `buf.reverse(b)`                  | Reverse a byte array in place. Mutates `b`                                      |
+| Function                           | Description                                                                         |
+| ---------------------------------- | ----------------------------------------------------------------------------------- |
+| `buf.slice(b, start, end?)`        | Return a new byte array from `start` to `end` (exclusive). Default `end`: length    |
+| `buf.concat(a, b)`                 | Concatenate two byte arrays into a new byte array                                   |
+| `buf.copy(src, dst, offset?)`      | Copy bytes from `src` into `dst` starting at `offset` (default: `0`). Mutates `dst` |
+| `buf.fill(b, value, start?, end?)` | Fill a byte array (or range) with a value. Mutates `b`                              |
+| `buf.reverse(b)`                   | Reverse a byte array in place. Mutates `b`                                          |
 
 ### Binary Read (Big-Endian / Little-Endian)
 
-| Function                           | Description                                                                     |
-| ---------------------------------- | ------------------------------------------------------------------------------- |
-| `buf.readUint8(b, offset)`        | Read an unsigned 8-bit integer at offset                                        |
-| `buf.readUint16BE(b, offset)`     | Read an unsigned 16-bit integer (big-endian) at offset                          |
-| `buf.readUint16LE(b, offset)`     | Read an unsigned 16-bit integer (little-endian) at offset                       |
-| `buf.readUint32BE(b, offset)`     | Read an unsigned 32-bit integer (big-endian) at offset                          |
-| `buf.readUint32LE(b, offset)`     | Read an unsigned 32-bit integer (little-endian) at offset                       |
-| `buf.readInt8(b, offset)`         | Read a signed 8-bit integer at offset                                           |
-| `buf.readInt16BE(b, offset)`      | Read a signed 16-bit integer (big-endian) at offset                             |
-| `buf.readInt16LE(b, offset)`      | Read a signed 16-bit integer (little-endian) at offset                          |
-| `buf.readInt32BE(b, offset)`      | Read a signed 32-bit integer (big-endian) at offset                             |
-| `buf.readInt32LE(b, offset)`      | Read a signed 32-bit integer (little-endian) at offset                          |
-| `buf.readInt64BE(b, offset)`      | Read a signed 64-bit integer (big-endian) at offset                             |
-| `buf.readInt64LE(b, offset)`      | Read a signed 64-bit integer (little-endian) at offset                          |
-| `buf.readFloatBE(b, offset)`      | Read a 32-bit float (big-endian) at offset                                      |
-| `buf.readFloatLE(b, offset)`      | Read a 32-bit float (little-endian) at offset                                   |
-| `buf.readDoubleBE(b, offset)`     | Read a 64-bit double (big-endian) at offset                                     |
-| `buf.readDoubleLE(b, offset)`     | Read a 64-bit double (little-endian) at offset                                  |
+| Function                      | Description                                               |
+| ----------------------------- | --------------------------------------------------------- |
+| `buf.readUint8(b, offset)`    | Read an unsigned 8-bit integer at offset                  |
+| `buf.readUint16BE(b, offset)` | Read an unsigned 16-bit integer (big-endian) at offset    |
+| `buf.readUint16LE(b, offset)` | Read an unsigned 16-bit integer (little-endian) at offset |
+| `buf.readUint32BE(b, offset)` | Read an unsigned 32-bit integer (big-endian) at offset    |
+| `buf.readUint32LE(b, offset)` | Read an unsigned 32-bit integer (little-endian) at offset |
+| `buf.readInt8(b, offset)`     | Read a signed 8-bit integer at offset                     |
+| `buf.readInt16BE(b, offset)`  | Read a signed 16-bit integer (big-endian) at offset       |
+| `buf.readInt16LE(b, offset)`  | Read a signed 16-bit integer (little-endian) at offset    |
+| `buf.readInt32BE(b, offset)`  | Read a signed 32-bit integer (big-endian) at offset       |
+| `buf.readInt32LE(b, offset)`  | Read a signed 32-bit integer (little-endian) at offset    |
+| `buf.readInt64BE(b, offset)`  | Read a signed 64-bit integer (big-endian) at offset       |
+| `buf.readInt64LE(b, offset)`  | Read a signed 64-bit integer (little-endian) at offset    |
+| `buf.readFloatBE(b, offset)`  | Read a 32-bit float (big-endian) at offset                |
+| `buf.readFloatLE(b, offset)`  | Read a 32-bit float (little-endian) at offset             |
+| `buf.readDoubleBE(b, offset)` | Read a 64-bit double (big-endian) at offset               |
+| `buf.readDoubleLE(b, offset)` | Read a 64-bit double (little-endian) at offset            |
 
 ### Binary Write (Big-Endian / Little-Endian)
 
-| Function                                 | Description                                                                 |
-| ---------------------------------------- | --------------------------------------------------------------------------- |
-| `buf.writeUint8(b, offset, value)`       | Write an unsigned 8-bit integer at offset. Mutates `b`                      |
-| `buf.writeUint16BE(b, offset, value)`    | Write an unsigned 16-bit integer (big-endian) at offset. Mutates `b`        |
-| `buf.writeUint16LE(b, offset, value)`    | Write an unsigned 16-bit integer (little-endian) at offset. Mutates `b`     |
-| `buf.writeUint32BE(b, offset, value)`    | Write an unsigned 32-bit integer (big-endian) at offset. Mutates `b`        |
-| `buf.writeUint32LE(b, offset, value)`    | Write an unsigned 32-bit integer (little-endian) at offset. Mutates `b`     |
-| `buf.writeInt8(b, offset, value)`        | Write a signed 8-bit integer at offset. Mutates `b`                         |
-| `buf.writeInt16BE(b, offset, value)`     | Write a signed 16-bit integer (big-endian) at offset. Mutates `b`           |
-| `buf.writeInt16LE(b, offset, value)`     | Write a signed 16-bit integer (little-endian) at offset. Mutates `b`        |
-| `buf.writeInt32BE(b, offset, value)`     | Write a signed 32-bit integer (big-endian) at offset. Mutates `b`           |
-| `buf.writeInt32LE(b, offset, value)`     | Write a signed 32-bit integer (little-endian) at offset. Mutates `b`        |
-| `buf.writeInt64BE(b, offset, value)`     | Write a signed 64-bit integer (big-endian) at offset. Mutates `b`           |
-| `buf.writeInt64LE(b, offset, value)`     | Write a signed 64-bit integer (little-endian) at offset. Mutates `b`        |
-| `buf.writeFloatBE(b, offset, value)`     | Write a 32-bit float (big-endian) at offset. Mutates `b`                    |
-| `buf.writeFloatLE(b, offset, value)`     | Write a 32-bit float (little-endian) at offset. Mutates `b`                 |
-| `buf.writeDoubleBE(b, offset, value)`    | Write a 64-bit double (big-endian) at offset. Mutates `b`                   |
-| `buf.writeDoubleLE(b, offset, value)`    | Write a 64-bit double (little-endian) at offset. Mutates `b`                |
+| Function                              | Description                                                             |
+| ------------------------------------- | ----------------------------------------------------------------------- |
+| `buf.writeUint8(b, offset, value)`    | Write an unsigned 8-bit integer at offset. Mutates `b`                  |
+| `buf.writeUint16BE(b, offset, value)` | Write an unsigned 16-bit integer (big-endian) at offset. Mutates `b`    |
+| `buf.writeUint16LE(b, offset, value)` | Write an unsigned 16-bit integer (little-endian) at offset. Mutates `b` |
+| `buf.writeUint32BE(b, offset, value)` | Write an unsigned 32-bit integer (big-endian) at offset. Mutates `b`    |
+| `buf.writeUint32LE(b, offset, value)` | Write an unsigned 32-bit integer (little-endian) at offset. Mutates `b` |
+| `buf.writeInt8(b, offset, value)`     | Write a signed 8-bit integer at offset. Mutates `b`                     |
+| `buf.writeInt16BE(b, offset, value)`  | Write a signed 16-bit integer (big-endian) at offset. Mutates `b`       |
+| `buf.writeInt16LE(b, offset, value)`  | Write a signed 16-bit integer (little-endian) at offset. Mutates `b`    |
+| `buf.writeInt32BE(b, offset, value)`  | Write a signed 32-bit integer (big-endian) at offset. Mutates `b`       |
+| `buf.writeInt32LE(b, offset, value)`  | Write a signed 32-bit integer (little-endian) at offset. Mutates `b`    |
+| `buf.writeInt64BE(b, offset, value)`  | Write a signed 64-bit integer (big-endian) at offset. Mutates `b`       |
+| `buf.writeInt64LE(b, offset, value)`  | Write a signed 64-bit integer (little-endian) at offset. Mutates `b`    |
+| `buf.writeFloatBE(b, offset, value)`  | Write a 32-bit float (big-endian) at offset. Mutates `b`                |
+| `buf.writeFloatLE(b, offset, value)`  | Write a 32-bit float (little-endian) at offset. Mutates `b`             |
+| `buf.writeDoubleBE(b, offset, value)` | Write a 64-bit double (big-endian) at offset. Mutates `b`               |
+| `buf.writeDoubleLE(b, offset, value)` | Write a 64-bit double (little-endian) at offset. Mutates `b`            |
 
 ### Examples
 
@@ -2430,16 +2430,16 @@ The `crypto` namespace provides cryptographic hash functions, HMAC signatures, U
 
 ### Hash Functions
 
-| Function              | Description                                   |
-| --------------------- | --------------------------------------------- |
-| `crypto.md5(data)`         | Compute MD5 hash of a string (hex string)         |
-| `crypto.md5Bytes(data)`    | Compute MD5 hash as a byte array                  |
-| `crypto.sha1(data)`        | Compute SHA-1 hash of a string (hex string)       |
-| `crypto.sha1Bytes(data)`   | Compute SHA-1 hash as a byte array                |
-| `crypto.sha256(data)`      | Compute SHA-256 hash of a string (hex string)     |
-| `crypto.sha256Bytes(data)` | Compute SHA-256 hash as a byte array              |
-| `crypto.sha512(data)`      | Compute SHA-512 hash of a string (hex string)     |
-| `crypto.sha512Bytes(data)` | Compute SHA-512 hash as a byte array              |
+| Function                   | Description                                   |
+| -------------------------- | --------------------------------------------- |
+| `crypto.md5(data)`         | Compute MD5 hash of a string (hex string)     |
+| `crypto.md5Bytes(data)`    | Compute MD5 hash as a byte array              |
+| `crypto.sha1(data)`        | Compute SHA-1 hash of a string (hex string)   |
+| `crypto.sha1Bytes(data)`   | Compute SHA-1 hash as a byte array            |
+| `crypto.sha256(data)`      | Compute SHA-256 hash of a string (hex string) |
+| `crypto.sha256Bytes(data)` | Compute SHA-256 hash as a byte array          |
+| `crypto.sha512(data)`      | Compute SHA-512 hash of a string (hex string) |
+| `crypto.sha512Bytes(data)` | Compute SHA-512 hash as a byte array          |
 
 ```stash
 let hash = crypto.sha256("hello");
@@ -2452,10 +2452,10 @@ io.println(md5);   // "5d41402abc4b2a76b9719d911017c592"
 
 ### HMAC
 
-| Function                       | Description                                        |
-| ------------------------------ | -------------------------------------------------- |
-| `crypto.hmac(algo, key, data)`      | Compute HMAC with specified algorithm (hex string)  |
-| `crypto.hmacBytes(algo, key, data)` | Compute HMAC as a byte array                        |
+| Function                            | Description                                        |
+| ----------------------------------- | -------------------------------------------------- |
+| `crypto.hmac(algo, key, data)`      | Compute HMAC with specified algorithm (hex string) |
+| `crypto.hmacBytes(algo, key, data)` | Compute HMAC as a byte array                       |
 
 The `algo` parameter accepts `"md5"`, `"sha1"`, `"sha256"`, or `"sha512"`.
 
@@ -2481,9 +2481,9 @@ io.println("MD5: " + md5sum);
 
 ### UUID & Random
 
-| Function                           | Description                                                                                                            |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| `crypto.uuid()`                    | Generate a random UUID v4 string                                                                                       |
+| Function                           | Description                                                                                                                                     |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `crypto.uuid()`                    | Generate a random UUID v4 string                                                                                                                |
 | `crypto.randomBytes(n, encoding?)` | Generate `n` cryptographically secure random bytes. With no encoding: returns `byte[]`. With `encoding`: `"hex"` or `"base64"` returns a string |
 
 `randomBytes` returns a native byte array by default. Pass `encoding: "hex"` for a lowercase hexadecimal string, or `encoding: "base64"` for Base64 output.
@@ -2513,8 +2513,8 @@ The `encoding` namespace provides Base64, URL, and hexadecimal encoding and deco
 
 ### Base64
 
-| Function                             | Description                                                                                                               |
-| ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------- |
+| Function                                  | Description                                                                                                               |
+| ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
 | `encoding.base64Encode(s, urlSafe?)`      | Encode a string to Base64. When `urlSafe` is `true`, uses RFC 4648 URL-safe alphabet (`-` and `_` instead of `+` and `/`) |
 | `encoding.base64Decode(s, urlSafe?)`      | Decode a Base64 string to a string. Set `urlSafe` to `true` when decoding URL-safe encoded data                           |
 | `encoding.base64DecodeBytes(s, urlSafe?)` | Decode a Base64 string to a byte array (`byte[]`)                                                                         |
@@ -2550,10 +2550,10 @@ io.println(decoded);   // "hello world&key=value"
 
 ### Hexadecimal
 
-| Function                | Description                                   |
-| ----------------------- | --------------------------------------------- |
-| `encoding.hexEncode(s)`      | Encode a string's UTF-8 bytes as hexadecimal          |
-| `encoding.hexDecode(s)`      | Decode a hexadecimal string to a UTF-8 string         |
+| Function                     | Description                                            |
+| ---------------------------- | ------------------------------------------------------ |
+| `encoding.hexEncode(s)`      | Encode a string's UTF-8 bytes as hexadecimal           |
+| `encoding.hexDecode(s)`      | Decode a hexadecimal string to a UTF-8 string          |
 | `encoding.hexDecodeBytes(s)` | Decode a hexadecimal string to a byte array (`byte[]`) |
 
 ```stash
@@ -3257,6 +3257,172 @@ net.tcpListen(8080, (conn) => {
 | `port`      | `int`    | Remote port           |
 | `localPort` | `int`    | Local ephemeral port  |
 
+### Async TCP Sockets
+
+| Function                                    | Description                                                           |
+| ------------------------------------------- | --------------------------------------------------------------------- |
+| `net.tcpConnectAsync(host, port, options?)` | Async. Creates a TCP connection. Returns `Future<TcpConnection>`.     |
+| `net.tcpSendAsync(conn, data)`              | Async. Sends string data. Returns `Future<int>` (bytes sent).         |
+| `net.tcpSendBytesAsync(conn, data)`         | Async. Sends binary data (`byte[]`). Returns `Future<int>`.           |
+| `net.tcpRecvAsync(conn, options?)`          | Async. Receives string data. Returns `Future<string\|null>`.          |
+| `net.tcpRecvBytesAsync(conn, options?)`     | Async. Receives binary data. Returns `Future<byte[]\|null>`.          |
+| `net.tcpCloseAsync(conn)`                   | Async. Gracefully closes a connection. Returns `Future<null>`.        |
+| `net.tcpListenAsync(port, handler)`         | Async. Starts a multi-client TCP server. Returns `Future<TcpServer>`. |
+| `net.tcpServerClose(server)`                | Stops a TCP server.                                                   |
+| `net.tcpIsOpen(conn)`                       | Returns `true` if the TCP connection is open.                         |
+| `net.tcpState(conn)`                        | Returns `TcpConnectionState` enum value.                              |
+
+#### `net.tcpConnectAsync(host, port, options?)`
+
+Async. Creates a TCP connection to a host and port.
+
+- `host` — Hostname or IP address string
+- `port` — Port number (1–65535)
+- `options` — Optional `TcpConnectOptions` struct
+
+```stash
+let conn = await net.tcpConnectAsync("redis.local", 6379);
+
+// With options:
+let conn = await net.tcpConnectAsync("nats.local", 4222, net.TcpConnectOptions {
+    timeoutMs: 3000,
+    noDelay: true,
+    keepAlive: true,
+});
+```
+
+#### `net.tcpSendAsync(conn, data)`
+
+Async. Sends UTF-8 string data over an open TCP connection.
+
+- Returns `Future<int>` — bytes sent
+
+```stash
+let sent = await net.tcpSendAsync(conn, "PING\r\n");
+io.println("Sent ${sent} bytes");
+```
+
+#### `net.tcpSendBytesAsync(conn, data)`
+
+Async. Sends binary data (`byte[]`) over a TCP connection.
+
+```stash
+let cmd = buf.from("*1\r\n$4\r\nPING\r\n");
+let sent = await net.tcpSendBytesAsync(conn, cmd);
+```
+
+#### `net.tcpRecvAsync(conn, options?)`
+
+Async. Receives string data from a TCP connection. Returns `null` on timeout, `""` on peer close.
+
+- `options` — Optional `TcpRecvOptions` struct
+
+```stash
+let data = await net.tcpRecvAsync(conn);
+if data == null {
+    io.println("Timed out");
+} else if data == "" {
+    io.println("Connection closed by peer");
+} else {
+    io.println("Got: ${data}");
+}
+
+// With options:
+let data = await net.tcpRecvAsync(conn, net.TcpRecvOptions { maxBytes: 8192, timeoutMs: 5000 });
+```
+
+#### `net.tcpRecvBytesAsync(conn, options?)`
+
+Async. Receives binary data as `byte[]`. Returns `null` on timeout, empty `byte[]` on peer close.
+
+```stash
+let data = await net.tcpRecvBytesAsync(conn, net.TcpRecvOptions { maxBytes: 1024 });
+if data != null {
+    io.println("Received ${buf.len(data)} bytes");
+}
+```
+
+#### `net.tcpCloseAsync(conn)`
+
+Async. Gracefully closes a TCP connection with `Shutdown(Both)` + `Dispose()`. Idempotent — safe to call on already-closed connections.
+
+```stash
+await net.tcpCloseAsync(conn);
+```
+
+#### `net.tcpListenAsync(port, handler)`
+
+Async. Starts a multi-client TCP server. Returns a `TcpServer` handle immediately after the listener starts. Each accepted connection runs the handler in its own execution context.
+
+- `port` — Port to listen on (1–65535, or 0 for auto-assign)
+- `handler` — Function that receives each `TcpConnection`
+
+```stash
+let server = await net.tcpListenAsync(8080, fn(conn) {
+    let request = await net.tcpRecvAsync(conn);
+    await net.tcpSendAsync(conn, "HTTP/1.1 200 OK\r\n\r\nHello\n");
+    await net.tcpCloseAsync(conn);
+});
+
+io.println("Listening on port ${server.port}");
+// ... do other work ...
+
+net.tcpServerClose(server);
+```
+
+#### `net.tcpServerClose(server)`
+
+Stops a TCP server and closes the listener. Does not close existing accepted connections. Idempotent.
+
+```stash
+net.tcpServerClose(server);
+```
+
+#### `net.tcpIsOpen(conn)` / `net.tcpState(conn)`
+
+Sync. Query connection state. Works with both sync and async TCP connections.
+
+```stash
+if net.tcpIsOpen(conn) {
+    await net.tcpSendAsync(conn, "PING\r\n");
+}
+
+match net.tcpState(conn) {
+    TcpConnectionState.Open => io.println("Connected"),
+    TcpConnectionState.Closed => io.println("Disconnected"),
+}
+```
+
+#### `TcpConnectOptions`
+
+| Field       | Type   | Default | Description                             |
+| ----------- | ------ | ------- | --------------------------------------- |
+| `timeoutMs` | `int`  | `5000`  | Connection timeout in milliseconds      |
+| `tls`       | `bool` | `false` | Enable TLS wrapping (not yet supported) |
+| `noDelay`   | `bool` | `false` | Disable Nagle's algorithm               |
+| `keepAlive` | `bool` | `false` | Enable TCP keep-alive                   |
+
+#### `TcpRecvOptions`
+
+| Field      | Type  | Default | Description                         |
+| ---------- | ----- | ------- | ----------------------------------- |
+| `maxBytes` | `int` | `4096`  | Max bytes to read (capped at 16 MB) |
+| `timeoutMs` | `int` | `30000` | Receive timeout in milliseconds     |
+
+#### `TcpServer`
+
+| Field    | Type   | Description                                 |
+| -------- | ------ | ------------------------------------------- |
+| `port`   | `int`  | Listening port                              |
+| `active` | `bool` | Whether the server is accepting connections |
+
+#### `TcpConnectionState` Enum
+
+| Value    | Description          |
+| -------- | -------------------- |
+| `Open`   | Connection is active |
+| `Closed` | Connection is closed |
+
 ### UDP Datagrams
 
 | Function                        | Description                                             |
@@ -3301,15 +3467,15 @@ io.println(msg.port);  // sender's port
 
 ### WebSocket Client
 
-| Function                            | Description                                                           |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| `net.wsConnect(url, options?)`      | Async. Opens a WebSocket connection. Returns `Future<WsConnection>`.  |
-| `net.wsSend(conn, data)`            | Async. Sends a text message. Returns `Future<int>` (bytes sent).      |
-| `net.wsSendBinary(conn, data)`      | Async. Sends binary data (base64-encoded). Returns `Future<int>`.     |
-| `net.wsRecv(conn, timeout?)`        | Async. Receives next message. Returns `Future<WsMessage\|null>`.      |
-| `net.wsClose(conn, code?, reason?)` | Async. Initiates graceful close handshake.                            |
-| `net.wsState(conn)`                 | Returns `WsConnectionState` enum value.                               |
-| `net.wsIsOpen(conn)`                | Returns `true` if connection is `WsConnectionState.Open`.             |
+| Function                            | Description                                                          |
+| ----------------------------------- | -------------------------------------------------------------------- |
+| `net.wsConnect(url, options?)`      | Async. Opens a WebSocket connection. Returns `Future<WsConnection>`. |
+| `net.wsSend(conn, data)`            | Async. Sends a text message. Returns `Future<int>` (bytes sent).     |
+| `net.wsSendBinary(conn, data)`      | Async. Sends binary data (base64-encoded). Returns `Future<int>`.    |
+| `net.wsRecv(conn, timeout?)`        | Async. Receives next message. Returns `Future<WsMessage\|null>`.     |
+| `net.wsClose(conn, code?, reason?)` | Async. Initiates graceful close handshake.                           |
+| `net.wsState(conn)`                 | Returns `WsConnectionState` enum value.                              |
+| `net.wsIsOpen(conn)`                | Returns `true` if connection is `WsConnectionState.Open`.            |
 
 #### `net.wsConnect(url, options?)`
 

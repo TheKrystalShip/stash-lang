@@ -22,9 +22,16 @@ public static class NetBuiltIns
     /// <summary>Maps WsConnection instances to their underlying ClientWebSocket. Uses weak references to allow GC.</summary>
     private static readonly ConditionalWeakTable<StashInstance, ClientWebSocket> _wsClients = new();
 
+    /// <summary>Maps async TcpConnection instances to their underlying TcpClient.</summary>
+    private static readonly ConditionalWeakTable<StashInstance, TcpClient> _tcpAsyncClients = new();
+
+    /// <summary>Maps TcpServer instances to their underlying TcpListener.</summary>
+    private static readonly ConditionalWeakTable<StashInstance, TcpListener> _tcpServers = new();
+
     public static NamespaceDefinition Define()
     {
         var wsStateEnum = new StashEnum("WsConnectionState", new List<string> { "Connecting", "Open", "Closing", "Closed" });
+        var tcpStateEnum = new StashEnum("TcpConnectionState", new List<string> { "Open", "Closed" });
         var ns = new NamespaceBuilder("net");
         ns.RequiresCapability(StashCapabilities.Network);
 
@@ -694,6 +701,375 @@ public static class NetBuiltIns
             return StashValue.FromBool(client.State == WebSocketState.Open);
         }, returnType: "bool", documentation: "Returns true if the WebSocket connection is open.\n@param conn The WsConnection.\n@return True if the connection state is Open.");
 
+        // net.tcpConnectAsync(host, port, ?options) — Async. Creates a TCP connection.
+        ns.Function("tcpConnectAsync", [Param("host", "string"), Param("port", "int"), Param("options", "TcpConnectOptions")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("net.tcpConnectAsync: expected 2 or 3 arguments.");
+            var host = SvArgs.String(args, 0, "net.tcpConnectAsync");
+            var port = SvArgs.Long(args, 1, "net.tcpConnectAsync");
+            if (port < 1 || port > 65535)
+                throw new RuntimeError("net.tcpConnectAsync: port must be between 1 and 65535.");
+
+            int timeout = 5000;
+            bool noDelay = false;
+            bool keepAlive = false;
+            bool tls = false;
+
+            if (args.Length > 2 && args[2].IsObj && args[2].AsObj is StashInstance opts && opts.TypeName == "TcpConnectOptions")
+            {
+                if (opts.GetField("timeoutMs", null).ToObject() is long t) timeout = (int)t;
+                if (opts.GetField("noDelay", null).ToObject() is bool nd) noDelay = nd;
+                if (opts.GetField("keepAlive", null).ToObject() is bool ka) keepAlive = ka;
+                if (opts.GetField("tls", null).ToObject() is bool tlsVal) tls = tlsVal;
+            }
+
+            if (tls)
+                throw new RuntimeError("net.tcpConnectAsync: TLS is not yet supported. See future release.");
+
+            var capturedHost = host;
+            var capturedPort = (int)port;
+            var capturedTimeout = timeout;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                var client = new TcpClient();
+                if (noDelay) client.NoDelay = true;
+                if (keepAlive) client.Client.SetSocketOption(SocketOptionLevel.Socket, SocketOptionName.KeepAlive, true);
+                using var timeoutCts = new CancellationTokenSource(capturedTimeout);
+                using var connectCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, timeoutCts.Token);
+                try
+                {
+                    await client.ConnectAsync(capturedHost, capturedPort, connectCts.Token);
+                }
+                catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cts.Token.IsCancellationRequested)
+                {
+                    client.Dispose();
+                    throw new RuntimeError($"net.tcpConnectAsync: connection timed out after {capturedTimeout}ms.");
+                }
+                catch (OperationCanceledException)
+                {
+                    client.Dispose();
+                    throw new RuntimeError("net.tcpConnectAsync: connection was cancelled.");
+                }
+                catch (Exception ex)
+                {
+                    client.Dispose();
+                    throw new RuntimeError($"net.tcpConnectAsync: failed to connect to '{capturedHost}:{capturedPort}': {ex.Message}");
+                }
+                int localPort = ((IPEndPoint)client.Client.LocalEndPoint!).Port;
+                var conn = new StashInstance("TcpConnection", new Dictionary<string, StashValue>
+                {
+                    ["host"] = StashValue.FromObj(capturedHost),
+                    ["port"] = StashValue.FromInt(capturedPort),
+                    ["localPort"] = StashValue.FromInt(localPort),
+                });
+                _tcpAsyncClients.AddOrUpdate(conn, client);
+                return (object?)conn;
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "TcpConnection", isVariadic: true, documentation: "Async. Creates a TCP connection to a host and port.\n@param host The hostname or IP address.\n@param port The port number (1-65535).\n@param options Optional TcpConnectOptions struct.\n@return A Future resolving to a TcpConnection.");
+
+        // net.tcpSendAsync(conn, data) — Async. Sends string data over a TCP connection.
+        ns.Function("tcpSendAsync", [Param("conn", "TcpConnection"), Param("data", "string")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 2)
+                throw new RuntimeError("net.tcpSendAsync: expected 2 arguments.");
+            if (args[0].ToObject() is not StashInstance conn)
+                throw new RuntimeError("net.tcpSendAsync: first argument must be a TcpConnection.");
+            var data = SvArgs.String(args, 1, "net.tcpSendAsync");
+
+            TcpClient client = GetTcpClient(conn, "net.tcpSendAsync");
+            var capturedData = data;
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                try
+                {
+                    byte[] bytes = Encoding.UTF8.GetBytes(capturedData);
+                    var stream = client.GetStream();
+                    await stream.WriteAsync(bytes, 0, bytes.Length, cts.Token);
+                    return (object?)(long)bytes.Length;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    throw new RuntimeError($"net.tcpSendAsync: send failed: {ex.Message}");
+                }
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "int", documentation: "Async. Sends string data over a TCP connection.\n@param conn The TcpConnection.\n@param data The string data to send.\n@return A Future resolving to the number of bytes sent.");
+
+        // net.tcpSendBytesAsync(conn, data) — Async. Sends binary data over a TCP connection.
+        ns.Function("tcpSendBytesAsync", [Param("conn", "TcpConnection"), Param("data", "byte[]")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 2)
+                throw new RuntimeError("net.tcpSendBytesAsync: expected 2 arguments.");
+            if (args[0].ToObject() is not StashInstance conn)
+                throw new RuntimeError("net.tcpSendBytesAsync: first argument must be a TcpConnection.");
+            if (args[1].ToObject() is not StashByteArray byteArr)
+                throw new RuntimeError("net.tcpSendBytesAsync: second argument must be a byte[].");
+
+            TcpClient client = GetTcpClient(conn, "net.tcpSendBytesAsync");
+            byte[] data = byteArr.AsSpan().ToArray();
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                try
+                {
+                    var stream = client.GetStream();
+                    await stream.WriteAsync(data, 0, data.Length, cts.Token);
+                    return (object?)(long)data.Length;
+                }
+                catch (OperationCanceledException) { throw; }
+                catch (Exception ex)
+                {
+                    throw new RuntimeError($"net.tcpSendBytesAsync: send failed: {ex.Message}");
+                }
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "int", documentation: "Async. Sends binary data (byte[]) over a TCP connection.\n@param conn The TcpConnection.\n@param data The byte[] data to send.\n@return A Future resolving to the number of bytes sent.");
+
+        // net.tcpRecvAsync(conn, ?options) — Async. Receives string data from a TCP connection.
+        ns.Function("tcpRecvAsync", [Param("conn", "TcpConnection"), Param("options", "TcpRecvOptions")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("net.tcpRecvAsync: expected 1 or 2 arguments.");
+            if (args[0].ToObject() is not StashInstance conn)
+                throw new RuntimeError("net.tcpRecvAsync: first argument must be a TcpConnection.");
+
+            int maxBytes = 4096;
+            int timeout = 30000;
+
+            if (args.Length > 1 && args[1].IsObj && args[1].AsObj is StashInstance opts && opts.TypeName == "TcpRecvOptions")
+            {
+                if (opts.GetField("maxBytes", null).ToObject() is long mb) maxBytes = (int)Math.Min(mb, 16_777_216);
+                if (opts.GetField("timeoutMs", null).ToObject() is long t) timeout = (int)t;
+            }
+
+            TcpClient client = GetTcpClient(conn, "net.tcpRecvAsync");
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                var stream = client.GetStream();
+                var buffer = new byte[maxBytes];
+                using var timeoutCts = new CancellationTokenSource(timeout);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, timeoutCts.Token);
+                try
+                {
+                    int bytesRead = await stream.ReadAsync(buffer, 0, maxBytes, linkedCts.Token);
+                    return (object?)Encoding.UTF8.GetString(buffer, 0, bytesRead);
+                }
+                catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cts.Token.IsCancellationRequested)
+                {
+                    return null; // Timeout — not an error
+                }
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "string", isVariadic: true, documentation: "Async. Receives string data from a TCP connection.\n@param conn The TcpConnection.\n@param options Optional TcpRecvOptions struct with maxBytes and timeout.\n@return A Future resolving to a string, or null on timeout.");
+
+        // net.tcpRecvBytesAsync(conn, ?options) — Async. Receives binary data from a TCP connection.
+        ns.Function("tcpRecvBytesAsync", [Param("conn", "TcpConnection"), Param("options", "TcpRecvOptions")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("net.tcpRecvBytesAsync: expected 1 or 2 arguments.");
+            if (args[0].ToObject() is not StashInstance conn)
+                throw new RuntimeError("net.tcpRecvBytesAsync: first argument must be a TcpConnection.");
+
+            int maxBytes = 4096;
+            int timeout = 30000;
+
+            if (args.Length > 1 && args[1].IsObj && args[1].AsObj is StashInstance opts && opts.TypeName == "TcpRecvOptions")
+            {
+                if (opts.GetField("maxBytes", null).ToObject() is long mb) maxBytes = (int)Math.Min(mb, 16_777_216);
+                if (opts.GetField("timeoutMs", null).ToObject() is long t) timeout = (int)t;
+            }
+
+            TcpClient client = GetTcpClient(conn, "net.tcpRecvBytesAsync");
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            var dotnetTask = Task.Run<object?>(async () =>
+            {
+                var stream = client.GetStream();
+                var buffer = new byte[maxBytes];
+                using var timeoutCts = new CancellationTokenSource(timeout);
+                using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, timeoutCts.Token);
+                try
+                {
+                    int bytesRead = await stream.ReadAsync(buffer, 0, maxBytes, linkedCts.Token);
+                    if (bytesRead == 0) return (object?)new StashByteArray(Array.Empty<byte>());
+                    return (object?)new StashByteArray(buffer.AsSpan(0, bytesRead).ToArray());
+                }
+                catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cts.Token.IsCancellationRequested)
+                {
+                    return null; // Timeout — not an error
+                }
+            });
+            return StashValue.FromObj(new StashFuture(dotnetTask, cts));
+        }, returnType: "byte[]", isVariadic: true, documentation: "Async. Receives binary data from a TCP connection.\n@param conn The TcpConnection.\n@param options Optional TcpRecvOptions struct with maxBytes and timeout.\n@return A Future resolving to a byte[], or null on timeout.");
+
+        // net.tcpCloseAsync(conn) — Async. Gracefully closes a TCP connection.
+        ns.Function("tcpCloseAsync", [Param("conn", "TcpConnection")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 1)
+                throw new RuntimeError("net.tcpCloseAsync: expected 1 argument.");
+            if (args[0].ToObject() is not StashInstance conn)
+                throw new RuntimeError("net.tcpCloseAsync: argument must be a TcpConnection.");
+
+            if (_tcpAsyncClients.TryGetValue(conn, out TcpClient? client))
+            {
+                try { client.Client.Shutdown(SocketShutdown.Both); } catch { }
+                client.Dispose();
+                _tcpAsyncClients.Remove(conn);
+            }
+            else
+            {
+                try
+                {
+                    if (conn.GetField("_client", null).ToObject() is TcpClient syncClient)
+                    {
+                        try { syncClient.Client.Shutdown(SocketShutdown.Both); } catch { }
+                        syncClient.Dispose();
+                    }
+                }
+                catch { /* field doesn't exist — already closed or not a sync connection */ }
+            }
+            return StashValue.FromObj(StashFuture.Resolved(null));
+        }, returnType: "null", documentation: "Async. Gracefully closes a TCP connection.\n@param conn The TcpConnection to close.\n@return A Future resolving to null.");
+
+        // net.tcpIsOpen(conn) — Sync. Returns true if the TCP connection is open.
+        ns.Function("tcpIsOpen", [Param("conn", "TcpConnection")], (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 1)
+                throw new RuntimeError("net.tcpIsOpen: expected 1 argument.");
+            if (args[0].ToObject() is not StashInstance conn)
+                throw new RuntimeError("net.tcpIsOpen: argument must be a TcpConnection.");
+
+            try
+            {
+                TcpClient client = GetTcpClient(conn, "net.tcpIsOpen");
+                return StashValue.FromBool(client.Connected);
+            }
+            catch
+            {
+                return StashValue.False;
+            }
+        }, returnType: "bool", documentation: "Returns true if the TCP connection is open.\n@param conn The TcpConnection.\n@return True if the connection is open.");
+
+        // net.tcpState(conn) — Sync. Returns the TcpConnectionState enum value.
+        ns.Function("tcpState", [Param("conn", "TcpConnection")], (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 1)
+                throw new RuntimeError("net.tcpState: expected 1 argument.");
+            if (args[0].ToObject() is not StashInstance conn)
+                throw new RuntimeError("net.tcpState: argument must be a TcpConnection.");
+
+            try
+            {
+                TcpClient client = GetTcpClient(conn, "net.tcpState");
+                var member = tcpStateEnum.GetMember(client.Connected ? "Open" : "Closed");
+                return member is not null ? StashValue.FromObj(member) : StashValue.Null;
+            }
+            catch
+            {
+                var member = tcpStateEnum.GetMember("Closed");
+                return member is not null ? StashValue.FromObj(member) : StashValue.Null;
+            }
+        }, returnType: "TcpConnectionState", documentation: "Returns the current connection state of a TCP connection.\n@param conn The TcpConnection.\n@return A TcpConnectionState enum value.");
+
+        // net.tcpListenAsync(port, handler) — Async. Starts a multi-client TCP server.
+        ns.Function("tcpListenAsync", [Param("port", "int"), Param("handler", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 2)
+                throw new RuntimeError("net.tcpListenAsync: expected 2 arguments.");
+            var port = SvArgs.Long(args, 0, "net.tcpListenAsync");
+            if (port < 0 || port > 65535)
+                throw new RuntimeError("net.tcpListenAsync: port must be between 0 and 65535.");
+            var handler = SvArgs.Callable(args, 1, "net.tcpListenAsync");
+
+            var listener = new TcpListener(IPAddress.Any, (int)port);
+            listener.Start();
+
+            int actualPort = ((IPEndPoint)listener.LocalEndpoint).Port;
+            var serverInst = new StashInstance("TcpServer", new Dictionary<string, StashValue>
+            {
+                ["port"] = StashValue.FromInt(actualPort),
+                ["active"] = StashValue.True,
+            });
+
+            _tcpServers.AddOrUpdate(serverInst, listener);
+
+            var cts = CancellationTokenSource.CreateLinkedTokenSource(ctx.CancellationToken);
+
+            // Spawn accept loop
+            _ = Task.Run(async () =>
+            {
+                try
+                {
+                    while (!cts.Token.IsCancellationRequested)
+                    {
+                        TcpClient clientSocket;
+                        try
+                        {
+                            clientSocket = await listener.AcceptTcpClientAsync(cts.Token);
+                        }
+                        catch (OperationCanceledException) { break; }
+                        catch (ObjectDisposedException) { break; }
+
+                        int localPort = ((IPEndPoint)clientSocket.Client.LocalEndPoint!).Port;
+                        string remoteHost = ((IPEndPoint)clientSocket.Client.RemoteEndPoint!).Address.ToString();
+                        int remotePort = ((IPEndPoint)clientSocket.Client.RemoteEndPoint!).Port;
+
+                        var connInst = new StashInstance("TcpConnection", new Dictionary<string, StashValue>
+                        {
+                            ["host"] = StashValue.FromObj(remoteHost),
+                            ["port"] = StashValue.FromInt(remotePort),
+                            ["localPort"] = StashValue.FromInt(localPort),
+                        });
+                        _tcpAsyncClients.AddOrUpdate(connInst, clientSocket);
+
+                        // Fire-and-forget: handle each connection in its own forked context
+                        _ = Task.Run(() =>
+                        {
+                            try { ctx.InvokeCallbackDirect(handler, new StashValue[] { StashValue.FromObj(connInst) }); }
+                            catch { /* handler errors don't kill the server */ }
+                        });
+                    }
+                }
+                catch (OperationCanceledException) { /* normal shutdown */ }
+                catch (ObjectDisposedException) { /* listener was stopped */ }
+                finally
+                {
+                    try { listener.Stop(); } catch { }
+                    serverInst.SetField("active", StashValue.False, null);
+                }
+            });
+
+            // Resolve immediately with the server handle
+            return StashValue.FromObj(new StashFuture(Task.FromResult<object?>(serverInst), cts));
+        }, returnType: "TcpServer", documentation: "Async. Starts a multi-client TCP server on a port.\n@param port The port to listen on (1-65535, or 0 for auto).\n@param handler A function that receives each TcpConnection.\n@return A Future resolving to a TcpServer handle.");
+
+        // net.tcpServerClose(server) — Sync. Stops a TCP server.
+        ns.Function("tcpServerClose", [Param("server", "TcpServer")], (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length != 1)
+                throw new RuntimeError("net.tcpServerClose: expected 1 argument.");
+            if (args[0].ToObject() is not StashInstance server || server.TypeName != "TcpServer")
+                throw new RuntimeError("net.tcpServerClose: argument must be a TcpServer.");
+
+            if (_tcpServers.TryGetValue(server, out TcpListener? listener))
+            {
+                try { listener.Stop(); } catch { }
+                _tcpServers.Remove(server);
+            }
+            server.SetField("active", StashValue.False, null);
+            return StashValue.Null;
+        }, returnType: "null", documentation: "Stops a TCP server and closes the listener.\n@param server The TcpServer handle to stop.");
+
         // Struct definitions
         ns.Struct("SubnetInfo", [
             new BuiltInField("network", "ip"),
@@ -751,7 +1127,26 @@ public static class NetBuiltIns
             new BuiltInField("close", "bool"),
         ]);
 
+        ns.Struct("TcpConnectOptions", [
+            new BuiltInField("timeoutMs", "int"),
+            new BuiltInField("tls", "bool"),
+            new BuiltInField("noDelay", "bool"),
+            new BuiltInField("keepAlive", "bool"),
+        ]);
+
+        ns.Struct("TcpRecvOptions", [
+            new BuiltInField("maxBytes", "int"),
+            new BuiltInField("timeoutMs", "int"),
+        ]);
+
+        ns.Struct("TcpServer", [
+            new BuiltInField("port", "int"),
+            new BuiltInField("active", "bool"),
+        ]);
+
         ns.Enum("WsConnectionState", ["Connecting", "Open", "Closing", "Closed"]);
+
+        ns.Enum("TcpConnectionState", ["Open", "Closed"]);
 
         return ns.Build();
     }
@@ -794,6 +1189,24 @@ public static class NetBuiltIns
         if (!_wsClients.TryGetValue(inst, out ClientWebSocket? ws))
             throw new RuntimeError($"{funcName}: connection is invalid or closed.");
         return ws;
+    }
+
+    private static TcpClient GetTcpClient(StashInstance conn, string funcName)
+    {
+        // Try async storage first (ConditionalWeakTable)
+        if (_tcpAsyncClients.TryGetValue(conn, out TcpClient? asyncClient))
+            return asyncClient;
+
+        // Fall back to sync hidden field
+        try
+        {
+            var clientField = conn.GetField("_client", null);
+            if (clientField.ToObject() is TcpClient syncClient)
+                return syncClient;
+        }
+        catch { }
+
+        throw new RuntimeError($"{funcName}: invalid or closed TcpConnection.");
     }
 
     private static string MapWsState(WebSocketState state) => state switch

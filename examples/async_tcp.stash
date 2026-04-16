@@ -1,0 +1,63 @@
+// Async TCP Sockets — Demonstrates async TCP networking in Stash
+//
+// The net.tcp*Async functions provide non-blocking TCP I/O that works
+// with await, task.all, and task.race for concurrent networking.
+
+// --- Echo Server ---
+// Start a multi-client server on an auto-assigned port
+let server = await net.tcpListenAsync(0, (conn) => {
+   // Each connection is handled in its own context
+   while (net.tcpIsOpen(conn)) {
+      let data = await net.tcpRecvAsync(conn, net.TcpRecvOptions { timeoutMs: 5000 });
+      if (data == null || data == "") {
+        break;
+      }
+      await net.tcpSendAsync(conn, data);
+   }
+   await net.tcpCloseAsync(conn);
+});
+
+io.println("Echo server listening on port ${server.port}");
+time.sleep(0.05);
+
+// --- String I/O ---
+let conn = await net.tcpConnectAsync("127.0.0.1", server.port, TcpConnectOptions {
+  noDelay: true
+});
+
+io.println("Connected from local port ${conn.localPort}");
+io.println("Connection open: ${net.tcpIsOpen(conn)}");
+
+// Send and receive text
+let sent = await net.tcpSendAsync(conn, "Hello, TCP!");
+io.println("Sent ${sent} bytes");
+
+let response = await net.tcpRecvAsync(conn);
+io.println("Received: ${response}");
+
+// --- Binary I/O ---
+let payload = buf.from("binary data");
+let bytesSent = await net.tcpSendBytesAsync(conn, payload);
+io.println("Sent ${bytesSent} binary bytes");
+
+let binaryResponse = await net.tcpRecvBytesAsync(conn, TcpRecvOptions { maxBytes: 1024 });
+if (binaryResponse != null) {
+  io.println("Received ${buf.len(binaryResponse)} binary bytes");
+}
+
+// --- Connection State ---
+io.println("State: ${net.tcpState(conn)}");
+
+// --- Timeout Handling ---
+// No data coming, so this will time out
+let timedOut = await net.tcpRecvAsync(conn, net.TcpRecvOptions { timeoutMs: 100 });
+io.println("Timeout result is null: ${timedOut == null}");
+
+// --- Cleanup ---
+await net.tcpCloseAsync(conn);
+io.println("Connection open after close: ${net.tcpIsOpen(conn)}");
+io.println("State after close: ${net.tcpState(conn)}");
+
+net.tcpServerClose(server);
+io.println("Server active: ${server.active}");
+io.println("Done!");
