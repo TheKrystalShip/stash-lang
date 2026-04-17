@@ -46,6 +46,6 @@ public interface IInterpreterContext : IExecutionContext, IProcessContext, ITest
     /// and boxing/unboxing. Built-ins should prefer this over InvokeCallback.
     /// Default implementation bridges to the legacy InvokeCallback path.
     /// </summary>
-    StashValue InvokeCallbackDirect(IStashCallable callable, ReadOnlySpan<StashValue> args) =>
+    new StashValue InvokeCallbackDirect(IStashCallable callable, ReadOnlySpan<StashValue> args) =>
         callable.CallDirect(Fork(), args);
 }

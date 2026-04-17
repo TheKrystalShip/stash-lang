@@ -1,4 +1,5 @@
 using Stash.Runtime;
+using Stash.Runtime.Stdlib;
 
 namespace Stash.Bytecode;
 
@@ -61,6 +62,9 @@ public sealed class Chunk
 
     /// <summary>Metadata-based const global initializations: (Slot, ConstIndex) pairs processed before execution.</summary>
     public (ushort Slot, ushort ConstIndex)[]? ConstGlobalInits { get; }
+
+    /// <summary>Optional stdlib manifest declaring required globals for load-time validation.</summary>
+    public StdlibManifest? StdlibManifest { get; internal set; }
 
     internal Chunk(
         uint[] code,

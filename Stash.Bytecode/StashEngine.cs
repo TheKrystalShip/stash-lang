@@ -11,6 +11,7 @@ using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Stdlib;
 using Stash.Runtime.Types;
 using Stash.Stdlib;
 
@@ -32,6 +33,7 @@ using Stash.Stdlib;
 public class StashEngine
 {
     private readonly StashCapabilities _capabilities;
+    private readonly List<IStdlibProvider> _additionalProviders = [];
     private VirtualMachine? _vm;
     private TextWriter _output = TextWriter.Null;
     private TextWriter _errorOutput = TextWriter.Null;
@@ -132,6 +134,19 @@ public class StashEngine
     /// </summary>
     public bool OptimizeBytecode { get; set; } = true;
 
+    /// <summary>
+    /// Adds a custom stdlib provider whose namespaces and globals will be
+    /// merged into the VM alongside Stash's built-in standard library.
+    /// Must be called before the first script execution.
+    /// </summary>
+    public StashEngine AddStdlibProvider(IStdlibProvider provider)
+    {
+        if (_vm is not null)
+            throw new InvalidOperationException("Cannot add stdlib providers after the VM has been created.");
+        _additionalProviders.Add(provider);
+        return this;
+    }
+
     /// <summary>Creates and configures the bytecode VM with built-in globals.</summary>
     private VirtualMachine EnsureVM()
     {
@@ -140,7 +155,20 @@ public class StashEngine
             return _vm;
         }
 
-        var vmGlobals = StdlibDefinitions.CreateVMGlobals(_capabilities);
+        Dictionary<string, StashValue> vmGlobals;
+        if (_additionalProviders.Count > 0)
+        {
+            var composer = new StdlibComposer()
+                .Add(new StashStdlibProvider())
+                .WithCapabilities(_capabilities);
+            foreach (IStdlibProvider provider in _additionalProviders)
+                composer.Add(provider);
+            vmGlobals = composer.Build();
+        }
+        else
+        {
+            vmGlobals = StdlibDefinitions.CreateVMGlobals(_capabilities);
+        }
 
         _vm = new VirtualMachine(vmGlobals, _cancellationToken)
         {

@@ -14,6 +14,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Stdlib;
 using Stash.Runtime.Types;
 using DebugCallFrame = Stash.Debugging.CallFrame;
 
@@ -214,6 +215,7 @@ public sealed partial class VirtualMachine
             _debugCallStack.Clear();
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
         InitGlobalSlots(chunk);
+        ValidateStdlibManifest(chunk);
 
         if (_debugger is not null)
         {
@@ -238,6 +240,7 @@ public sealed partial class VirtualMachine
             _debugCallStack.Clear();
         PushFrame(chunk, baseSlot: 0, upvalues: null, name: chunk.Name);
         InitGlobalSlots(chunk);
+        ValidateStdlibManifest(chunk);
 
         object? result;
         if (_debugger is not null)
@@ -330,6 +333,27 @@ public sealed partial class VirtualMachine
             {
                 _globalSlots[i] = value;
             }
+        }
+    }
+
+    private void ValidateStdlibManifest(Chunk chunk)
+    {
+        if (chunk.StdlibManifest is not { } manifest)
+            return;
+
+        foreach (string ns in manifest.RequiredNamespaces)
+        {
+            if (!_globals.ContainsKey(ns))
+                throw new RuntimeError(
+                    $"Bytecode requires namespace '{ns}' but it is not available. " +
+                    "Ensure the VM is configured with the required stdlib provider.");
+        }
+
+        foreach (string global in manifest.RequiredGlobals)
+        {
+            if (!_globals.ContainsKey(global))
+                throw new RuntimeError(
+                    $"Bytecode requires global '{global}' but it is not available.");
         }
     }
 

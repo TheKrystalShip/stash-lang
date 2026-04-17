@@ -4,6 +4,7 @@ using System.IO;
 using System.Text;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Stdlib;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
@@ -16,6 +17,7 @@ public static class BytecodeReader
     private const ushort FormatVersion         = 1;
     private const byte   FlagHasDebugInfo      = 0x01;
     private const byte   FlagHasEmbeddedSource = 0x04;
+    private const byte   FlagHasStdlibManifest = 0x08;
     private const ushort NullLength            = 0xFFFF;
     private const int    MaxCodeLength         = 16 * 1024 * 1024; // 16 MB
     private const int    MaxStringLength       = 16 * 1024 * 1024; // 16 MB
@@ -26,7 +28,13 @@ public static class BytecodeReader
         using var reader = new BinaryReader(stream, Encoding.UTF8, leaveOpen: true);
         byte flags = ReadAndValidateHeader(reader);
         bool hasDebugInfo = (flags & FlagHasDebugInfo) != 0;
-        return ReadChunk(reader, hasDebugInfo);
+        bool hasStdlibManifest = (flags & FlagHasStdlibManifest) != 0;
+        var chunk = ReadChunk(reader, hasDebugInfo);
+        if (hasStdlibManifest)
+        {
+            chunk.StdlibManifest = ReadStdlibManifest(reader);
+        }
+        return chunk;
     }
 
     /// <summary>Convenience: read from file path.</summary>
@@ -81,12 +89,16 @@ public static class BytecodeReader
         byte flags = ReadAndValidateHeader(reader);
         bool hasDebugInfo      = (flags & FlagHasDebugInfo) != 0;
         bool hasEmbeddedSource = (flags & FlagHasEmbeddedSource) != 0;
+        bool hasStdlibManifest = (flags & FlagHasStdlibManifest) != 0;
 
         if (!hasEmbeddedSource)
             return null;
 
         // Skip past the serialized chunk to reach the embedded source section.
         ReadChunk(reader, hasDebugInfo);
+
+        if (hasStdlibManifest)
+            ReadStdlibManifest(reader); // skip past manifest to reach embedded source
 
         uint sourceLength = reader.ReadUInt32();
         if (sourceLength > MaxStringLength)
@@ -477,5 +489,25 @@ public static class BytecodeReader
         bool hasTypeReg = reader.ReadByte() != 0;
         string[] fieldNames = ReadStringArray(reader);
         return new StructInitMetadata(typeName, hasTypeReg, fieldNames);
+    }
+
+    private static StdlibManifest ReadStdlibManifest(BinaryReader reader)
+    {
+        // Namespace count + names
+        int nsCount = reader.ReadUInt16();
+        var namespaces = new string[nsCount];
+        for (int i = 0; i < nsCount; i++)
+            namespaces[i] = ReadString16(reader);
+
+        // Global count + names
+        int globalCount = reader.ReadUInt16();
+        var globals = new string[globalCount];
+        for (int i = 0; i < globalCount; i++)
+            globals[i] = ReadString16(reader);
+
+        // Capabilities (u32)
+        var capabilities = (StashCapabilities)reader.ReadUInt32();
+
+        return new StdlibManifest(namespaces, globals, capabilities);
     }
 }

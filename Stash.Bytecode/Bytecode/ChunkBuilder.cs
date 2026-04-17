@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Stdlib;
 
 namespace Stash.Bytecode;
 
@@ -17,6 +18,7 @@ public sealed class ChunkBuilder
     private readonly List<UpvalueDescriptor> _upvalues = new();
     private int _icSlotCount;
     private List<(ushort Slot, ushort ConstIndex)>? _constGlobalInits;
+    private StdlibManifest? _stdlibManifest;
 
     // ---- Metadata (set by Compiler before Build) ----
     public int Arity { get; set; }
@@ -196,6 +198,17 @@ public sealed class ChunkBuilder
     }
 
     // ==================================================================
+    // Stdlib Manifest
+    // ==================================================================
+
+    /// <summary>Set the stdlib manifest for the compiled chunk.</summary>
+    public ChunkBuilder SetStdlibManifest(StdlibManifest manifest)
+    {
+        _stdlibManifest = manifest;
+        return this;
+    }
+
+    // ==================================================================
     // Source Mapping
     // ==================================================================
 
@@ -225,7 +238,7 @@ public sealed class ChunkBuilder
                 icSlots[i].ConstantIndex = _icConstantIndices[i];
         }
 
-        return new Chunk(
+        var chunk = new Chunk(
             code: _code.ToArray(),
             constants: _constants.ToArray(),
             sourceMap: new SourceMap(_sourceEntries.ToArray()),
@@ -244,6 +257,9 @@ public sealed class ChunkBuilder
             globalSlotCount: globalSlotCount,
             icSlots: icSlots,
             constGlobalInits: _constGlobalInits?.ToArray());
+
+        chunk.StdlibManifest = _stdlibManifest;
+        return chunk;
     }
 
     // ==================================================================

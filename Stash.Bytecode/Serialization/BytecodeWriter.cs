@@ -4,6 +4,7 @@ using System.IO;
 using System.Security.Cryptography;
 using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Stdlib;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
@@ -25,10 +26,11 @@ public static class BytecodeWriter
     [Flags]
     public enum FileFlags : byte
     {
-        None             = 0,
-        HasDebugInfo     = 1 << 0,
-        Optimized        = 1 << 1,
+        None              = 0,
+        HasDebugInfo      = 1 << 0,
+        Optimized         = 1 << 1,
         HasEmbeddedSource = 1 << 2,
+        HasStdlibManifest = 1 << 3,
     }
 
     /// <summary>
@@ -43,8 +45,12 @@ public static class BytecodeWriter
     public static void Write(Stream stream, Chunk chunk, bool includeDebugInfo = true, bool optimized = true, string? sourceText = null, bool embedSource = false)
     {
         using var writer = new BinaryWriter(stream, Encoding.UTF8, leaveOpen: true);
-        WriteHeader(writer, includeDebugInfo, optimized, embedSource, sourceText);
+        WriteHeader(writer, includeDebugInfo, optimized, embedSource, sourceText, chunk.StdlibManifest is not null);
         WriteChunk(writer, chunk, includeDebugInfo);
+        if (chunk.StdlibManifest is { } manifest)
+        {
+            WriteStdlibManifest(writer, manifest);
+        }
         if (embedSource)
         {
             WriteEmbeddedSource(writer, sourceText);
@@ -93,7 +99,7 @@ public static class BytecodeWriter
 
     // --- Header ---
 
-    private static void WriteHeader(BinaryWriter writer, bool includeDebugInfo, bool optimized, bool embedSource, string? sourceText)
+    private static void WriteHeader(BinaryWriter writer, bool includeDebugInfo, bool optimized, bool embedSource, string? sourceText, bool hasStdlibManifest = false)
     {
         // 0x00: Magic "STBC" — write as individual bytes to guarantee byte order
         writer.Write((byte)0x53);
@@ -106,9 +112,10 @@ public static class BytecodeWriter
 
         // 0x06: Flags
         FileFlags flags = FileFlags.None;
-        if (includeDebugInfo)  flags |= FileFlags.HasDebugInfo;
-        if (optimized)         flags |= FileFlags.Optimized;
-        if (embedSource)       flags |= FileFlags.HasEmbeddedSource;
+        if (includeDebugInfo)    flags |= FileFlags.HasDebugInfo;
+        if (optimized)           flags |= FileFlags.Optimized;
+        if (embedSource)         flags |= FileFlags.HasEmbeddedSource;
+        if (hasStdlibManifest)   flags |= FileFlags.HasStdlibManifest;
         writer.Write((byte)flags);
 
         // 0x07: Reserved padding
@@ -529,5 +536,21 @@ public static class BytecodeWriter
         writer.Write((ushort)values.Count);
         foreach (string? s in values)
             WriteNullableString(writer, s);
+    }
+
+    private static void WriteStdlibManifest(BinaryWriter writer, StdlibManifest manifest)
+    {
+        // Namespace count + names
+        writer.Write((ushort)manifest.RequiredNamespaces.Count);
+        foreach (string ns in manifest.RequiredNamespaces)
+            WriteLengthPrefixedString(writer, ns);
+
+        // Global count + names
+        writer.Write((ushort)manifest.RequiredGlobals.Count);
+        foreach (string g in manifest.RequiredGlobals)
+            WriteLengthPrefixedString(writer, g);
+
+        // Capabilities (u32)
+        writer.Write((uint)manifest.MinimumCapabilities);
     }
 }

@@ -250,7 +250,7 @@ internal sealed class VMContext : IInterpreterContext
     /// </summary>
     internal int MainThreadId { get; set; }
 
-    StashValue IInterpreterContext.InvokeCallbackDirect(IStashCallable callable, System.ReadOnlySpan<StashValue> args)
+    public StashValue InvokeCallbackDirect(IStashCallable callable, System.ReadOnlySpan<StashValue> args)
     {
         if (callable is VMFunction vmFn)
         {

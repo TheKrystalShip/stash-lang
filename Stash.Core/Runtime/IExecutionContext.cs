@@ -8,7 +8,7 @@ using Stash.Common;
 /// Core execution state: I/O streams, cancellation, state access, and forking.
 /// This is the base context that most built-in functions need.
 /// </summary>
-public interface IExecutionContext
+public interface IExecutionContext : IBuiltInContext
 {
     // --- State access ---
     object? LastError { get; set; }
@@ -18,12 +18,12 @@ public interface IExecutionContext
     string[]? ScriptArgs { get; }
 
     // --- I/O streams ---
-    TextWriter Output { get; set; }
-    TextWriter ErrorOutput { get; set; }
-    TextReader Input { get; set; }
+    new TextWriter Output { get; set; }
+    new TextWriter ErrorOutput { get; set; }
+    new TextReader Input { get; set; }
 
     // --- Cancellation ---
-    CancellationToken CancellationToken { get; }
+    new CancellationToken CancellationToken { get; }
 
     // --- Debug support ---
     object? Debugger { get; }
