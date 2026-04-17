@@ -60,7 +60,7 @@ public class TypeProtocolTests
         var dur = new StashDuration(5000); // 5 seconds
         bool found = ((IVMFieldAccessible)dur).VMTryGetField("totalMs", out StashValue value, null);
         Assert.True(found);
-        Assert.Equal(5000.0, value.AsFloat);
+        Assert.Equal(5000L, value.AsInt);
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using System.Linq;
 using System.Runtime.CompilerServices;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
@@ -340,22 +341,8 @@ public sealed partial class VirtualMachine
             double              => "float",
             string              => "string",
             List<StashValue>    => "array",
-            StashTypedArray sta => sta.ElementTypeName + "[]",
-            StashDictionary     => "dict",
-            StashRange          => "range",
-            StashDuration       => "duration",
-            StashByteSize       => "bytes",
-            StashSemVer         => "semver",
-            StashSecret         => "secret",
-            StashIpAddress      => "ip",
-            StashError          => "Error",
-            StashInstance si    => si.TypeName,
-            StashEnumValue ev   => ev.TypeName,
-            StashStruct         => "struct",
-            StashEnum           => "enum",
+            IVMTyped typed      => typed.VMTypeName,
             StashInterface      => "interface",
-            StashNamespace      => "namespace",
-            StashFuture         => "Future",
             VMFunction          => "function",
             IStashCallable      => "function",
             _                   => "unknown",
@@ -391,126 +378,14 @@ public sealed partial class VirtualMachine
             return dict.Get(name).ToObject();
         }
 
-        // 3. StashNamespace: member access
-        if (obj is StashNamespace ns)
+        // 3. Protocol dispatch for all other types that implement IVMFieldAccessible
+        if (obj is IVMFieldAccessible accessible)
         {
-            return ns.GetMember(name, span);
+            if (accessible.VMTryGetField(name, out StashValue fieldResult, span))
+                return fieldResult.ToObject();
         }
 
-        // 4. StashStruct: static method access
-        if (obj is StashStruct structDef)
-        {
-            if (structDef.Methods.TryGetValue(name, out IStashCallable? method))
-            {
-                return method;
-            }
-
-            throw new RuntimeError($"Struct '{structDef.Name}' has no static member '{name}'.", span);
-        }
-
-        // 5. StashEnum: member access
-        if (obj is StashEnum enumDef)
-        {
-            StashEnumValue? enumVal = enumDef.GetMember(name);
-            if (enumVal == null)
-            {
-                throw new RuntimeError($"Enum '{enumDef.Name}' has no member '{name}'.", span);
-            }
-
-            return enumVal;
-        }
-
-        // 6. StashEnumValue: property access
-        if (obj is StashEnumValue enumValue)
-        {
-            return name switch
-            {
-                "typeName" => enumValue.TypeName,
-                "memberName" => enumValue.MemberName,
-                _ => throw new RuntimeError($"Enum value has no property '{name}'.", span)
-            };
-        }
-
-        // 7. StashError: property access
-        if (obj is StashError error)
-        {
-            return name switch
-            {
-                "message" => error.Message,
-                "type" => error.Type,
-                "stack" => error.Stack is not null ? new List<StashValue>(error.Stack.Select(s => StashValue.FromObj(s))) : null,
-                _ => error.Properties?.TryGetValue(name, out object? propVal) == true
-                    ? propVal
-                    : throw new RuntimeError($"Error has no property '{name}'.", span)
-            };
-        }
-
-        // StashDuration: property access
-        if (obj is StashDuration dur)
-        {
-            return name switch
-            {
-                "totalMs" => (object)dur.TotalMilliseconds,
-                "totalSeconds" => (object)dur.TotalSeconds,
-                "totalMinutes" => (object)dur.TotalMinutes,
-                "totalHours" => (object)dur.TotalHours,
-                "totalDays" => (object)dur.TotalDays,
-                "milliseconds" => (object)dur.Milliseconds,
-                "seconds" => (object)dur.Seconds,
-                "minutes" => (object)dur.Minutes,
-                "hours" => (object)dur.Hours,
-                "days" => (object)dur.Days,
-                _ => throw new RuntimeError($"Duration has no property '{name}'.", span)
-            };
-        }
-
-        // StashByteSize: property access
-        if (obj is StashByteSize bs)
-        {
-            return name switch
-            {
-                "bytes" => (object)bs.TotalBytes,
-                "kb" => (object)bs.Kb,
-                "mb" => (object)bs.Mb,
-                "gb" => (object)bs.Gb,
-                "tb" => (object)bs.Tb,
-                _ => throw new RuntimeError($"ByteSize has no property '{name}'.", span)
-            };
-        }
-
-        // StashSemVer: property access
-        if (obj is StashSemVer sv)
-        {
-            return name switch
-            {
-                "major" => (object)sv.Major,
-                "minor" => (object)sv.Minor,
-                "patch" => (object)sv.Patch,
-                "prerelease" => (object)(sv.Prerelease ?? ""),
-                "build" => (object)(sv.BuildMetadata ?? ""),
-                "isPrerelease" => (object)sv.IsPrerelease,
-                _ => throw new RuntimeError($"SemVer has no property '{name}'.", span)
-            };
-        }
-
-        // StashIpAddress: property access
-        if (obj is StashIpAddress ip)
-        {
-            return name switch
-            {
-                "address" => (object)ip.Address.ToString(),
-                "version" => (object)(long)ip.Version,
-                "prefixLength" => ip.PrefixLength.HasValue ? (object)(long)ip.PrefixLength.Value : null,
-                "isLoopback" => (object)ip.IsLoopback,
-                "isPrivate" => (object)ip.IsPrivate,
-                "isLinkLocal" => (object)ip.IsLinkLocal,
-                "isIPv4" => (object)(ip.Version == 4),
-                "isIPv6" => (object)(ip.Version == 6),
-                _ => throw new RuntimeError($"IpAddress has no property '{name}'.", span)
-            };
-        }
-
-        // 8. Built-in type .length properties
+        // 4. Built-in type .length properties
         if (obj is List<StashValue> svList && name == "length")
         {
             return (long)svList.Count;
@@ -567,14 +442,9 @@ public sealed partial class VirtualMachine
 
     private static void SetFieldValue(object? obj, string name, object? value, SourceSpan? span)
     {
-        if (obj is StashInstance instance)
+        if (obj is IVMFieldMutable mutable)
         {
-            instance.SetField(name, StashValue.FromObject(value), span);
-            return;
-        }
-        if (obj is StashDictionary dict)
-        {
-            dict.Set(name, StashValue.FromObject(value));
+            mutable.VMSetField(name, StashValue.FromObject(value), span);
             return;
         }
         throw new RuntimeError($"Cannot set field '{name}' on {RuntimeValues.Stringify(obj)}.", span);

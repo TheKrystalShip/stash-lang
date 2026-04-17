@@ -218,7 +218,7 @@ public sealed class StashDuration : IComparable<StashDuration>, IEquatable<Stash
     {
         switch (name)
         {
-            case "totalMs":      value = StashValue.FromFloat(TotalMilliseconds); return true;
+            case "totalMs":      value = StashValue.FromInt(TotalMilliseconds);   return true;
             case "totalSeconds": value = StashValue.FromFloat(TotalSeconds);      return true;
             case "totalMinutes": value = StashValue.FromFloat(TotalMinutes);      return true;
             case "totalHours":   value = StashValue.FromFloat(TotalHours);        return true;

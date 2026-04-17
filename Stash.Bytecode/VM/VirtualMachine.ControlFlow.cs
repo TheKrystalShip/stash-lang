@@ -4,6 +4,7 @@ using System.Runtime.CompilerServices;
 using System.Threading;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
@@ -470,7 +471,6 @@ public sealed partial class VirtualMachine
         public object? Collection;
         public int Index;
         public bool Indexed;
-        public IEnumerator<KeyValuePair<object, StashValue>>? DictEnumerator;
     }
 
     private void ExecuteIterPrep(ref CallFrame frame, uint inst)
@@ -480,48 +480,27 @@ public sealed partial class VirtualMachine
         int @base = frame.BaseSlot;
         object? val = _stack[@base + a].ToObject();
         SourceSpan? span = GetCurrentSpan(ref frame);
+        bool indexed = b != 0;
 
+        // Protocol dispatch for types implementing IVMIterable
+        if (val is IVMIterable iterable)
+        {
+            IVMIterator iterator = iterable.VMGetIterator(indexed);
+            _stack[@base + a] = StashValue.FromObj(iterator);
+            return;
+        }
+
+        // Raw C# types that can't implement protocols
         IteratorState iterState;
 
-        if (val is StashTypedArray typedArr)
-        {
-            // Snapshot as List<StashValue> for iteration — reuses the existing list iteration path
-            var snapshot = new List<StashValue>(typedArr.Count);
-            for (int i = 0; i < typedArr.Count; i++)
-                snapshot.Add(typedArr.Get(i));
-            iterState = new IteratorState { Collection = snapshot };
-        }
-        else if (val is List<StashValue> list)
+        if (val is List<StashValue> list)
         {
             // Snapshot the list so mutations during iteration don't cause infinite loops
             iterState = new IteratorState { Collection = new List<StashValue>(list) };
         }
-        else if (val is StashDictionary dict)
-        {
-            iterState = new IteratorState
-            {
-                Collection = dict,
-                DictEnumerator = dict.GetAllEntries().GetEnumerator(),
-            };
-        }
         else if (val is string str)
         {
             iterState = new IteratorState { Collection = str };
-        }
-        else if (val is StashRange range)
-        {
-            iterState = new IteratorState { Collection = range };
-        }
-        else if (val is StashEnum enumDef)
-        {
-            // Build a list of StashEnumValues so IterLoop can use the list path.
-            var members = new List<StashValue>(enumDef.Members.Count);
-            foreach (string m in enumDef.Members)
-            {
-                StashEnumValue? ev = enumDef.GetMember(m);
-                members.Add(ev != null ? StashValue.FromObj(ev) : StashValue.Null);
-            }
-            iterState = new IteratorState { Collection = members };
         }
         else
         {
@@ -529,7 +508,7 @@ public sealed partial class VirtualMachine
                 $"Value is not iterable: {RuntimeValues.Stringify(val)}.", span);
         }
 
-        iterState.Indexed = b != 0;
+        iterState.Indexed = indexed;
         _stack[@base + a] = StashValue.FromObj(iterState);
     }
 
@@ -537,7 +516,23 @@ public sealed partial class VirtualMachine
     {
         byte a = Instruction.GetA(inst);
         int @base = frame.BaseSlot;
-        var iter = (IteratorState)_stack[@base + a].AsObj!;
+        object? iterObj = _stack[@base + a].AsObj!;
+
+        // Protocol-based iterator
+        if (iterObj is IVMIterator vmIter)
+        {
+            if (!vmIter.MoveNext())
+            {
+                frame.IP += Instruction.GetSBx(inst);
+                return;
+            }
+            _stack[@base + a + 1] = vmIter.Current;
+            _stack[@base + a + 2] = vmIter.CurrentKey;
+            return;
+        }
+
+        // Legacy IteratorState for raw C# types (List<StashValue>, string)
+        var iter = (IteratorState)iterObj;
 
         if (iter.Collection is List<StashValue> list)
         {
@@ -550,26 +545,6 @@ public sealed partial class VirtualMachine
             _stack[@base + a + 2] = StashValue.FromInt(iter.Index);
             iter.Index++;
         }
-        else if (iter.Collection is StashDictionary)
-        {
-            if (!iter.DictEnumerator!.MoveNext())
-            {
-                frame.IP += Instruction.GetSBx(inst);
-                return;
-            }
-            var kv = iter.DictEnumerator.Current;
-            if (iter.Indexed)
-            {
-                _stack[@base + a + 1] = kv.Value;                     // value slot → dict value (VariableName)
-                _stack[@base + a + 2] = StashValue.FromObj(kv.Key);  // index slot → dict key (IndexName)
-            }
-            else
-            {
-                _stack[@base + a + 1] = StashValue.FromObj(kv.Key);  // single-var: key goes to VariableName
-                _stack[@base + a + 2] = kv.Value;                     // unused in single-var mode
-            }
-            iter.Index++;
-        }
         else if (iter.Collection is string str)
         {
             if (iter.Index >= str.Length)
@@ -578,20 +553,6 @@ public sealed partial class VirtualMachine
                 return;
             }
             _stack[@base + a + 1] = StashValue.FromObj(str[iter.Index].ToString());
-            _stack[@base + a + 2] = StashValue.FromInt(iter.Index);
-            iter.Index++;
-        }
-        else if (iter.Collection is StashRange range)
-        {
-            long step = range.Step;
-            long current = range.Start + step * iter.Index;
-            bool inBounds = step > 0 ? current < range.End : current > range.End;
-            if (!inBounds)
-            {
-                frame.IP += Instruction.GetSBx(inst);
-                return;
-            }
-            _stack[@base + a + 1] = StashValue.FromInt(current);
             _stack[@base + a + 2] = StashValue.FromInt(iter.Index);
             iter.Index++;
         }

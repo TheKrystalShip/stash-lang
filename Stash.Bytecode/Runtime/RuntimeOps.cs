@@ -5,6 +5,7 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
@@ -29,7 +30,7 @@ internal static class RuntimeOps
         {
             null => true,
             string s => s.Length == 0,
-            StashError => true,
+            IVMTruthiness t => t.VMIsFalsy,
             _ => false,
         },
         _ => true,
@@ -47,7 +48,7 @@ internal static class RuntimeOps
             StashValueTag.Bool => left.AsBool == right.AsBool,
             StashValueTag.Int or StashValueTag.Byte => left.AsInt == right.AsInt,
             StashValueTag.Float => left.AsFloat == right.AsFloat,
-            StashValueTag.Obj => RuntimeValues.IsEqual(left.AsObj, right.AsObj),
+            StashValueTag.Obj => left.AsObj is IVMEquatable eq ? eq.VMEquals(right) : RuntimeValues.IsEqual(left.AsObj, right.AsObj),
             _ => false,
         };
     }
@@ -62,8 +63,13 @@ internal static class RuntimeOps
         StashValueTag.Int => value.AsInt.ToString(),
         StashValueTag.Byte => value.AsByte.ToString(),
         StashValueTag.Float => value.AsFloat.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        StashValueTag.Obj => value.AsObj is StashSecret ? StashSecret.RedactedText
-            : value.AsObj is string s ? s : RuntimeValues.Stringify(value.AsObj),
+        StashValueTag.Obj => value.AsObj switch
+        {
+            string s => s,
+            IVMStringifiable sf => sf.VMToString(),
+            { } obj => RuntimeValues.Stringify(obj),
+            _ => "null",
+        },
         _ => "null",
     };
 
@@ -84,17 +90,22 @@ internal static class RuntimeOps
         {
             return StashValue.FromFloat(ToDouble(left) + ToDouble(right));
         }
-        // String concatenation — if either side is a string
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
-        // Secret taint propagation — any concat involving a secret produces a secret
-        if (lObj is StashSecret || rObj is StashSecret)
+
+        // Protocol dispatch — try left operand first, then right (reverse dispatch)
+        if (lObj is IVMArithmetic leftArith)
         {
-            StashValue realL = lObj is StashSecret secL ? secL.InnerValue : left;
-            StashValue realR = rObj is StashSecret secR ? secR.InnerValue : right;
-            string concatResult = string.Concat(Stringify(realL), Stringify(realR));
-            return StashValue.FromObj(new StashSecret(StashValue.FromObj(concatResult)));
+            if (leftArith.VMTryArithmetic(ArithmeticOp.Add, right, true, out StashValue result, span))
+                return result;
         }
+        if (rObj is IVMArithmetic rightArith)
+        {
+            if (rightArith.VMTryArithmetic(ArithmeticOp.Add, left, false, out StashValue result, span))
+                return result;
+        }
+
+        // String concatenation — if either side is a string (strings can't implement protocols)
         if (lObj is string ls && rObj is string rs)
         {
             return StashValue.FromObj(string.Concat(ls, rs));
@@ -106,31 +117,6 @@ internal static class RuntimeOps
         if (rObj is string rs2)
         {
             return StashValue.FromObj(string.Concat(Stringify(left), rs2));
-        }
-        // IP address + offset
-        if (lObj is StashIpAddress ipL && right.IsInt)
-        {
-            return StashValue.FromObj(ipL.Add(right.AsInt));
-        }
-
-        if (left.IsInt && rObj is StashIpAddress ipR)
-        {
-            return StashValue.FromObj(ipR.Add(left.AsInt));
-        }
-        // Duration + Duration
-        if (lObj is StashDuration durL && rObj is StashDuration durR)
-        {
-            return StashValue.FromObj(durL.Add(durR));
-        }
-        // ByteSize + ByteSize
-        if (lObj is StashByteSize bsL && rObj is StashByteSize bsR)
-        {
-            return StashValue.FromObj(bsL.Add(bsR));
-        }
-        // Type mismatch errors
-        if (lObj is StashDuration or StashByteSize || rObj is StashDuration or StashByteSize)
-        {
-            throw new RuntimeError("Cannot mix duration or byte size with other types in addition.", span);
         }
 
         throw new RuntimeError("Operands must be numbers or strings.", span);
@@ -150,31 +136,19 @@ internal static class RuntimeOps
             return StashValue.FromFloat(ToDouble(left) - ToDouble(right));
         }
 
+        // Protocol dispatch
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
-        if (lObj is StashIpAddress ipSubL && rObj is StashIpAddress ipSubR)
-        {
-            return StashValue.FromObj(ipSubL.Subtract(ipSubR));
-        }
 
-        if (lObj is StashIpAddress ipSubA && right.IsInt)
+        if (lObj is IVMArithmetic leftArith)
         {
-            return StashValue.FromObj(ipSubA.Add(-right.AsInt));
+            if (leftArith.VMTryArithmetic(ArithmeticOp.Subtract, right, true, out StashValue result, span))
+                return result;
         }
-
-        if (lObj is StashDuration durSubL && rObj is StashDuration durSubR)
+        if (rObj is IVMArithmetic rightArith)
         {
-            return StashValue.FromObj(durSubL.Subtract(durSubR));
-        }
-
-        if (lObj is StashByteSize bsSubL && rObj is StashByteSize bsSubR)
-        {
-            return StashValue.FromObj(bsSubL.Subtract(bsSubR));
-        }
-
-        if (lObj is StashDuration or StashByteSize || rObj is StashDuration or StashByteSize)
-        {
-            throw new RuntimeError("Cannot mix duration or byte size with other types in subtraction.", span);
+            if (rightArith.VMTryArithmetic(ArithmeticOp.Subtract, left, false, out StashValue result, span))
+                return result;
         }
 
         throw new RuntimeError("Operands must be two numbers or two IP addresses.", span);
@@ -215,30 +189,16 @@ internal static class RuntimeOps
         {
             return StashValue.FromFloat(ToDouble(left) * ToDouble(right));
         }
-        // Duration * number
-        if (lObj is StashDuration durMulL && right.IsNumeric)
+        // Protocol dispatch
+        if (lObj is IVMArithmetic leftArith)
         {
-            return StashValue.FromObj(durMulL.Multiply(ToDouble(right)));
+            if (leftArith.VMTryArithmetic(ArithmeticOp.Multiply, right, true, out StashValue result, span))
+                return result;
         }
-
-        if (left.IsNumeric && rObj is StashDuration durMulR)
+        if (rObj is IVMArithmetic rightArith)
         {
-            return StashValue.FromObj(durMulR.Multiply(ToDouble(left)));
-        }
-        // ByteSize * number
-        if (lObj is StashByteSize bsMulL && right.IsNumeric)
-        {
-            return StashValue.FromObj(bsMulL.Multiply(ToDouble(right)));
-        }
-
-        if (left.IsNumeric && rObj is StashByteSize bsMulR)
-        {
-            return StashValue.FromObj(bsMulR.Multiply(ToDouble(left)));
-        }
-        // Errors
-        if (lObj is StashDuration or StashByteSize || rObj is StashDuration or StashByteSize)
-        {
-            throw new RuntimeError("Duration and byte size can only be multiplied by a number.", span);
+            if (rightArith.VMTryArithmetic(ArithmeticOp.Multiply, left, false, out StashValue result, span))
+                return result;
         }
 
         throw new RuntimeError("Operands must be numbers.", span);
@@ -248,38 +208,21 @@ internal static class RuntimeOps
     {
         if (left.IsByte) left = StashValue.FromInt(left.AsByte);
         if (right.IsByte) right = StashValue.FromInt(right.AsByte);
+        // Protocol dispatch first (Duration/ByteSize division has special semantics)
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
-        // Duration / duration or Duration / number
-        if (lObj is StashDuration durDivL)
+
+        if (lObj is IVMArithmetic leftArith)
         {
-            if (rObj is StashDuration durDivR)
-            {
-                return StashValue.FromFloat(durDivL.DivideBy(durDivR));
-            }
-
-            if (right.IsNumeric)
-            {
-                return StashValue.FromObj(durDivL.Divide(ToDouble(right)));
-            }
-
-            throw new RuntimeError("Duration can only be divided by a number or another duration.", span);
+            if (leftArith.VMTryArithmetic(ArithmeticOp.Divide, right, true, out StashValue result, span))
+                return result;
         }
-        // ByteSize / bytesize or ByteSize / number
-        if (lObj is StashByteSize bsDivL)
+        if (rObj is IVMArithmetic rightArith)
         {
-            if (rObj is StashByteSize bsDivR)
-            {
-                return StashValue.FromFloat(bsDivL.DivideBy(bsDivR));
-            }
-
-            if (right.IsNumeric)
-            {
-                return StashValue.FromObj(bsDivL.Divide(ToDouble(right)));
-            }
-
-            throw new RuntimeError("Byte size can only be divided by a number or another byte size.", span);
+            if (rightArith.VMTryArithmetic(ArithmeticOp.Divide, left, false, out StashValue result, span))
+                return result;
         }
+
         // Numeric division
         if (!left.IsNumeric || !right.IsNumeric)
         {
@@ -391,14 +334,10 @@ internal static class RuntimeOps
             return StashValue.FromFloat(-value.AsFloat);
         }
 
-        if (value.IsObj && value.AsObj is StashDuration dur)
+        if (value.IsObj && value.AsObj is IVMArithmetic arith)
         {
-            return StashValue.FromObject(dur.Negate());
-        }
-
-        if (value.IsObj && value.AsObj is StashByteSize bs)
-        {
-            return StashValue.FromObject(new StashByteSize(-bs.TotalBytes));
+            if (arith.VMTryArithmetic(ArithmeticOp.Negate, StashValue.Null, true, out StashValue result, span))
+                return result;
         }
 
         throw new RuntimeError("Operand must be a number.", span);
@@ -532,37 +471,18 @@ internal static class RuntimeOps
         object? lObj = left.IsObj ? left.AsObj : null;
         object? rObj = right.IsObj ? right.AsObj : null;
 
-        if (lObj is StashIpAddress ipL && rObj is StashIpAddress ipR)
+        if (lObj is IVMComparable leftCmp)
         {
-            return ipL.CompareTo(ipR);
+            if (leftCmp.VMTryCompare(right, out int result, span))
+                return result;
+        }
+        if (rObj is IVMComparable rightCmp)
+        {
+            if (rightCmp.VMTryCompare(left, out int result, span))
+                return -result; // Reverse the comparison result
         }
 
-        if (lObj is StashDuration durL && rObj is StashDuration durR)
-        {
-            return durL.CompareTo(durR);
-        }
-
-        if (lObj is StashByteSize bsL && rObj is StashByteSize bsR)
-        {
-            return bsL.CompareTo(bsR);
-        }
-
-        if (lObj is StashSemVer svL && rObj is StashSemVer svR)
-        {
-            return svL.CompareTo(svR);
-        }
-
-        if (lObj is StashSemVer || rObj is StashSemVer)
-        {
-            throw new RuntimeError("Semver can only be compared to another semver.", span);
-        }
-
-        if (lObj is StashDuration or StashByteSize || rObj is StashDuration or StashByteSize)
-        {
-            throw new RuntimeError("Cannot compare duration or byte size with incompatible types.", span);
-        }
-
-        throw new RuntimeError("Operands must be two numbers or two IP addresses.", span);
+        throw new RuntimeError("Operands must be two numbers or two comparable values.", span);
     }
 
     // --- String Interpolation ---
