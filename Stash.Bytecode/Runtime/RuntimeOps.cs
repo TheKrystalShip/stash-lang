@@ -19,11 +19,18 @@ internal static class RuntimeOps
     // --- Truthiness ---
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    public static bool IsFalsy(StashValue value) => value.Tag switch
+    public static bool IsFalsy(StashValue value)
     {
-        StashValueTag.Null => true,
-        StashValueTag.Bool => !value.AsBool,
-        StashValueTag.Int => value.AsInt == 0,
+        StashValueTag tag = value.Tag;
+        if (tag == StashValueTag.Bool) return !value.AsBool;
+        if (tag == StashValueTag.Int) return value.AsInt == 0;
+        if (tag == StashValueTag.Null) return true;
+        return IsFalsySlow(value);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool IsFalsySlow(StashValue value) => value.Tag switch
+    {
         StashValueTag.Byte => value.AsByte == 0,
         StashValueTag.Float => value.AsFloat == 0.0,
         StashValueTag.Obj => value.AsObj switch
@@ -42,16 +49,22 @@ internal static class RuntimeOps
     public static bool IsEqual(StashValue left, StashValue right)
     {
         if (left.Tag != right.Tag) return false;
-        return left.Tag switch
-        {
-            StashValueTag.Null => true,
-            StashValueTag.Bool => left.AsBool == right.AsBool,
-            StashValueTag.Int or StashValueTag.Byte => left.AsInt == right.AsInt,
-            StashValueTag.Float => left.AsFloat == right.AsFloat,
-            StashValueTag.Obj => left.AsObj is IVMEquatable eq ? eq.VMEquals(right) : RuntimeValues.IsEqual(left.AsObj, right.AsObj),
-            _ => false,
-        };
+        if (left.Tag == StashValueTag.Int) return left.AsInt == right.AsInt;
+        if (left.Tag == StashValueTag.Bool) return left.AsBool == right.AsBool;
+        return IsEqualSlow(left, right);
     }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static bool IsEqualSlow(StashValue left, StashValue right) => left.Tag switch
+    {
+        StashValueTag.Null => true,
+        StashValueTag.Byte => left.AsInt == right.AsInt,
+        StashValueTag.Float => left.AsFloat == right.AsFloat,
+        StashValueTag.Obj => left.AsObj is IVMEquatable eq
+            ? eq.VMEquals(right)
+            : RuntimeValues.IsEqual(left.AsObj, right.AsObj),
+        _ => false,
+    };
 
     // --- Stringify ---
 
@@ -63,13 +76,15 @@ internal static class RuntimeOps
         StashValueTag.Int => value.AsInt.ToString(),
         StashValueTag.Byte => value.AsByte.ToString(),
         StashValueTag.Float => value.AsFloat.ToString(System.Globalization.CultureInfo.InvariantCulture),
-        StashValueTag.Obj => value.AsObj switch
-        {
-            string s => s,
-            IVMStringifiable sf => sf.VMToString(),
-            { } obj => RuntimeValues.Stringify(obj),
-            _ => "null",
-        },
+        StashValueTag.Obj => value.AsObj is string s ? s : StringifyObj(value.AsObj),
+        _ => "null",
+    };
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static string StringifyObj(object? obj) => obj switch
+    {
+        IVMStringifiable sf => sf.VMToString(),
+        { } o => RuntimeValues.Stringify(o),
         _ => "null",
     };
 
@@ -251,10 +266,6 @@ internal static class RuntimeOps
     {
         if (left.IsByte) left = StashValue.FromInt(left.AsByte);
         if (right.IsByte) right = StashValue.FromInt(right.AsByte);
-        if (!left.IsNumeric || !right.IsNumeric)
-        {
-            throw new RuntimeError("Operands must be numbers.", span);
-        }
 
         if (left.IsInt && right.IsInt)
         {
@@ -265,13 +276,18 @@ internal static class RuntimeOps
 
             return StashValue.FromInt(left.AsInt % right.AsInt);
         }
-        double dr = ToDouble(right);
-        if (dr == 0.0)
+        if (left.IsNumeric && right.IsNumeric)
         {
-            throw new RuntimeError("Division by zero.", span);
+            double dr = ToDouble(right);
+            if (dr == 0.0)
+            {
+                throw new RuntimeError("Division by zero.", span);
+            }
+
+            return StashValue.FromFloat(ToDouble(left) % dr);
         }
 
-        return StashValue.FromFloat(ToDouble(left) % dr);
+        return ArithmeticProtocolFallback(left, right, ArithmeticOp.Modulo, "Operands must be numbers.", span);
     }
 
     public static StashValue Power(StashValue left, StashValue right, SourceSpan? span)
@@ -282,18 +298,12 @@ internal static class RuntimeOps
         {
             return StashValue.FromInt((long)Math.Pow(left.AsInt, right.AsInt));
         }
-
-        if (!left.IsNumeric)
+        if (left.IsNumeric && right.IsNumeric)
         {
-            throw new RuntimeError("Operands must be numbers.", span);
+            return StashValue.FromFloat(Math.Pow(ToDouble(left), ToDouble(right)));
         }
 
-        if (!right.IsNumeric)
-        {
-            throw new RuntimeError("Operands must be numbers.", span);
-        }
-
-        return StashValue.FromFloat(Math.Pow(ToDouble(left), ToDouble(right)));
+        return ArithmeticProtocolFallback(left, right, ArithmeticOp.Power, "Operands must be numbers.", span);
     }
 
     public static bool Contains(StashValue left, StashValue right, SourceSpan? span)
@@ -509,6 +519,27 @@ internal static class RuntimeOps
     }
 
     // --- String Repeat ---
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static StashValue ArithmeticProtocolFallback(
+        StashValue left, StashValue right, ArithmeticOp op, string errorMessage, SourceSpan? span)
+    {
+        object? lObj = left.IsObj ? left.AsObj : null;
+        object? rObj = right.IsObj ? right.AsObj : null;
+
+        if (lObj is IVMArithmetic leftArith)
+        {
+            if (leftArith.VMTryArithmetic(op, right, true, out StashValue result, span))
+                return result;
+        }
+        if (rObj is IVMArithmetic rightArith)
+        {
+            if (rightArith.VMTryArithmetic(op, left, false, out StashValue result, span))
+                return result;
+        }
+
+        throw new RuntimeError(errorMessage, span);
+    }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static string RepeatString(string s, int count)

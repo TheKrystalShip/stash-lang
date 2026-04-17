@@ -11,7 +11,7 @@ using Stash.Runtime.Protocols;
 /// Represents a runtime instance of a struct — field values with a type tag.
 /// Struct-backed instances use slot-based array storage; anonymous instances use dictionary storage.
 /// </summary>
-public class StashInstance : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMStringifiable
+public class StashInstance : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMStringifiable, IVMEquatable
 {
     public string TypeName { get; }
     public StashStruct? Struct { get; }
@@ -231,5 +231,7 @@ public class StashInstance : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMS
     }
 
     public string VMToString() => ToString();
+
+    public bool VMEquals(StashValue other) => other.IsObj && ReferenceEquals(this, other.AsObj);
 }
 

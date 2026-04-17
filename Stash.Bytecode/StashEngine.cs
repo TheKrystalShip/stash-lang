@@ -34,6 +34,7 @@ public class StashEngine
 {
     private readonly StashCapabilities _capabilities;
     private readonly List<IStdlibProvider> _additionalProviders = [];
+    private readonly List<Action<VirtualMachine>> _pendingTypeRegistrations = [];
     private VirtualMachine? _vm;
     private TextWriter _output = TextWriter.Null;
     private TextWriter _errorOutput = TextWriter.Null;
@@ -147,6 +148,23 @@ public class StashEngine
         return this;
     }
 
+    /// <summary>
+    /// Register an external CLR type with the VM for typeof and is operator support.
+    /// Must be called before executing any scripts.
+    /// </summary>
+    public StashEngine RegisterType<T>(string vmTypeName, Func<object, bool>? predicate = null) where T : class
+    {
+        if (_vm is not null)
+            throw new InvalidOperationException("Cannot register types after the VM has been created. Call RegisterType before executing scripts.");
+
+        _pendingTypeRegistrations.Add(vm =>
+        {
+            vm.RegisterTypeName<T>(vmTypeName);
+            vm.RegisterTypeCheck(vmTypeName, predicate ?? (obj => obj is T));
+        });
+        return this;
+    }
+
     /// <summary>Creates and configures the bytecode VM with built-in globals.</summary>
     private VirtualMachine EnsureVM()
     {
@@ -179,6 +197,8 @@ public class StashEngine
             EmbeddedMode = true,
             ModuleLoader = LoadModuleForVM
         };
+        foreach (var registration in _pendingTypeRegistrations)
+            registration(_vm);
         return _vm;
     }
 

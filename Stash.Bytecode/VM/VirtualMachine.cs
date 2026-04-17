@@ -14,6 +14,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Resolution;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 using Stash.Runtime.Stdlib;
 using Stash.Runtime.Types;
 using DebugCallFrame = Stash.Debugging.CallFrame;
@@ -23,7 +24,7 @@ namespace Stash.Bytecode;
 /// <summary>
 /// Core fields, constructor, properties, stack operations, and execution entry points.
 /// </summary>
-public sealed partial class VirtualMachine
+public sealed partial class VirtualMachine : IVMTypeRegistrar
 {
     // ── Zero-cost debug mode markers ──
     // .NET JIT/AOT fully specializes generic methods over value-type type params.
@@ -57,6 +58,8 @@ public sealed partial class VirtualMachine
     internal static readonly StashValue UndefinedGlobal = StashValue.FromObj(_undefinedSentinel);
     private readonly List<Upvalue> _openUpvalues;
     private CancellationToken _ct;
+    private readonly Dictionary<Type, string> _registeredTypeNames = new();
+    private readonly Dictionary<string, Func<object, bool>> _registeredTypeChecks = new(StringComparer.Ordinal);
 
     private readonly List<ExceptionHandler> _exceptionHandlers = new();
     private readonly VMContext _context;
@@ -89,6 +92,18 @@ public sealed partial class VirtualMachine
             ModuleCache = ModuleCache,
             ModuleLocks = ModuleLocks
         };
+    }
+
+    // ── IVMTypeRegistrar ──
+    public void RegisterTypeName<T>(string vmTypeName) where T : class
+    {
+        _registeredTypeNames[typeof(T)] = vmTypeName;
+        _context.TypeNameResolver = ResolveRegisteredTypeName;
+    }
+
+    public void RegisterTypeCheck(string vmTypeName, Func<object, bool> predicate)
+    {
+        _registeredTypeChecks[vmTypeName] = predicate;
     }
 
     /// <summary>The global variable store. Populate before Execute for built-in namespaces.</summary>

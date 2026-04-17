@@ -20,9 +20,18 @@ public sealed partial class VirtualMachine
         int @base = frame.BaseSlot;
         StashValue rb = _stack[@base + b], rc = _stack[@base + c];
         if (rb.IsInt && rc.IsInt)
+        {
             _stack[@base + a] = StashValue.FromInt(rb.AsInt + rc.AsInt);
-        else
-            ExecuteAddSlow(ref frame, a, @base, rb, rc);
+            return;
+        }
+        if (rb.IsNumeric && rc.IsNumeric)
+        {
+            _stack[@base + a] = StashValue.FromFloat(
+                (rb.IsInt ? (double)rb.AsInt : rb.AsFloat) +
+                (rc.IsInt ? (double)rc.AsInt : rc.AsFloat));
+            return;
+        }
+        ExecuteAddSlow(ref frame, a, @base, rb, rc);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -43,9 +52,18 @@ public sealed partial class VirtualMachine
         int @base = frame.BaseSlot;
         StashValue rb = _stack[@base + b], rc = _stack[@base + c];
         if (rb.IsInt && rc.IsInt)
+        {
             _stack[@base + a] = StashValue.FromInt(rb.AsInt - rc.AsInt);
-        else
-            ExecuteSubSlow(ref frame, a, @base, rb, rc);
+            return;
+        }
+        if (rb.IsNumeric && rc.IsNumeric)
+        {
+            _stack[@base + a] = StashValue.FromFloat(
+                (rb.IsInt ? (double)rb.AsInt : rb.AsFloat) -
+                (rc.IsInt ? (double)rc.AsInt : rc.AsFloat));
+            return;
+        }
+        ExecuteSubSlow(ref frame, a, @base, rb, rc);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -67,9 +85,18 @@ public sealed partial class VirtualMachine
         StashValue rb = _stack[@base + b];
         StashValue kc = frame.Chunk.Constants[c];
         if (rb.IsInt && kc.IsInt)
+        {
             _stack[@base + a] = StashValue.FromInt(rb.AsInt + kc.AsInt);
-        else
-            ExecuteAddSlow(ref frame, a, @base, rb, kc);
+            return;
+        }
+        if (rb.IsNumeric && kc.IsNumeric)
+        {
+            _stack[@base + a] = StashValue.FromFloat(
+                (rb.IsInt ? (double)rb.AsInt : rb.AsFloat) +
+                (kc.IsInt ? (double)kc.AsInt : kc.AsFloat));
+            return;
+        }
+        ExecuteAddSlow(ref frame, a, @base, rb, kc);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -80,9 +107,18 @@ public sealed partial class VirtualMachine
         StashValue rb = _stack[@base + b];
         StashValue kc = frame.Chunk.Constants[c];
         if (rb.IsInt && kc.IsInt)
+        {
             _stack[@base + a] = StashValue.FromInt(rb.AsInt - kc.AsInt);
-        else
-            ExecuteSubSlow(ref frame, a, @base, rb, kc);
+            return;
+        }
+        if (rb.IsNumeric && kc.IsNumeric)
+        {
+            _stack[@base + a] = StashValue.FromFloat(
+                (rb.IsInt ? (double)rb.AsInt : rb.AsFloat) -
+                (kc.IsInt ? (double)kc.AsInt : kc.AsFloat));
+            return;
+        }
+        ExecuteSubSlow(ref frame, a, @base, rb, kc);
     }
 
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
@@ -92,9 +128,18 @@ public sealed partial class VirtualMachine
         int @base = frame.BaseSlot;
         StashValue rb = _stack[@base + b], rc = _stack[@base + c];
         if (rb.IsInt && rc.IsInt)
+        {
             _stack[@base + a] = StashValue.FromInt(rb.AsInt * rc.AsInt);
-        else
-            ExecuteMulSlow(ref frame, a, @base, rb, rc);
+            return;
+        }
+        if (rb.IsNumeric && rc.IsNumeric)
+        {
+            _stack[@base + a] = StashValue.FromFloat(
+                (rb.IsInt ? (double)rb.AsInt : rb.AsFloat) *
+                (rc.IsInt ? (double)rc.AsInt : rc.AsFloat));
+            return;
+        }
+        ExecuteMulSlow(ref frame, a, @base, rb, rc);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -119,9 +164,17 @@ public sealed partial class VirtualMachine
             long dv = rc.AsInt;
             if (dv == 0) throw new RuntimeError("Division by zero.", GetCurrentSpan(ref frame));
             _stack[@base + a] = StashValue.FromInt(rb.AsInt / dv);
+            return;
         }
-        else
-            ExecuteDivSlow(ref frame, a, @base, rb, rc);
+        if (rb.IsNumeric && rc.IsNumeric)
+        {
+            double cd = rc.IsInt ? (double)rc.AsInt : rc.AsFloat;
+            if (cd == 0.0) throw new RuntimeError("Division by zero.", GetCurrentSpan(ref frame));
+            _stack[@base + a] = StashValue.FromFloat(
+                (rb.IsInt ? (double)rb.AsInt : rb.AsFloat) / cd);
+            return;
+        }
+        ExecuteDivSlow(ref frame, a, @base, rb, rc);
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -224,7 +277,6 @@ public sealed partial class VirtualMachine
 
     // ══════════════════════════ Bitwise ══════════════════════════
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteBAnd(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
@@ -236,7 +288,6 @@ public sealed partial class VirtualMachine
             _stack[@base + a] = RuntimeOps.BitAnd(rb, rc, GetCurrentSpan(ref frame));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteBOr(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
@@ -248,7 +299,6 @@ public sealed partial class VirtualMachine
             _stack[@base + a] = RuntimeOps.BitOr(rb, rc, GetCurrentSpan(ref frame));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteBXor(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
@@ -260,7 +310,6 @@ public sealed partial class VirtualMachine
             _stack[@base + a] = RuntimeOps.BitXor(rb, rc, GetCurrentSpan(ref frame));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteBNot(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst), b = Instruction.GetB(inst);
@@ -272,7 +321,6 @@ public sealed partial class VirtualMachine
             _stack[@base + a] = RuntimeOps.BitNot(rb, GetCurrentSpan(ref frame));
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteShl(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);
@@ -290,7 +338,6 @@ public sealed partial class VirtualMachine
             _stack[@base + a] = RuntimeOps.ShiftLeft(rb, rc, span);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteShr(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst), b = Instruction.GetB(inst), c = Instruction.GetC(inst);

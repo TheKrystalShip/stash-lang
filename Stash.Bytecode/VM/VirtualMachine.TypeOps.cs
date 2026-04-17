@@ -39,7 +39,7 @@ public sealed partial class VirtualMachine
         return false;
     }
 
-    private static bool CheckIsType(object? value, string typeName) => typeName switch
+    private bool CheckIsType(object? value, string typeName) => typeName switch
     {
         "int"       => value is long,
         "float"     => value is double,
@@ -64,7 +64,8 @@ public sealed partial class VirtualMachine
         "Future"    => value is StashFuture,
         _ when typeName.EndsWith("[]") => value is StashTypedArray ta2 && ta2.ElementTypeName == typeName[..^2],
         _           => value is StashEnumValue ev ? ev.TypeName == typeName
-                     : value is StashInstance inst && inst.TypeName == typeName,
+                     : value is StashInstance inst ? inst.TypeName == typeName
+                     : _registeredTypeChecks.TryGetValue(typeName, out var pred) && value is not null && pred(value),
     };
 
     [MethodImpl(MethodImplOptions.NoInlining)]
@@ -110,6 +111,10 @@ public sealed partial class VirtualMachine
             else if (value is StashInstance inst2 && inst2.TypeName == typeName)
             {
                 result = true;
+            }
+            else if (_registeredTypeChecks.TryGetValue(typeName, out var pred))
+            {
+                result = value is not null && pred(value);
             }
             else if (isDynamic)
             {
@@ -345,9 +350,16 @@ public sealed partial class VirtualMachine
             StashInterface      => "interface",
             VMFunction          => "function",
             IStashCallable      => "function",
-            _                   => "unknown",
+            _                   => ResolveRegisteredTypeName(value),
         };
         _stack[@base + a] = StashValue.FromObj(typeName);
+    }
+
+    private string ResolveRegisteredTypeName(object? value)
+    {
+        if (value is not null && _registeredTypeNames.TryGetValue(value.GetType(), out string? name))
+            return name;
+        return "unknown";
     }
 
     private object? GetFieldValue(object? obj, string name, SourceSpan? span)

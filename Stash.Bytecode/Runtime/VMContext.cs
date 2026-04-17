@@ -52,6 +52,10 @@ internal sealed class VMContext : IInterpreterContext
     public CancellationToken CancellationToken => _ct;
     public object? Debugger { get; set; }
 
+    // --- Type Registration ---
+    internal Func<object?, string>? TypeNameResolver { get; set; }
+    string IBuiltInContext.ResolveRegisteredTypeName(object? value) => TypeNameResolver?.Invoke(value) ?? "unknown";
+
     // --- Elevation Context ---
     public bool ElevationActive { get; set; }
     public string? ElevationCommand { get; set; }

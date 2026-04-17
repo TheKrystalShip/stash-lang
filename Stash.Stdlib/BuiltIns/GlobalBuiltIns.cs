@@ -50,7 +50,7 @@ public static class GlobalBuiltIns
                 StashIpAddress => "ip",
                 StashSemVer => "semver",
                 IStashCallable => "function",
-                _ => obj.GetType().Name.Contains("BoundMethod") ? "function" : "unknown"
+                _ => obj.GetType().Name.Contains("BoundMethod") ? "function" : ctx.ResolveRegisteredTypeName(obj)
             });
         }, returnType: "string");
 

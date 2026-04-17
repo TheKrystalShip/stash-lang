@@ -10,6 +10,7 @@ namespace Stash.Bytecode;
 /// </summary>
 public sealed partial class VirtualMachine
 {
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteGetGlobal(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -17,15 +18,26 @@ public sealed partial class VirtualMachine
         Dictionary<string, StashValue>? mg = frame.ModuleGlobals;
         if (mg == null || mg == _globals)
         {
-            // Fast path: main-script global — direct array access
             StashValue val = _globalSlots[slot];
-            if (val.AsObj == _undefinedSentinel)
-                ThrowUndefinedGlobal(ref frame, slot);
-            _stack[frame.BaseSlot + a] = val;
+            if (val.AsObj != _undefinedSentinel)
+            {
+                _stack[frame.BaseSlot + a] = val;
+                return;
+            }
+        }
+        ExecuteGetGlobalSlow(ref frame, a, slot);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteGetGlobalSlow(ref CallFrame frame, byte a, ushort slot)
+    {
+        Dictionary<string, StashValue>? mg = frame.ModuleGlobals;
+        if (mg == null || mg == _globals)
+        {
+            ThrowUndefinedGlobal(ref frame, slot);
         }
         else
         {
-            // Module function — fall back to dict lookup using name table
             string name = frame.Chunk.GlobalNameTable![slot];
             if (!mg.TryGetValue(name, out StashValue value))
                 throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));

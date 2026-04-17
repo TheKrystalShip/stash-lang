@@ -459,11 +459,11 @@ Stash compiles to a **register-based bytecode VM** with constant folding, dead b
 
 | Benchmark                 |  Stash | Python | Node.js |   Ruby |   Perl |    Lua |      Bash |
 | ------------------------- | -----: | -----: | ------: | -----: | -----: | -----: | --------: |
-| **Algorithms**            | 108 ms |  79 ms |    7 ms |  63 ms | 200 ms |  33 ms | 10,511 ms |
-| **Function Calls**        |  70 ms |  77 ms |    3 ms |  17 ms | 102 ms |  13 ms |  3,632 ms |
-| **Expression Throughput** | 184 ms | 179 ms |   15 ms | 189 ms | 131 ms |  85 ms |  4,992 ms |
-| **Built-in Functions**    | 189 ms | 296 ms |   27 ms | 351 ms | 339 ms | 204 ms | 23,076 ms |
-| **Scope Lookup**          |  95 ms |  92 ms |    4 ms | 136 ms | 273 ms |  58 ms |  3,260 ms |
+| **Algorithms**            | 101 ms |  73 ms |    6 ms |  52 ms | 192 ms |  33 ms | 10,589 ms |
+| **Function Calls**        |  68 ms |  79 ms |    3 ms |  17 ms | 101 ms |  14 ms |  3,645 ms |
+| **Expression Throughput** | 156 ms | 180 ms |   15 ms | 189 ms | 131 ms |  84 ms |  4,928 ms |
+| **Built-in Functions**    | 180 ms | 295 ms |   30 ms | 351 ms | 340 ms | 208 ms | 23,220 ms |
+| **Scope Lookup**          |  95 ms | 101 ms |    8 ms | 136 ms | 261 ms |  58 ms |  3,185 ms |
 
 > Measured on the same machine, same workload, identical algorithms and iteration counts across all languages. Median of 3 runs.
 >
