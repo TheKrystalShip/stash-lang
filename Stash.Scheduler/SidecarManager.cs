@@ -12,13 +12,6 @@ using System.Text.Json.Serialization;
 /// </summary>
 internal static class SidecarManager
 {
-    private static readonly JsonSerializerOptions _jsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-    };
-
     private static string GetBaseDirectory()
     {
         string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
@@ -45,7 +38,7 @@ internal static class SidecarManager
         string path = GetSidecarPath(data.Name);
         string tmpPath = path + ".tmp";
 
-        byte[] json = JsonSerializer.SerializeToUtf8Bytes(data, _jsonOptions);
+        byte[] json = JsonSerializer.SerializeToUtf8Bytes(data, SidecarJsonContext.Default.SidecarData);
         File.WriteAllBytes(tmpPath, json);
 
         if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
@@ -65,7 +58,7 @@ internal static class SidecarManager
         try
         {
             byte[] bytes = File.ReadAllBytes(path);
-            return JsonSerializer.Deserialize<SidecarData>(bytes, _jsonOptions);
+            return JsonSerializer.Deserialize(bytes, SidecarJsonContext.Default.SidecarData);
         }
         catch
         {
@@ -108,3 +101,10 @@ internal sealed class SidecarData
     public string? StashVersion { get; set; }
     public Dictionary<string, string>? PlatformExtras { get; set; }
 }
+
+[JsonSerializable(typeof(SidecarData))]
+[JsonSourceGenerationOptions(
+    WriteIndented = true,
+    PropertyNamingPolicy = JsonKnownNamingPolicy.CamelCase,
+    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull)]
+internal partial class SidecarJsonContext : JsonSerializerContext;

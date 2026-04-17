@@ -39,8 +39,8 @@ public class Program
 
             if (arg.StartsWith('-'))
             {
-                Console.Error.WriteLine($"stash-dap: unknown option '{arg}'");
-                Console.Error.WriteLine("Run 'stash-dap --help' for usage information.");
+                await Console.Error.WriteLineAsync($"stash-dap: unknown option '{arg}'");
+                await Console.Error.WriteLineAsync("Run 'stash-dap --help' for usage information.");
                 Environment.Exit(64);
             }
         }

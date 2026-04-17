@@ -127,7 +127,9 @@ public class AsyncTcpBuiltInsTests : StashTestBase
     private static void StopTcpServer(TcpListener listener, Task serverTask)
     {
         listener.Stop();
+#pragma warning disable VSTHRD002 // Intentional sync wait for test server cleanup
         try { serverTask.Wait(TimeSpan.FromSeconds(2)); } catch { }
+#pragma warning restore VSTHRD002
     }
 
     // ── net.tcpConnectAsync — reserved ports: 19940-19941 ────────────────────

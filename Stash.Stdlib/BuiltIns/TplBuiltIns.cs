@@ -50,11 +50,15 @@ public static class TplBuiltIns
             // If first arg is a string, render it as a template
             if (args[0].ToObject() is string template)
             {
-                return StashValue.FromObj(ctx.CompileAndRenderTemplate(template, data));
+                return ctx.CompileAndRenderTemplate(template, data) is { } rendered
+                    ? StashValue.FromObj(rendered)
+                    : StashValue.Null;
             }
 
             // If first arg is a compiled template (List<TemplateNode>), render pre-parsed AST
-            return StashValue.FromObj(ctx.RenderCompiledTemplate(args[0].ToObject(), data));
+            return ctx.RenderCompiledTemplate(args[0].ToObject(), data) is { } compiled
+                ? StashValue.FromObj(compiled)
+                : StashValue.Null;
         });
 
         // tpl.renderFile(path, data) — render a template file with data dictionary

@@ -16,6 +16,7 @@
     <TrimMode>partial</TrimMode>
     <PublishReadyToRun>true</PublishReadyToRun>
     <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+    <NoWarn>IL2104</NoWarn> <!-- Suppress warning about missing IL code for System.Reflection.Emit, which is not used in the LSP server. -->
   </PropertyGroup>
 
   <ItemGroup>

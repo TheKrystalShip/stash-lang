@@ -36,7 +36,9 @@ public static class ArgsBuiltIns
 
         ns.Function("parse", [Param("spec", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
-                return StashValue.FromObj(new ArgumentParser(ctx.ScriptArgs ?? Array.Empty<string>()).Parse(args[0].ToObject()));
+                return new ArgumentParser(ctx.ScriptArgs ?? Array.Empty<string>()).Parse(args[0].ToObject()) is { } result
+                    ? StashValue.FromObj(result)
+                    : StashValue.Null;
             },
             returnType: "dict"
         );
