@@ -713,6 +713,9 @@ public class Parser
                     return SwitchStatement();
                 }
                 return ExpressionStatement();
+            case TokenType.Defer:
+                Advance();
+                return DeferStatement();
             case TokenType.Try:
                 if (_tokens[_current + 1].Type == TokenType.LeftBrace)
                 {
@@ -998,6 +1001,30 @@ public class Parser
         Expr value = Expression();
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after throw value.");
         return new ThrowStmt(keyword, value, MakeSpan(keyword.Span, semi.Span));
+    }
+
+    /// <summary>
+    /// Parses a defer statement: <c>defer expr;</c>, <c>defer await expr;</c>, or <c>defer { block }</c>.
+    /// The <c>defer</c> token has already been consumed.
+    /// </summary>
+    /// <returns>A <see cref="DeferStmt"/>.</returns>
+    private Stmt DeferStatement()
+    {
+        Token deferToken = Previous();
+
+        // Block defer: defer { ... }
+        if (Check(TokenType.LeftBrace))
+        {
+            BlockStmt block = ParseBlock();
+            return new DeferStmt(deferToken, block, false, MakeSpan(deferToken.Span, block.Span));
+        }
+
+        // Check for await: defer await expr
+        bool hasAwait = Match(TokenType.Await);
+
+        // Single-statement defer: defer expr; or defer await expr;
+        Stmt body = ExpressionStatement();
+        return new DeferStmt(deferToken, body, hasAwait, MakeSpan(deferToken.Span, body.Span));
     }
 
     /// <summary>

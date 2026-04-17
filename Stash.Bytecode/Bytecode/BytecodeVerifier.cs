@@ -37,8 +37,8 @@ public sealed class BytecodeVerifier
             uint word = chunk.Code[i];
             var op = Instruction.GetOp(word);
 
-            // 1. Validate opcode range (0–92)
-            if ((byte)op > 92)
+            // 1. Validate opcode range (0–93)
+            if ((byte)op > 93)
             {
                 AddError(errors, instrIdx, prefix, $"Invalid opcode {(byte)op}.");
                 lastInstrIdx = instrIdx;

@@ -393,6 +393,13 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitDeferStmt(DeferStmt stmt)
+    {
+        EmitFromToken(stmt.DeferKeyword, TokenTypeKeyword, 0);
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
         EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);

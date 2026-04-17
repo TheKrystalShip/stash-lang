@@ -266,6 +266,12 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
     public object? VisitBreakStmt(BreakStmt stmt) => null;
     public object? VisitContinueStmt(ContinueStmt stmt) => null;
 
+    public object? VisitDeferStmt(DeferStmt stmt)
+    {
+        stmt.Body.Accept(this);
+        return null;
+    }
+
     public object? VisitExprStmt(ExprStmt stmt)
     {
         ResolveExpr(stmt.Expression);

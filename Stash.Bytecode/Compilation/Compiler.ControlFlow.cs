@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
+using Stash.Runtime;
 using Stash.Runtime.Types;
 
 namespace Stash.Bytecode;
@@ -556,5 +557,144 @@ public sealed partial class Compiler
 
         _scope.FreeTemp(subjectReg);
         return null;
+    }
+
+    /// <inheritdoc />
+    public object? VisitDeferStmt(DeferStmt stmt)
+    {
+        _builder.AddSourceMapping(stmt.Span);
+
+        if (stmt.Body is BlockStmt block)
+        {
+            CompileDeferBlock(block);
+        }
+        else if (stmt.Body is ExprStmt exprStmt && exprStmt.Expression is CallExpr callExpr)
+        {
+            CompileDeferCall(callExpr, exprStmt, stmt.HasAwait);
+        }
+        else
+        {
+            // Non-call expression: wrap in a closure like block defer
+            CompileDeferBodyAsBlock(stmt.Body);
+        }
+
+        return null;
+    }
+
+    private void CompileDeferCall(CallExpr call, ExprStmt fallbackStmt, bool hasAwait)
+    {
+        // Check for spread args first — fall back to block-style closure (no eager eval)
+        foreach (Expr arg in call.Arguments)
+        {
+            if (arg is SpreadExpr)
+            {
+                CompileDeferBodyAsBlock(fallbackStmt);
+                return;
+            }
+        }
+
+        // Eager evaluation: evaluate callee and args into hidden locals at function scope level.
+        // These locals are NOT scoped — they live until the function returns so the defer
+        // closure can access them as upvalues while the frame is still alive.
+        byte calleeLocal = _scope.DeclareLocal("<defer_callee>");
+        CompileExprTo(call.Callee, calleeLocal);
+        _scope.MarkInitialized();
+
+        int argCount = call.Arguments.Count;
+        for (int i = 0; i < argCount; i++)
+        {
+            byte argLocal = _scope.DeclareLocal($"<defer_arg_{i}>");
+            CompileExprTo(call.Arguments[i], argLocal);
+            _scope.MarkInitialized();
+        }
+
+        // Build a zero-param closure that reads the captured values via upvalues
+        // and performs the call at defer-run time.
+        var child = new Compiler(this, "<defer>", _globalSlots);
+
+        byte childCalleeReg = child._scope.AllocTemp();
+        byte calleeUv = child.ResolveUpvalue("<defer_callee>", 1);
+        child._builder.EmitAB(OpCode.GetUpval, childCalleeReg, calleeUv);
+
+        for (int i = 0; i < argCount; i++)
+        {
+            byte childArgReg = child._scope.AllocTemp();
+            byte argUv = child.ResolveUpvalue($"<defer_arg_{i}>", 1);
+            child._builder.EmitAB(OpCode.GetUpval, childArgReg, argUv);
+        }
+
+        // Callee at childCalleeReg, args at childCalleeReg+1 .. childCalleeReg+argCount
+        // Call encoding: A=callee, B=0, C=argc (same as normal call sites)
+        child._builder.EmitABC(OpCode.Call, childCalleeReg, 0, (byte)argCount);
+
+        if (hasAwait)
+            child._builder.EmitABC(OpCode.Await, childCalleeReg, childCalleeReg, 0);
+
+        child._builder.EmitABC(OpCode.Return, childCalleeReg, 1, 0);
+
+        // Free child temps LIFO
+        for (int i = argCount - 1; i >= 0; i--)
+            child._scope.FreeTemp((byte)(childCalleeReg + 1 + i));
+        child._scope.FreeTemp(childCalleeReg);
+
+        EmitDeferClosure(child);
+    }
+
+    private void CompileDeferBlock(BlockStmt block)
+    {
+        var child = new Compiler(this, "<defer>", _globalSlots);
+
+        foreach (Stmt s in block.Statements)
+            child.CompileStmt(s);
+
+        // Implicit null return
+        byte retReg = child._scope.AllocTemp();
+        child._builder.EmitA(OpCode.LoadNull, retReg);
+        child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
+        child._scope.FreeTemp(retReg);
+
+        EmitDeferClosure(child);
+    }
+
+    private void CompileDeferBodyAsBlock(Stmt body)
+    {
+        var child = new Compiler(this, "<defer>", _globalSlots);
+
+        child.CompileStmt(body);
+
+        // Implicit null return
+        byte retReg = child._scope.AllocTemp();
+        child._builder.EmitA(OpCode.LoadNull, retReg);
+        child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
+        child._scope.FreeTemp(retReg);
+
+        EmitDeferClosure(child);
+    }
+
+    /// <summary>
+    /// Finalises a child compiler's chunk and emits Closure + upvalue descriptors + Defer
+    /// into the current (parent) builder.
+    /// </summary>
+    private void EmitDeferClosure(Compiler child)
+    {
+        // Defer requires the slow return path — force MayHaveCapturedLocals so the
+        // ultra-fast OpReturn in the dispatch loop falls through to ExecuteReturn.
+        _builder.MayHaveCapturedLocals = true;
+
+        child._builder.MaxRegs = child._scope.MaxRegs;
+        child._builder.LocalNames = child._scope.GetLocalNames();
+        child._builder.LocalIsConst = child._scope.GetLocalIsConst();
+        child._builder.UpvalueNames = child._upvalueNames?.ToArray();
+
+        Chunk deferChunk = child._builder.Build();
+        ushort chunkIdx = _builder.AddConstant(StashValue.FromObj(deferChunk));
+
+        byte closureReg = _scope.AllocTemp();
+        _builder.EmitABx(OpCode.Closure, closureReg, chunkIdx);
+        foreach (UpvalueDescriptor uv in deferChunk.Upvalues)
+            _builder.EmitRaw((uint)(uv.IsLocal ? 1 : 0) | ((uint)uv.Index << 8));
+
+        _builder.EmitA(OpCode.Defer, closureReg);
+        _scope.FreeTemp(closureReg);
     }
 }

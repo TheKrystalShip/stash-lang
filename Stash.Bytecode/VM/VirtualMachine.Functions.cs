@@ -742,6 +742,14 @@ public sealed partial class VirtualMachine
         if (frame.Chunk.MayHaveCapturedLocals)
             CloseUpvalues(baseSlot);
 
+        // Execute defers in LIFO order before popping the frame
+        if (frame.Defers is { Count: > 0 })
+        {
+            var defers = frame.Defers;
+            frame.Defers = null; // Prevent re-execution during exception unwinding
+            retVal = ExecuteDefers<TDebugMode>(defers, baseSlot, frame.Chunk.MaxRegs, retVal);
+        }
+
         _frameCount--;
 
         if (_frameCount == 0)
@@ -788,6 +796,116 @@ public sealed partial class VirtualMachine
 
         _stack[frame.BaseSlot + a] = StashValue.FromObj(
             new VMFunction(fnChunk, upvalues) { ModuleGlobals = _globals });
+    }
+
+    /// <summary>
+    /// Executes deferred closures in LIFO order. Called from ExecuteReturn during normal function exit.
+    /// </summary>
+    private StashValue ExecuteDefers<TDebugMode>(List<StashValue> defers, int frameBaseSlot, int frameMaxRegs, StashValue returnValue) where TDebugMode : struct
+    {
+        RuntimeError? firstError = null;
+        List<StashError>? suppressed = null;
+
+        for (int i = defers.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                // Restore stack pointer to the frame's register window
+                _sp = frameBaseSlot + frameMaxRegs;
+
+                // Push the defer closure and call it
+                StashValue closure = defers[i];
+                _stack[_sp] = closure;
+                _sp++;
+                CallValue(closure.AsObj!, 0, null);
+
+                // Run the defer closure to completion (handles try-catch internally)
+                RunDeferClosure(_frameCount - 1);
+            }
+            catch (RuntimeError ex)
+            {
+                if (firstError == null)
+                    firstError = ex;
+                else
+                    (suppressed ??= new()).Add(
+                        new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties));
+            }
+        }
+
+        if (firstError != null)
+        {
+            if (suppressed != null)
+            {
+                throw new RuntimeError(firstError.Message, firstError.Span, firstError.ErrorType)
+                {
+                    Properties = firstError.Properties,
+                    SuppressedErrors = suppressed,
+                };
+            }
+            throw firstError;
+        }
+
+        return returnValue;
+    }
+
+    /// <summary>
+    /// Runs a defer closure to completion, handling any internal try-catch blocks.
+    /// Stops when frame count drops to targetFrameCount.
+    /// </summary>
+    private void RunDeferClosure(int targetFrameCount)
+    {
+        while (true)
+        {
+            try
+            {
+                RunInner<DebugOff>(targetFrameCount);
+                return;
+            }
+            catch (RuntimeError ex) when (_exceptionHandlers.Count > 0 && _exceptionHandlers[^1].FrameIndex >= targetFrameCount)
+            {
+                // Exception handler is within the defer closure — handle it internally
+                ExceptionHandler handler = _exceptionHandlers[^1];
+                _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
+                CloseUpvalues(handler.StackLevel);
+                _frameCount = handler.FrameIndex + 1;
+                _sp = handler.StackLevel;
+                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                _context.LastError = stashError;
+                ref CallFrame hf = ref _frames[_frameCount - 1];
+                _stack[hf.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
+                hf.IP = handler.CatchIP;
+                // Continue loop: RunInner resumes at the catch handler
+            }
+            // No matching handler within the defer — let the error propagate
+        }
+    }
+
+    /// <summary>
+    /// Executes defers for a frame being unwound during exception handling.
+    /// Errors from defers are collected as suppressed, not propagated.
+    /// </summary>
+    private void RunFrameDefers(ref CallFrame frame, ref List<StashError>? suppressed)
+    {
+        var defers = frame.Defers!;
+        frame.Defers = null; // Prevent re-execution
+
+        for (int i = defers.Count - 1; i >= 0; i--)
+        {
+            try
+            {
+                _sp = frame.BaseSlot + frame.Chunk.MaxRegs;
+                StashValue closure = defers[i];
+                _stack[_sp] = closure;
+                _sp++;
+                CallValue(closure.AsObj!, 0, null);
+                RunDeferClosure(_frameCount - 1);
+            }
+            catch (RuntimeError deferEx)
+            {
+                (suppressed ??= new()).Add(
+                    new StashError(deferEx.Message, deferEx.ErrorType ?? "RuntimeError", null, deferEx.Properties));
+            }
+        }
     }
 
 }

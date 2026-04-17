@@ -132,4 +132,9 @@ public interface IStmtVisitor<T>
     /// Visits a <see cref="SwitchStmt"/> node (<c>switch (value) { case x: { ... } default: { ... } }</c>).
     /// </summary>
     T VisitSwitchStmt(SwitchStmt stmt);
+
+    /// <summary>
+    /// Visits a <see cref="DeferStmt"/> node (<c>defer stmt</c> or <c>defer { block }</c>).
+    /// </summary>
+    T VisitDeferStmt(DeferStmt stmt);
 }

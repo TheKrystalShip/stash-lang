@@ -249,6 +249,28 @@ internal static class ControlFlowPrinter
         ctx.EmitToken(); // ;
     }
 
+    internal static void PrintDefer(DeferStmt stmt, FormatContext ctx, Action<Stmt> formatStmt)
+    {
+        ctx.EmitToken(); // defer
+        if (stmt.HasAwait)
+        {
+            ctx.Space();
+            ctx.EmitToken(); // await
+        }
+        if (stmt.Body is BlockStmt)
+        {
+            BraceRules.BeforeOpenBrace(ctx);
+            ctx.PushScope(ScopeKind.ControlFlowBody);
+            formatStmt(stmt.Body);
+            ctx.PopScope();
+        }
+        else
+        {
+            ctx.Space();
+            formatStmt(stmt.Body);
+        }
+    }
+
     internal static void PrintExprStmt(ExprStmt stmt, FormatContext ctx, Action<Expr> formatExpr)
     {
         formatExpr(stmt.Expression);

@@ -32,4 +32,7 @@ internal struct CallFrame
     /// Set when calling an imported function that carries module-scoped definitions.
     /// </summary>
     public Dictionary<string, StashValue>? ModuleGlobals;
+
+    /// <summary>Deferred closures to execute at function exit (LIFO). Null when no defers registered.</summary>
+    public List<StashValue>? Defers;
 }

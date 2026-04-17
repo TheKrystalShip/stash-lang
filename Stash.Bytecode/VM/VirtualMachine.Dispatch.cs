@@ -43,6 +43,17 @@ public sealed partial class VirtualMachine
                 ExceptionHandler handler = _exceptionHandlers[^1];
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
 
+                // Execute defers for frames being unwound BEFORE closing upvalues
+                List<StashError>? suppressed = null;
+                for (int i = _frameCount - 1; i > handler.FrameIndex; i--)
+                {
+                    ref CallFrame unwoundFrame = ref _frames[i];
+                    if (unwoundFrame.Defers is { Count: > 0 })
+                    {
+                        RunFrameDefers(ref unwoundFrame, ref suppressed);
+                    }
+                }
+
                 // Close any upvalues in the unwound stack region before restoring
                 CloseUpvalues(handler.StackLevel);
 
@@ -50,8 +61,15 @@ public sealed partial class VirtualMachine
                 _frameCount = handler.FrameIndex + 1;
                 _sp = handler.StackLevel;
 
+                // Merge suppressed errors from the exception itself (e.g. from ExecuteDefers
+                // when multiple defers throw) with any collected during frame unwinding.
+                if (ex.SuppressedErrors is { Count: > 0 })
+                    (suppressed ??= new()).AddRange(ex.SuppressedErrors);
+
                 // Construct the StashError and store it in the designated error register
                 var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                if (suppressed != null)
+                    stashError.Suppressed = suppressed;
                 _context.LastError = stashError;
                 ref CallFrame handlerFrame = ref _frames[_frameCount - 1];
                 _stack[handlerFrame.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
@@ -292,7 +310,8 @@ public sealed partial class VirtualMachine
                     byte b = Instruction.GetB(inst);
                     StashValue retVal = b != 0 ? _stack[@base + a] : StashValue.Null;
 
-                    // Ultra-fast return: no debug, no captured locals
+                    // Ultra-fast return: no debug, no captured locals (also covers defers —
+                    // the compiler sets MayHaveCapturedLocals when emitting Defer opcodes)
                     if (typeof(TDebugMode) == typeof(DebugOff) && !frame.Chunk.MayHaveCapturedLocals)
                     {
                         _frameCount--;
@@ -351,22 +370,10 @@ public sealed partial class VirtualMachine
                 case OpCode.EnumDecl: ExecuteEnumDecl(ref frame, inst); break;
                 case OpCode.IfaceDecl: ExecuteIfaceDecl(ref frame, inst); break;
                 case OpCode.Extend: ExecuteExtend(ref frame, inst); break;
+                case OpCode.Defer: ExecuteDefer(ref frame, inst); break;
 
                 // ==================== Error Handling ====================
-                case OpCode.TryBegin:
-                {
-                    // ABx (signed offset via EmitJump+PatchJump): push handler; decode with GetSBx
-                    byte errReg = Instruction.GetA(inst);
-                    int catchOffset = Instruction.GetSBx(inst);
-                    _exceptionHandlers.Add(new ExceptionHandler
-                    {
-                        CatchIP = frame.IP + catchOffset,
-                        StackLevel = _sp,
-                        FrameIndex = _frameCount - 1,
-                        ErrorReg = errReg,
-                    });
-                    break;
-                }
+                case OpCode.TryBegin: ExecuteTryBegin(ref frame, inst); break;
                 case OpCode.TryEnd: ExecuteTryEnd(); break;
                 case OpCode.Throw: ExecuteThrow(ref frame, inst); break;
                 case OpCode.TryExpr: ExecuteTryExpr(ref frame, inst); break;

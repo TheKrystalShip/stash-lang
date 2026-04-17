@@ -1,0 +1,173 @@
+#!/usr/bin/env stash
+
+// ============================================================
+// defer — LIFO Cleanup
+// ============================================================
+// The defer statement registers cleanup code to execute when
+// the enclosing function exits. Defers execute in LIFO order
+// (last registered = first to run).
+
+// ─── 1. Basic single-statement defer ────────────────────────
+
+fn basicDefer() {
+  defer io.println("  cleanup: closing connection");
+  io.println("  doing work...");
+  io.println("  more work...");
+}
+
+io.println("=== 1. Basic single-statement defer ===");
+basicDefer();
+io.println();
+
+// ─── 2. LIFO execution order ────────────────────────────────
+
+fn lifoOrder() {
+  defer io.println("  3rd: delete temp files");
+  defer io.println("  2nd: close connection");
+  defer io.println("  1st: release lock");
+  io.println("  doing work...");
+}
+
+io.println("=== 2. LIFO execution order ===");
+lifoOrder();
+io.println();
+
+// ─── 3. Block defer with conditional logic ──────────────────
+
+fn blockDefer(shouldRollback) {
+  let status = "unknown";
+  defer {
+    if (status == "failed") {
+      io.println("  rolling back changes");
+    } else {
+      io.println("  committing changes");
+    }
+  }
+  if (shouldRollback) {
+    status = "failed";
+  } else {
+    status = "success";
+  }
+}
+
+io.println("=== 3. Block defer with conditional logic ===");
+io.println("Block defer (success):");
+blockDefer(false);
+io.println("Block defer (rollback):");
+blockDefer(true);
+io.println();
+
+// ─── 4. Eager vs late binding ───────────────────────────────
+//
+// Single-statement defer evaluates its expression arguments eagerly —
+// the callee and all argument values are captured at the defer site.
+// Block defer is a closure — it sees the variable's value at exit time.
+
+fn eagerVsLate() {
+  let x = 10;
+  defer io.println("  eager: " + conv.toStr(x)); // captures x=10 NOW
+  defer {
+    io.println("  late:  " + conv.toStr(x));
+  } // sees x=20 at exit
+  x = 20;
+}
+
+io.println("=== 4. Eager vs late binding ===");
+eagerVsLate();
+io.println();
+
+// ─── 5. Defer with try/catch ────────────────────────────────
+//
+// Defers run even when an exception propagates out of the function.
+// The exception continues to unwind after all defers complete.
+
+fn riskyOperation() {
+  defer io.println("  cleanup always runs");
+  throw "something went wrong";
+}
+
+io.println("=== 5. Defer with try/catch ===");
+try {
+  riskyOperation();
+} catch (e) {
+  io.println("  caught: " + e.message);
+}
+io.println();
+
+// ─── 6. Multi-resource cleanup pattern ──────────────────────
+//
+// Register defers immediately after acquiring each resource.
+// LIFO order means the last-acquired resource is released first.
+
+fn deploy() {
+  defer io.println("  3. delete temp files");
+  io.println("  acquired temp directory");
+  defer io.println("  2. close connection");
+  io.println("  opened connection");
+  defer io.println("  1. release lock");
+  io.println("  acquired lock");
+  io.println("  deploying...");
+}
+
+io.println("=== 6. Multi-resource cleanup pattern ===");
+deploy();
+io.println();
+// ─── 7. Defer in loops (footgun) ────────────────────────────
+//
+// Defers inside a loop accumulate for the entire function lifetime,
+// not per iteration. They all fire when the function returns.
+// Use try/finally for per-iteration cleanup instead.
+
+io.println("=== 7. Defer in loops ===");
+io.println("Defer in loop (accumulates — all fire at function exit):");
+
+fn deferInLoop() {
+  for (let i = 0; i < 3; i++) {
+    defer io.println("  deferred " + conv.toStr(i));
+  }
+  io.println("  after loop");
+}
+
+deferInLoop();
+io.println();
+io.println("Per-iteration cleanup with try/finally (preferred):");
+for (let i = 0; i < 3; i = i + 1) {
+  try {
+    io.println("  processing " + conv.toStr(i));
+  } finally {
+    io.println("  cleanup " + conv.toStr(i));
+  }
+}
+io.println();
+
+// ─── 8. Conditional defer ───────────────────────────────────
+//
+// A defer inside an if block only registers if that branch executes.
+
+fn conditionalDefer(needsCleanup) {
+  if (needsCleanup) {
+    defer io.println("  cleaning up");
+  }
+  io.println("  main work");
+}
+
+io.println("=== 8. Conditional defer ===");
+io.println("With cleanup:");
+conditionalDefer(true);
+io.println("Without cleanup:");
+conditionalDefer(false);
+io.println();
+
+// ─── 9. Recursion ───────────────────────────────────────────
+//
+// Each call frame has its own independent defer list.
+
+fn recurse(n) {
+  defer io.println("  exit " + conv.toStr(n));
+  if (n > 0) {
+    recurse(n - 1);
+  }
+}
+
+io.println("=== 9. Recursion (each call has independent defers) ===");
+recurse(3);

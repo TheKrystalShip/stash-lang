@@ -279,6 +279,15 @@ public sealed partial class VirtualMachine
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteDefer(ref CallFrame frame, uint inst)
+    {
+        int @base = frame.BaseSlot;
+        byte a = Instruction.GetA(inst);
+        StashValue closure = _stack[@base + a];
+        (frame.Defers ??= new List<StashValue>()).Add(closure);
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteNewStruct(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);

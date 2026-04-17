@@ -3,6 +3,7 @@ namespace Stash.Runtime;
 using System;
 using System.Collections.Generic;
 using Stash.Common;
+using Stash.Runtime.Types;
 
 /// <summary>
 /// Exception thrown when the interpreter encounters an error during expression evaluation.
@@ -42,6 +43,11 @@ public class RuntimeError : Exception
     /// beyond <c>type</c> and <c>message</c>.
     /// </summary>
     public Dictionary<string, object?>? Properties { get; init; }
+
+    /// <summary>
+    /// Errors from deferred cleanup that occurred during this error's propagation.
+    /// </summary>
+    public List<StashError>? SuppressedErrors { get; init; }
 
     /// <summary>
     /// Initializes a new <see cref="RuntimeError"/> with a human-readable message and an

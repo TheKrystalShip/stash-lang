@@ -876,6 +876,14 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitContinueStmt(ContinueStmt stmt) => null;
 
+    /// <summary>Walks the deferred body for nested declarations.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitDeferStmt(DeferStmt stmt)
+    {
+        stmt.Body.Accept(this);
+        return null;
+    }
+
     /// <summary>
     /// Registers a placeholder <see cref="SymbolKind.Variable"/> symbol for each imported name.
     /// These placeholder symbols are later replaced by fully-resolved <see cref="SymbolInfo"/>

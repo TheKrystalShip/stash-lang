@@ -324,6 +324,9 @@ public enum TokenType
     /// <summary>The <c>timeout</c> keyword. Begins a timeout expression that bounds execution time.</summary>
     Timeout,
 
+    /// <summary>The <c>defer</c> keyword. Registers cleanup code to execute at function exit.</summary>
+    Defer,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

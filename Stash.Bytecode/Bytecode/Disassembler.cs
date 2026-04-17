@@ -138,6 +138,7 @@ public static class Disassembler
         [OpCode.GtK]            = "gt.k",
         [OpCode.GeK]            = "ge.k",
         [OpCode.TypedWrap]      = "typed.wrap",
+        [OpCode.Defer]          = "defer",
     };
 
     // ─── Instruction Format Classification ───────────────────────────────────

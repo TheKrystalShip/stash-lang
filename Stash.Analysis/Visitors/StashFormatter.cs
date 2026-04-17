@@ -375,6 +375,12 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
         return 0;
     }
 
+    public int VisitDeferStmt(DeferStmt stmt)
+    {
+        ControlFlowPrinter.PrintDefer(stmt, _ctx, FormatStmt);
+        return 0;
+    }
+
     public int VisitExprStmt(ExprStmt stmt)
     {
         ControlFlowPrinter.PrintExprStmt(stmt, _ctx, FormatExpr);

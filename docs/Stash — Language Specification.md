@@ -30,7 +30,7 @@
 13. [Implementation Roadmap](#13-implementation-roadmap)
 14. [References & Resources](#14-references--resources)
 
-**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [7f. Timeout Blocks](#7f-timeout-blocks) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
+**Addenda:** [3b. Compound Assignment Operators](#3b-compound-assignment-operators) · [3c. Multi-line Strings](#3c-multi-line-strings) · [3d. Range Expressions](#3d-range-expressions) · [3e. Destructuring Assignment](#3e-destructuring-assignment) · [4b. The `in` Operator](#4b-the-in-operator) · [4c. The `is` Operator](#4c-the-is-operator) · [5b. Enums](#5b-enums) · [5c. Dictionaries](#5c-dictionaries) · [5d. Dictionary Dot Access](#5d-dictionary-dot-access) · [5e. Optional Chaining](#5e-optional-chaining) · [5f. Interfaces](#5f-interfaces) · [6b. Shebang Support](#6b-shebang-support) · [6c. Output Redirection](#6c-output-redirection) · [6d. Privilege Elevation (`elevate`)](#6d-privilege-elevation-elevate) · [7b. Error Handling](#7b-error-handling) · [7c. Switch Expressions](#7c-switch-expressions) · [7d. Retry Blocks](#7d-retry-blocks) · [7e. Switch Statements](#7e-switch-statements) · [7f. Timeout Blocks](#7f-timeout-blocks) · [7g. Defer](#7g-defer) · [8b. Lambda Expressions](#8b-lambda-expressions) · [8c. UFCS — Uniform Function Call Syntax](#8c-ufcs--uniform-function-call-syntax) · [8d. Extend Blocks — Type Extension Methods](#8d-extend-blocks--type-extension-methods) · [9b. Module / Import System](#9b-module--import-system) · [9c. Code Formatter](#9c-code-formatter) · [9d. Diagnostic Codes & Suppression](#9d-diagnostic-codes--suppression)
 
 > **Standard Library:** Namespace reference tables, process management, argument parsing, and testing infrastructure are documented in the [Standard Library Reference](Stash%20—%20Standard%20Library%20Reference.md).
 
@@ -3369,6 +3369,174 @@ timeout 30s {
 - Timeout only guarantees interruption of I/O operations (`http.*`, `$()`, `process.*`, `time.sleep`, `fs.*`). CPU-bound code checks for cancellation at loop boundaries.
 - The duration must be positive. Zero or negative durations throw a `RuntimeError`.
 - The block executes in the same scope — closures and variable captures work normally.
+
+---
+
+## 7g. Defer
+
+The `defer` statement registers a cleanup action to execute when the enclosing **function** returns — whether by a normal `return`, by falling off the end, or because an exception propagates through it. Multiple defers in a function execute in **LIFO order** (last registered runs first). `defer` is a statement keyword, not a function, so it integrates cleanly with the language's scope rules and diagnostics.
+
+### Syntax
+
+```stash
+// Single-statement form — most common
+defer <expression>
+
+// Block form — for multi-step or conditional cleanup
+defer { <statements> }
+
+// Async variant — inside async functions
+defer await <expression>
+defer await { <statements> }
+```
+
+### Scope
+
+A `defer` statement is **function-scoped**: registered defers always run when the enclosing function exits, regardless of which control flow path is taken. They are not block-scoped (a defer inside an `if` branch fires at function exit, not at the end of the `if`).
+
+```stash
+fn example() {
+    defer io.println("3: runs last registered, exits first");
+    defer io.println("2: middle");
+    defer io.println("1: first registered, exits last");
+    io.println("body");
+}
+// Output:
+//   body
+//   3: runs last registered, exits first
+//   2: middle
+//   1: first registered, exits last
+```
+
+A defer registered inside a conditional branch only fires if that branch was reached:
+
+```stash
+fn conditionalCleanup(acquired) {
+    if (acquired) {
+        defer releaseResource();   // only runs if acquired == true
+    }
+    doWork();
+}
+```
+
+### Evaluation: Eager vs Late Binding
+
+The two forms differ in **when expressions are evaluated**:
+
+**Single-statement (`defer expr`):** The callee and all argument values are evaluated **immediately** at the defer site (eager binding). The captured values are frozen — later mutations to variables do not affect what the deferred call will receive.
+
+**Block (`defer { ... }`):** The block is compiled as a **closure** over the enclosing scope. Variables are captured by reference and read at the time the block executes (late binding) — i.e., when the function exits.
+
+```stash
+fn eagerVsLate() {
+    let x = 10;
+    defer io.println("eager: " + conv.toStr(x));   // captures x = 10 now
+    defer { io.println("late: " + conv.toStr(x)); } // reads x at exit time
+    x = 20;
+}
+// Output:
+//   late: 20
+//   eager: 10
+```
+
+### Error Handling
+
+Defers run even when an exception propagates out of the function. After all defers complete, the exception continues to unwind up the call stack.
+
+```stash
+fn riskyOp() {
+    defer io.println("cleanup always runs");
+    throw "something went wrong";
+}
+
+try { riskyOp(); } catch (e) { io.println("caught: " + e.message); }
+// Output:
+//   cleanup always runs
+//   caught: something went wrong
+```
+
+**Suppressed errors:** If a deferred action itself throws, the error is caught and attached to the propagating exception's `.suppressed` array — it does not replace the original error or stop other defers from running.
+
+```stash
+fn example() {
+    defer throw "cleanup error";   // suppressed — stored in exception.suppressed
+    throw "original error";
+}
+let err = try example();
+io.println(err.message);                     // "original error"
+io.println(err.suppressed[0].message);       // "cleanup error"
+```
+
+### Interactions
+
+**With `try/finally`:** `defer` and `finally` are complementary. Use `finally` for cleanup scoped to a single `try` block; use `defer` for cleanup scoped to the function lifetime. Defers run **after** any `finally` clause in the body.
+
+**With `retry`:** Defers are not re-registered on each retry attempt. Register defers before the `retry` block to ensure they fire once at function exit. Inside the retry body, `try/finally` is the right tool for per-attempt cleanup.
+
+**With `timeout`:** Defers registered before a `timeout` block run when the enclosing function exits — not when the timeout fires. Resources acquired inside a `timeout` block should use `try/finally` for cleanup in the timeout handler.
+
+**With closures and lambdas:** `defer` applies to the immediately enclosing `fn` declaration. A `defer` inside a lambda registered from within a function runs when the **lambda** exits, not the outer function.
+
+```stash
+fn outer() {
+    let cleanup = () => {
+        defer io.println("lambda cleanup");  // runs when lambda exits
+        doWork();
+    }
+    cleanup();   // "lambda cleanup" prints here
+}
+```
+
+### Defer in Loops
+
+A defer registered inside a loop accumulates for the **entire function lifetime** — all instances fire when the function returns, not at the end of each iteration. This is usually unintentional. Use `try/finally` for per-iteration cleanup:
+
+```stash
+// Footgun — 3 defers accumulate, all fire at function exit
+fn processAll(items) {
+    for (let item in items) {
+        defer cleanup(item);    // fires at function return, not end of loop body
+    }
+}
+
+// Correct — cleanup runs after each iteration
+fn processAll(items) {
+    for (let item in items) {
+        try {
+            process(item);
+        } finally {
+            cleanup(item);
+        }
+    }
+}
+```
+
+### Multi-Resource Cleanup Pattern
+
+Register a `defer` immediately after acquiring each resource. LIFO order guarantees that the most-recently acquired resource is released first — mirroring correct manual cleanup order without requiring nested `try/finally` blocks.
+
+```stash
+fn deploy() {
+    defer deleteTempFiles();         // runs 3rd
+    let tmp = acquireTempDir();
+
+    defer closeConnection();         // runs 2nd
+    let conn = openConnection();
+
+    defer releaseLock();             // runs 1st
+    acquireLock();
+
+    doDeployWork(tmp, conn);
+    // All three defers fire here, LIFO: releaseLock → closeConnection → deleteTempFiles
+}
+```
+
+### Implementation Notes
+
+- Each call frame maintains a list of deferred closures (initially `null`; allocated lazily on the first `defer`).
+- The `OpCode.Defer` instruction pushes a compiled closure onto the current frame's defer list.
+- At return (normal or exception), the VM executes defers in reverse registration order before popping the frame.
+- Errors thrown by defers are caught by the VM and attached to the propagating exception's `.suppressed` array.
 
 ---
 

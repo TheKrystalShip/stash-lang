@@ -76,7 +76,7 @@ public class Lexer
     /// as a static field shared across all <see cref="Lexer"/> instances.
     /// </remarks>
     private static readonly FrozenDictionary<string, TokenType> _keywords =
-        new Dictionary<string, TokenType>(37)
+        new Dictionary<string, TokenType>(38)
         {
             ["let"] = TokenType.Let,
             ["const"] = TokenType.Const,
@@ -108,6 +108,7 @@ public class Lexer
             ["is"] = TokenType.Is,
             ["async"] = TokenType.Async,
             ["await"] = TokenType.Await,
+            ["defer"] = TokenType.Defer,
             ["elevate"] = TokenType.Elevate,
             ["extend"] = TokenType.Extend,
             ["retry"] = TokenType.Retry,

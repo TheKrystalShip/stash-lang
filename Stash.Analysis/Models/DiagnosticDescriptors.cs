@@ -22,6 +22,10 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0105 = new("SA0105", "Empty block body", DiagnosticLevel.Information, "Control flow", "Empty {0} body.");
     public static readonly DiagnosticDescriptor SA0106 = new("SA0106", "Unreachable code after terminating branches", DiagnosticLevel.Information, "Control flow", "Unreachable code: all preceding branches unconditionally return or throw.");
     public static readonly DiagnosticDescriptor SA0109 = new("SA0109", "Cyclomatic complexity too high", DiagnosticLevel.Information, "Control flow", "Cyclomatic complexity of function '{0}' is {1}, exceeds threshold of {2}.");
+    public static readonly DiagnosticDescriptor SA0150 = new("SA0150", "Defer in loop", DiagnosticLevel.Warning, "Control flow", "'defer' inside a loop accumulates deferred calls — consider 'try/finally' for per-iteration cleanup.");
+    public static readonly DiagnosticDescriptor SA0151 = new("SA0151", "Defer after return", DiagnosticLevel.Warning, "Control flow", "'defer' after unconditional return or throw — deferred code will never be registered.");
+    public static readonly DiagnosticDescriptor SA0152 = new("SA0152", "Empty defer block", DiagnosticLevel.Information, "Control flow", "Empty 'defer' block has no effect.");
+    public static readonly DiagnosticDescriptor SA0153 = new("SA0153", "Defer await without async", DiagnosticLevel.Warning, "Control flow", "'defer await' used outside of an async function.");
 
     // ── SA02xx — Declarations ────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0201 = new("SA0201", "Unused declaration", DiagnosticLevel.Information, "Declarations", "{0} '{1}' is declared but never used.");
@@ -119,6 +123,10 @@ public static class DiagnosticDescriptors
         dict[SA0105.Code] = SA0105;
         dict[SA0106.Code] = SA0106;
         dict[SA0109.Code] = SA0109;
+        dict[SA0150.Code] = SA0150;
+        dict[SA0151.Code] = SA0151;
+        dict[SA0152.Code] = SA0152;
+        dict[SA0153.Code] = SA0153;
         dict[SA0201.Code] = SA0201;
         dict[SA0202.Code] = SA0202;
         dict[SA0203.Code] = SA0203;

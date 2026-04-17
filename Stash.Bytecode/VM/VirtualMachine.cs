@@ -395,6 +395,7 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
         frame.Upvalues = upvalues;
         frame.FunctionName = name;
         frame.ModuleGlobals = moduleGlobals;
+        frame.Defers = null;
 
         // Ensure the shared stack has room for this frame's entire register window.
         int needed = baseSlot + chunk.MaxRegs;

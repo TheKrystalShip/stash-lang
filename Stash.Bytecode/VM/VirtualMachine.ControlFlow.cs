@@ -49,7 +49,22 @@ public sealed partial class VirtualMachine
         throw new RuntimeError(RuntimeValues.Stringify(errorVal), span);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteTryBegin(ref CallFrame frame, uint inst)
+    {
+        // ABx (signed offset via EmitJump+PatchJump): push handler; decode with GetSBx
+        byte errReg = Instruction.GetA(inst);
+        int catchOffset = Instruction.GetSBx(inst);
+        _exceptionHandlers.Add(new ExceptionHandler
+        {
+            CatchIP = frame.IP + catchOffset,
+            StackLevel = _sp,
+            FrameIndex = _frameCount - 1,
+            ErrorReg = errReg,
+        });
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteTryEnd()
     {
         if (_exceptionHandlers.Count > 0)

@@ -123,6 +123,18 @@ public sealed partial class VirtualMachine
             {
                 ExceptionHandler handler = _exceptionHandlers[^1];
                 _exceptionHandlers.RemoveAt(_exceptionHandlers.Count - 1);
+
+                // Execute defers for frames being unwound BEFORE closing upvalues
+                List<StashError>? suppressed = null;
+                for (int i = _frameCount - 1; i > handler.FrameIndex; i--)
+                {
+                    ref CallFrame unwoundFrame = ref _frames[i];
+                    if (unwoundFrame.Defers is { Count: > 0 })
+                    {
+                        RunFrameDefers(ref unwoundFrame, ref suppressed);
+                    }
+                }
+
                 CloseUpvalues(handler.StackLevel);
                 _frameCount = handler.FrameIndex + 1;
                 while (_debugCallStack.Count > handler.FrameIndex)
@@ -131,7 +143,15 @@ public sealed partial class VirtualMachine
                 }
 
                 _sp = handler.StackLevel;
+
+                // Merge suppressed errors from the exception itself (e.g. from ExecuteDefers
+                // when multiple defers throw) with any collected during frame unwinding.
+                if (ex.SuppressedErrors is { Count: > 0 })
+                    (suppressed ??= new()).AddRange(ex.SuppressedErrors);
+
                 var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                if (suppressed != null)
+                    stashError.Suppressed = suppressed;
                 _context.LastError = stashError;
                 ref CallFrame hf2 = ref _frames[_frameCount - 1];
                 _stack[hf2.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);

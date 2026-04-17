@@ -235,6 +235,10 @@ public enum OpCode : byte
     // === Typed Arrays ===
     /// <summary>ABx: R(A) = TypedArray(elementType=K(Bx), elements=R(A)).</summary>
     TypedWrap = 92,
+
+    // === Defer ===
+    /// <summary>A: Push deferred closure R(A) onto the current frame's defer stack (LIFO).</summary>
+    Defer = 93,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>

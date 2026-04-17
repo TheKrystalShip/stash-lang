@@ -18,6 +18,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private int _loopDepth;
     private int _functionDepth;
     private int _elevateDepth;
+    private int _asyncDepth;
 
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
@@ -180,6 +181,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         DispatchNodeRules(stmt);
 
         _functionDepth++;
+        if (stmt.IsAsync) _asyncDepth++;
         var savedStatements = _allStatements;
         _allStatements = stmt.Body.Statements;
         CheckUnreachableStatements(stmt.Body.Statements);
@@ -188,6 +190,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             s.Accept(this);
         }
         _allStatements = savedStatements;
+        if (stmt.IsAsync) _asyncDepth--;
         _functionDepth--;
 
         return null;
@@ -413,6 +416,30 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             }
             @case.Body.Accept(this);
         }
+        return null;
+    }
+
+    public object? VisitDeferStmt(DeferStmt stmt)
+    {
+        // SA0150: defer inside a loop accumulates deferred calls
+        if (_loopDepth > 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0150.CreateDiagnostic(stmt.DeferKeyword.Span));
+        }
+
+        // SA0152: empty defer block has no effect
+        if (stmt.Body is BlockStmt block && block.Statements.Count == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0152.CreateDiagnostic(stmt.Span));
+        }
+
+        // SA0153: defer await outside an async function
+        if (stmt.HasAwait && _asyncDepth == 0)
+        {
+            _diagnostics.Add(DiagnosticDescriptors.SA0153.CreateDiagnostic(stmt.DeferKeyword.Span));
+        }
+
+        stmt.Body.Accept(this);
         return null;
     }
 
@@ -667,6 +694,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         DispatchNodeRules(expr);
 
         _functionDepth++;
+        if (expr.IsAsync) _asyncDepth++;
 
         if (expr.ExpressionBody != null)
         {
@@ -677,6 +705,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
             expr.BlockBody.Accept(this);
         }
 
+        if (expr.IsAsync) _asyncDepth--;
         _functionDepth--;
 
         return null;

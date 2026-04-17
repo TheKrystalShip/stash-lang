@@ -24,6 +24,9 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
         Properties = properties;
     }
 
+    /// <summary>Errors from deferred cleanup that occurred during this error's propagation.</summary>
+    public List<StashError>? Suppressed { get; set; }
+
     /// <summary>
     /// Creates a <see cref="StashError"/> from a caught <see cref="RuntimeError"/> and an optional call stack.
     /// </summary>
@@ -41,7 +44,10 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
         }
 
         string type = error.ErrorType ?? "RuntimeError";
-        return new StashError(error.Message, type, stack, error.Properties);
+        var stashError = new StashError(error.Message, type, stack, error.Properties);
+        if (error.SuppressedErrors != null)
+            stashError.Suppressed = error.SuppressedErrors;
+        return stashError;
     }
 
     public override string ToString() => $"{Type}: {Message}";
@@ -67,6 +73,16 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
                     return true;
                 }
                 value = StashValue.Null;
+                return true;
+            case "suppressed":
+                if (Suppressed is { Count: > 0 })
+                {
+                    value = StashValue.FromObj(new List<StashValue>(Suppressed.Select(s => StashValue.FromObj(s))));
+                }
+                else
+                {
+                    value = StashValue.FromObj(new List<StashValue>());
+                }
                 return true;
             default:
                 if (Properties?.TryGetValue(name, out object? propVal) == true)
