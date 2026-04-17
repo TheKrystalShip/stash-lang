@@ -3,12 +3,14 @@ namespace Stash.Runtime.Types;
 using System.Collections.Generic;
 using System.Linq;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
+using Stash.Common;
 
 /// <summary>
 /// Represents a dictionary — an unordered collection of key-value pairs.
 /// Keys must be value types: string, int (long), float (double), or bool.
 /// </summary>
-public class StashDictionary
+public class StashDictionary : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMIterable, IVMIndexable, IVMSized, IVMStringifiable
 {
     private readonly Dictionary<object, StashValue> _entries = new();
 
@@ -114,4 +116,70 @@ public class StashDictionary
 
         throw new RuntimeError($"Dictionary keys must be string, int, float, or bool. Got '{key.GetType().Name}'.");
     }
+
+    // --- Protocol implementations ---
+
+    public string VMTypeName => "dict";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        if (Has(name))
+        {
+            value = Get(name);
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    public void VMSetField(string name, StashValue value, SourceSpan? span)
+    {
+        Set(name, value);
+    }
+
+    public IVMIterator VMGetIterator(bool indexed)
+    {
+        return new StashDictionaryIterator(this, indexed);
+    }
+
+    public StashValue VMGetIndex(StashValue index, SourceSpan? span)
+    {
+        if (index.IsNull)
+            throw new RuntimeError("Dictionary key cannot be null.", span);
+        return Get(index.ToObject()!);
+    }
+
+    public void VMSetIndex(StashValue index, StashValue value, SourceSpan? span)
+    {
+        if (index.IsNull)
+            throw new RuntimeError("Dictionary key cannot be null.", span);
+        Set(index.ToObject()!, value);
+    }
+
+    public long VMLength => Count;
+
+    public string VMToString() => RuntimeValues.Stringify(this);
+}
+
+internal sealed class StashDictionaryIterator : IVMIterator
+{
+    private readonly IEnumerator<KeyValuePair<object, StashValue>> _enumerator;
+    private readonly bool _indexed;
+    private int _index;
+
+    public StashDictionaryIterator(StashDictionary dict, bool indexed)
+    {
+        _enumerator = dict.GetAllEntries().GetEnumerator();
+        _indexed = indexed;
+        _index = -1;
+    }
+
+    public bool MoveNext()
+    {
+        _index++;
+        return _enumerator.MoveNext();
+    }
+
+    public StashValue Current => _indexed ? _enumerator.Current.Value : StashValue.FromObj(_enumerator.Current.Key);
+    public StashValue CurrentKey => _indexed ? StashValue.FromObj(_enumerator.Current.Key) : StashValue.FromInt(_index);
 }

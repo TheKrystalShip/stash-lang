@@ -2,12 +2,16 @@ namespace Stash.Runtime.Types;
 
 using System;
 using System.Globalization;
+using Stash.Common;
+using Stash.Runtime;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a byte-size value in Stash (e.g., <c>100B</c>, <c>1.5MB</c>, <c>2GB</c>).
 /// Stores size as total bytes internally.
 /// </summary>
-public sealed class StashByteSize : IComparable<StashByteSize>, IEquatable<StashByteSize>
+public sealed class StashByteSize : IComparable<StashByteSize>, IEquatable<StashByteSize>,
+    IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable
 {
     public long TotalBytes { get; }
 
@@ -173,4 +177,88 @@ public sealed class StashByteSize : IComparable<StashByteSize>, IEquatable<Stash
         string formatted = value.ToString("0.##", CultureInfo.InvariantCulture);
         return $"{formatted}{unit}";
     }
+
+    // --- VM Protocol Implementations ---
+
+    public string VMTypeName => "bytes";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        switch (name)
+        {
+            case "bytes": value = StashValue.FromInt(TotalBytes); return true;
+            case "kb":    value = StashValue.FromFloat(Kb);       return true;
+            case "mb":    value = StashValue.FromFloat(Mb);       return true;
+            case "gb":    value = StashValue.FromFloat(Gb);       return true;
+            case "tb":    value = StashValue.FromFloat(Tb);       return true;
+            default:      value = StashValue.Null;                return false;
+        }
+    }
+
+    public bool VMTryArithmetic(ArithmeticOp op, StashValue other, bool isLeftOperand,
+                                out StashValue result, SourceSpan? span)
+    {
+        result = StashValue.Null;
+        switch (op)
+        {
+            case ArithmeticOp.Add when isLeftOperand:
+                if (other.IsObj && other.AsObj is StashByteSize addBs)
+                {
+                    result = StashValue.FromObj(Add(addBs));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Subtract when isLeftOperand:
+                if (other.IsObj && other.AsObj is StashByteSize subBs)
+                {
+                    result = StashValue.FromObj(Subtract(subBs));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Multiply:
+                if (other.IsInt || other.IsFloat)
+                {
+                    double factor = other.IsInt ? (double)other.AsInt : other.AsFloat;
+                    result = StashValue.FromObj(Multiply(factor));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Divide when isLeftOperand:
+                if (other.IsObj && other.AsObj is StashByteSize divBs)
+                {
+                    result = StashValue.FromFloat(DivideBy(divBs));
+                    return true;
+                }
+                if (other.IsInt || other.IsFloat)
+                {
+                    double factor = other.IsInt ? (double)other.AsInt : other.AsFloat;
+                    result = StashValue.FromObj(Divide(factor));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Negate when isLeftOperand:
+                result = StashValue.FromObj(new StashByteSize(-TotalBytes));
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    public bool VMTryCompare(StashValue other, out int result, SourceSpan? span)
+    {
+        if (other.IsObj && other.AsObj is StashByteSize otherBs)
+        {
+            result = CompareTo(otherBs);
+            return true;
+        }
+        result = 0;
+        return false;
+    }
+
+    public string VMToString() => ToString();
 }

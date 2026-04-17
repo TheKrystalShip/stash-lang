@@ -1,12 +1,16 @@
 namespace Stash.Runtime.Types;
 
 using System;
+using Stash.Common;
+using Stash.Runtime;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a duration value in Stash (e.g., <c>5s</c>, <c>2h30m</c>, <c>500ms</c>).
 /// Stores time as total milliseconds internally.
 /// </summary>
-public sealed class StashDuration : IComparable<StashDuration>, IEquatable<StashDuration>
+public sealed class StashDuration : IComparable<StashDuration>, IEquatable<StashDuration>,
+    IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable
 {
     public long TotalMilliseconds { get; }
 
@@ -205,4 +209,93 @@ public sealed class StashDuration : IComparable<StashDuration>, IEquatable<Stash
 
         return string.Join("", parts);
     }
+
+    // --- VM Protocol Implementations ---
+
+    public string VMTypeName => "duration";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        switch (name)
+        {
+            case "totalMs":      value = StashValue.FromFloat(TotalMilliseconds); return true;
+            case "totalSeconds": value = StashValue.FromFloat(TotalSeconds);      return true;
+            case "totalMinutes": value = StashValue.FromFloat(TotalMinutes);      return true;
+            case "totalHours":   value = StashValue.FromFloat(TotalHours);        return true;
+            case "totalDays":    value = StashValue.FromFloat(TotalDays);         return true;
+            case "milliseconds": value = StashValue.FromInt(Milliseconds);        return true;
+            case "seconds":      value = StashValue.FromInt(Seconds);             return true;
+            case "minutes":      value = StashValue.FromInt(Minutes);             return true;
+            case "hours":        value = StashValue.FromInt(Hours);               return true;
+            case "days":         value = StashValue.FromInt(Days);                return true;
+            default:             value = StashValue.Null;                         return false;
+        }
+    }
+
+    public bool VMTryArithmetic(ArithmeticOp op, StashValue other, bool isLeftOperand,
+                                out StashValue result, SourceSpan? span)
+    {
+        result = StashValue.Null;
+        switch (op)
+        {
+            case ArithmeticOp.Add when isLeftOperand:
+                if (other.IsObj && other.AsObj is StashDuration addDur)
+                {
+                    result = StashValue.FromObj(Add(addDur));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Subtract when isLeftOperand:
+                if (other.IsObj && other.AsObj is StashDuration subDur)
+                {
+                    result = StashValue.FromObj(Subtract(subDur));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Multiply:
+                if (other.IsInt || other.IsFloat)
+                {
+                    double factor = other.IsInt ? (double)other.AsInt : other.AsFloat;
+                    result = StashValue.FromObj(Multiply(factor));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Divide when isLeftOperand:
+                if (other.IsObj && other.AsObj is StashDuration divDur)
+                {
+                    result = StashValue.FromFloat(DivideBy(divDur));
+                    return true;
+                }
+                if (other.IsInt || other.IsFloat)
+                {
+                    double factor = other.IsInt ? (double)other.AsInt : other.AsFloat;
+                    result = StashValue.FromObj(Divide(factor));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Negate when isLeftOperand:
+                result = StashValue.FromObj(Negate());
+                return true;
+
+            default:
+                return false;
+        }
+    }
+
+    public bool VMTryCompare(StashValue other, out int result, SourceSpan? span)
+    {
+        if (other.IsObj && other.AsObj is StashDuration otherDur)
+        {
+            result = CompareTo(otherDur);
+            return true;
+        }
+        result = 0;
+        return false;
+    }
+
+    public string VMToString() => ToString();
 }

@@ -4,8 +4,11 @@ using System;
 using System.Linq;
 using System.Net;
 using System.Net.Sockets;
+using Stash.Common;
+using Stash.Runtime;
+using Stash.Runtime.Protocols;
 
-public class StashIpAddress
+public class StashIpAddress : IVMTyped, IVMFieldAccessible, IVMArithmetic, IVMComparable, IVMStringifiable
 {
     public IPAddress Address { get; }
     public int Version { get; }
@@ -451,4 +454,71 @@ public class StashIpAddress
         // 169.254.0.0/16
         return bytes[0] == 169 && bytes[1] == 254;
     }
+
+    // --- VM Protocol Implementations ---
+
+    public string VMTypeName => "ip";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        switch (name)
+        {
+            case "address":      value = StashValue.FromObj(Address.ToString());              return true;
+            case "version":      value = StashValue.FromInt(Version);                         return true;
+            case "prefixLength": value = PrefixLength.HasValue
+                                     ? StashValue.FromInt(PrefixLength.Value)
+                                     : StashValue.Null;                                       return true;
+            case "isLoopback":   value = StashValue.FromBool(IsLoopback);                     return true;
+            case "isPrivate":    value = StashValue.FromBool(IsPrivate);                      return true;
+            case "isLinkLocal":  value = StashValue.FromBool(IsLinkLocal);                    return true;
+            case "isIPv4":       value = StashValue.FromBool(Version == 4);                   return true;
+            case "isIPv6":       value = StashValue.FromBool(Version == 6);                   return true;
+            default:             value = StashValue.Null;                                     return false;
+        }
+    }
+
+    public bool VMTryArithmetic(ArithmeticOp op, StashValue other, bool isLeftOperand,
+                                out StashValue result, SourceSpan? span)
+    {
+        result = StashValue.Null;
+        switch (op)
+        {
+            case ArithmeticOp.Add:
+                if (other.IsInt)
+                {
+                    result = StashValue.FromObj(Add(other.AsInt));
+                    return true;
+                }
+                return false;
+
+            case ArithmeticOp.Subtract when isLeftOperand:
+                if (other.IsObj && other.AsObj is StashIpAddress otherIp)
+                {
+                    result = StashValue.FromInt(Subtract(otherIp));
+                    return true;
+                }
+                if (other.IsInt)
+                {
+                    result = StashValue.FromObj(Add(-other.AsInt));
+                    return true;
+                }
+                return false;
+
+            default:
+                return false;
+        }
+    }
+
+    public bool VMTryCompare(StashValue other, out int result, SourceSpan? span)
+    {
+        if (other.IsObj && other.AsObj is StashIpAddress otherIp)
+        {
+            result = CompareTo(otherIp);
+            return true;
+        }
+        result = 0;
+        return false;
+    }
+
+    public string VMToString() => ToString();
 }

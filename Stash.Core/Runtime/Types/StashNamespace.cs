@@ -6,11 +6,12 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Stash.Common;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a namespace — a named container for functions, structs, enums, and other members.
 /// </summary>
-public class StashNamespace
+public class StashNamespace : IVMTyped, IVMFieldAccessible, IVMStringifiable
 {
     public string Name { get; }
     public bool IsBuiltIn { get; init; }
@@ -107,4 +108,21 @@ public class StashNamespace
     }
 
     public override string ToString() => $"<namespace {Name}>";
+
+    // --- Protocol implementations ---
+
+    public string VMTypeName => "namespace";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        if (HasMember(name))
+        {
+            value = GetMemberValue(name, span);
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    public string VMToString() => ToString();
 }

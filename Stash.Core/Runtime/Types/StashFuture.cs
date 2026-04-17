@@ -3,11 +3,12 @@ namespace Stash.Runtime.Types;
 using System;
 using System.Threading;
 using System.Threading.Tasks;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a future value in the Stash runtime — the result of calling an async function.
 /// </summary>
-public class StashFuture
+public class StashFuture : IVMTyped, IVMStringifiable
 {
     private readonly Task<object?> _task;
     private readonly CancellationTokenSource _cts;
@@ -78,4 +79,10 @@ public class StashFuture
     }
 
     public override string ToString() => $"<Future:{Status}>";
+
+    // --- VM Protocol Implementations ---
+
+    public string VMTypeName => "Future";
+
+    public string VMToString() => ToString();
 }

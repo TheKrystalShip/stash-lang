@@ -3,12 +3,13 @@ namespace Stash.Runtime.Types;
 using System;
 using System.Collections.Generic;
 using Stash.Common;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// A method bound to a specific struct instance. When called, injects the instance
 /// as 'self' into the method's environment before executing the body.
 /// </summary>
-public class StashBoundMethod : IStashCallable
+public class StashBoundMethod : IStashCallable, IVMTyped
 {
     private readonly StashInstance _instance;
     private readonly IStashCallable _method;
@@ -44,4 +45,8 @@ public class StashBoundMethod : IStashCallable
     }
 
     public override string ToString() => $"<method {_method}>";
+
+    // --- Protocol implementations ---
+
+    public string VMTypeName => "function";
 }

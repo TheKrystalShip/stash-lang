@@ -1,12 +1,15 @@
 namespace Stash.Runtime.Types;
 
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
+using Stash.Runtime;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a first-class error value in the Stash runtime.
 /// </summary>
-public class StashError
+public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMStringifiable
 {
     public string Message { get; }
     public string Type { get; }
@@ -42,4 +45,41 @@ public class StashError
     }
 
     public override string ToString() => $"{Type}: {Message}";
+
+    // --- VM Protocol Implementations ---
+
+    public string VMTypeName => "Error";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        switch (name)
+        {
+            case "message":
+                value = StashValue.FromObj(Message);
+                return true;
+            case "type":
+                value = StashValue.FromObj(Type);
+                return true;
+            case "stack":
+                if (Stack is not null)
+                {
+                    value = StashValue.FromObj(new List<StashValue>(Stack.Select(s => StashValue.FromObj(s))));
+                    return true;
+                }
+                value = StashValue.Null;
+                return true;
+            default:
+                if (Properties?.TryGetValue(name, out object? propVal) == true)
+                {
+                    value = StashValue.FromObject(propVal);
+                    return true;
+                }
+                value = StashValue.Null;
+                return false;
+        }
+    }
+
+    public bool VMIsFalsy => true;
+
+    public string VMToString() => ToString();
 }

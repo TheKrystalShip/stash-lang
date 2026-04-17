@@ -1,11 +1,13 @@
 namespace Stash.Runtime.Types;
 
 using System.Collections.Generic;
+using Stash.Common;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a struct declaration — a named template with a list of field names and methods.
 /// </summary>
-public class StashStruct
+public class StashStruct : IVMTyped, IVMFieldAccessible, IVMStringifiable
 {
     public string Name { get; }
     public List<string> Fields { get; }
@@ -30,4 +32,21 @@ public class StashStruct
     }
 
     public override string ToString() => $"<struct {Name}>";
+
+    // --- Protocol implementations ---
+
+    public string VMTypeName => "struct";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        if (Methods.TryGetValue(name, out IStashCallable? method))
+        {
+            value = StashValue.FromObj(method);
+            return true;
+        }
+        value = default;
+        return false;
+    }
+
+    public string VMToString() => ToString();
 }

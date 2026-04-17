@@ -1,13 +1,17 @@
 namespace Stash.Runtime.Types;
 
 using System;
+using Stash.Common;
+using Stash.Runtime;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a semantic version value in Stash (e.g., <c>1.0.0</c>, <c>3.0.0-beta.2</c>, <c>2.x</c>).
 /// Follows the SemVer 2.0.0 specification for parsing, comparison, and equality.
 /// Build metadata is ignored in comparisons and equality per spec.
 /// </summary>
-public sealed class StashSemVer : IComparable<StashSemVer>, IEquatable<StashSemVer>
+public sealed class StashSemVer : IComparable<StashSemVer>, IEquatable<StashSemVer>,
+    IVMTyped, IVMFieldAccessible, IVMComparable, IVMStringifiable
 {
     public long Major { get; }
     public long Minor { get; }
@@ -282,4 +286,35 @@ public sealed class StashSemVer : IComparable<StashSemVer>, IEquatable<StashSemV
         if (!string.IsNullOrEmpty(BuildMetadata)) s += $"+{BuildMetadata}";
         return s;
     }
+
+    // --- VM Protocol Implementations ---
+
+    public string VMTypeName => "semver";
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        switch (name)
+        {
+            case "major":        value = StashValue.FromInt(Major);                    return true;
+            case "minor":        value = StashValue.FromInt(Minor);                    return true;
+            case "patch":        value = StashValue.FromInt(Patch);                    return true;
+            case "prerelease":   value = StashValue.FromObj(Prerelease ?? "");        return true;
+            case "build":        value = StashValue.FromObj(BuildMetadata ?? "");     return true;
+            case "isPrerelease": value = StashValue.FromBool(IsPrerelease);           return true;
+            default:             value = StashValue.Null;                              return false;
+        }
+    }
+
+    public bool VMTryCompare(StashValue other, out int result, SourceSpan? span)
+    {
+        if (other.IsObj && other.AsObj is StashSemVer otherSv)
+        {
+            result = CompareTo(otherSv);
+            return true;
+        }
+        result = 0;
+        return false;
+    }
+
+    public string VMToString() => ToString();
 }

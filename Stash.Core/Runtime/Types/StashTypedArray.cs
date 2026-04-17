@@ -3,9 +3,11 @@ namespace Stash.Runtime.Types;
 using System;
 using System.Collections.Generic;
 using System.Text;
+using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 
-public abstract class StashTypedArray
+public abstract class StashTypedArray : IVMTyped, IVMIterable, IVMIndexable, IVMSized, IVMStringifiable
 {
     public abstract string ElementTypeName { get; }
     public abstract int Count { get; }
@@ -76,4 +78,58 @@ public abstract class StashTypedArray
         sb.Append(']');
         return sb.ToString();
     }
+
+    // --- Protocol implementations ---
+
+    public string VMTypeName => ElementTypeName + "[]";
+
+    public IVMIterator VMGetIterator(bool indexed)
+    {
+        return new StashTypedArrayIterator(this);
+    }
+
+    public StashValue VMGetIndex(StashValue index, SourceSpan? span)
+    {
+        if (!index.IsInt)
+            throw new RuntimeError($"Typed array index must be an integer.", span);
+        int resolved = ResolveIndex((int)index.AsInt);
+        CheckBounds(resolved, "get");
+        return Get(resolved);
+    }
+
+    public void VMSetIndex(StashValue index, StashValue value, SourceSpan? span)
+    {
+        if (!index.IsInt)
+            throw new RuntimeError($"Typed array index must be an integer.", span);
+        int resolved = ResolveIndex((int)index.AsInt);
+        CheckBounds(resolved, "set");
+        Set(resolved, value);
+    }
+
+    public long VMLength => Count;
+
+    public string VMToString() => Stringify();
+}
+
+internal sealed class StashTypedArrayIterator : IVMIterator
+{
+    private readonly List<StashValue> _snapshot;
+    private int _index;
+
+    public StashTypedArrayIterator(StashTypedArray array)
+    {
+        _snapshot = new List<StashValue>(array.Count);
+        for (int i = 0; i < array.Count; i++)
+            _snapshot.Add(array.Get(i));
+        _index = -1;
+    }
+
+    public bool MoveNext()
+    {
+        _index++;
+        return _index < _snapshot.Count;
+    }
+
+    public StashValue Current => _snapshot[_index];
+    public StashValue CurrentKey => StashValue.FromInt(_index);
 }

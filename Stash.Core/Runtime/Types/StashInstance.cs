@@ -5,12 +5,13 @@ using System.Collections.Generic;
 using System.Text;
 using Stash.Common;
 using Stash.Runtime;
+using Stash.Runtime.Protocols;
 
 /// <summary>
 /// Represents a runtime instance of a struct — field values with a type tag.
 /// Struct-backed instances use slot-based array storage; anonymous instances use dictionary storage.
 /// </summary>
-public class StashInstance
+public class StashInstance : IVMTyped, IVMFieldAccessible, IVMFieldMutable, IVMStringifiable
 {
     public string TypeName { get; }
     public StashStruct? Struct { get; }
@@ -183,5 +184,52 @@ public class StashInstance
             _toStringGuard.Remove(this);
         }
     }
+
+    // --- Protocol implementations ---
+
+    public string VMTypeName => TypeName;
+
+    public bool VMTryGetField(string name, out StashValue value, SourceSpan? span)
+    {
+        if (FieldSlots is not null)
+        {
+            if (Struct!.FieldIndices.TryGetValue(name, out int idx))
+            {
+                value = FieldSlots[idx];
+                return true;
+            }
+
+            if (Struct.Methods.TryGetValue(name, out IStashCallable? method))
+            {
+                value = StashValue.FromObj(new StashBoundMethod(this, method));
+                return true;
+            }
+
+            value = default;
+            return false;
+        }
+
+        if (_fields!.TryGetValue(name, out StashValue fieldValue))
+        {
+            value = fieldValue;
+            return true;
+        }
+
+        if (Struct != null && Struct.Methods.TryGetValue(name, out IStashCallable? method2))
+        {
+            value = StashValue.FromObj(new StashBoundMethod(this, method2));
+            return true;
+        }
+
+        value = default;
+        return false;
+    }
+
+    public void VMSetField(string name, StashValue value, SourceSpan? span)
+    {
+        SetField(name, value, span);
+    }
+
+    public string VMToString() => ToString();
 }
 
