@@ -3103,6 +3103,31 @@ public class InterpreterTests : StashTestBase
     }
 
     [Fact]
+    public void Import_FunctionReturningClosure_PreservesDefiningModuleGlobals()
+    {
+        string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));
+        System.IO.Directory.CreateDirectory(tmpDir);
+        try
+        {
+            string modulePath = System.IO.Path.Combine(tmpDir, "math.stash");
+            System.IO.File.WriteAllText(modulePath, @"
+let factor = 7;
+fn makeAdder(x) {
+    return (y) => x + y + factor;
+}");
+
+            string mainPath = System.IO.Path.Combine(tmpDir, "main.stash");
+            string source = "import { makeAdder } from \"math.stash\"; let add3 = makeAdder(3); let result = add3(4);";
+
+            Assert.Equal(14L, RunWithFile(source, mainPath));
+        }
+        finally
+        {
+            System.IO.Directory.Delete(tmpDir, true);
+        }
+    }
+
+    [Fact]
     public void Import_StructFromModule()
     {
         string tmpDir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "stash_test_" + System.Guid.NewGuid().ToString("N"));

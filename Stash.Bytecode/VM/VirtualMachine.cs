@@ -445,41 +445,4 @@ public sealed partial class VirtualMachine : IVMTypeRegistrar
     private SourceSpan? GetCurrentSpan(ref CallFrame frame) =>
         frame.Chunk.SourceMap.GetSpan(frame.IP > 0 ? frame.IP - 1 : 0);
 
-    // ---- Upvalue Management ----
-
-    private Upvalue CaptureUpvalue(int stackIndex)
-    {
-        for (int i = 0; i < _openUpvalues.Count; i++)
-        {
-            Upvalue existing = _openUpvalues[i];
-            if (existing.StackIndex == stackIndex)
-            {
-                return existing;
-            }
-        }
-        var upvalue = new Upvalue(_stack, stackIndex);
-        // Insert sorted by descending StackIndex for efficient closing
-        int insertIdx = 0;
-        while (insertIdx < _openUpvalues.Count && _openUpvalues[insertIdx].StackIndex > stackIndex)
-        {
-            insertIdx++;
-        }
-
-        _openUpvalues.Insert(insertIdx, upvalue);
-        return upvalue;
-    }
-
-    private void CloseUpvalues(int fromSlot)
-    {
-        if (_openUpvalues.Count == 0) return;
-        for (int i = _openUpvalues.Count - 1; i >= 0; i--)
-        {
-            if (_openUpvalues[i].StackIndex >= fromSlot)
-            {
-                _openUpvalues[i].Close();
-                _openUpvalues.RemoveAt(i);
-            }
-        }
-    }
-
 }

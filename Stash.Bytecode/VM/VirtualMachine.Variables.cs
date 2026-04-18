@@ -52,6 +52,7 @@ public sealed partial class VirtualMachine
         throw new RuntimeError($"Undefined variable '{name}'.", GetCurrentSpan(ref frame));
     }
 
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void ExecuteSetGlobal(ref CallFrame frame, uint inst)
     {
         byte a = Instruction.GetA(inst);
@@ -59,22 +60,31 @@ public sealed partial class VirtualMachine
         Dictionary<string, StashValue>? mg = frame.ModuleGlobals;
         if (mg == null || mg == _globals)
         {
-            // Fast path: main-script global
-            if (_constGlobalSlots.Length > slot && _constGlobalSlots[slot])
-                throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
-            StashValue val = _stack[frame.BaseSlot + a];
-            _globalSlots[slot] = val;
-            // Write-through to dict for module loading, debugger, and REPL compatibility
-            _globals[_globalNameTable[slot]] = val;
+            ExecuteSetMainGlobal(ref frame, a, slot);
+            return;
         }
-        else
-        {
-            // Module function — dict-based fallback
-            string name = frame.Chunk.GlobalNameTable![slot];
-            if (_constGlobals.Contains(name))
-                throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
-            mg[name] = _stack[frame.BaseSlot + a];
-        }
+
+        ExecuteSetModuleGlobal(ref frame, a, slot, mg);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteSetMainGlobal(ref CallFrame frame, byte a, ushort slot)
+    {
+        if (_constGlobalSlots.Length > slot && _constGlobalSlots[slot])
+            throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+
+        StashValue val = _stack[frame.BaseSlot + a];
+        _globalSlots[slot] = val;
+        _globals[_globalNameTable[slot]] = val;
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteSetModuleGlobal(ref CallFrame frame, byte a, ushort slot, Dictionary<string, StashValue> moduleGlobals)
+    {
+        string name = frame.Chunk.GlobalNameTable![slot];
+        if (_constGlobals.Contains(name))
+            throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+        moduleGlobals[name] = _stack[frame.BaseSlot + a];
     }
 
     private void ExecuteInitConstGlobal(ref CallFrame frame, uint inst)

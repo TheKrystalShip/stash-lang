@@ -776,28 +776,6 @@ public sealed partial class VirtualMachine
         return false;
     }
 
-    private void ExecuteClosure(ref CallFrame frame, uint inst)
-    {
-        byte a = Instruction.GetA(inst);
-        ushort chunkIdx = Instruction.GetBx(inst);
-        Chunk fnChunk = (Chunk)frame.Chunk.Constants[chunkIdx].AsObj!;
-
-        var upvalues = new Upvalue[fnChunk.Upvalues.Length];
-        for (int i = 0; i < fnChunk.Upvalues.Length; i++)
-        {
-            // Each upvalue descriptor is a raw 32-bit word: bits[0:7]=isLocal, bits[8:15]=index.
-            uint desc = frame.Chunk.Code[frame.IP++];
-            byte isLocal = (byte)(desc & 0xFF);
-            byte index = (byte)((desc >> 8) & 0xFF);
-            upvalues[i] = isLocal == 1
-                ? CaptureUpvalue(frame.BaseSlot + index)
-                : frame.Upvalues![index];
-        }
-
-        _stack[frame.BaseSlot + a] = StashValue.FromObj(
-            new VMFunction(fnChunk, upvalues) { ModuleGlobals = _globals });
-    }
-
     /// <summary>
     /// Executes deferred closures in LIFO order. Called from ExecuteReturn during normal function exit.
     /// </summary>
