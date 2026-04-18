@@ -10,7 +10,7 @@ function registerStashLanguage() {
         keywords: [
             'let', 'const', 'fn', 'struct', 'enum', 'interface', 'extend', 'if', 'else', 'while', 'do',
             'for', 'in', 'return', 'break', 'continue', 'try', 'catch', 'finally', 'defer', 'retry', 'onRetry', 'until', 'timeout',
-            'throw', 'switch', 'case', 'default', 'as', 'import',
+            'throw', 'switch', 'case', 'default', 'as', 'import', 'from', 'and', 'or', 'is',
             'async', 'await', 'spawn', 'typeof', 'delete', 'match'
         ],
 
