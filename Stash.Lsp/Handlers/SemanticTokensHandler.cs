@@ -19,15 +19,12 @@ using static Stash.Analysis.SemanticTokenConstants;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Classifies tokens into semantic types (namespace, type, function, parameter, variable,
-/// property, enumMember, keyword, number, string, comment, operator) and applies modifiers
-/// (declaration, readonly). Uses the <see cref="AnalysisEngine"/> cached result's token list
-/// and symbol table for accurate per-token classification.
-/// </para>
-/// <para>
-/// Special handling is applied for: post-dot member access, dict literal keys vs. struct init
-/// fields, embedded expressions inside interpolated strings and command literals, and doc-comment
-/// tag highlighting (<c>@param</c>, <c>@return</c>, <c>@returns</c>).
+/// Classifies tokens into 11 symbol-identity types (namespace, type, struct, enum, interface,
+/// function, method, parameter, variable, property, enumMember) and applies modifiers
+/// (declaration, readonly, defaultLibrary, async). Uses the <see cref="AnalysisEngine"/> cached
+/// result's token list and the <see cref="SemanticTokenWalker"/> for accurate per-token
+/// classification. Lexical constructs (keywords, numbers, strings, comments, operators) are
+/// handled by the TextMate/tree-sitter grammar and are not emitted as semantic tokens.
 /// </para>
 /// </remarks>
 public class SemanticTokensHandler : SemanticTokensHandlerBase

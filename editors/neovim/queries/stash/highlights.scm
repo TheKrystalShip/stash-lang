@@ -27,6 +27,11 @@
 "import" @keyword.import
 "from" @keyword.import
 "as" @keyword
+"elevate" @keyword
+"retry" @keyword
+"timeout" @keyword
+"onRetry" @keyword
+"until" @keyword
 "and" @keyword.operator
 "or" @keyword.operator
 "is" @keyword.operator

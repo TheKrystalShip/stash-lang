@@ -13,6 +13,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     private readonly AnalysisResult _result;
     private readonly Dictionary<(int Line, int Col), (int Type, int Modifiers)> _classified;
     private readonly Dictionary<(int Line, int Col), SymbolInfo> _resolvedRefs;
+    private bool _isMethodContext;
 
     public IReadOnlyDictionary<(int Line, int Col), (int Type, int Modifiers)> ClassifiedTokens => _classified;
 
@@ -327,7 +328,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         {
             fnModifiers |= ModifierAsync;
         }
-        EmitFromToken(stmt.Name, TokenTypeFunction, fnModifiers);
+        EmitFromToken(stmt.Name, _isMethodContext ? TokenTypeMethod : TokenTypeFunction, fnModifiers);
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
             EmitFromToken(stmt.Parameters[i], TokenTypeParameter, ModifierDeclaration);
@@ -407,10 +408,12 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
                 EmitFromToken(fieldType.Name, TokenTypeType, 0);
             }
         }
+        _isMethodContext = true;
         foreach (var method in stmt.Methods)
         {
             method.Accept(this);
         }
+        _isMethodContext = false;
         foreach (var iface in stmt.Interfaces)
         {
             EmitFromToken(iface, TokenTypeInterface, 0);
@@ -421,10 +424,12 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     public int VisitExtendStmt(ExtendStmt stmt)
     {
         EmitFromToken(stmt.TypeName, TokenTypeStruct, 0);
+        _isMethodContext = true;
         foreach (var method in stmt.Methods)
         {
             method.Accept(this);
         }
+        _isMethodContext = false;
         return 0;
     }
 
