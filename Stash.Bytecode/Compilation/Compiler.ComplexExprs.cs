@@ -15,8 +15,7 @@ public sealed partial class Compiler
     public object? VisitUpdateExpr(UpdateExpr expr)
     {
         byte dest = _destReg;
-        bool isVoid = _voidContext;      // NEW
-        _voidContext = false;             // NEW — consume, sub-expressions are not void
+        bool isVoid = ConsumeVoidContext();
         _builder.AddSourceMapping(expr.Span);
 
         int sign = expr.Operator.Type == TokenType.PlusPlus ? 1 : -1;
@@ -167,91 +166,14 @@ public sealed partial class Compiler
         byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
 
-        var child = new Compiler(this, null, _globalSlots);
-        int paramCount = expr.Parameters.Count;
-
-        // Declare parameters as locals (registers 0..paramCount-1)
-        foreach (Token param in expr.Parameters)
-            child._scope.DeclareLocal(param.Lexeme);
-
-        // Compute MinArity: scan trailing defaults
-        int minArity = paramCount;
-        bool hasDefaultParams = false;
-        if (expr.DefaultValues != null && expr.DefaultValues.Count > 0)
-        {
-            int countForDefaults = expr.HasRestParam ? paramCount - 1 : paramCount;
-            for (int i = countForDefaults - 1; i >= 0; i--)
-            {
-                if (expr.DefaultValues.Count > i && expr.DefaultValues[i] != null)
-                {
-                    minArity = i;
-                    hasDefaultParams = true;
-                }
-                else
-                    break;
-            }
-        }
-
-        if (hasDefaultParams && expr.DefaultValues != null)
-        {
-            for (int i = 0; i < expr.DefaultValues.Count && i < paramCount; i++)
-            {
-                if (expr.DefaultValues[i] == null) continue;
-
-                byte paramReg = (byte)i;
-                byte tempSentinel = child._scope.AllocTemp();
-                ushort sentinelIdx = child._builder.AddConstant(VirtualMachine.NotProvided);
-                child._builder.EmitABx(OpCode.LoadK, tempSentinel, sentinelIdx);
-
-                byte cmpReg = child._scope.AllocTemp();
-                child._builder.EmitABC(OpCode.Ne, cmpReg, paramReg, tempSentinel);
-                int skipDefault = child._builder.EmitJump(OpCode.JmpTrue, cmpReg);
-                child._scope.FreeTemp(cmpReg);
-                child._scope.FreeTemp(tempSentinel);
-
-                child.CompileExprTo(expr.DefaultValues[i]!, paramReg);
-                child._builder.PatchJump(skipDefault);
-            }
-        }
-
-        // Compile body
-        if (expr.ExpressionBody != null)
-        {
-            byte resultReg = child._scope.AllocTemp();
-            child.CompileExprTo(expr.ExpressionBody, resultReg);
-            child._builder.EmitABC(OpCode.Return, resultReg, 1, 0);
-            child._scope.FreeTemp(resultReg);
-        }
-        else if (expr.BlockBody != null)
-        {
-            foreach (Stmt s in expr.BlockBody.Statements)
-                child.CompileStmt(s);
-        }
-
-        // OPT-4: Only emit implicit return null if the body doesn't unconditionally return/throw
-        bool alwaysReturns = expr.ExpressionBody != null; // Expression bodies always return
-        if (!alwaysReturns && expr.BlockBody != null)
-            alwaysReturns = BodyAlwaysReturns(expr.BlockBody.Statements);
-
-        if (!alwaysReturns)
-        {
-            byte retReg = child._scope.AllocTemp();
-            child._builder.EmitA(OpCode.LoadNull, retReg);
-            child._builder.EmitABC(OpCode.Return, retReg, 1, 0);
-            child._scope.FreeTemp(retReg);
-        }
-
-        // Finalize chunk metadata
-        child._builder.Arity = paramCount;
-        child._builder.MinArity = minArity;
-        child._builder.MaxRegs = child._scope.MaxRegs;
-        child._builder.IsAsync = expr.IsAsync;
-        child._builder.HasRestParam = expr.HasRestParam;
-        child._builder.LocalNames = child._scope.GetLocalNames();
-        child._builder.LocalIsConst = child._scope.GetLocalIsConst();
-        child._builder.UpvalueNames = child._upvalueNames?.ToArray();
-
-        Chunk lambdaChunk = child._builder.Build();
+        Chunk lambdaChunk = CompileFunction(
+            expr.Parameters,
+            expr.BlockBody,
+            name: null,
+            expr.IsAsync,
+            expr.HasRestParam,
+            expr.DefaultValues,
+            expressionBody: expr.ExpressionBody);
 
         ushort chunkIdx = _builder.AddConstant(StashValue.FromObj(lambdaChunk));
         _builder.EmitABx(OpCode.Closure, dest, chunkIdx);

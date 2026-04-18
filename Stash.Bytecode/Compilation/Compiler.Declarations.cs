@@ -46,18 +46,7 @@ partial class Compiler
         else
             _builder.EmitA(OpCode.LoadNull, reg);
 
-        // Typed array wrapping: if the type hint is T[], emit TypedWrap to convert the array
-        if (stmt.TypeHint is { IsArray: true })
-        {
-            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(stmt.TypeHint.Name.Lexeme));
-            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
-        }
-        // Scalar byte narrowing: if the type hint is byte (not byte[]), emit TypedWrap to narrow int→byte
-        else if (stmt.TypeHint is { IsArray: false } && stmt.TypeHint.Name.Lexeme == "byte")
-        {
-            ushort typeIdx = _builder.AddConstant(StashValue.FromObj("byte"));
-            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
-        }
+        EmitTypeWrapping(reg, stmt.TypeHint);
 
         _scope.MarkInitialized();
 
@@ -99,18 +88,7 @@ partial class Compiler
             CompileExprTo(stmt.Initializer, reg);
         }
 
-        // Typed array wrapping: if the type hint is T[], emit TypedWrap to convert the array
-        if (stmt.TypeHint is { IsArray: true })
-        {
-            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(stmt.TypeHint.Name.Lexeme));
-            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
-        }
-        // Scalar byte narrowing: if the type hint is byte (not byte[]), emit TypedWrap to narrow int→byte
-        else if (stmt.TypeHint is { IsArray: false } && stmt.TypeHint.Name.Lexeme == "byte")
-        {
-            ushort typeIdx = _builder.AddConstant(StashValue.FromObj("byte"));
-            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
-        }
+        EmitTypeWrapping(reg, stmt.TypeHint);
 
         _scope.MarkInitialized();
 
@@ -186,21 +164,7 @@ partial class Compiler
             List<Token> methodParams = method.Parameters;
             List<Expr?>? methodDefaults = method.DefaultValues;
 
-            // Prepend implicit 'self' if not already in parameter list
-            if (!methodParams.Any(p => p.Lexeme == "self"))
-            {
-                methodParams = new List<Token>(methodParams.Count + 1);
-                methodParams.Add(new Token(TokenType.Identifier, "self", null, method.Name.Span));
-                methodParams.AddRange(method.Parameters);
-
-                // Shift default values to account for the prepended self (which has no default)
-                if (methodDefaults != null && methodDefaults.Count > 0)
-                {
-                    var newDefaults = new List<Expr?>(methodDefaults.Count + 1) { null };
-                    newDefaults.AddRange(methodDefaults);
-                    methodDefaults = newDefaults;
-                }
-            }
+            PrependSelfParameter(ref methodParams, ref methodDefaults, method.Name.Span);
 
             Chunk mChunk = CompileFunction(
                 methodParams, method.Body, method.Name.Lexeme,
@@ -330,21 +294,7 @@ partial class Compiler
             List<Token> methodParams = method.Parameters;
             List<Expr?>? methodDefaults = method.DefaultValues;
 
-            // Prepend implicit 'self' if not already in parameter list
-            if (!methodParams.Any(p => p.Lexeme == "self"))
-            {
-                methodParams = new List<Token>(methodParams.Count + 1);
-                methodParams.Add(new Token(TokenType.Identifier, "self", null, method.Name.Span));
-                methodParams.AddRange(method.Parameters);
-
-                // Shift default values to account for the prepended self (which has no default)
-                if (methodDefaults != null && methodDefaults.Count > 0)
-                {
-                    var newDefaults = new List<Expr?>(methodDefaults.Count + 1) { null };
-                    newDefaults.AddRange(methodDefaults);
-                    methodDefaults = newDefaults;
-                }
-            }
+            PrependSelfParameter(ref methodParams, ref methodDefaults, method.Name.Span);
 
             Chunk mChunk = CompileFunction(
                 methodParams, method.Body, method.Name.Lexeme,

@@ -54,8 +54,7 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
         _scope = new CompilerScope();
         _builder.Name = functionName;
 
-        if (enclosing != null)
-            _builder.SetGlobalSlots(globalSlots);
+        _builder.SetGlobalSlots(globalSlots);
     }
 
     // ==================================================================
@@ -67,7 +66,6 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     {
         var globalSlots = new GlobalSlotAllocator();
         var compiler = new Compiler(null, null, globalSlots);
-        compiler._builder.SetGlobalSlots(globalSlots);
 
         foreach (Stmt stmt in statements)
             compiler.CompileStmt(stmt);
@@ -89,7 +87,6 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     {
         var globalSlots = new GlobalSlotAllocator();
         var compiler = new Compiler(null, null, globalSlots);
-        compiler._builder.SetGlobalSlots(globalSlots);
 
         byte result = compiler.CompileExpr(expression);
         compiler._builder.EmitABC(OpCode.Return, result, 1, 0);
@@ -147,5 +144,13 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
             ushort idx = _builder.AddConstant(sv);
             _builder.EmitABx(OpCode.LoadK, dest, idx);
         }
+    }
+
+    /// <summary>Consumes and returns the current void context flag, resetting it to false.</summary>
+    private bool ConsumeVoidContext()
+    {
+        bool isVoid = _voidContext;
+        _voidContext = false;
+        return isVoid;
     }
 }

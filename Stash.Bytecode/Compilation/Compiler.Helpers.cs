@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Stash.Common;
 using Stash.Lexing;
 using Stash.Parsing.AST;
@@ -150,12 +151,13 @@ partial class Compiler
     /// </summary>
     private Chunk CompileFunction(
         List<Token> parameters,
-        Stmt body,
+        Stmt? body,
         string? name,
         bool isAsync,
         bool hasRestParam,
         List<Expr?>? defaultValues,
-        bool constFirstParam = false)
+        bool constFirstParam = false,
+        Expr? expressionBody = null)
     {
         var child = new Compiler(this, name, _globalSlots);
 
@@ -210,21 +212,28 @@ partial class Compiler
         }
 
         // Compile body
-        if (body is BlockStmt block)
+        if (expressionBody != null)
+        {
+            byte resultReg = child._scope.AllocTemp();
+            child.CompileExprTo(expressionBody, resultReg);
+            child._builder.EmitABC(OpCode.Return, resultReg, 1, 0);
+            child._scope.FreeTemp(resultReg);
+        }
+        else if (body is BlockStmt block)
         {
             foreach (Stmt stmt in block.Statements)
                 child.CompileStmt(stmt);
         }
-        else
+        else if (body != null)
         {
             child.CompileStmt(body);
         }
 
         // OPT-4: Only emit implicit return null if the body doesn't unconditionally return/throw
-        bool alwaysReturns = false;
-        if (body is BlockStmt blk)
+        bool alwaysReturns = expressionBody != null;
+        if (!alwaysReturns && body is BlockStmt blk)
             alwaysReturns = BodyAlwaysReturns(blk.Statements);
-        else
+        else if (!alwaysReturns && body != null)
             alwaysReturns = StmtAlwaysReturns(body);
 
         if (!alwaysReturns)
@@ -324,5 +333,111 @@ partial class Compiler
                            && StmtAlwaysReturns(tc.CatchBody),
         _ => false,
     };
+
+    private const string ByteTypeName = "byte";
+
+    /// <summary>
+    /// Emits TypedWrap for typed array wrapping or scalar byte narrowing.
+    /// </summary>
+    private void EmitTypeWrapping(byte reg, TypeHint? typeHint)
+    {
+        if (typeHint is { IsArray: true })
+        {
+            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(typeHint.Name.Lexeme));
+            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
+        }
+        else if (typeHint is { IsArray: false } && typeHint.Name.Lexeme == ByteTypeName)
+        {
+            ushort typeIdx = _builder.AddConstant(StashValue.FromObj(ByteTypeName));
+            _builder.EmitABx(OpCode.TypedWrap, reg, typeIdx);
+        }
+    }
+
+    /// <summary>
+    /// Prepends an implicit 'self' parameter to a method's parameter list,
+    /// shifting default values to account for the prepended parameter.
+    /// </summary>
+    private static void PrependSelfParameter(
+        ref List<Token> methodParams,
+        ref List<Expr?>? methodDefaults,
+        SourceSpan span)
+    {
+        if (methodParams.Any(p => p.Lexeme == "self"))
+            return;
+
+        var newParams = new List<Token>(methodParams.Count + 1);
+        newParams.Add(new Token(TokenType.Identifier, "self", null, span));
+        newParams.AddRange(methodParams);
+        methodParams = newParams;
+
+        if (methodDefaults != null && methodDefaults.Count > 0)
+        {
+            var newDefaults = new List<Expr?>(methodDefaults.Count + 1) { null };
+            newDefaults.AddRange(methodDefaults);
+            methodDefaults = newDefaults;
+        }
+    }
+
+    /// <summary>
+    /// Inline finally bodies whose scope depth is greater than the target depth.
+    /// Used by break/continue to ensure finally blocks run before jumping.
+    /// </summary>
+    private void InlineFinallyForJump(int targetScopeDepth)
+    {
+        if (_activeFinally == null) return;
+        for (int i = _activeFinally.Count - 1; i >= 0; i--)
+        {
+            FinallyInfo fi = _activeFinally[i];
+            if (fi.ScopeDepth > targetScopeDepth && fi.Body != null)
+            {
+                _builder.EmitAx(OpCode.TryEnd, 0);
+                CompileStmt(fi.Body);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reserves a contiguous register window for a function call.
+    /// If dest is a temp at the allocation frontier, reuses it as the base.
+    /// Returns the callee register.
+    /// </summary>
+    private byte ReserveCallWindow(byte dest, int argc)
+    {
+        if (dest >= _scope.LocalCount && dest + 1 == _scope.NextFreeReg)
+        {
+            if (argc > 0)
+                _scope.ReserveRegs(argc);
+            return dest;
+        }
+        return _scope.ReserveRegs(1 + argc);
+    }
+
+    /// <summary>
+    /// Compiles a condition expression and emits a conditional jump.
+    /// Applies OPT-5 negation inversion: if (!x) → compile x with JmpTrue.
+    /// Returns (condReg, jumpIndex, condIsLocal).
+    /// The caller must free condReg if condIsLocal is false.
+    /// </summary>
+    private (byte condReg, int jumpIndex, bool condIsLocal) CompileConditionJump(Expr condition)
+    {
+        byte condReg;
+        int jumpIndex;
+        bool condIsLocal;
+
+        if (condition is UnaryExpr { Operator.Type: TokenType.Bang } negation)
+        {
+            condIsLocal = TryGetLocalReg(negation.Right, out byte negLocalReg);
+            condReg = condIsLocal ? negLocalReg : CompileExpr(negation.Right);
+            jumpIndex = _builder.EmitJump(OpCode.JmpTrue, condReg);
+        }
+        else
+        {
+            condIsLocal = TryGetLocalReg(condition, out byte condLocalReg);
+            condReg = condIsLocal ? condLocalReg : CompileExpr(condition);
+            jumpIndex = _builder.EmitJump(OpCode.JmpFalse, condReg);
+        }
+
+        return (condReg, jumpIndex, condIsLocal);
+    }
 
 }

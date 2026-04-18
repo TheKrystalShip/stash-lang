@@ -30,21 +30,7 @@ public sealed partial class Compiler
         _builder.AddSourceMapping(stmt.Span);
 
         // OPT-5: Negation inversion — if (!x) → compile x, JmpTrue (skip Not + JmpFalse)
-        byte condReg;
-        int elseJump;
-        bool condIsLocal = false;
-        if (stmt.Condition is UnaryExpr { Operator.Type: TokenType.Bang } negation)
-        {
-            condIsLocal = TryGetLocalReg(negation.Right, out byte negLocalReg);
-            condReg = condIsLocal ? negLocalReg : CompileExpr(negation.Right);
-            elseJump = _builder.EmitJump(OpCode.JmpTrue, condReg);
-        }
-        else
-        {
-            condIsLocal = TryGetLocalReg(stmt.Condition, out byte condLocalReg);
-            condReg = condIsLocal ? condLocalReg : CompileExpr(stmt.Condition);
-            elseJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
-        }
+        var (condReg, elseJump, condIsLocal) = CompileConditionJump(stmt.Condition);
         if (!condIsLocal) _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.ThenBranch);
@@ -79,21 +65,7 @@ public sealed partial class Compiler
         (_loops ??= new()).Push(loopCtx);
 
         // OPT-5: Negation inversion — while (!x) → compile x, JmpTrue (skip Not + JmpFalse)
-        byte condReg;
-        int exitJump;
-        bool condIsLocal = false;
-        if (stmt.Condition is UnaryExpr { Operator.Type: TokenType.Bang } negation)
-        {
-            condIsLocal = TryGetLocalReg(negation.Right, out byte negLocalReg);
-            condReg = condIsLocal ? negLocalReg : CompileExpr(negation.Right);
-            exitJump = _builder.EmitJump(OpCode.JmpTrue, condReg);
-        }
-        else
-        {
-            condIsLocal = TryGetLocalReg(stmt.Condition, out byte condLocalReg);
-            condReg = condIsLocal ? condLocalReg : CompileExpr(stmt.Condition);
-            exitJump = _builder.EmitJump(OpCode.JmpFalse, condReg);
-        }
+        var (condReg, exitJump, condIsLocal) = CompileConditionJump(stmt.Condition);
         if (!condIsLocal) _scope.FreeTemp(condReg);
 
         CompileStmt(stmt.Body);
@@ -269,18 +241,7 @@ public sealed partial class Compiler
         LoopContext loop = _loops.Peek();
 
         // Inline any finally bodies that are inside this loop (innermost first)
-        if (_activeFinally != null)
-        {
-            for (int i = _activeFinally.Count - 1; i >= 0; i--)
-            {
-                FinallyInfo fi = _activeFinally[i];
-                if (fi.ScopeDepth > loop.ScopeDepth && fi.Body != null)
-                {
-                    _builder.EmitAx(OpCode.TryEnd, 0);
-                    CompileStmt(fi.Body);
-                }
-            }
-        }
+        InlineFinallyForJump(loop.ScopeDepth);
 
         loop.BreakJumps.Add(_builder.EmitJump(OpCode.Jmp));
         return null;
@@ -296,18 +257,7 @@ public sealed partial class Compiler
         LoopContext loop = _loops.Peek();
 
         // Inline any finally bodies that are inside this loop (innermost first)
-        if (_activeFinally != null)
-        {
-            for (int i = _activeFinally.Count - 1; i >= 0; i--)
-            {
-                FinallyInfo fi = _activeFinally[i];
-                if (fi.ScopeDepth > loop.ScopeDepth && fi.Body != null)
-                {
-                    _builder.EmitAx(OpCode.TryEnd, 0);
-                    CompileStmt(fi.Body);
-                }
-            }
-        }
+        InlineFinallyForJump(loop.ScopeDepth);
 
         if (loop.ContinueTarget >= 0)
         {

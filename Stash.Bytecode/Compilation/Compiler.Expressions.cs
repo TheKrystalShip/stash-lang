@@ -220,8 +220,7 @@ partial class Compiler
     public object? VisitAssignExpr(AssignExpr expr)
     {
         byte dest = _destReg;
-        bool isVoid = _voidContext;      // NEW
-        _voidContext = false;             // NEW — consume
+        bool isVoid = ConsumeVoidContext();
         _builder.AddSourceMapping(expr.Span);
 
         // OPT-8: Compound assignment with integer constant → AddI
@@ -286,8 +285,7 @@ partial class Compiler
     public object? VisitCallExpr(CallExpr expr)
     {
         byte dest = _destReg;
-        bool isVoid = _voidContext;
-        _voidContext = false;  // Sub-expressions are not in void context
+        bool isVoid = ConsumeVoidContext();
         _builder.AddSourceMapping(expr.Span);
 
         int argc = expr.Arguments.Count;
@@ -300,18 +298,7 @@ partial class Compiler
             ushort nameIdx = _builder.AddConstant(dot.Name.Lexeme);
             if (nameIdx <= 255)
             {
-                // OPT-1: If dest is a temp at the allocation frontier, reuse it as the window base
-                byte calleeReg;
-                if (dest >= _scope.LocalCount && dest + 1 == _scope.NextFreeReg)
-                {
-                    calleeReg = dest;
-                    if (argc > 0)
-                        _scope.ReserveRegs(argc); // Only reserve arg slots; dest already allocated
-                }
-                else
-                {
-                    calleeReg = _scope.ReserveRegs(1 + argc);
-                }
+                byte calleeReg = ReserveCallWindow(dest, argc);
 
                 // Compile the receiver (namespace) into a temp ABOVE the call window
                 // so FreeTemp works correctly (stack-based register allocator)
@@ -348,18 +335,7 @@ partial class Compiler
         }
 
         // Generic path: reserve window, compile callee+args, emit Call
-        // OPT-1: If dest is a temp at the allocation frontier, reuse it as the window base
-        byte calleeReg2;
-        if (dest >= _scope.LocalCount && dest + 1 == _scope.NextFreeReg)
-        {
-            calleeReg2 = dest;
-            if (argc > 0)
-                _scope.ReserveRegs(argc);
-        }
-        else
-        {
-            calleeReg2 = _scope.ReserveRegs(1 + argc);
-        }
+        byte calleeReg2 = ReserveCallWindow(dest, argc);
 
         // Compile callee into calleeReg
         CompileExprTo(expr.Callee, calleeReg2);
