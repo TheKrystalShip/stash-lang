@@ -41,6 +41,7 @@
 
     "template-tag": {
       "name": "meta.tag.stash-tpl",
+      "contentName": "meta.embedded.block.stash",
       "begin": "(\\{%-?)\\s*",
       "beginCaptures": {
         "1": { "name": "punctuation.definition.tag.begin.stash-tpl" }
@@ -58,6 +59,7 @@
 
     "template-expression": {
       "name": "meta.expression.stash-tpl",
+      "contentName": "meta.embedded.block.stash",
       "begin": "(\\{\\{-?)\\s*",
       "beginCaptures": {
         "1": { "name": "punctuation.definition.expression.begin.stash-tpl" }

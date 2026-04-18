@@ -91,7 +91,10 @@
       {
         "language": "stash-tpl",
         "scopeName": "source.stash-tpl",
-        "path": "./syntaxes/stash-tpl.tmLanguage.json"
+        "path": "./syntaxes/stash-tpl.tmLanguage.json",
+        "embeddedLanguages": {
+          "meta.embedded.block.stash": "stash"
+        }
       }
     ],
     "snippets": [
