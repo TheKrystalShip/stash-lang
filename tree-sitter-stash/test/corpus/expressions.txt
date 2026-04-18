@@ -1,0 +1,146 @@
+==================
+Binary expression
+==================
+
+x + y;
+
+---
+
+(source_file
+  (expression_statement
+    (binary_expression
+      left: (identifier)
+      right: (identifier))))
+
+==================
+Ternary expression
+==================
+
+x > 0 ? x : y;
+
+---
+
+(source_file
+  (expression_statement
+    (ternary_expression
+      condition: (binary_expression
+        left: (identifier)
+        right: (number))
+      consequence: (identifier)
+      alternative: (identifier))))
+
+==================
+Call expression
+==================
+
+add(1, 2);
+
+---
+
+(source_file
+  (expression_statement
+    (call_expression
+      function: (identifier)
+      (argument_list
+        (number)
+        (number)))))
+
+==================
+Member access
+==================
+
+obj.field;
+
+---
+
+(source_file
+  (expression_statement
+    (member_expression
+      object: (identifier)
+      property: (identifier))))
+
+==================
+Index expression
+==================
+
+arr[0];
+
+---
+
+(source_file
+  (expression_statement
+    (index_expression
+      object: (identifier)
+      index: (number))))
+
+==================
+Lambda expression
+==================
+
+(x) => x;
+
+---
+
+(source_file
+  (expression_statement
+    (lambda_expression
+      (parameter_list
+        (parameter
+          name: (identifier)))
+      body: (identifier))))
+
+==================
+Array literal
+==================
+
+[1, 2, 3];
+
+---
+
+(source_file
+  (expression_statement
+    (array_expression
+      (number)
+      (number)
+      (number))))
+
+==================
+Pipe expression
+==================
+
+data |> transform;
+
+---
+
+(source_file
+  (expression_statement
+    (pipe_expression
+      left: (identifier)
+      right: (identifier))))
+
+==================
+Assignment expression
+==================
+
+x = 5;
+
+---
+
+(source_file
+  (expression_statement
+    (assignment_expression
+      left: (identifier)
+      right: (number))))
+
+==================
+Unary expression
+==================
+
+!flag;
+
+---
+
+(source_file
+  (expression_statement
+    (unary_expression
+      operand: (identifier))))

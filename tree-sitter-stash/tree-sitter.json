@@ -1,0 +1,14 @@
+{
+  "metadata": {
+    "version": "0.1.0",
+    "license": "MIT"
+  },
+  "grammars": [
+    {
+      "name": "stash",
+      "scope": "source.stash",
+      "file-types": ["stash"],
+      "injection-regex": "^stash$"
+    }
+  ]
+}

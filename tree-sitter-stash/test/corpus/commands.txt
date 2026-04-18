@@ -1,0 +1,25 @@
+==================
+Command expression
+==================
+
+$(ls);
+
+---
+
+(source_file
+  (expression_statement
+    (command_expression
+      (command_content))))
+
+==================
+Strict command
+==================
+
+$!(npm install);
+
+---
+
+(source_file
+  (expression_statement
+    (command_expression
+      (command_content))))

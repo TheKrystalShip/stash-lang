@@ -1,0 +1,183 @@
+==================
+If statement
+==================
+
+if (x > 0) {
+  return x;
+}
+
+---
+
+(source_file
+  (if_statement
+    (binary_expression
+      left: (identifier)
+      right: (number))
+    (block
+      (return_statement
+        (identifier)))))
+
+==================
+If-else statement
+==================
+
+if (x > 0) {
+  return x;
+} else {
+  return 0;
+}
+
+---
+
+(source_file
+  (if_statement
+    (binary_expression
+      left: (identifier)
+      right: (number))
+    (block
+      (return_statement
+        (identifier)))
+    (else_clause
+      (block
+        (return_statement
+          (number))))))
+
+==================
+While loop
+==================
+
+while (x > 0) {
+  x = x - 1;
+}
+
+---
+
+(source_file
+  (while_statement
+    (binary_expression
+      left: (identifier)
+      right: (number))
+    (block
+      (expression_statement
+        (assignment_expression
+          left: (identifier)
+          right: (binary_expression
+            left: (identifier)
+            right: (number)))))))
+
+==================
+For-in loop
+==================
+
+for (let x in arr) {
+  x;
+}
+
+---
+
+(source_file
+  (for_in_statement
+    value: (identifier)
+    (identifier)
+    (block
+      (expression_statement
+        (identifier)))))
+
+==================
+Return statement
+==================
+
+return 42;
+
+---
+
+(source_file
+  (return_statement
+    (number)))
+
+==================
+Break statement
+==================
+
+break;
+
+---
+
+(source_file
+  (break_statement))
+
+==================
+Continue statement
+==================
+
+continue;
+
+---
+
+(source_file
+  (continue_statement))
+
+==================
+Try-catch
+==================
+
+try {
+  throw "error";
+} catch (e) {
+  e;
+}
+
+---
+
+(source_file
+  (try_catch_statement
+    (block
+      (throw_statement
+        (string
+          (string_content))))
+    error: (identifier)
+    (block
+      (expression_statement
+        (identifier)))))
+
+==================
+Defer expression
+==================
+
+defer cleanup();
+
+---
+
+(source_file
+  (defer_statement
+    (call_expression
+      function: (identifier)
+      (argument_list))))
+
+==================
+Switch statement
+==================
+
+switch (x) {
+  case 1: {
+    y;
+  }
+  default: {
+    z;
+  }
+}
+
+---
+
+(source_file
+  (switch_statement
+    (identifier)
+    (switch_case
+      (number)
+      (block
+        (expression_statement
+          (identifier))))
+    (switch_default
+      (block
+        (expression_statement
+          (identifier))))))

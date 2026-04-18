@@ -1,0 +1,14 @@
+{
+  "name": "tree-sitter-stash",
+  "version": "0.1.0",
+  "description": "Tree-sitter grammar for the Stash scripting language",
+  "main": "bindings/node",
+  "keywords": ["tree-sitter", "parser", "stash"],
+  "license": "MIT",
+  "dependencies": {
+    "tree-sitter-cli": "^0.26.0"
+  },
+  "devDependencies": {
+    "tree-sitter": "^0.22.0"
+  }
+}

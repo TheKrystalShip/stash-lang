@@ -1,0 +1,83 @@
+==================
+Integer literal
+==================
+
+42;
+
+---
+
+(source_file
+  (expression_statement
+    (number)))
+
+==================
+Float literal
+==================
+
+3.14;
+
+---
+
+(source_file
+  (expression_statement
+    (float)))
+
+==================
+Hex literal
+==================
+
+0xFF;
+
+---
+
+(source_file
+  (expression_statement
+    (hex_number)))
+
+==================
+Binary literal
+==================
+
+0b1010;
+
+---
+
+(source_file
+  (expression_statement
+    (binary_number)))
+
+==================
+Boolean true
+==================
+
+true;
+
+---
+
+(source_file
+  (expression_statement
+    (boolean)))
+
+==================
+Boolean false
+==================
+
+false;
+
+---
+
+(source_file
+  (expression_statement
+    (boolean)))
+
+==================
+Null literal
+==================
+
+null;
+
+---
+
+(source_file
+  (expression_statement
+    (null)))

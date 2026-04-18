@@ -1,0 +1,26 @@
+==================
+Simple string
+==================
+
+"hello";
+
+---
+
+(source_file
+  (expression_statement
+    (string
+      (string_content))))
+
+==================
+String with escape
+==================
+
+"hello\n";
+
+---
+
+(source_file
+  (expression_statement
+    (string
+      (string_content)
+      (escape_sequence))))

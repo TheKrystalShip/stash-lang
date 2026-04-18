@@ -1,0 +1,161 @@
+==================
+Variable declaration
+==================
+
+let x = 5;
+
+---
+
+(source_file
+  (variable_declaration
+    name: (identifier)
+    (number)))
+
+==================
+Constant declaration
+==================
+
+const N = 42;
+
+---
+
+(source_file
+  (constant_declaration
+    name: (identifier)
+    (number)))
+
+==================
+Function declaration
+==================
+
+fn add(a, b) {
+  return a + b;
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    (parameter_list
+      (parameter
+        name: (identifier))
+      (parameter
+        name: (identifier)))
+    (block
+      (return_statement
+        (binary_expression
+          left: (identifier)
+          right: (identifier))))))
+
+==================
+Async function
+==================
+
+async fn fetch() {
+  return await get();
+}
+
+---
+
+(source_file
+  (function_declaration
+    name: (identifier)
+    (parameter_list)
+    (block
+      (return_statement
+        (await_expression
+          (call_expression
+            function: (identifier)
+            (argument_list)))))))
+
+==================
+Struct declaration
+==================
+
+struct Point {
+  x,
+  y
+}
+
+---
+
+(source_file
+  (struct_declaration
+    name: (identifier)
+    (struct_body
+      (struct_field
+        name: (identifier))
+      (struct_field
+        name: (identifier)))))
+
+==================
+Enum declaration
+==================
+
+enum Color {
+  Red,
+  Green,
+  Blue
+}
+
+---
+
+(source_file
+  (enum_declaration
+    name: (identifier)
+    (enum_member
+      name: (identifier))
+    (enum_member
+      name: (identifier))
+    (enum_member
+      name: (identifier))))
+
+==================
+Interface declaration
+==================
+
+interface Drawable {
+  fn draw(self)
+}
+
+---
+
+(source_file
+  (interface_declaration
+    name: (identifier)
+    (interface_method
+      name: (identifier)
+      (parameter_list
+        (parameter
+          name: (identifier))))))
+
+==================
+Import named
+==================
+
+import { foo, bar } from "module";
+
+---
+
+(source_file
+  (import_statement
+    (import_specifier_list
+      (identifier)
+      (identifier))
+    (string
+      (string_content))))
+
+==================
+Import namespace
+==================
+
+import "utils" as utils;
+
+---
+
+(source_file
+  (import_statement
+    (string
+      (string_content))
+    alias: (identifier)))
