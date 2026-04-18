@@ -52,12 +52,13 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     {
         int tokenType = definition.Kind switch
         {
-            StashSymbolKind.Function or StashSymbolKind.Method => TokenTypeFunction,
+            StashSymbolKind.Function => TokenTypeFunction,
+            StashSymbolKind.Method => TokenTypeMethod,
             StashSymbolKind.Variable => TokenTypeVariable,
             StashSymbolKind.Constant => TokenTypeVariable,
             StashSymbolKind.Parameter => TokenTypeParameter,
-            StashSymbolKind.Struct => TokenTypeType,
-            StashSymbolKind.Enum => TokenTypeType,
+            StashSymbolKind.Struct => TokenTypeStruct,
+            StashSymbolKind.Enum => TokenTypeEnum,
             StashSymbolKind.Interface => TokenTypeInterface,
             StashSymbolKind.Field => TokenTypeProperty,
             StashSymbolKind.EnumMember => TokenTypeEnumMember,
@@ -74,7 +75,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             modifiers |= ModifierDeclaration;
         }
 
-        if (definition.Kind == StashSymbolKind.Constant)
+        if (definition.Kind is StashSymbolKind.Constant or StashSymbolKind.EnumMember)
         {
             modifiers |= ModifierReadonly;
         }
@@ -86,6 +87,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     {
         if (token.Lexeme is "self" or "attempt")
         {
+            EmitFromToken(token, TokenTypeVariable, ModifierReadonly);
             return;
         }
 
@@ -98,13 +100,13 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
         if (StdlibRegistry.IsBuiltInFunction(token.Lexeme))
         {
-            EmitFromToken(token, TokenTypeFunction, ModifierReadonly);
+            EmitFromToken(token, TokenTypeFunction, ModifierDefaultLibrary);
             return;
         }
 
         if (StdlibRegistry.IsBuiltInNamespace(token.Lexeme))
         {
-            EmitFromToken(token, TokenTypeNamespace, 0);
+            EmitFromToken(token, TokenTypeNamespace, ModifierDefaultLibrary);
         }
     }
 
@@ -123,19 +125,19 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
                 if (StdlibRegistry.TryGetNamespaceFunction(qualifiedName, out _))
                 {
-                    EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
+                    EmitFromToken(memberToken, TokenTypeFunction, ModifierDefaultLibrary);
                     return;
                 }
 
                 if (StdlibRegistry.TryGetNamespaceConstant(qualifiedName, out _))
                 {
-                    EmitFromToken(memberToken, TokenTypeVariable, ModifierReadonly);
+                    EmitFromToken(memberToken, TokenTypeVariable, ModifierDefaultLibrary | ModifierReadonly);
                     return;
                 }
 
                 if (StdlibRegistry.Enums.Any(e => e.Name == memberName && e.Namespace == namespaceName))
                 {
-                    EmitFromToken(memberToken, TokenTypeType, 0);
+                    EmitFromToken(memberToken, TokenTypeEnum, 0);
                     return;
                 }
             }
@@ -185,19 +187,19 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         if (StdlibRegistry.TryGetNamespaceFunction("str." + memberName, out _) ||
             StdlibRegistry.TryGetNamespaceFunction("arr." + memberName, out _))
         {
-            EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
+            EmitFromToken(memberToken, TokenTypeMethod, ModifierDefaultLibrary);
             return;
         }
 
         if (StdlibRegistry.IsBuiltInFunction(memberName))
         {
-            EmitFromToken(memberToken, TokenTypeFunction, ModifierReadonly);
+            EmitFromToken(memberToken, TokenTypeMethod, ModifierDefaultLibrary);
             return;
         }
 
         if (isCall)
         {
-            EmitFromToken(memberToken, TokenTypeFunction, 0);
+            EmitFromToken(memberToken, TokenTypeMethod, 0);
         }
         else
         {
@@ -320,11 +322,12 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitFnDeclStmt(FnDeclStmt stmt)
     {
-        if (stmt.AsyncKeyword is Token asyncTok)
+        int fnModifiers = ModifierDeclaration;
+        if (stmt.AsyncKeyword is not null)
         {
-            EmitFromToken(asyncTok, TokenTypeKeyword, 0);
+            fnModifiers |= ModifierAsync;
         }
-        EmitFromToken(stmt.Name, TokenTypeFunction, ModifierDeclaration);
+        EmitFromToken(stmt.Name, TokenTypeFunction, fnModifiers);
         for (int i = 0; i < stmt.Parameters.Count; i++)
         {
             EmitFromToken(stmt.Parameters[i], TokenTypeParameter, ModifierDeclaration);
@@ -356,25 +359,19 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitThrowStmt(ThrowStmt stmt)
     {
-        EmitFromToken(stmt.Keyword, TokenTypeKeyword, 0);
         stmt.Value.Accept(this);
         return 0;
     }
 
     public int VisitTryCatchStmt(TryCatchStmt stmt)
     {
-        EmitFromToken(stmt.TryKeyword, TokenTypeKeyword, 0);
         stmt.TryBody.Accept(this);
         if (stmt.CatchBody is not null)
         {
-            if (stmt.CatchKeyword is not null)
-                EmitFromToken(stmt.CatchKeyword, TokenTypeKeyword, 0);
             if (stmt.CatchVariable is not null)
                 EmitFromToken(stmt.CatchVariable, TokenTypeVariable, ModifierDeclaration);
             stmt.CatchBody.Accept(this);
         }
-        if (stmt.FinallyKeyword is not null)
-            EmitFromToken(stmt.FinallyKeyword, TokenTypeKeyword, 0);
         stmt.FinallyBody?.Accept(this);
         return 0;
     }
@@ -395,14 +392,13 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitDeferStmt(DeferStmt stmt)
     {
-        EmitFromToken(stmt.DeferKeyword, TokenTypeKeyword, 0);
         stmt.Body.Accept(this);
         return 0;
     }
 
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
-        EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
+        EmitFromToken(stmt.Name, TokenTypeStruct, ModifierDeclaration);
         for (int i = 0; i < stmt.Fields.Count; i++)
         {
             EmitFromToken(stmt.Fields[i], TokenTypeProperty, ModifierDeclaration);
@@ -424,8 +420,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitExtendStmt(ExtendStmt stmt)
     {
-        EmitFromToken(stmt.ExtendKeyword, TokenTypeKeyword, 0);
-        EmitFromToken(stmt.TypeName, TokenTypeType, 0);
+        EmitFromToken(stmt.TypeName, TokenTypeStruct, 0);
         foreach (var method in stmt.Methods)
         {
             method.Accept(this);
@@ -435,10 +430,10 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitEnumDeclStmt(EnumDeclStmt stmt)
     {
-        EmitFromToken(stmt.Name, TokenTypeType, ModifierDeclaration);
+        EmitFromToken(stmt.Name, TokenTypeEnum, ModifierDeclaration);
         foreach (var member in stmt.Members)
         {
-            EmitFromToken(member, TokenTypeEnumMember, ModifierDeclaration);
+            EmitFromToken(member, TokenTypeEnumMember, ModifierDeclaration | ModifierReadonly);
         }
         return 0;
     }
@@ -456,7 +451,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         }
         foreach (var method in stmt.Methods)
         {
-            EmitFromToken(method.Name, TokenTypeFunction, ModifierDeclaration);
+            EmitFromToken(method.Name, TokenTypeMethod, ModifierDeclaration);
             for (int i = 0; i < method.Parameters.Count; i++)
             {
                 EmitFromToken(method.Parameters[i], TokenTypeParameter, ModifierDeclaration);
@@ -634,7 +629,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     {
         expr.Target?.Accept(this);
 
-        EmitFromToken(expr.Name, TokenTypeType, 0);
+        EmitFromToken(expr.Name, TokenTypeStruct, 0);
         foreach (var (field, value) in expr.FieldValues)
         {
             EmitFromToken(field, TokenTypeProperty, 0);
@@ -697,14 +692,12 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitAwaitExpr(AwaitExpr expr)
     {
-        EmitFromToken(expr.Keyword, TokenTypeKeyword, 0);
         expr.Expression.Accept(this);
         return 0;
     }
 
     public int VisitRetryExpr(RetryExpr expr)
     {
-        EmitFromToken(expr.RetryKeyword, TokenTypeKeyword, 0);
         expr.MaxAttempts.Accept(this);
         expr.OptionsExpr?.Accept(this);
         if (expr.NamedOptions is not null)
@@ -713,7 +706,6 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
         if (expr.OnRetryClause is not null)
         {
-            EmitFromToken(expr.OnRetryClause.OnRetryKeyword, TokenTypeKeyword, 0);
             if (expr.OnRetryClause.IsReference && expr.OnRetryClause.Reference is not null)
             {
                 expr.OnRetryClause.Reference.Accept(this);
@@ -732,8 +724,6 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
             }
         }
 
-        if (expr.UntilKeyword is not null)
-            EmitFromToken(expr.UntilKeyword, TokenTypeKeyword, 0);
         expr.UntilClause?.Accept(this);
 
         expr.Body.Accept(this);
@@ -742,7 +732,6 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitTimeoutExpr(TimeoutExpr expr)
     {
-        EmitFromToken(expr.TimeoutKeyword, TokenTypeKeyword, 0);
         expr.Duration.Accept(this);
         foreach (var stmt in expr.Body.Statements)
             stmt.Accept(this);
@@ -770,10 +759,6 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitLambdaExpr(LambdaExpr expr)
     {
-        if (expr.AsyncKeyword is Token asyncTok)
-        {
-            EmitFromToken(asyncTok, TokenTypeKeyword, 0);
-        }
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
             EmitFromToken(expr.Parameters[i], TokenTypeParameter, ModifierDeclaration);
@@ -826,7 +811,6 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     /// <inheritdoc />
     public int VisitSpreadExpr(SpreadExpr expr)
     {
-        EmitFromToken(expr.Operator, TokenTypeOperator, 0);
         expr.Expression.Accept(this);
         return 0;
     }

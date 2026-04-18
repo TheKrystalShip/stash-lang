@@ -114,38 +114,44 @@
           "type": [
             "entity.name.type.stash"
           ],
+          "struct": [
+            "entity.name.struct.stash"
+          ],
+          "enum": [
+            "entity.name.enum.stash"
+          ],
+          "interface": [
+            "entity.name.interface.stash"
+          ],
           "function": [
             "entity.name.function.stash"
+          ],
+          "method": [
+            "entity.name.function.member.stash"
           ],
           "parameter": [
             "variable.parameter.stash"
           ],
           "variable": [
-            "variable.other.stash"
+            "variable.other.readwrite.stash"
           ],
           "property": [
-            "variable.other.property.stash"
+            "variable.other.member.stash"
           ],
           "enumMember": [
             "variable.other.enummember.stash"
           ],
-          "keyword": [
-            "keyword.control.stash"
+          "variable.readonly": [
+            "variable.other.constant.stash"
           ],
-          "number": [
-            "constant.numeric.stash"
+          "variable.defaultLibrary": [
+            "support.variable.stash"
           ],
-          "string": [
-            "string.quoted.double.stash"
+          "function.defaultLibrary": [
+            "support.function.stash"
           ],
-          "comment": [
-            "comment.line.stash"
-          ],
-          "operator": [
-            "keyword.operator.stash"
-          ],
-          "interface": [
-            "entity.name.type.interface.stash"
+          "namespace.defaultLibrary": [
+            "support.type.stash"
           ]
         }
       }
