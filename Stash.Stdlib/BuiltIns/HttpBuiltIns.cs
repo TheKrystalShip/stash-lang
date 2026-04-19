@@ -73,7 +73,7 @@ public static class HttpBuiltIns
                 throw new RuntimeError("http.get: request timed out.");
             }
         }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
+        documentation: "Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the GET request to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
 
         // http.post(url, body[, options]) — Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
         ns.Function("post", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -107,7 +107,7 @@ public static class HttpBuiltIns
                 throw new RuntimeError("http.post: request timed out.");
             }
         }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
+        documentation: "Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the POST request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
 
         // http.put(url, body[, options]) — Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
         ns.Function("put", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -141,7 +141,7 @@ public static class HttpBuiltIns
                 throw new RuntimeError("http.put: request timed out.");
             }
         }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
+        documentation: "Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the PUT request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
 
         // http.delete(url[, options]) — Sends an HTTP DELETE request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
         ns.Function("delete", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -171,7 +171,7 @@ public static class HttpBuiltIns
                 throw new RuntimeError("http.delete: request timed out.");
             }
         }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
+        documentation: "Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the DELETE request to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
 
         // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
         ns.Function("request", [Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -221,7 +221,8 @@ public static class HttpBuiltIns
             {
                 throw new RuntimeError("http.request: request timed out.");
             }
-        }, returnType: "HttpResponse");
+        }, returnType: "HttpResponse",
+        documentation: "Sends a custom HTTP request. The options dict must include 'url' (string) and optionally 'method' (string, default GET), 'headers' (dict), and 'body' (string). Returns an HttpResponse struct with status, body, and headers fields.\n@param options A dict with request options: url, method, headers, body\n@return An HttpResponse struct with status, body, and headers");
 
         // http.patch(url, body[, options]) — Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct.
         ns.Function("patch", [Param("url", "string"), Param("body", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -255,7 +256,7 @@ public static class HttpBuiltIns
                 throw new RuntimeError("http.patch: request timed out.");
             }
         }, returnType: "HttpResponse", isVariadic: true,
-        documentation: "Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.");
+        documentation: "Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the PATCH request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
 
         // http.download(url, path[, options]) — Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns null.
         ns.Function("download", [Param("url", "string"), Param("path", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -296,7 +297,7 @@ public static class HttpBuiltIns
             }
             return StashValue.Null;
         }, isVariadic: true,
-        documentation: "Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns null.");
+        documentation: "Downloads the response body of a GET request and writes it to the given file path. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns null.\n@param url The URL to download from\n@param path The local file path to write the downloaded content to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return null");
 
         ns.Struct("HttpResponse", [
             new BuiltInField("status", "int"),

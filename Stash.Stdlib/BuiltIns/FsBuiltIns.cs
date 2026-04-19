@@ -193,7 +193,9 @@ public static class FsBuiltIns
             path = ctx.ExpandTilde(path);
 
             return StashValue.FromBool(System.IO.File.Exists(path));
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if a file exists at the given path.\n@param path The file path to check.\n@return True if the file exists, false otherwise.");
 
         // fs.dirExists(path) — Returns true if the given path is an existing directory, false otherwise.
         ns.Function("dirExists", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -202,7 +204,9 @@ public static class FsBuiltIns
             path = ctx.ExpandTilde(path);
 
             return StashValue.FromBool(System.IO.Directory.Exists(path));
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if a directory exists at the given path.\n@param path The directory path to check.\n@return True if the directory exists, false otherwise.");
 
         // fs.pathExists(path) — Returns true if the given path exists as either a file or directory, false otherwise.
         ns.Function("pathExists", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -211,7 +215,9 @@ public static class FsBuiltIns
             path = ctx.ExpandTilde(path);
 
             return StashValue.FromBool(System.IO.File.Exists(path) || System.IO.Directory.Exists(path));
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if either a file or directory exists at the given path.\n@param path The path to check.\n@return True if a file or directory exists at the path, false otherwise.");
 
         // fs.createDir(path) — Creates a directory (and any missing parent directories). Returns null. No-ops if the directory already exists.
         ns.Function("createDir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -222,7 +228,9 @@ public static class FsBuiltIns
             try { System.IO.Directory.CreateDirectory(path); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create directory '{path}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Creates a directory and all necessary parent directories. No-ops if the directory already exists.\n@param path The directory path to create.\n@return null");
 
         // fs.delete(path) — Deletes a file or recursively deletes a directory. Throws if the path does not exist.
         ns.Function("delete", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -247,7 +255,9 @@ public static class FsBuiltIns
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot delete '{path}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Deletes a file or recursively deletes a directory at the given path. Throws if the path does not exist.\n@param path The file or directory path to delete.\n@return null");
 
         // fs.copy(src, dst, overwrite?) — Copies a file from src to dst. Returns null.
         ns.Function("copy", [Param("src", "string"), Param("dst", "string"), Param("overwrite?", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -303,7 +313,9 @@ public static class FsBuiltIns
 
             try { return StashValue.FromInt(new System.IO.FileInfo(path).Length); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get size of '{path}': {e.Message}"); }
-        });
+        },
+            returnType: "int",
+            documentation: "Returns the size of a file in bytes.\n@param path The file path.\n@return The file size in bytes as an integer.");
 
         // fs.listDir(path, filter?) — Returns an array of file and directory paths directly inside the given directory.
         ns.Function("listDir", [Param("path", "string"), Param("filter?", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -340,7 +352,9 @@ public static class FsBuiltIns
             try { System.IO.File.AppendAllText(path, content); }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot append to file '{path}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Appends content to a file, creating it if it doesn't exist. Returns null.\n@param path The file path to append to.\n@param content The string content to append.\n@return null");
 
         // fs.readLines(path) — Reads all lines of a file and returns them as an array of strings.
         ns.Function("readLines", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -357,7 +371,9 @@ public static class FsBuiltIns
                 return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot read file '{path}': {e.Message}"); }
-        });
+        },
+            returnType: "array",
+            documentation: "Reads a file and returns an array of lines.\n@param path The file path to read.\n@return An array of strings, one per line.");
 
         // fs.glob(pattern) — Returns an array of file paths matching a glob pattern (e.g. "src/**/*.cs"). Supports wildcards in filename only.
         ns.Function("glob", [Param("pattern", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -386,7 +402,9 @@ public static class FsBuiltIns
                 return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"fs.glob failed: {e.Message}"); }
-        });
+        },
+            returnType: "array",
+            documentation: "Returns an array of file paths matching the glob pattern.\n@param pattern The glob pattern (e.g. \"src/**/*.cs\").\n@return An array of matching file path strings.");
 
         // fs.isFile(path) — Returns true if the path refers to an existing regular file.
         ns.Function("isFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -395,7 +413,9 @@ public static class FsBuiltIns
             path = ctx.ExpandTilde(path);
 
             return StashValue.FromBool(System.IO.File.Exists(path));
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the path points to a regular file.\n@param path The path to check.\n@return True if the path is an existing regular file.");
 
         // fs.isDir(path) — Returns true if the path refers to an existing directory.
         ns.Function("isDir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -404,7 +424,9 @@ public static class FsBuiltIns
             path = ctx.ExpandTilde(path);
 
             return StashValue.FromBool(System.IO.Directory.Exists(path));
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the path points to a directory.\n@param path The path to check.\n@return True if the path is an existing directory.");
 
         // fs.isSymlink(path) — Returns true if the path is an existing symbolic link (reparse point).
         ns.Function("isSymlink", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -421,13 +443,17 @@ public static class FsBuiltIns
             {
                 return StashValue.FromBool(false);
             }
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the path points to a symbolic link.\n@param path The path to check.\n@return True if the path is an existing symbolic link.");
 
         // fs.tempFile() — Creates a new empty temporary file and returns its path string.
         ns.Function("tempFile", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _args) =>
         {
             return StashValue.FromObj(System.IO.Path.GetTempFileName());
-        });
+        },
+            returnType: "string",
+            documentation: "Creates a temporary file and returns its path.\n@return The path to the newly created temporary file.");
 
         // fs.tempDir() — Creates a new temporary directory with a random name and returns its path string.
         ns.Function("tempDir", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _args) =>
@@ -435,7 +461,9 @@ public static class FsBuiltIns
             string dir = System.IO.Path.Combine(System.IO.Path.GetTempPath(), System.IO.Path.GetRandomFileName());
             System.IO.Directory.CreateDirectory(dir);
             return StashValue.FromObj(dir);
-        });
+        },
+            returnType: "string",
+            documentation: "Creates a temporary directory and returns its path.\n@return The path to the newly created temporary directory.");
 
         // fs.modifiedAt(path) — Returns the last-modified time of a file as a Unix timestamp (float, seconds since epoch).
         ns.Function("modifiedAt", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -449,7 +477,9 @@ public static class FsBuiltIns
                 return StashValue.FromFloat((double)new System.DateTimeOffset(info.LastWriteTimeUtc).ToUnixTimeMilliseconds() / 1000.0);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot get modified time for '{path}': {e.Message}"); }
-        });
+        },
+            returnType: "float",
+            documentation: "Returns the last modification time of a file as a Unix timestamp (seconds since epoch).\n@param path The file path.\n@return The last modified time as a float (seconds since Unix epoch).");
 
         // fs.walk(path) — Recursively walks a directory and returns an array of all file paths within it (all depths).
         ns.Function("walk", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -466,7 +496,9 @@ public static class FsBuiltIns
                 return StashValue.FromObj(result);
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"fs.walk failed: {e.Message}"); }
-        });
+        },
+            returnType: "array",
+            documentation: "Recursively lists all files under the given directory path.\n@param path The directory path to walk.\n@return An array of file path strings for all files found recursively.");
 
         // fs.readable(path) — Returns true if the path exists and the current process can read it.
         ns.Function("readable", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -486,7 +518,9 @@ public static class FsBuiltIns
             }
             catch (System.UnauthorizedAccessException) { return StashValue.FromBool(false); }
             catch (System.IO.IOException) { return StashValue.FromBool(false); }
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the file at the given path is readable by the current process.\n@param path The file path to check.\n@return True if the file exists and is readable.");
 
         // fs.writable(path) — Returns true if the path exists and the current process can write to it.
         ns.Function("writable", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -514,7 +548,9 @@ public static class FsBuiltIns
             }
             catch (System.UnauthorizedAccessException) { return StashValue.FromBool(false); }
             catch (System.IO.IOException) { return StashValue.FromBool(false); }
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the file at the given path is writable by the current process.\n@param path The file path to check.\n@return True if the file exists and is writable.");
 
         // fs.executable(path) — Returns true if the path is an existing file and appears to be executable (by extension on Windows, by Unix mode bits on Unix).
         ns.Function("executable", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -546,7 +582,9 @@ public static class FsBuiltIns
                 }
             }
             catch (System.IO.IOException) { return StashValue.FromBool(false); }
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the file at the given path is executable. On Unix, checks execute permission bits. On Windows, checks file extension.\n@param path The file path to check.\n@return True if the file exists and is executable.");
 
         // fs.createFile(path) — Creates an empty file at path, or updates its last-modified time if it already exists (similar to Unix touch). Returns null.
         ns.Function("createFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -567,7 +605,9 @@ public static class FsBuiltIns
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create file '{path}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Creates an empty file at the given path, or updates its last-modified time if it already exists.\n@param path The file path to create or touch.\n@return null");
 
         // fs.symlink(target, linkPath) — Creates a symbolic link at linkPath pointing to target. Returns null.
         ns.Function("symlink", [Param("target", "string"), Param("linkPath", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -583,7 +623,9 @@ public static class FsBuiltIns
             }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot create symlink '{linkPath}': {e.Message}"); }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Creates a symbolic link at linkPath pointing to target.\n@param target The target path the symlink will point to.\n@param linkPath The path where the symbolic link will be created.\n@return null");
 
         // fs.stat(path) — Returns a dict with file metadata: size (int), isFile (bool), isDir (bool), isSymlink (bool), modified (float), created (float), name (string).
         ns.Function("stat", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -614,7 +656,9 @@ public static class FsBuiltIns
             }
             catch (RuntimeError) { throw; }
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot stat '{path}': {e.Message}"); }
-        });
+        },
+            returnType: "dict",
+            documentation: "Returns a dictionary with file metadata including size, isFile, isDir, isSymlink, modified, created, and name.\n@param path The file or directory path.\n@return A dictionary with keys: size (int), isFile (bool), isDir (bool), isSymlink (bool), modified (float), created (float), name (string).");
 
         // fs.getPermissions(path) — Returns a FilePermissions struct describing the file's permission bits.
         ns.Function("getPermissions", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

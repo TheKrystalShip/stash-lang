@@ -62,7 +62,9 @@ public static class ProcessBuiltIns
             ctx.CleanupTrackedProcesses();
             ctx.EmitExit((int)code);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Exits the current process with the given integer exit code. Tracked processes are cleaned up before exit.\n@param code The exit code to use\n@return Does not return — exits the process");
 
         // process.exec(command) — Replaces the current process image with the given command (Unix execvp). On Windows, starts the process and exits with its code.
         ns.Function("exec", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -127,7 +129,9 @@ public static class ProcessBuiltIns
             }
 
             return StashValue.Null; // unreachable
-        });
+        },
+            returnType: "null",
+            documentation: "Replaces the current process image with the given command (Unix execvp). On Windows, starts the process with inherited I/O and exits with its exit code. Does not return on success.\n@param command The command and arguments to execute\n@return Does not return — replaces the process");
 
         // process.spawn(command) — Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output.
         ns.Function("spawn", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -158,7 +162,9 @@ public static class ProcessBuiltIns
             var handle = new StashInstance("Process", fields);
             ctx.TrackedProcesses.Add((handle, osProcess));
             return StashValue.FromObj(handle);
-        }, returnType: "Process");
+        },
+            returnType: "Process",
+            documentation: "Spawns a child process with redirected stdio. Returns a Process handle. Use process.wait() to collect output and the exit code.\n@param command The command and arguments to spawn\n@return A Process handle");
 
         // process.wait(handle) — Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.
         ns.Function("wait", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -206,7 +212,9 @@ public static class ProcessBuiltIns
             ctx.ProcessWaitCache[handle] = result;
             FireExitCallbacks(ctx, handle, result);
             return StashValue.FromObj(result);
-        }, returnType: "CommandResult");
+        },
+            returnType: "CommandResult",
+            documentation: "Waits for a spawned process to exit and returns a CommandResult with stdout, stderr, and exitCode.\n@param handle The Process handle returned by process.spawn()\n@return A CommandResult with stdout, stderr, and exitCode");
 
         // process.waitTimeout(handle, ms) — Waits up to the given milliseconds for a process to exit. Returns a CommandResult or null if timed out.
         ns.Function("waitTimeout", [Param("handle", "Process"), Param("ms", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -250,7 +258,9 @@ public static class ProcessBuiltIns
             ctx.ProcessWaitCache[handle] = result;
             FireExitCallbacks(ctx, handle, result);
             return StashValue.FromObj(result);
-        });
+        },
+            returnType: "CommandResult",
+            documentation: "Waits up to the given number of milliseconds for a process to exit. Returns a CommandResult on success, or null if the timeout expires.\n@param handle The Process handle returned by process.spawn()\n@param ms Maximum wait time in milliseconds\n@return A CommandResult, or null if timed out");
 
         // process.kill(handle) — Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success.
         ns.Function("kill", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -272,7 +282,9 @@ public static class ProcessBuiltIns
             {
                 return StashValue.FromBool(false);
             }
-        });
+        },
+            returnType: "bool",
+            documentation: "Sends SIGTERM (Unix) or terminates (Windows) a running process. Returns true on success, false if the process has already exited.\n@param handle The Process handle returned by process.spawn()\n@return True if the signal was sent, false if the process was not running");
 
         // process.isAlive(handle) — Returns true if the process is still running, false if it has exited.
         ns.Function("isAlive", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -287,7 +299,9 @@ public static class ProcessBuiltIns
 
             try { return StashValue.FromBool(!entry.Process.HasExited); }
             catch { return StashValue.FromBool(false); }
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the process is still running, false if it has exited.\n@param handle The Process handle returned by process.spawn()\n@return True if the process is running");
 
         // process.pid(handle) — Returns the OS process ID (integer) for a spawned Process handle.
         ns.Function("pid", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -295,7 +309,9 @@ public static class ProcessBuiltIns
             var handle = SvArgs.Instance(args, 0, "Process", "process.pid");
 
             return handle.GetField("pid", null);
-        });
+        },
+            returnType: "int",
+            documentation: "Returns the OS process ID for a spawned Process handle.\n@param handle The Process handle returned by process.spawn()\n@return The integer process ID");
 
         // process.signal(handle, signum) — Sends a POSIX signal (integer) to a running process. Use process.SIGTERM etc. as constants. Returns true on success.
         ns.Function("signal", [Param("handle", "Process"), Param("signum", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -340,7 +356,9 @@ public static class ProcessBuiltIns
             {
                 return StashValue.FromBool(false);
             }
-        });
+        },
+            returnType: "bool",
+            documentation: "Sends a POSIX signal to a running process. Use process.SIGTERM, process.SIGKILL, etc. as signal number constants. Returns true on success.\n@param handle The Process handle returned by process.spawn()\n@param signum The POSIX signal number (1–64)\n@return True if the signal was sent successfully");
 
         // process.detach(handle) — Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit.
         ns.Function("detach", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -356,7 +374,9 @@ public static class ProcessBuiltIns
             }
 
             return StashValue.FromBool(false);
-        });
+        },
+            returnType: "bool",
+            documentation: "Removes a Process handle from tracking. The process continues running but will not be cleaned up on script exit. Returns true if the handle was tracked.\n@param handle The Process handle to detach\n@return True if the handle was found and removed");
 
         // process.list() — Returns an array of all currently tracked Process handles spawned by this script.
         ns.Function("list", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _args) =>
@@ -367,7 +387,9 @@ public static class ProcessBuiltIns
                 result.Add(StashValue.FromObj(handle));
             }
             return StashValue.FromObj(result);
-        });
+        },
+            returnType: "array",
+            documentation: "Returns an array of all Process handles currently tracked by this script.\n@return An array of Process handles");
 
         // process.read(handle) — Non-blocking read from a process's stdout. Returns a string chunk or null if no data is available.
         ns.Function("read", [Param("handle", "Process")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -396,7 +418,9 @@ public static class ProcessBuiltIns
             {
                 return StashValue.Null;
             }
-        });
+        },
+            returnType: "string",
+            documentation: "Non-blocking read from a process's stdout. Returns a string chunk if data is available, or null if no data is ready.\n@param handle The Process handle returned by process.spawn()\n@return A string chunk, or null if no data is available");
 
         // process.write(handle, data) — Writes a string to a process's stdin. Returns true on success, false if the process has exited.
         ns.Function("write", [Param("handle", "Process"), Param("data", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -420,7 +444,9 @@ public static class ProcessBuiltIns
             {
                 return StashValue.FromBool(false);
             }
-        });
+        },
+            returnType: "bool",
+            documentation: "Writes a string to a process's stdin. Returns true on success, false if the process has already exited.\n@param handle The Process handle returned by process.spawn()\n@param data The string data to write to stdin\n@return True if written successfully");
 
         // ── Future Extensions ─────────────────────────────────────────
 
@@ -449,7 +475,9 @@ public static class ProcessBuiltIns
 
             callbacks.Add(callback);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Registers a callback function to be called when the process exits. The callback receives a CommandResult as its argument.\n@param handle The Process handle returned by process.spawn()\n@param callback A function that accepts a CommandResult\n@return null");
 
         // process.daemonize(command) — Starts a process fully detached from the script (no stdio redirection). Returns a Process handle; the process is NOT tracked and survives script exit.
         ns.Function("daemonize", [Param("command", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -482,7 +510,9 @@ public static class ProcessBuiltIns
 
             // Daemonized processes are NOT tracked — they survive script exit
             return StashValue.FromObj(handle);
-        });
+        },
+            returnType: "Process",
+            documentation: "Starts a process fully detached from the script with no stdio redirection. The process is not tracked and survives script exit.\n@param command The command and arguments to daemonize\n@return A Process handle for the detached process");
 
         // process.find(name) — Returns an array of Process handles for all OS processes matching the given name.
         ns.Function("find", [Param("name", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -512,7 +542,9 @@ public static class ProcessBuiltIns
             }
 
             return StashValue.FromObj(result);
-        });
+        },
+            returnType: "array",
+            documentation: "Returns an array of Process handles for all OS processes matching the given name.\n@param name The process name to search for\n@return An array of matching Process handles");
 
         // process.exists(pid) — Returns true if a process with the given OS PID is currently running.
         ns.Function("exists", [Param("pid", "int")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -530,7 +562,9 @@ public static class ProcessBuiltIns
             {
                 return StashValue.FromBool(false);
             }
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if an OS process with the given PID is currently running.\n@param pid The OS process ID to check\n@return True if the process exists and is running");
 
         // process.waitAll(handles) — Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order.
         ns.Function("waitAll", [Param("handles", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -581,7 +615,9 @@ public static class ProcessBuiltIns
             }
 
             return StashValue.FromObj(results);
-        });
+        },
+            returnType: "array",
+            documentation: "Waits for all processes in the array to exit. Returns an array of CommandResult values in the same order as the input.\n@param handles An array of Process handles\n@return An array of CommandResult values");
 
         // process.waitAny(handles) — Waits until any process in the array exits. Returns the CommandResult of the first process to finish.
         ns.Function("waitAny", [Param("handles", "array")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -669,7 +705,9 @@ public static class ProcessBuiltIns
 
                 Thread.Sleep(50); // Poll every 50ms
             }
-        });
+        },
+            returnType: "CommandResult",
+            documentation: "Waits until any process in the array exits. Returns the CommandResult of the first process to finish.\n@param handles A non-empty array of Process handles\n@return The CommandResult of the first process to exit");
 
         // process.chdir(path) — Changes the current working directory of the script process to the given path.
         ns.Function("chdir", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -684,7 +722,9 @@ public static class ProcessBuiltIns
 
             System.Environment.CurrentDirectory = resolved;
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Changes the current working directory of the script process to the given path.\n@param path The directory path to change to\n@return null");
 
         // process.withDir(path, fn) — Temporarily changes the working directory to path, calls fn(), then restores the original directory. Returns fn's return value.
         ns.Function("withDir", [Param("path", "string"), Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -708,7 +748,9 @@ public static class ProcessBuiltIns
             {
                 System.Environment.CurrentDirectory = previous;
             }
-        });
+        },
+            returnType: "any",
+            documentation: "Temporarily changes the working directory to the given path, calls fn(), then restores the original directory. Returns fn's return value.\n@param path The directory to temporarily change to\n@param fn The function to execute in the new directory\n@return The return value of fn");
 
         ns.Struct("CommandResult", [
             new BuiltInField("stdout", "string"),

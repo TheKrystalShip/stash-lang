@@ -27,7 +27,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, expected, actual, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that actual equals expected using strict equality (no type coercion). Throws AssertionError if not.\n@param actual The actual value\n@param expected The expected value\n@return null");
 
         // assert.notEqual(actual, expected)
         ns.Function("notEqual", [Param("actual"), Param("expected")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -40,7 +42,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, expected, actual, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that actual does not equal expected. Throws AssertionError if they are equal.\n@param actual The actual value\n@param expected The value to compare against\n@return null");
 
         // assert.true(value)
         ns.Function("true", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -52,7 +56,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, true, val, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that the value is truthy. Throws AssertionError if falsy.\n@param value The value to check\n@return null");
 
         // assert.false(value)
         ns.Function("false", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -64,7 +70,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, false, val, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that the value is falsy. Throws AssertionError if truthy.\n@param value The value to check\n@return null");
 
         // assert.null(value)
         ns.Function("null", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -76,7 +84,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, null, val, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that the value is null. Throws AssertionError if not null.\n@param value The value to check\n@return null");
 
         // assert.notNull(value)
         ns.Function("notNull", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -87,7 +97,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, "non-null", null, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that the value is not null. Throws AssertionError if null.\n@param value The value to check\n@return null");
 
         // assert.greater(a, b) — a > b
         ns.Function("greater", [Param("a"), Param("b")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -102,7 +114,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, $"> {RuntimeValues.Stringify(bObj)}", aObj, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that a is greater than b. Throws AssertionError if not.\n@param a The left-hand value\n@param b The right-hand value\n@return null");
 
         // assert.less(a, b) — a < b
         ns.Function("less", [Param("a"), Param("b")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -117,7 +131,9 @@ public static class AssertBuiltIns
                 throw new AssertionError(msg, $"< {RuntimeValues.Stringify(bObj)}", aObj, ctx.CurrentSpan);
             }
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Asserts that a is less than b. Throws AssertionError if not.\n@param a The left-hand value\n@param b The right-hand value\n@return null");
 
         // assert.throws(fn) — fn() should throw; returns error message
         ns.Function("throws", [Param("fn", "function")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -133,14 +149,18 @@ public static class AssertBuiltIns
             }
             string msg = "assert.throws failed: expected function to throw but it did not";
             throw new AssertionError(msg, "error", "no error", ctx.CurrentSpan);
-        });
+        },
+            returnType: "string",
+            documentation: "Asserts that fn throws an error when called. Returns the error message if it throws.\n@param fn The function to invoke\n@return The error message thrown by fn");
 
         // assert.fail(message?) — unconditional failure
         ns.Function("fail", [Param("message", "string?")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             string msg = args[0].ToObject() is string s ? s : "assert.fail called";
             throw new AssertionError(msg, null, null, ctx.CurrentSpan);
-        });
+        },
+            returnType: "never",
+            documentation: "Immediately fails the test with an optional message.\n@param message Optional failure message\n@return never");
 
         return ns.Build();
     }

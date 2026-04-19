@@ -103,7 +103,9 @@ public static class TestBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Defines and executes a test case with the given name and body function.\n@param name The test case name\n@param fn The test body function\n@return null");
 
         // test.skip(name, fn) — register a skipped test; body is never executed
         ns.Function("skip", [Param("name", "string"), Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -132,7 +134,9 @@ public static class TestBuiltIns
 
             ctx.TestHarness?.OnTestSkip(fullName, "skipped");
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Defines a skipped test case that will not be executed.\n@param name The test case name\n@param fn The test body function (not executed)\n@return null");
 
         // test.describe(name, fn) — group tests
         ns.Function("describe", [Param("name", "string"), Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -196,7 +200,9 @@ public static class TestBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Groups related test cases under a named description block.\n@param name The description block name\n@param fn The function containing test cases\n@return null");
 
         // test.beforeAll(fn) — execute fn() immediately inside a describe block (runs before any tests below it)
         ns.Function("beforeAll", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -208,7 +214,9 @@ public static class TestBuiltIns
             }
             ctx.InvokeCallbackDirect(callable, ReadOnlySpan<StashValue>.Empty);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Registers a setup function to run once before all tests in the current describe block.\n@param fn The setup function\n@return null");
 
         // test.afterAll(fn) — register fn() to run when the current describe block ends
         ns.Function("afterAll", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -220,7 +228,9 @@ public static class TestBuiltIns
             }
             ctx.AfterAllHooks[^1].Add(callable);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Registers a teardown function to run once after all tests in the current describe block.\n@param fn The teardown function\n@return null");
 
         // test.beforeEach(fn) — register fn() to run before each test in the current describe scope
         ns.Function("beforeEach", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -232,7 +242,9 @@ public static class TestBuiltIns
             }
             ctx.BeforeEachHooks[^1].Add(callable);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Registers a setup function to run before each test case in the current describe block.\n@param fn The setup function\n@return null");
 
         // test.afterEach(fn) — register fn() to run after each test in the current describe scope
         ns.Function("afterEach", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -244,7 +256,9 @@ public static class TestBuiltIns
             }
             ctx.AfterEachHooks[^1].Add(callable);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Registers a teardown function to run after each test case in the current describe block.\n@param fn The teardown function\n@return null");
 
         // test.captureOutput(fn) — execute fn() with output redirected to a string, returns captured output
         ns.Function("captureOutput", [Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -262,7 +276,9 @@ public static class TestBuiltIns
                 ctx.Output = previousOutput;
             }
             return StashValue.FromObj(sw.ToString());
-        });
+        },
+            returnType: "string",
+            documentation: "Executes fn while capturing all printed output, then returns the captured text.\n@param fn The function to execute\n@return The captured output as a string");
 
         return ns.Build();
     }

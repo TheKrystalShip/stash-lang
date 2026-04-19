@@ -24,14 +24,16 @@ public static class ArgsBuiltIns
 
                 return StashValue.FromObj(result);
             },
-            returnType: "array"
+            returnType: "array",
+            documentation: "Returns the command-line arguments as an array of strings.\n@return An array of argument strings passed to the script"
         );
 
         ns.Function("count", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
                 return StashValue.FromInt((long)(ctx.ScriptArgs?.Length ?? 0));
             },
-            returnType: "int"
+            returnType: "int",
+            documentation: "Returns the number of command-line arguments.\n@return The count of arguments passed to the script"
         );
 
         ns.Function("parse", [Param("spec", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -40,7 +42,8 @@ public static class ArgsBuiltIns
                     ? StashValue.FromObj(result)
                     : StashValue.Null;
             },
-            returnType: "dict"
+            returnType: "dict",
+            documentation: "Parses command-line arguments according to the given spec.\n@param spec A dict describing the expected arguments (flags, options, positional)\n@return A dict of parsed argument values"
         );
 
         ns.Function("build", [Param("spec", "dict"), Param("values", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

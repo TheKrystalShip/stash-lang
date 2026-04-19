@@ -24,16 +24,36 @@ public static class TaskBuiltIns
         var taskStatusEnum = new StashEnum("Status", new List<string> { "Running", "Completed", "Failed", "Cancelled" });
         var ns = new NamespaceBuilder("task");
 
-        ns.Function("run",      [Param("fn", "function")], Run);
-        ns.Function("await",    [Param("task", "Future")], Await);
-        ns.Function("awaitAll", [Param("tasks", "array")], AwaitAll);
-        ns.Function("awaitAny", [Param("tasks", "array")], AwaitAny);
-        ns.Function("status",   [Param("task", "Future")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) => Status(ctx, args, taskStatusEnum));
-        ns.Function("cancel",   [Param("task", "Future")], Cancel);
-        ns.Function("all",     [Param("tasks", "array")], All);
-        ns.Function("race",    [Param("tasks", "array")], Race);
-        ns.Function("resolve", [Param("value")], TaskResolve);
-        ns.Function("delay",   [Param("seconds", "number")], Delay);
+        ns.Function("run",      [Param("fn", "function")], Run,
+            returnType: "Future",
+            documentation: "Runs a function asynchronously in a new task and returns a Future. Use task.await() to wait for the result.\n@param fn The function to run asynchronously\n@return A Future representing the running task");
+        ns.Function("await",    [Param("task", "Future")], Await,
+            returnType: "any",
+            documentation: "Waits for a Future to complete and returns its result. Throws if the task failed.\n@param task The Future to await\n@return The result value of the task");
+        ns.Function("awaitAll", [Param("tasks", "array")], AwaitAll,
+            returnType: "array",
+            documentation: "Waits for all Futures in the array to complete. Returns an array of results in the same order. Failed tasks become error values.\n@param tasks An array of Futures\n@return An array of result values");
+        ns.Function("awaitAny", [Param("tasks", "array")], AwaitAny,
+            returnType: "any",
+            documentation: "Waits for the first Future in the array to complete. Returns its result and cancels all remaining tasks.\n@param tasks A non-empty array of Futures\n@return The result of the first completed Future");
+        ns.Function("status",   [Param("task", "Future")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) => Status(ctx, args, taskStatusEnum),
+            returnType: "string",
+            documentation: "Returns the current status of a Future as a Status enum value: Running, Completed, Failed, or Cancelled.\n@param task The Future to check\n@return The task status enum value");
+        ns.Function("cancel",   [Param("task", "Future")], Cancel,
+            returnType: "null",
+            documentation: "Requests cancellation of a running Future. The task may not stop immediately.\n@param task The Future to cancel\n@return null");
+        ns.Function("all",     [Param("tasks", "array")], All,
+            returnType: "Future",
+            documentation: "Returns a new Future that resolves when all Futures in the array complete. Plain values are wrapped in completed Futures.\n@param tasks An array of Futures or plain values\n@return A Future that resolves to an array of all results");
+        ns.Function("race",    [Param("tasks", "array")], Race,
+            returnType: "Future",
+            documentation: "Returns a new Future that resolves when the first Future in the array completes. Requires a non-empty array.\n@param tasks A non-empty array of Futures\n@return A Future that resolves to the first completed value");
+        ns.Function("resolve", [Param("value")], TaskResolve,
+            returnType: "Future",
+            documentation: "Returns an already-resolved Future wrapping the given value.\n@param value The value to resolve\n@return A completed Future wrapping the value");
+        ns.Function("delay",   [Param("seconds", "number")], Delay,
+            returnType: "Future",
+            documentation: "Returns a Future that completes after the given number of seconds.\n@param seconds The delay duration in seconds\n@return A Future that resolves to null after the delay");
         ns.Function("timeout", [Param("ms", "number"), Param("fn", "function")], Timeout,
             returnType: "any",
             documentation: "Executes a function with a timeout. Throws a TimeoutError if the function does not complete within the specified time.\n@param ms Timeout in milliseconds\n@param fn The function to execute\n@return The function's return value");

@@ -137,7 +137,9 @@ public static class PkgBuiltIns
             }
 
             return StashValue.FromObj(dict);
-        });
+        },
+            returnType: "dict",
+            documentation: "Returns package metadata from the nearest stash.json manifest as a dict, or null if no manifest is found.\n@return A dict with fields such as name, version, description, author, license, dependencies, etc.");
 
         // pkg.version() — Returns the "version" field from the nearest stash.json manifest, or null if not set.
         ns.Function("version", [], (ctx, _) =>
@@ -150,7 +152,9 @@ public static class PkgBuiltIns
 
             PackageManifest? manifest = PackageManifest.Load(projectRoot);
             return manifest?.Version is string v ? StashValue.FromObj(v) : StashValue.Null;
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the version string from the nearest stash.json manifest, or null if not set.\n@return The version string, or null");
 
         // pkg.dependencies() — Returns a dict of resolved dependencies from stash.lock, falling back to stash.json "dependencies".
         //   Returns null if no manifest or dependencies are found.
@@ -185,14 +189,18 @@ public static class PkgBuiltIns
                 deps.Set(name, StashValue.FromObj(version));
             }
             return StashValue.FromObj(deps);
-        });
+        },
+            returnType: "dict",
+            documentation: "Returns a dict of dependency name→version pairs from stash.lock (or stash.json if no lock file exists), or null if none are found.\n@return A dict mapping dependency name strings to their resolved version strings, or null");
 
         // pkg.root() — Returns the absolute path of the nearest project root directory (containing stash.json), or null.
         ns.Function("root", [], (ctx, _) =>
         {
             string? root = FindProjectRoot(ctx);
             return root is not null ? StashValue.FromObj(root) : StashValue.Null;
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the root directory path of the current package (the directory containing stash.json), or null if not found.\n@return The absolute path to the package root, or null");
 
         return ns.Build();
     }

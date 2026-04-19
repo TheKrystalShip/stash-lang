@@ -99,21 +99,24 @@ public static class TermBuiltIns
         {
             var text = SvArgs.String(args, 0, "term.bold");
             return StashValue.FromObj($"\x1b[1m{text}\x1b[0m");
-        }, returnType: "string");
+        }, returnType: "string",
+            documentation: "Returns the text wrapped in ANSI bold formatting.\n@param text The text to style\n@return The ANSI bold-styled string");
 
         // term.dim(text) — Wraps 'text' in ANSI dim (faint) escape codes. Returns the styled string.
         ns.Function("dim", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             var text = SvArgs.String(args, 0, "term.dim");
             return StashValue.FromObj($"\x1b[2m{text}\x1b[0m");
-        }, returnType: "string");
+        }, returnType: "string",
+            documentation: "Returns the text wrapped in ANSI dim formatting.\n@param text The text to style\n@return The ANSI dim-styled string");
 
         // term.underline(text) — Wraps 'text' in ANSI underline escape codes. Returns the styled string.
         ns.Function("underline", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             var text = SvArgs.String(args, 0, "term.underline");
             return StashValue.FromObj($"\x1b[4m{text}\x1b[0m");
-        }, returnType: "string");
+        }, returnType: "string",
+            documentation: "Returns the text with ANSI underline formatting.\n@param text The text to style\n@return The ANSI underlined string");
 
         // term.style(text, opts) — Applies multiple styles to 'text' using an options dict.
         //   Supported keys: "bold" (bool), "dim" (bool), "underline" (bool), "color" (string).
@@ -167,35 +170,41 @@ public static class TermBuiltIns
             }
 
             return StashValue.FromObj($"\x1b[{string.Join(";", codes)}m{text}\x1b[0m");
-        }, returnType: "string");
+        }, returnType: "string",
+            documentation: "Applies multiple ANSI styles to text.\n@param text The text to style\n@param opts A dict of style options: bold (bool), dim (bool), underline (bool), color (string)\n@return The ANSI-styled string, or text unchanged if no options are set");
 
         // term.strip(text) — Removes all ANSI escape sequences from 'text'. Returns the plain string.
         ns.Function("strip", [Param("text", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             var text = SvArgs.String(args, 0, "term.strip");
             return StashValue.FromObj(Regex.Replace(text, @"\x1b\[[0-9;]*m", ""));
-        }, returnType: "string");
+        }, returnType: "string",
+            documentation: "Removes all ANSI escape codes from the text.\n@param text The text to strip\n@return The plain text without any ANSI escape sequences");
 
         // term.width() — Returns the current terminal column width. Falls back to 80 if unavailable.
         ns.Function("width", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
         {
             try { return StashValue.FromInt((long)Console.WindowWidth); }
             catch { return StashValue.FromInt(80L); }
-        }, returnType: "int");
+        }, returnType: "int",
+            documentation: "Returns the terminal width in columns. Falls back to 80 if the width cannot be determined.\n@return The number of columns in the terminal");
 
         // term.isInteractive() — Returns true if stdin is connected to an interactive terminal (not redirected).
         ns.Function("isInteractive", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> _) =>
         {
             try { return StashValue.FromBool(!Console.IsInputRedirected); }
             catch { return StashValue.False; }
-        }, returnType: "bool");
+        }, returnType: "bool",
+            documentation: "Returns true if the terminal supports interactive input (stdin is not redirected).\n@return true if running in an interactive terminal, false if stdin is redirected");
 
         // term.clear() — Clears the terminal screen using ANSI escape sequences. Returns null.
         ns.Function("clear", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> _) =>
         {
             ctx.Output.Write("\x1b[2J\x1b[H");
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Clears the terminal screen.\n@return null");
 
         // term.table(rows [, headers]) — Formats a two-dimensional array as an ASCII table string.
         //   Optional 'headers' array is rendered as a separate header row with a divider line.
@@ -270,7 +279,8 @@ public static class TermBuiltIns
             sb.Append(separator);
 
             return StashValue.FromObj(sb.ToString());
-        }, returnType: "string", isVariadic: true);
+        }, returnType: "string", isVariadic: true,
+            documentation: "Formats data as an ASCII table with the given headers and rows.\n@param rows A 2D array of values to render as table rows\n@param headers Optional array of column header strings\n@return A formatted ASCII table string");
 
         return ns.Build();
     }

@@ -52,7 +52,8 @@ public static class GlobalBuiltIns
                 IStashCallable => "function",
                 _ => obj.GetType().Name.Contains("BoundMethod") ? "function" : ctx.ResolveRegisteredTypeName(obj)
             });
-        }, returnType: "string");
+        }, returnType: "string",
+            documentation: "Returns the type name of a value as a string.\n@param value The value to inspect\n@return A string such as 'int', 'string', 'array', 'dict', 'null', 'bool', 'float', or a struct/enum name");
 
         b.Function("semver", [Param("value", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
@@ -65,7 +66,7 @@ public static class GlobalBuiltIns
 
             string detail = StashSemVer.ValidateFormat(str) ?? $"Invalid semantic version '{str}'.";
             throw new RuntimeError(detail, null);
-        }, returnType: "semver", documentation: "Parses a string into a semver value.");
+        }, returnType: "semver", documentation: "Parses a string into a semver value.\n@param value A semantic version string in the format MAJOR.MINOR.PATCH (e.g. '1.2.3' or '2.0.0-beta.1')\n@return A semver value representing the parsed version");
 
         b.Function("nameof", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -98,7 +99,8 @@ public static class GlobalBuiltIns
                 IStashCallable c => c.Name ?? "function",
                 _ => "unknown"
             });
-        }, returnType: "string");
+        }, returnType: "string",
+            documentation: "Returns the name of a variable, function, struct, or enum as a string.\n@param value The value to name\n@return The name of the value, or its type name for primitives");
 
         b.Function("len", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -120,12 +122,14 @@ public static class GlobalBuiltIns
                 if (obj is StashDictionary dict) return StashValue.FromInt((long)dict.Count);
             }
             throw new RuntimeError("Argument to 'len' must be a string, array, or dictionary.");
-        }, returnType: "int");
+        }, returnType: "int",
+            documentation: "Returns the length of a string, array, or dictionary.\n@param value A string, array, or dict\n@return The number of characters, elements, or entries");
 
         b.Function("lastError", [], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             return ctx.LastError is not null ? StashValue.FromObj(ctx.LastError) : StashValue.Null;
-        }, returnType: "Error");
+        }, returnType: "Error",
+            documentation: "Returns the last error that was caught in a try/catch block, or null if none.\n@return The last caught Error value, or null");
 
         b.Function("range", [Param("start_or_end", "int"), Param("end", "int"), Param("step", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
@@ -171,7 +175,8 @@ public static class GlobalBuiltIns
                 }
             }
             return StashValue.FromObj(result);
-        }, returnType: "array", isVariadic: true);
+        }, returnType: "array", isVariadic: true,
+            documentation: "Generates an array of integers. With one argument, generates 0..n-1. With two, generates start..end-1. With three, uses the given step.\n@param start_or_end End (exclusive) when called with 1 arg, or start when called with 2-3 args\n@param end End (exclusive) when called with 2 or 3 args\n@param step Step size (positive or negative); must not be zero\n@return An array of integers");
 
         if (capabilities.HasFlag(StashCapabilities.Process))
         {
@@ -180,14 +185,17 @@ public static class GlobalBuiltIns
                 var code = SvArgs.Long(args, 0, "exit");
                 ctx.EmitExit((int)code);
                 return StashValue.Null;
-            });
+            },
+                returnType: "never",
+                documentation: "Terminates the program with the given exit code.\n@param code The exit code to return to the OS\n@return never");
         }
 
         b.Function("hash", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             if (args[0].IsNull) return StashValue.FromInt(0L);
             return StashValue.FromInt((long)args[0].ToObject()!.GetHashCode());
-        }, returnType: "int");
+        }, returnType: "int",
+            documentation: "Returns a hash code for the given value.\n@param value The value to hash\n@return An integer hash code");
 
         b.Function("secret", [Param("value")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {

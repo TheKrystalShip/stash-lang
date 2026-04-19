@@ -25,7 +25,9 @@ public static class IoBuiltIns
             ctx.Output.WriteLine(text);
             ctx.NotifyOutput("stdout", text + "\n");
             return StashValue.Null;
-        }, isVariadic: true);
+        }, isVariadic: true,
+            returnType: "null",
+            documentation: "Prints a value followed by a newline to standard output.\n@param value The value to print\n@return null");
 
         ns.Function("print", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -33,7 +35,9 @@ public static class IoBuiltIns
             ctx.Output.Write(text);
             ctx.NotifyOutput("stdout", text);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Prints a value to standard output without a trailing newline.\n@param value The value to print\n@return null");
 
         ns.Function("eprintln", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -41,7 +45,9 @@ public static class IoBuiltIns
             ctx.ErrorOutput.WriteLine(text);
             ctx.NotifyOutput("stderr", text + "\n");
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Prints a value followed by a newline to standard error.\n@param value The value to print\n@return null");
 
         ns.Function("eprint", [Param("value")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -49,7 +55,9 @@ public static class IoBuiltIns
             ctx.ErrorOutput.Write(text);
             ctx.NotifyOutput("stderr", text);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Prints a value to standard error without a trailing newline.\n@param value The value to print\n@return null");
 
         ns.Function("readLine", [Param("prompt", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -65,7 +73,8 @@ public static class IoBuiltIns
             }
             var result = ctx.Input.ReadLine();
             return result is null ? StashValue.Null : StashValue.FromObj(result);
-        }, returnType: "string", isVariadic: true);
+        }, returnType: "string", isVariadic: true,
+            documentation: "Displays a prompt and reads a line of input from the user.\n@param prompt Optional prompt text to display before reading input\n@return The line of text entered by the user, or null on end of input");
 
         ns.Function("confirm", [Param("prompt", "string"), Param("default", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {

@@ -59,7 +59,9 @@ public static class TplBuiltIns
             return ctx.RenderCompiledTemplate(args[0].ToObject(), data) is { } compiled
                 ? StashValue.FromObj(compiled)
                 : StashValue.Null;
-        });
+        },
+            returnType: "string",
+            documentation: "Renders a template string or pre-compiled template with the given data dictionary.\n@param template The template string or pre-compiled template\n@param data The data dictionary to use for rendering\n@return The rendered output string");
 
         // tpl.renderFile(path, data) — render a template file with data dictionary
         ns.Function("renderFile", [Param("path", "string"), Param("data", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -84,14 +86,18 @@ public static class TplBuiltIns
             }
             string? basePath = Path.GetDirectoryName(Path.GetFullPath(expandedPath));
             return StashValue.FromObject(ctx.CompileAndRenderTemplate(template, data, basePath));
-        });
+        },
+            returnType: "string",
+            documentation: "Reads a template from a file and renders it with the given data dictionary.\n@param path The path to the template file\n@param data The data dictionary to use for rendering\n@return The rendered output string");
 
         // tpl.compile(template) — pre-compile a template string for repeated rendering
         ns.Function("compile", [Param("template", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var template = SvArgs.String(args, 0, "tpl.compile");
             return StashValue.FromObject(ctx.CompileTemplate(template));
-        });
+        },
+            returnType: "function",
+            documentation: "Compiles a template string and returns a pre-compiled template for repeated rendering.\n@param template The template string to compile\n@return A pre-compiled template object");
 
         return ns.Build();
     }

@@ -120,7 +120,9 @@ public static class SftpBuiltIns
             {
                 throw new RuntimeError($"sftp.connect: {e.Message}");
             }
-        });
+        },
+            returnType: "SftpConnection",
+            documentation: "Connects to an SFTP server and returns an SftpConnection instance.\n@param options Options dict with host, port (default 22), username, and password or privateKey\n@return An SftpConnection struct with host, port, and username fields");
 
         // sftp.upload(conn, localPath, remotePath) — Uploads a local file to the remote host.
         ns.Function("upload", [Param("conn", "SftpConnection"), Param("localPath", "string"), Param("remotePath", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -146,7 +148,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Uploads a local file to the remote server.\n@param conn The SFTP connection\n@param localPath Path to the local file to upload\n@param remotePath Destination path on the remote server\n@return null");
 
         // sftp.download(conn, remotePath, localPath) — Downloads a remote file to the local host.
         ns.Function("download", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("localPath", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -172,7 +176,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Downloads a file from the remote server to a local path.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@param localPath Destination path on the local machine\n@return null");
 
         // sftp.readFile(conn, remotePath) — Reads a remote file and returns its contents as a string.
         ns.Function("readFile", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -190,7 +196,9 @@ public static class SftpBuiltIns
             {
                 throw new RuntimeError($"sftp.readFile: {e.Message}");
             }
-        });
+        },
+            returnType: "string",
+            documentation: "Reads and returns the content of a remote file as a string.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@return The file content decoded as a UTF-8 string");
 
         // sftp.writeFile(conn, remotePath, content) — Writes a string to a remote file.
         ns.Function("writeFile", [Param("conn", "SftpConnection"), Param("remotePath", "string"), Param("content", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -211,7 +219,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Writes content to a remote file, creating or overwriting it.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@param content The string content to write\n@return null");
 
         // sftp.list(conn, remotePath) — Lists entries in a remote directory.
         // Returns an array of dicts with name, size, isDir, and modified fields.
@@ -246,7 +256,9 @@ public static class SftpBuiltIns
             {
                 throw new RuntimeError($"sftp.list: {e.Message}");
             }
-        });
+        },
+            returnType: "array",
+            documentation: "Lists files and directories at the remote path.\n@param conn The SFTP connection\n@param remotePath The remote directory path to list\n@return An array of dicts with name, size, isDir, and modified fields");
 
         // sftp.delete(conn, remotePath) — Deletes a remote file.
         ns.Function("delete", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -264,7 +276,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Deletes a file on the remote server.\n@param conn The SFTP connection\n@param remotePath Path to the file to delete\n@return null");
 
         // sftp.mkdir(conn, remotePath) — Creates a remote directory.
         ns.Function("mkdir", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -282,7 +296,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Creates a directory on the remote server.\n@param conn The SFTP connection\n@param remotePath Path of the directory to create\n@return null");
 
         // sftp.rmdir(conn, remotePath) — Removes a remote directory.
         ns.Function("rmdir", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -300,7 +316,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Removes a directory on the remote server.\n@param conn The SFTP connection\n@param remotePath Path of the directory to remove\n@return null");
 
         // sftp.exists(conn, remotePath) — Checks if a remote path exists.
         ns.Function("exists", [Param("conn", "SftpConnection"), Param("remotePath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -316,7 +334,9 @@ public static class SftpBuiltIns
             {
                 throw new RuntimeError($"sftp.exists: {e.Message}");
             }
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if a file or directory exists at the remote path.\n@param conn The SFTP connection\n@param remotePath The remote path to check\n@return true if the path exists, false otherwise");
 
         // sftp.stat(conn, remotePath) — Gets file attributes for a remote path.
         // Returns a dict with size, isDir, modified, and permissions fields.
@@ -388,7 +408,9 @@ public static class SftpBuiltIns
             {
                 throw new RuntimeError($"sftp.stat: {e.Message}");
             }
-        });
+        },
+            returnType: "dict",
+            documentation: "Returns file metadata as a dictionary.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@return A dict with size, isDir, modified, and permissions fields");
 
         // sftp.chmod(conn, remotePath, mode) — Changes file permissions on a remote path.
         // Mode is an integer representing octal permissions (e.g., 755).
@@ -411,7 +433,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Changes the permissions of a remote file.\n@param conn The SFTP connection\n@param remotePath Path to the file on the remote server\n@param mode Permission mode as a decimal octal representation (e.g., 755)\n@return null");
 
         // sftp.rename(conn, oldPath, newPath) — Renames or moves a remote file.
         ns.Function("rename", [Param("conn", "SftpConnection"), Param("oldPath", "string"), Param("newPath", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -430,7 +454,9 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Renames or moves a file on the remote server.\n@param conn The SFTP connection\n@param oldPath Current path of the file\n@param newPath New path for the file\n@return null");
 
         // sftp.close(conn) — Disconnects and disposes the SFTP connection.
         ns.Function("close", [Param("conn", "SftpConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -451,14 +477,18 @@ public static class SftpBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Closes the SFTP connection and releases all resources.\n@param conn The SFTP connection to close\n@return null");
 
         // sftp.isConnected(conn) — Returns true if the SFTP connection is still active.
         ns.Function("isConnected", [Param("conn", "SftpConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             SftpClient client = GetClient(args[0].ToObject(), "sftp.isConnected");
             return StashValue.FromBool(client.IsConnected);
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the SFTP connection is still active.\n@param conn The SFTP connection to check\n@return true if connected, false otherwise");
 
         ns.Struct("SftpConnection", [
             new BuiltInField("host", "string"),

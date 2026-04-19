@@ -123,7 +123,9 @@ public static class SshBuiltIns
             {
                 throw new RuntimeError($"ssh.connect: {e.Message}");
             }
-        });
+        },
+            returnType: "SshConnection",
+            documentation: "Connects to an SSH server and returns an SshConnection instance.\n@param options Options dict with host, port (default 22), username, and password or privateKey\n@return An SshConnection struct with host, port, and username fields");
 
         // ssh.exec(conn, command) — Executes a command on the remote host.
         // Returns a CommandResult struct with stdout, stderr, and exitCode.
@@ -141,7 +143,9 @@ public static class SshBuiltIns
             {
                 throw new RuntimeError($"ssh.exec: {e.Message}");
             }
-        });
+        },
+            returnType: "CommandResult",
+            documentation: "Executes a single command on the remote server and returns the result.\n@param conn The SSH connection\n@param command The command to execute\n@return A CommandResult struct with stdout, stderr, and exitCode");
 
         // ssh.execAll(conn, commands) — Executes an array of commands sequentially.
         // Returns an array of CommandResult structs.
@@ -169,7 +173,9 @@ public static class SshBuiltIns
             {
                 throw new RuntimeError($"ssh.execAll: {e.Message}");
             }
-        });
+        },
+            returnType: "array",
+            documentation: "Executes multiple commands sequentially on the remote server and returns an array of results.\n@param conn The SSH connection\n@param commands An array of command strings to execute\n@return An array of CommandResult structs with stdout, stderr, and exitCode");
 
         // ssh.shell(conn, commands) — Runs commands through an interactive shell stream.
         // Useful for commands requiring a TTY or stateful sessions (sudo, etc.).
@@ -209,7 +215,9 @@ public static class SshBuiltIns
             {
                 throw new RuntimeError($"ssh.shell: {e.Message}");
             }
-        });
+        },
+            returnType: "string",
+            documentation: "Opens an interactive shell session and executes commands in sequence, returning the combined output.\n@param conn The SSH connection\n@param commands An array of command strings to run in the shell\n@return The combined shell output as a string");
 
         // ssh.close(conn) — Disconnects and disposes the SSH connection.
         ns.Function("close", [Param("conn", "SshConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -230,14 +238,18 @@ public static class SshBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Closes the SSH connection and releases all resources.\n@param conn The SSH connection to close\n@return null");
 
         // ssh.isConnected(conn) — Returns true if the SSH connection is still active.
         ns.Function("isConnected", [Param("conn", "SshConnection")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             SshClient client = GetClient(args[0].ToObject(), "ssh.isConnected");
             return StashValue.FromBool(client.IsConnected);
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the SSH connection is still active.\n@param conn The SSH connection to check\n@return true if connected, false otherwise");
 
         // ssh.tunnel(conn, options) — Creates a local port forward (SSH tunnel).
         // Options dict: localPort (int, default 0 for auto), remoteHost (string, required), remotePort (int, required).
@@ -283,7 +295,9 @@ public static class SshBuiltIns
             {
                 throw new RuntimeError($"ssh.tunnel: {e.Message}");
             }
-        });
+        },
+            returnType: "SshTunnel",
+            documentation: "Creates an SSH port-forwarding tunnel and returns an SshTunnel instance.\n@param conn The SSH connection\n@param options Options dict with localPort (default 0 for auto), remoteHost, and remotePort\n@return An SshTunnel struct with localPort, remoteHost, and remotePort fields");
 
         // ssh.closeTunnel(tunnel) — Closes an SSH tunnel (port forward).
         ns.Function("closeTunnel", [Param("tunnel", "SshTunnel")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -311,7 +325,9 @@ public static class SshBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Closes an SSH port-forwarding tunnel.\n@param tunnel The SshTunnel instance to close\n@return null");
 
         ns.Struct("SshConnection", [
             new BuiltInField("host", "string"),

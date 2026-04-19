@@ -38,14 +38,18 @@ public static class EnvBuiltIns
 
             System.Environment.SetEnvironmentVariable(name, value);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Sets an environment variable to the given value.\n@param name The environment variable name\n@param value The value to assign\n@return null");
 
         ns.Function("has", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             var name = SvArgs.String(args, 0, "env.has");
 
             return StashValue.FromBool(System.Environment.GetEnvironmentVariable(name) != null);
-        });
+        },
+            returnType: "bool",
+            documentation: "Returns true if the environment variable is set.\n@param name The environment variable name\n@return True if the variable exists");
 
         ns.Function("all", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
@@ -55,7 +59,9 @@ public static class EnvBuiltIns
                 dict.Set(entry.Key.ToString()!, StashValue.FromObject(entry.Value?.ToString()));
             }
             return StashValue.FromObj(dict);
-        });
+        },
+            returnType: "dict",
+            documentation: "Returns a dictionary of all current environment variables.\n@return A dictionary mapping variable names to their values");
 
         ns.Function("withPrefix", [Param("prefix", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
@@ -71,7 +77,9 @@ public static class EnvBuiltIns
                 }
             }
             return StashValue.FromObj(dict);
-        });
+        },
+            returnType: "dict",
+            documentation: "Returns a dictionary of all environment variables whose names start with the given prefix.\n@param prefix The prefix to filter by\n@return A dictionary of matching environment variables");
 
         ns.Function("remove", [Param("name", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
@@ -79,27 +87,37 @@ public static class EnvBuiltIns
 
             System.Environment.SetEnvironmentVariable(name, null);
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Removes an environment variable.\n@param name The environment variable name to remove\n@return null");
 
         ns.Function("cwd", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             return StashValue.FromObj(System.Environment.CurrentDirectory);
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the current working directory path.\n@return The current working directory");
 
         ns.Function("home", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             return StashValue.FromObj(System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile));
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the current user's home directory path.\n@return The home directory path");
 
         ns.Function("hostname", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             return StashValue.FromObj(System.Environment.MachineName);
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the machine's hostname.\n@return The hostname");
 
         ns.Function("user", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             return StashValue.FromObj(System.Environment.UserName);
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the current user's login name.\n@return The username");
 
         ns.Function("os", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
@@ -119,12 +137,16 @@ public static class EnvBuiltIns
             }
 
             return StashValue.FromObj("unknown");
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the current operating system as a string: 'linux', 'macos', 'windows', or 'unknown'.\n@return The OS name");
 
         ns.Function("arch", [], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             return StashValue.FromObj(System.Runtime.InteropServices.RuntimeInformation.OSArchitecture.ToString().ToLowerInvariant());
-        });
+        },
+            returnType: "string",
+            documentation: "Returns the CPU architecture (e.g. 'x64', 'arm64').\n@return The architecture name");
 
         ns.Function("loadFile", [Param("path", "string"), Param("prefix", "string?")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -187,7 +209,10 @@ public static class EnvBuiltIns
             }
 
             return StashValue.FromInt(count);
-        }, isVariadic: true);
+        },
+            isVariadic: true,
+            returnType: "int",
+            documentation: "Loads environment variables from a .env file. Optionally prefixes all variable names. Returns the number of variables loaded.\n@param path Path to the .env file\n@param prefix Optional prefix to prepend to all variable names\n@return The number of variables loaded");
 
         ns.Function("saveFile", [Param("path", "string")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
@@ -230,7 +255,9 @@ public static class EnvBuiltIns
             }
 
             return StashValue.Null;
-        });
+        },
+            returnType: "null",
+            documentation: "Saves all current environment variables to a .env file at the given path.\n@param path Path to write the .env file\n@return null");
 
         return ns.Build();
     }
