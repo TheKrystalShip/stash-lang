@@ -53,6 +53,7 @@ public static class StdlibDefinitions
         (() => SftpBuiltIns.Define(),      StashCapabilities.Network),
         (() => NetBuiltIns.Define(),       StashCapabilities.Network),
         (() => SchedulerBuiltIns.Define(), StashCapabilities.Process | StashCapabilities.FileSystem),
+        (() => LogBuiltIns.Define(),       StashCapabilities.None),
     ];
 
     private static readonly ConcurrentDictionary<StashCapabilities, IReadOnlyList<NamespaceDefinition>> _namespacesCache = new();

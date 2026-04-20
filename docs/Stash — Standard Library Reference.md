@@ -46,6 +46,7 @@
 30. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
 32. [Argument Parsing](#argument-parsing)
 33. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+34. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -4325,3 +4326,97 @@ if scheduler.available() {
 ---
 
 _This is a living document. Update as the standard library expands._
+
+---
+
+## `log` — Structured Logging
+
+The `log` namespace provides structured logging with level-based filtering, text and JSON output formats, and scoped loggers with preset fields. Output goes to stderr by default.
+
+### Log Levels
+
+| Level   | Value | Description                              |
+| ------- | ----- | ---------------------------------------- |
+| `debug` | 0     | Verbose diagnostic output                |
+| `info`  | 1     | Informational messages (default minimum) |
+| `warn`  | 2     | Warnings                                 |
+| `error` | 3     | Errors                                   |
+
+### Functions
+
+| Function                     | Description                                                              |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| `log.debug(message, data?)`  | Log at DEBUG level                                                       |
+| `log.info(message, data?)`   | Log at INFO level                                                        |
+| `log.warn(message, data?)`   | Log at WARN level                                                        |
+| `log.error(message, data?)`  | Log at ERROR level                                                       |
+| `log.setLevel(level)`        | Set the minimum log level threshold                                      |
+| `log.setFormat(format)`      | Set the output format: `"text"` or `"json"`                              |
+| `log.setOutput(target)`      | Set the output target: `"stdout"`, `"stderr"`, or a file path            |
+| `log.withFields(dict)`       | Return a scoped logger dict with preset fields merged into every entry   |
+
+### Output Formats
+
+**Text format** (default):
+```
+[2026-04-20 14:32:01.234] INFO  Message key=value key2=value2
+```
+
+**JSON format**:
+```json
+{"ts":"2026-04-20T14:32:01.234Z","level":"INFO","msg":"Message","key":"value","key2":"value2"}
+```
+
+### Data Parameter
+
+When a `data` argument is provided:
+- **Dict**: all key-value pairs are merged into the log entry
+- **Any other value**: emitted as a `data=<value>` field
+
+```stash
+log.info("request", {method: "GET", status: 200, path: "/api/v1/users"});
+// [2026-04-20 14:32:01.234] INFO  request method=GET status=200 path=/api/v1/users
+
+log.warn("slow response", 2500);
+// [2026-04-20 14:32:01.234] WARN  slow response data=2500
+```
+
+### Configuration
+
+```stash
+// Set minimum level — DEBUG messages shown, INFO and above are always shown
+log.setLevel("debug");
+
+// Switch to JSON output (useful for log aggregators)
+log.setFormat("json");
+
+// Write to stdout instead of stderr
+log.setOutput("stdout");
+
+// Write to a file (appends)
+log.setOutput("/var/log/app.log");
+```
+
+Level strings are case-insensitive. `"warning"` is accepted as an alias for `"warn"`.
+
+### Scoped Loggers
+
+`log.withFields(dict)` returns a logger dict with `debug`, `info`, `warn`, and `error` keys. Every message emitted through a scoped logger automatically includes the preset fields.
+
+```stash
+let logger = log.withFields({service: "api", version: "2.1.0"});
+
+logger["info"]("server started", {port: 8080});
+// [2026-04-20 14:32:01.234] INFO  server started service=api version=2.1.0 port=8080
+
+logger["error"]("request failed", {code: 500});
+// [2026-04-20 14:32:01.234] ERROR request failed service=api version=2.1.0 code=500
+```
+
+### Error Messages
+
+| Situation                     | Error                                                                         |
+| ----------------------------- | ----------------------------------------------------------------------------- |
+| Unknown level string          | `log.setLevel: unknown level '<x>'. Expected 'debug', 'info', 'warn', or 'error'.` |
+| Unknown format string         | `log.setFormat: unknown format '<x>'. Expected 'text' or 'json'.`             |
+| File cannot be opened         | `log.setOutput: failed to open file '<path>': <reason>`                       |
