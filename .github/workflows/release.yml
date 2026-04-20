@@ -1,0 +1,222 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-native:
+    name: Build Native (${{ matrix.rid }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+            cli-name: stash-linux-x64
+            check-name: stash-check-linux-x64
+            format-name: stash-format-linux-x64
+          - os: macos-latest
+            rid: osx-x64
+            cli-name: stash-macos-x64
+            check-name: stash-check-macos-x64
+            format-name: stash-format-macos-x64
+          - os: macos-latest
+            rid: osx-arm64
+            cli-name: stash-macos-arm64
+            check-name: stash-check-macos-arm64
+            format-name: stash-format-macos-arm64
+          - os: windows-latest
+            rid: win-x64
+            cli-name: stash-windows-x64.exe
+            check-name: stash-check-windows-x64.exe
+            format-name: stash-format-windows-x64.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Publish Stash.Cli (AOT)
+        run: dotnet publish Stash.Cli -c Release -r ${{ matrix.rid }} --self-contained -o publish/cli
+
+      - name: Publish Stash.Check (AOT)
+        run: dotnet publish Stash.Check -c Release -r ${{ matrix.rid }} --self-contained -o publish/check
+
+      - name: Publish Stash.Format (AOT)
+        run: dotnet publish Stash.Format -c Release -r ${{ matrix.rid }} --self-contained -o publish/format
+
+      - name: Prepare artifacts (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          mkdir -p artifacts
+          
+          # CLI
+          cp publish/cli/Stash artifacts/${{ matrix.cli-name }}
+          chmod +x artifacts/${{ matrix.cli-name }}
+          
+          # Check
+          cp publish/check/StashCheck artifacts/${{ matrix.check-name }}
+          chmod +x artifacts/${{ matrix.check-name }}
+          
+          # Format
+          cp publish/format/StashFormat artifacts/${{ matrix.format-name }}
+          chmod +x artifacts/${{ matrix.format-name }}
+
+      - name: Prepare artifacts (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path artifacts
+          
+          # CLI
+          Copy-Item "publish/cli/Stash.exe" "artifacts/${{ matrix.cli-name }}"
+          
+          # Check
+          Copy-Item "publish/check/StashCheck.exe" "artifacts/${{ matrix.check-name }}"
+          
+          # Format
+          Copy-Item "publish/format/StashFormat.exe" "artifacts/${{ matrix.format-name }}"
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: native-${{ matrix.rid }}
+          path: artifacts/*
+          retention-days: 1
+
+  build-managed:
+    name: Build Managed (LSP/DAP)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Publish Stash.Lsp
+        run: dotnet publish Stash.Lsp -c Release -o publish/lsp
+
+      - name: Publish Stash.Dap
+        run: dotnet publish Stash.Dap -c Release -o publish/dap
+
+      - name: Create archives
+        run: |
+          mkdir -p artifacts
+          
+          # LSP archives
+          cd publish/lsp
+          tar -czvf ../../artifacts/stash-lsp-linux-x64.tar.gz *
+          zip -r ../../artifacts/stash-lsp-windows-x64.zip *
+          cp ../../artifacts/stash-lsp-linux-x64.tar.gz ../../artifacts/stash-lsp-macos-x64.tar.gz
+          cp ../../artifacts/stash-lsp-linux-x64.tar.gz ../../artifacts/stash-lsp-macos-arm64.tar.gz
+          cd ../..
+          
+          # DAP archives
+          cd publish/dap
+          tar -czvf ../../artifacts/stash-dap-linux-x64.tar.gz *
+          zip -r ../../artifacts/stash-dap-windows-x64.zip *
+          cp ../../artifacts/stash-dap-linux-x64.tar.gz ../../artifacts/stash-dap-macos-x64.tar.gz
+          cp ../../artifacts/stash-dap-linux-x64.tar.gz ../../artifacts/stash-dap-macos-arm64.tar.gz
+          cd ../..
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: managed
+          path: artifacts/*
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: [build-native, build-managed]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          
+          # Move all native binaries
+          cp artifacts/native-linux-x64/* release/
+          cp artifacts/native-osx-x64/* release/
+          cp artifacts/native-osx-arm64/* release/
+          cp artifacts/native-win-x64/* release/
+          
+          # Move managed archives
+          cp artifacts/managed/* release/
+          
+          echo "Release files:"
+          ls -la release/
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum * > checksums-sha256.txt
+          echo "Checksums:"
+          cat checksums-sha256.txt
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: Stash ${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: ${{ contains(steps.version.outputs.version, '-') }}
+          generate_release_notes: true
+          files: |
+            release/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

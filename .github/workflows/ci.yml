@@ -1,0 +1,213 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build
+        run: dotnet build --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test --configuration Release --no-build --verbosity normal
+
+  verify-aot:
+    name: Verify AOT (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            rid: linux-x64
+          - os: macos-latest
+            rid: osx-arm64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Publish Stash.Cli (AOT)
+        run: dotnet publish Stash.Cli -c Release -r ${{ matrix.rid }} --self-contained
+
+      - name: Publish Stash.Check (AOT)
+        run: dotnet publish Stash.Check -c Release -r ${{ matrix.rid }} --self-contained
+
+      - name: Publish Stash.Format (AOT)
+        run: dotnet publish Stash.Format -c Release -r ${{ matrix.rid }} --self-contained
+
+      - name: Verify binaries exist
+        shell: bash
+        run: |
+          echo "Checking AOT binaries..."
+          
+          # Set binary extension based on OS
+          EXT=""
+          if [[ "${{ matrix.os }}" == "windows-latest" ]]; then
+            EXT=".exe"
+          fi
+          
+          # Check each binary exists
+          CLI_BIN="Stash.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/Stash${EXT}"
+          CHECK_BIN="Stash.Check/bin/Release/net10.0/${{ matrix.rid }}/publish/StashCheck${EXT}"
+          FORMAT_BIN="Stash.Format/bin/Release/net10.0/${{ matrix.rid }}/publish/StashFormat${EXT}"
+          
+          for bin in "$CLI_BIN" "$CHECK_BIN" "$FORMAT_BIN"; do
+            if [[ -f "$bin" ]]; then
+              echo "✓ Found: $bin"
+            else
+              echo "✗ Missing: $bin"
+              exit 1
+            fi
+          done
+
+      - name: Check binary sizes
+        shell: bash
+        run: |
+          echo "Checking binary sizes..."
+          
+          CLI_BIN="Stash.Cli/bin/Release/net10.0/${{ matrix.rid }}/publish/Stash"
+          CHECK_BIN="Stash.Check/bin/Release/net10.0/${{ matrix.rid }}/publish/StashCheck"
+          FORMAT_BIN="Stash.Format/bin/Release/net10.0/${{ matrix.rid }}/publish/StashFormat"
+          
+          # Size thresholds in bytes
+          CLI_MAX=$((25 * 1024 * 1024))    # 25 MB
+          CHECK_MAX=$((20 * 1024 * 1024))  # 20 MB
+          FORMAT_MAX=$((20 * 1024 * 1024)) # 20 MB
+          
+          check_size() {
+            local bin="$1"
+            local max="$2"
+            local name="$3"
+            
+            if [[ ! -f "$bin" ]]; then
+              echo "✗ Binary not found: $bin"
+              return 1
+            fi
+            
+            local size=$(stat -f%z "$bin" 2>/dev/null || stat -c%s "$bin" 2>/dev/null)
+            local size_mb=$(echo "scale=2; $size / 1024 / 1024" | bc)
+            local max_mb=$(echo "scale=2; $max / 1024 / 1024" | bc)
+            
+            if [[ $size -gt $max ]]; then
+              echo "✗ $name: ${size_mb} MB exceeds limit of ${max_mb} MB"
+              return 1
+            else
+              echo "✓ $name: ${size_mb} MB (limit: ${max_mb} MB)"
+              return 0
+            fi
+          }
+          
+          FAILED=0
+          check_size "$CLI_BIN" $CLI_MAX "Stash CLI" || FAILED=1
+          check_size "$CHECK_BIN" $CHECK_MAX "StashCheck" || FAILED=1
+          check_size "$FORMAT_BIN" $FORMAT_MAX "StashFormat" || FAILED=1
+          
+          if [[ $FAILED -eq 1 ]]; then
+            echo ""
+            echo "Binary size check failed!"
+            exit 1
+          fi
+
+  verify-managed:
+    name: Verify Managed Builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Publish Stash.Lsp (Managed)
+        run: dotnet publish Stash.Lsp -c Release -o publish/lsp
+
+      - name: Publish Stash.Dap (Managed)
+        run: dotnet publish Stash.Dap -c Release -o publish/dap
+
+      - name: Verify managed builds
+        run: |
+          echo "Checking managed builds..."
+          
+          if [[ -f "publish/lsp/Stash.Lsp.dll" ]]; then
+            echo "✓ Found: Stash.Lsp.dll"
+          else
+            echo "✗ Missing: Stash.Lsp.dll"
+            exit 1
+          fi
+          
+          if [[ -f "publish/dap/Stash.Dap.dll" ]]; then
+            echo "✓ Found: Stash.Dap.dll"
+          else
+            echo "✗ Missing: Stash.Dap.dll"
+            exit 1
+          fi
