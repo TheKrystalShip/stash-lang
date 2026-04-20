@@ -20,30 +20,31 @@
 4. [`env` — Environment Variables](#env--environment-variables)
 5. [`fs` — File System Operations](#fs--file-system-operations)
 6. [`path` — Path Manipulation](#path--path-manipulation)
-7. [`str` — String Operations](#str--string-operations)
-8. [`arr` — Array Operations](#arr--array-operations)
-9. [`buf` — Byte Array Operations](#buf--byte-array-operations)
-10. [`dict` — Dictionary Operations](#dict--dictionary-operations)
-11. [`math` — Math Functions](#math--math-functions)
-12. [`time` — Time & Date](#time--time--date)
-13. [`json` — JSON](#json--json)
-14. [`ini` — INI Configuration](#ini--ini-configuration)
-15. [`yaml` — YAML](#yaml--yaml)
-16. [`toml` — TOML](#toml--toml)
-17. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
-18. [`http` — HTTP Requests](#http--http-requests)
-19. [`process` — Process Management](#process--process-management)
-20. [`tpl` — Templating](#tpl--templating)
-21. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-22. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-23. [`term` — Terminal Formatting](#term--terminal-formatting)
-24. [`sys` — System Information](#sys--system-information)
-25. [`task` — Parallel Tasks](#task--parallel-tasks)
-26. [`net` — Networking](#net--networking)
-27. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-28. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-29. [Argument Parsing](#argument-parsing)
-30. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+7. [`archive` — Archive Operations](#archive--archive-operations)
+8. [`str` — String Operations](#str--string-operations)
+9. [`arr` — Array Operations](#arr--array-operations)
+10. [`buf` — Byte Array Operations](#buf--byte-array-operations)
+11. [`dict` — Dictionary Operations](#dict--dictionary-operations)
+12. [`math` — Math Functions](#math--math-functions)
+13. [`time` — Time & Date](#time--time--date)
+14. [`json` — JSON](#json--json)
+15. [`ini` — INI Configuration](#ini--ini-configuration)
+16. [`yaml` — YAML](#yaml--yaml)
+17. [`toml` — TOML](#toml--toml)
+18. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
+19. [`http` — HTTP Requests](#http--http-requests)
+20. [`process` — Process Management](#process--process-management)
+21. [`tpl` — Templating](#tpl--templating)
+22. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+23. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+24. [`term` — Terminal Formatting](#term--terminal-formatting)
+25. [`sys` — System Information](#sys--system-information)
+26. [`task` — Parallel Tasks](#task--parallel-tasks)
+27. [`net` — Networking](#net--networking)
+28. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+29. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+30. [Argument Parsing](#argument-parsing)
+31. [`scheduler` — OS Service Management](#scheduler--os-service-management)
 
 ---
 
@@ -411,6 +412,134 @@ path.join("/var", "log", "app", "server.log");  // "/var/log/app/server.log"
 path.join("~", ".config", "stash");             // "~/.config/stash"
 path.join("/usr", "local", "bin");              // "/usr/local/bin"
 ```
+
+---
+
+## `archive` — Archive Operations
+
+> **Requires:** `FileSystem` capability
+
+Creates, extracts, and inspects ZIP, TAR, and GZIP archives. TAR archives with `.tar.gz` or `.tgz` extensions are automatically gzip-compressed.
+
+### Functions
+
+| Function                                       | Description                                       |
+| ---------------------------------------------- | ------------------------------------------------- |
+| `archive.zip(outputPath, inputPaths, opts?)`   | Create a ZIP archive                              |
+| `archive.unzip(archivePath, outputDir, opts?)` | Extract a ZIP archive                             |
+| `archive.tar(outputPath, inputPaths, opts?)`   | Create a TAR archive (auto-gzip for .tar.gz/.tgz) |
+| `archive.untar(archivePath, outputDir, opts?)` | Extract a TAR archive (auto-detects gzip)         |
+| `archive.gzip(inputPath, outputPath?)`         | Gzip-compress a single file                       |
+| `archive.gunzip(inputPath, outputPath?)`       | Gzip-decompress a single file                     |
+| `archive.list(archivePath)`                    | List archive contents without extracting          |
+
+### `ArchiveOptions` Struct
+
+```stash
+struct ArchiveOptions {
+    compressionLevel: int,   // 0 = no compression, 1–9 = speed→size trade-off (default: 6)
+    overwrite: bool,         // Overwrite existing files (default: false)
+    preservePaths: bool,     // Preserve directory structure in archives (default: true)
+    filter: string           // Glob pattern to filter entries during extraction (e.g. "*.txt")
+}
+```
+
+### `ArchiveEntry` Struct
+
+Returned by `archive.list()`:
+
+```stash
+struct ArchiveEntry {
+    name: string,        // Entry path within the archive
+    size: int,           // Uncompressed size in bytes
+    isDirectory: bool,   // Whether the entry is a directory
+    modifiedAt: string   // ISO-8601 modification timestamp
+}
+```
+
+### `archive.zip(outputPath, inputPaths, options?)`
+
+Creates a ZIP archive. `inputPaths` may be a single string or an array of strings. Directories are added recursively. Returns the output path.
+
+```stash
+// Single file
+archive.zip("build.zip", "dist/app");
+
+// Multiple files
+archive.zip("release.zip", ["README.md", "LICENSE", "dist/"]);
+
+// With options
+let opts = archive.ArchiveOptions { compressionLevel: 9, overwrite: true };
+archive.zip("release.zip", "dist/", opts);
+```
+
+### `archive.unzip(archivePath, outputDir, options?)`
+
+Extracts a ZIP archive into `outputDir` (created if it doesn't exist). Returns an array of extracted file paths.
+
+```stash
+let files = archive.unzip("release.zip", "output/");
+
+// Only extract .config files
+let opts = archive.ArchiveOptions { filter: "*.config", overwrite: true };
+let configs = archive.unzip("backup.zip", "/etc/app/", opts);
+```
+
+### `archive.tar(outputPath, inputPaths, options?)`
+
+Creates a TAR archive. When `outputPath` ends with `.tar.gz` or `.tgz`, the archive is automatically gzip-compressed. Returns the output path.
+
+```stash
+archive.tar("backup.tar", ["data/", "config/"]);
+
+// Gzipped tarball
+archive.tar("backup.tar.gz", "src/", archive.ArchiveOptions { compressionLevel: 6 });
+```
+
+### `archive.untar(archivePath, outputDir, options?)`
+
+Extracts a TAR archive. Automatically detects gzip compression by file extension and magic bytes. Returns an array of extracted file paths.
+
+```stash
+let files = archive.untar("backup.tar.gz", "restore/");
+```
+
+### `archive.gzip(inputPath, outputPath?)`
+
+Compresses a single file with gzip. The default output path appends `.gz` to the input path. Returns the output path.
+
+```stash
+archive.gzip("data.csv");               // Creates "data.csv.gz"
+archive.gzip("data.csv", "data.gz");    // Explicit output path
+```
+
+### `archive.gunzip(inputPath, outputPath?)`
+
+Decompresses a gzip file. The default output path strips the `.gz` extension. Returns the output path.
+
+```stash
+archive.gunzip("data.csv.gz");          // Creates "data.csv"
+archive.gunzip("data.gz", "data.csv");  // Explicit output path
+```
+
+### `archive.list(archivePath)`
+
+Lists the contents of a ZIP or TAR (including `.tar.gz`/`.tgz`) archive without extracting. Returns an array of `ArchiveEntry` structs.
+
+```stash
+let entries = archive.list("release.zip");
+for entry in entries {
+    io.println(entry.name + " (" + entry.size + " bytes)");
+}
+```
+
+### Error Messages
+
+- File not found: `"archive.{func}: file not found: '{path}'"`
+- Invalid archive: `"archive.{func}: invalid {format} archive: '{path}'"`
+- Permission denied: `"archive.{func}: permission denied: '{path}'"`
+- File already exists (overwrite=false): `"archive.{func}: file already exists: '{path}'"`
+- Path traversal attempt: `"archive.{func}: entry would extract outside target directory: '{entry}'"`
 
 ---
 
@@ -3404,9 +3533,9 @@ match net.tcpState(conn) {
 
 #### `TcpRecvOptions`
 
-| Field      | Type  | Default | Description                         |
-| ---------- | ----- | ------- | ----------------------------------- |
-| `maxBytes` | `int` | `4096`  | Max bytes to read (capped at 16 MB) |
+| Field       | Type  | Default | Description                         |
+| ----------- | ----- | ------- | ----------------------------------- |
+| `maxBytes`  | `int` | `4096`  | Max bytes to read (capped at 16 MB) |
 | `timeoutMs` | `int` | `30000` | Receive timeout in milliseconds     |
 
 #### `TcpServer`

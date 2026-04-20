@@ -1,0 +1,93 @@
+// archive.stash — Demonstrates the archive namespace
+// ZIP, TAR, GZIP operations for file packaging and compression
+
+// ── Setup: create some sample files ─────────────────────────────────────────
+
+fs.writeFile("/tmp/stash_archive_demo/readme.txt", "Stash archive demo\n");
+fs.writeFile("/tmp/stash_archive_demo/data.csv", "id,name,value\n1,foo,42\n2,bar,99\n");
+fs.writeFile("/tmp/stash_archive_demo/config.json", "{\"debug\": false, \"port\": 8080}\n");
+fs.mkdir("/tmp/stash_archive_demo/src");
+fs.writeFile("/tmp/stash_archive_demo/src/main.stash", "io.println(\"hello\");\n");
+fs.writeFile("/tmp/stash_archive_demo/src/util.stash", "fn add(a, b) { return a + b; }\n");
+
+// ── ZIP ──────────────────────────────────────────────────────────────────────
+
+// Create a ZIP from multiple files
+let zipPath = "/tmp/stash_archive_demo/release.zip";
+archive.zip(zipPath, [
+    "/tmp/stash_archive_demo/readme.txt",
+    "/tmp/stash_archive_demo/data.csv",
+    "/tmp/stash_archive_demo/config.json"
+]);
+io.println("Created: " + zipPath);
+
+// Create a ZIP with compression options
+let opts = archive.ArchiveOptions { compressionLevel: 9, overwrite: true };
+archive.zip(zipPath, "/tmp/stash_archive_demo/src", opts);
+io.println("Recreated with max compression: " + zipPath);
+
+// List ZIP contents
+let entries = archive.list(zipPath);
+io.println("\nContents of " + zipPath + ":");
+for (let entry in entries) {
+    let kind = entry.isDirectory ? "dir " : "file";
+    io.println("  [" + kind + "] " + entry.name + " (" + entry.size + " bytes)");
+}
+
+// Extract ZIP — only .stash files
+let extractDir = "/tmp/stash_archive_demo/unzipped";
+let extractOpts = archive.ArchiveOptions { filter: "*.stash", overwrite: true };
+let extracted = archive.unzip(zipPath, extractDir, extractOpts);
+io.println("\nExtracted " + len(extracted) + " .stash file(s) to: " + extractDir);
+for (let f in extracted) {
+    io.println("  " + f);
+}
+
+// ── TAR ──────────────────────────────────────────────────────────────────────
+
+// Create a plain TAR
+let tarPath = "/tmp/stash_archive_demo/backup.tar";
+archive.tar(tarPath, "/tmp/stash_archive_demo/src");
+io.println("\nCreated TAR: " + tarPath);
+
+// Create a gzipped tarball (.tar.gz)
+let tgzPath = "/tmp/stash_archive_demo/backup.tar.gz";
+archive.tar(tgzPath, [
+    "/tmp/stash_archive_demo/readme.txt",
+    "/tmp/stash_archive_demo/src"
+]);
+io.println("Created gzipped tarball: " + tgzPath);
+
+// List .tar.gz contents
+let tarEntries = archive.list(tgzPath);
+io.println("\nContents of " + tgzPath + ":");
+for (let entry in tarEntries) {
+    io.println("  " + entry.name + " (" + entry.size + " bytes)");
+}
+
+// Extract TAR
+let tarOut = "/tmp/stash_archive_demo/untarred";
+let tarFiles = archive.untar(tgzPath, tarOut, archive.ArchiveOptions { overwrite: true });
+io.println("\nExtracted " + len(tarFiles) + " file(s) from tarball");
+
+// ── GZIP (single-file compression) ──────────────────────────────────────────
+
+// Compress a CSV file
+let gzFile = archive.gzip("/tmp/stash_archive_demo/data.csv");
+io.println("\nCompressed: " + gzFile);
+
+let origSize = fs.stat("/tmp/stash_archive_demo/data.csv").size;
+let compSize = fs.stat(gzFile).size;
+io.println("Original: " + origSize + " bytes → Compressed: " + compSize + " bytes");
+
+// Decompress it back
+let restored = archive.gunzip(gzFile, "/tmp/stash_archive_demo/data_restored.csv");
+io.println("Decompressed to: " + restored);
+
+let restoredContent = fs.readFile(restored);
+io.println("Restored content:\n" + restoredContent);
+
+// ── Cleanup ──────────────────────────────────────────────────────────────────
+
+fs.remove("/tmp/stash_archive_demo", true);
+io.println("\nDemo complete. Cleaned up /tmp/stash_archive_demo.");

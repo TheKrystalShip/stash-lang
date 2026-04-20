@@ -25,6 +25,7 @@ public static class StdlibDefinitions
         (() => ProcessBuiltIns.Define(),  StashCapabilities.Process),
         (() => FsBuiltIns.Define(),       StashCapabilities.FileSystem),
         (() => PathBuiltIns.Define(),     StashCapabilities.None),
+        (() => ArchiveBuiltIns.Define(),  StashCapabilities.FileSystem),
         (() => ArrBuiltIns.Define(),      StashCapabilities.None),
         (() => DictBuiltIns.Define(),     StashCapabilities.None),
         (() => StrBuiltIns.Define(),      StashCapabilities.None),
