@@ -212,7 +212,163 @@ public static class CryptoBuiltIns
             returnType: "byte[]",
             documentation: "Computes an HMAC signature using byte arrays for key and data.\n@param algo The hash algorithm: \"md5\", \"sha1\", \"sha256\", or \"sha512\"\n@param key The secret key as byte[]\n@param data The data to sign as byte[]\n@return The HMAC as a byte array");
 
+        // crypto.generateKey(bits?) — Generates a cryptographically secure random encryption key.
+        //   'bits' defaults to 256. Accepts 128, 192, or 256. Returns a lowercase hex-encoded string.
+        ns.Function("generateKey", [Param("bits", "int")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            int bits = 256;
+            if (args.Length == 1)
+            {
+                long rawBits = SvArgs.Long(args, 0, "crypto.generateKey");
+                if (rawBits != 128 && rawBits != 192 && rawBits != 256)
+                    throw new RuntimeError($"'crypto.generateKey' accepts 128, 192, or 256 bits, got {rawBits}.");
+                bits = (int)rawBits;
+            }
+            return StashValue.FromObj(HashToHex(RandomNumberGenerator.GetBytes(bits / 8)));
+        },
+            returnType: "string",
+            isVariadic: true,
+            documentation: "Generates a cryptographically secure random encryption key.\n@param bits Optional key size in bits: 128, 192, or 256 (default: 256)\n@return The key as a lowercase hexadecimal string");
+
+        // crypto.encrypt(data, key, options?) — Encrypts data using AES-256-GCM.
+        //   'data' can be a string or byte[]. 'key' must be a 32-byte hex string or byte[].
+        //   Returns a dict: { ciphertext: "hex", iv: "hex", tag: "hex" }.
+        ns.Function("encrypt", [Param("data", "string"), Param("key", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'crypto.encrypt' expects 2 or 3 arguments.");
+
+            byte[] plaintext;
+            StashValue dataArg = args[0];
+            if (dataArg.IsObj && dataArg.AsObj is string dataStr)
+                plaintext = Encoding.UTF8.GetBytes(dataStr);
+            else if (dataArg.IsObj && dataArg.AsObj is StashByteArray dataBa)
+                plaintext = dataBa.AsSpan().ToArray();
+            else
+                throw new RuntimeError("1st argument to 'crypto.encrypt' must be a string or byte[].");
+
+            byte[] keyBytes = ExtractKeyBytes(args[1], "crypto.encrypt");
+
+            if (keyBytes.Length != 32)
+                throw new RuntimeError($"'crypto.encrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.");
+
+            byte[] iv = RandomNumberGenerator.GetBytes(12);
+            byte[] ciphertext = new byte[plaintext.Length];
+            byte[] tag = new byte[16];
+
+            using var aes = new AesGcm(keyBytes, 16);
+            aes.Encrypt(iv, plaintext, ciphertext, tag);
+
+            var result = new StashDictionary();
+            result.Set("ciphertext", StashValue.FromObj(HashToHex(ciphertext)));
+            result.Set("iv", StashValue.FromObj(HashToHex(iv)));
+            result.Set("tag", StashValue.FromObj(HashToHex(tag)));
+            return StashValue.FromObj(result);
+        },
+            returnType: "dict",
+            isVariadic: true,
+            documentation: "Encrypts data using AES-256-GCM.\n@param data The plaintext to encrypt — string or byte[]\n@param key A 32-byte (256-bit) key as a hex string or byte[]\n@param options Reserved for future use (optional)\n@return A dictionary with fields: ciphertext (hex), iv (hex), tag (hex)");
+
+        // crypto.decrypt(ciphertext, key, options?) — Decrypts AES-256-GCM encrypted data.
+        //   'ciphertext' can be a dict { ciphertext, iv, tag } or a combined hex string (iv+tag+ciphertext).
+        //   'key' must be the same 32-byte hex string or byte[] used for encryption.
+        //   Returns the decrypted UTF-8 string. Throws if authentication fails.
+        ns.Function("decrypt", [Param("ciphertext", "string"), Param("key", "string"), Param("options", "dict")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 2 || args.Length > 3)
+                throw new RuntimeError("'crypto.decrypt' expects 2 or 3 arguments.");
+
+            byte[] keyBytes = ExtractKeyBytes(args[1], "crypto.decrypt");
+
+            if (keyBytes.Length != 32)
+                throw new RuntimeError($"'crypto.decrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.");
+
+            byte[] cipherBytes;
+            byte[] ivBytes;
+            byte[] tagBytes;
+
+            StashValue ctArg = args[0];
+            if (ctArg.IsObj && ctArg.AsObj is StashDictionary ctDict)
+            {
+                StashValue ctVal = ctDict.Get("ciphertext");
+                StashValue ivVal = ctDict.Get("iv");
+                StashValue tagVal = ctDict.Get("tag");
+                if (ctVal.IsNull || ivVal.IsNull || tagVal.IsNull)
+                    throw new RuntimeError("'crypto.decrypt' dict must contain 'ciphertext', 'iv', and 'tag' fields.");
+                if (ctVal.AsObj is not string ctHexField)
+                    throw new RuntimeError("'ciphertext' field in 'crypto.decrypt' dict must be a hex string.");
+                if (ivVal.AsObj is not string ivHexField)
+                    throw new RuntimeError("'iv' field in 'crypto.decrypt' dict must be a hex string.");
+                if (tagVal.AsObj is not string tagHexField)
+                    throw new RuntimeError("'tag' field in 'crypto.decrypt' dict must be a hex string.");
+                cipherBytes = HexToBytes(ctHexField, "crypto.decrypt");
+                ivBytes = HexToBytes(ivHexField, "crypto.decrypt");
+                tagBytes = HexToBytes(tagHexField, "crypto.decrypt");
+            }
+            else if (ctArg.IsObj && ctArg.AsObj is string combinedHex)
+            {
+                // Combined format: iv (24 hex chars) + tag (32 hex chars) + ciphertext (rest)
+                if (combinedHex.Length < 56)
+                    throw new RuntimeError("'crypto.decrypt' combined hex string is too short (must encode at least iv + tag).");
+                ivBytes = HexToBytes(combinedHex[..24], "crypto.decrypt");
+                tagBytes = HexToBytes(combinedHex[24..56], "crypto.decrypt");
+                cipherBytes = HexToBytes(combinedHex[56..], "crypto.decrypt");
+            }
+            else
+            {
+                throw new RuntimeError("1st argument to 'crypto.decrypt' must be a dictionary { ciphertext, iv, tag } or a combined hex string.");
+            }
+
+            byte[] plaintext = new byte[cipherBytes.Length];
+            try
+            {
+                using var aes = new AesGcm(keyBytes, 16);
+                aes.Decrypt(ivBytes, cipherBytes, tagBytes, plaintext);
+            }
+            catch (CryptographicException)
+            {
+                throw new RuntimeError("'crypto.decrypt' failed: authentication tag verification failed.");
+            }
+
+            return StashValue.FromObj(Encoding.UTF8.GetString(plaintext));
+        },
+            returnType: "string",
+            isVariadic: true,
+            documentation: "Decrypts data encrypted with AES-256-GCM.\n@param ciphertext A dictionary { ciphertext, iv, tag } with hex fields, or a combined hex string (iv+tag+ciphertext)\n@param key The 32-byte (256-bit) decryption key as a hex string or byte[]\n@param options Reserved for future use (optional)\n@return The decrypted plaintext string");
+
         return ns.Build();
+    }
+
+    /// <summary>
+    /// Extracts key bytes from either a hex string or a <see cref="StashByteArray"/>.
+    /// </summary>
+    private static byte[] ExtractKeyBytes(StashValue keyArg, string funcName)
+    {
+        if (keyArg.IsObj && keyArg.AsObj is string keyHex)
+            return HexToBytes(keyHex, funcName);
+        if (keyArg.IsObj && keyArg.AsObj is StashByteArray keyBa)
+            return keyBa.AsSpan().ToArray();
+        throw new RuntimeError($"2nd argument to '{funcName}' must be a hex string or byte[].");
+    }
+
+    /// <summary>
+    /// Converts a lowercase or uppercase hexadecimal string to a byte array.
+    /// </summary>
+    /// <param name="hex">The hex string to convert.</param>
+    /// <param name="funcName">The calling function name used in error messages.</param>
+    /// <exception cref="RuntimeError">Thrown when <paramref name="hex"/> has odd length or invalid characters.</exception>
+    private static byte[] HexToBytes(string hex, string funcName)
+    {
+        if (hex.Length % 2 != 0)
+            throw new RuntimeError($"Invalid hex string in '{funcName}': length must be even.");
+        try
+        {
+            return Convert.FromHexString(hex);
+        }
+        catch (FormatException)
+        {
+            throw new RuntimeError($"Invalid hex string in '{funcName}': contains non-hexadecimal characters.");
+        }
     }
 
     /// <summary>

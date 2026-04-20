@@ -2658,7 +2658,7 @@ For complete documentation on Stash's built-in testing primitives — `test()`, 
 
 ## `crypto` — Cryptography & Hashing
 
-The `crypto` namespace provides cryptographic hash functions, HMAC signatures, UUID generation, and secure random byte generation. All hash functions return lowercase hexadecimal strings.
+The `crypto` namespace provides cryptographic hash functions, HMAC signatures, UUID generation, secure random byte generation, and AES-256-GCM authenticated encryption. All hash functions return lowercase hexadecimal strings.
 
 ### Hash Functions
 
@@ -2735,6 +2735,39 @@ io.println(b64Token);  // Base64-encoded string
 
 // Convert byte array to hex if needed
 let hexStr = buf.toHex(token);
+```
+
+### AES-256-GCM Encryption
+
+| Function                              | Description                                                                              |
+| ------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `crypto.generateKey(bits?)`           | Generate a cryptographically secure random key (default: 256 bits). Returns hex string  |
+| `crypto.encrypt(data, key, options?)` | Encrypt `data` with AES-256-GCM. Returns `{ ciphertext, iv, tag }` as hex strings       |
+| `crypto.decrypt(ciphertext, key, options?)` | Decrypt AES-256-GCM data. Returns the plaintext string                             |
+
+`generateKey` accepts `128`, `192`, or `256` as the bit count (default `256`). `encrypt` accepts a `string` or `byte[]` as data. The `key` must be a 32-byte (256-bit) hex string or `byte[]`. Each `encrypt` call generates a unique random 12-byte IV; the authentication tag is 16 bytes (128-bit GCM tag). `decrypt` accepts the dict returned by `encrypt`, or any dict with `ciphertext`, `iv`, and `tag` hex fields. Throws a `RuntimeError` if authentication tag verification fails (wrong key or tampered data).
+
+```stash
+// Generate a key once and store it securely
+let key = crypto.generateKey();       // 64-char hex string (256 bits)
+let key128 = crypto.generateKey(128); // 32-char hex string (128 bits)
+
+// Encrypt a string
+let enc = crypto.encrypt("secret message", key);
+io.println(enc.ciphertext);  // hex-encoded ciphertext
+io.println(enc.iv);          // hex-encoded 12-byte IV (24 chars)
+io.println(enc.tag);         // hex-encoded 16-byte authentication tag (32 chars)
+
+// Decrypt back to the original string
+let plaintext = crypto.decrypt(enc, key);
+io.println(plaintext);  // "secret message"
+
+// Error handling — wrong key or tampered data throws an error
+try {
+    let bad = crypto.decrypt(enc, crypto.generateKey());
+} catch (e) {
+    io.println(e.message);  // "authentication tag verification failed"
+}
 ```
 
 ---

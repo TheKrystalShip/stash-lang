@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Stash.Runtime.Types;
 
 namespace Stash.Tests.Interpreting;
 
@@ -254,5 +255,205 @@ public class CryptoTests : StashTestBase
         var result = Run(@"let result = crypto.randomBytes(16, ""hex"");");
         var hex = Assert.IsType<string>(result);
         Assert.Equal(32, hex.Length);
+    }
+
+    // ── generateKey ───────────────────────────────────────────────────────────
+
+    [Fact]
+    public void GenerateKey_DefaultBits_Returns64CharHex()
+    {
+        var result = Run(@"let result = crypto.generateKey();");
+        var hex = Assert.IsType<string>(result);
+        Assert.Equal(64, hex.Length);
+        Assert.Matches("^[0-9a-f]+$", hex);
+    }
+
+    [Fact]
+    public void GenerateKey_128Bits_Returns32CharHex()
+    {
+        var result = Run(@"let result = crypto.generateKey(128);");
+        var hex = Assert.IsType<string>(result);
+        Assert.Equal(32, hex.Length);
+    }
+
+    [Fact]
+    public void GenerateKey_192Bits_Returns48CharHex()
+    {
+        var result = Run(@"let result = crypto.generateKey(192);");
+        var hex = Assert.IsType<string>(result);
+        Assert.Equal(48, hex.Length);
+    }
+
+    [Fact]
+    public void GenerateKey_256Bits_Returns64CharHex()
+    {
+        var result = Run(@"let result = crypto.generateKey(256);");
+        var hex = Assert.IsType<string>(result);
+        Assert.Equal(64, hex.Length);
+    }
+
+    [Fact]
+    public void GenerateKey_InvalidBits_ThrowsError()
+    {
+        RunExpectingError(@"crypto.generateKey(512);");
+    }
+
+    [Fact]
+    public void GenerateKey_ProducesUniqueKeys()
+    {
+        var a = (string)Run(@"let result = crypto.generateKey();")!;
+        var b = (string)Run(@"let result = crypto.generateKey();")!;
+        Assert.NotEqual(a, b);
+    }
+
+    // ── encrypt ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Encrypt_String_ReturnsDict()
+    {
+        var result = Run(@"let key = crypto.generateKey(); let result = crypto.encrypt(""hello"", key);");
+        Assert.IsType<StashDictionary>(result);
+    }
+
+    [Fact]
+    public void Encrypt_ReturnsNonNullIv()
+    {
+        var result = Run(@"let key = crypto.generateKey(); let enc = crypto.encrypt(""hello"", key); let result = enc.iv;");
+        var iv = Assert.IsType<string>(result);
+        Assert.Equal(24, iv.Length); // 12 bytes = 24 hex chars
+        Assert.Matches("^[0-9a-f]+$", iv);
+    }
+
+    [Fact]
+    public void Encrypt_ReturnsNonNullTag()
+    {
+        var result = Run(@"let key = crypto.generateKey(); let enc = crypto.encrypt(""hello"", key); let result = enc.tag;");
+        var tag = Assert.IsType<string>(result);
+        Assert.Equal(32, tag.Length); // 16 bytes = 32 hex chars
+        Assert.Matches("^[0-9a-f]+$", tag);
+    }
+
+    [Fact]
+    public void Encrypt_DifferentCallsProduceDifferentCiphertexts()
+    {
+        // Same key, different IVs per call → different ciphertexts
+        const string fixedKey = "0000000000000000000000000000000000000000000000000000000000000000";
+        var a = (string)Run($@"let result = crypto.encrypt(""hello"", ""{fixedKey}"").ciphertext;")!;
+        var b = (string)Run($@"let result = crypto.encrypt(""hello"", ""{fixedKey}"").ciphertext;")!;
+        Assert.NotEqual(a, b);
+    }
+
+    [Fact]
+    public void Encrypt_EmptyString_Success()
+    {
+        var result = Run(@"let key = crypto.generateKey(); let result = crypto.encrypt("""", key);");
+        var d = Assert.IsType<StashDictionary>(result);
+        Assert.NotNull(d.Get("ciphertext").ToObject());
+        Assert.NotNull(d.Get("iv").ToObject());
+        Assert.NotNull(d.Get("tag").ToObject());
+    }
+
+    [Fact]
+    public void Encrypt_LongString_Success()
+    {
+        var result = Run(@"let key = crypto.generateKey(); let big = ""abcdefghijklmnopqrstuvwxyz0123456789abcdefghijklmnopqrstuvwxyz01234""; let result = crypto.encrypt(big, key);");
+        Assert.IsType<StashDictionary>(result);
+    }
+
+    [Fact]
+    public void Encrypt_KeyTooShort_ThrowsError()
+    {
+        // 16 hex chars = 8 bytes — too short for AES-256
+        RunExpectingError(@"crypto.encrypt(""hello"", ""0000000000000000"");");
+    }
+
+    [Fact]
+    public void Encrypt_KeyTooLong_ThrowsError()
+    {
+        // 66 hex chars = 33 bytes — too long for AES-256
+        RunExpectingError(@"crypto.encrypt(""hello"", ""000000000000000000000000000000000000000000000000000000000000000000"");");
+    }
+
+    // ── decrypt ───────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Decrypt_EncryptedString_ReturnsOriginal()
+    {
+        var result = Run(@"
+            let key = crypto.generateKey();
+            let enc = crypto.encrypt(""hello world"", key);
+            let result = crypto.decrypt(enc, key);
+        ");
+        Assert.Equal("hello world", result);
+    }
+
+    [Fact]
+    public void Decrypt_WithDictCiphertext_ReturnsOriginal()
+    {
+        var result = Run(@"
+            let key = crypto.generateKey();
+            let enc = crypto.encrypt(""hello world"", key);
+            let d = { ciphertext: enc.ciphertext, iv: enc.iv, tag: enc.tag };
+            let result = crypto.decrypt(d, key);
+        ");
+        Assert.Equal("hello world", result);
+    }
+
+    [Fact]
+    public void Decrypt_WrongKey_ThrowsError()
+    {
+        RunExpectingError(@"
+            let key1 = crypto.generateKey();
+            let key2 = crypto.generateKey();
+            let enc = crypto.encrypt(""hello"", key1);
+            crypto.decrypt(enc, key2);
+        ");
+    }
+
+    [Fact]
+    public void Decrypt_TamperedCiphertext_ThrowsError()
+    {
+        RunExpectingError(@"
+            let key = crypto.generateKey();
+            let enc = crypto.encrypt(""hello"", key);
+            let tampered = { ""ciphertext"": enc.ciphertext, ""iv"": enc.iv, ""tag"": ""00000000000000000000000000000000"" };
+            crypto.decrypt(tampered, key);
+        ");
+    }
+
+    // ── roundtrip ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Roundtrip_EncryptDecrypt_Identical()
+    {
+        var result = Run(@"
+            let key = crypto.generateKey();
+            let plaintext = ""The quick brown fox jumps over the lazy dog"";
+            let enc = crypto.encrypt(plaintext, key);
+            let result = crypto.decrypt(enc, key);
+        ");
+        Assert.Equal("The quick brown fox jumps over the lazy dog", result);
+    }
+
+    [Fact]
+    public void Roundtrip_EmptyString_Identical()
+    {
+        var result = Run(@"
+            let key = crypto.generateKey();
+            let enc = crypto.encrypt("""", key);
+            let result = crypto.decrypt(enc, key);
+        ");
+        Assert.Equal("", result);
+    }
+
+    [Fact]
+    public void Roundtrip_UnicodeString_Identical()
+    {
+        var result = Run(@"
+            let key = crypto.generateKey();
+            let enc = crypto.encrypt(""héllo wörld ☺"", key);
+            let result = crypto.decrypt(enc, key);
+        ");
+        Assert.Equal("héllo wörld ☺", result);
     }
 }
