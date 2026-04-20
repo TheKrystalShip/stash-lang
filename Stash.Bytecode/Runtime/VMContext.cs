@@ -183,6 +183,10 @@ internal sealed class VMContext : IInterpreterContext
         }
     }
 
+    // --- Logger Context ---
+
+    public LoggerState LoggerState { get; set; } = new();
+
     // --- IInterpreterContext ---
 
     /// <summary>
@@ -222,6 +226,7 @@ internal sealed class VMContext : IInterpreterContext
             ModuleLoader = ModuleLoader,
             ModuleCache = ModuleCache,
             ModuleLocks = ModuleLocks,
+            LoggerState = LoggerState,
         };
     }
 

@@ -30,18 +30,8 @@ public class LogBuiltInsTests : StashTestBase
         return (outSw.ToString(), errSw.ToString());
     }
 
-    // Reset global log state before each test by running setLevel/setFormat/setOutput defaults.
-    private static void ResetLogState(string source)
-    {
-        // Prepend resets so each test starts from known defaults.
-        _ = source; // used below
-    }
-
     private static (string stdout, string stderr) CaptureWithReset(string source)
-    {
-        string full = "log.setLevel(\"info\"); log.setFormat(\"text\"); log.setOutput(\"stderr\");\n" + source;
-        return CaptureBoth(full);
-    }
+        => CaptureBoth(source);
 
     // ── Text format pattern: [YYYY-MM-DD HH:MM:SS.mmm] LEVEL Message ─────────
     private static readonly Regex TextPattern =

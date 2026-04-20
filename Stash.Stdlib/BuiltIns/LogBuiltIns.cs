@@ -14,14 +14,6 @@ using static Stash.Stdlib.Registration.P;
 /// <summary>Registers the <c>log</c> namespace providing structured logging with levels, timestamps, and text/JSON output.</summary>
 public static class LogBuiltIns
 {
-    // ── Global logger state ───────────────────────────────────────────────────
-
-    private static readonly object _lock = new();
-    private static int _logLevel = 1;         // 0=DEBUG, 1=INFO, 2=WARN, 3=ERROR
-    private static string _logFormat = "text";
-    private static string _logOutput = "stderr";
-    private static TextWriter? _fileWriter;
-
     // ── Level constants ───────────────────────────────────────────────────────
 
     private const int LevelDebug = 0;
@@ -79,54 +71,41 @@ public static class LogBuiltIns
             documentation: "Logs a message at ERROR level.\n@param message The log message\n@param data Optional extra fields (dict) or a scalar value\n@return null");
 
         ns.Function("setLevel", [Param("level", "string")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
                 var level = SvArgs.String(args, 0, "log.setLevel");
                 int parsed = ParseLevel(level);
-                lock (_lock) { _logLevel = parsed; }
+                ctx.LoggerState.Level = parsed;
                 return StashValue.Null;
             },
             returnType: "null",
             documentation: "Sets the minimum log level. Messages below this level are suppressed.\n@param level One of: 'debug', 'info', 'warn', 'error'\n@return null");
 
         ns.Function("setFormat", [Param("format", "string")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
                 var format = SvArgs.String(args, 0, "log.setFormat");
                 if (format != "text" && format != "json")
                     throw new RuntimeError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.");
-                lock (_lock) { _logFormat = format; }
+                ctx.LoggerState.Format = format;
                 return StashValue.Null;
             },
             returnType: "null",
             documentation: "Sets the output format.\n@param format 'text' (default) or 'json'\n@return null");
 
         ns.Function("setOutput", [Param("target", "string")],
-            static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
+            (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
             {
                 var target = SvArgs.String(args, 0, "log.setOutput");
-                lock (_lock)
+                if (target != "stdout" && target != "stderr")
                 {
-                    if (target != "stdout" && target != "stderr")
-                    {
-                        // It's a file path — open (or create) it.
-                        try
-                        {
-                            var newWriter = new StreamWriter(target, append: true, Encoding.UTF8) { AutoFlush = true };
-                            _fileWriter?.Dispose();
-                            _fileWriter = newWriter;
-                        }
-                        catch (Exception ex)
-                        {
-                            throw new RuntimeError($"log.setOutput: failed to open file '{target}': {ex.Message}");
-                        }
-                    }
-                    else
-                    {
-                        _fileWriter?.Dispose();
-                        _fileWriter = null;
-                    }
-                    _logOutput = target;
+                    try { ctx.LoggerState.SetFileOutput(target); }
+                    catch (Exception ex) { throw new RuntimeError($"log.setOutput: failed to open file '{target}': {ex.Message}"); }
+                }
+                else
+                {
+                    ctx.LoggerState.ClearFileOutput();
+                    ctx.LoggerState.Output = target;
                 }
                 return StashValue.Null;
             },
@@ -150,18 +129,11 @@ public static class LogBuiltIns
     internal static void Emit(IInterpreterContext ctx, int level, ReadOnlySpan<StashValue> args,
         StashDictionary? presetFields = null)
     {
-        int currentLevel;
-        string format;
-        string output;
-        TextWriter? fileWriter;
-
-        lock (_lock)
-        {
-            currentLevel = _logLevel;
-            format = _logFormat;
-            output = _logOutput;
-            fileWriter = _fileWriter;
-        }
+        var state = ctx.LoggerState;
+        int currentLevel = state.Level;
+        string format = state.Format;
+        string output = state.Output;
+        TextWriter? fileWriter = state.FileWriter;
 
         if (level < currentLevel)
             return;
@@ -337,18 +309,11 @@ public static class LogBuiltIns
     private static void EmitScoped(IInterpreterContext ctx, int level,
         ReadOnlySpan<StashValue> args, StashDictionary presetFields)
     {
-        int currentLevel;
-        string format;
-        string output;
-        TextWriter? fileWriter;
-
-        lock (_lock)
-        {
-            currentLevel = _logLevel;
-            format = _logFormat;
-            output = _logOutput;
-            fileWriter = _fileWriter;
-        }
+        var state = ctx.LoggerState;
+        int currentLevel = state.Level;
+        string format = state.Format;
+        string output = state.Output;
+        TextWriter? fileWriter = state.FileWriter;
 
         if (level < currentLevel)
             return;

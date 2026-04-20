@@ -1,0 +1,81 @@
+#!/usr/bin/env stash
+
+// Structured Logging Example
+// Demonstrates the log namespace: levels, formats, scoped loggers, and file output.
+
+// ─── 1. Basic log levels ────────────────────────────────────────────────────
+
+log.info("Starting application", { version: "1.0.0", pid: 42 });
+log.debug("Debug output is suppressed by default");
+log.setLevel("debug");
+log.debug("Debug is now visible");
+log.info("Processing request", { method: "GET", path: "/api/users" });
+log.warn("Rate limit approaching", { requests: 950, limit: 1000 });
+log.error("Database connection failed", { host: "db.internal", port: 5432 });
+// ─── 2. Scalar data field ───────────────────────────────────────────────────
+
+log.info("User count", 1024); // data=1024
+
+log.warn("High memory usage", "92%"); // data=92%
+
+// ─── 3. JSON format ────────────────────────────────────────────────────────
+
+log.info("Switching to JSON format");
+log.setFormat("json");
+log.info("Request completed", { status: 200, duration_ms: 43, user_id: 7 });
+log.warn("Slow query detected", { query: "SELECT *", duration_ms: 1850 });
+log.setFormat("text");
+// ─── 4. Scoped loggers (withFields) ────────────────────────────────────────
+//
+// log.withFields(dict) returns a logger dict that pre-attaches fields
+// to every message. Ideal for tagging all logs from a component or request.
+
+let http_log = log.withFields({ component: "http", version: "2" });
+http_log.info("Listening", { addr: "0.0.0.0:8080" });
+http_log.info("Request", { method: "POST", path: "/login", ip: "10.0.0.5" });
+http_log.warn("Slow response", { path: "/report", duration_ms: 3200 });
+let db_log = log.withFields({ component: "db", pool: "primary" });
+db_log.info("Connected", { host: "db.internal", connections: 10 });
+db_log.error("Query failed", { error: "deadlock detected", table: "orders" });
+
+// ─── 5. Nested scoped logger ────────────────────────────────────────────────
+//
+// Combine withFields for request-scoped loggers inside a handler.
+
+fn handle_request(req_id, user_id) {
+  let req_log = log.withFields({ req_id: req_id, user_id: user_id });
+  req_log.info("Request started");
+  req_log.debug("Loading user profile");
+  req_log.info("Request completed", { status: 200 });
+}
+
+handle_request("abc-123", 42);
+handle_request("def-456", 99);
+// ─── 6. Level filtering ─────────────────────────────────────────────────────
+
+log.setLevel("warn");
+log.debug("Not shown");
+log.info("Not shown");
+log.warn("Only warn and above are shown");
+log.error("Errors always visible at this level");
+log.setLevel("info"); // restore
+
+// ─── 7. File output ────────────────────────────────────────────────────────
+
+let log_path = path.join(env.cwd(), "app.log");
+log.setOutput(log_path);
+log.info("This goes to the log file", { source: "example" });
+log.warn("File logging active", { path: log_path });
+log.setOutput("stderr"); // restore
+
+// Verify the file was written
+
+let lines = fs.readFile(log_path);
+io.println($"\nLog file has {len(str.split(lines, "\n"))} lines");
+fs.delete(log_path);
+// ─── 8. stdout vs stderr routing ───────────────────────────────────────────
+
+log.setOutput("stdout");
+log.info("This goes to stdout (useful for log collectors)");
+log.setOutput("stderr");
+log.info("Back to stderr (default)");
