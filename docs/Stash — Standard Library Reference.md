@@ -20,31 +20,32 @@
 4. [`env` — Environment Variables](#env--environment-variables)
 5. [`fs` — File System Operations](#fs--file-system-operations)
 6. [`path` — Path Manipulation](#path--path-manipulation)
-7. [`archive` — Archive Operations](#archive--archive-operations)
-8. [`str` — String Operations](#str--string-operations)
-9. [`arr` — Array Operations](#arr--array-operations)
-10. [`buf` — Byte Array Operations](#buf--byte-array-operations)
-11. [`dict` — Dictionary Operations](#dict--dictionary-operations)
-12. [`math` — Math Functions](#math--math-functions)
-13. [`time` — Time & Date](#time--time--date)
-14. [`json` — JSON](#json--json)
-15. [`ini` — INI Configuration](#ini--ini-configuration)
-16. [`yaml` — YAML](#yaml--yaml)
-17. [`toml` — TOML](#toml--toml)
-18. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
-19. [`http` — HTTP Requests](#http--http-requests)
-20. [`process` — Process Management](#process--process-management)
-21. [`tpl` — Templating](#tpl--templating)
-22. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-23. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-24. [`term` — Terminal Formatting](#term--terminal-formatting)
-25. [`sys` — System Information](#sys--system-information)
-26. [`task` — Parallel Tasks](#task--parallel-tasks)
-27. [`net` — Networking](#net--networking)
-28. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-29. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-30. [Argument Parsing](#argument-parsing)
-31. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+7. [`csv` — Parsing and Writing ](#csv--csv-parsing-and-writing)
+8. [`archive` — Archive Operations](#archive--archive-operations)
+9. [`str` — String Operations](#str--string-operations)
+10. [`arr` — Array Operations](#arr--array-operations)
+11. [`buf` — Byte Array Operations](#buf--byte-array-operations)
+12. [`dict` — Dictionary Operations](#dict--dictionary-operations)
+13. [`math` — Math Functions](#math--math-functions)
+14. [`time` — Time & Date](#time--time--date)
+15. [`json` — JSON](#json--json)
+16. [`ini` — INI Configuration](#ini--ini-configuration)
+17. [`yaml` — YAML](#yaml--yaml)
+18. [`toml` — TOML](#toml--toml)
+19. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
+20. [`http` — HTTP Requests](#http--http-requests)
+21. [`process` — Process Management](#process--process-management)
+22. [`tpl` — Templating](#tpl--templating)
+23. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+24. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+25. [`term` — Terminal Formatting](#term--terminal-formatting)
+26. [`sys` — System Information](#sys--system-information)
+27. [`task` — Parallel Tasks](#task--parallel-tasks)
+28. [`net` — Networking](#net--networking)
+29. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+30. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+32. [Argument Parsing](#argument-parsing)
+33. [`scheduler` — OS Service Management](#scheduler--os-service-management)
 
 ---
 
@@ -412,6 +413,107 @@ path.join("/var", "log", "app", "server.log");  // "/var/log/app/server.log"
 path.join("~", ".config", "stash");             // "~/.config/stash"
 path.join("/usr", "local", "bin");              // "/usr/local/bin"
 ```
+
+---
+
+## `csv` — CSV Parsing and Writing
+
+RFC 4180 compliant CSV parsing and serialization. Handles quoted fields, embedded newlines, CRLF/LF line endings, and BOM stripping.
+
+### Functions
+
+| Function                              | Description                                  |
+| ------------------------------------- | -------------------------------------------- |
+| `csv.parse(text, opts?)`              | Parse CSV string → array of arrays or dicts  |
+| `csv.stringify(data, opts?)`          | Array of arrays/dicts → CSV string           |
+| `csv.parseFile(path, opts?)`          | Parse a CSV file                             |
+| `csv.writeFile(path, data, opts?)`    | Write data to a CSV file                     |
+
+### `CsvOptions` Struct
+
+```stash
+struct CsvOptions {
+    delimiter: string,   // Field delimiter — must be a single character (default: ",")
+    quote: string,       // Quote character — must be a single character (default: "\"")
+    escape: string,      // Escape character — must be a single character (default: "\"")
+    header: bool,        // Treat first row as column names; return array of dicts (default: false)
+    columns: [string]    // Explicit column names; return array of dicts without consuming a header row
+}
+```
+
+### `csv.parse(text, options?)`
+
+Parses a CSV string. Returns an array of arrays by default. When `header: true` or `columns` is set, returns an array of dictionaries.
+
+```stash
+// Basic parsing
+let rows = csv.parse("name,age\nAlice,30\nBob,25");
+// → [["name","age"], ["Alice","30"], ["Bob","25"]]
+
+// With header row
+let opts = csv.CsvOptions { header: true };
+let records = csv.parse("name,age\nAlice,30", opts);
+// → [{ name: "Alice", age: "30" }]
+
+// Explicit column names (no header row consumed)
+let opts = csv.CsvOptions { columns: ["name", "age"] };
+let records = csv.parse("Alice,30", opts);
+// → [{ name: "Alice", age: "30" }]
+
+// Tab-separated values
+let opts = csv.CsvOptions { delimiter: "\t" };
+let rows = csv.parse("a\tb\tc", opts);
+```
+
+**Errors:** `csv.parse: unterminated quoted field at row {n}` | `csv.parse: invalid options: delimiter must be a single character`
+
+### `csv.stringify(data, options?)`
+
+Converts an array of arrays or array of dictionaries to a CSV string. Fields containing the delimiter, quote character, or newlines are automatically quoted.
+
+```stash
+// From array of arrays
+let csv = csv.stringify([["name","age"],["Alice","30"]]);
+// → "name,age\nAlice,30"
+
+// From array of dicts (keys become implicit header)
+let rows = [{ name: "Alice", age: "30" }, { name: "Bob", age: "25" }];
+let csv = csv.stringify(rows);
+
+// With explicit header row
+let opts = csv.CsvOptions { header: true };
+let csv = csv.stringify(rows, opts);
+
+// Custom delimiter
+let opts = csv.CsvOptions { delimiter: ";" };
+let csv = csv.stringify([["a","b"],["1","2"]], opts);
+// → "a;b\n1;2"
+```
+
+### `csv.parseFile(path, options?)`
+
+Reads a CSV file and parses it. Accepts all options from `csv.parse`.
+
+```stash
+let records = csv.parseFile("users.csv", csv.CsvOptions { header: true });
+for record in records {
+    io.println(record.name + " — " + record.age);
+}
+```
+
+**Errors:** `csv.parseFile: file not found: '{path}'` | `csv.parseFile: permission denied: '{path}'`
+
+### `csv.writeFile(path, data, options?)`
+
+Writes an array of arrays or dictionaries to a CSV file. Creates parent directories if needed. Returns the path written.
+
+```stash
+let rows = [{ name: "Alice", age: "30" }, { name: "Bob", age: "25" }];
+let opts = csv.CsvOptions { header: true };
+csv.writeFile("output.csv", rows, opts);
+```
+
+**Errors:** `csv.writeFile: permission denied: '{path}'`
 
 ---
 
