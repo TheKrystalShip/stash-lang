@@ -44,9 +44,9 @@
 28. [`net` — Networking](#net--networking)
 29. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
 30. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-32. [Argument Parsing](#argument-parsing)
-33. [`scheduler` — OS Service Management](#scheduler--os-service-management)
-34. [`log` — Structured Logging](#log--structured-logging)
+31. [Argument Parsing](#argument-parsing)
+32. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+33. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -423,12 +423,12 @@ RFC 4180 compliant CSV parsing and serialization. Handles quoted fields, embedde
 
 ### Functions
 
-| Function                              | Description                                  |
-| ------------------------------------- | -------------------------------------------- |
-| `csv.parse(text, opts?)`              | Parse CSV string → array of arrays or dicts  |
-| `csv.stringify(data, opts?)`          | Array of arrays/dicts → CSV string           |
-| `csv.parseFile(path, opts?)`          | Parse a CSV file                             |
-| `csv.writeFile(path, data, opts?)`    | Write data to a CSV file                     |
+| Function                           | Description                                 |
+| ---------------------------------- | ------------------------------------------- |
+| `csv.parse(text, opts?)`           | Parse CSV string → array of arrays or dicts |
+| `csv.stringify(data, opts?)`       | Array of arrays/dicts → CSV string          |
+| `csv.parseFile(path, opts?)`       | Parse a CSV file                            |
+| `csv.writeFile(path, data, opts?)` | Write data to a CSV file                    |
 
 ### `CsvOptions` Struct
 
@@ -2739,11 +2739,11 @@ let hexStr = buf.toHex(token);
 
 ### AES-256-GCM Encryption
 
-| Function                              | Description                                                                              |
-| ------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `crypto.generateKey(bits?)`           | Generate a cryptographically secure random key (default: 256 bits). Returns hex string  |
-| `crypto.encrypt(data, key, options?)` | Encrypt `data` with AES-256-GCM. Returns `{ ciphertext, iv, tag }` as hex strings       |
-| `crypto.decrypt(ciphertext, key, options?)` | Decrypt AES-256-GCM data. Returns the plaintext string                             |
+| Function                                    | Description                                                                            |
+| ------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `crypto.generateKey(bits?)`                 | Generate a cryptographically secure random key (default: 256 bits). Returns hex string |
+| `crypto.encrypt(data, key, options?)`       | Encrypt `data` with AES-256-GCM. Returns `{ ciphertext, iv, tag }` as hex strings      |
+| `crypto.decrypt(ciphertext, key, options?)` | Decrypt AES-256-GCM data. Returns the plaintext string                                 |
 
 `generateKey` accepts `128`, `192`, or `256` as the bit count (default `256`). `encrypt` accepts a `string` or `byte[]` as data. The `key` must be a 32-byte (256-bit) hex string or `byte[]`. Each `encrypt` call generates a unique random 12-byte IV; the authentication tag is 16 bytes (128-bit GCM tag). `decrypt` accepts the dict returned by `encrypt`, or any dict with `ciphertext`, `iv`, and `tag` hex fields. Throws a `RuntimeError` if authentication tag verification fails (wrong key or tampered data).
 
@@ -4377,32 +4377,41 @@ The `log` namespace provides structured logging with level-based filtering, text
 
 ### Functions
 
-| Function                     | Description                                                              |
-| ---------------------------- | ------------------------------------------------------------------------ |
-| `log.debug(message, data?)`  | Log at DEBUG level                                                       |
-| `log.info(message, data?)`   | Log at INFO level                                                        |
-| `log.warn(message, data?)`   | Log at WARN level                                                        |
-| `log.error(message, data?)`  | Log at ERROR level                                                       |
-| `log.setLevel(level)`        | Set the minimum log level threshold                                      |
-| `log.setFormat(format)`      | Set the output format: `"text"` or `"json"`                              |
-| `log.setOutput(target)`      | Set the output target: `"stdout"`, `"stderr"`, or a file path            |
-| `log.withFields(dict)`       | Return a scoped logger dict with preset fields merged into every entry   |
+| Function                    | Description                                                            |
+| --------------------------- | ---------------------------------------------------------------------- |
+| `log.debug(message, data?)` | Log at DEBUG level                                                     |
+| `log.info(message, data?)`  | Log at INFO level                                                      |
+| `log.warn(message, data?)`  | Log at WARN level                                                      |
+| `log.error(message, data?)` | Log at ERROR level                                                     |
+| `log.setLevel(level)`       | Set the minimum log level threshold                                    |
+| `log.setFormat(format)`     | Set the output format: `"text"` or `"json"`                            |
+| `log.setOutput(target)`     | Set the output target: `"stdout"`, `"stderr"`, or a file path          |
+| `log.withFields(dict)`      | Return a scoped logger dict with preset fields merged into every entry |
 
 ### Output Formats
 
 **Text format** (default):
+
 ```
 [2026-04-20 14:32:01.234] INFO  Message key=value key2=value2
 ```
 
 **JSON format**:
+
 ```json
-{"ts":"2026-04-20T14:32:01.234Z","level":"INFO","msg":"Message","key":"value","key2":"value2"}
+{
+  "ts": "2026-04-20T14:32:01.234Z",
+  "level": "INFO",
+  "msg": "Message",
+  "key": "value",
+  "key2": "value2"
+}
 ```
 
 ### Data Parameter
 
 When a `data` argument is provided:
+
 - **Dict**: all key-value pairs are merged into the log entry
 - **Any other value**: emitted as a `data=<value>` field
 
@@ -4448,8 +4457,8 @@ logger["error"]("request failed", {code: 500});
 
 ### Error Messages
 
-| Situation                     | Error                                                                         |
-| ----------------------------- | ----------------------------------------------------------------------------- |
-| Unknown level string          | `log.setLevel: unknown level '<x>'. Expected 'debug', 'info', 'warn', or 'error'.` |
-| Unknown format string         | `log.setFormat: unknown format '<x>'. Expected 'text' or 'json'.`             |
-| File cannot be opened         | `log.setOutput: failed to open file '<path>': <reason>`                       |
+| Situation             | Error                                                                              |
+| --------------------- | ---------------------------------------------------------------------------------- |
+| Unknown level string  | `log.setLevel: unknown level '<x>'. Expected 'debug', 'info', 'warn', or 'error'.` |
+| Unknown format string | `log.setFormat: unknown format '<x>'. Expected 'text' or 'json'.`                  |
+| File cannot be opened | `log.setOutput: failed to open file '<path>': <reason>`                            |
