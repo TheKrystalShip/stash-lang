@@ -1,13 +1,13 @@
 # Stash Language — Project Guidelines
 
-Stash is a cross-platform scripting language for system administration. The interpreter is .NET-based and compiles to native binaries for Linux, macOS, and Windows. It combines C-style syntax with first-class shell command execution (`$(...)` syntax), built-in data structures (structs, enums, dictionaries), and 30 namespaces of standard library functions. Language features and standard library additions must work across all three platforms.
+Stash is a cross-platform scripting language for system administration. The interpreter is .NET-based and compiles to native binaries for Linux, macOS, and Windows. It combines C-style syntax with first-class shell command execution (`$(...)` syntax), built-in data structures (structs, enums, dictionaries), and 35 namespaces of standard library functions. Language features and standard library additions must work across all three platforms.
 
 ## Architecture
 
 ```
 Stash.Core          → Lexer (two-pointer scanner), Parser (recursive-descent), 54 AST node types
 Stash.Stdlib        → Built-in metadata registry, model records, single source of truth for all namespaces
-Stash.Bytecode      → Bytecode VM (compiler + register-based VM), 94 opcodes, 30 built-in namespaces
+Stash.Bytecode      → Bytecode VM (compiler + register-based VM), 94 opcodes, 35 built-in namespaces
 Stash.Analysis      → Static analysis engine, rules, resolvers, visitors for diagnostics and tooling
 Stash.Cli           → REPL + script runner (Native AOT)
 Stash.Lsp           → Language Server Protocol (OmniSharp — NOT AOT, requires reflection)

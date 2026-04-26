@@ -71,7 +71,10 @@ public sealed partial class VirtualMachine
     private void ExecuteSetMainGlobal(ref CallFrame frame, byte a, ushort slot)
     {
         if (_constGlobalSlots.Length > slot && _constGlobalSlots[slot])
-            throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+        {
+            string name = _globalNameTable.Length > slot ? _globalNameTable[slot] : $"<slot {slot}>";
+            throw new RuntimeError($"Cannot assign to constant '{name}'.", GetCurrentSpan(ref frame));
+        }
 
         StashValue val = _stack[frame.BaseSlot + a];
         _globalSlots[slot] = val;
@@ -83,7 +86,7 @@ public sealed partial class VirtualMachine
     {
         string name = frame.Chunk.GlobalNameTable![slot];
         if (_constGlobals.Contains(name))
-            throw new RuntimeError("Assignment to constant variable.", GetCurrentSpan(ref frame));
+            throw new RuntimeError($"Cannot assign to constant '{name}'.", GetCurrentSpan(ref frame));
         moduleGlobals[name] = _stack[frame.BaseSlot + a];
     }
 

@@ -42,6 +42,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `release.yml` — Automated release pipeline for `v*.*.*` tags
   - Publishes native binaries for linux-x64, osx-x64, osx-arm64, win-x64
   - SHA-256 checksums included with each release
+- **`xml` namespace** — XML parsing, serialization, querying, and validation
+  - `xml.parse(text, options?)` — Parses an XML string into an `XmlNode` tree
+  - `xml.stringify(node, options?)` — Serializes an `XmlNode` back to an XML string
+  - `xml.valid(text)` — Returns `true` if the string is well-formed XML
+  - `xml.query(root, xpath)` — Queries an `XmlNode` tree using an XPath expression
+  - `XmlNode` struct with `tag`, `attrs`, `text`, `children` fields
+  - `XmlParseOptions` struct with `preserveWhitespace` field
+  - `XmlStringifyOptions` struct with `indent`, `declaration`, `encoding` fields
+- **`config` namespace** — now supports all 6 config formats: JSON, YAML, TOML, INI, CSV, XML
+  - `config.read` / `config.write` / `config.parse` / `config.stringify` now handle `"csv"` and `"xml"` format strings
+  - Auto-detection extended: `.csv` → `csv`, `.xml` → `xml`
+- **`io.readPassword(prompt?)`** — Reads a password from the terminal with character masking; returns a `secret` value
+  - Falls back to plain `readLine` when stdin is not a TTY (pipes, CI environments)
+- **`http.head(url, options?)`** — Sends an HTTP HEAD request; returns status, headers, and an empty body
+- **`fs.chown(path, uid, gid)`** — Changes file ownership by UID/GID on Unix; throws a descriptive error on Windows
+  - Pass `-1` for `uid` or `gid` to leave that value unchanged
+- **`test.only(name, fn)`** — Marks a test as exclusive; when any `test.only` test is present, all `test.it` tests are skipped
+- **`assert.deepEqual(actual, expected)`** — Deep structural equality assertion for nested arrays, dicts, and structs; includes path-aware failure messages (e.g. `at [2].name`)
+- **`assert.closeTo(actual, expected, delta)`** — Numeric proximity assertion with a tolerance `delta`
+- **Runtime error message improvements** — Arithmetic and comparison errors now include type names and conversion hints
+  - Example: `"Operands must be numbers or strings, got 'bool' and 'int'. Convert with conv.toInt() or conv.toFloat() first."`
+  - Constant assignment error now names the variable: `"Cannot assign to constant 'myVar'."`
 
 ---
 
@@ -72,7 +94,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Shell command execution with `$(cmd)` syntax and `CommandResult` type
 - `elevate` keyword for privilege escalation on Unix/Windows
 
-### Standard Library — 33 Namespaces, 492+ Functions
+### Standard Library — 35 Namespaces, 500+ Functions
 - **`io`** — Terminal I/O: `println`, `print`, `readLine`, `confirm`
 - **`conv`** — Type conversion: `toStr`, `toInt`, `toFloat`, `toHex`, `fromHex`, `toBool`
 - **`arr`** — 37 array functions: `map`, `filter`, `reduce`, `sort`, `groupBy`, `chunk`, `flatten`, `unique`, and more
@@ -84,7 +106,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`yaml`** — YAML parse/stringify
 - **`toml`** — TOML parse/stringify
 - **`ini`** — INI file parse/stringify
-- **`config`** — Multi-format config read/write (JSON, YAML, TOML, INI)
+- **`config`** — Multi-format config read/write (JSON, YAML, TOML, INI, CSV, XML)
 - **`fs`** — 27 filesystem functions: `readFile`, `writeFile`, `glob`, `walk`, `stat`, `chmod`, and more
 - **`path`** — Path manipulation: `abs`, `dir`, `base`, `ext`, `join`, `normalize`
 - **`env`** — Environment: `get`, `set`, `all`, `cwd`, `home`, `hostname`, `loadFile`, `saveFile`

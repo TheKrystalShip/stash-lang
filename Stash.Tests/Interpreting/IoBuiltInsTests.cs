@@ -2,6 +2,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Bytecode;
 using Stash.Resolution;
+using Stash.Runtime.Types;
 using Stash.Stdlib;
 
 namespace Stash.Tests.Interpreting;
@@ -206,5 +207,78 @@ public class IoBuiltInsTests : StashTestBase
         vm.Input = new System.IO.StringReader("yes\n");
         var result = vm.Execute(chunk);
         Assert.Equal(true, result);
+    }
+
+    // ── io.readPassword ───────────────────────────────────────────────────
+
+    [Fact]
+    public void ReadPassword_NonInteractiveMode_ReturnsSecret()
+    {
+        // Console.IsInputRedirected is true in test environments
+        string src = "let result = io.readPassword(\"Password: \");\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        vm.Output = new System.IO.StringWriter();
+        vm.Input = new System.IO.StringReader("mysecret\n");
+        var result = vm.Execute(chunk);
+        Assert.IsType<StashSecret>(result);
+    }
+
+    [Fact]
+    public void ReadPassword_EmptyInput_ReturnsSecret()
+    {
+        string src = "let result = io.readPassword();\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        vm.Output = new System.IO.StringWriter();
+        vm.Input = new System.IO.StringReader("\n");
+        var result = vm.Execute(chunk);
+        Assert.IsType<StashSecret>(result);
+    }
+
+    [Fact]
+    public void ReadPassword_PromptIsPrinted()
+    {
+        string src = "let result = io.readPassword(\"Password: \");\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        var outSw = new System.IO.StringWriter();
+        vm.Output = outSw;
+        vm.Input = new System.IO.StringReader("value\n");
+        vm.Execute(chunk);
+        Assert.Contains("Password: ", outSw.ToString());
+    }
+
+    [Fact]
+    public void ReadPassword_RevealedValueMatchesInput()
+    {
+        string src = "let result = io.readPassword();\nreturn result;";
+        var lexer = new Lexer(src, "<test>");
+        var tokens = lexer.ScanTokens();
+        var parser = new Parser(tokens);
+        var stmts = parser.ParseProgram();
+        SemanticResolver.Resolve(stmts);
+        var chunk = Compiler.Compile(stmts);
+        var vm = new VirtualMachine(StdlibDefinitions.CreateVMGlobals());
+        vm.Output = new System.IO.StringWriter();
+        vm.Input = new System.IO.StringReader("hunter2\n");
+        var result = vm.Execute(chunk);
+        var secret = Assert.IsType<StashSecret>(result);
+        Assert.Equal("hunter2", secret.Reveal().AsObj);
     }
 }

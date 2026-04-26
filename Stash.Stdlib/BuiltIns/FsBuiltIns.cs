@@ -17,7 +17,7 @@ using static Stash.Stdlib.Registration.P;
 /// </summary>
 /// <remarks>
 /// <para>
-/// Provides 33 functions for reading, writing, and inspecting the filesystem:
+/// Provides 34 functions for reading, writing, and inspecting the filesystem:
 /// <c>fs.readFile</c>, <c>fs.writeFile</c>, <c>fs.appendFile</c>, <c>fs.readLines</c>,
 /// <c>fs.createFile</c>, <c>fs.exists</c>, <c>fs.dirExists</c>, <c>fs.pathExists</c>,
 /// <c>fs.createDir</c>, <c>fs.listDir</c>, <c>fs.delete</c>, <c>fs.copy</c>, <c>fs.move</c>,
@@ -25,7 +25,7 @@ using static Stash.Stdlib.Registration.P;
 /// <c>fs.isDir</c>, <c>fs.isSymlink</c>, <c>fs.symlink</c>, <c>fs.modifiedAt</c>,
 /// <c>fs.readable</c>, <c>fs.writable</c>, <c>fs.executable</c>, <c>fs.tempFile</c>,
 /// <c>fs.tempDir</c>, <c>fs.getPermissions</c>, <c>fs.setPermissions</c>,
-/// <c>fs.setReadOnly</c>, <c>fs.setExecutable</c>, <c>fs.watch</c>, and <c>fs.unwatch</c>.
+/// <c>fs.setReadOnly</c>, <c>fs.setExecutable</c>, <c>fs.chown</c>, <c>fs.watch</c>, and <c>fs.unwatch</c>.
 /// </para>
 /// <para>
 /// This namespace is only registered when the <see cref="StashCapabilities.FileSystem"/>
@@ -113,6 +113,32 @@ public static class FsBuiltIns
             }
             _debounceTimers.Clear();
             try { OsWatcher.Dispose(); } catch { }
+        }
+    }
+
+    [System.Runtime.InteropServices.DllImport("libc", EntryPoint = "chown", SetLastError = true)]
+    private static extern int LibcChown(string pathname, uint owner, uint group);
+
+    private static void ChownFile(string path, int uid, int gid)
+    {
+        if (!System.IO.File.Exists(path) && !System.IO.Directory.Exists(path))
+            throw new RuntimeError($"fs.chown: path not found: '{path}'.");
+
+        uint owner = uid == -1 ? unchecked((uint)-1) : (uint)uid;
+        uint group = gid == -1 ? unchecked((uint)-1) : (uint)gid;
+        int result = LibcChown(path, owner, group);
+        if (result != 0)
+        {
+            int errno = System.Runtime.InteropServices.Marshal.GetLastWin32Error();
+            string msg = errno switch
+            {
+                1  => $"fs.chown: permission denied — must be superuser or file owner.",
+                2  => $"fs.chown: path not found: '{path}'.",
+                13 => $"fs.chown: permission denied — must be superuser or file owner.",
+                22 => $"fs.chown: invalid uid {uid} or gid {gid}.",
+                _  => $"fs.chown: failed with errno {errno}."
+            };
+            throw new RuntimeError(msg);
         }
     }
 
@@ -864,6 +890,32 @@ public static class FsBuiltIns
             catch (System.IO.IOException e) { throw new RuntimeError($"Cannot set read-only on '{path}': {e.Message}"); }
             return StashValue.Null;
         }, returnType: "null", documentation: "Sets or clears the read-only state of a file. On Unix, toggles write bits. On Windows, sets the ReadOnly file attribute.\n@param path The file path to modify.\n@param readOnly True to make the file read-only, false to make it writable.");
+
+        // fs.chown(path, uid, gid) — Changes file owner/group. Unix only.
+        ns.Function("chown", [Param("path", "string"), Param("uid", "int"), Param("gid", "int")],
+            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            {
+                if (args.Length != 3)
+                    throw new RuntimeError("fs.chown: expected 3 arguments (path, uid, gid).");
+
+                string path = SvArgs.String(args, 0, "fs.chown");
+                long uid = SvArgs.Long(args, 1, "fs.chown");
+                long gid = SvArgs.Long(args, 2, "fs.chown");
+                path = ctx.ExpandTilde(path);
+
+                if (System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
+                    System.Runtime.InteropServices.OSPlatform.Windows))
+                {
+                    throw new RuntimeError(
+                        "fs.chown: file ownership change by uid/gid is not supported on Windows. " +
+                        "Use fs.setPermissions() for access control.");
+                }
+
+                ChownFile(path, (int)uid, (int)gid);
+                return StashValue.Null;
+            },
+            returnType: "null",
+            documentation: "Changes the owner and group of a file or directory. Unix only.\n@param path The file or directory path\n@param uid New owner user ID (-1 to leave unchanged)\n@param gid New owner group ID (-1 to leave unchanged)");
 
         // fs.setExecutable(path, executable) — Sets or clears the executable bit (Unix) or is a no-op on Windows.
         ns.Function("setExecutable", [Param("path", "string"), Param("executable", "bool")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>

@@ -8,8 +8,11 @@ using System.Net.NetworkInformation;
 using System.Net.Sockets;
 using System.Text;
 using System.Threading;
+using System.IO;
+using System.Net.Security;
 using System.Net.WebSockets;
 using System.Runtime.CompilerServices;
+using System.Security.Authentication;
 using System.Threading.Tasks;
 using Stash.Runtime;
 using Stash.Runtime.Types;
@@ -27,6 +30,9 @@ public static class NetBuiltIns
 
     /// <summary>Maps TcpServer instances to their underlying TcpListener.</summary>
     private static readonly ConditionalWeakTable<StashInstance, TcpListener> _tcpServers = new();
+
+    /// <summary>Maps async TLS TcpConnection instances to their SslStream (layered over the NetworkStream).</summary>
+    private static readonly ConditionalWeakTable<StashInstance, SslStream> _sslStreams = new();
 
     public static NamespaceDefinition Define()
     {
@@ -715,6 +721,8 @@ public static class NetBuiltIns
             bool noDelay = false;
             bool keepAlive = false;
             bool tls = false;
+            bool tlsVerify = true;
+            string? tlsSni = null;
 
             if (args.Length > 2 && args[2].IsObj && args[2].AsObj is StashInstance opts && opts.TypeName == "TcpConnectOptions")
             {
@@ -722,10 +730,9 @@ public static class NetBuiltIns
                 if (opts.GetField("noDelay", null).ToObject() is bool nd) noDelay = nd;
                 if (opts.GetField("keepAlive", null).ToObject() is bool ka) keepAlive = ka;
                 if (opts.GetField("tls", null).ToObject() is bool tlsVal) tls = tlsVal;
+                if (opts.GetField("tlsVerify", null).ToObject() is bool tv) tlsVerify = tv;
+                if (opts.GetField("tlsSni", null).ToObject() is string sni && !string.IsNullOrEmpty(sni)) tlsSni = sni;
             }
-
-            if (tls)
-                throw new RuntimeError("net.tcpConnectAsync: TLS is not yet supported. See future release.");
 
             var capturedHost = host;
             var capturedPort = (int)port;
@@ -758,6 +765,37 @@ public static class NetBuiltIns
                     client.Dispose();
                     throw new RuntimeError($"net.tcpConnectAsync: failed to connect to '{capturedHost}:{capturedPort}': {ex.Message}");
                 }
+                SslStream? sslStream = null;
+                if (tls)
+                {
+                    string targetHost = tlsSni ?? capturedHost;
+                    sslStream = new SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+                    try
+                    {
+                        var sslOptions = new SslClientAuthenticationOptions
+                        {
+                            TargetHost = targetHost,
+                            RemoteCertificateValidationCallback = tlsVerify
+                                ? null
+                                : (_, _, _, _) => true,
+                        };
+                        await sslStream.AuthenticateAsClientAsync(sslOptions, connectCts.Token);
+                    }
+                    catch (AuthenticationException ex)
+                    {
+                        sslStream.Dispose();
+                        client.Dispose();
+                        throw new RuntimeError($"net.tcpConnectAsync: TLS handshake failed — {ex.Message}.");
+                    }
+                    catch (IOException ex) when (ex.InnerException is AuthenticationException innerEx)
+                    {
+                        sslStream.Dispose();
+                        client.Dispose();
+                        if (tlsVerify)
+                            throw new RuntimeError($"net.tcpConnectAsync: TLS certificate validation failed — {innerEx.Message}. Set tlsVerify: false to skip validation (insecure).");
+                        throw new RuntimeError($"net.tcpConnectAsync: TLS handshake failed — {ex.Message}.");
+                    }
+                }
                 int localPort = ((IPEndPoint)client.Client.LocalEndPoint!).Port;
                 var conn = new StashInstance("TcpConnection", new Dictionary<string, StashValue>
                 {
@@ -766,6 +804,8 @@ public static class NetBuiltIns
                     ["localPort"] = StashValue.FromInt(localPort),
                 });
                 _tcpAsyncClients.AddOrUpdate(conn, client);
+                if (sslStream is not null)
+                    _sslStreams.Add(conn, sslStream);
                 return (object?)conn;
             });
             return StashValue.FromObj(new StashFuture(dotnetTask, cts));
@@ -789,7 +829,7 @@ public static class NetBuiltIns
                 try
                 {
                     byte[] bytes = Encoding.UTF8.GetBytes(capturedData);
-                    var stream = client.GetStream();
+                    var stream = GetTcpStream(conn, "net.tcpSendAsync");
                     await stream.WriteAsync(bytes, 0, bytes.Length, cts.Token);
                     return (object?)(long)bytes.Length;
                 }
@@ -820,7 +860,7 @@ public static class NetBuiltIns
             {
                 try
                 {
-                    var stream = client.GetStream();
+                    var stream = GetTcpStream(conn, "net.tcpSendBytesAsync");
                     await stream.WriteAsync(data, 0, data.Length, cts.Token);
                     return (object?)(long)data.Length;
                 }
@@ -855,7 +895,7 @@ public static class NetBuiltIns
 
             var dotnetTask = Task.Run<object?>(async () =>
             {
-                var stream = client.GetStream();
+                var stream = GetTcpStream(conn, "net.tcpRecvAsync");
                 var buffer = new byte[maxBytes];
                 using var timeoutCts = new CancellationTokenSource(timeout);
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, timeoutCts.Token);
@@ -894,7 +934,7 @@ public static class NetBuiltIns
 
             var dotnetTask = Task.Run<object?>(async () =>
             {
-                var stream = client.GetStream();
+                var stream = GetTcpStream(conn, "net.tcpRecvBytesAsync");
                 var buffer = new byte[maxBytes];
                 using var timeoutCts = new CancellationTokenSource(timeout);
                 using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cts.Token, timeoutCts.Token);
@@ -919,6 +959,12 @@ public static class NetBuiltIns
                 throw new RuntimeError("net.tcpCloseAsync: expected 1 argument.");
             if (args[0].ToObject() is not StashInstance conn)
                 throw new RuntimeError("net.tcpCloseAsync: argument must be a TcpConnection.");
+
+            if (_sslStreams.TryGetValue(conn, out SslStream? ssl))
+            {
+                try { ssl.Dispose(); } catch { }
+                _sslStreams.Remove(conn);
+            }
 
             if (_tcpAsyncClients.TryGetValue(conn, out TcpClient? client))
             {
@@ -1132,6 +1178,8 @@ public static class NetBuiltIns
             new BuiltInField("tls", "bool"),
             new BuiltInField("noDelay", "bool"),
             new BuiltInField("keepAlive", "bool"),
+            new BuiltInField("tlsVerify", "bool"),
+            new BuiltInField("tlsSni", "string"),
         ]);
 
         ns.Struct("TcpRecvOptions", [
@@ -1189,6 +1237,13 @@ public static class NetBuiltIns
         if (!_wsClients.TryGetValue(inst, out ClientWebSocket? ws))
             throw new RuntimeError($"{funcName}: connection is invalid or closed.");
         return ws;
+    }
+
+    private static Stream GetTcpStream(StashInstance conn, string funcName)
+    {
+        if (_sslStreams.TryGetValue(conn, out SslStream? ssl))
+            return ssl;
+        return GetTcpClient(conn, funcName).GetStream();
     }
 
     private static TcpClient GetTcpClient(StashInstance conn, string funcName)

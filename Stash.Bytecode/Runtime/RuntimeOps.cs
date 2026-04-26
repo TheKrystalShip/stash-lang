@@ -134,7 +134,7 @@ internal static class RuntimeOps
             return StashValue.FromObj(string.Concat(Stringify(left), rs2));
         }
 
-        throw new RuntimeError("Operands must be numbers or strings.", span);
+        throw new RuntimeError($"Operands must be numbers or strings, got '{GetTypeName(left)}' and '{GetTypeName(right)}'. Convert with conv.toInt() or conv.toFloat() first.", span);
     }
 
     public static StashValue Subtract(StashValue left, StashValue right, SourceSpan? span)
@@ -166,7 +166,7 @@ internal static class RuntimeOps
                 return result;
         }
 
-        throw new RuntimeError("Operands must be two numbers or two IP addresses.", span);
+        throw new RuntimeError($"Operands must be two numbers or two IP addresses, got '{GetTypeName(left)}' and '{GetTypeName(right)}'. Convert with conv.toInt() or conv.toFloat() first.", span);
     }
 
     public static StashValue Multiply(StashValue left, StashValue right, SourceSpan? span)
@@ -216,7 +216,7 @@ internal static class RuntimeOps
                 return result;
         }
 
-        throw new RuntimeError("Operands must be numbers.", span);
+        throw new RuntimeError($"Operands must be numbers, got '{GetTypeName(left)}' and '{GetTypeName(right)}'. Convert with conv.toInt() or conv.toFloat() first.", span);
     }
 
     public static StashValue Divide(StashValue left, StashValue right, SourceSpan? span)
@@ -241,7 +241,7 @@ internal static class RuntimeOps
         // Numeric division
         if (!left.IsNumeric || !right.IsNumeric)
         {
-            throw new RuntimeError("Operands must be numbers.", span);
+            throw new RuntimeError($"Operands must be numbers, got '{GetTypeName(left)}' and '{GetTypeName(right)}'. Convert with conv.toInt() or conv.toFloat() first.", span);
         }
 
         if (left.IsInt && right.IsInt)
@@ -350,7 +350,7 @@ internal static class RuntimeOps
                 return result;
         }
 
-        throw new RuntimeError("Operand must be a number.", span);
+        throw new RuntimeError($"Operand must be a number, got '{GetTypeName(value)}'.", span);
     }
 
     // --- Bitwise ---
@@ -369,7 +369,7 @@ internal static class RuntimeOps
             return StashValue.FromObj(ipL.BitwiseAnd(ipR));
         }
 
-        throw new RuntimeError("Operands must be two integers or two IP addresses.", span);
+        throw new RuntimeError($"Operands must be two integers or two IP addresses, got '{GetTypeName(left)}' and '{GetTypeName(right)}'.", span);
     }
 
     public static StashValue BitOr(StashValue left, StashValue right, SourceSpan? span)
@@ -386,7 +386,7 @@ internal static class RuntimeOps
             return StashValue.FromObj(ipL.BitwiseOr(ipR));
         }
 
-        throw new RuntimeError("Operands must be two integers or two IP addresses.", span);
+        throw new RuntimeError($"Operands must be two integers or two IP addresses, got '{GetTypeName(left)}' and '{GetTypeName(right)}'.", span);
     }
 
     public static StashValue BitXor(StashValue left, StashValue right, SourceSpan? span)
@@ -398,7 +398,7 @@ internal static class RuntimeOps
             return StashValue.FromInt(left.AsInt ^ right.AsInt);
         }
 
-        throw new RuntimeError("Operands must be integers.", span);
+        throw new RuntimeError($"Operands must be integers, got '{GetTypeName(left)}' and '{GetTypeName(right)}'.", span);
     }
 
     public static StashValue BitNot(StashValue value, SourceSpan? span)
@@ -414,7 +414,7 @@ internal static class RuntimeOps
             return StashValue.FromObject(ip.BitwiseNot());
         }
 
-        throw new RuntimeError("Operand must be an integer.", span);
+        throw new RuntimeError($"Operand must be an integer, got '{GetTypeName(value)}'.", span);
     }
 
     public static StashValue ShiftLeft(StashValue left, StashValue right, SourceSpan? span)
@@ -430,7 +430,7 @@ internal static class RuntimeOps
 
             return StashValue.FromInt(left.AsInt << (int)right.AsInt);
         }
-        throw new RuntimeError("Operands must be integers.", span);
+        throw new RuntimeError($"Operands must be integers, got '{GetTypeName(left)}' and '{GetTypeName(right)}'.", span);
     }
 
     public static StashValue ShiftRight(StashValue left, StashValue right, SourceSpan? span)
@@ -446,7 +446,7 @@ internal static class RuntimeOps
 
             return StashValue.FromInt(left.AsInt >> (int)right.AsInt);
         }
-        throw new RuntimeError("Operands must be integers.", span);
+        throw new RuntimeError($"Operands must be integers, got '{GetTypeName(left)}' and '{GetTypeName(right)}'.", span);
     }
 
     // --- Comparison ---
@@ -492,7 +492,7 @@ internal static class RuntimeOps
                 return -result; // Reverse the comparison result
         }
 
-        throw new RuntimeError("Operands must be two numbers or two comparable values.", span);
+        throw new RuntimeError($"Operands must be two numbers or two comparable values, got '{GetTypeName(left)}' and '{GetTypeName(right)}'.", span);
     }
 
     // --- String Interpolation ---
@@ -568,5 +568,23 @@ internal static class RuntimeOps
             StashValueTag.Float => v.AsFloat,
             _ => throw new InvalidOperationException("Not a number"),
         };
+    }
+
+    private static string GetTypeName(StashValue v)
+    {
+        if (v.IsNull) return "null";
+        if (v.IsInt) return "int";
+        if (v.IsFloat) return "float";
+        if (v.IsBool) return "bool";
+        if (v.IsByte) return "byte";
+        if (v.IsObj)
+        {
+            object? obj = v.AsObj;
+            if (obj is string) return "string";
+            if (obj is List<StashValue>) return "array";
+            if (obj is IVMTyped typed) return typed.VMTypeName;
+            return obj?.GetType().Name ?? "null";
+        }
+        return "unknown";
     }
 }

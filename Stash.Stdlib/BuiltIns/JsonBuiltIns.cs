@@ -375,4 +375,26 @@ public static class JsonBuiltIns
         sb.Append('}');
         return sb.ToString();
     }
+
+    // ── Config namespace integration ──────────────────────────────────────────
+
+    /// <summary>Parses a JSON string to a Stash runtime value. Called by config.parse/config.read.</summary>
+    internal static object? ParseJson(string text, string callerName)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(text);
+            return ConvertElement(doc.RootElement);
+        }
+        catch (JsonException e)
+        {
+            throw new RuntimeError($"{callerName}: invalid JSON — " + e.Message);
+        }
+    }
+
+    /// <summary>Serializes a Stash value to a pretty-printed JSON string with 2-space indentation. Called by config.stringify/config.write.</summary>
+    internal static string StringifyJson(object? data)
+    {
+        return PrettyValue(data, 0, 2);
+    }
 }

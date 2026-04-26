@@ -140,18 +140,37 @@ Use `test.skip()` for:
 - Tests for features that are known broken
 - Platform-specific tests that don't apply to the current environment
 
+### `test.only(name, fn)` — Exclusive Test
+
+```stash
+test.only("critical path", () => {
+    assert.equal(compute(), 42);
+});
+test.it("other test", () => {
+    // This will be skipped — test.only is active
+});
+```
+
+When one or more `test.only()` calls appear in a test run, all `test.it()` calls are skipped (counted as skipped in TAP output). `test.skip()` tests remain skipped as normal. This mirrors the behavior of `it.only` / `test.only` in Jest.
+
+Use `test.only()` to:
+
+- Focus on a single failing test during debugging
+- Run a subset of tests without commenting out others
+
 ### `test` Namespace Functions Summary
 
-| Function             | Description                                                     |
-| -------------------- | --------------------------------------------------------------- |
-| `test.it(name, fn)`     | Register and run a test case                                    |
-| `test.skip(name, fn)`     | Register a skipped test (body is not executed)                  |
-| `test.describe(name, fn)` | Group tests under a descriptive name                            |
-| `test.beforeAll(fn)`      | Run `fn()` once before tests in the current `test.describe` block    |
-| `test.afterAll(fn)`       | Run `fn()` once after all tests in the current `test.describe` block |
+| Function                  | Description                                                             |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `test.it(name, fn)`       | Register and run a test case                                            |
+| `test.only(name, fn)`     | Exclusive test — only `test.only` tests run when any exist              |
+| `test.skip(name, fn)`     | Register a skipped test (body is not executed)                          |
+| `test.describe(name, fn)` | Group tests under a descriptive name                                    |
+| `test.beforeAll(fn)`      | Run `fn()` once before tests in the current `test.describe` block       |
+| `test.afterAll(fn)`       | Run `fn()` once after all tests in the current `test.describe` block    |
 | `test.beforeEach(fn)`     | Run `fn()` before each `test.it()` in the current `test.describe` scope |
 | `test.afterEach(fn)`      | Run `fn()` after each `test.it()` in the current `test.describe` scope  |
-| `test.captureOutput(fn)`  | Execute `fn()` with output redirected; returns captured string  |
+| `test.captureOutput(fn)`  | Execute `fn()` with output redirected; returns captured string          |
 
 These functions are accessed via the `test` namespace.
 
@@ -159,18 +178,20 @@ These functions are accessed via the `test` namespace.
 
 ## 5. `assert` Namespace
 
-| Function                            | Description                                    |
-| ----------------------------------- | ---------------------------------------------- |
-| `assert.equal(actual, expected)`    | Assert `actual == expected` (no type coercion) |
-| `assert.notEqual(actual, expected)` | Assert `actual != expected`                    |
-| `assert.true(value)`                | Assert value is truthy                         |
-| `assert.false(value)`               | Assert value is falsy                          |
-| `assert.null(value)`                | Assert value is `null`                         |
-| `assert.notNull(value)`             | Assert value is not `null`                     |
-| `assert.greater(a, b)`              | Assert `a > b`                                 |
-| `assert.less(a, b)`                 | Assert `a < b`                                 |
-| `assert.throws(fn)`                 | Assert `fn()` throws; returns error message    |
-| `assert.fail(message?)`             | Unconditionally fail                           |
+| Function                                  | Description                                            |
+| ----------------------------------------- | ------------------------------------------------------ | ----------------- | --------- |
+| `assert.equal(actual, expected)`          | Assert `actual == expected` (no type coercion)         |
+| `assert.notEqual(actual, expected)`       | Assert `actual != expected`                            |
+| `assert.true(value)`                      | Assert value is truthy                                 |
+| `assert.false(value)`                     | Assert value is falsy                                  |
+| `assert.null(value)`                      | Assert value is `null`                                 |
+| `assert.notNull(value)`                   | Assert value is not `null`                             |
+| `assert.greater(a, b)`                    | Assert `a > b`                                         |
+| `assert.less(a, b)`                       | Assert `a < b`                                         |
+| `assert.throws(fn)`                       | Assert `fn()` throws; returns error message            |
+| `assert.fail(message?)`                   | Unconditionally fail                                   |
+| `assert.deepEqual(actual, expected)`      | Recursive structural equality (arrays, dicts, structs) |
+| `assert.closeTo(actual, expected, delta)` | Assert `                                               | actual - expected | <= delta` |
 
 > **Note:** Equality uses Stash's strict equality — no type coercion. For truthiness rules, see the [Language Specification](../Stash%20—%20Language%20Specification.md#4-type-system).
 

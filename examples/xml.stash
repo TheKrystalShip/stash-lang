@@ -1,0 +1,32 @@
+#!usr/bin/env stash
+
+// XML Namespace Example
+
+let xmlStr = """<server host=\"localhost\" port=\"8080\">
+    <timeout>30</timeout>
+    <tags>
+        <tag>web</tag>
+        <tag>api</tag>
+    </tags>
+</server>
+""";
+
+let root = xml.parse(xmlStr);
+io.println(root.tag);                // server
+io.println(root.attrs["host"]);      // localhost
+io.println(root.attrs["port"]);      // 8080
+
+// Query with XPath
+let tags = xml.query(root, "tags/tag");
+io.println(len(tags));               // 2
+io.println(tags[0].text);            // web
+io.println(tags[1].text);            // api
+
+// Stringify with options
+let opts = xml.XmlStringifyOptions { indent: 2, declaration: true };
+let output = xml.stringify(root, opts);
+io.println(output);
+
+// Validate
+io.println(xml.valid("<valid/>"));   // true
+io.println(xml.valid("not xml"));    // false

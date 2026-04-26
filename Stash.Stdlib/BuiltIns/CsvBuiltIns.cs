@@ -544,4 +544,21 @@ public static class CsvBuiltIns
         }
         sb.Append(quoteChar);
     }
+
+    // ── Config namespace integration ──────────────────────────────────────────
+
+    /// <summary>Parses a CSV string using default options (comma delimiter, no header row). Called by config.parse/config.read.</summary>
+    internal static List<StashValue> ParseCsvDefault(string text)
+    {
+        var rows = ParseCsv(text, DefaultOptions.Delimiter, DefaultOptions.Quote, DefaultOptions.Escape);
+        return BuildArrayRows(rows);
+    }
+
+    /// <summary>Serializes a Stash array of arrays or dicts to a CSV string using default options. Called by config.stringify/config.write.</summary>
+    internal static string StringifyCsvDefault(object? data, string callerName)
+    {
+        if (data is not List<StashValue> rows)
+            throw new RuntimeError($"{callerName}: CSV format requires an array value.");
+        return StringifyCsv(rows, DefaultOptions.Delimiter, DefaultOptions.Quote, DefaultOptions.Escape, DefaultOptions.Header, DefaultOptions.Columns);
+    }
 }

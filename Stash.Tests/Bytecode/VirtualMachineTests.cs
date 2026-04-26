@@ -152,6 +152,38 @@ public class VirtualMachineTests : BytecodeTestBase
         Assert.Throws<RuntimeError>(() => Execute("return 1 / 0;"));
     }
 
+    [Fact]
+    public void Arithmetic_AddTypeMismatch_ErrorIncludesTypeNames()
+    {
+        var ex = Assert.Throws<RuntimeError>(() => Execute("return true + null;"));
+        Assert.Contains("'bool'", ex.Message);
+        Assert.Contains("'null'", ex.Message);
+        Assert.Contains("conv.toInt()", ex.Message);
+    }
+
+    [Fact]
+    public void Arithmetic_MultiplyTypeMismatch_ErrorIncludesTypeNames()
+    {
+        var ex = Assert.Throws<RuntimeError>(() => Execute("return true * false;"));
+        Assert.Contains("'bool'", ex.Message);
+        Assert.Contains("conv.toInt()", ex.Message);
+    }
+
+    [Fact]
+    public void Arithmetic_DivideTypeMismatch_ErrorIncludesTypeNames()
+    {
+        var ex = Assert.Throws<RuntimeError>(() => Execute("return null / 2;"));
+        Assert.Contains("'null'", ex.Message);
+        Assert.Contains("conv.toInt()", ex.Message);
+    }
+
+    [Fact]
+    public void Const_ReassignmentError_IncludesVariableName()
+    {
+        var ex = Assert.Throws<RuntimeError>(() => Execute("const x = 1; x = 2;"));
+        Assert.Contains("'x'", ex.Message);
+    }
+
     // =========================================================================
     // 3. Comparison
     // =========================================================================

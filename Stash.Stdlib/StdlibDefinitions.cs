@@ -37,6 +37,7 @@ public static class StdlibDefinitions
         (() => CsvBuiltIns.Define(),      StashCapabilities.None),
         (() => HttpBuiltIns.Define(),     StashCapabilities.Network),
         (() => IniBuiltIns.Define(),      StashCapabilities.None),
+        (() => XmlBuiltIns.Define(),      StashCapabilities.None),
         (() => YamlBuiltIns.Define(),     StashCapabilities.None),
         (() => TomlBuiltIns.Define(),     StashCapabilities.None),
         (() => ConfigBuiltIns.Define(),   StashCapabilities.None),

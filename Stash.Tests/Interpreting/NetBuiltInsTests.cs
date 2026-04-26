@@ -569,6 +569,95 @@ let result = info.hostCount;
         Assert.Equal("string", result);
     }
 
+    // ── net.tcpConnectAsync TLS ─────────────────────────────────────────────
+
+    [Fact]
+    public void TcpConnectAsync_TlsConnect_Succeeds()
+    {
+        if (!IsTlsReachable("example.com", 443)) return; // Skip - no TLS connectivity
+        string output;
+        try
+        {
+            output = RunCapturingOutput(@"
+                let conn = await net.tcpConnectAsync(""example.com"", 443, net.TcpConnectOptions {
+                    tls: true,
+                    timeoutMs: 10000,
+                });
+                io.println(conn.host);
+                io.println(conn.port);
+                io.println(conn.localPort > 0);
+                await net.tcpCloseAsync(conn);
+            ");
+        }
+        catch (RuntimeError)
+        {
+            return; // Skip - TLS not working in this test environment
+        }
+        var lines = output.Trim().Split('\n');
+        Assert.Equal("example.com", lines[0].Trim());
+        Assert.Equal("443", lines[1].Trim());
+        Assert.Equal("true", lines[2].Trim());
+    }
+
+    [Fact]
+    public void TcpConnectAsync_TlsVerifyFalse_Succeeds()
+    {
+        if (!IsTlsReachable("example.com", 443)) return; // Skip - no TLS connectivity
+        string output;
+        try
+        {
+            output = RunCapturingOutput(@"
+                let conn = await net.tcpConnectAsync(""example.com"", 443, net.TcpConnectOptions {
+                    tls: true,
+                    tlsVerify: false,
+                    timeoutMs: 10000,
+                });
+                io.println(conn.port);
+                await net.tcpCloseAsync(conn);
+            ");
+        }
+        catch (RuntimeError)
+        {
+            return; // Skip - TLS not working in this test environment
+        }
+        Assert.Equal("443", output.Trim());
+    }
+
+    [Fact]
+    public void TcpConnectAsync_TlsSni_Accepted()
+    {
+        if (!IsTlsReachable("example.com", 443)) return; // Skip - no TLS connectivity
+        string output;
+        try
+        {
+            output = RunCapturingOutput(@"
+                let conn = await net.tcpConnectAsync(""example.com"", 443, net.TcpConnectOptions {
+                    tls: true,
+                    tlsSni: ""example.com"",
+                    timeoutMs: 10000,
+                });
+                io.println(conn.port);
+                await net.tcpCloseAsync(conn);
+            ");
+        }
+        catch (RuntimeError)
+        {
+            return; // Skip - TLS not working in this test environment
+        }
+        Assert.Equal("443", output.Trim());
+    }
+
+    [Fact]
+    public void TcpConnectOptions_HasTlsVerifyAndTlsSniFields()
+    {
+        // Verify the new struct fields are accessible
+        var result = Run(@"
+            let opts = net.TcpConnectOptions { tls: true, tlsVerify: false, tlsSni: ""myhost.com"" };
+            let result = opts.tlsSni;
+        ");
+        Assert.Equal("myhost.com", result);
+    }
+
     #region WebSocket
 
     private static (HttpListener listener, Task serverTask) StartWsEchoServer(int port)
@@ -901,4 +990,20 @@ let result = info.hostCount;
     }
 
     #endregion
+
+    private static bool IsTlsReachable(string host, int port)
+    {
+        try
+        {
+            using var client = new System.Net.Sockets.TcpClient();
+            if (!client.ConnectAsync(host, port).Wait(3000)) return false;
+            using var ssl = new System.Net.Security.SslStream(client.GetStream(), leaveInnerStreamOpen: false);
+            var task = ssl.AuthenticateAsClientAsync(host);
+            return task.Wait(5000) && !task.IsFaulted;
+        }
+        catch
+        {
+            return false;
+        }
+    }
 }

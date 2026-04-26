@@ -1,11 +1,7 @@
 namespace Stash.Stdlib.BuiltIns;
 
 using System;
-using System.Collections.Generic;
-using System.Globalization;
 using System.IO;
-using System.Text;
-using System.Text.Json;
 using Stash.Runtime;
 using Stash.Runtime.Types;
 using Stash.Stdlib.Registration;
@@ -49,7 +45,7 @@ public static class ConfigBuiltIns
         },
             returnType: "dict",
             isVariadic: true,
-            documentation: "Reads and parses a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param format Optional format: 'json', 'ini', 'yaml', 'toml'\n@return Parsed dictionary");
+            documentation: "Reads and parses a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param format Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'\n@return Parsed dictionary");
 
         // config.write(path, data, format?) — Serializes data and writes it to a config file. Format is auto-detected from extension if omitted. Supports "json" and "ini".
         ns.Function("write", [Param("path", "string"), Param("data", "any"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -76,7 +72,7 @@ public static class ConfigBuiltIns
         },
             returnType: "void",
             isVariadic: true,
-            documentation: "Serializes data and writes it to a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param data The data to write\n@param format Optional format: 'json', 'ini', 'yaml', 'toml'");
+            documentation: "Serializes data and writes it to a config file. Format is auto-detected from extension if omitted.\n@param path The file path\n@param data The data to write\n@param format Optional format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'");
 
         // config.parse(text, format) — Parses a config string in the given format ("json" or "ini"). Returns a dict.
         ns.Function("parse", [Param("text", "string"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -87,7 +83,7 @@ public static class ConfigBuiltIns
             return StashValue.FromObject(ParseByFormat(text, format, "config.parse"));
         },
             returnType: "dict",
-            documentation: "Parses a config string in the given format.\n@param text The config text\n@param format The format: 'json', 'ini', 'yaml', 'toml'\n@return Parsed dictionary");
+            documentation: "Parses a config string in the given format.\n@param text The config text\n@param format The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'\n@return Parsed dictionary");
 
         // config.stringify(data, format) — Serializes a Stash value to the given config format string ("json" or "ini"). Returns a string.
         ns.Function("stringify", [Param("data", "any"), Param("format", "string")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
@@ -97,7 +93,7 @@ public static class ConfigBuiltIns
             return StashValue.FromObj(StringifyByFormat(args[0].ToObject(), format, "config.stringify"));
         },
             returnType: "string",
-            documentation: "Serializes a value to the given config format.\n@param data The value to serialize\n@param format The format: 'json', 'ini', 'yaml', 'toml'\n@return Config string");
+            documentation: "Serializes a value to the given config format.\n@param data The value to serialize\n@param format The format: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'\n@return Config string");
 
         return ns.Build();
     }
@@ -114,6 +110,8 @@ public static class ConfigBuiltIns
             ".ini" or ".cfg" or ".conf" or ".properties" => "ini",
             ".yaml" or ".yml" => "yaml",
             ".toml" => "toml",
+            ".csv" => "csv",
+            ".xml" => "xml",
             _ => throw new RuntimeError($"config: unsupported file extension '{ext}'. Use the format parameter to specify the format explicitly.")
         };
     }
@@ -127,11 +125,13 @@ public static class ConfigBuiltIns
     {
         return format.ToLowerInvariant() switch
         {
-            "json" => ParseJson(text, callerName),
+            "json" => JsonBuiltIns.ParseJson(text, callerName),
             "ini" => IniBuiltIns.ParseIni(text),
             "yaml" => YamlBuiltIns.ParseYaml(text),
             "toml" => TomlBuiltIns.ParseToml(text),
-            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml'.")
+            "csv" => CsvBuiltIns.ParseCsvDefault(text),
+            "xml" => XmlBuiltIns.ParseXml(text),
+            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'.")
         };
     }
 
@@ -144,7 +144,7 @@ public static class ConfigBuiltIns
     {
         return format.ToLowerInvariant() switch
         {
-            "json" => PrettyValue(data, 0),
+            "json" => JsonBuiltIns.StringifyJson(data),
             "ini" => data is StashDictionary iniDict
                 ? IniBuiltIns.StringifyIni(iniDict)
                 : throw new RuntimeError($"{callerName}: INI format requires a dict value."),
@@ -152,207 +152,12 @@ public static class ConfigBuiltIns
             "toml" => data is StashDictionary tomlDict
                 ? TomlBuiltIns.StringifyToml(tomlDict)
                 : throw new RuntimeError($"{callerName}: TOML format requires a dict value."),
-            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml'.")
+            "csv" => CsvBuiltIns.StringifyCsvDefault(data, callerName),
+            "xml" => data is StashInstance xmlNode
+                ? XmlBuiltIns.StringifyXml(xmlNode, callerName)
+                : throw new RuntimeError($"{callerName}: XML format requires an XmlNode value."),
+            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'.")
         };
     }
 
-    /// <summary>Parses a JSON string to Stash runtime values.</summary>
-    /// <param name="text">The JSON string to parse.</param>
-    /// <param name="callerName">The calling function name, used in error messages.</param>
-    /// <returns>A parsed Stash value.</returns>
-    private static object? ParseJson(string text, string callerName)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(text);
-            return ConvertJsonElement(doc.RootElement);
-        }
-        catch (JsonException e)
-        {
-            throw new RuntimeError($"{callerName}: invalid JSON — " + e.Message);
-        }
-    }
-
-    /// <summary>Recursively converts a <see cref="System.Text.Json.JsonElement"/> to a Stash runtime value.</summary>
-    /// <param name="element">The JSON element to convert.</param>
-    /// <returns>A Stash runtime value.</returns>
-    private static object? ConvertJsonElement(JsonElement element)
-    {
-        return element.ValueKind switch
-        {
-            JsonValueKind.String => element.GetString()!,
-            JsonValueKind.Number => element.TryGetInt64(out long l) ? (object?)l : element.GetDouble(),
-            JsonValueKind.True => true,
-            JsonValueKind.False => false,
-            JsonValueKind.Null => null,
-            JsonValueKind.Array => ConvertJsonArray(element),
-            JsonValueKind.Object => ConvertJsonObject(element),
-            _ => null
-        };
-    }
-
-    /// <summary>Converts a JSON array element to a <c>List&lt;StashValue&gt;</c>.</summary>
-    /// <param name="element">The JSON array element to convert.</param>
-    /// <returns>A list of converted Stash values.</returns>
-    private static List<StashValue> ConvertJsonArray(JsonElement element)
-    {
-        var list = new List<StashValue>();
-        foreach (var item in element.EnumerateArray())
-        {
-            list.Add(StashValue.FromObject(ConvertJsonElement(item)));
-        }
-
-        return list;
-    }
-
-    /// <summary>Converts a JSON object element to a <see cref="StashDictionary"/>.</summary>
-    /// <param name="element">The JSON object element to convert.</param>
-    /// <returns>A <see cref="StashDictionary"/> with string keys and converted values.</returns>
-    private static StashDictionary ConvertJsonObject(JsonElement element)
-    {
-        var dict = new StashDictionary();
-        foreach (var prop in element.EnumerateObject())
-        {
-            dict.Set(prop.Name, StashValue.FromObject(ConvertJsonElement(prop.Value)));
-        }
-
-        return dict;
-    }
-
-    /// <summary>Converts a Stash runtime value to a pretty-printed JSON string with indentation.</summary>
-    /// <param name="value">The Stash value to serialize.</param>
-    /// <param name="indent">The current indentation level.</param>
-    /// <returns>A pretty-printed JSON string.</returns>
-    private static string PrettyValue(object? value, int indent)
-    {
-        return value switch
-        {
-            null => "null",
-            bool b => b ? "true" : "false",
-            long l => l.ToString(CultureInfo.InvariantCulture),
-            double d => d.ToString("G", CultureInfo.InvariantCulture),
-            string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
-            List<StashValue> arr => PrettyArray(arr, indent),
-            StashDictionary dict => PrettyDict(dict, indent),
-            StashInstance inst => PrettyInstance(inst, indent),
-            _ => throw new RuntimeError($"config.stringify: cannot serialize value of type {value.GetType().Name}.")
-        };
-    }
-
-    /// <summary>Pretty-prints a Stash array as a JSON array with indentation.</summary>
-    /// <param name="arr">The array to pretty-print.</param>
-    /// <param name="indent">The current indentation level.</param>
-    /// <returns>A pretty-printed JSON array string.</returns>
-    private static string PrettyArray(List<StashValue> arr, int indent)
-    {
-        if (arr.Count == 0)
-        {
-            return "[]";
-        }
-
-        var sb = new StringBuilder("[\n");
-        string innerIndent = new string(' ', (indent + 1) * 2);
-        string closingIndent = new string(' ', indent * 2);
-        for (int i = 0; i < arr.Count; i++)
-        {
-            sb.Append(innerIndent);
-            sb.Append(PrettyValue(arr[i].ToObject(), indent + 1));
-            if (i < arr.Count - 1)
-            {
-                sb.Append(',');
-            }
-
-            sb.Append('\n');
-        }
-        sb.Append(closingIndent);
-        sb.Append(']');
-        return sb.ToString();
-    }
-
-    /// <summary>Pretty-prints a <see cref="StashDictionary"/> as a JSON object with indentation.</summary>
-    /// <param name="dict">The dictionary to pretty-print.</param>
-    /// <param name="indent">The current indentation level.</param>
-    /// <returns>A pretty-printed JSON object string.</returns>
-    private static string PrettyDict(StashDictionary dict, int indent)
-    {
-        var keys = dict.RawKeys();
-        if (keys.Count == 0)
-        {
-            return "{}";
-        }
-
-        var sb = new StringBuilder("{\n");
-        string innerIndent = new string(' ', (indent + 1) * 2);
-        string closingIndent = new string(' ', indent * 2);
-        bool first = true;
-        foreach (var key in keys)
-        {
-            if (!first)
-            {
-                sb.Append(",\n");
-            }
-
-            first = false;
-            string keyStr = PrettyKey(key);
-            object? val = dict.Get(key).ToObject();
-            sb.Append(innerIndent);
-            sb.Append(keyStr);
-            sb.Append(": ");
-            sb.Append(PrettyValue(val, indent + 1));
-        }
-        sb.Append('\n');
-        sb.Append(closingIndent);
-        sb.Append('}');
-        return sb.ToString();
-    }
-
-    /// <summary>Pretty-prints a <see cref="StashInstance"/> as a JSON object with indentation.</summary>
-    /// <param name="inst">The struct instance to pretty-print.</param>
-    /// <param name="indent">The current indentation level.</param>
-    /// <returns>A pretty-printed JSON object string.</returns>
-    private static string PrettyInstance(StashInstance inst, int indent)
-    {
-        var fields = inst.GetFields();
-        if (fields.Count == 0)
-        {
-            return "{}";
-        }
-
-        var sb = new StringBuilder("{\n");
-        string innerIndent = new string(' ', (indent + 1) * 2);
-        string closingIndent = new string(' ', indent * 2);
-        bool first = true;
-        foreach (var kvp in fields)
-        {
-            if (!first)
-            {
-                sb.Append(",\n");
-            }
-
-            first = false;
-            sb.Append(innerIndent);
-            sb.Append(JsonSerializer.Serialize(kvp.Key, StashJsonContext.Default.String));
-            sb.Append(": ");
-            sb.Append(PrettyValue(kvp.Value.ToObject(), indent + 1));
-        }
-        sb.Append('\n');
-        sb.Append(closingIndent);
-        sb.Append('}');
-        return sb.ToString();
-    }
-
-    /// <summary>Converts a dictionary key to a JSON-quoted string.</summary>
-    /// <param name="key">The dictionary key to convert.</param>
-    /// <returns>A JSON-quoted string representation of the key.</returns>
-    private static string PrettyKey(object key)
-    {
-        return key switch
-        {
-            string s => JsonSerializer.Serialize(s, StashJsonContext.Default.String),
-            long l => JsonSerializer.Serialize(l.ToString(CultureInfo.InvariantCulture), StashJsonContext.Default.String),
-            double d => JsonSerializer.Serialize(d.ToString("G", CultureInfo.InvariantCulture), StashJsonContext.Default.String),
-            bool b => JsonSerializer.Serialize(b ? "true" : "false", StashJsonContext.Default.String),
-            _ => throw new RuntimeError("config: dict key must be a string, number, or bool.")
-        };
-    }
 }

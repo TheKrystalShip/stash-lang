@@ -173,6 +173,36 @@ public static class HttpBuiltIns
         }, returnType: "HttpResponse", isVariadic: true,
         documentation: "Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the DELETE request to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
 
+        // http.head(url[, options]) — Sends an HTTP HEAD request. Optionally accepts an options dict with 'headers' (dict) and 'timeout' (int, ms). Returns a HttpResponse struct with an empty body.
+        ns.Function("head", [Param("url", "string"), Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            if (args.Length < 1 || args.Length > 2)
+                throw new RuntimeError("'http.head' requires 1 or 2 arguments.");
+            var url = SvArgs.String(args, 0, "http.head");
+
+            ValidateUrl(url, "http.head");
+
+            var request = new HttpRequestMessage(HttpMethod.Head, url);
+            var timeout = ApplyOptions(request, args, 1, "http.head");
+            using var cts = MakeLinkedCts(ctx.CancellationToken, timeout);
+            var requestCt = cts?.Token ?? ctx.CancellationToken;
+
+            try
+            {
+                var response = _client.SendAsync(request, requestCt).GetAwaiter().GetResult();
+                return StashValue.FromObj(MakeResponse(response));
+            }
+            catch (HttpRequestException e)
+            {
+                throw new RuntimeError("http.head: request failed — " + e.Message);
+            }
+            catch (TaskCanceledException)
+            {
+                throw new RuntimeError("http.head: request timed out.");
+            }
+        }, returnType: "HttpResponse", isVariadic: true,
+        documentation: "Sends an HTTP HEAD request and returns the response status and headers.\n@param url The URL to request\n@param options Optional request options (headers, timeout)\n@return HttpResponse with status, headers, and empty body");
+
         // http.request(options) — Sends a fully customizable HTTP request. Options dict supports: url, method, headers (dict), body. Returns a HttpResponse struct.
         ns.Function("request", [Param("options", "dict")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {

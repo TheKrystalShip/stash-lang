@@ -29,24 +29,26 @@
 13. [`math` — Math Functions](#math--math-functions)
 14. [`time` — Time & Date](#time--time--date)
 15. [`json` — JSON](#json--json)
-16. [`ini` — INI Configuration](#ini--ini-configuration)
-17. [`yaml` — YAML](#yaml--yaml)
-18. [`toml` — TOML](#toml--toml)
-19. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
-20. [`http` — HTTP Requests](#http--http-requests)
-21. [`process` — Process Management](#process--process-management)
-22. [`tpl` — Templating](#tpl--templating)
-23. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
-24. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
-25. [`term` — Terminal Formatting](#term--terminal-formatting)
-26. [`sys` — System Information](#sys--system-information)
-27. [`task` — Parallel Tasks](#task--parallel-tasks)
-28. [`net` — Networking](#net--networking)
-29. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
-30. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
-31. [Argument Parsing](#argument-parsing)
-32. [`scheduler` — OS Service Management](#scheduler--os-service-management)
-33. [`log` — Structured Logging](#log--structured-logging)
+16. [`xml` — XML](#xml--xml)
+17. [`ini` — INI Configuration](#ini--ini-configuration)
+18. [`yaml` — YAML](#yaml--yaml)
+19. [`toml` — TOML](#toml--toml)
+20. [`toml` — TOML](#toml--toml)
+21. [`config` — Format-Agnostic Configuration](#config--format-agnostic-configuration)
+22. [`http` — HTTP Requests](#http--http-requests)
+23. [`process` — Process Management](#process--process-management)
+24. [`tpl` — Templating](#tpl--templating)
+25. [`crypto` — Cryptography & Hashing](#crypto--cryptography--hashing)
+26. [`encoding` — Encoding & Decoding](#encoding--encoding--decoding)
+27. [`term` — Terminal Formatting](#term--terminal-formatting)
+28. [`sys` — System Information](#sys--system-information)
+29. [`task` — Parallel Tasks](#task--parallel-tasks)
+30. [`net` — Networking](#net--networking)
+31. [`ssh` — SSH Remote Execution](#ssh--ssh-remote-execution)
+32. [`sftp` — SFTP File Transfer](#sftp--sftp-file-transfer)
+33. [Argument Parsing](#argument-parsing)
+34. [`scheduler` — OS Service Management](#scheduler--os-service-management)
+35. [`log` — Structured Logging](#log--structured-logging)
 
 ---
 
@@ -97,6 +99,7 @@ let raw = reveal(key);    // "abc123"
 | `io.eprint(val)`               | Print value without newline to standard error                                                                                                  |
 | `io.readLine(prompt?)`         | Read a line from standard input, with optional prompt                                                                                          |
 | `io.confirm(prompt, default?)` | Display a [y/N] confirmation prompt, returns boolean. Optional `default` is used when the user presses Enter without typing (default: `false`) |
+| `io.readPassword(prompt?)`     | Read a password from stdin without echoing typed characters. Returns a `secret`                                                                |
 
 ### Examples
 
@@ -258,6 +261,7 @@ let config = env.withPrefix("MYAPP_");
 | `fs.setPermissions(path, permissions)`   | Set file permissions from a `FilePermissions` struct                                                                  |
 | `fs.setReadOnly(path, readOnly)`         | Set or clear the read-only state of a file or directory                                                               |
 | `fs.setExecutable(path, executable)`     | Set or clear the executable bit (Unix) — no-op on Windows                                                             |
+| `fs.chown(path, uid, gid)`               | Changes file owner/group (Unix only). Use -1 to leave uid or gid unchanged.                                           |
 | `fs.watch(path, callback, options?)`     | Watch a file or directory for changes, returns a `Watcher` handle                                                     |
 | `fs.unwatch(watcher)`                    | Stop a file watcher previously created by `fs.watch()`                                                                |
 
@@ -1533,6 +1537,112 @@ let pretty4 = json.pretty(data, 4);   // same but 4-space indent
 
 ---
 
+## `xml` — XML
+
+The `xml` namespace provides parsing, serialization, and XPath querying of XML documents using LINQ to XML.
+
+### Structs
+
+#### `XmlNode`
+
+Represents an XML element or special node.
+
+| Field      | Type     | Description                                                             |
+| ---------- | -------- | ----------------------------------------------------------------------- |
+| `tag`      | `string` | Element tag name. `"#text"` for text nodes, `"#cdata"` for CDATA nodes. |
+| `attrs`    | `dict`   | Attribute key-value pairs (empty dict if none).                         |
+| `text`     | `string` | Concatenated direct text content (empty string if none).                |
+| `children` | `array`  | Array of child `XmlNode` structs.                                       |
+
+#### `XmlParseOptions`
+
+| Field                | Type   | Default | Description                                        |
+| -------------------- | ------ | ------- | -------------------------------------------------- |
+| `preserveWhitespace` | `bool` | `false` | If true, whitespace-only text nodes are preserved. |
+
+#### `XmlStringifyOptions`
+
+| Field         | Type     | Default   | Description                                             |
+| ------------- | -------- | --------- | ------------------------------------------------------- |
+| `indent`      | `int`    | `2`       | Number of spaces for indentation. `0` = compact output. |
+| `declaration` | `bool`   | `false`   | If true, include the `<?xml ...?>` declaration.         |
+| `encoding`    | `string` | `"UTF-8"` | Encoding name written into the XML declaration.         |
+
+### Functions
+
+| Function                        | Description                                           |
+| ------------------------------- | ----------------------------------------------------- |
+| `xml.parse(text, options?)`     | Parse an XML string into an XmlNode tree              |
+| `xml.stringify(node, options?)` | Serialize an XmlNode tree to an XML string            |
+| `xml.valid(text)`               | Return `true` if the string is valid, well-formed XML |
+| `xml.query(root, xpath)`        | Query an XmlNode tree using an XPath expression       |
+
+### `xml.parse(text, options?) -> XmlNode`
+
+Parses an XML string and returns the root `XmlNode`. Raises an error if the XML is malformed.
+
+```stash
+let root = xml.parse("<config version=\"2\"><host>localhost</host></config>")
+io.println(root.tag)                 // config
+io.println(root.attrs["version"])    // 2
+
+// Access children
+let host = root.children[0]
+io.println(host.tag)                 // host
+io.println(host.text)                // localhost
+```
+
+**With options:**
+
+```stash
+let opts = xml.XmlParseOptions { preserveWhitespace: true }
+let root = xml.parse(xmlStr, opts)
+```
+
+### `xml.stringify(node, options?) -> string`
+
+Serializes an `XmlNode` tree back to an XML string.
+
+```stash
+let root = xml.parse("<root><item id=\"1\">hello</item></root>")
+
+// Default (2-space indent, no declaration)
+let out = xml.stringify(root)
+
+// With options
+let opts = xml.XmlStringifyOptions { indent: 4, declaration: true }
+let out2 = xml.stringify(root, opts)
+```
+
+### `xml.valid(text) -> bool`
+
+Returns `true` if the string is valid, well-formed XML. Does not throw on invalid input.
+
+```stash
+io.println(xml.valid("<root/>"))     // true
+io.println(xml.valid("<root>"))      // false — unclosed tag
+io.println(xml.valid(""))            // false
+```
+
+### `xml.query(root, xpath) -> array`
+
+Evaluates an XPath expression against the node tree. Returns an array of matching `XmlNode` values (for element results) or `string` values (for attribute or text results). Returns an empty array if nothing matches.
+
+```stash
+let root = xml.parse("<root><item id=\"1\"/><item id=\"2\"/></root>")
+
+// Select elements
+let items = xml.query(root, "item")
+io.println(len(items))              // 2
+io.println(items[0].attrs["id"])    // 1
+
+// Select attribute values
+let ids = xml.query(root, "item/@id")
+io.println(ids[0])                  // 1
+```
+
+---
+
 ## `ini` — INI Configuration
 
 The `ini` namespace provides parsing and serialization of INI-format configuration files.
@@ -1872,6 +1982,7 @@ io.println("Configuration updated.");
 | `http.get(url, options?)`            | Send HTTP GET request and return response             |
 | `http.post(url, body, options?)`     | Send HTTP POST request with body and return response  |
 | `http.put(url, body, options?)`      | Send HTTP PUT request with body and return response   |
+| `http.head(url, options?)`           | Send HTTP HEAD request and return status and headers  |
 | `http.delete(url, options?)`         | Send HTTP DELETE request and return response          |
 | `http.request(options)`              | Send custom HTTP request with a dict of options       |
 | `http.patch(url, body, options?)`    | Send HTTP PATCH request with body and return response |
@@ -3554,6 +3665,18 @@ let conn = await net.tcpConnectAsync("nats.local", 4222, net.TcpConnectOptions {
     noDelay: true,
     keepAlive: true,
 });
+
+// TLS connection:
+let conn = await net.tcpConnectAsync("example.com", 443, net.TcpConnectOptions {
+    tls: true,
+});
+
+// TLS with SNI override and skip cert validation (insecure):
+let conn = await net.tcpConnectAsync("10.0.0.1", 8443, net.TcpConnectOptions {
+    tls: true,
+    tlsSni: "internal.myhost.com",
+    tlsVerify: false,
+});
 ```
 
 #### `net.tcpSendAsync(conn, data)`
@@ -3660,12 +3783,14 @@ match net.tcpState(conn) {
 
 #### `TcpConnectOptions`
 
-| Field       | Type   | Default | Description                             |
-| ----------- | ------ | ------- | --------------------------------------- |
-| `timeoutMs` | `int`  | `5000`  | Connection timeout in milliseconds      |
-| `tls`       | `bool` | `false` | Enable TLS wrapping (not yet supported) |
-| `noDelay`   | `bool` | `false` | Disable Nagle's algorithm               |
-| `keepAlive` | `bool` | `false` | Enable TCP keep-alive                   |
+| Field       | Type     | Default | Description                                                              |
+| ----------- | -------- | ------- | ------------------------------------------------------------------------ |
+| `timeoutMs` | `int`    | `5000`  | Connection timeout in milliseconds                                       |
+| `tls`       | `bool`   | `false` | Enable TLS wrapping over the TCP connection                              |
+| `noDelay`   | `bool`   | `false` | Disable Nagle's algorithm                                                |
+| `keepAlive` | `bool`   | `false` | Enable TCP keep-alive                                                    |
+| `tlsVerify` | `bool`   | `true`  | Validate the server's TLS certificate. Set to `false` to skip (insecure) |
+| `tlsSni`    | `string` | `""`    | Override the SNI hostname sent during TLS handshake. Defaults to `host`  |
 
 #### `TcpRecvOptions`
 
@@ -4159,7 +4284,7 @@ let results = task.awaitAll(tasks);
 
 These are shared across tasks but are effectively immutable:
 
-- **Built-in namespaces:** All 24 namespaces (`io`, `arr`, `str`, etc.) are frozen after registration. Safe to call from any task.
+- **Built-in namespaces:** All 35 namespaces (`io`, `arr`, `str`, etc.) are frozen after registration. Safe to call from any task.
 - **Global scope reference:** The global (outermost) environment is shared by reference for access to global functions and constants. This is safe for reads.
 - **Struct and enum definitions:** Type definitions are immutable once created.
 

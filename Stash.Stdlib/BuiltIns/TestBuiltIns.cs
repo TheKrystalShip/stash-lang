@@ -25,7 +25,6 @@ public static class TestBuiltIns
         {
             var name = SvArgs.String(args, 0, "test.it");
             var body = SvArgs.Callable(args, 1, "test.it");
-            var harness = ctx.TestHarness;
             var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
 
             // Build the fully qualified test name from describe context
@@ -48,64 +47,51 @@ public static class TestBuiltIns
                 return StashValue.Null;
             }
 
-            harness?.OnTestStart(fullName, span);
-            var sw = Stopwatch.StartNew();
-
-            try
+            // If exclusive mode is active (any test.only was called), skip this test
+            if (ctx.HasExclusiveTests)
             {
-                // Run beforeEach hooks from all describe levels (outermost to innermost)
-                foreach (var level in ctx.BeforeEachHooks)
-                {
-                    foreach (var hook in level)
-                    {
-                        ctx.InvokeCallbackDirect(hook, ReadOnlySpan<StashValue>.Empty);
-                    }
-                }
-
-                ctx.InvokeCallbackDirect(body, ReadOnlySpan<StashValue>.Empty);
-                sw.Stop();
-
-                // Run afterEach hooks from all describe levels (innermost to outermost)
-                for (int i = ctx.AfterEachHooks.Count - 1; i >= 0; i--)
-                {
-                    foreach (var hook in ctx.AfterEachHooks[i])
-                    {
-                        ctx.InvokeCallbackDirect(hook, ReadOnlySpan<StashValue>.Empty);
-                    }
-                }
-
-                harness?.OnTestPass(fullName, sw.Elapsed);
-            }
-            catch (AssertionError ex)
-            {
-                sw.Stop();
-                if (harness is not null)
-                {
-                    harness.OnTestFail(fullName, ex.Message, ex.Span ?? span, sw.Elapsed);
-                }
-                else
-                {
-                    // No harness — assertion failures crash the script (normal behavior)
-                    throw;
-                }
-            }
-            catch (RuntimeError ex)
-            {
-                sw.Stop();
-                if (harness is not null)
-                {
-                    harness.OnTestFail(fullName, ex.Message, ex.Span ?? span, sw.Elapsed);
-                }
-                else
-                {
-                    throw;
-                }
+                ctx.TestHarness?.OnTestSkip(fullName, "test.only active");
+                return StashValue.Null;
             }
 
-            return StashValue.Null;
+            return RunTest(ctx, fullName, body, span);
         },
             returnType: "null",
             documentation: "Defines and executes a test case with the given name and body function.\n@param name The test case name\n@param fn The test body function\n@return null");
+
+        // test.only(name, fn) — exclusive test; when any test.only is used, test.it calls are skipped
+        ns.Function("only", [Param("name", "string"), Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+        {
+            // Mark exclusive mode — subsequent test.it calls will be skipped
+            ctx.HasExclusiveTests = true;
+
+            var name = SvArgs.String(args, 0, "test.only");
+            var body = SvArgs.Callable(args, 1, "test.only");
+            var span = ctx.CurrentSpan ?? new SourceSpan("<unknown>", 1, 1, 1, 1);
+
+            string fullName = BuildFullName(ctx, ctx.CurrentDescribe, name);
+
+            // Check test filter
+            if (ctx.TestFilter is not null)
+            {
+                bool matches = ctx.TestFilter.Any(f => fullName.StartsWith(f));
+                if (!matches)
+                {
+                    return StashValue.Null;
+                }
+            }
+
+            // Discovery mode — record but don't execute
+            if (ctx.DiscoveryMode)
+            {
+                ctx.TestHarness?.OnTestDiscovered(fullName, span);
+                return StashValue.Null;
+            }
+
+            return RunTest(ctx, fullName, body, span);
+        },
+            returnType: "null",
+            documentation: "Defines and executes an exclusive test case. When one or more test.only() calls exist, all test.it() calls are silently skipped.\n@param name The test case name\n@param fn The test body function\n@return null");
 
         // test.skip(name, fn) — register a skipped test; body is never executed
         ns.Function("skip", [Param("name", "string"), Param("fn", "function")], (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
@@ -292,5 +278,65 @@ public static class TestBuiltIns
 
         string fileName = Path.GetFileName(ctx.CurrentFile ?? "unknown");
         return $"{fileName} > {testName}";
+    }
+
+    private static StashValue RunTest(IInterpreterContext ctx, string fullName, IStashCallable body, SourceSpan span)
+    {
+        var harness = ctx.TestHarness;
+        harness?.OnTestStart(fullName, span);
+        var sw = Stopwatch.StartNew();
+
+        try
+        {
+            // Run beforeEach hooks from all describe levels (outermost to innermost)
+            foreach (var level in ctx.BeforeEachHooks)
+            {
+                foreach (var hook in level)
+                {
+                    ctx.InvokeCallbackDirect(hook, ReadOnlySpan<StashValue>.Empty);
+                }
+            }
+
+            ctx.InvokeCallbackDirect(body, ReadOnlySpan<StashValue>.Empty);
+            sw.Stop();
+
+            // Run afterEach hooks from all describe levels (innermost to outermost)
+            for (int i = ctx.AfterEachHooks.Count - 1; i >= 0; i--)
+            {
+                foreach (var hook in ctx.AfterEachHooks[i])
+                {
+                    ctx.InvokeCallbackDirect(hook, ReadOnlySpan<StashValue>.Empty);
+                }
+            }
+
+            harness?.OnTestPass(fullName, sw.Elapsed);
+        }
+        catch (AssertionError ex)
+        {
+            sw.Stop();
+            if (harness is not null)
+            {
+                harness.OnTestFail(fullName, ex.Message, ex.Span ?? span, sw.Elapsed);
+            }
+            else
+            {
+                // No harness — assertion failures crash the script (normal behavior)
+                throw;
+            }
+        }
+        catch (RuntimeError ex)
+        {
+            sw.Stop();
+            if (harness is not null)
+            {
+                harness.OnTestFail(fullName, ex.Message, ex.Span ?? span, sw.Elapsed);
+            }
+            else
+            {
+                throw;
+            }
+        }
+
+        return StashValue.Null;
     }
 }

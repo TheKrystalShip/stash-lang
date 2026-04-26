@@ -646,4 +646,50 @@ public class FsBuiltInsTests : TempDirectoryFixture
         var list = Assert.IsType<List<object?>>(result);
         Assert.Equal(2, list.Count);
     }
+
+    // ── fs.chown ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Chown_WindowsThrowsPlatformError()
+    {
+        if (!OperatingSystem.IsWindows()) return;
+
+        var path = Path.Combine(TestDir, "chown_win.txt");
+        File.WriteAllText(path, "");
+
+        RunExpectingError($"fs.chown(\"{path}\", 1000, 1000);");
+    }
+
+    [Fact]
+    public void Chown_Unix_NoopWithMinusOne()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var path = Path.Combine(TestDir, "chown_noop.txt");
+        File.WriteAllText(path, "content");
+
+        // -1,-1 means "don't change" — should succeed for any file we own
+        RunStatements($"fs.chown(\"{path}\", -1, -1);");
+    }
+
+    [Fact]
+    public void Chown_MissingFile_ThrowsError()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var path = Path.Combine(TestDir, "chown_missing.txt");
+        RunExpectingError($"fs.chown(\"{path}\", -1, -1);");
+    }
+
+    [Fact]
+    public void Chown_ReturnsNull()
+    {
+        if (!OperatingSystem.IsLinux() && !OperatingSystem.IsMacOS()) return;
+
+        var path = Path.Combine(TestDir, "chown_null.txt");
+        File.WriteAllText(path, "content");
+
+        var result = Run($"let result = fs.chown(\"{path}\", -1, -1);");
+        Assert.Null(result);
+    }
 }

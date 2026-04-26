@@ -91,4 +91,96 @@ public class MathBuiltInsTests : StashTestBase
         var result = (long)Run("let result = math.randomInt(100);")!;
         Assert.InRange(result, 0L, 100L);
     }
+
+    // ── math.floor / math.ceil ────────────────────────────────────────────────
+
+    [Fact]
+    public void Floor_PositiveFloat_RoundsDown()
+    {
+        Assert.Equal(3.0, Run("let result = math.floor(3.9);"));
+    }
+
+    [Fact]
+    public void Floor_NegativeFloat_RoundsDown()
+    {
+        Assert.Equal(-4.0, Run("let result = math.floor(-3.1);"));
+    }
+
+    [Fact]
+    public void Ceil_PositiveFloat_RoundsUp()
+    {
+        Assert.Equal(4.0, Run("let result = math.ceil(3.1);"));
+    }
+
+    [Fact]
+    public void Ceil_NegativeFloat_RoundsUp()
+    {
+        Assert.Equal(-3.0, Run("let result = math.ceil(-3.9);"));
+    }
+
+    // ── math.clamp ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Clamp_ValueBetweenBounds_ReturnsValue()
+    {
+        Assert.Equal(5L, Run("let result = math.clamp(5, 1, 10);"));
+    }
+
+    [Fact]
+    public void Clamp_ValueAtMin_ReturnsMin()
+    {
+        Assert.Equal(1L, Run("let result = math.clamp(1, 1, 10);"));
+    }
+
+    [Fact]
+    public void Clamp_ValueAtMax_ReturnsMax()
+    {
+        Assert.Equal(10L, Run("let result = math.clamp(10, 1, 10);"));
+    }
+
+    [Fact]
+    public void Clamp_ValueBelowMin_ReturnsMin()
+    {
+        Assert.Equal(1L, Run("let result = math.clamp(-5, 1, 10);"));
+    }
+
+    [Fact]
+    public void Clamp_ValueAboveMax_ReturnsMax()
+    {
+        Assert.Equal(10L, Run("let result = math.clamp(99, 1, 10);"));
+    }
+
+    // ── math.pow ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Pow_NegativeExponent_ReturnsFloat()
+    {
+        var result = (double)Run("let result = math.pow(2, -1);")!;
+        Assert.Equal(0.5, result, precision: 10);
+    }
+
+    // ── math.log10 ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Log10_100_Returns2()
+    {
+        var result = (double)Run("let result = math.log10(100);")!;
+        Assert.Equal(2.0, result, precision: 10);
+    }
+
+    // ── math.abs ──────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Abs_NegativeInt_ReturnsPositive()
+    {
+        Assert.Equal(7L, Run("let result = math.abs(-7);"));
+    }
+
+    // ── math.sqrt ─────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Sqrt_4_Returns2()
+    {
+        Assert.Equal(2.0, Run("let result = math.sqrt(4);"));
+    }
 }

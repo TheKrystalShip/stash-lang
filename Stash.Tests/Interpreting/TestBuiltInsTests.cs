@@ -813,4 +813,112 @@ public class TestBuiltInsTests : StashTestBase
         var cleaned = vm.Globals["cleaned"].ToObject();
         Assert.Equal(true, cleaned);
     }
+
+    // ── 10. test.only() — exclusive tests ────────────────────────────────────
+
+    [Fact]
+    public void TestOnly_OnlyRunsExclusiveTest()
+    {
+        var (reporter, _) = RunWithHarness("""
+            test.only("exclusive", () => { assert.true(true); });
+            test.it("should be skipped", () => { assert.true(true); });
+            """);
+
+        Assert.Equal(1, reporter.PassedCount);
+        Assert.Equal(0, reporter.FailedCount);
+        Assert.Equal(1, reporter.SkippedCount);
+    }
+
+    [Fact]
+    public void TestOnly_MultipleOnlyCalls_AllRun()
+    {
+        var (reporter, _) = RunWithHarness("""
+            test.only("first", () => { assert.true(true); });
+            test.only("second", () => { assert.equal(1, 1); });
+            test.it("skipped", () => { assert.true(true); });
+            """);
+
+        Assert.Equal(2, reporter.PassedCount);
+        Assert.Equal(0, reporter.FailedCount);
+        Assert.Equal(1, reporter.SkippedCount);
+    }
+
+    [Fact]
+    public void TestIt_WithoutOnly_RunsNormally()
+    {
+        var (reporter, _) = RunWithHarness("""
+            test.it("runs normally", () => { assert.equal(1, 1); });
+            test.it("also runs", () => { assert.true(true); });
+            """);
+
+        Assert.Equal(2, reporter.PassedCount);
+        Assert.Equal(0, reporter.SkippedCount);
+    }
+
+    // ── 11. assert.deepEqual ──────────────────────────────────────────────────
+
+    [Fact]
+    public void DeepEqual_PrimitiveEqual_Passes()
+    {
+        RunStatements("assert.deepEqual(42, 42);");
+    }
+
+    [Fact]
+    public void DeepEqual_PrimitiveNotEqual_Fails()
+    {
+        Assert.Throws<AssertionError>(() => RunStatements("assert.deepEqual(1, 2);"));
+    }
+
+    [Fact]
+    public void DeepEqual_NestedArray_Passes()
+    {
+        RunStatements("assert.deepEqual([1, [2, 3]], [1, [2, 3]]);");
+    }
+
+    [Fact]
+    public void DeepEqual_ArrayLengthMismatch_Fails()
+    {
+        Assert.Throws<AssertionError>(() => RunStatements("assert.deepEqual([1, 2], [1, 2, 3]);"));
+    }
+
+    [Fact]
+    public void DeepEqual_NestedDict_Passes()
+    {
+        RunStatements("""
+            let d1 = {x: 1, y: 2};
+            let d2 = {x: 1, y: 2};
+            assert.deepEqual(d1, d2);
+            """);
+    }
+
+    [Fact]
+    public void DeepEqual_DictKeyMismatch_FailsWithPath()
+    {
+        var ex = Assert.Throws<AssertionError>(() => RunStatements("""
+            let d1 = {x: 1};
+            let d2 = {x: 99};
+            assert.deepEqual(d1, d2);
+            """));
+        Assert.Contains("x", ex.Message);
+    }
+
+    // ── 12. assert.closeTo ────────────────────────────────────────────────────
+
+    [Fact]
+    public void CloseTo_WithinDelta_Passes()
+    {
+        RunStatements("assert.closeTo(3.14, 3.14159, 0.01);");
+    }
+
+    [Fact]
+    public void CloseTo_OutsideDelta_Fails()
+    {
+        Assert.Throws<AssertionError>(() => RunStatements("assert.closeTo(3.0, 3.5, 0.01);"));
+    }
+
+    [Fact]
+    public void CloseTo_NegativeDelta_ThrowsRuntimeError()
+    {
+        Assert.Throws<RuntimeError>(() => RunStatements("assert.closeTo(1.0, 1.0, -0.1);"));
+    }
 }

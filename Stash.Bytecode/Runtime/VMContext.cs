@@ -120,6 +120,7 @@ internal sealed class VMContext : IInterpreterContext
     public string? CurrentDescribe { get; set; }
     public string[]? TestFilter { get; set; }
     public bool DiscoveryMode { get; set; }
+    public bool HasExclusiveTests { get; set; }
     public List<List<IStashCallable>> BeforeEachHooks { get; } = new();
     public List<List<IStashCallable>> AfterEachHooks { get; } = new();
     public List<List<IStashCallable>> AfterAllHooks { get; } = new();
@@ -222,6 +223,7 @@ internal sealed class VMContext : IInterpreterContext
             EmbeddedMode = EmbeddedMode,
             TestHarness = TestHarness,
             TestFilter = TestFilter,
+            HasExclusiveTests = HasExclusiveTests,
             Globals = Globals,
             ModuleLoader = ModuleLoader,
             ModuleCache = ModuleCache,

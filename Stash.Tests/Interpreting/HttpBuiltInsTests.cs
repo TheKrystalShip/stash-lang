@@ -15,6 +15,41 @@ public class HttpBuiltInsTests : StashTestBase, IDisposable
         try { Directory.Delete(_testDir, true); } catch { }
     }
 
+    // --- http.head ---
+
+    [Fact]
+    public void Head_NonStringUrlThrows()
+    {
+        RunExpectingError("http.head(123);");
+    }
+
+    [Fact]
+    public void Head_InvalidSchemeThrows()
+    {
+        var ex = RunCapturingError("http.head(\"ftp://example.com\");");
+        Assert.Contains("must use http://", ex.Message);
+    }
+
+    [Fact]
+    public void Head_InvalidUrl_Throws()
+    {
+        var ex = RunCapturingError("http.head(\"http://invalid.test.localhost.invalid\");");
+        Assert.Contains("request failed", ex.Message);
+    }
+
+    [Fact]
+    public void Head_ValidSchemes_FailWithConnectionError()
+    {
+        // http:// and https:// pass scheme validation; the error should be a connection failure
+        var exHttp = RunCapturingError("http.head(\"http://localhost:19999\");");
+        Assert.DoesNotContain("must use http://", exHttp.Message);
+        Assert.Contains("request failed", exHttp.Message);
+
+        var exHttps = RunCapturingError("http.head(\"https://localhost:19999\");");
+        Assert.DoesNotContain("must use http://", exHttps.Message);
+        Assert.Contains("request failed", exHttps.Message);
+    }
+
     // --- http.patch ---
 
     [Fact]

@@ -12,6 +12,7 @@ public interface ITestContext
     string? CurrentDescribe { get; set; }
     string[]? TestFilter { get; set; }
     bool DiscoveryMode { get; set; }
+    bool HasExclusiveTests { get; set; }
     List<List<IStashCallable>> BeforeEachHooks { get; }
     List<List<IStashCallable>> AfterEachHooks { get; }
     List<List<IStashCallable>> AfterAllHooks { get; }

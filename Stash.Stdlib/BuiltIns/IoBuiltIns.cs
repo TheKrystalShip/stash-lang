@@ -1,7 +1,9 @@
 namespace Stash.Stdlib.BuiltIns;
 
 using System;
+using System.Text;
 using Stash.Runtime;
+using Stash.Runtime.Types;
 using Stash.Stdlib.Registration;
 using static Stash.Stdlib.Registration.P;
 
@@ -110,6 +112,78 @@ public static class IoBuiltIns
             isVariadic: true,
             documentation: "Prompts the user for a yes/no confirmation.\n@param prompt The prompt text to display\n@param default Optional default value: true shows [Y/n] (Enter = yes), false shows [y/N] (Enter = no)\n@return true if the user answered yes, false otherwise");
 
+        ns.Function("readPassword", [Param("prompt?", "string")],
+            static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
+            {
+                if (args.Length > 1)
+                    throw new RuntimeError("'io.readPassword' expects 0 or 1 arguments.");
+
+                if (args.Length == 1 && !args[0].IsNull)
+                {
+                    string prompt = SvArgs.String(args, 0, "io.readPassword");
+                    ctx.Output.Write(prompt);
+                    ctx.NotifyOutput("stdout", prompt);
+                }
+
+                string collected;
+                if (Console.IsInputRedirected || !object.ReferenceEquals(ctx.Input, Console.In))
+                {
+                    string? line = ctx.Input.ReadLine();
+                    if (line is null)
+                        throw new RuntimeError("io.readPassword: input cancelled.");
+                    collected = line;
+                }
+                else
+                {
+                    collected = ReadPasswordInteractive(ctx);
+                }
+
+                return StashValue.FromObj(new StashSecret(StashValue.FromObj(collected)));
+            },
+            returnType: "secret",
+            isVariadic: true,
+            documentation: "Reads a password from stdin without echoing typed characters. Returns a secret.\n@param prompt? Optional prompt text to display before reading\n@return The entered password wrapped in a secret value");
+
         return ns.Build();
+    }
+
+    private static string ReadPasswordInteractive(IInterpreterContext ctx)
+    {
+        var sb = new StringBuilder();
+        while (true)
+        {
+            ConsoleKeyInfo key;
+            try
+            {
+                key = Console.ReadKey(intercept: true);
+            }
+            catch (InvalidOperationException)
+            {
+                string? line = ctx.Input.ReadLine();
+                if (line is null)
+                    throw new RuntimeError("io.readPassword: input cancelled.");
+                return line;
+            }
+
+            if (key.Key == ConsoleKey.Enter)
+                break;
+
+            if (key.Key == ConsoleKey.Backspace)
+            {
+                if (sb.Length > 0)
+                    sb.Length--;
+                continue;
+            }
+
+            if (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0)
+                throw new RuntimeError("io.readPassword: input cancelled.");
+
+            if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
+                sb.Append(key.KeyChar);
+        }
+
+        ctx.Output.WriteLine();
+        ctx.NotifyOutput("stdout", "\n");
+        return sb.ToString();
     }
 }
