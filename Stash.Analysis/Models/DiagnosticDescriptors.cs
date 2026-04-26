@@ -78,6 +78,7 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0707 = new("SA0707", "Invalid until clause", DiagnosticLevel.Warning, "Commands", "'until' clause expects a callable expression (lambda or function reference).");
     public static readonly DiagnosticDescriptor SA0708 = new("SA0708", "Backoff without delay", DiagnosticLevel.Information, "Commands", "'backoff' has no effect without a non-zero 'delay'.");
     public static readonly DiagnosticDescriptor SA0709 = new("SA0709", "Retry no throwable operations", DiagnosticLevel.Information, "Commands", "Retry body contains no operations that can throw. The retry block will always succeed on the first attempt.");
+    public static readonly DiagnosticDescriptor SA0710 = new("SA0710", "Passthrough command in pipe chain", DiagnosticLevel.Error, "Commands", "A passthrough command ($>(...) or $!>(...)) cannot appear in a pipe chain. Piping requires capturing stdout, which is incompatible with passthrough I/O inheritance. Use $(cmd) or $!(cmd) in pipe chains.");
 
     // ── SA08xx — Imports ─────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0801 = new("SA0801", "Dynamic import path", DiagnosticLevel.Information, "Imports", "Dynamic import path cannot be resolved statically. Autocomplete, go-to-definition, and other editor features will not be available for this import.");
@@ -173,6 +174,7 @@ public static class DiagnosticDescriptors
         dict[SA0707.Code] = SA0707;
         dict[SA0708.Code] = SA0708;
         dict[SA0709.Code] = SA0709;
+        dict[SA0710.Code] = SA0710;
         dict[SA0801.Code] = SA0801;
         dict[SA0802.Code] = SA0802;
         dict[SA0804.Code] = SA0804;

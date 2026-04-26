@@ -654,8 +654,25 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitPipeExpr(PipeExpr expr)
     {
-        expr.Left.Accept(this);
-        expr.Right.Accept(this);
+        // Flatten the left-associative PipeExpr chain into an ordered stage list
+        var stages = new List<Expr>();
+        Expr current = expr;
+        while (current is PipeExpr pipe)
+        {
+            stages.Insert(0, pipe.Right);
+            current = pipe.Left;
+        }
+        stages.Insert(0, current); // leftmost non-pipe node
+
+        // Validate and visit each stage
+        foreach (var stage in stages)
+        {
+            if (stage is CommandExpr { IsPassthrough: true } cmd)
+                _diagnostics.Add(DiagnosticDescriptors.SA0710.CreateDiagnostic(cmd.Span));
+
+            stage.Accept(this);
+        }
+
         return null;
     }
 

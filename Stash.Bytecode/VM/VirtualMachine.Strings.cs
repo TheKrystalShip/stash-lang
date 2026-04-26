@@ -35,30 +35,8 @@ public sealed partial class VirtualMachine
 
         var (program, arguments) = CommandParser.Parse(command);
 
-        // Expand tilde in individual arguments
-        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        for (int i = 0; i < arguments.Count; i++)
-        {
-            string arg = arguments[i];
-            if (arg == "~")
-                arguments[i] = home;
-            else if (arg.StartsWith("~/", StringComparison.Ordinal) || arg.StartsWith("~\\", StringComparison.Ordinal))
-                arguments[i] = Path.Combine(home, arg[2..]);
-        }
-
-        // Apply elevation prefix if active
-        if (_context.ElevationActive && _context.ElevationCommand != null)
-        {
-            string lowerProgram = program.ToLowerInvariant();
-            if (lowerProgram is not ("sudo" or "doas" or "gsudo" or "runas") &&
-                !string.Equals(program, _context.ElevationCommand, StringComparison.OrdinalIgnoreCase))
-            {
-                var prefixedArgs = new List<string>(arguments.Count + 1) { program };
-                prefixedArgs.AddRange(arguments);
-                arguments = prefixedArgs;
-                program = _context.ElevationCommand;
-            }
-        }
+        ApplyTildeToArguments(arguments);
+        ApplyElevationIfActive(ref program, ref arguments);
 
         bool isPassthrough = (flags & 0x01) != 0;
         bool isStrict      = (flags & 0x02) != 0;
@@ -113,6 +91,109 @@ public sealed partial class VirtualMachine
                 ["exitCode"] = StashValue.FromInt((long)exitCode)
             }) { StringifyField = "stdout" });
         }
+    }
+
+    private static void ApplyTildeToArguments(List<string> arguments)
+    {
+        string home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        for (int i = 0; i < arguments.Count; i++)
+        {
+            string arg = arguments[i];
+            if (arg == "~")
+                arguments[i] = home;
+            else if (arg.StartsWith("~/", StringComparison.Ordinal) || arg.StartsWith("~\\", StringComparison.Ordinal))
+                arguments[i] = Path.Combine(home, arg[2..]);
+        }
+    }
+
+    private void ApplyElevationIfActive(ref string program, ref List<string> arguments)
+    {
+        if (_context.ElevationActive && _context.ElevationCommand != null)
+        {
+            string lowerProgram = program.ToLowerInvariant();
+            if (lowerProgram is not ("sudo" or "doas" or "gsudo" or "runas") &&
+                !string.Equals(program, _context.ElevationCommand, StringComparison.OrdinalIgnoreCase))
+            {
+                var prefixedArgs = new List<string>(arguments.Count + 1) { program };
+                prefixedArgs.AddRange(arguments);
+                arguments = prefixedArgs;
+                program = _context.ElevationCommand;
+            }
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecutePipeChain(ref CallFrame frame, uint inst)
+    {
+        byte a = Instruction.GetA(inst);
+        byte stageCount = Instruction.GetB(inst);
+        byte partsBase = Instruction.GetC(inst);
+        int @base = frame.BaseSlot;
+        SourceSpan? span = GetCurrentSpan(ref frame);
+
+        // 1. Read B companion words from the instruction stream
+        var stageMetas = new (int PartCount, byte Flags)[stageCount];
+        for (int i = 0; i < stageCount; i++)
+        {
+            uint companion = frame.Chunk.Code[frame.IP++];
+            stageMetas[i] = ((int)((companion >> 8) & 0xFF), (byte)(companion & 0xFF));
+        }
+
+        // 2. Assemble stage descriptors from the parts register block
+        var stages = new List<PipeStage>(stageCount);
+        int regOffset = 0;
+        for (int i = 0; i < stageCount; i++)
+        {
+            var (partCount, flags) = stageMetas[i];
+
+            Span<char> stackBuf = stackalloc char[256];
+            var vsb = new ValueStringBuilder(stackBuf);
+            for (int p = 0; p < partCount; p++)
+                vsb.Append(RuntimeOps.Stringify(_stack[@base + partsBase + regOffset + p]));
+            regOffset += partCount;
+
+            string command = _context.ExpandTilde(vsb.AsSpan().Trim().ToString());
+            vsb.Dispose();
+            if (string.IsNullOrEmpty(command))
+                throw new RuntimeError("Command cannot be empty in pipe chain.", span);
+
+            var (program, arguments) = CommandParser.Parse(command);
+            ApplyTildeToArguments(arguments);
+            ApplyElevationIfActive(ref program, ref arguments);
+
+            stages.Add(new PipeStage(program, arguments, flags));
+        }
+
+        // 3. Execute the streaming pipeline
+        var (stdout, stderr, exitCodes) = ExecPipelineStreaming(stages, span, _ct);
+
+        // 4. Strict mode check on last stage only
+        byte lastFlags = stageMetas[stageCount - 1].Flags;
+        bool isStrict = (lastFlags & 0x01) != 0;
+        int lastExitCode = exitCodes[^1];
+        if (isStrict && lastExitCode != 0)
+        {
+            throw new RuntimeError(
+                $"Command failed with exit code {lastExitCode}.",
+                span, "CommandError")
+            {
+                Properties = new Dictionary<string, object?>
+                {
+                    ["exitCode"] = (long)lastExitCode,
+                    ["stderr"]   = stderr,
+                    ["stdout"]   = stdout,
+                }
+            };
+        }
+
+        // 5. Store CommandResult
+        _stack[@base + a] = StashValue.FromObj(new StashInstance("CommandResult",
+            new Dictionary<string, StashValue>
+            {
+                ["stdout"]   = StashValue.FromObj(stdout),
+                ["stderr"]   = StashValue.FromObj(stderr),
+                ["exitCode"] = StashValue.FromInt((long)lastExitCode)
+            }) { StringifyField = "stdout" });
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

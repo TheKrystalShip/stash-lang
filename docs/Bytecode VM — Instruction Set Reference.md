@@ -1502,16 +1502,44 @@ Concatenates B parts from consecutive registers into a single string. Parts alte
 
 ---
 
-#### `pipe` — Command Pipeline
+#### `pipe.chain` — Streaming Pipe Chain
 
-| Field    | Value              |
-| -------- | ------------------ |
-| Format   | ABC                |
-| Operands | `R(A), R(B), R(C)` |
+| Field    | Value                         |
+| -------- | ----------------------------- |
+| Format   | ABC + B companion words       |
+| Operands | `R(A), R(B), R(C)`            |
 
-**Operation:** `R(A) → R(B) | R(C)` (pipe left command's stdout into right command).
+Execute a streaming shell pipe chain. All stages run concurrently with OS-level pipes connecting them.
 
-Both operands must be command results. The compiler handles the actual piping during command execution; this opcode stores the right-side result.
+| Field | Meaning |
+| ----- | ------- |
+| A     | Destination register (receives `CommandResult`) |
+| B     | Stage count (2–255) |
+| C     | Base register of the flattened parts block |
+
+Followed immediately by B **companion words** (one per stage, in order):
+
+| Bits | Meaning |
+| ---- | ------- |
+| 15–8 | Part count for this stage (number of registers in the parts block) |
+| 7–1  | Reserved (must be 0) |
+| 0    | Strict flag: if 1, a non-zero exit code from the **last stage only** throws `CommandError` |
+
+**Execution model:**
+1. Read B companion words from the instruction stream.
+2. Build command strings from contiguous registers starting at R(C).
+3. Start all N processes with OS pipes: `stdout[0] → stdin[1] → … → stdin[N-1]`.
+4. Drain all stderr streams concurrently (prevents OS buffer deadlock).
+5. Run N-1 pump tasks (`stdout[i] → stdin[i+1]`, 8 KiB char buffer).
+6. Collect final stage stdout; wait for all processes to exit.
+7. Apply strict mode check on the last stage's exit code only.
+8. Write `CommandResult` (stdout, stderr, exitCode) to R(A).
+
+**Notes:**
+- The exit code stored in `CommandResult.exitCode` is the last stage's exit code.
+- `stderr` in `CommandResult` is the last stage's stderr only; intermediate stages' stderr is drained and discarded.
+- If the downstream process exits early (e.g., `head -5`), the upstream pump gets an `IOException` (broken pipe) and terminates gracefully — this is the streaming termination signal.
+- Passthrough commands (`$>(...)`) are rejected at compile time.
 
 ---
 

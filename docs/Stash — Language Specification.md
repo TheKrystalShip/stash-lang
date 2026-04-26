@@ -2192,6 +2192,37 @@ let result = $(cmd1 | cmd2) | $(cmd3);
 
 The `|` operator is **exclusive to command chaining** — it cannot be used between non-command expressions. For logical OR, use `||`.
 
+#### Inline Pipe Syntax
+
+The formal grammar for the inline pipe variant:
+
+```ebnf
+InlinePipe   ::= "$(" PipedCommand ")"
+               | "$!(" PipedCommand ")"
+PipedCommand ::= CommandPart ("|" CommandPart)*
+CommandPart  ::= <whitespace-trimmed command text with ${} interpolations>
+```
+
+String interpolation (`${}`) works in any stage of an inline pipe:
+
+```stash
+let pattern = "world";
+let filtered = $(echo "hello world" | grep ${pattern});
+io.println(filtered.stdout);  // → "hello world"
+
+// Multi-stage transformation
+let result = $(echo "hello world" | tr 'a-z' 'A-Z' | rev);
+io.println(result.stdout);    // → "DLROW OLLEH"
+```
+
+Inline and external pipe syntax mix freely in the same expression — the result is a single pipeline:
+
+```stash
+// 3-stage chain: inline stage followed by external stage
+let lines = $(seq 1 100 | grep "^5") | $(wc -l);
+io.println(lines.stdout);     // → "11"
+```
+
 #### Execution Semantics
 
 Pipe chains use **streaming concurrent execution**. All stages in the chain launch simultaneously as OS-level processes, connected by OS-level pipes — stdout of each stage flows directly into stdin of the next with no buffering in between.
@@ -2212,6 +2243,46 @@ let first5 = $(yes | head -5);
 ```
 
 The exit code of the entire pipe expression is the exit code of the **last command** in the chain (standard POSIX behavior). All stages run to completion regardless of earlier stages' exit codes — there is no short-circuit on failure.
+
+**Strict mode:** The strict variant `$!(...)` applies only to the last stage. A non-zero exit code from the last stage throws `CommandError`; exit codes from intermediate stages are ignored.
+
+```stash
+let result = $!(cat /var/log/syslog | grep error | wc -l);
+// Throws CommandError only if 'wc -l' exits with a non-zero code.
+// 'grep' returning exit code 1 (no matches found) does not throw.
+```
+
+**Stderr capture:** Only the last stage's stderr is captured in `CommandResult.stderr`. Intermediate stages' stderr is drained concurrently and discarded (preventing OS pipe buffer deadlock).
+
+**Passthrough commands** (`$>(...)` and `$!>(...)`) cannot appear in a pipe chain. This is both a static analysis error (SA0710) and a compile-time error. Passthrough commands run with inherited terminal I/O — the OS never routes their stdout into a pipe buffer. Use `$(cmd)` or `$!(cmd)` for commands that participate in pipe chains.
+
+#### Strict Mode in Pipe Chains
+
+The strict modifier (`$!`) determines whether the pipe chain throws a `CommandError` on non-zero exit. Only the **last stage's exit code** is checked — intermediate exit codes are ignored regardless of whether intermediate stages use `$!()`.
+
+```stash
+// Last stage determines outcome
+let r = $(false) | $!(echo "ran");    // succeeds — echo exits 0
+let r = $(echo "hi") | $!(false);     // throws CommandError — false exits 1
+
+// Inline: all stages get $! from the lexer, but only the last matters
+let r = $!(cmd1 | cmd2 | cmd3);      // throws only if cmd3 exits non-zero
+
+// External chain with explicit last-stage strict
+let r = $(cmd1) | $(cmd2) | $!(cmd3); // equivalent semantics
+```
+
+#### Passthrough Commands Cannot Be Piped
+
+```stash
+$>(vim file.txt);          // VALID — standalone passthrough, inherits terminal I/O
+
+$(echo hello) | $>(cat);  // SA0710: passthrough cannot appear in a pipe chain
+$>(cmd1) | $(cmd2);        // SA0710: passthrough cannot appear in a pipe chain
+
+// Use $! for strict captured pipe — not $>
+$(echo hello) | $!(cat);  // valid: strict captured pipe
+```
 
 #### Output Redirection
 

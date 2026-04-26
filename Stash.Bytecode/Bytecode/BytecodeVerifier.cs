@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 
 namespace Stash.Bytecode;
@@ -37,8 +38,8 @@ public sealed class BytecodeVerifier
             uint word = chunk.Code[i];
             var op = Instruction.GetOp(word);
 
-            // 1. Validate opcode range (0–93)
-            if ((byte)op > 93)
+            // 1. Validate opcode range (0–95); keep upper bound in sync with OpCode enum (Rethrow = 95)
+            if ((byte)op > 95)
             {
                 AddError(errors, instrIdx, prefix, $"Invalid opcode {(byte)op}.");
                 lastInstrIdx = instrIdx;
@@ -79,11 +80,34 @@ public sealed class BytecodeVerifier
                 case OpCode.GetTable:
                 case OpCode.SetTable:
                 case OpCode.NewRange:
-                case OpCode.Pipe:
                 case OpCode.In:
                     CheckReg(errors, instrIdx, prefix, chunk, "B", b);
                     CheckReg(errors, instrIdx, prefix, chunk, "C", c);
                     break;
+
+                // ── PipeChain: B=stageCount (not a register), C=partsBase; followed by B companion words ─
+
+                case OpCode.PipeChain:
+                {
+                    // C is partsBase — a register that must be in bounds
+                    CheckReg(errors, instrIdx, prefix, chunk, "C", c);
+                    // B is the stage count — not a register, but must be >= 2
+                    if (b < 2)
+                        AddError(errors, instrIdx, prefix, $"Opcode {op}: stage count B={b} is invalid (must be >= 2).");
+                    // Skip B companion words
+                    int stageCount = b;
+                    for (int s = 0; s < stageCount; s++)
+                    {
+                        i++;
+                        if (i >= len)
+                        {
+                            AddError(errors, instrIdx, prefix, $"Opcode {op}: missing companion word {s} (expected {stageCount} total).");
+                            break;
+                        }
+                        // Companion word: bits 15-8 = partCount, bits 7-0 = flags. No further validation needed.
+                    }
+                    break;
+                }
 
                 // ── B is a register, C is an immediate ──────────────────────────────
 
@@ -283,6 +307,19 @@ public sealed class BytecodeVerifier
                     }
                     break;
                 }
+
+                // ── CatchMatch: ABx — A=errReg (register), Bx=constant index (string[]) ──
+
+                case OpCode.CatchMatch:
+                    // A (errReg) already validated by the general A-register check above.
+                    CheckConstBx(errors, instrIdx, prefix, chunk, bx);
+                    break;
+
+                // ── Rethrow: A=catch register — no operand validation beyond A-register check ─
+
+                case OpCode.Rethrow:
+                    // A (catch register) already validated by the general A-register check above.
+                    break;
             }
 
             lastInstrIdx = instrIdx;
@@ -294,7 +331,7 @@ public sealed class BytecodeVerifier
             var lastOp = Instruction.GetOp(chunk.Code[lastInstrIdx]);
             if (lastOp != OpCode.Return)
             {
-                string opName = (byte)lastOp <= 92 ? lastOp.ToString() : $"op_{(byte)lastOp:x2}";
+                string opName = Enum.IsDefined(lastOp) ? lastOp.ToString() : $"op_{(byte)lastOp:x2}";
                 AddError(errors, lastInstrIdx, prefix,
                     $"Warning: last instruction is {opName} (expected Return); execution may fall off the end.");
             }

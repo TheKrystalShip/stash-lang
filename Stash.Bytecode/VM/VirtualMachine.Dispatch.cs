@@ -398,7 +398,7 @@ public sealed partial class VirtualMachine
 
                 // ==================== Shell Commands ====================
                 case OpCode.Command: ExecuteCommand(ref frame, inst); break;
-                case OpCode.Pipe: ExecutePipe(ref frame, inst); break;
+                case OpCode.PipeChain: ExecutePipeChain(ref frame, inst); break;
                 case OpCode.Redirect: ExecuteRedirect(ref frame, inst); break;
 
                 // ==================== Module Import ====================

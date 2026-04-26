@@ -140,11 +140,76 @@ public sealed partial class Compiler
     {
         byte dest = _destReg;
         _builder.AddSourceMapping(expr.Span);
-        byte leftReg = CompileExpr(expr.Left);
-        byte rightReg = CompileExpr(expr.Right);
-        _builder.EmitABC(OpCode.Pipe, dest, leftReg, rightReg);
-        _scope.FreeTemp(rightReg);
-        _scope.FreeTemp(leftReg);
+
+        // Flatten the left-associative pipe chain into a list of CommandExprs
+        var stages = FlattenPipeChain(expr);
+
+        // Compute merged parts per stage and validate
+        var allMergedParts = new List<List<(Expr? originalExpr, string? folded)>>(stages.Count);
+        int totalParts = 0;
+        foreach (var stage in stages)
+        {
+            var merged = MergeInterpolationParts(stage.Parts);
+            allMergedParts.Add(merged);
+            totalParts += merged.Count;
+        }
+
+        // Reserve a contiguous block for all parts across all stages
+        // (use at least 1 to avoid zero-size reservation issues)
+        byte partsBase = _scope.ReserveRegs(totalParts > 0 ? totalParts : 1);
+
+        // Compile all parts into the register block
+        int regOffset = 0;
+        for (int si = 0; si < stages.Count; si++)
+        {
+            foreach (var (originalExpr, folded) in allMergedParts[si])
+            {
+                byte partReg = (byte)(partsBase + regOffset++);
+                if (folded is not null)
+                {
+                    ushort idx = _builder.AddConstant(folded);
+                    _builder.EmitABx(OpCode.LoadK, partReg, idx);
+                }
+                else
+                {
+                    CompileExprTo(originalExpr!, partReg);
+                }
+            }
+        }
+
+        // Emit PipeChain instruction followed by B companion words
+        _builder.EmitABC(OpCode.PipeChain, dest, (byte)stages.Count, partsBase);
+        for (int si = 0; si < stages.Count; si++)
+        {
+            byte flags = stages[si].IsStrict ? (byte)0x01 : (byte)0x00;
+            uint companion = ((uint)allMergedParts[si].Count << 8) | flags;
+            _builder.EmitRaw(companion);
+        }
+
+        // Free the parts register block
+        _scope.FreeTempFrom(partsBase);
+
         return null;
+    }
+
+    private static List<CommandExpr> FlattenPipeChain(PipeExpr root)
+    {
+        var stages = new List<CommandExpr>();
+        Expr current = root;
+        while (current is PipeExpr pipe)
+        {
+            if (pipe.Right is not CommandExpr rightCmd)
+                throw new CompileError("Pipe stages must be command expressions.", pipe.Right.Span);
+            if (rightCmd.IsPassthrough)
+                throw new CompileError("Passthrough command ($>(...) or $!>(...)) cannot appear in a pipe chain. Use $(cmd) or $!(cmd) instead.", rightCmd.Span);
+            stages.Insert(0, rightCmd);
+            current = pipe.Left;
+        }
+        if (current is not CommandExpr leftCmd)
+            throw new CompileError("Pipe stages must be command expressions.", current.Span);
+        if (leftCmd.IsPassthrough)
+            throw new CompileError("Passthrough command ($>(...) or $!>(...)) cannot appear in a pipe chain. Use $(cmd) or $!(cmd) instead.", leftCmd.Span);
+        stages.Insert(0, leftCmd);
+        return stages;
     }
 }

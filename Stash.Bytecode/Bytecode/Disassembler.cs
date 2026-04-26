@@ -110,7 +110,7 @@ public static class Disassembler
         [OpCode.IfaceDecl]      = "iface.decl",
         [OpCode.Extend]         = "extend",
         [OpCode.Command]        = "command",
-        [OpCode.Pipe]           = "pipe",
+        [OpCode.PipeChain]      = "pipe.chain",
         [OpCode.Redirect]       = "redirect",
         [OpCode.Import]         = "import",
         [OpCode.ImportAs]       = "import.as",
@@ -296,6 +296,24 @@ public static class Disassembler
             if (op == OpCode.CallBuiltIn)
             {
                 idx++;
+            }
+
+            // PipeChain: skip and annotate B companion words (one per stage)
+            if (op == OpCode.PipeChain)
+            {
+                byte stageCount = Instruction.GetB(word);
+                for (int s = 0; s < stageCount; s++)
+                {
+                    idx++;
+                    if (idx < chunk.Code.Length)
+                    {
+                        uint cwWord = chunk.Code[idx];
+                        int partCount = (int)((cwWord >> 8) & 0xFF);
+                        byte flags = (byte)(cwWord & 0xFF);
+                        if (!options.Compact)
+                            sb.AppendLine($"                    ; stage[{s}]: parts={partCount} flags=0x{flags:x2}");
+                    }
+                }
             }
         }
     }
@@ -498,7 +516,7 @@ public static class Disassembler
 
             // Shell
             OpCode.Command     => ($"r{a}, {b}, {c}", null),
-            OpCode.Pipe        => ($"r{a}, r{b}, r{c}", null),
+            OpCode.PipeChain   => ($"r{a}, {b} stages, r{c}", $"parts from r{c}"),
             OpCode.Redirect    => ($"r{a}, r{c}, {b}", null),
             OpCode.Interpolate => ($"r{a}, {b}", null),
 
@@ -554,6 +572,11 @@ public static class Disassembler
                 idx++; // skip companion word
             if (op == OpCode.CallBuiltIn)
                 idx++; // skip companion word
+            if (op == OpCode.PipeChain)
+            {
+                byte stageCount = Instruction.GetB(word);
+                idx += stageCount; // skip companion words
+            }
         }
 
         var labels = new Dictionary<int, string>();

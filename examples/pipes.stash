@@ -1,0 +1,43 @@
+#!usr/bin/env stash
+
+// pipes.stash — Stash pipe operator examples
+
+// ── External pipes: $(cmd1) | $(cmd2) ─────────────────────────────────────
+// Each stage is an independent $() expression
+let result = $(echo "hello world") | $(cat);
+io.println(result.stdout);   // → "hello world"
+
+// Exit code comes from the last stage
+let r = $(false) | $(echo "ran anyway");
+io.println(r.exitCode);      // → 0 (echo succeeded)
+
+// Three stages
+let sorted = $(printf "3\n1\n2") | $(sort) | $(head -2);
+io.println(sorted.stdout);   // → "1\n2"
+
+// ── Inline pipes: $(cmd1 | cmd2) ──────────────────────────────────────────
+// All stages inside one $(). Identical runtime semantics.
+let upper = $(echo "hello world" | tr 'a-z' 'A-Z');
+io.println(upper.stdout);    // → "HELLO WORLD"
+
+// Interpolation in any stage
+let pattern = "world";
+let filtered = $(echo "hello\nworld" | grep ${pattern});
+io.println(filtered.stdout); // → "world"
+
+// Inline + external compose freely
+let composed = $(echo "hello" | cat) | $(cat);
+io.println(composed.stdout); // → "hello"
+
+// ── Strict mode ───────────────────────────────────────────────────────────
+// $!(cmd1 | cmd2) — throws CommandError if the last stage exits non-zero
+try {
+    $!(echo "hello" | false);
+} catch (e) {
+    io.println(e.code);      // → "CommandError"
+    io.println(e.exitCode);  // → 1
+}
+
+// Strict applied to external pipe — only the last $!() stage is strict
+let check = $(false) | $!(echo "ok");
+io.println(check.exitCode);  // → 0 (echo ok succeeded)

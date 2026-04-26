@@ -264,4 +264,41 @@ public class Phase1DiagnosticsTests : AnalysisTestBase
         var diagnostics = Validate(source);
         Assert.Contains(diagnostics, d => d.Code == "SA0708");
     }
+
+    // ── SA0710: Passthrough command in pipe chain ──────────────────
+
+    [Fact]
+    public void SA0710_PassthroughOnRightSideOfPipe_EmitsDiagnostic()
+    {
+        var diagnostics = Validate("$(echo hi) | $>(cat);");
+        Assert.Contains(diagnostics, d => d.Code == "SA0710");
+    }
+
+    [Fact]
+    public void SA0710_PassthroughOnLeftSideOfPipe_EmitsDiagnostic()
+    {
+        var diagnostics = Validate("$>(echo hi) | $(cat);");
+        Assert.Contains(diagnostics, d => d.Code == "SA0710");
+    }
+
+    [Fact]
+    public void SA0710_StrictPassthroughInPipe_EmitsDiagnostic()
+    {
+        var diagnostics = Validate("$(echo hi) | $!>(cat);");
+        Assert.Contains(diagnostics, d => d.Code == "SA0710");
+    }
+
+    [Fact]
+    public void SA0710_StrictPipeChain_NoFalsePositive()
+    {
+        var diagnostics = Validate("$(cmd1) | $!(cmd2);");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0710");
+    }
+
+    [Fact]
+    public void SA0710_NormalPipeChain_NoFalsePositive()
+    {
+        var diagnostics = Validate("$(cmd1) | $(cmd2);");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0710");
+    }
 }

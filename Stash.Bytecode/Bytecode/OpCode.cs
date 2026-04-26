@@ -167,8 +167,8 @@ public enum OpCode : byte
     // === Shell ===
     /// <summary>ABC: R(A) = execute command with B parts from R(A+1)..R(A+B).</summary>
     Command = 64,
-    /// <summary>ABC: R(A) = pipe(R(B), R(C)).</summary>
-    Pipe = 65,
+    /// <summary>ABC + B companion words: execute streaming pipe chain. A=dest, B=stageCount, C=partsBase. Each companion word: bits15-8=partCount, bits7-0=flags (bit0=isStrict).</summary>
+    PipeChain = 65,
     /// <summary>ABC: Redirect R(A) stream (B flags) to file R(C).</summary>
     Redirect = 66,
 

@@ -2369,22 +2369,22 @@ public class InterpreterTests : StashTestBase
         Assert.Equal(0L, result);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
-    public void PassthroughCommand_InPipeRight_ThrowsRuntimeError()
+    [Fact]
+    public void PassthroughCommand_InPipeRight_ThrowsCompileError()
     {
-        RunExpectingError("let result = $(echo hi) | $>(cat);");
+        Assert.Throws<CompileError>(() => Run("let result = $(echo hi) | $>(cat);"));
     }
 
     // ===== Phase 4: Pipe Operator =====
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
     public void Pipe_BasicChain_StdoutPiped()
     {
         var result = Run("let r = $(echo hello) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
     public void Pipe_ExitCodeFromLastCommand()
     {
         // Pipeline exit code comes from the last command (POSIX semantics).
@@ -2393,14 +2393,14 @@ public class InterpreterTests : StashTestBase
         Assert.Equal(0L, result);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
     public void Pipe_ThreeCommands()
     {
         var result = Run("let r = $(echo hello) | $(cat) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
     public void Pipe_GrepFilter()
     {
         // echo two lines, grep for one
@@ -2408,7 +2408,8 @@ public class InterpreterTests : StashTestBase
         Assert.Contains("world", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_StreamingHeadTerminatesProducer()
     {
         // yes outputs infinite "y" lines; head -5 reads 5 then closes stdin.
@@ -2420,9 +2421,11 @@ public class InterpreterTests : StashTestBase
         Assert.All(lines, line => Assert.Equal("y", line));
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_LargeDataStreams()
     {
+        if (OperatingSystem.IsWindows()) return;
         // Generate a large output and pipe through wc -l to verify streaming works
         // without buffering the entire output in memory.
         var result = Run("let r = $(seq 1 10000) | $(wc -l); let result = r.stdout;");
@@ -2430,9 +2433,11 @@ public class InterpreterTests : StashTestBase
         Assert.Equal("10000", stdout);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_GrepNonMatchExitCode()
     {
+        if (OperatingSystem.IsWindows()) return;
         // grep returns exit code 1 when no matches found.
         // Pipeline exit code should reflect the last command's status.
         var result = Run("let r = $(echo hello) | $(grep nomatch); let result = r.exitCode;");
@@ -2442,48 +2447,58 @@ public class InterpreterTests : StashTestBase
     [Fact]
     public void Pipe_AllStagesMustBeCommands()
     {
-        RunExpectingError("let r = $(echo hi) | 42;");
+        Assert.Throws<CompileError>(() => Run("let r = $(echo hi) | 42;"));
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
     public void Pipe_PassthroughInPipelineThrowsError()
     {
-        RunExpectingError("let r = $>(echo hi) | $(cat);");
+        Assert.Throws<CompileError>(() => Run("let r = $>(echo hi) | $(cat);"));
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_StderrFromLastCommand()
     {
+        if (OperatingSystem.IsWindows()) return;
         // Only the last command's stderr is captured.
         var result = Run("let r = $(echo hello) | $(cat /dev/null/nonexistent); let result = r.stderr;");
         Assert.IsType<string>(result);
         Assert.True(((string)result!).Length > 0, "Expected stderr from last pipeline stage");
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_FourCommandChain()
     {
+        if (OperatingSystem.IsWindows()) return;
         var result = Run(@"let r = $(printf ""3\n1\n2"") | $(sort) | $(head -2) | $(tail -1); let result = r.stdout;");
         Assert.Contains("2", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_WithInterpolation()
     {
+        if (OperatingSystem.IsWindows()) return;
         var result = Run(@"let pattern = ""hello""; let r = $(echo hello world) | $(grep ${pattern}); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_InlineBasicChain()
     {
+        if (OperatingSystem.IsWindows()) return;
         var result = Run("let r = $(echo hello | cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_InlineThreeStages()
     {
+        if (OperatingSystem.IsWindows()) return;
         var result = Run(@"let r = $(printf ""3\n1\n2"" | sort | head -2); let result = r.stdout;");
         string stdout = ((string)result!).Trim();
         Assert.Contains("1", stdout);
@@ -2491,32 +2506,40 @@ public class InterpreterTests : StashTestBase
         Assert.DoesNotContain("3", stdout);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_InlineMixedWithExternal()
     {
+        if (OperatingSystem.IsWindows()) return;
         // Inline pipe + external pipe
         var result = Run("let r = $(echo hello | cat) | $(cat); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_InlineWithInterpolation()
     {
+        if (OperatingSystem.IsWindows()) return;
         var result = Run(@"let pattern = ""hello""; let r = $(echo hello world | grep ${pattern}); let result = r.stdout;");
         Assert.Contains("hello", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_InlineLargeData()
     {
+        if (OperatingSystem.IsWindows()) return;
         var result = Run("let r = $(seq 1 10000 | wc -l); let result = r.stdout;");
         string stdout = ((string)result!).Trim();
         Assert.Equal("10000", stdout);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void Pipe_InlineStreamingHead()
     {
+        if (OperatingSystem.IsWindows()) return;
         // yes outputs infinite lines; head -5 reads 5 then terminates the pipe
         var result = Run("let r = $(yes | head -5); let result = r.stdout;");
         string stdout = (string)result!;
@@ -9605,17 +9628,21 @@ fn makeAdder(x) {
 
     // ── Strict Command Pipeline Tests ───────────────────────────────────
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void StrictCommand_Pipeline_Success_ReturnsCommandResult()
     {
+        if (OperatingSystem.IsWindows()) return;
         var result = Run("let r = $!(echo hello | tr a-z A-Z); let result = r.stdout;");
         Assert.IsType<string>(result);
         Assert.Contains("HELLO", (string)result!);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void StrictCommand_Pipeline_Failure_ThrowsCommandError()
     {
+        if (OperatingSystem.IsWindows()) return;
         var ex = Assert.Throws<RuntimeError>(() =>
             Run("$!(echo hello | false); let result = null;")
         );
@@ -9623,9 +9650,11 @@ fn makeAdder(x) {
         Assert.Contains("Command failed", ex.Message);
     }
 
-    [Fact(Skip = "Pipes are blocking the test suite due to a deadlock issue. Need to investigate and fix before re-enabling.")]
+    [Fact]
+    [Trait("Category", "Unix")]
     public void StrictCommand_Pipeline_Failure_CaughtExitCode()
     {
+        if (OperatingSystem.IsWindows()) return;
         string source = @"
             let result = null;
             try {
