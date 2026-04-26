@@ -1,0 +1,67 @@
+#!usr/bin/env stash
+
+// Typed Catch — Multi-clause Error Handling Example
+
+// Error taxonomy: functions throw specific error types
+// TypeError, ValueError, IndexError, KeyError, IOError, ParseError, etc.
+
+fn parseAge(input) {
+    let n = conv.toInt(input);
+    if (n < 0 || n > 150) {
+        throw ValueError { message: "Age must be between 0 and 150, got " + n };
+    }
+    return n;
+}
+
+// Multi-clause typed catch
+fn processAge(input) {
+    try {
+        let age = parseAge(input);
+        io.println("Parsed age: " + age);
+    } catch (ParseError e) {
+        io.println("Not a valid number: " + e.message);
+    } catch (ValueError e) {
+        io.println("Out of range: " + e.message);
+    } catch (e) {
+        io.println("Unexpected error: " + e.type + " — " + e.message);
+    }
+}
+
+processAge("25");     // Parsed age: 25
+processAge("abc");    // Not a valid number: Cannot parse 'abc' as integer.
+processAge("-1");     // Out of range: Age must be between 0 and 150, got -1
+
+// Union type catch
+fn readConfig(path) {
+    try {
+        return fs.readText(path);
+    } catch (IOError | ValueError e) {
+        io.println("Config unavailable: " + e.message);
+        return null;
+    }
+}
+
+// Bare rethrow — re-throws preserving type and call stack
+fn strictParse(input) {
+    try {
+        return conv.toInt(input);
+    } catch (ParseError e) {
+        io.println("Parse failed, rethrowing...");
+        throw;  // re-throw ParseError with original stack
+    }
+}
+
+// e.stack — access the call stack as a list of strings
+fn showStack() {
+    try {
+        conv.toInt("bad");
+    } catch (e) {
+        io.println("Error type: " + e.type);
+        io.println("Stack frames:");
+        for (frame in e.stack) {
+            io.println("  " + frame);
+        }
+    }
+}
+
+showStack();

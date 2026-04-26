@@ -31,7 +31,7 @@ public static class BufBuiltIns
                 "latin1" => System.Text.Encoding.Latin1,
                 "utf-16" or "utf16" => System.Text.Encoding.Unicode,
                 "utf-32" or "utf32" => System.Text.Encoding.UTF32,
-                _ => throw new RuntimeError($"buf.from: unsupported encoding '{encoding}'. Supported: utf-8, ascii, latin1, utf-16, utf-32.")
+                _ => throw new RuntimeError($"buf.from: unsupported encoding '{encoding}'. Supported: utf-8, ascii, latin1, utf-16, utf-32.", errorType: "ValueError")
             };
             return StashValue.FromObj(new StashByteArray(enc.GetBytes(s)));
         },
@@ -50,7 +50,7 @@ public static class BufBuiltIns
             }
             catch (FormatException)
             {
-                throw new RuntimeError($"buf.fromHex: invalid hex string '{hex}'.");
+                throw new RuntimeError($"buf.fromHex: invalid hex string '{hex}'.", errorType: "ParseError");
             }
         },
             returnType: "byte[]",
@@ -65,7 +65,7 @@ public static class BufBuiltIns
             }
             catch (FormatException)
             {
-                throw new RuntimeError($"buf.fromBase64: invalid base64 string.");
+                throw new RuntimeError($"buf.fromBase64: invalid base64 string.", errorType: "ParseError");
             }
         },
             returnType: "byte[]",
@@ -74,7 +74,7 @@ public static class BufBuiltIns
         ns.Function("alloc", [Param("size", "int"), Param("fill", "byte")], static (IInterpreterContext _, ReadOnlySpan<StashValue> args) =>
         {
             int size = (int)SvArgs.Long(args, 0, "buf.alloc");
-            if (size < 0) throw new RuntimeError($"buf.alloc: size must be non-negative, got {size}.");
+            if (size < 0) throw new RuntimeError($"buf.alloc: size must be non-negative, got {size}.", errorType: "ValueError");
             byte[] data = new byte[size];
             if (args.Length >= 2)
             {
@@ -99,11 +99,11 @@ public static class BufBuiltIns
                 {
                     long n = v.AsInt;
                     if (n < 0 || n > 255)
-                        throw new RuntimeError($"buf.of: argument {i} has value {n} which is out of byte range [0, 255].");
+                        throw new RuntimeError($"buf.of: argument {i} has value {n} which is out of byte range [0, 255].", errorType: "ValueError");
                     data[i] = (byte)n;
                 }
                 else
-                    throw new RuntimeError($"buf.of: argument {i} must be a byte or int (0-255).");
+                    throw new RuntimeError($"buf.of: argument {i} must be a byte or int (0-255).", errorType: "TypeError");
             }
             return StashValue.FromObj(new StashByteArray(data));
         },
@@ -124,7 +124,7 @@ public static class BufBuiltIns
                 "latin1" => System.Text.Encoding.Latin1,
                 "utf-16" or "utf16" => System.Text.Encoding.Unicode,
                 "utf-32" or "utf32" => System.Text.Encoding.UTF32,
-                _ => throw new RuntimeError($"buf.toString: unsupported encoding '{encoding}'.")
+                _ => throw new RuntimeError($"buf.toString: unsupported encoding '{encoding}'.", errorType: "ValueError")
             };
             return StashValue.FromObj(enc.GetString(ba.AsSpan()));
         },
@@ -182,7 +182,7 @@ public static class BufBuiltIns
             if (searchVal.IsByte || searchVal.IsInt)
             {
                 long rawVal = searchVal.IsByte ? searchVal.AsByte : searchVal.AsInt;
-                if (rawVal < 0 || rawVal > 255) throw new RuntimeError("buf.indexOf: search byte must be in range [0, 255].");
+                if (rawVal < 0 || rawVal > 255) throw new RuntimeError("buf.indexOf: search byte must be in range [0, 255].", errorType: "ValueError");
                 byte needle = (byte)rawVal;
                 int idx = haystack.Slice(from).IndexOf(needle);
                 return StashValue.FromInt(idx >= 0 ? idx + from : -1);
@@ -192,7 +192,7 @@ public static class BufBuiltIns
                 int idx = haystack.Slice(from).IndexOf(searchBa.AsSpan());
                 return StashValue.FromInt(idx >= 0 ? idx + from : -1);
             }
-            throw new RuntimeError("Second argument to 'buf.indexOf' must be a byte, int (0-255), or byte[].");
+            throw new RuntimeError("Second argument to 'buf.indexOf' must be a byte, int (0-255), or byte[].", errorType: "TypeError");
         },
             returnType: "int",
             isVariadic: true,
@@ -206,14 +206,14 @@ public static class BufBuiltIns
             if (searchVal.IsByte || searchVal.IsInt)
             {
                 long rawVal = searchVal.IsByte ? searchVal.AsByte : searchVal.AsInt;
-                if (rawVal < 0 || rawVal > 255) throw new RuntimeError("buf.includes: search byte must be in range [0, 255].");
+                if (rawVal < 0 || rawVal > 255) throw new RuntimeError("buf.includes: search byte must be in range [0, 255].", errorType: "ValueError");
                 return StashValue.FromBool(haystack.Contains((byte)rawVal));
             }
             if (searchVal.IsObj && searchVal.AsObj is StashByteArray searchBa)
             {
                 return StashValue.FromBool(haystack.IndexOf(searchBa.AsSpan()) >= 0);
             }
-            throw new RuntimeError("Second argument to 'buf.includes' must be a byte, int (0-255), or byte[].");
+            throw new RuntimeError("Second argument to 'buf.includes' must be a byte, int (0-255), or byte[].", errorType: "TypeError");
         },
             returnType: "bool",
             documentation: "Checks if a byte array contains a byte or subsequence.\n@param data The byte array\n@param search The byte or byte[] to find\n@return true if found");
@@ -254,7 +254,7 @@ public static class BufBuiltIns
                 if (args[i].IsObj && args[i].AsObj is StashByteArray ba)
                     totalLen += ba.Count;
                 else
-                    throw new RuntimeError($"Argument {i + 1} to 'buf.concat' must be a byte[].");
+                    throw new RuntimeError($"Argument {i + 1} to 'buf.concat' must be a byte[].", errorType: "TypeError");
             }
             byte[] result = new byte[totalLen];
             int offset = 0;
@@ -278,9 +278,9 @@ public static class BufBuiltIns
             int srcStart = args.Length >= 4 ? (int)SvArgs.Long(args, 3, "buf.copy") : 0;
             int srcEnd = args.Length >= 5 ? (int)SvArgs.Long(args, 4, "buf.copy") : src.Count;
             if (srcStart < 0 || srcEnd < 0 || destOffset < 0)
-                throw new RuntimeError("buf.copy: offsets must be non-negative.");
+                throw new RuntimeError("buf.copy: offsets must be non-negative.", errorType: "ValueError");
             if (srcStart > src.Count || srcEnd > src.Count)
-                throw new RuntimeError("buf.copy: source range out of bounds.");
+                throw new RuntimeError("buf.copy: source range out of bounds.", errorType: "IndexError");
             int count = Math.Min(srcEnd - srcStart, dest.Count - destOffset);
             if (count <= 0) return StashValue.FromInt(0);
             ReadOnlySpan<byte> srcSpan = src.AsSpan().Slice(srcStart, count);
@@ -491,7 +491,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint8");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeUint8");
             long val = SvArgs.Long(args, 2, "buf.writeUint8");
-            if (val < 0 || val > 255) throw new RuntimeError($"buf.writeUint8: value {val} out of range [0, 255].");
+            if (val < 0 || val > 255) throw new RuntimeError($"buf.writeUint8: value {val} out of range [0, 255].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 1, "buf.writeUint8");
             ba.GetBackingArray(out int _)[offset] = (byte)val;
             return StashValue.Null;
@@ -504,7 +504,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint16BE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeUint16BE");
             long val = SvArgs.Long(args, 2, "buf.writeUint16BE");
-            if (val < 0 || val > 65535) throw new RuntimeError($"buf.writeUint16BE: value {val} out of range [0, 65535].");
+            if (val < 0 || val > 65535) throw new RuntimeError($"buf.writeUint16BE: value {val} out of range [0, 65535].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 2, "buf.writeUint16BE");
             BinaryPrimitives.WriteUInt16BigEndian(ba.GetBackingArray(out int _).AsSpan(offset), (ushort)val);
             return StashValue.Null;
@@ -517,7 +517,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint16LE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeUint16LE");
             long val = SvArgs.Long(args, 2, "buf.writeUint16LE");
-            if (val < 0 || val > 65535) throw new RuntimeError($"buf.writeUint16LE: value {val} out of range [0, 65535].");
+            if (val < 0 || val > 65535) throw new RuntimeError($"buf.writeUint16LE: value {val} out of range [0, 65535].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 2, "buf.writeUint16LE");
             BinaryPrimitives.WriteUInt16LittleEndian(ba.GetBackingArray(out int _).AsSpan(offset), (ushort)val);
             return StashValue.Null;
@@ -530,7 +530,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint32BE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeUint32BE");
             long val = SvArgs.Long(args, 2, "buf.writeUint32BE");
-            if (val < 0 || val > 4294967295L) throw new RuntimeError($"buf.writeUint32BE: value {val} out of range [0, 4294967295].");
+            if (val < 0 || val > 4294967295L) throw new RuntimeError($"buf.writeUint32BE: value {val} out of range [0, 4294967295].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 4, "buf.writeUint32BE");
             BinaryPrimitives.WriteUInt32BigEndian(ba.GetBackingArray(out int _).AsSpan(offset), (uint)val);
             return StashValue.Null;
@@ -543,7 +543,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeUint32LE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeUint32LE");
             long val = SvArgs.Long(args, 2, "buf.writeUint32LE");
-            if (val < 0 || val > 4294967295L) throw new RuntimeError($"buf.writeUint32LE: value {val} out of range [0, 4294967295].");
+            if (val < 0 || val > 4294967295L) throw new RuntimeError($"buf.writeUint32LE: value {val} out of range [0, 4294967295].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 4, "buf.writeUint32LE");
             BinaryPrimitives.WriteUInt32LittleEndian(ba.GetBackingArray(out int _).AsSpan(offset), (uint)val);
             return StashValue.Null;
@@ -556,7 +556,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt8");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeInt8");
             long val = SvArgs.Long(args, 2, "buf.writeInt8");
-            if (val < -128 || val > 127) throw new RuntimeError($"buf.writeInt8: value {val} out of range [-128, 127].");
+            if (val < -128 || val > 127) throw new RuntimeError($"buf.writeInt8: value {val} out of range [-128, 127].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 1, "buf.writeInt8");
             ba.GetBackingArray(out int _)[offset] = (byte)(sbyte)val;
             return StashValue.Null;
@@ -569,7 +569,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt16BE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeInt16BE");
             long val = SvArgs.Long(args, 2, "buf.writeInt16BE");
-            if (val < -32768 || val > 32767) throw new RuntimeError($"buf.writeInt16BE: value {val} out of range [-32768, 32767].");
+            if (val < -32768 || val > 32767) throw new RuntimeError($"buf.writeInt16BE: value {val} out of range [-32768, 32767].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 2, "buf.writeInt16BE");
             BinaryPrimitives.WriteInt16BigEndian(ba.GetBackingArray(out int _).AsSpan(offset), (short)val);
             return StashValue.Null;
@@ -582,7 +582,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt16LE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeInt16LE");
             long val = SvArgs.Long(args, 2, "buf.writeInt16LE");
-            if (val < -32768 || val > 32767) throw new RuntimeError($"buf.writeInt16LE: value {val} out of range [-32768, 32767].");
+            if (val < -32768 || val > 32767) throw new RuntimeError($"buf.writeInt16LE: value {val} out of range [-32768, 32767].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 2, "buf.writeInt16LE");
             BinaryPrimitives.WriteInt16LittleEndian(ba.GetBackingArray(out int _).AsSpan(offset), (short)val);
             return StashValue.Null;
@@ -595,7 +595,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt32BE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeInt32BE");
             long val = SvArgs.Long(args, 2, "buf.writeInt32BE");
-            if (val < -2147483648L || val > 2147483647L) throw new RuntimeError($"buf.writeInt32BE: value {val} out of range [-2147483648, 2147483647].");
+            if (val < -2147483648L || val > 2147483647L) throw new RuntimeError($"buf.writeInt32BE: value {val} out of range [-2147483648, 2147483647].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 4, "buf.writeInt32BE");
             BinaryPrimitives.WriteInt32BigEndian(ba.GetBackingArray(out int _).AsSpan(offset), (int)val);
             return StashValue.Null;
@@ -608,7 +608,7 @@ public static class BufBuiltIns
             StashByteArray ba = SvArgs.ByteArray(args, 0, "buf.writeInt32LE");
             int offset = (int)SvArgs.Long(args, 1, "buf.writeInt32LE");
             long val = SvArgs.Long(args, 2, "buf.writeInt32LE");
-            if (val < -2147483648L || val > 2147483647L) throw new RuntimeError($"buf.writeInt32LE: value {val} out of range [-2147483648, 2147483647].");
+            if (val < -2147483648L || val > 2147483647L) throw new RuntimeError($"buf.writeInt32LE: value {val} out of range [-2147483648, 2147483647].", errorType: "ValueError");
             CheckWriteBounds(ba, offset, 4, "buf.writeInt32LE");
             BinaryPrimitives.WriteInt32LittleEndian(ba.GetBackingArray(out int _).AsSpan(offset), (int)val);
             return StashValue.Null;

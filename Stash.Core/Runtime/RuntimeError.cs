@@ -50,6 +50,12 @@ public class RuntimeError : Exception
     public List<StashError>? SuppressedErrors { get; init; }
 
     /// <summary>
+    /// The call stack captured when this error was thrown or caught, or <c>null</c> if not captured.
+    /// Set by the VM at the catch boundary or unhandled boundary.
+    /// </summary>
+    public List<StackFrame>? CallStack { get; set; }
+
+    /// <summary>
     /// Initializes a new <see cref="RuntimeError"/> with a human-readable message and an
     /// optional source location.
     /// </summary>

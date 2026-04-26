@@ -360,18 +360,23 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitThrowStmt(ThrowStmt stmt)
     {
-        stmt.Value.Accept(this);
+        stmt.Value?.Accept(this);
         return 0;
     }
 
     public int VisitTryCatchStmt(TryCatchStmt stmt)
     {
         stmt.TryBody.Accept(this);
-        if (stmt.CatchBody is not null)
+        foreach (CatchClause clause in stmt.CatchClauses)
         {
-            if (stmt.CatchVariable is not null)
-                EmitFromToken(stmt.CatchVariable, TokenTypeVariable, ModifierDeclaration);
-            stmt.CatchBody.Accept(this);
+            // Emit type tokens for typed catch clauses
+            foreach (Token typeToken in clause.TypeTokens)
+            {
+                if (typeToken.Lexeme != "Error")
+                    EmitFromToken(typeToken, TokenTypeType, 0);
+            }
+            EmitFromToken(clause.Variable, TokenTypeVariable, ModifierDeclaration);
+            clause.Body.Accept(this);
         }
         stmt.FinallyBody?.Accept(this);
         return 0;

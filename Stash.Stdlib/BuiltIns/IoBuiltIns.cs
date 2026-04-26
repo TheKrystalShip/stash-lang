@@ -130,7 +130,7 @@ public static class IoBuiltIns
                 {
                     string? line = ctx.Input.ReadLine();
                     if (line is null)
-                        throw new RuntimeError("io.readPassword: input cancelled.");
+                        throw new RuntimeError("io.readPassword: input cancelled.", errorType: "IOError");
                     collected = line;
                 }
                 else
@@ -161,7 +161,7 @@ public static class IoBuiltIns
             {
                 string? line = ctx.Input.ReadLine();
                 if (line is null)
-                    throw new RuntimeError("io.readPassword: input cancelled.");
+                    throw new RuntimeError("io.readPassword: input cancelled.", errorType: "IOError");
                 return line;
             }
 
@@ -176,7 +176,7 @@ public static class IoBuiltIns
             }
 
             if (key.Key == ConsoleKey.C && (key.Modifiers & ConsoleModifiers.Control) != 0)
-                throw new RuntimeError("io.readPassword: input cancelled.");
+                throw new RuntimeError("io.readPassword: input cancelled.", errorType: "IOError");
 
             if (key.KeyChar != '\0' && !char.IsControl(key.KeyChar))
                 sb.Append(key.KeyChar);

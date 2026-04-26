@@ -102,7 +102,7 @@ public sealed class DefiniteAssignmentRule : IAnalysisRule
                 break;
 
             case ThrowStmt throwStmt:
-                CheckReadsInExpr(throwStmt.Value, uninitInBlock, context);
+                if (throwStmt.Value != null) CheckReadsInExpr(throwStmt.Value, uninitInBlock, context);
                 break;
 
             case IfStmt ifStmt:
@@ -176,10 +176,10 @@ public sealed class DefiniteAssignmentRule : IAnalysisRule
             case TryCatchStmt tryCatch:
                 var tryAssigned = new HashSet<string>(definitelyAssigned);
                 AnalyzeBlock(tryCatch.TryBody.Statements, tryAssigned, context);
-                if (tryCatch.CatchBody != null)
+                foreach (var clause in tryCatch.CatchClauses)
                 {
                     var catchAssigned = new HashSet<string>(definitelyAssigned);
-                    AnalyzeBlock(tryCatch.CatchBody.Statements, catchAssigned, context);
+                    AnalyzeBlock(clause.Body.Statements, catchAssigned, context);
                 }
                 if (tryCatch.FinallyBody != null)
                 {

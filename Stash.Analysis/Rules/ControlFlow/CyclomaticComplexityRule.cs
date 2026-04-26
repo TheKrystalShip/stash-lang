@@ -106,11 +106,11 @@ public sealed class CyclomaticComplexityRule : IAnalysisRule, IConfigurableRule
                 break;
 
             case TryCatchStmt tryCatch:
-                if (tryCatch.CatchBody != null)
+                if (tryCatch.CatchClauses.Count > 0)
                     count++; // catch clause counts as a branch
                 CountStmts(tryCatch.TryBody.Statements, ref count);
-                if (tryCatch.CatchBody != null)
-                    CountStmts(tryCatch.CatchBody.Statements, ref count);
+                foreach (var clause in tryCatch.CatchClauses)
+                    CountStmts(clause.Body.Statements, ref count);
                 if (tryCatch.FinallyBody != null)
                     CountStmts(tryCatch.FinallyBody.Statements, ref count);
                 break;

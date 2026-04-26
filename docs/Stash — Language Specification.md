@@ -264,11 +264,11 @@ Dynamically typed. Values carry their type at runtime. The following built-in ty
 | `bool`      | `true`, `false`                            |                                               |
 | `null`      | `null`                                     | Absence of value                              |
 | `array`     | `[1, 2, 3]`, `["a", 42, true]`             | Ordered, mixed-type, dynamic-size             |
-| `int[]`     | `let a: int[] = [1, 2, 3]`                  | Typed array — homogeneous integers            |
-| `float[]`   | `let a: float[] = [1.0, 2.5]`               | Typed array — homogeneous floats              |
-| `string[]`  | `let a: string[] = ["a", "b"]`              | Typed array — homogeneous strings             |
-| `bool[]`    | `let a: bool[] = [true, false]`             | Typed array — homogeneous booleans            |
-| `byte[]`    | `let a: byte[] = buf.from("hello")`         | Typed array — homogeneous bytes (0–255)       |
+| `int[]`     | `let a: int[] = [1, 2, 3]`                 | Typed array — homogeneous integers            |
+| `float[]`   | `let a: float[] = [1.0, 2.5]`              | Typed array — homogeneous floats              |
+| `string[]`  | `let a: string[] = ["a", "b"]`             | Typed array — homogeneous strings             |
+| `bool[]`    | `let a: bool[] = [true, false]`            | Typed array — homogeneous booleans            |
+| `byte[]`    | `let a: byte[] = buf.from("hello")`        | Typed array — homogeneous bytes (0–255)       |
 | `struct`    | `Server { host: "...", ... }`              | Named structured data (see Section 5)         |
 | `enum`      | `Status.Active`, `Color.Red`               | Named constants (see Section 5b)              |
 | `dict`      | `{ key: value }`, `dict.new()`             | Key-value map (see Section 5c)                |
@@ -1540,7 +1540,7 @@ for (let item in inventory) {
 | ---------------------------- | ------------- | ------------- |
 | `42`                         | `"int"`       | `"int"`       |
 | `"hi"`                       | `"string"`    | `"string"`    |
-| `let a: int[] = [1]`             | `"int[]"`   | `"int[]"`   |
+| `let a: int[] = [1]`         | `"int[]"`     | `"int[]"`     |
 | `null`                       | `"null"`      | `"null"`      |
 | `Printable` (interface)      | `"interface"` | `"Printable"` |
 | `Product` (struct def)       | `"struct"`    | `"Product"`   |
@@ -2733,6 +2733,8 @@ Stash uses a **`try` expression** model with first-class **error values** — li
 
 By default, runtime errors **crash the script** with a stack trace. This is the right behavior for most scripting — fail loudly, fix the problem. When you _expect_ an operation might fail, you opt in to error handling with `try`.
 
+The CLI renders uncaught errors with **source context** — three lines of source around the error site — making it easy to locate the failure without opening a separate file.
+
 ### The `try` Expression
 
 `try` is a **prefix expression** that wraps any expression. On success, `try` returns the value normally. On failure, `try` catches the error and returns an **Error value** instead of crashing.
@@ -2756,11 +2758,11 @@ io.println(n);           // 42
 
 Error values are first-class values with their own type. They carry three fields:
 
-| Field      | Type     | Description                                           |
-| ---------- | -------- | ----------------------------------------------------- |
-| `.message` | `string` | Human-readable error description                      |
-| `.type`    | `string` | Error category (e.g. `"RuntimeError"`, `"TypeError"`) |
-| `.stack`   | `array?` | Call stack at the point of failure                    |
+| Field      | Type       | Description                                                                                         |
+| ---------- | ---------- | --------------------------------------------------------------------------------------------------- |
+| `.message` | `string`   | Human-readable error description                                                                    |
+| `.type`    | `string`   | Error type name (e.g. `"TypeError"`, `"IOError"`) — see [Error Type Taxonomy](#error-type-taxonomy) |
+| `.stack`   | `string[]` | Call stack frames at the point of failure — each entry like `"  at fn (file:line:col)"`             |
 
 Error values are **falsy** — they evaluate to `false` in boolean contexts. This makes them compose naturally with `??`:
 
@@ -2786,6 +2788,11 @@ io.println(last.message);    // "Cannot parse 'abc' as integer."
 `throw` raises a runtime error from user code. The throw value determines the error's type and message:
 
 ```stash
+// Throw a typed error — preferred; creates a first-class error with the given type and message
+throw TypeError("Expected a string, got int");
+throw ValueError("Age must be between 0 and 150");
+throw IOError("Cannot read /etc/config: permission denied");
+
 // Throw a string — becomes a RuntimeError
 throw "something went wrong";
 
@@ -2898,22 +2905,81 @@ try {
 #### Syntax
 
 ```stash
-try { ... }                              // bare try — error suppression
-try { ... } catch (variable) { ... }     // catch errors
-try { ... } finally { ... }              // guaranteed cleanup
-try { ... } catch (e) { ... } finally { ... }  // both
+try { ... }                                         // bare try — error suppression
+try { ... } catch (e) { ... }                       // catch-all
+try { ... } catch (TypeError e) { ... }             // typed catch — specific type only
+try { ... } catch (IOError | ValueError e) { ... }  // union catch — either type
+try { ... } catch (TypeError e) { ... } catch (e) { ... }  // multi-clause
+try { ... } finally { ... }                         // guaranteed cleanup
+try { ... } catch (e) { ... } finally { ... }       // both
 ```
 
-The `catch` clause declares a variable that receives the Error value (same fields as `try expr` errors: `.message`, `.type`, `.stack`). The `finally` clause runs unconditionally — after the try body on success, after the catch body on error.
+Multiple `catch` clauses are evaluated in order. The **first matching clause** handles the error; remaining clauses are skipped. If no clause matches, the error propagates to the next enclosing handler.
+
+The `catch` clause declares a variable scoped to its body that receives the Error value (`.message`, `.type`, `.stack`). The `finally` clause runs unconditionally — after the try body on success, after the catch body on error.
+
+#### Catch Forms
+
+| Clause form                           | Matches                                            |
+| ------------------------------------- | -------------------------------------------------- |
+| `catch (e) { }`                       | Catch-all — matches any error                      |
+| `catch (Error e) { }`                 | Catch-all — `Error` is reserved and always matches |
+| `catch (TypeError e) { }`             | Only matches `TypeError`                           |
+| `catch (IOError \| ValueError e) { }` | Matches `IOError` or `ValueError` (union)          |
+
+> **Note:** `Error` is a reserved identifier in catch clauses — it always acts as a catch-all, matching any error regardless of type. Using `catch (Error e)` is equivalent to `catch (e)`.
+
+#### Multi-clause Catch
+
+```stash
+try {
+    // ...
+} catch (TypeError e) {
+    // only handles TypeError
+} catch (ValueError | ParseError e) {
+    // handles either ValueError or ParseError
+} catch (e) {
+    // catch-all — handles anything not matched above
+}
+```
+
+**Clause ordering rules:**
+
+- More specific types must come before catch-all clauses.
+- A typed clause after a catch-all is unreachable (static analysis error `SA0161`).
+- Duplicate catch-all clauses produce static analysis warning `SA0162`.
+
+#### Error Type Taxonomy
+
+Stash assigns every runtime error a **type string** accessible via `e.type`. The built-in taxonomy:
+
+| Type                | Trigger                                                     |
+| ------------------- | ----------------------------------------------------------- |
+| `TypeError`         | Wrong type passed to a function                             |
+| `ValueError`        | Valid type, invalid value (e.g. out-of-range, empty string) |
+| `IndexError`        | Array or string index out of bounds                         |
+| `KeyError`          | Dictionary key not found                                    |
+| `IOError`           | File or network I/O failure                                 |
+| `ParseError`        | Parsing failure (JSON, config files, number conversion)     |
+| `CommandError`      | Shell command exited with a non-zero exit code              |
+| `NotSupportedError` | Operation not supported on this platform                    |
+| `TimeoutError`      | Network or async operation timed out                        |
+| `AssertionError`    | Failed assertion (test framework)                           |
+| `RuntimeError`      | Default / uncategorized error                               |
+
+> **Note:** Catching `RuntimeError` by name is discouraged — it is the default catch-all type in the taxonomy. Prefer specific types where possible. The static analysis engine emits `SA0163` (warning) when `RuntimeError` is caught by name.
 
 #### Four Forms
 
-| Form                                | Behavior                                              |
-| ----------------------------------- | ----------------------------------------------------- |
-| `try { } catch (e) { }`             | Catches errors; `e` is the Error value                |
-| `try { } finally { }`               | No catch — errors propagate after `finally` runs      |
-| `try { } catch (e) { } finally { }` | Catches errors, then `finally` always runs            |
-| `try { }`                           | Bare try — silently suppresses errors (use sparingly) |
+| Form                                    | Behavior                                              |
+| --------------------------------------- | ----------------------------------------------------- |
+| `try { } catch (e) { }`                 | Catch-all; `e` is the Error value                     |
+| `try { } catch (T e) { }`               | Typed catch; only matches type `T`                    |
+| `try { } catch (T \| U e) { }`          | Union catch; matches type `T` or `U`                  |
+| `try { } catch (T e) { } catch (e) { }` | Multi-clause; first match wins                        |
+| `try { } finally { }`                   | No catch — errors propagate after `finally` runs      |
+| `try { } catch (e) { } finally { }`     | Catches errors, then `finally` always runs            |
+| `try { }`                               | Bare try — silently suppresses errors (use sparingly) |
 
 #### Catch Variable Scoping
 
@@ -2946,14 +3012,43 @@ If the `catch` block itself throws, `finally` still runs before the new error pr
 
 #### Rethrow in Catch
 
-Rethrow a caught error to add context or re-signal it:
+Re-signal a caught error in two ways:
+
+**`throw e`** — throw the error value explicitly. Re-raises with the type and message preserved, but the call stack resets to the point of rethrow:
 
 ```stash
 try {
     riskyOperation();
 } catch (e) {
     io.eprintln("Failed: " + e.message);
-    throw e;  // re-throws the original error
+    throw e;  // re-throws the error value
+}
+```
+
+**`throw;`** — bare rethrow. Re-throws the original `RuntimeError`, preserving the original source span and call stack. This is the preferred form when you want to rethrow without any modification:
+
+```stash
+try {
+    riskyOperation();
+} catch (ParseError e) {
+    io.eprintln("Parse failed, logging and rethrowing");
+    throw;  // re-throws ParseError with original stack intact
+}
+```
+
+`throw;` is only valid inside a `catch` block. Using it outside a catch block is a static analysis error (`SA0160`).
+
+**Stack trace access** — use `e.stack` to inspect or log the call stack before rethrowing:
+
+```stash
+try {
+    conv.toInt("bad");
+} catch (e) {
+    io.println("Error type: " + e.type);
+    for (frame in e.stack) {
+        io.println(frame);  // "  at fn (file:line:col)"
+    }
+    throw;
 }
 ```
 
@@ -2976,21 +3071,40 @@ try {
 
 #### When to Use Which
 
-| Pattern                             | Use case                                              |
-| ----------------------------------- | ----------------------------------------------------- |
-| `try expr ?? default`               | Quick fallback for a single fallible expression       |
-| `try expr` + `is Error`             | Inspect error details for a single expression         |
-| `try { } catch (e) { }`             | Handle errors across multiple statements              |
-| `try { } finally { }`               | Guaranteed resource cleanup (files, locks, temp dirs) |
-| `try { } catch (e) { } finally { }` | Both error handling and cleanup                       |
+| Pattern                                 | Use case                                              |
+| --------------------------------------- | ----------------------------------------------------- |
+| `try expr ?? default`                   | Quick fallback for a single fallible expression       |
+| `try expr` + `is Error`                 | Inspect error details for a single expression         |
+| `try { } catch (e) { }`                 | Handle any error across multiple statements           |
+| `try { } catch (TypeError e) { }`       | Handle a specific error type                          |
+| `try { } catch (T e) { } catch (e) { }` | Multi-clause: specific types + catch-all fallback     |
+| `try { } finally { }`                   | Guaranteed resource cleanup (files, locks, temp dirs) |
+| `try { } catch (e) { } finally { }`     | Both error handling and cleanup                       |
 
 Both patterns are first-class — `try expr` is lightweight and composable; `try/catch/finally` is structured and scoped. Choose based on complexity.
+
+### Static Analysis
+
+The following diagnostics apply to typed catch:
+
+| Code     | Severity | Description                                                         |
+| -------- | -------- | ------------------------------------------------------------------- |
+| `SA0160` | Error    | Bare `throw;` outside a catch block                                 |
+| `SA0161` | Error    | Typed catch clause after a catch-all — the clause is unreachable    |
+| `SA0162` | Warning  | Duplicate catch-all clauses in the same try statement               |
+| `SA0163` | Warning  | Catching `RuntimeError` by name — prefer a more specific error type |
 
 ### Implementation
 
 **`try expr`:** A single AST node (`TryExpr`) wrapping another expression. On failure, the interpreter catches the internal `RuntimeError`, converts it to a `StashError` value (with message, type, and stack trace), stores it for `lastError()`, and returns it. Error values are falsy, making them compatible with `??` for default-value patterns.
 
-**`try/catch/finally`:** A statement AST node (`TryCatchStmt`) with try body, optional catch clause (keyword + variable + body), and optional finally clause (keyword + body). The parser disambiguates at the `try` keyword: if the next token is `{`, it parses a `TryCatchStmt`; otherwise, it parses a `try expr` (`TryExpr`). `throw` is a statement node (`ThrowStmt`) that raises a `RuntimeError` from user code.
+**`try/catch/finally`:** A statement AST node (`TryCatchStmt`) with a try body, one or more catch clauses, and an optional finally clause. Each catch clause carries a type-name list (empty = catch-all), a variable name, and a body. The parser disambiguates at the `try` keyword: if the next token is `{`, it parses a `TryCatchStmt`; otherwise, it parses a `try expr` (`TryExpr`).
+
+**Typed catch dispatch:** The compiler emits a `CatchMatch` instruction (opcode 94) for each catch clause. `CatchMatch` compares the error's `.type` string against the clause's type-name array; an empty array is a catch-all. A match skips the following `Jmp`; a miss falls through to the `Jmp` leading to the next clause. If the last clause is typed and none matched, a `Rethrow` (opcode 95) re-raises the original exception.
+
+**Bare rethrow:** `throw;` compiles to `Rethrow` (opcode 95). It re-throws the `StashError`'s original `RuntimeError` (preserving span and call stack), or synthesises a new `RuntimeError` from the error's message and type if no original exception is available.
+
+**`throw`:** A statement node (`ThrowStmt`) that raises a `RuntimeError` from user code. Typed error constructors (e.g. `throw TypeError("msg")`) are sugar for constructing a `StashError` with the given type and message.
 
 ### Design History
 

@@ -28,6 +28,13 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
     public List<StashError>? Suppressed { get; set; }
 
     /// <summary>
+    /// The original <see cref="RuntimeError"/> that produced this StashError.
+    /// Set by the VM when catching an exception. Used by bare <c>throw;</c> rethrow
+    /// to preserve the original source span and call stack. Not accessible from Stash code.
+    /// </summary>
+    public RuntimeError? OriginalException { get; set; }
+
+    /// <summary>
     /// Creates a <see cref="StashError"/> from a caught <see cref="RuntimeError"/> and an optional call stack.
     /// </summary>
     public static StashError FromRuntimeError(RuntimeError error, IReadOnlyList<(string FunctionName, SourceSpan CallSite)>? callStack)

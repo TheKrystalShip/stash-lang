@@ -2844,7 +2844,7 @@ public class InterpreterTests : StashTestBase
             let result = err.type;
         ";
         var resultVal = Run(source);
-        Assert.Equal("RuntimeError", resultVal);
+        Assert.Equal("ParseError", resultVal);
     }
 
     [Fact]

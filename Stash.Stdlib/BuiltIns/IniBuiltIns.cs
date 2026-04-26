@@ -29,7 +29,7 @@ public static class IniBuiltIns
             }
             catch (Exception e) when (e is not RuntimeError)
             {
-                throw new RuntimeError("ini.parse: failed to parse INI — " + e.Message);
+                throw new RuntimeError("ini.parse: failed to parse INI — " + e.Message, errorType: "ParseError");
             }
         },
             returnType: "dict",

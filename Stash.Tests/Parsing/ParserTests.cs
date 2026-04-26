@@ -1340,10 +1340,12 @@ public class ParserTests
     }
 
     [Fact]
-    public void Parse_Throw_MissingExpression_ReportsError()
+    public void Parse_Throw_BareRethrow_ParsesSuccessfully()
     {
-        var parser = ParseProgramWithParser("throw ;");
-        Assert.NotEmpty(parser.Errors);
+        // Bare throw; is valid syntax (re-throw inside catch body)
+        var stmts = ParseProgram("throw;");
+        var throwStmt = Assert.IsType<ThrowStmt>(stmts[0]);
+        Assert.Null(throwStmt.Value);
     }
 
     // ===== Phase 5: Null Coalescing (??) =====

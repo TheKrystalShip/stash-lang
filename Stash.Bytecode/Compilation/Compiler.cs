@@ -37,6 +37,7 @@ public sealed partial class Compiler : IExprVisitor<object?>, IStmtVisitor<objec
     private Stack<LoopContext>? _loops;
     private List<FinallyInfo>? _activeFinally;
     private List<string>? _upvalueNames;
+    private byte _activeCatchErrReg;  // register of the nearest enclosing catch handler's error, for bare rethrow
 
     /// <summary>Info about an active try-finally block for break/continue/return handling.</summary>
     private sealed class FinallyInfo

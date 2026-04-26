@@ -58,9 +58,10 @@ public sealed class EmptyBlockRule : IAnalysisRule
                 {
                     context.ReportDiagnostic(DiagnosticDescriptors.SA0105.CreateDiagnostic(tryBlock.Span, "try"));
                 }
-                if (tcs.CatchBody is BlockStmt catchBlock && catchBlock.Statements.Count == 0)
+                foreach (var clause in tcs.CatchClauses)
                 {
-                    context.ReportDiagnostic(DiagnosticDescriptors.SA0105.CreateDiagnostic(catchBlock.Span, "catch"));
+                    if (clause.Body.Statements.Count == 0)
+                        context.ReportDiagnostic(DiagnosticDescriptors.SA0105.CreateDiagnostic(clause.Body.Span, "catch"));
                 }
                 break;
         }

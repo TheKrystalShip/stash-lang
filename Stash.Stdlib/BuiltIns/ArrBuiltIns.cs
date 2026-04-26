@@ -49,12 +49,12 @@ public static class ArrBuiltIns
             if (arrVal.IsObj && arrVal.AsObj is StashTypedArray taPop)
             {
                 if (taPop.Count == 0)
-                    throw new RuntimeError("Cannot pop from an empty array.");
+                    throw new RuntimeError("Cannot pop from an empty array.", errorType: "ValueError");
                 return taPop.RemoveLast();
             }
             var list = SvArgs.StashList(args, 0, "arr.pop");
             if (list.Count == 0)
-                throw new RuntimeError("Cannot pop from an empty array.");
+                throw new RuntimeError("Cannot pop from an empty array.", errorType: "ValueError");
             var last = list[list.Count - 1];
             list.RemoveAt(list.Count - 1);
             return last;
@@ -66,7 +66,7 @@ public static class ArrBuiltIns
         {
             var list = SvArgs.StashList(args, 0, "arr.peek");
             if (list.Count == 0)
-                throw new RuntimeError("Cannot peek an empty array.");
+                throw new RuntimeError("Cannot peek an empty array.", errorType: "ValueError");
             return list[list.Count - 1];
         },
             returnType: "any",
@@ -80,13 +80,13 @@ public static class ArrBuiltIns
             {
                 int i = (int)(idx < 0 ? idx + taInsert.Count : idx);
                 if (i < 0 || i > taInsert.Count)
-                    throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.");
+                    throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.", errorType: "IndexError");
                 taInsert.Insert(i, args[2]);
                 return StashValue.Null;
             }
             var list = SvArgs.StashList(args, 0, "arr.insert");
             if (idx < 0 || idx > list.Count)
-                throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.");
+                throw new RuntimeError($"Index {idx} is out of bounds for 'arr.insert'.", errorType: "IndexError");
             list.Insert((int)idx, args[2]);
             return StashValue.Null;
         },
@@ -107,7 +107,7 @@ public static class ArrBuiltIns
             }
             var list = SvArgs.StashList(args, 0, "arr.removeAt");
             if (idx < 0 || idx >= list.Count)
-                throw new RuntimeError($"Index {idx} is out of bounds for 'arr.removeAt'.");
+                throw new RuntimeError($"Index {idx} is out of bounds for 'arr.removeAt'.", errorType: "IndexError");
             var removedVal = list[(int)idx];
             list.RemoveAt((int)idx);
             return removedVal;
@@ -314,7 +314,7 @@ public static class ArrBuiltIns
                             var res = ctx.InvokeCallbackDirect(cmp, new StashValue[] { a, b }).ToObject();
                             if (res is long l) return l < 0 ? -1 : l > 0 ? 1 : 0;
                             if (res is double d) return d < 0 ? -1 : d > 0 ? 1 : 0;
-                            throw new RuntimeError("'arr.sort' comparator must return a number.");
+                            throw new RuntimeError("'arr.sort' comparator must return a number.", errorType: "TypeError");
                         });
                     }
                     else
@@ -328,7 +328,7 @@ public static class ArrBuiltIns
                             if (ao is long la2 && bo is double db2) return ((double)la2).CompareTo(db2);
                             if (ao is double da2 && bo is long lb2) return da2.CompareTo((double)lb2);
                             if (ao is string sa && bo is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
-                            throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.");
+                            throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.", errorType: "TypeError");
                         });
                     }
                 }
@@ -350,7 +350,7 @@ public static class ArrBuiltIns
                         var res = ctx.InvokeCallbackDirect(cmp, new StashValue[] { a, b }).ToObject();
                         if (res is long l) return l < 0 ? -1 : l > 0 ? 1 : 0;
                         if (res is double d) return d < 0 ? -1 : d > 0 ? 1 : 0;
-                        throw new RuntimeError("'arr.sort' comparator must return a number.");
+                        throw new RuntimeError("'arr.sort' comparator must return a number.", errorType: "TypeError");
                     });
                 }
                 else
@@ -364,7 +364,7 @@ public static class ArrBuiltIns
                         if (ao is long la2 && bo is double db2) return ((double)la2).CompareTo(db2);
                         if (ao is double da2 && bo is long lb2) return da2.CompareTo((double)lb2);
                         if (ao is string sa && bo is string sb) return string.Compare(sa, sb, StringComparison.Ordinal);
-                        throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.");
+                        throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sort'.", errorType: "TypeError");
                     });
                 }
             }
@@ -696,7 +696,7 @@ public static class ArrBuiltIns
                 var v = item.ToObject();
                 if (v is long l) longTotal += l;
                 else if (v is double d) { doubleTotal += d; hasFloat = true; }
-                else throw new RuntimeError("'arr.sum' requires all elements to be numbers.");
+                else throw new RuntimeError("'arr.sum' requires all elements to be numbers.", errorType: "TypeError");
             }
             return hasFloat ? StashValue.FromFloat(doubleTotal + longTotal) : StashValue.FromInt(longTotal);
         },
@@ -707,7 +707,7 @@ public static class ArrBuiltIns
         {
             var list = SvArgs.StashList(args, 0, "arr.min");
             if (list.Count == 0)
-                throw new RuntimeError("'arr.min' requires a non-empty array.");
+                throw new RuntimeError("'arr.min' requires a non-empty array.", errorType: "ValueError");
             double min = double.MaxValue;
             bool hasFloat = false;
             foreach (var item in list)
@@ -715,7 +715,7 @@ public static class ArrBuiltIns
                 var v = item.ToObject();
                 if (v is long l) { if (l < min) min = l; }
                 else if (v is double d) { if (d < min) min = d; hasFloat = true; }
-                else throw new RuntimeError("'arr.min' requires all elements to be numbers.");
+                else throw new RuntimeError("'arr.min' requires all elements to be numbers.", errorType: "TypeError");
             }
             return hasFloat ? StashValue.FromFloat(min) : StashValue.FromInt((long)min);
         },
@@ -726,7 +726,7 @@ public static class ArrBuiltIns
         {
             var list = SvArgs.StashList(args, 0, "arr.max");
             if (list.Count == 0)
-                throw new RuntimeError("'arr.max' requires a non-empty array.");
+                throw new RuntimeError("'arr.max' requires a non-empty array.", errorType: "ValueError");
             double max = double.MinValue;
             bool hasFloat = false;
             foreach (var item in list)
@@ -734,7 +734,7 @@ public static class ArrBuiltIns
                 var v = item.ToObject();
                 if (v is long l) { if (l > max) max = l; }
                 else if (v is double d) { if (d > max) max = d; hasFloat = true; }
-                else throw new RuntimeError("'arr.max' requires all elements to be numbers.");
+                else throw new RuntimeError("'arr.max' requires all elements to be numbers.", errorType: "TypeError");
             }
             return hasFloat ? StashValue.FromFloat(max) : StashValue.FromInt((long)max);
         },
@@ -760,7 +760,7 @@ public static class ArrBuiltIns
             var list = SvArgs.StashList(args, 0, "arr.chunk");
             var size = SvArgs.Long(args, 1, "arr.chunk");
             if (size <= 0)
-                throw new RuntimeError("'arr.chunk' size must be > 0.");
+                throw new RuntimeError("'arr.chunk' size must be > 0.", errorType: "ValueError");
             var result = new List<StashValue>();
             for (int i = 0; i < list.Count; i += (int)size)
             {
@@ -878,7 +878,7 @@ public static class ArrBuiltIns
         {
             string elementType = SvArgs.String(args, 0, "arr.new");
             long size = SvArgs.Long(args, 1, "arr.new");
-            if (size < 0) throw new RuntimeError("Array size cannot be negative.");
+            if (size < 0) throw new RuntimeError("Array size cannot be negative.", errorType: "ValueError");
             StashTypedArray result = StashTypedArray.CreateWithCapacity(elementType, (int)size);
             return StashValue.FromObj(result);
         }, returnType: "array", documentation: "Creates a new zero-initialized typed array with the specified size.\n@param elementType The element type: \"int\", \"float\", \"string\", or \"bool\"\n@param size The number of elements (zero-initialized)\n@return A new typed array");
@@ -890,11 +890,11 @@ public static class ArrBuiltIns
     {
         if (args.Count < 2 || args[1].ToObject() is not IStashCallable callable)
         {
-            throw new RuntimeError("arr.parMap() expects (array, function, [maxConcurrency]).");
+            throw new RuntimeError("arr.parMap() expects (array, function, [maxConcurrency]).", errorType: "TypeError");
         }
         List<StashValue> list;
         if (args[0].ToObject() is List<StashValue> l1) list = l1;
-        else throw new RuntimeError("arr.parMap() expects (array, function, [maxConcurrency]).");
+        else throw new RuntimeError("arr.parMap() expects (array, function, [maxConcurrency]).", errorType: "TypeError");
 
         int maxConcurrency = ParseMaxConcurrency(args, "arr.parMap");
         int count = list.Count;
@@ -938,11 +938,11 @@ public static class ArrBuiltIns
     {
         if (args.Count < 2 || args[1].ToObject() is not IStashCallable callable)
         {
-            throw new RuntimeError("arr.parFilter() expects (array, function, [maxConcurrency]).");
+            throw new RuntimeError("arr.parFilter() expects (array, function, [maxConcurrency]).", errorType: "TypeError");
         }
         List<StashValue> list;
         if (args[0].ToObject() is List<StashValue> l1) list = l1;
-        else throw new RuntimeError("arr.parFilter() expects (array, function, [maxConcurrency]).");
+        else throw new RuntimeError("arr.parFilter() expects (array, function, [maxConcurrency]).", errorType: "TypeError");
 
         int maxConcurrency = ParseMaxConcurrency(args, "arr.parFilter");
         int count = list.Count;
@@ -995,11 +995,11 @@ public static class ArrBuiltIns
     {
         if (args.Count < 2 || args[1].ToObject() is not IStashCallable callable)
         {
-            throw new RuntimeError("arr.parForEach() expects (array, function, [maxConcurrency]).");
+            throw new RuntimeError("arr.parForEach() expects (array, function, [maxConcurrency]).", errorType: "TypeError");
         }
         List<StashValue> list;
         if (args[0].ToObject() is List<StashValue> l1) list = l1;
-        else throw new RuntimeError("arr.parForEach() expects (array, function, [maxConcurrency]).");
+        else throw new RuntimeError("arr.parForEach() expects (array, function, [maxConcurrency]).", errorType: "TypeError");
 
         int maxConcurrency = ParseMaxConcurrency(args, "arr.parForEach");
         var exceptions = new System.Collections.Concurrent.ConcurrentBag<Exception>();
@@ -1048,13 +1048,13 @@ public static class ArrBuiltIns
         {
             if (n < 1)
             {
-                throw new RuntimeError($"Third argument to '{fnName}' (maxConcurrency) must be >= 1.");
+                throw new RuntimeError($"Third argument to '{fnName}' (maxConcurrency) must be >= 1.", errorType: "ValueError");
             }
 
             return (int)n;
         }
 
-        throw new RuntimeError($"Third argument to '{fnName}' (maxConcurrency) must be an integer.");
+        throw new RuntimeError($"Third argument to '{fnName}' (maxConcurrency) must be an integer.", errorType: "TypeError");
     }
 
     private static void FlattenInto(List<StashValue> source, List<StashValue> result, int depth)
@@ -1095,6 +1095,6 @@ public static class ArrBuiltIns
             return string.Compare(sa, sb, StringComparison.Ordinal);
         }
 
-        throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sortBy'.");
+        throw new RuntimeError("Cannot compare values of incompatible types in 'arr.sortBy'.", errorType: "TypeError");
     }
 }

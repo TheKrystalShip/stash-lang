@@ -62,17 +62,17 @@ public static class ArchiveBuiltIns
                 var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.zip") : DefaultOptions;
 
                 if (inputPaths.Count == 0)
-                    throw new RuntimeError("archive.zip: input paths cannot be empty.");
+                    throw new RuntimeError("archive.zip: input paths cannot be empty.", errorType: "ValueError");
 
                 // Check for existing file
                 if (File.Exists(outputPath) && !options.Overwrite)
-                    throw new RuntimeError($"archive.zip: file already exists: '{outputPath}'");
+                    throw new RuntimeError($"archive.zip: file already exists: '{outputPath}'", errorType: "IOError");
 
                 // Validate input paths exist
                 foreach (var p in inputPaths)
                 {
                     if (!File.Exists(p) && !Directory.Exists(p))
-                        throw new RuntimeError($"archive.zip: file not found: '{p}'");
+                        throw new RuntimeError($"archive.zip: file not found: '{p}'", errorType: "IOError");
                 }
 
                 try
@@ -111,11 +111,11 @@ public static class ArchiveBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (UnauthorizedAccessException)
                 {
-                    throw new RuntimeError($"archive.zip: permission denied: '{outputPath}'");
+                    throw new RuntimeError($"archive.zip: permission denied: '{outputPath}'", errorType: "IOError");
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"archive.zip: failed to create archive: {ex.Message}");
+                    throw new RuntimeError($"archive.zip: failed to create archive: {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "string",
@@ -134,7 +134,7 @@ public static class ArchiveBuiltIns
                 var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.unzip") : DefaultOptions;
 
                 if (!File.Exists(archivePath))
-                    throw new RuntimeError($"archive.unzip: file not found: '{archivePath}'");
+                    throw new RuntimeError($"archive.unzip: file not found: '{archivePath}'", errorType: "IOError");
 
                 try
                 {
@@ -161,10 +161,10 @@ public static class ArchiveBuiltIns
                         // Security check — prevent path traversal
                         var destPathFull = Path.GetFullPath(destPath);
                         if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
-                            throw new RuntimeError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'");
+                            throw new RuntimeError($"archive.unzip: entry would extract outside target directory: '{entry.FullName}'", errorType: "ValueError");
 
                         if (File.Exists(destPath) && !options.Overwrite)
-                            throw new RuntimeError($"archive.unzip: file already exists: '{destPath}'");
+                            throw new RuntimeError($"archive.unzip: file already exists: '{destPath}'", errorType: "IOError");
 
                         var destDir = Path.GetDirectoryName(destPath);
                         if (!string.IsNullOrEmpty(destDir))
@@ -179,15 +179,15 @@ public static class ArchiveBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (InvalidDataException)
                 {
-                    throw new RuntimeError($"archive.unzip: invalid ZIP archive: '{archivePath}'");
+                    throw new RuntimeError($"archive.unzip: invalid ZIP archive: '{archivePath}'", errorType: "ParseError");
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    throw new RuntimeError($"archive.unzip: permission denied: '{outputDir}'");
+                    throw new RuntimeError($"archive.unzip: permission denied: '{outputDir}'", errorType: "IOError");
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"archive.unzip: failed to extract archive: {ex.Message}");
+                    throw new RuntimeError($"archive.unzip: failed to extract archive: {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "array",
@@ -206,17 +206,17 @@ public static class ArchiveBuiltIns
                 var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.tar") : DefaultOptions;
 
                 if (inputPaths.Count == 0)
-                    throw new RuntimeError("archive.tar: input paths cannot be empty.");
+                    throw new RuntimeError("archive.tar: input paths cannot be empty.", errorType: "ValueError");
 
                 // Check for existing file
                 if (File.Exists(outputPath) && !options.Overwrite)
-                    throw new RuntimeError($"archive.tar: file already exists: '{outputPath}'");
+                    throw new RuntimeError($"archive.tar: file already exists: '{outputPath}'", errorType: "IOError");
 
                 // Validate input paths exist
                 foreach (var p in inputPaths)
                 {
                     if (!File.Exists(p) && !Directory.Exists(p))
-                        throw new RuntimeError($"archive.tar: file not found: '{p}'");
+                        throw new RuntimeError($"archive.tar: file not found: '{p}'", errorType: "IOError");
                 }
 
                 try
@@ -280,11 +280,11 @@ public static class ArchiveBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (UnauthorizedAccessException)
                 {
-                    throw new RuntimeError($"archive.tar: permission denied: '{outputPath}'");
+                    throw new RuntimeError($"archive.tar: permission denied: '{outputPath}'", errorType: "IOError");
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"archive.tar: failed to create archive: {ex.Message}");
+                    throw new RuntimeError($"archive.tar: failed to create archive: {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "string",
@@ -303,7 +303,7 @@ public static class ArchiveBuiltIns
                 var options = args.Length > 2 ? GetArchiveOptions(args[2], "archive.untar") : DefaultOptions;
 
                 if (!File.Exists(archivePath))
-                    throw new RuntimeError($"archive.untar: file not found: '{archivePath}'");
+                    throw new RuntimeError($"archive.untar: file not found: '{archivePath}'", errorType: "IOError");
 
                 try
                 {
@@ -346,10 +346,10 @@ public static class ArchiveBuiltIns
                             // Security check — prevent path traversal
                             var destPathFull = Path.GetFullPath(destPath);
                             if (!destPathFull.StartsWith(outputDirFull, StringComparison.Ordinal))
-                                throw new RuntimeError($"archive.untar: entry would extract outside target directory: '{entry.Name}'");
+                                throw new RuntimeError($"archive.untar: entry would extract outside target directory: '{entry.Name}'", errorType: "ValueError");
 
                             if (File.Exists(destPath) && !options.Overwrite)
-                                throw new RuntimeError($"archive.untar: file already exists: '{destPath}'");
+                                throw new RuntimeError($"archive.untar: file already exists: '{destPath}'", errorType: "IOError");
 
                             var destDir = Path.GetDirectoryName(destPath);
                             if (!string.IsNullOrEmpty(destDir))
@@ -370,15 +370,15 @@ public static class ArchiveBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (InvalidDataException)
                 {
-                    throw new RuntimeError($"archive.untar: invalid TAR archive: '{archivePath}'");
+                    throw new RuntimeError($"archive.untar: invalid TAR archive: '{archivePath}'", errorType: "ParseError");
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    throw new RuntimeError($"archive.untar: permission denied: '{outputDir}'");
+                    throw new RuntimeError($"archive.untar: permission denied: '{outputDir}'", errorType: "IOError");
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"archive.untar: failed to extract archive: {ex.Message}");
+                    throw new RuntimeError($"archive.untar: failed to extract archive: {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "array",
@@ -395,7 +395,7 @@ public static class ArchiveBuiltIns
                 var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gzip"));
 
                 if (!File.Exists(inputPath))
-                    throw new RuntimeError($"archive.gzip: file not found: '{inputPath}'");
+                    throw new RuntimeError($"archive.gzip: file not found: '{inputPath}'", errorType: "IOError");
 
                 var outputPath = args.Length > 1 && !args[1].IsNull
                     ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gzip"))
@@ -413,11 +413,11 @@ public static class ArchiveBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (UnauthorizedAccessException)
                 {
-                    throw new RuntimeError($"archive.gzip: permission denied: '{outputPath}'");
+                    throw new RuntimeError($"archive.gzip: permission denied: '{outputPath}'", errorType: "IOError");
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"archive.gzip: failed to compress file: {ex.Message}");
+                    throw new RuntimeError($"archive.gzip: failed to compress file: {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "string",
@@ -434,7 +434,7 @@ public static class ArchiveBuiltIns
                 var inputPath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.gunzip"));
 
                 if (!File.Exists(inputPath))
-                    throw new RuntimeError($"archive.gunzip: file not found: '{inputPath}'");
+                    throw new RuntimeError($"archive.gunzip: file not found: '{inputPath}'", errorType: "IOError");
 
                 var outputPath = args.Length > 1 && !args[1].IsNull
                     ? ctx.ExpandTilde(SvArgs.String(args, 1, "archive.gunzip"))
@@ -448,7 +448,7 @@ public static class ArchiveBuiltIns
 
                     // Validate it's a gzip file
                     if (!IsGzipFile(inputStream))
-                        throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'");
+                        throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: "ParseError");
 
                     inputStream.Position = 0;
 
@@ -461,15 +461,15 @@ public static class ArchiveBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (InvalidDataException)
                 {
-                    throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'");
+                    throw new RuntimeError($"archive.gunzip: invalid gzip file: '{inputPath}'", errorType: "ParseError");
                 }
                 catch (UnauthorizedAccessException)
                 {
-                    throw new RuntimeError($"archive.gunzip: permission denied: '{outputPath}'");
+                    throw new RuntimeError($"archive.gunzip: permission denied: '{outputPath}'", errorType: "IOError");
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"archive.gunzip: failed to decompress file: {ex.Message}");
+                    throw new RuntimeError($"archive.gunzip: failed to decompress file: {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "string",
@@ -486,7 +486,7 @@ public static class ArchiveBuiltIns
                 var archivePath = ctx.ExpandTilde(SvArgs.String(args, 0, "archive.list"));
 
                 if (!File.Exists(archivePath))
-                    throw new RuntimeError($"archive.list: file not found: '{archivePath}'");
+                    throw new RuntimeError($"archive.list: file not found: '{archivePath}'", errorType: "IOError");
 
                 var entries = new List<StashValue>();
 
@@ -546,7 +546,7 @@ public static class ArchiveBuiltIns
                     }
                     else
                     {
-                        throw new RuntimeError($"archive.list: unsupported archive format: '{archivePath}'");
+                        throw new RuntimeError($"archive.list: unsupported archive format: '{archivePath}'", errorType: "ValueError");
                     }
 
                     return StashValue.FromObj(entries);
@@ -554,11 +554,11 @@ public static class ArchiveBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (InvalidDataException)
                 {
-                    throw new RuntimeError($"archive.list: invalid archive: '{archivePath}'");
+                    throw new RuntimeError($"archive.list: invalid archive: '{archivePath}'", errorType: "ParseError");
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"archive.list: failed to read archive: {ex.Message}");
+                    throw new RuntimeError($"archive.list: failed to read archive: {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "array",

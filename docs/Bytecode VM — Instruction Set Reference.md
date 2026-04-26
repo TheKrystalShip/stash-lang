@@ -39,7 +39,7 @@ The Stash bytecode VM is a **register-based virtual machine** that executes fixe
 
 | Physical CPU    | Stash VM                                                            |
 | --------------- | ------------------------------------------------------------------- |
-| Instruction Set | 92 opcodes across 14 categories                                     |
+| Instruction Set | 95 opcodes across 14 categories                                     |
 | Registers       | Virtual registers `r0..rN` (windows into a flat value stack)        |
 | Machine code    | 32-bit instruction words                                            |
 | Program counter | `IP` (instruction pointer) per call frame                           |
@@ -1415,6 +1415,48 @@ The thrown `RuntimeError` is caught by the outermost VM loop. If an exception ha
 **Operation:** `R(A) → R(B)`
 
 Simple register copy used after a catch clause to move the exception handler's result to the destination register. Used in `try` expressions (as opposed to `try` statements).
+
+---
+
+#### `catch.match` — Typed Catch Dispatch (Opcode 94)
+
+| Field    | Value              |
+| -------- | ------------------ |
+| Format   | ABx                |
+| Operands | `R(A), K(Bx)`      |
+
+**Operation:** Multi-clause typed catch dispatch.
+
+- `R(A)` holds the caught `StashError`.
+- `K(Bx)` is a `string[]` constant containing the type names this clause handles (e.g., `["TypeError"]` or `["IOError", "ValueError"]`).
+
+Matching rules:
+
+1. If the type-name array is **empty** — this is a catch-all clause. Skip the following instruction (IP++) unconditionally.
+2. Otherwise, check if the error's `.type` string matches any name in the array (exact string comparison).
+   - **Match:** IP++ (skips the `Jmp` that would jump to the next clause).
+   - **No match:** Fall through to the `Jmp`, which transfers control to the next catch clause.
+
+If the last catch clause is typed (not catch-all) and no clause matched, a `Rethrow` is emitted after the final `Jmp` to propagate the original error.
+
+Used by: multi-clause typed `catch` dispatch in `try/catch` statements.
+
+---
+
+#### `rethrow` — Bare Rethrow (Opcode 95)
+
+| Field    | Value  |
+| -------- | ------ |
+| Format   | A only |
+| Operands | `R(A)` |
+
+**Operation:** Re-throw the caught error, preserving its original exception, source span, and call stack.
+
+- `R(A)` holds the caught `StashError`.
+- If the error has an `OriginalException` (a C# `RuntimeError`), that exception is re-thrown directly — preserving the original IP, span, and C# call stack.
+- If there is no original exception (e.g., the error was constructed from a string or dict), a new `RuntimeError` is synthesised from the error's `.message` and `.type` and thrown.
+
+Used by: bare `throw;` inside catch bodies; also emitted when the final typed catch clause in a multi-clause chain does not match (implicit rethrow).
 
 ---
 

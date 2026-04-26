@@ -83,7 +83,7 @@ public sealed class DeadStoreRule : IAnalysisRule
             case ReturnStmt ret when ret.Value != null:
                 ClearReadsInExpr(ret.Value, pending);
                 break;
-            case ThrowStmt throwStmt:
+            case ThrowStmt throwStmt when throwStmt.Value != null:
                 ClearReadsInExpr(throwStmt.Value, pending);
                 break;
             case IfStmt ifStmt:
@@ -160,8 +160,8 @@ public sealed class DeadStoreRule : IAnalysisRule
                 break;
             case TryCatchStmt tryCatch:
                 AnalyzeBlock(tryCatch.TryBody.Statements, context);
-                if (tryCatch.CatchBody != null)
-                    AnalyzeBlock(tryCatch.CatchBody.Statements, context);
+                foreach (var clause in tryCatch.CatchClauses)
+                    AnalyzeBlock(clause.Body.Statements, context);
                 if (tryCatch.FinallyBody != null)
                     AnalyzeBlock(tryCatch.FinallyBody.Statements, context);
                 break;

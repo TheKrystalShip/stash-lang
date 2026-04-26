@@ -3,6 +3,7 @@ namespace Stash.Analysis;
 using System;
 using System.Collections.Generic;
 using Stash.Analysis.Rules;
+using Stash.Lexing;
 using Stash.Parsing.AST;
 using Stash.Stdlib;
 
@@ -19,6 +20,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private int _functionDepth;
     private int _elevateDepth;
     private int _asyncDepth;
+    private int _catchDepth;
 
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
@@ -389,7 +391,16 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitThrowStmt(ThrowStmt stmt)
     {
-        stmt.Value.Accept(this);
+        if (stmt.Value is null)
+        {
+            // Bare rethrow
+            if (_catchDepth == 0)
+                _diagnostics.Add(DiagnosticDescriptors.SA0160.CreateDiagnostic(stmt.Keyword.Span));
+        }
+        else
+        {
+            stmt.Value.Accept(this);
+        }
         return null;
     }
 
@@ -398,9 +409,36 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         DispatchNodeRules(stmt);
 
         stmt.TryBody.Accept(this);
-        stmt.CatchBody?.Accept(this);
-        stmt.FinallyBody?.Accept(this);
 
+        // Validate catch clause ordering: catch-all must be last; no duplicates
+        bool seenCatchAll = false;
+        for (int i = 0; i < stmt.CatchClauses.Count; i++)
+        {
+            CatchClause clause = stmt.CatchClauses[i];
+            if (seenCatchAll)
+            {
+                // This clause is unreachable (after a catch-all)
+                if (clause.IsCatchAll)
+                    _diagnostics.Add(DiagnosticDescriptors.SA0162.CreateDiagnostic(clause.Keyword.Span));
+                else
+                    _diagnostics.Add(DiagnosticDescriptors.SA0161.CreateDiagnostic(clause.Keyword.Span));
+            }
+            if (clause.IsCatchAll)
+                seenCatchAll = true;
+
+            // SA0163: warn on explicit "RuntimeError" catch type (not for untyped catch-all)
+            foreach (Token typeToken in clause.TypeTokens)
+            {
+                if (typeToken.Lexeme == "RuntimeError")
+                    _diagnostics.Add(DiagnosticDescriptors.SA0163.CreateDiagnostic(typeToken.Span));
+            }
+
+            _catchDepth++;
+            clause.Body.Accept(this);
+            _catchDepth--;
+        }
+
+        stmt.FinallyBody?.Accept(this);
         return null;
     }
 

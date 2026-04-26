@@ -307,25 +307,31 @@ public sealed class CfgBuilder
         current.AddSuccessor(tryEntry);
         var tryOut = BuildSequence(tryEntry, stmt.TryBody.Statements, exit, breakTarget, continueTarget);
 
-        if (stmt.CatchBody != null)
+        if (stmt.CatchClauses.Count > 0)
         {
-            // Catch block: reachable from any throw within the try block
-            var catchEntry = NewBlock();
-            tryEntry.AddSuccessor(catchEntry); // represent the exception edge
-            var catchOut = BuildSequence(catchEntry, stmt.CatchBody.Statements, exit, breakTarget, continueTarget);
+            // Catch block(s): reachable from any throw within the try block.
+            // For CFG purposes, model all clauses as a single merged catch region.
+            BasicBlock? lastCatchOut = null;
+            foreach (var clause in stmt.CatchClauses)
+            {
+                var catchEntry = NewBlock();
+                tryEntry.AddSuccessor(catchEntry); // represent the exception edge
+                var catchOut = BuildSequence(catchEntry, clause.Body.Statements, exit, breakTarget, continueTarget);
+                lastCatchOut = catchOut;
+            }
 
             if (stmt.FinallyBody != null)
             {
                 var finallyEntry = NewBlock();
                 if (tryOut != null) tryOut.AddSuccessor(finallyEntry);
-                if (catchOut != null) catchOut.AddSuccessor(finallyEntry);
+                if (lastCatchOut != null) lastCatchOut.AddSuccessor(finallyEntry);
                 var finallyOut = BuildSequence(finallyEntry, stmt.FinallyBody.Statements, exit, breakTarget, continueTarget);
                 if (finallyOut != null) finallyOut.AddSuccessor(afterBlock);
             }
             else
             {
                 if (tryOut != null) tryOut.AddSuccessor(afterBlock);
-                if (catchOut != null) catchOut.AddSuccessor(afterBlock);
+                if (lastCatchOut != null) lastCatchOut.AddSuccessor(afterBlock);
             }
         }
         else if (stmt.FinallyBody != null)

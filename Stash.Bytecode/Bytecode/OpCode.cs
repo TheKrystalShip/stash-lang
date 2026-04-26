@@ -239,6 +239,12 @@ public enum OpCode : byte
     // === Defer ===
     /// <summary>A: Push deferred closure R(A) onto the current frame's defer stack (LIFO).</summary>
     Defer = 93,
+
+    // === Exception Type Matching ===
+    /// <summary>ABC: Check if caught error in R(A) matches type names K(B); if no match, jump by signed C offset to next clause.</summary>
+    CatchMatch = 94,
+    /// <summary>A: Re-throw the original RuntimeError that was caught into R(A)'s handler register.</summary>
+    Rethrow = 95,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>

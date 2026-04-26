@@ -328,9 +328,9 @@ partial class Compiler
         IfStmt ifs => ifs.ElseBranch != null
                       && StmtAlwaysReturns(ifs.ThenBranch)
                       && StmtAlwaysReturns(ifs.ElseBranch),
-        TryCatchStmt tc => tc.CatchBody != null
+        TryCatchStmt tc => tc.CatchClauses.Count > 0
                            && StmtAlwaysReturns(tc.TryBody)
-                           && StmtAlwaysReturns(tc.CatchBody),
+                           && StmtAlwaysReturns(tc.CatchClauses[0].Body),
         _ => false,
     };
 

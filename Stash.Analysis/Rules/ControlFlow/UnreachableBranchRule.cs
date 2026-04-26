@@ -85,8 +85,8 @@ public sealed class UnreachableBranchRule : IAnalysisRule
                 break;
             case TryCatchStmt tryCatch:
                 AnalyzeBlock(tryCatch.TryBody.Statements, context);
-                if (tryCatch.CatchBody != null)
-                    AnalyzeBlock(tryCatch.CatchBody.Statements, context);
+                foreach (var clause in tryCatch.CatchClauses)
+                    AnalyzeBlock(clause.Body.Statements, context);
                 if (tryCatch.FinallyBody != null)
                     AnalyzeBlock(tryCatch.FinallyBody.Statements, context);
                 break;

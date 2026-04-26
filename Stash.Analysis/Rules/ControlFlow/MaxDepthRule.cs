@@ -95,9 +95,9 @@ public sealed class MaxDepthRule : IAnalysisRule, IConfigurableRule
             {
                 int inner = currentDepth + 1;
                 int max = ComputeMaxDepth(tryCatch.TryBody.Statements, inner);
-                if (tryCatch.CatchBody != null)
+                foreach (var clause in tryCatch.CatchClauses)
                 {
-                    int catchDepth = ComputeMaxDepth(tryCatch.CatchBody.Statements, inner);
+                    int catchDepth = ComputeMaxDepth(clause.Body.Statements, inner);
                     if (catchDepth > max) max = catchDepth;
                 }
 

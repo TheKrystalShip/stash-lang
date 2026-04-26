@@ -1123,4 +1123,136 @@ public class SemanticValidatorTests : AnalysisTestBase
         Assert.DoesNotContain(diagnostics, d =>
             d.Message.Contains("no operations that can throw"));
     }
+
+    // =========================================================================
+    // SA0160–SA0163: typed catch / bare rethrow diagnostics
+    // =========================================================================
+
+    [Fact]
+    public void SA0160_BareThrow_OutsideCatch_ReportsDiagnostic()
+    {
+        // throw; is only valid inside a catch block
+        var diagnostics = Validate("throw;");
+        Assert.Contains(diagnostics, d => d.Code == "SA0160");
+    }
+
+    [Fact]
+    public void SA0160_BareThrow_InsideCatch_NoError()
+    {
+        // throw; inside a catch block is valid
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (e) {
+                throw;
+            }
+        ");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0160");
+    }
+
+    [Fact]
+    public void SA0161_TypedClauseAfterCatchAll_ReportsDiagnostic()
+    {
+        // catch (e) followed by catch (TypeError e) — typed clause is unreachable
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (e) {
+                // catch-all
+            } catch (TypeError e) {
+                // unreachable
+            }
+        ");
+        Assert.Contains(diagnostics, d => d.Code == "SA0161");
+    }
+
+    [Fact]
+    public void SA0161_ErrorKeywordCatchAll_ThenTyped_ReportsDiagnostic()
+    {
+        // catch (Error e) followed by catch (ParseError e) — typed clause is unreachable
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (Error e) {
+                // catch-all via Error keyword
+            } catch (ParseError e) {
+                // unreachable
+            }
+        ");
+        Assert.Contains(diagnostics, d => d.Code == "SA0161");
+    }
+
+    [Fact]
+    public void SA0161_TypedBeforeCatchAll_NoError()
+    {
+        // Typed clause before catch-all is correct ordering — no diagnostic
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (TypeError e) {
+                // typed first
+            } catch (e) {
+                // catch-all last
+            }
+        ");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0161");
+    }
+
+    [Fact]
+    public void SA0162_DuplicateCatchAll_ReportsDiagnostic()
+    {
+        // Two catch-all clauses — second is unreachable
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (e) {
+                // first catch-all
+            } catch (e) {
+                // second catch-all — unreachable
+            }
+        ");
+        Assert.Contains(diagnostics, d => d.Code == "SA0162");
+    }
+
+    [Fact]
+    public void SA0162_SingleCatchAll_NoError()
+    {
+        // A single catch-all is fine
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (e) {
+                // only catch-all
+            }
+        ");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0162");
+    }
+
+    [Fact]
+    public void SA0163_CatchingRuntimeErrorByName_ReportsDiagnostic()
+    {
+        // Explicitly catching the base RuntimeError type is discouraged
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (RuntimeError e) {
+                // catching by base name
+            }
+        ");
+        Assert.Contains(diagnostics, d => d.Code == "SA0163");
+    }
+
+    [Fact]
+    public void SA0163_CatchingSpecificErrorType_NoWarning()
+    {
+        // Catching a specific typed error is correct — no SA0163
+        var diagnostics = Validate(@"
+            try {
+                throw ""x"";
+            } catch (TypeError e) {
+                // specific type — fine
+            }
+        ");
+        Assert.DoesNotContain(diagnostics, d => d.Code == "SA0163");
+    }
 }

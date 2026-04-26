@@ -65,7 +65,7 @@ public sealed partial class Compiler
     {
         _builder.AddSourceMapping(stmt.Span);
 
-        bool hasCatch = stmt.CatchBody != null;
+        bool hasCatch = stmt.CatchClauses.Count > 0;
         bool hasFinally = stmt.FinallyBody != null;
 
         if (hasCatch && hasFinally)
@@ -83,12 +83,12 @@ public sealed partial class Compiler
     // ── try { } catch [(e)] { }  — no finally ──────────────────────────────
     private void CompileTryCatch(TryCatchStmt stmt)
     {
-        // The error register must be a local (not a temp) so that any
-        // DeclareLocal calls inside the try body (via VisitBlockStmt) occupy
-        // registers above it rather than aliasing it.
-        string errName = stmt.CatchVariable?.Lexeme ?? "<catch_err>";
+        IReadOnlyList<CatchClause> clauses = stmt.CatchClauses;
+
+        // Declare the shared error register as a hidden local so try body registers
+        // start above it and cannot alias it.
         _scope.BeginScope();
-        byte errReg = _scope.DeclareLocal(errName);
+        byte errReg = _scope.DeclareLocal("<catch_err>");
         _scope.MarkInitialized();
 
         int tryBeginIdx = _builder.EmitJump(OpCode.TryBegin, errReg);
@@ -99,13 +99,65 @@ public sealed partial class Compiler
         _builder.EmitAx(OpCode.TryEnd, 0);
         int endJump = _builder.EmitJump(OpCode.Jmp);
 
-        // Catch handler: TryBegin already placed the caught exception in errReg.
+        // Catch dispatch point: TryBegin jumps here with errReg holding the caught exception.
         _builder.PatchJump(tryBeginIdx);
-        CompileStmt(stmt.CatchBody!);
 
-        EndScope(); // releases errReg and closes any captured upvalues
+        var clauseEndJumps = new List<int>(clauses.Count);
 
+        for (int i = 0; i < clauses.Count; i++)
+        {
+            CatchClause clause = clauses[i];
+            bool isCatchAll = clause.IsCatchAll;
+
+            // Emit CatchMatch with the type names constant.
+            // CatchMatch: on match, skips the following Jmp (falls through to clause body).
+            //             on no match, the following Jmp executes to route to the next clause.
+            string[] typeNames = isCatchAll
+                ? System.Array.Empty<string>()
+                : GetTypeNames(clause);
+            ushort constIdx = _builder.AddConstant((object)typeNames);
+            _builder.EmitABx(OpCode.CatchMatch, errReg, constIdx);
+            int noMatchJump = _builder.EmitJump(OpCode.Jmp); // jumped over by CatchMatch on match
+
+            // Clause body: open a new scope with the user's variable bound to errReg.
+            _scope.BeginScope();
+            byte clauseVar = _scope.DeclareLocal(clause.Variable.Lexeme);
+            _scope.MarkInitialized();
+            if (clauseVar != errReg)
+                _builder.EmitABC(OpCode.Move, clauseVar, errReg, 0);
+
+            byte savedCatchReg = _activeCatchErrReg;
+            _activeCatchErrReg = errReg;
+            CompileStmt(clause.Body);
+            _activeCatchErrReg = savedCatchReg;
+
+            EndScope(); // releases clauseVar
+            clauseEndJumps.Add(_builder.EmitJump(OpCode.Jmp)); // jump past all catches
+
+            // Patch the no-match jump to HERE (start of next clause or rethrow).
+            _builder.PatchJump(noMatchJump);
+
+            if (isCatchAll) break; // no rethrow needed after a catch-all
+        }
+
+        // If the last clause is not a catch-all, rethrow for unmatched errors.
+        if (!clauses[^1].IsCatchAll)
+            _builder.EmitA(OpCode.Rethrow, errReg);
+
+        EndScope(); // releases errReg
+
+        // Patch the try-body end jump and all clause-end jumps to here.
         _builder.PatchJump(endJump);
+        foreach (int j in clauseEndJumps)
+            _builder.PatchJump(j);
+    }
+
+    private static string[] GetTypeNames(CatchClause clause)
+    {
+        var names = new string[clause.TypeTokens.Count];
+        for (int i = 0; i < clause.TypeTokens.Count; i++)
+            names[i] = clause.TypeTokens[i].Lexeme;
+        return names;
     }
 
     // ── try { } finally { }  — no catch ────────────────────────────────────
@@ -148,6 +200,8 @@ public sealed partial class Compiler
     // ── try { } catch [(e)] { } finally { } ────────────────────────────────
     private void CompileTryCatchFinally(TryCatchStmt stmt)
     {
+        IReadOnlyList<CatchClause> clauses = stmt.CatchClauses;
+
         // Outer handler: catches any error that escapes (or is re-thrown by)
         // the catch body, ensuring finally always runs on the error path.
         _scope.BeginScope();
@@ -158,10 +212,9 @@ public sealed partial class Compiler
         int outerTryBeginIdx = _builder.EmitJump(OpCode.TryBegin, savedErrReg);
 
         // Inner handler: catches errors from the try body and routes them to
-        // the catch block. Declared as a local for the same reason as CompileTryCatch.
+        // the catch dispatch. Declared as a hidden local for the same reason as CompileTryCatch.
         _scope.BeginScope();
-        string errName = stmt.CatchVariable?.Lexeme ?? "<catch_err>";
-        byte errReg = _scope.DeclareLocal(errName);
+        byte errReg = _scope.DeclareLocal("<catch_err>");
         _scope.MarkInitialized();
 
         int innerTryBeginIdx = _builder.EmitJump(OpCode.TryBegin, errReg);
@@ -172,17 +225,57 @@ public sealed partial class Compiler
         CompileStmt(stmt.TryBody);
 
         _builder.EmitAx(OpCode.TryEnd, 0); // pop inner handler
-        int afterCatchJump = _builder.EmitJump(OpCode.Jmp); // skip catch body
+        int afterCatchJump = _builder.EmitJump(OpCode.Jmp); // skip catch dispatch
 
-        // Inner catch handler: errReg already holds the caught exception.
+        // Inner catch dispatch point: entered when an exception is caught from try body.
         _builder.PatchJump(innerTryBeginIdx);
-        CompileStmt(stmt.CatchBody!);
+
+        var clauseEndJumps = new List<int>(clauses.Count);
+
+        for (int i = 0; i < clauses.Count; i++)
+        {
+            CatchClause clause = clauses[i];
+            bool isCatchAll = clause.IsCatchAll;
+
+            string[] typeNames = isCatchAll
+                ? System.Array.Empty<string>()
+                : GetTypeNames(clause);
+            ushort constIdx = _builder.AddConstant((object)typeNames);
+            _builder.EmitABx(OpCode.CatchMatch, errReg, constIdx);
+            int noMatchJump = _builder.EmitJump(OpCode.Jmp);
+
+            _scope.BeginScope();
+            byte clauseVar = _scope.DeclareLocal(clause.Variable.Lexeme);
+            _scope.MarkInitialized();
+            if (clauseVar != errReg)
+                _builder.EmitABC(OpCode.Move, clauseVar, errReg, 0);
+
+            byte savedCatchReg = _activeCatchErrReg;
+            _activeCatchErrReg = errReg;
+            CompileStmt(clause.Body);
+            _activeCatchErrReg = savedCatchReg;
+
+            EndScope();
+            clauseEndJumps.Add(_builder.EmitJump(OpCode.Jmp));
+
+            _builder.PatchJump(noMatchJump);
+
+            if (isCatchAll) break;
+        }
+
+        // If the last clause is not a catch-all, rethrow for unmatched errors.
+        if (!clauses[^1].IsCatchAll)
+            _builder.EmitA(OpCode.Rethrow, errReg);
+
         EndScope(); // releases errReg (inner scope)
 
         _activeFinally.RemoveAt(_activeFinally.Count - 1);
 
-        // Rejoin point: both try-body and catch-body flow merge here.
+        // Rejoin point: try-body (no exception) and catch-body flows merge here.
         _builder.PatchJump(afterCatchJump);
+        foreach (int j in clauseEndJumps)
+            _builder.PatchJump(j);
+
         _builder.EmitAx(OpCode.TryEnd, 0); // pop outer handler
 
         // FinallyStart is now known: the first instruction of the success finally body.

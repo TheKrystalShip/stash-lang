@@ -23,6 +23,7 @@ public sealed partial class VirtualMachine
         public int StackLevel;
         public int FrameIndex;
         public byte ErrorReg;  // register that receives the caught error value
+        public RuntimeError? OriginalError;  // cached for bare rethrow (Rethrow opcode)
     }
 
     // ------------------------------------------------------------------
@@ -66,10 +67,22 @@ public sealed partial class VirtualMachine
                 if (ex.SuppressedErrors is { Count: > 0 })
                     (suppressed ??= new()).AddRange(ex.SuppressedErrors);
 
-                // Construct the StashError and store it in the designated error register
-                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", null, ex.Properties);
+                // Capture the call stack (innermost frame first, capped at 50)
+                var callStack = CaptureCallStack();
+                ex.CallStack = callStack;
+
+                // Construct the StashError with the call stack and store in the designated error register
+                List<string>? stackLines = null;
+                if (callStack is { Count: > 0 })
+                {
+                    stackLines = new List<string>(callStack.Count);
+                    foreach (var sf in callStack)
+                        stackLines.Add($"  at {sf.FunctionName} ({sf.Span})");
+                }
+                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", stackLines, ex.Properties);
                 if (suppressed != null)
                     stashError.Suppressed = suppressed;
+                stashError.OriginalException = ex;
                 _context.LastError = stashError;
                 ref CallFrame handlerFrame = ref _frames[_frameCount - 1];
                 _stack[handlerFrame.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);
@@ -377,6 +390,8 @@ public sealed partial class VirtualMachine
                 case OpCode.TryEnd: ExecuteTryEnd(); break;
                 case OpCode.Throw: ExecuteThrow(ref frame, inst); break;
                 case OpCode.TryExpr: ExecuteTryExpr(ref frame, inst); break;
+                case OpCode.CatchMatch: ExecuteCatchMatch(ref frame, inst); break;
+                case OpCode.Rethrow: ExecuteRethrow(ref frame, inst); break;
 
                 // ==================== Strings ====================
                 case OpCode.Interpolate: ExecuteInterpolate(ref frame, inst); break;
@@ -412,6 +427,23 @@ public sealed partial class VirtualMachine
                         GetCurrentSpan(ref frame));
             }
         }
+    }
+
+    private List<StackFrame> CaptureCallStack()
+    {
+        const int MaxFrames = 50;
+        int count = Math.Min(_frameCount, MaxFrames);
+        var frames = new List<StackFrame>(count);
+        for (int i = _frameCount - 1; i >= 0; i--)
+        {
+            ref CallFrame f = ref _frames[i];
+            SourceSpan? span = f.Chunk.SourceMap.GetSpan(f.IP > 0 ? f.IP - 1 : 0);
+            if (span is null) continue;
+            string fnName = f.FunctionName ?? "<main>";
+            frames.Add(new StackFrame(fnName, span.Value));
+            if (frames.Count >= MaxFrames) break;
+        }
+        return frames;
     }
 
 }

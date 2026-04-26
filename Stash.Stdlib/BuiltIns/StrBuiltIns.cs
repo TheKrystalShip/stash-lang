@@ -236,12 +236,12 @@ public static class StrBuiltIns
             var s = SvArgs.String(args, 0, "str.substring");
             var start = SvArgs.Long(args, 1, "str.substring");
             if (start < 0 || start > s.Length)
-                throw new RuntimeError($"'str.substring' start index {start} is out of range for string of length {s.Length}.");
+                throw new RuntimeError($"'str.substring' start index {start} is out of range for string of length {s.Length}.", errorType: "IndexError");
             if (args.Length == 3)
             {
                 var end = SvArgs.Long(args, 2, "str.substring");
                 if (end < start || end > s.Length)
-                    throw new RuntimeError($"'str.substring' end index {end} is out of range.");
+                    throw new RuntimeError($"'str.substring' end index {end} is out of range.", errorType: "IndexError");
                 return StashValue.FromObj(s.Substring((int)start, (int)(end - start)));
             }
             return StashValue.FromObj(s.Substring((int)start));
@@ -326,7 +326,7 @@ public static class StrBuiltIns
             var s = SvArgs.String(args, 0, "str.repeat");
             var count = SvArgs.Long(args, 1, "str.repeat");
             if (count < 0)
-                throw new RuntimeError("'str.repeat' count must be >= 0.");
+                throw new RuntimeError("'str.repeat' count must be >= 0.", errorType: "ValueError");
             return StashValue.FromObj(string.Concat(Enumerable.Repeat(s, (int)count)));
         },
             returnType: "string",
@@ -370,7 +370,7 @@ public static class StrBuiltIns
             {
                 var fill = SvArgs.String(args, 2, "str.padStart");
                 if (fill.Length != 1)
-                    throw new RuntimeError("Third argument to 'str.padStart' must be a single-character string.");
+                    throw new RuntimeError("Third argument to 'str.padStart' must be a single-character string.", errorType: "ValueError");
                 fillChar = fill[0];
             }
             return StashValue.FromObj(s.PadLeft((int)length, fillChar));
@@ -393,7 +393,7 @@ public static class StrBuiltIns
             {
                 var fill = SvArgs.String(args, 2, "str.padEnd");
                 if (fill.Length != 1)
-                    throw new RuntimeError("Third argument to 'str.padEnd' must be a single-character string.");
+                    throw new RuntimeError("Third argument to 'str.padEnd' must be a single-character string.", errorType: "ValueError");
                 fillChar = fill[0];
             }
             return StashValue.FromObj(s.PadRight((int)length, fillChar));
@@ -480,11 +480,11 @@ public static class StrBuiltIns
             }
             catch (RegexMatchTimeoutException)
             {
-                throw new RuntimeError("'str.match' regex match timed out.");
+                throw new RuntimeError("'str.match' regex match timed out.", errorType: "TimeoutError");
             }
             catch (ArgumentException ex)
             {
-                throw new RuntimeError($"'str.match' invalid regex pattern: {ex.Message}");
+                throw new RuntimeError($"'str.match' invalid regex pattern: {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "string",
@@ -509,11 +509,11 @@ public static class StrBuiltIns
             }
             catch (RegexMatchTimeoutException)
             {
-                throw new RuntimeError("'str.matchAll' regex match timed out.");
+                throw new RuntimeError("'str.matchAll' regex match timed out.", errorType: "TimeoutError");
             }
             catch (ArgumentException ex)
             {
-                throw new RuntimeError($"'str.matchAll' invalid regex pattern: {ex.Message}");
+                throw new RuntimeError($"'str.matchAll' invalid regex pattern: {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "array",
@@ -534,11 +534,11 @@ public static class StrBuiltIns
             }
             catch (RegexMatchTimeoutException)
             {
-                throw new RuntimeError("'str.isMatch' regex match timed out.");
+                throw new RuntimeError("'str.isMatch' regex match timed out.", errorType: "TimeoutError");
             }
             catch (ArgumentException ex)
             {
-                throw new RuntimeError($"'str.isMatch' invalid regex pattern: {ex.Message}");
+                throw new RuntimeError($"'str.isMatch' invalid regex pattern: {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "bool",
@@ -560,11 +560,11 @@ public static class StrBuiltIns
             }
             catch (RegexMatchTimeoutException)
             {
-                throw new RuntimeError("'str.replaceRegex' regex match timed out.");
+                throw new RuntimeError("'str.replaceRegex' regex match timed out.", errorType: "TimeoutError");
             }
             catch (ArgumentException ex)
             {
-                throw new RuntimeError($"'str.replaceRegex' invalid regex pattern: {ex.Message}");
+                throw new RuntimeError($"'str.replaceRegex' invalid regex pattern: {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "string",
@@ -587,11 +587,11 @@ public static class StrBuiltIns
             }
             catch (RegexMatchTimeoutException)
             {
-                throw new RuntimeError("'str.capture' regex match timed out.");
+                throw new RuntimeError("'str.capture' regex match timed out.", errorType: "TimeoutError");
             }
             catch (ArgumentException ex)
             {
-                throw new RuntimeError($"'str.capture' invalid regex pattern: {ex.Message}");
+                throw new RuntimeError($"'str.capture' invalid regex pattern: {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "RegexMatch",
@@ -616,11 +616,11 @@ public static class StrBuiltIns
             }
             catch (RegexMatchTimeoutException)
             {
-                throw new RuntimeError("'str.captureAll' regex match timed out.");
+                throw new RuntimeError("'str.captureAll' regex match timed out.", errorType: "TimeoutError");
             }
             catch (ArgumentException ex)
             {
-                throw new RuntimeError($"'str.captureAll' invalid regex pattern: {ex.Message}");
+                throw new RuntimeError($"'str.captureAll' invalid regex pattern: {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "array",
@@ -634,7 +634,7 @@ public static class StrBuiltIns
             var s = SvArgs.String(args, 0, "str.count");
             var sub = SvArgs.String(args, 1, "str.count");
             if (sub.Length == 0)
-                throw new RuntimeError("'str.count' substring must not be empty.");
+                throw new RuntimeError("'str.count' substring must not be empty.", errorType: "ValueError");
             long count = 0;
             int idx = 0;
             while ((idx = s.IndexOf(sub, idx, StringComparison.Ordinal)) >= 0)
@@ -678,7 +678,7 @@ public static class StrBuiltIns
             }
             catch (RegexMatchTimeoutException)
             {
-                throw new RuntimeError("'str.format' regex match timed out.");
+                throw new RuntimeError("'str.format' regex match timed out.", errorType: "TimeoutError");
             }
         },
             returnType: "string",
@@ -764,7 +764,7 @@ public static class StrBuiltIns
             var s = SvArgs.String(args, 0, "str.truncate");
             var maxLen = SvArgs.Long(args, 1, "str.truncate");
             if (maxLen < 0)
-                throw new RuntimeError("'str.truncate' maxLen must be >= 0.");
+                throw new RuntimeError("'str.truncate' maxLen must be >= 0.", errorType: "ValueError");
             string suffix = args.Length == 3 ? SvArgs.String(args, 2, "str.truncate") : "...";
             if (s.Length <= (int)maxLen) return StashValue.FromObj(s);
             int cutLen = (int)maxLen - suffix.Length;
@@ -800,7 +800,7 @@ public static class StrBuiltIns
             var s = SvArgs.String(args, 0, "str.wrap");
             var width = SvArgs.Long(args, 1, "str.wrap");
             if (width <= 0)
-                throw new RuntimeError("'str.wrap' width must be > 0.");
+                throw new RuntimeError("'str.wrap' width must be > 0.", errorType: "ValueError");
             var result = new System.Text.StringBuilder();
             int w = (int)width;
             foreach (var paragraph in s.Split('\n'))

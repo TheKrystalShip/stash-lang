@@ -91,6 +91,8 @@ let raw = reveal(key);    // "abc123"
 
 ## `io` — Standard I/O
 
+> **Throws:** `IOError` for I/O failures (e.g. reading from a closed stdin).
+
 | Function                       | Description                                                                                                                                    |
 | ------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
 | `io.println(val)`              | Print value followed by newline                                                                                                                |
@@ -117,6 +119,8 @@ let ok = io.confirm("Are you sure?", false);         // [y/N]
 ---
 
 ## `conv` — Type Conversion
+
+> **Throws:** `TypeError` for unsupported input types; `ParseError` for strings that cannot be parsed (e.g. `conv.toInt("abc")`); `ValueError` for out-of-range values (e.g. `conv.toByte(300)`).
 
 | Function                  | Description                                                                                               |
 | ------------------------- | --------------------------------------------------------------------------------------------------------- |
@@ -153,6 +157,8 @@ conv.toHex(255, 8);         // "000000ff"
 ---
 
 ## `env` — Environment Variables
+
+> **Throws:** `TypeError` when a non-string value is passed as a variable name or value.
 
 | Function                  | Description                                                           |
 | ------------------------- | --------------------------------------------------------------------- |
@@ -224,6 +230,8 @@ let config = env.withPrefix("MYAPP_");
 ---
 
 ## `fs` — File System Operations
+
+> **Throws:** `IOError` for file-system failures (file not found, permission denied, path not a directory); `ValueError` for invalid arguments (e.g. unrecognised encoding name).
 
 | Function                                 | Description                                                                                                           |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
@@ -396,6 +404,8 @@ fs.unwatch(watcher);
 ---
 
 ## `path` — Path Manipulation
+
+> **Throws:** `TypeError` for non-string path arguments; `ValueError` for invalid or malformed path segments.
 
 | Function                  | Description                                                        |
 | ------------------------- | ------------------------------------------------------------------ |
@@ -654,6 +664,8 @@ for entry in entries {
 
 All `str` functions take the target string as the first argument. Strings are immutable — functions return new strings rather than modifying in place.
 
+> **Throws:** `TypeError` for non-string arguments; `ValueError` for invalid argument values (e.g. negative repeat count, invalid regex pattern).
+
 ### Case & Whitespace
 
 | Function                   | Description                                                          |
@@ -818,6 +830,8 @@ io.println(str.padEnd("hi", 6));                      // "hi    "
 ## `arr` — Array Operations
 
 All `arr` functions take the target array as the first argument. Functions that mutate the array do so **in-place**.
+
+> **Throws:** `TypeError` for non-array arguments or wrong-typed callbacks; `IndexError` for out-of-bounds index access (e.g. `arr.removeAt`, `arr.insert`).
 
 ### Core Manipulation
 
@@ -1145,6 +1159,8 @@ io.println(buf.equals(data, loaded));   // true
 
 All `dict` functions (except `dict.new` and `dict.merge`) take the target dictionary as the first argument. Functional operations (`map`, `filter`, `merge`) return **new** dictionaries — they do not mutate the original.
 
+> **Throws:** `TypeError` for non-dictionary arguments or wrong-typed callbacks; `KeyError` when a required key is not found (e.g. `dict.get` with no default).
+
 | Function                     | Description                                                                                                                                     |
 | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `dict.new()`                 | Create an empty dictionary                                                                                                                      |
@@ -1247,6 +1263,8 @@ let val = dict.get(config, "port", 8080);  // 8080 if "port" key absent
 ---
 
 ## `math` — Math Functions
+
+> **Throws:** `TypeError` for non-numeric arguments; `ValueError` for domain errors (e.g. `math.log` of a negative number, `math.sqrt` of a negative number).
 
 ### Core
 
@@ -1490,6 +1508,8 @@ io.println(time.daysInMonth());  // current month
 ---
 
 ## `json` — JSON
+
+> **Throws:** `ParseError` when the input string is not valid JSON (`json.parse`); `TypeError` for values that cannot be serialised to JSON (e.g. functions, byte arrays).
 
 | Function                       | Description                                                                                            |
 | ------------------------------ | ------------------------------------------------------------------------------------------------------ |
@@ -1976,6 +1996,8 @@ io.println("Configuration updated.");
 ---
 
 ## `http` — HTTP Requests
+
+> **Throws:** `IOError` for network failures (connection refused, DNS resolution failure); `TimeoutError` when the request exceeds the configured timeout.
 
 | Function                             | Description                                           |
 | ------------------------------------ | ----------------------------------------------------- |
@@ -2771,6 +2793,8 @@ For complete documentation on Stash's built-in testing primitives — `test()`, 
 
 The `crypto` namespace provides cryptographic hash functions, HMAC signatures, UUID generation, secure random byte generation, and AES-256-GCM authenticated encryption. All hash functions return lowercase hexadecimal strings.
 
+> **Throws:** `TypeError` for wrong argument types (e.g. passing a non-string to a hash function that expects a string).
+
 ### Hash Functions
 
 | Function                   | Description                                   |
@@ -3037,6 +3061,8 @@ io.println(term.table(data, ["ID", "Name", "Score"]));
 ## `sys` — System Information
 
 The `sys` namespace provides functions for querying system-level information: CPU, memory, disk, network interfaces, and process metadata. These are read-only introspection functions useful for server monitoring, health checks, and capacity planning scripts.
+
+> **Throws:** `NotSupportedError` for functions unavailable on the current platform (e.g. `sys.loadAvg` on Windows); `TypeError` for wrong argument types.
 
 | Function                        | Description                                                                                                                             |
 | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
@@ -3463,6 +3489,8 @@ let result = await f;    // 42
 ## `net` — Networking
 
 The `net` namespace provides networking utilities including subnet computation, DNS resolution, connectivity testing, and network interface discovery. Requires the **Network** capability.
+
+> **Throws:** `IOError` for network failures (DNS resolution, connectivity checks); `TimeoutError` when a network operation exceeds its deadline.
 
 ### Subnet Information
 

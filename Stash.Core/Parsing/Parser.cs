@@ -991,13 +991,18 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses a throw statement: <c>throw expr;</c>.
+    /// Parses a throw statement: <c>throw expr;</c> or bare <c>throw;</c> (re-throw).
     /// The <c>throw</c> token has already been consumed.
     /// </summary>
     /// <returns>A <see cref="ThrowStmt"/>.</returns>
     private Stmt ThrowStatement()
     {
         Token keyword = Previous();
+        if (Match(TokenType.Semicolon))
+        {
+            // Bare rethrow: throw;
+            return new ThrowStmt(keyword, null, MakeSpan(keyword.Span, Previous().Span));
+        }
         Expr value = Expression();
         Token semi = Consume(TokenType.Semicolon, "Expected ';' after throw value.");
         return new ThrowStmt(keyword, value, MakeSpan(keyword.Span, semi.Span));
@@ -1103,19 +1108,37 @@ public class Parser
         Token tryKeyword = Previous();
         BlockStmt tryBody = ParseBlock();
 
-        Token? catchKeyword = null;
-        Token? catchVariable = null;
-        BlockStmt? catchBody = null;
+        var catchClauses = new List<CatchClause>();
         Token? finallyKeyword = null;
         BlockStmt? finallyBody = null;
 
-        if (Match(TokenType.Catch))
+        while (Match(TokenType.Catch))
         {
-            catchKeyword = Previous();
+            Token catchKeyword = Previous();
             Consume(TokenType.LeftParen, "Expected '(' after 'catch'.");
-            catchVariable = Consume(TokenType.Identifier, "Expected variable name in 'catch'.");
+            // Parse either "Type var" or just "var" (full multi-clause/union parsing)
+            Token firstIdent = Consume(TokenType.Identifier, "Expected variable name or type name in 'catch'.");
+            var typeTokens = new List<Token>();
+            Token variable;
+            if (!Check(TokenType.RightParen))
+            {
+                // First token was a type name; parse optional | type names, then variable
+                typeTokens.Add(firstIdent);
+                while (Match(TokenType.Pipe))
+                {
+                    typeTokens.Add(Consume(TokenType.Identifier, "Expected type name after '|' in catch clause."));
+                }
+                variable = Consume(TokenType.Identifier, "Expected variable name in 'catch'.");
+            }
+            else
+            {
+                // Single identifier → untyped catch-all
+                variable = firstIdent;
+            }
             Consume(TokenType.RightParen, "Expected ')' after catch variable.");
-            catchBody = ParseBlock();
+            BlockStmt catchBody = ParseBlock();
+            SourceSpan clauseSpan = MakeSpan(catchKeyword.Span, catchBody.Span);
+            catchClauses.Add(new CatchClause(catchKeyword, typeTokens, variable, catchBody, clauseSpan));
         }
 
         if (Match(TokenType.Finally))
@@ -1124,8 +1147,9 @@ public class Parser
             finallyBody = ParseBlock();
         }
 
-        SourceSpan endSpan = (finallyBody ?? catchBody ?? tryBody).Span;
-        return new TryCatchStmt(tryKeyword, tryBody, catchKeyword, catchVariable, catchBody, finallyKeyword, finallyBody,
+        Stmt lastPart = (Stmt?)finallyBody ?? (catchClauses.Count > 0 ? catchClauses[^1].Body : tryBody);
+        SourceSpan endSpan = lastPart.Span;
+        return new TryCatchStmt(tryKeyword, tryBody, catchClauses, finallyKeyword, finallyBody,
             MakeSpan(tryKeyword.Span, endSpan));
     }
 

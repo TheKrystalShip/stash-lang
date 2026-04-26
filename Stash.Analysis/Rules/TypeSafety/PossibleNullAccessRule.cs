@@ -83,7 +83,7 @@ public sealed class PossibleNullAccessRule : IAnalysisRule
                 break;
 
             case ThrowStmt throwStmt:
-                CheckExprForNullAccess(throwStmt.Value, maybeNull, context);
+                if (throwStmt.Value != null) CheckExprForNullAccess(throwStmt.Value, maybeNull, context);
                 break;
 
             case IfStmt ifStmt:
@@ -129,8 +129,8 @@ public sealed class PossibleNullAccessRule : IAnalysisRule
 
             case TryCatchStmt tryCatch:
                 AnalyzeBlock(tryCatch.TryBody.Statements, new HashSet<string>(maybeNull), context);
-                if (tryCatch.CatchBody != null)
-                    AnalyzeBlock(tryCatch.CatchBody.Statements, new HashSet<string>(maybeNull), context);
+                foreach (var clause in tryCatch.CatchClauses)
+                    AnalyzeBlock(clause.Body.Statements, new HashSet<string>(maybeNull), context);
                 if (tryCatch.FinallyBody != null)
                     AnalyzeBlock(tryCatch.FinallyBody.Statements, new HashSet<string>(maybeNull), context);
                 break;

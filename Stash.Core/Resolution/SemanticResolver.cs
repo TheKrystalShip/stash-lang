@@ -259,7 +259,8 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
 
     public object? VisitThrowStmt(ThrowStmt stmt)
     {
-        ResolveExpr(stmt.Value);
+        if (stmt.Value is not null)
+            ResolveExpr(stmt.Value);
         return null;
     }
 
@@ -334,12 +335,12 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
     public object? VisitTryCatchStmt(TryCatchStmt stmt)
     {
         ResolveStmt(stmt.TryBody);
-        if (stmt.CatchBody is not null)
+        foreach (CatchClause clause in stmt.CatchClauses)
         {
             BeginScope();
-            Declare(stmt.CatchVariable!.Lexeme);
-            Define(stmt.CatchVariable.Lexeme);
-            ResolveAll(stmt.CatchBody.Statements);
+            Declare(clause.Variable.Lexeme);
+            Define(clause.Variable.Lexeme);
+            ResolveAll(clause.Body.Statements);
             EndScope();
         }
         if (stmt.FinallyBody is not null)

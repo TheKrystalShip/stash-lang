@@ -147,9 +147,18 @@ partial class Compiler
     public object? VisitThrowStmt(ThrowStmt stmt)
     {
         _builder.AddSourceMapping(stmt.Span);
-        byte reg = CompileExpr(stmt.Value);
-        _builder.EmitA(OpCode.Throw, reg);
-        _scope.FreeTemp(reg);
+        if (stmt.Value is null)
+        {
+            // Bare rethrow — requires active catch error register (tracked in Phase C)
+            // Emit Rethrow with register 0 as placeholder; proper implementation in Phase C
+            _builder.EmitA(OpCode.Rethrow, _activeCatchErrReg);
+        }
+        else
+        {
+            byte reg = CompileExpr(stmt.Value);
+            _builder.EmitA(OpCode.Throw, reg);
+            _scope.FreeTemp(reg);
+        }
         return null;
     }
 

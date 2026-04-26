@@ -1119,7 +1119,17 @@ public class Program
     /// <param name="ex">The runtime error to report.</param>
     private static void PrintRuntimeError(RuntimeError ex)
     {
-        if (ex.Span is { } span)
+        string errorType = ex.ErrorType ?? "RuntimeError";
+
+        if (ex.CallStack is { Count: > 0 })
+        {
+            Console.Error.WriteLine($"{errorType}: {ex.Message}");
+            foreach (var frame in ex.CallStack)
+                Console.Error.WriteLine($"  at {frame.FunctionName} ({frame.Span})");
+
+            PrintSourceContext(ex.CallStack[0]);
+        }
+        else if (ex.Span is { } span)
         {
             string location = string.IsNullOrEmpty(span.File)
                 ? $"{span.StartLine}:{span.StartColumn}"
@@ -1129,6 +1139,58 @@ public class Program
         else
         {
             Console.Error.WriteLine($"[runtime error] {ex.Message}");
+        }
+    }
+
+    private static readonly System.Collections.Generic.Dictionary<string, string[]?> _sourceCache = new();
+
+    private static void PrintSourceContext(StackFrame frame)
+    {
+        string? file = frame.Span.File;
+        if (string.IsNullOrEmpty(file) || file == "<stdin>")
+            return;
+
+        string[] lines;
+        try
+        {
+            if (!_sourceCache.TryGetValue(file, out string[]? cached))
+            {
+                cached = System.IO.File.ReadAllLines(file, System.Text.Encoding.UTF8);
+                _sourceCache[file] = cached;
+            }
+            if (cached is null) return;
+            lines = cached;
+        }
+        catch (System.Exception)
+        {
+            return;
+        }
+
+        int errorLine = frame.Span.StartLine; // 1-based
+        if (errorLine < 1 || errorLine > lines.Length)
+            return;
+
+        int firstLine = Math.Max(1, errorLine - 1);
+        int lastLine = Math.Min(lines.Length, errorLine + 1);
+        int lineNumWidth = lastLine.ToString().Length;
+
+        Console.Error.WriteLine();
+        for (int lineNum = firstLine; lineNum <= lastLine; lineNum++)
+        {
+            string lineContent = lines[lineNum - 1];
+            string prefix = lineNum == errorLine ? " > " : "   ";
+            Console.Error.WriteLine($"{prefix}{lineNum.ToString().PadLeft(lineNumWidth)} | {lineContent}");
+
+            if (lineNum == errorLine && frame.Span.StartColumn > 0)
+            {
+                int indent = prefix.Length + lineNumWidth + 3;
+                int col = frame.Span.StartColumn - 1;
+                int length = Math.Max(1, frame.Span.EndColumn > frame.Span.StartColumn
+                    ? frame.Span.EndColumn - frame.Span.StartColumn
+                    : 1);
+                Console.Error.Write(new string(' ', indent + col));
+                Console.Error.WriteLine(new string('^', length));
+            }
         }
     }
 }

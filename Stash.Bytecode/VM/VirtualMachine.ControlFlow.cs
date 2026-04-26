@@ -577,4 +577,59 @@ public sealed partial class VirtualMachine
             frame.IP += Instruction.GetSBx(inst);
         }
     }
+
+    // ══════════════════════════ Exception Type Matching ══════════════════════════
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteCatchMatch(ref CallFrame frame, uint inst)
+    {
+        // ABx encoding: A = error register, Bx = constant pool index for string[] of type names.
+        // Empty array means catch-all (always matches).
+        // On match:    frame.IP++ to skip the following Jmp, falling through to the clause body.
+        // On no match: do nothing — the following Jmp executes and routes to the next clause.
+        byte a = Instruction.GetA(inst);
+        ushort bx = Instruction.GetBx(inst);
+
+        var typeNames = (string[])frame.Chunk.Constants[bx].AsObj!;
+        if (typeNames.Length == 0)
+        {
+            frame.IP++; // catch-all always matches — skip the following Jmp
+            return;
+        }
+
+        object? errObj = _stack[frame.BaseSlot + a].ToObject();
+        string errorType = errObj is StashError se ? se.Type : "RuntimeError";
+
+        foreach (string typeName in typeNames)
+        {
+            if (typeName == errorType)
+            {
+                frame.IP++; // matched — skip the following Jmp
+                return;
+            }
+        }
+
+        // No match — fall through to the Jmp which routes to the next clause
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteRethrow(ref CallFrame frame, uint inst)
+    {
+        // A encoding: A = error register containing the StashError to rethrow.
+        // Re-throws the original RuntimeError to preserve its source span and call stack.
+        byte a = Instruction.GetA(inst);
+        object? errObj = _stack[frame.BaseSlot + a].ToObject();
+
+        if (errObj is StashError se)
+        {
+            // Prefer the original RuntimeError (preserves span + call stack)
+            if (se.OriginalException is { } orig)
+                throw orig;
+
+            // Fallback: reconstruct from StashError fields
+            throw new RuntimeError(se.Message, GetCurrentSpan(ref frame), se.Type) { Properties = se.Properties };
+        }
+
+        throw new RuntimeError("Rethrow used outside of a catch block.", GetCurrentSpan(ref frame));
+    }
 }

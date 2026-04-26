@@ -76,7 +76,7 @@ public sealed class NullFlowRule : IAnalysisRule
                 ScanExprForNullAccess(ret.Value, state, context);
                 break;
 
-            case ThrowStmt throwStmt:
+            case ThrowStmt throwStmt when throwStmt.Value != null:
                 ScanExprForNullAccess(throwStmt.Value, state, context);
                 break;
         }

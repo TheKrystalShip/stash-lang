@@ -56,9 +56,9 @@ public static class SshBuiltIns
             var options = SvArgs.Dict(args, 0, "ssh.connect");
 
             var host = options.Get("host").ToObject() as string
-                ?? throw new RuntimeError("ssh.connect: 'host' is required and must be a string.");
+                ?? throw new RuntimeError("ssh.connect: 'host' is required and must be a string.", errorType: "TypeError");
             var username = options.Get("username").ToObject() as string
-                ?? throw new RuntimeError("ssh.connect: 'username' is required and must be a string.");
+                ?? throw new RuntimeError("ssh.connect: 'username' is required and must be a string.", errorType: "TypeError");
 
             int port = 22;
             var portVal = options.Get("port").ToObject();
@@ -73,7 +73,7 @@ public static class SshBuiltIns
 
             if (password is null && privateKeyPath is null)
             {
-                throw new RuntimeError("ssh.connect: must provide 'password' or 'privateKey'.");
+                throw new RuntimeError("ssh.connect: must provide 'password' or 'privateKey'.", errorType: "ValueError");
             }
 
             try
@@ -105,23 +105,23 @@ public static class SshBuiltIns
             }
             catch (SshAuthenticationException e)
             {
-                throw new RuntimeError($"ssh.connect: authentication failed — {e.Message}");
+                throw new RuntimeError($"ssh.connect: authentication failed — {e.Message}", errorType: "IOError");
             }
             catch (SshConnectionException e)
             {
-                throw new RuntimeError($"ssh.connect: connection failed — {e.Message}");
+                throw new RuntimeError($"ssh.connect: connection failed — {e.Message}", errorType: "IOError");
             }
             catch (SshException e)
             {
-                throw new RuntimeError($"ssh.connect: {e.Message}");
+                throw new RuntimeError($"ssh.connect: {e.Message}", errorType: "IOError");
             }
             catch (IOException e)
             {
-                throw new RuntimeError($"ssh.connect: {e.Message}");
+                throw new RuntimeError($"ssh.connect: {e.Message}", errorType: "IOError");
             }
             catch (System.Net.Sockets.SocketException e)
             {
-                throw new RuntimeError($"ssh.connect: {e.Message}");
+                throw new RuntimeError($"ssh.connect: {e.Message}", errorType: "IOError");
             }
         },
             returnType: "SshConnection",
@@ -141,7 +141,7 @@ public static class SshBuiltIns
             }
             catch (SshException e)
             {
-                throw new RuntimeError($"ssh.exec: {e.Message}");
+                throw new RuntimeError($"ssh.exec: {e.Message}", errorType: "IOError");
             }
         },
             returnType: "CommandResult",
@@ -161,7 +161,7 @@ public static class SshBuiltIns
                 {
                     if (item.ToObject() is not string cmd)
                     {
-                        throw new RuntimeError("ssh.execAll: all commands must be strings.");
+                        throw new RuntimeError("ssh.execAll: all commands must be strings.", errorType: "TypeError");
                     }
 
                     SshCommand sshCmd = client.RunCommand(cmd);
@@ -171,7 +171,7 @@ public static class SshBuiltIns
             }
             catch (SshException e)
             {
-                throw new RuntimeError($"ssh.execAll: {e.Message}");
+                throw new RuntimeError($"ssh.execAll: {e.Message}", errorType: "IOError");
             }
         },
             returnType: "array",
@@ -193,7 +193,7 @@ public static class SshBuiltIns
                 {
                     if (item.ToObject() is not string cmd)
                     {
-                        throw new RuntimeError("ssh.shell: all commands must be strings.");
+                        throw new RuntimeError("ssh.shell: all commands must be strings.", errorType: "TypeError");
                     }
 
                     stream.WriteLine(cmd);
@@ -213,7 +213,7 @@ public static class SshBuiltIns
             }
             catch (SshException e)
             {
-                throw new RuntimeError($"ssh.shell: {e.Message}");
+                throw new RuntimeError($"ssh.shell: {e.Message}", errorType: "IOError");
             }
         },
             returnType: "string",
@@ -234,7 +234,7 @@ public static class SshBuiltIns
             }
             catch (SshException e)
             {
-                throw new RuntimeError($"ssh.close: {e.Message}");
+                throw new RuntimeError($"ssh.close: {e.Message}", errorType: "IOError");
             }
 
             return StashValue.Null;
@@ -260,12 +260,12 @@ public static class SshBuiltIns
             var options = SvArgs.Dict(args, 1, "ssh.tunnel");
 
             var remoteHost = options.Get("remoteHost").ToObject() as string
-                ?? throw new RuntimeError("ssh.tunnel: 'remoteHost' is required and must be a string.");
+                ?? throw new RuntimeError("ssh.tunnel: 'remoteHost' is required and must be a string.", errorType: "TypeError");
 
             var remotePortVal = options.Get("remotePort").ToObject();
             if (remotePortVal is not long remotePort)
             {
-                throw new RuntimeError("ssh.tunnel: 'remotePort' is required and must be an integer.");
+                throw new RuntimeError("ssh.tunnel: 'remotePort' is required and must be an integer.", errorType: "TypeError");
             }
 
             uint localPort = 0;
@@ -293,7 +293,7 @@ public static class SshBuiltIns
             }
             catch (SshException e)
             {
-                throw new RuntimeError($"ssh.tunnel: {e.Message}");
+                throw new RuntimeError($"ssh.tunnel: {e.Message}", errorType: "IOError");
             }
         },
             returnType: "SshTunnel",
@@ -306,7 +306,7 @@ public static class SshBuiltIns
 
             if (!_tunnels.TryGetValue(inst, out ForwardedPortLocal? forward))
             {
-                throw new RuntimeError("ssh.closeTunnel: tunnel is invalid.");
+                throw new RuntimeError("ssh.closeTunnel: tunnel is invalid.", errorType: "TypeError");
             }
 
             _tunnelClients.TryGetValue(inst, out SshClient? client);
@@ -321,7 +321,7 @@ public static class SshBuiltIns
             }
             catch (SshException e)
             {
-                throw new RuntimeError($"ssh.closeTunnel: {e.Message}");
+                throw new RuntimeError($"ssh.closeTunnel: {e.Message}", errorType: "IOError");
             }
 
             return StashValue.Null;
@@ -350,12 +350,12 @@ public static class SshBuiltIns
     {
         if (arg is not StashInstance inst || inst.TypeName != "SshConnection")
         {
-            throw new RuntimeError($"First argument to '{funcName}' must be an SshConnection.");
+            throw new RuntimeError($"First argument to '{funcName}' must be an SshConnection.", errorType: "TypeError");
         }
 
         if (!_clients.TryGetValue(inst, out SshClient? client))
         {
-            throw new RuntimeError($"{funcName}: connection is invalid or closed.");
+            throw new RuntimeError($"{funcName}: connection is invalid or closed.", errorType: "IOError");
         }
 
         return client;

@@ -65,7 +65,7 @@ public static class EncodingBuiltIns
             }
             catch (FormatException ex)
             {
-                throw new RuntimeError($"Invalid Base64 string in 'encoding.base64Decode': {ex.Message}");
+                throw new RuntimeError($"Invalid Base64 string in 'encoding.base64Decode': {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "string",
@@ -114,7 +114,7 @@ public static class EncodingBuiltIns
             }
             catch (FormatException ex)
             {
-                throw new RuntimeError($"Invalid hex string in 'encoding.hexDecode': {ex.Message}");
+                throw new RuntimeError($"Invalid hex string in 'encoding.hexDecode': {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "string",
@@ -139,7 +139,7 @@ public static class EncodingBuiltIns
             }
             catch (FormatException ex)
             {
-                throw new RuntimeError($"Invalid Base64 string in 'encoding.base64DecodeBytes': {ex.Message}");
+                throw new RuntimeError($"Invalid Base64 string in 'encoding.base64DecodeBytes': {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "byte[]",
@@ -155,7 +155,7 @@ public static class EncodingBuiltIns
             }
             catch (FormatException ex)
             {
-                throw new RuntimeError($"Invalid hex string in 'encoding.hexDecodeBytes': {ex.Message}");
+                throw new RuntimeError($"Invalid hex string in 'encoding.hexDecodeBytes': {ex.Message}", errorType: "ParseError");
             }
         },
             returnType: "byte[]",

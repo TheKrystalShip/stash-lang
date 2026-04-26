@@ -179,19 +179,36 @@ internal static class ControlFlowPrinter
         ctx.PushScope(ScopeKind.TryCatchBody);
         formatStmt(stmt.TryBody);
         ctx.PopScope();
-        if (stmt.CatchBody is not null)
+
+        foreach (CatchClause clause in stmt.CatchClauses)
         {
             ctx.Space();
             ctx.EmitToken(); // catch
             ctx.Space();
             ctx.EmitToken(); // (
+            // For typed catch: emit type names with | between them, then the variable
+            if (clause.TypeTokens.Count > 0)
+            {
+                for (int i = 0; i < clause.TypeTokens.Count; i++)
+                {
+                    if (i > 0)
+                    {
+                        ctx.Space();
+                        ctx.EmitToken(); // |
+                        ctx.Space();
+                    }
+                    ctx.EmitToken(); // type name
+                }
+                ctx.Space();
+            }
             ctx.EmitToken(); // variable
             ctx.EmitToken(); // )
             BraceRules.BeforeOpenBrace(ctx);
             ctx.PushScope(ScopeKind.TryCatchBody);
-            formatStmt(stmt.CatchBody);
+            formatStmt(clause.Body);
             ctx.PopScope();
         }
+
         if (stmt.FinallyBody is not null)
         {
             ctx.Space();
@@ -232,8 +249,11 @@ internal static class ControlFlowPrinter
     internal static void PrintThrow(ThrowStmt stmt, FormatContext ctx, Action<Expr> formatExpr)
     {
         ctx.EmitToken(); // throw
-        ctx.Space();
-        formatExpr(stmt.Value);
+        if (stmt.Value is not null)
+        {
+            ctx.Space();
+            formatExpr(stmt.Value);
+        }
         ctx.EmitToken(); // ;
     }
 

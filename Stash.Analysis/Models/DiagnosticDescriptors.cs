@@ -26,6 +26,10 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0151 = new("SA0151", "Defer after return", DiagnosticLevel.Warning, "Control flow", "'defer' after unconditional return or throw — deferred code will never be registered.");
     public static readonly DiagnosticDescriptor SA0152 = new("SA0152", "Empty defer block", DiagnosticLevel.Information, "Control flow", "Empty 'defer' block has no effect.");
     public static readonly DiagnosticDescriptor SA0153 = new("SA0153", "Defer await without async", DiagnosticLevel.Warning, "Control flow", "'defer await' used outside of an async function.");
+    public static readonly DiagnosticDescriptor SA0160 = new("SA0160", "Bare rethrow outside catch", DiagnosticLevel.Error, "Control flow", "Bare 'throw;' is only valid inside a catch block.");
+    public static readonly DiagnosticDescriptor SA0161 = new("SA0161", "Unreachable catch clause", DiagnosticLevel.Error, "Control flow", "Catch-all clause makes subsequent typed catch clause unreachable.");
+    public static readonly DiagnosticDescriptor SA0162 = new("SA0162", "Duplicate catch-all clause", DiagnosticLevel.Warning, "Control flow", "Multiple catch-all clauses — only the first is reachable.");
+    public static readonly DiagnosticDescriptor SA0163 = new("SA0163", "Catching generic RuntimeError", DiagnosticLevel.Warning, "Control flow", "Catching 'RuntimeError' — consider catching a more specific error type instead.");
 
     // ── SA02xx — Declarations ────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0201 = new("SA0201", "Unused declaration", DiagnosticLevel.Information, "Declarations", "{0} '{1}' is declared but never used.");
@@ -127,6 +131,10 @@ public static class DiagnosticDescriptors
         dict[SA0151.Code] = SA0151;
         dict[SA0152.Code] = SA0152;
         dict[SA0153.Code] = SA0153;
+        dict[SA0160.Code] = SA0160;
+        dict[SA0161.Code] = SA0161;
+        dict[SA0162.Code] = SA0162;
+        dict[SA0163.Code] = SA0163;
         dict[SA0201.Code] = SA0201;
         dict[SA0202.Code] = SA0202;
         dict[SA0203.Code] = SA0203;

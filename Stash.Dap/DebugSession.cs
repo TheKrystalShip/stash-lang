@@ -18,6 +18,8 @@ using Stash.Parsing;
 using Stash.Resolution;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Events;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Models;
+using StashStackFrame = Stash.Runtime.StackFrame;
+using StackFrame = OmniSharp.Extensions.DebugAdapter.Protocol.Models.StackFrame;
 using OmniSharp.Extensions.DebugAdapter.Protocol.Server;
 using DapBreakpoint = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Breakpoint;
 using DapThread = OmniSharp.Extensions.DebugAdapter.Protocol.Models.Thread;

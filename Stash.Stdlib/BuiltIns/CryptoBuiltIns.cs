@@ -73,7 +73,7 @@ public static class CryptoBuiltIns
                 "sha1"   => new HMACSHA1(keyBytes),
                 "sha256" => new HMACSHA256(keyBytes),
                 "sha512" => new HMACSHA512(keyBytes),
-                _        => throw new RuntimeError("crypto.hmac: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.")
+                _        => throw new RuntimeError("crypto.hmac: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.", errorType: "ValueError")
             };
             byte[] hash = hmac.ComputeHash(dataBytes);
 
@@ -102,11 +102,11 @@ public static class CryptoBuiltIns
             }
             catch (FileNotFoundException)
             {
-                throw new RuntimeError($"File not found: '{path}'.");
+                throw new RuntimeError($"File not found: '{path}'.", errorType: "IOError");
             }
             catch (IOException ex)
             {
-                throw new RuntimeError($"Error reading file '{path}': {ex.Message}");
+                throw new RuntimeError($"Error reading file '{path}': {ex.Message}", errorType: "IOError");
             }
 
             return StashValue.FromObj(HashToHex(ComputeHash(algo, fileBytes)));
@@ -134,10 +134,10 @@ public static class CryptoBuiltIns
             var n = SvArgs.Long(args, 0, "crypto.randomBytes");
 
             if (n <= 0)
-                throw new RuntimeError("Argument to 'crypto.randomBytes' must be greater than 0.");
+                throw new RuntimeError("Argument to 'crypto.randomBytes' must be greater than 0.", errorType: "ValueError");
 
             if (n > int.MaxValue)
-                throw new RuntimeError("Argument to 'crypto.randomBytes' is too large.");
+                throw new RuntimeError("Argument to 'crypto.randomBytes' is too large.", errorType: "ValueError");
 
             var bytes = RandomNumberGenerator.GetBytes((int)n);
 
@@ -152,7 +152,7 @@ public static class CryptoBuiltIns
                 "hex"    => HashToHex(bytes),
                 "base64" => Convert.ToBase64String(bytes),
                 "raw"    => Encoding.Latin1.GetString(bytes),
-                _        => throw new RuntimeError($"Unknown encoding '{encoding}' in 'crypto.randomBytes'. Expected \"hex\", \"base64\", or \"raw\".")
+                _        => throw new RuntimeError($"Unknown encoding '{encoding}' in 'crypto.randomBytes'. Expected \"hex\", \"base64\", or \"raw\".", errorType: "ValueError")
             };
             return StashValue.FromObj(result);
         },
@@ -205,7 +205,7 @@ public static class CryptoBuiltIns
                 "sha1"   => new HMACSHA1(keyArr),
                 "sha256" => new HMACSHA256(keyArr),
                 "sha512" => new HMACSHA512(keyArr),
-                _        => throw new RuntimeError("crypto.hmacBytes: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.")
+                _        => throw new RuntimeError("crypto.hmacBytes: unknown algorithm '" + algo + "'. Expected 'md5', 'sha1', 'sha256', or 'sha512'.", errorType: "ValueError")
             };
             return StashValue.FromObj(new StashByteArray(hmac.ComputeHash(dataArr)));
         },
@@ -221,7 +221,7 @@ public static class CryptoBuiltIns
             {
                 long rawBits = SvArgs.Long(args, 0, "crypto.generateKey");
                 if (rawBits != 128 && rawBits != 192 && rawBits != 256)
-                    throw new RuntimeError($"'crypto.generateKey' accepts 128, 192, or 256 bits, got {rawBits}.");
+                    throw new RuntimeError($"'crypto.generateKey' accepts 128, 192, or 256 bits, got {rawBits}.", errorType: "ValueError");
                 bits = (int)rawBits;
             }
             return StashValue.FromObj(HashToHex(RandomNumberGenerator.GetBytes(bits / 8)));
@@ -245,12 +245,12 @@ public static class CryptoBuiltIns
             else if (dataArg.IsObj && dataArg.AsObj is StashByteArray dataBa)
                 plaintext = dataBa.AsSpan().ToArray();
             else
-                throw new RuntimeError("1st argument to 'crypto.encrypt' must be a string or byte[].");
+                throw new RuntimeError("1st argument to 'crypto.encrypt' must be a string or byte[].", errorType: "TypeError");
 
             byte[] keyBytes = ExtractKeyBytes(args[1], "crypto.encrypt");
 
             if (keyBytes.Length != 32)
-                throw new RuntimeError($"'crypto.encrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.");
+                throw new RuntimeError($"'crypto.encrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.", errorType: "ValueError");
 
             byte[] iv = RandomNumberGenerator.GetBytes(12);
             byte[] ciphertext = new byte[plaintext.Length];
@@ -281,7 +281,7 @@ public static class CryptoBuiltIns
             byte[] keyBytes = ExtractKeyBytes(args[1], "crypto.decrypt");
 
             if (keyBytes.Length != 32)
-                throw new RuntimeError($"'crypto.decrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.");
+                throw new RuntimeError($"'crypto.decrypt' requires a 32-byte (256-bit) key, got {keyBytes.Length} bytes.", errorType: "ValueError");
 
             byte[] cipherBytes;
             byte[] ivBytes;
@@ -294,13 +294,13 @@ public static class CryptoBuiltIns
                 StashValue ivVal = ctDict.Get("iv");
                 StashValue tagVal = ctDict.Get("tag");
                 if (ctVal.IsNull || ivVal.IsNull || tagVal.IsNull)
-                    throw new RuntimeError("'crypto.decrypt' dict must contain 'ciphertext', 'iv', and 'tag' fields.");
+                    throw new RuntimeError("'crypto.decrypt' dict must contain 'ciphertext', 'iv', and 'tag' fields.", errorType: "TypeError");
                 if (ctVal.AsObj is not string ctHexField)
-                    throw new RuntimeError("'ciphertext' field in 'crypto.decrypt' dict must be a hex string.");
+                    throw new RuntimeError("'ciphertext' field in 'crypto.decrypt' dict must be a hex string.", errorType: "TypeError");
                 if (ivVal.AsObj is not string ivHexField)
-                    throw new RuntimeError("'iv' field in 'crypto.decrypt' dict must be a hex string.");
+                    throw new RuntimeError("'iv' field in 'crypto.decrypt' dict must be a hex string.", errorType: "TypeError");
                 if (tagVal.AsObj is not string tagHexField)
-                    throw new RuntimeError("'tag' field in 'crypto.decrypt' dict must be a hex string.");
+                    throw new RuntimeError("'tag' field in 'crypto.decrypt' dict must be a hex string.", errorType: "TypeError");
                 cipherBytes = HexToBytes(ctHexField, "crypto.decrypt");
                 ivBytes = HexToBytes(ivHexField, "crypto.decrypt");
                 tagBytes = HexToBytes(tagHexField, "crypto.decrypt");
@@ -309,14 +309,14 @@ public static class CryptoBuiltIns
             {
                 // Combined format: iv (24 hex chars) + tag (32 hex chars) + ciphertext (rest)
                 if (combinedHex.Length < 56)
-                    throw new RuntimeError("'crypto.decrypt' combined hex string is too short (must encode at least iv + tag).");
+                    throw new RuntimeError("'crypto.decrypt' combined hex string is too short (must encode at least iv + tag).", errorType: "ValueError");
                 ivBytes = HexToBytes(combinedHex[..24], "crypto.decrypt");
                 tagBytes = HexToBytes(combinedHex[24..56], "crypto.decrypt");
                 cipherBytes = HexToBytes(combinedHex[56..], "crypto.decrypt");
             }
             else
             {
-                throw new RuntimeError("1st argument to 'crypto.decrypt' must be a dictionary { ciphertext, iv, tag } or a combined hex string.");
+                throw new RuntimeError("1st argument to 'crypto.decrypt' must be a dictionary { ciphertext, iv, tag } or a combined hex string.", errorType: "TypeError");
             }
 
             byte[] plaintext = new byte[cipherBytes.Length];
@@ -327,7 +327,7 @@ public static class CryptoBuiltIns
             }
             catch (CryptographicException)
             {
-                throw new RuntimeError("'crypto.decrypt' failed: authentication tag verification failed.");
+                throw new RuntimeError("'crypto.decrypt' failed: authentication tag verification failed.", errorType: "ValueError");
             }
 
             return StashValue.FromObj(Encoding.UTF8.GetString(plaintext));
@@ -348,7 +348,7 @@ public static class CryptoBuiltIns
             return HexToBytes(keyHex, funcName);
         if (keyArg.IsObj && keyArg.AsObj is StashByteArray keyBa)
             return keyBa.AsSpan().ToArray();
-        throw new RuntimeError($"2nd argument to '{funcName}' must be a hex string or byte[].");
+        throw new RuntimeError($"2nd argument to '{funcName}' must be a hex string or byte[].", errorType: "TypeError");
     }
 
     /// <summary>
@@ -360,14 +360,14 @@ public static class CryptoBuiltIns
     private static byte[] HexToBytes(string hex, string funcName)
     {
         if (hex.Length % 2 != 0)
-            throw new RuntimeError($"Invalid hex string in '{funcName}': length must be even.");
+            throw new RuntimeError($"Invalid hex string in '{funcName}': length must be even.", errorType: "ParseError");
         try
         {
             return Convert.FromHexString(hex);
         }
         catch (FormatException)
         {
-            throw new RuntimeError($"Invalid hex string in '{funcName}': contains non-hexadecimal characters.");
+            throw new RuntimeError($"Invalid hex string in '{funcName}': contains non-hexadecimal characters.", errorType: "ParseError");
         }
     }
 
@@ -393,6 +393,6 @@ public static class CryptoBuiltIns
             "sha1"   => SHA1.HashData(data),
             "sha256" => SHA256.HashData(data),
             "sha512" => SHA512.HashData(data),
-            _        => throw new RuntimeError($"Unknown hash algorithm '{algo}'. Supported: md5, sha1, sha256, sha512.")
+            _        => throw new RuntimeError($"Unknown hash algorithm '{algo}'. Supported: md5, sha1, sha256, sha512.", errorType: "ValueError")
         };
 }

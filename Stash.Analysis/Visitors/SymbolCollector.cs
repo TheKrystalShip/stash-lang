@@ -821,7 +821,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
     /// <returns>Always <see langword="null"/>.</returns>
     public object? VisitThrowStmt(ThrowStmt stmt)
     {
-        stmt.Value.Accept(this);
+        stmt.Value?.Accept(this);
         return null;
     }
 
@@ -834,11 +834,11 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             s.Accept(this);
         PopScope();
 
-        if (stmt.CatchBody is not null)
+        foreach (CatchClause clause in stmt.CatchClauses)
         {
-            PushScope(ScopeKind.Block, stmt.CatchBody.Span);
-            _currentScope.AddSymbol(new SymbolInfo(stmt.CatchVariable!.Lexeme, SymbolKind.Variable, stmt.CatchVariable.Span, detail: "caught error"));
-            foreach (var s in stmt.CatchBody.Statements)
+            PushScope(ScopeKind.Block, clause.Body.Span);
+            _currentScope.AddSymbol(new SymbolInfo(clause.Variable.Lexeme, SymbolKind.Variable, clause.Variable.Span, detail: "caught error"));
+            foreach (var s in clause.Body.Statements)
                 s.Accept(this);
             PopScope();
         }

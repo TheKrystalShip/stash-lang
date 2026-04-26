@@ -54,13 +54,13 @@ public static class XmlBuiltIns
                 if (args.Length > 1 && !args[1].IsNull)
                 {
                     if (args[1].AsObj is not StashInstance opts)
-                        throw new RuntimeError("xml.parse: options must be an XmlParseOptions struct.");
+                        throw new RuntimeError("xml.parse: options must be an XmlParseOptions struct.", errorType: "TypeError");
 
                     var pwVal = opts.GetField("preserveWhitespace", null);
                     if (!pwVal.IsNull)
                     {
                         if (!pwVal.IsBool)
-                            throw new RuntimeError("xml.parse: preserveWhitespace must be a boolean.");
+                            throw new RuntimeError("xml.parse: preserveWhitespace must be a boolean.", errorType: "TypeError");
                         preserveWhitespace = pwVal.AsBool;
                     }
                 }
@@ -95,7 +95,7 @@ public static class XmlBuiltIns
                     throw new RuntimeError("xml.stringify: expected 1 or 2 arguments.");
 
                 if (args[0].AsObj is not StashInstance nodeInst)
-                    throw new RuntimeError("xml.stringify: first argument must be an XmlNode.");
+                    throw new RuntimeError("xml.stringify: first argument must be an XmlNode.", errorType: "TypeError");
 
                 int indent = 2;
                 bool declaration = false;
@@ -104,13 +104,13 @@ public static class XmlBuiltIns
                 if (args.Length > 1 && !args[1].IsNull)
                 {
                     if (args[1].AsObj is not StashInstance opts)
-                        throw new RuntimeError("xml.stringify: options must be an XmlStringifyOptions struct.");
+                        throw new RuntimeError("xml.stringify: options must be an XmlStringifyOptions struct.", errorType: "TypeError");
 
                     var indentVal = opts.GetField("indent", null);
                     if (!indentVal.IsNull)
                     {
                         if (!indentVal.IsInt)
-                            throw new RuntimeError("xml.stringify: indent must be an integer.");
+                            throw new RuntimeError("xml.stringify: indent must be an integer.", errorType: "TypeError");
                         indent = (int)indentVal.AsInt;
                     }
 
@@ -118,7 +118,7 @@ public static class XmlBuiltIns
                     if (!declVal.IsNull)
                     {
                         if (!declVal.IsBool)
-                            throw new RuntimeError("xml.stringify: declaration must be a boolean.");
+                            throw new RuntimeError("xml.stringify: declaration must be a boolean.", errorType: "TypeError");
                         declaration = declVal.AsBool;
                     }
 
@@ -126,7 +126,7 @@ public static class XmlBuiltIns
                     if (!encVal.IsNull)
                     {
                         if (encVal.AsObj is not string encStr)
-                            throw new RuntimeError("xml.stringify: encoding must be a string.");
+                            throw new RuntimeError("xml.stringify: encoding must be a string.", errorType: "TypeError");
                         encoding = encStr;
                     }
                 }
@@ -159,7 +159,7 @@ public static class XmlBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"xml.stringify: failed — {ex.Message}");
+                    throw new RuntimeError($"xml.stringify: failed — {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "string",
@@ -194,7 +194,7 @@ public static class XmlBuiltIns
                     throw new RuntimeError("xml.query: expected 2 arguments.");
 
                 if (args[0].AsObj is not StashInstance nodeInst)
-                    throw new RuntimeError("xml.query: first argument must be an XmlNode.");
+                    throw new RuntimeError("xml.query: first argument must be an XmlNode.", errorType: "TypeError");
 
                 string xpath = SvArgs.String(args, 1, "xml.query");
                 var results = new List<StashValue>();
@@ -237,12 +237,12 @@ public static class XmlBuiltIns
                 }
                 catch (XPathException ex)
                 {
-                    throw new RuntimeError($"xml.query: invalid XPath expression — {ex.Message}");
+                    throw new RuntimeError($"xml.query: invalid XPath expression — {ex.Message}", errorType: "ParseError");
                 }
                 catch (RuntimeError) { throw; }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"xml.query: failed — {ex.Message}");
+                    throw new RuntimeError($"xml.query: failed — {ex.Message}", errorType: "IOError");
                 }
             },
             returnType: "array",
@@ -361,17 +361,17 @@ public static class XmlBuiltIns
         {
             var doc = XDocument.Parse(text, LoadOptions.None);
             if (doc.Root is null)
-                throw new RuntimeError("xml.parse: document has no root element.");
+                throw new RuntimeError("xml.parse: document has no root element.", errorType: "ParseError");
             return XElementToNode(doc.Root, false);
         }
         catch (XmlException ex)
         {
-            throw new RuntimeError($"xml.parse: invalid XML — {ex.LineNumber},{ex.LinePosition}: {ex.Message}");
+            throw new RuntimeError($"xml.parse: invalid XML — {ex.LineNumber},{ex.LinePosition}: {ex.Message}", errorType: "ParseError");
         }
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"xml.parse: failed to parse XML — {ex.Message}");
+            throw new RuntimeError($"xml.parse: failed to parse XML — {ex.Message}", errorType: "ParseError");
         }
     }
 
@@ -398,7 +398,7 @@ public static class XmlBuiltIns
         catch (RuntimeError) { throw; }
         catch (Exception ex)
         {
-            throw new RuntimeError($"{callerName}: XML serialization failed — {ex.Message}");
+            throw new RuntimeError($"{callerName}: XML serialization failed — {ex.Message}", errorType: "IOError");
         }
     }
 }

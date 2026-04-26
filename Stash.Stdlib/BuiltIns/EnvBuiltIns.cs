@@ -168,7 +168,7 @@ public static class EnvBuiltIns
             }
             catch (System.IO.IOException e)
             {
-                throw new RuntimeError("env.loadFile: " + e.Message);
+                throw new RuntimeError("env.loadFile: " + e.Message, errorType: "IOError");
             }
 
             long count = 0;
@@ -251,7 +251,7 @@ public static class EnvBuiltIns
             }
             catch (System.IO.IOException e)
             {
-                throw new RuntimeError("env.saveFile: " + e.Message);
+                throw new RuntimeError("env.saveFile: " + e.Message, errorType: "IOError");
             }
 
             return StashValue.Null;

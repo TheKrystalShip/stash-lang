@@ -38,7 +38,7 @@ public static class ConfigBuiltIns
             }
             catch (IOException e)
             {
-                throw new RuntimeError("config.read: " + e.Message);
+                throw new RuntimeError("config.read: " + e.Message, errorType: "IOError");
             }
 
             return StashValue.FromObject(ParseByFormat(text, format, "config.read"));
@@ -65,7 +65,7 @@ public static class ConfigBuiltIns
             }
             catch (IOException e)
             {
-                throw new RuntimeError("config.write: " + e.Message);
+                throw new RuntimeError("config.write: " + e.Message, errorType: "IOError");
             }
 
             return StashValue.Null;
@@ -112,7 +112,7 @@ public static class ConfigBuiltIns
             ".toml" => "toml",
             ".csv" => "csv",
             ".xml" => "xml",
-            _ => throw new RuntimeError($"config: unsupported file extension '{ext}'. Use the format parameter to specify the format explicitly.")
+            _ => throw new RuntimeError($"config: unsupported file extension '{ext}'. Use the format parameter to specify the format explicitly.", errorType: "ValueError")
         };
     }
 
@@ -131,7 +131,7 @@ public static class ConfigBuiltIns
             "toml" => TomlBuiltIns.ParseToml(text),
             "csv" => CsvBuiltIns.ParseCsvDefault(text),
             "xml" => XmlBuiltIns.ParseXml(text),
-            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'.")
+            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'.", errorType: "ValueError")
         };
     }
 
@@ -147,16 +147,16 @@ public static class ConfigBuiltIns
             "json" => JsonBuiltIns.StringifyJson(data),
             "ini" => data is StashDictionary iniDict
                 ? IniBuiltIns.StringifyIni(iniDict)
-                : throw new RuntimeError($"{callerName}: INI format requires a dict value."),
+                : throw new RuntimeError($"{callerName}: INI format requires a dict value.", errorType: "TypeError"),
             "yaml" => YamlBuiltIns.StringifyYaml(data),
             "toml" => data is StashDictionary tomlDict
                 ? TomlBuiltIns.StringifyToml(tomlDict)
-                : throw new RuntimeError($"{callerName}: TOML format requires a dict value."),
+                : throw new RuntimeError($"{callerName}: TOML format requires a dict value.", errorType: "TypeError"),
             "csv" => CsvBuiltIns.StringifyCsvDefault(data, callerName),
             "xml" => data is StashInstance xmlNode
                 ? XmlBuiltIns.StringifyXml(xmlNode, callerName)
-                : throw new RuntimeError($"{callerName}: XML format requires an XmlNode value."),
-            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'.")
+                : throw new RuntimeError($"{callerName}: XML format requires an XmlNode value.", errorType: "TypeError"),
+            _ => throw new RuntimeError($"{callerName}: unknown format '{format}'. Supported formats: 'json', 'ini', 'yaml', 'toml', 'csv', 'xml'.", errorType: "ValueError")
         };
     }
 
