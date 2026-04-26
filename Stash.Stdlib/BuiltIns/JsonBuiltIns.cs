@@ -31,7 +31,7 @@ public static class JsonBuiltIns
             }
             catch (JsonException e)
             {
-                throw new RuntimeError("json.parse: invalid JSON — " + e.Message, errorType: "ParseError");
+                throw new RuntimeError("json.parse: invalid JSON — " + e.Message, errorType: StashErrorTypes.ParseError);
             }
         },
             documentation: "Parses a JSON string into a Stash value (dict, array, string, number, bool, or null).\n@param str The JSON string to parse\n@return The parsed value");
@@ -151,7 +151,7 @@ public static class JsonBuiltIns
             StashInstance inst => StringifyInstance(inst),
             StashByteArray ba => JsonSerializer.Serialize(Convert.ToBase64String(ba.AsSpan()), StashJsonContext.Default.String),
             StashTypedArray ta => StringifyTypedArray(ta),
-            _ => throw new RuntimeError($"json.stringify: cannot serialize value of type {value.GetType().Name}.", errorType: "TypeError")
+            _ => throw new RuntimeError($"json.stringify: cannot serialize value of type {value.GetType().Name}.", errorType: StashErrorTypes.TypeError)
         };
     }
 
@@ -240,7 +240,7 @@ public static class JsonBuiltIns
             long l => JsonSerializer.Serialize(l.ToString(CultureInfo.InvariantCulture), StashJsonContext.Default.String),
             double d => JsonSerializer.Serialize(d.ToString("G", CultureInfo.InvariantCulture), StashJsonContext.Default.String),
             bool b => JsonSerializer.Serialize(b ? "true" : "false", StashJsonContext.Default.String),
-            _ => throw new RuntimeError("json.stringify: dict key must be a string, number, or bool.", errorType: "TypeError")
+            _ => throw new RuntimeError("json.stringify: dict key must be a string, number, or bool.", errorType: StashErrorTypes.TypeError)
         };
     }
 
@@ -262,7 +262,7 @@ public static class JsonBuiltIns
             StashInstance inst => PrettyInstance(inst, indent, indentWidth),
             StashByteArray ba => JsonSerializer.Serialize(Convert.ToBase64String(ba.AsSpan()), StashJsonContext.Default.String),
             StashTypedArray ta => PrettyTypedArray(ta, indent, indentWidth),
-            _ => throw new RuntimeError($"json.pretty: cannot serialize value of type {value.GetType().Name}.", errorType: "TypeError")
+            _ => throw new RuntimeError($"json.pretty: cannot serialize value of type {value.GetType().Name}.", errorType: StashErrorTypes.TypeError)
         };
     }
 
@@ -388,7 +388,7 @@ public static class JsonBuiltIns
         }
         catch (JsonException e)
         {
-            throw new RuntimeError($"{callerName}: invalid JSON — " + e.Message, errorType: "ParseError");
+            throw new RuntimeError($"{callerName}: invalid JSON — " + e.Message, errorType: StashErrorTypes.ParseError);
         }
     }
 

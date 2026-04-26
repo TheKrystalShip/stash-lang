@@ -86,7 +86,7 @@ public static class LogBuiltIns
             {
                 var format = SvArgs.String(args, 0, "log.setFormat");
                 if (format != "text" && format != "json")
-                    throw new RuntimeError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.", errorType: "ValueError");
+                    throw new RuntimeError($"log.setFormat: unknown format '{format}'. Expected 'text' or 'json'.", errorType: StashErrorTypes.ValueError);
                 ctx.LoggerState.Format = format;
                 return StashValue.Null;
             },
@@ -100,7 +100,7 @@ public static class LogBuiltIns
                 if (target != "stdout" && target != "stderr")
                 {
                     try { ctx.LoggerState.SetFileOutput(target); }
-                    catch (Exception ex) { throw new RuntimeError($"log.setOutput: failed to open file '{target}': {ex.Message}", errorType: "IOError"); }
+                    catch (Exception ex) { throw new RuntimeError($"log.setOutput: failed to open file '{target}': {ex.Message}", errorType: StashErrorTypes.IOError); }
                 }
                 else
                 {
@@ -372,6 +372,6 @@ public static class LogBuiltIns
             "info"  => LevelInfo,
             "warn" or "warning" => LevelWarn,
             "error" => LevelError,
-            _ => throw new RuntimeError($"log.setLevel: unknown level '{level}'. Expected 'debug', 'info', 'warn', or 'error'.", errorType: "ValueError")
+            _ => throw new RuntimeError($"log.setLevel: unknown level '{level}'. Expected 'debug', 'info', 'warn', or 'error'.", errorType: StashErrorTypes.ValueError)
         };
 }

@@ -53,7 +53,7 @@ public static class DictBuiltIns
             if (args.Length < 2 || args.Length > 3)
                 throw new RuntimeError("'dict.get' requires 2 or 3 arguments.");
             var d = SvArgs.Dict(args, 0, "dict.get");
-            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: "TypeError");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
             var result = d.Get(key);
             if (result.IsNull && args.Length == 3)
                 return args[2];
@@ -69,7 +69,7 @@ public static class DictBuiltIns
         ns.Function("set", [Param("dict", "dict"), Param("key", "any"), Param("value", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var d = SvArgs.Dict(args, 0, "dict.set");
-            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: "TypeError");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
             d.Set(key, args[2]);
             return StashValue.Null;
         },
@@ -81,7 +81,7 @@ public static class DictBuiltIns
         ns.Function("has", [Param("dict", "dict"), Param("key", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var d = SvArgs.Dict(args, 0, "dict.has");
-            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: "TypeError");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
             return StashValue.FromBool(d.Has(key));
         },
             returnType: "bool",
@@ -93,7 +93,7 @@ public static class DictBuiltIns
         ns.Function("remove", [Param("dict", "dict"), Param("key", "any")], static (IInterpreterContext ctx, ReadOnlySpan<StashValue> args) =>
         {
             var d = SvArgs.Dict(args, 0, "dict.remove");
-            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: "TypeError");
+            var key = args[1].ToObject() ?? throw new RuntimeError("Dictionary key cannot be null.", errorType: StashErrorTypes.TypeError);
             return StashValue.FromBool(d.Remove(key));
         },
             returnType: "bool",
@@ -246,9 +246,9 @@ public static class DictBuiltIns
                 }
                 else
                 {
-                    throw new RuntimeError("'dict.fromPairs' requires each element to be a [key, value] pair.", errorType: "TypeError");
+                    throw new RuntimeError("'dict.fromPairs' requires each element to be a [key, value] pair.", errorType: StashErrorTypes.TypeError);
                 }
-                if (key is null) throw new RuntimeError("Dictionary key cannot be null in 'dict.fromPairs'.", errorType: "TypeError");
+                if (key is null) throw new RuntimeError("Dictionary key cannot be null in 'dict.fromPairs'.", errorType: StashErrorTypes.TypeError);
                 result.Set(key, val);
             }
             return StashValue.FromObj(result);

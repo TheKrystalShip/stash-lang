@@ -148,12 +148,12 @@ public static class SysBuiltIns
                 }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"sys.diskUsage: {ex.Message}", errorType: "IOError");
+                    throw new RuntimeError($"sys.diskUsage: {ex.Message}", errorType: StashErrorTypes.IOError);
                 }
 
                 if (!drive.IsReady)
                 {
-                    throw new RuntimeError($"sys.diskUsage: drive '{drive.Name}' is not ready.", errorType: "IOError");
+                    throw new RuntimeError($"sys.diskUsage: drive '{drive.Name}' is not ready.", errorType: StashErrorTypes.IOError);
                 }
 
                 var dict = new StashDictionary();

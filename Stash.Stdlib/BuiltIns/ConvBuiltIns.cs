@@ -30,7 +30,7 @@ public static class ConvBuiltIns
             {
                 int radix = (int)SvArgs.Long(args, 1, "conv.toInt");
                 if (radix != 2 && radix != 8 && radix != 10 && radix != 16)
-                    throw new RuntimeError($"conv.toInt: unsupported base {radix}. Must be 2, 8, 10, or 16.", errorType: "ValueError");
+                    throw new RuntimeError($"conv.toInt: unsupported base {radix}. Must be 2, 8, 10, or 16.", errorType: StashErrorTypes.ValueError);
                 string s = SvArgs.String(args, 0, "conv.toInt");
                 string stripped = radix switch
                 {
@@ -45,7 +45,7 @@ public static class ConvBuiltIns
                 }
                 catch (Exception e) when (e is FormatException || e is OverflowException)
                 {
-                    throw new RuntimeError($"Cannot parse '{s}' as a base-{radix} integer.", errorType: "ParseError");
+                    throw new RuntimeError($"Cannot parse '{s}' as a base-{radix} integer.", errorType: StashErrorTypes.ParseError);
                 }
             }
             StashValue val = args[0];
@@ -56,9 +56,9 @@ public static class ConvBuiltIns
             {
                 if (long.TryParse(str, out long result))
                     return StashValue.FromInt(result);
-                throw new RuntimeError($"Cannot parse '{str}' as integer.", errorType: "ParseError");
+                throw new RuntimeError($"Cannot parse '{str}' as integer.", errorType: StashErrorTypes.ParseError);
             }
-            throw new RuntimeError("Argument to 'conv.toInt' must be a number or string.", errorType: "TypeError");
+            throw new RuntimeError("Argument to 'conv.toInt' must be a number or string.", errorType: StashErrorTypes.TypeError);
         },
             returnType: "int",
             isVariadic: true,
@@ -75,9 +75,9 @@ public static class ConvBuiltIns
                 if (double.TryParse(s, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out double result))
                     return StashValue.FromFloat(result);
-                throw new RuntimeError($"Cannot parse '{s}' as float.", errorType: "ParseError");
+                throw new RuntimeError($"Cannot parse '{s}' as float.", errorType: StashErrorTypes.ParseError);
             }
-            throw new RuntimeError("Argument to 'conv.toFloat' must be a number or string.", errorType: "TypeError");
+            throw new RuntimeError("Argument to 'conv.toFloat' must be a number or string.", errorType: StashErrorTypes.TypeError);
         },
             returnType: "float",
             documentation: "Parses a string or converts a number to a float. Returns null on failure.\n@param value A string or number to convert\n@return The float value, or null if parsing fails");
@@ -97,7 +97,7 @@ public static class ConvBuiltIns
             {
                 int radix = (int)SvArgs.Long(args, 1, "conv.toByte");
                 if (radix != 2 && radix != 8 && radix != 10 && radix != 16)
-                    throw new RuntimeError($"conv.toByte: unsupported base {radix}. Must be 2, 8, 10, or 16.", errorType: "ValueError");
+                    throw new RuntimeError($"conv.toByte: unsupported base {radix}. Must be 2, 8, 10, or 16.", errorType: StashErrorTypes.ValueError);
                 string s = SvArgs.String(args, 0, "conv.toByte");
                 string stripped = radix switch
                 {
@@ -110,12 +110,12 @@ public static class ConvBuiltIns
                 {
                     long parsed = System.Convert.ToInt64(stripped, radix);
                     if (parsed < 0 || parsed > 255)
-                        throw new RuntimeError($"Value {parsed} is out of byte range [0, 255].", errorType: "ValueError");
+                        throw new RuntimeError($"Value {parsed} is out of byte range [0, 255].", errorType: StashErrorTypes.ValueError);
                     return StashValue.FromByte((byte)parsed);
                 }
                 catch (Exception e) when (e is FormatException || e is OverflowException)
                 {
-                    throw new RuntimeError($"Cannot parse '{s}' as a base-{radix} byte value.", errorType: "ParseError");
+                    throw new RuntimeError($"Cannot parse '{s}' as a base-{radix} byte value.", errorType: StashErrorTypes.ParseError);
                 }
             }
             StashValue val = args[0];
@@ -124,23 +124,23 @@ public static class ConvBuiltIns
             {
                 long n = val.AsInt;
                 if (n < 0 || n > 255)
-                    throw new RuntimeError($"Value {n} is out of byte range [0, 255].", errorType: "ValueError");
+                    throw new RuntimeError($"Value {n} is out of byte range [0, 255].", errorType: StashErrorTypes.ValueError);
                 return StashValue.FromByte((byte)n);
             }
             if (val.IsFloat)
             {
                 long n = (long)val.AsFloat;
                 if (n < 0 || n > 255)
-                    throw new RuntimeError($"Value {n} is out of byte range [0, 255].", errorType: "ValueError");
+                    throw new RuntimeError($"Value {n} is out of byte range [0, 255].", errorType: StashErrorTypes.ValueError);
                 return StashValue.FromByte((byte)n);
             }
             if (val.IsObj && val.AsObj is string str)
             {
                 if (byte.TryParse(str, out byte result))
                     return StashValue.FromByte(result);
-                throw new RuntimeError($"Cannot parse '{str}' as byte.", errorType: "ParseError");
+                throw new RuntimeError($"Cannot parse '{str}' as byte.", errorType: StashErrorTypes.ParseError);
             }
-            throw new RuntimeError("Argument to 'conv.toByte' must be a number or string.", errorType: "TypeError");
+            throw new RuntimeError("Argument to 'conv.toByte' must be a number or string.", errorType: StashErrorTypes.TypeError);
         },
             returnType: "byte",
             isVariadic: true,
@@ -188,7 +188,7 @@ public static class ConvBuiltIns
             }
             catch (System.Exception e) when (e is System.FormatException || e is System.OverflowException)
             {
-                throw new RuntimeError($"Cannot parse '{s}' as a hexadecimal integer.", errorType: "ParseError");
+                throw new RuntimeError($"Cannot parse '{s}' as a hexadecimal integer.", errorType: StashErrorTypes.ParseError);
             }
         },
             returnType: "int",
@@ -204,7 +204,7 @@ public static class ConvBuiltIns
             }
             catch (System.Exception e) when (e is System.FormatException || e is System.OverflowException)
             {
-                throw new RuntimeError($"Cannot parse '{s}' as an octal integer.", errorType: "ParseError");
+                throw new RuntimeError($"Cannot parse '{s}' as an octal integer.", errorType: StashErrorTypes.ParseError);
             }
         },
             returnType: "int",
@@ -220,7 +220,7 @@ public static class ConvBuiltIns
             }
             catch (System.Exception e) when (e is System.FormatException || e is System.OverflowException)
             {
-                throw new RuntimeError($"Cannot parse '{s}' as a binary integer.", errorType: "ParseError");
+                throw new RuntimeError($"Cannot parse '{s}' as a binary integer.", errorType: StashErrorTypes.ParseError);
             }
         },
             returnType: "int",
@@ -230,7 +230,7 @@ public static class ConvBuiltIns
         {
             string s = SvArgs.String(args, 0, "conv.charCode");
             if (s.Length == 0)
-                throw new RuntimeError("Argument to 'conv.charCode' must be a non-empty string.", errorType: "ValueError");
+                throw new RuntimeError("Argument to 'conv.charCode' must be a non-empty string.", errorType: StashErrorTypes.ValueError);
             return StashValue.FromInt((long)s[0]);
         },
             returnType: "int",
@@ -240,7 +240,7 @@ public static class ConvBuiltIns
         {
             long n = SvArgs.Long(args, 0, "conv.fromCharCode");
             if (n < 0 || n > 0x10FFFF)
-                throw new RuntimeError($"Code point {n} is out of the valid Unicode range (0–0x10FFFF).", errorType: "ValueError");
+                throw new RuntimeError($"Code point {n} is out of the valid Unicode range (0–0x10FFFF).", errorType: StashErrorTypes.ValueError);
             return StashValue.FromObj(((char)(int)n).ToString());
         },
             returnType: "string",

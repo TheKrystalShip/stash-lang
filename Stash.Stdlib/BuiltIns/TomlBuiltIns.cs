@@ -54,7 +54,7 @@ public static class TomlBuiltIns
             }
             catch (TomlException e)
             {
-                throw new RuntimeError("toml.parse: invalid TOML — " + e.Message, errorType: "ParseError");
+                throw new RuntimeError("toml.parse: invalid TOML — " + e.Message, errorType: StashErrorTypes.ParseError);
             }
         },
             returnType: "dict",
@@ -72,7 +72,7 @@ public static class TomlBuiltIns
             }
             catch (TomlException e)
             {
-                throw new RuntimeError("toml.stringify: " + e.Message, errorType: "TypeError");
+                throw new RuntimeError("toml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
             }
         },
             returnType: "string",

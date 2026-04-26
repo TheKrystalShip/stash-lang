@@ -2859,17 +2859,16 @@ io.println(last.message);    // "Cannot parse 'abc' as integer."
 `throw` raises a runtime error from user code. The throw value determines the error's type and message:
 
 ```stash
-// Throw a typed error — preferred; creates a first-class error with the given type and message
-throw TypeError("Expected a string, got int");
-throw ValueError("Age must be between 0 and 150");
-throw IOError("Cannot read /etc/config: permission denied");
+// Throw a named error struct — preferred; type-safe, completion-friendly
+throw ValueError { message: "age must be between 0 and 150" };
+throw TypeError { message: "expected a string, got int" };
+throw IOError { message: "cannot read /etc/config: permission denied" };
+
+// Throw a dict — works too; required for dynamic type names at runtime
+throw { type: "ValidationError", message: "age must be >= 0" };
 
 // Throw a string — becomes a RuntimeError
 throw "something went wrong";
-
-// Throw a dict — use `type` for the error category, `message` for details
-// `type` defaults to "Error" if omitted; `message` defaults to "Unknown error"
-throw { type: "ValidationError", message: "age must be >= 0" };
 
 // Any other value is stringified and thrown as a RuntimeError
 throw 42;    // RuntimeError with message "42"
@@ -3039,6 +3038,43 @@ Stash assigns every runtime error a **type string** accessible via `e.type`. The
 | `RuntimeError`      | Default / uncategorized error                               |
 
 > **Note:** Catching `RuntimeError` by name is discouraged — it is the default catch-all type in the taxonomy. Prefer specific types where possible. The static analysis engine emits `SA0163` (warning) when `RuntimeError` is caught by name.
+
+#### Struct Throw Form
+
+Named error types can be thrown using struct literal syntax — the preferred form:
+
+```stash
+// Struct form — type-safe, IDE completion works on fields
+throw ValueError { message: "index must be positive" };
+throw ParseError { message: $"cannot parse '{input}'" };
+throw CommandError { message: "deploy failed", exitCode: 1, stderr: "permission denied", stdout: "", command: "kubectl apply" };
+
+// Equivalent dict form — still supported
+throw { type: "ValueError", message: "index must be positive" };
+```
+
+Both forms produce the same runtime error — the struct's `TypeName` becomes `e.type` in the catch clause. Typed catch works identically with both forms:
+
+```stash
+try {
+    throw ValueError { message: "invalid range" };
+} catch (ValueError e) {
+    io.println(e.message);  // "invalid range"
+    io.println(e.type);     // "ValueError"
+}
+```
+
+`CommandError` carries additional structured fields accessible after a typed catch:
+
+```stash
+try {
+    $!(git push origin main)
+} catch (CommandError e) {
+    io.println($"exit: {e.exitCode}");    // e.g. "exit: 128"
+    io.println($"stderr: {e.stderr}");
+    io.println($"command: {e.command}");
+}
+```
 
 #### Four Forms
 

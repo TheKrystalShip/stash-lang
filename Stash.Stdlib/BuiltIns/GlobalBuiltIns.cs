@@ -215,6 +215,23 @@ public static class GlobalBuiltIns
         // Enums
         b.Enum("Backoff", ["Fixed", "Linear", "Exponential"]);
 
+        // Error type structs — must be defined here so the VM can instantiate them via
+        // struct-init literals (e.g. `throw ValueError { message: "x" }`).
+        b.Struct(StashErrorTypes.ValueError,        [new("message", "string")]);
+        b.Struct(StashErrorTypes.TypeError,         [new("message", "string")]);
+        b.Struct(StashErrorTypes.ParseError,        [new("message", "string")]);
+        b.Struct(StashErrorTypes.IndexError,        [new("message", "string")]);
+        b.Struct(StashErrorTypes.IOError,           [new("message", "string")]);
+        b.Struct(StashErrorTypes.NotSupportedError, [new("message", "string")]);
+        b.Struct(StashErrorTypes.TimeoutError,      [new("message", "string")]);
+        b.Struct(StashErrorTypes.CommandError, [
+            new("message",  "string"),
+            new("exitCode", "int"),
+            new("stderr",   "string"),
+            new("stdout",   "string"),
+            new("command",  "string"),
+        ]);
+
         // Struct definitions
         b.Struct("RetryOptions", [
             new ("delay", "duration"),

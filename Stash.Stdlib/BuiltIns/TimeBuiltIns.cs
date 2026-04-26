@@ -93,7 +93,7 @@ public static class TimeBuiltIns
             }
             catch (FormatException)
             {
-                throw new RuntimeError($"'time.parse' could not parse \"{str}\" with format \"{fmt}\".", errorType: "ParseError");
+                throw new RuntimeError($"'time.parse' could not parse \"{str}\" with format \"{fmt}\".", errorType: StashErrorTypes.ParseError);
             }
         },
             returnType: "float",
@@ -227,7 +227,7 @@ public static class TimeBuiltIns
             try { tz = TimeZoneInfo.FindSystemTimeZoneById(timezone); }
             catch (TimeZoneNotFoundException)
             {
-                throw new RuntimeError($"'time.toTimezone' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: "ValueError");
+                throw new RuntimeError($"'time.toTimezone' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: StashErrorTypes.ValueError);
             }
             var offset = tz.GetUtcOffset(utcDto.UtcDateTime);
             return StashValue.FromFloat(ts + offset.TotalSeconds);
@@ -244,7 +244,7 @@ public static class TimeBuiltIns
             try { tz = TimeZoneInfo.FindSystemTimeZoneById(timezone); }
             catch (TimeZoneNotFoundException)
             {
-                throw new RuntimeError($"'time.toUTC' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: "ValueError");
+                throw new RuntimeError($"'time.toUTC' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: StashErrorTypes.ValueError);
             }
             // Interpret ts as local time in the given timezone
             var localAsUnspecified = DateTime.SpecifyKind(
@@ -283,7 +283,7 @@ public static class TimeBuiltIns
             try { tz = TimeZoneInfo.FindSystemTimeZoneById(timezone); }
             catch (TimeZoneNotFoundException)
             {
-                throw new RuntimeError($"'time.offset' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: "ValueError");
+                throw new RuntimeError($"'time.offset' unknown timezone '{timezone}'. Use time.timezones() to list available IDs.", errorType: StashErrorTypes.ValueError);
             }
             var offset = tz.GetUtcOffset(utcDto.UtcDateTime);
             return StashValue.FromFloat(offset.TotalHours);
@@ -353,7 +353,7 @@ public static class TimeBuiltIns
                 "day"    => new DateTimeOffset(dto.Year, dto.Month, dto.Day, 0, 0, 0, TimeSpan.Zero),
                 "hour"   => new DateTimeOffset(dto.Year, dto.Month, dto.Day, dto.Hour, 0, 0, TimeSpan.Zero),
                 "minute" => new DateTimeOffset(dto.Year, dto.Month, dto.Day, dto.Hour, dto.Minute, 0, TimeSpan.Zero),
-                _ => throw new RuntimeError($"'time.startOf' unknown unit '{unit}'. Use: year, month, day, hour, minute", errorType: "ValueError"),
+                _ => throw new RuntimeError($"'time.startOf' unknown unit '{unit}'. Use: year, month, day, hour, minute", errorType: StashErrorTypes.ValueError),
             };
             return StashValue.FromFloat(result.ToUnixTimeMilliseconds() / 1000.0);
         },
@@ -373,7 +373,7 @@ public static class TimeBuiltIns
                 "day"    => new DateTimeOffset(dto.Year, dto.Month, dto.Day, 23, 59, 59, 999, TimeSpan.Zero),
                 "hour"   => new DateTimeOffset(dto.Year, dto.Month, dto.Day, dto.Hour, 59, 59, 999, TimeSpan.Zero),
                 "minute" => new DateTimeOffset(dto.Year, dto.Month, dto.Day, dto.Hour, dto.Minute, 59, 999, TimeSpan.Zero),
-                _ => throw new RuntimeError($"'time.endOf' unknown unit '{unit}'. Use: year, month, day, hour, minute", errorType: "ValueError"),
+                _ => throw new RuntimeError($"'time.endOf' unknown unit '{unit}'. Use: year, month, day, hour, minute", errorType: StashErrorTypes.ValueError),
             };
             return StashValue.FromFloat(result.ToUnixTimeMilliseconds() / 1000.0);
         },

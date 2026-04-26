@@ -46,6 +46,26 @@ public sealed partial class VirtualMachine
             throw new RuntimeError(errMsg, span, errType) { Properties = props };
         }
 
+        if (errorVal is StashInstance thrownInstance)
+        {
+            string instType = thrownInstance.TypeName;
+            string instMsg;
+            if (thrownInstance.VMTryGetField("message", out StashValue msgVal, null))
+                instMsg = msgVal.ToObject()?.ToString() ?? "";
+            else
+                instMsg = RuntimeValues.Stringify(thrownInstance);
+
+            Dictionary<string, object?>? props = null;
+            foreach (var (fieldName, fieldValue) in thrownInstance.GetAllFields())
+            {
+                if (fieldName == "message") continue;
+                props ??= new Dictionary<string, object?>();
+                props[fieldName] = fieldValue.ToObject();
+            }
+
+            throw new RuntimeError(instMsg, span, instType) { Properties = props };
+        }
+
         throw new RuntimeError(RuntimeValues.Stringify(errorVal), span);
     }
 

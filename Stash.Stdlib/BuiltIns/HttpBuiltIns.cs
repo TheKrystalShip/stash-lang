@@ -66,11 +66,11 @@ public static class HttpBuiltIns
             }
             catch (HttpRequestException e)
             {
-                throw new RuntimeError("http.get: request failed — " + e.Message, errorType: "IOError");
+                throw new RuntimeError("http.get: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
             }
             catch (TaskCanceledException)
             {
-                throw new RuntimeError("http.get: request timed out.", errorType: "TimeoutError");
+                throw new RuntimeError("http.get: request timed out.", errorType: StashErrorTypes.TimeoutError);
             }
         }, returnType: "HttpResponse", isVariadic: true,
         documentation: "Sends an HTTP GET request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the GET request to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
@@ -100,11 +100,11 @@ public static class HttpBuiltIns
             }
             catch (HttpRequestException e)
             {
-                throw new RuntimeError("http.post: request failed — " + e.Message, errorType: "IOError");
+                throw new RuntimeError("http.post: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
             }
             catch (TaskCanceledException)
             {
-                throw new RuntimeError("http.post: request timed out.", errorType: "TimeoutError");
+                throw new RuntimeError("http.post: request timed out.", errorType: StashErrorTypes.TimeoutError);
             }
         }, returnType: "HttpResponse", isVariadic: true,
         documentation: "Sends an HTTP POST request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the POST request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
@@ -134,11 +134,11 @@ public static class HttpBuiltIns
             }
             catch (HttpRequestException e)
             {
-                throw new RuntimeError("http.put: request failed — " + e.Message, errorType: "IOError");
+                throw new RuntimeError("http.put: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
             }
             catch (TaskCanceledException)
             {
-                throw new RuntimeError("http.put: request timed out.", errorType: "TimeoutError");
+                throw new RuntimeError("http.put: request timed out.", errorType: StashErrorTypes.TimeoutError);
             }
         }, returnType: "HttpResponse", isVariadic: true,
         documentation: "Sends an HTTP PUT request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the PUT request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
@@ -164,11 +164,11 @@ public static class HttpBuiltIns
             }
             catch (HttpRequestException e)
             {
-                throw new RuntimeError("http.delete: request failed — " + e.Message, errorType: "IOError");
+                throw new RuntimeError("http.delete: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
             }
             catch (TaskCanceledException)
             {
-                throw new RuntimeError("http.delete: request timed out.", errorType: "TimeoutError");
+                throw new RuntimeError("http.delete: request timed out.", errorType: StashErrorTypes.TimeoutError);
             }
         }, returnType: "HttpResponse", isVariadic: true,
         documentation: "Sends an HTTP DELETE request to the given URL. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the DELETE request to\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");
@@ -194,11 +194,11 @@ public static class HttpBuiltIns
             }
             catch (HttpRequestException e)
             {
-                throw new RuntimeError("http.head: request failed — " + e.Message, errorType: "IOError");
+                throw new RuntimeError("http.head: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
             }
             catch (TaskCanceledException)
             {
-                throw new RuntimeError("http.head: request timed out.", errorType: "TimeoutError");
+                throw new RuntimeError("http.head: request timed out.", errorType: StashErrorTypes.TimeoutError);
             }
         }, returnType: "HttpResponse", isVariadic: true,
         documentation: "Sends an HTTP HEAD request and returns the response status and headers.\n@param url The URL to request\n@param options Optional request options (headers, timeout)\n@return HttpResponse with status, headers, and empty body");
@@ -211,7 +211,7 @@ public static class HttpBuiltIns
             var urlVal = options.Get("url").ToObject();
             if (urlVal is not string url)
             {
-                throw new RuntimeError("http.request: 'url' must be a string.", errorType: "TypeError");
+                throw new RuntimeError("http.request: 'url' must be a string.", errorType: StashErrorTypes.TypeError);
             }
 
             ValidateUrl(url, "http.request");
@@ -245,11 +245,11 @@ public static class HttpBuiltIns
             }
             catch (HttpRequestException e)
             {
-                throw new RuntimeError("http.request: request failed — " + e.Message, errorType: "IOError");
+                throw new RuntimeError("http.request: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
             }
             catch (TaskCanceledException)
             {
-                throw new RuntimeError("http.request: request timed out.", errorType: "TimeoutError");
+                throw new RuntimeError("http.request: request timed out.", errorType: StashErrorTypes.TimeoutError);
             }
         }, returnType: "HttpResponse",
         documentation: "Sends a custom HTTP request. The options dict must include 'url' (string) and optionally 'method' (string, default GET), 'headers' (dict), and 'body' (string). Returns an HttpResponse struct with status, body, and headers fields.\n@param options A dict with request options: url, method, headers, body\n@return An HttpResponse struct with status, body, and headers");
@@ -279,11 +279,11 @@ public static class HttpBuiltIns
             }
             catch (HttpRequestException e)
             {
-                throw new RuntimeError("http.patch: request failed — " + e.Message, errorType: "IOError");
+                throw new RuntimeError("http.patch: request failed — " + e.Message, errorType: StashErrorTypes.IOError);
             }
             catch (TaskCanceledException)
             {
-                throw new RuntimeError("http.patch: request timed out.", errorType: "TimeoutError");
+                throw new RuntimeError("http.patch: request timed out.", errorType: StashErrorTypes.TimeoutError);
             }
         }, returnType: "HttpResponse", isVariadic: true,
         documentation: "Sends an HTTP PATCH request with a JSON body string. Optionally accepts an options dict with 'headers' (dict of name→value pairs) and 'timeout' (int, milliseconds). Returns an HttpResponse struct with status, body, and headers fields.\n@param url The URL to send the PATCH request to\n@param body The request body string (typically JSON)\n@param options An optional dict with 'headers' (dict) and/or 'timeout' (int, milliseconds)\n@return An HttpResponse struct with status (int), body (string), and headers (dict) fields");

@@ -314,7 +314,7 @@ public static class TaskBuiltIns
             if (!completed)
             {
                 cts.Cancel();
-                throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: "TimeoutError");
+                throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: StashErrorTypes.TimeoutError);
             }
 
             // Check if the task faulted
@@ -330,7 +330,7 @@ public static class TaskBuiltIns
         }
         catch (AggregateException ae) when (ae.InnerException is OperationCanceledException)
         {
-            throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: "TimeoutError");
+            throw new RuntimeError($"Operation timed out after {timeoutMs}ms.", errorType: StashErrorTypes.TimeoutError);
         }
         catch (AggregateException ae) when (ae.InnerException is RuntimeError re)
         {

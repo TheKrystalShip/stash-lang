@@ -1,4 +1,4 @@
-#!usr/bin/env stash
+#!/usr/bin/env stash
 
 // pipes.stash — Stash pipe operator examples
 
@@ -34,7 +34,7 @@ io.println(composed.stdout); // → "hello"
 try {
     $!(echo "hello" | false);
 } catch (e) {
-    io.println(e.code);      // → "CommandError"
+    io.println(e.type);      // → "CommandError"
     io.println(e.exitCode);  // → 1
 }
 

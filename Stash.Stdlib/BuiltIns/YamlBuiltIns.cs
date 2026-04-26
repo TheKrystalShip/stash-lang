@@ -44,7 +44,7 @@ public static class YamlBuiltIns
             }
             catch (Exception e) when (e is not RuntimeError)
             {
-                throw new RuntimeError("yaml.parse: invalid YAML — " + e.Message, errorType: "ParseError");
+                throw new RuntimeError("yaml.parse: invalid YAML — " + e.Message, errorType: StashErrorTypes.ParseError);
             }
         },
             returnType: "any",
@@ -61,7 +61,7 @@ public static class YamlBuiltIns
             }
             catch (SharpYaml.YamlException e)
             {
-                throw new RuntimeError("yaml.stringify: " + e.Message, errorType: "TypeError");
+                throw new RuntimeError("yaml.stringify: " + e.Message, errorType: StashErrorTypes.TypeError);
             }
         },
             returnType: "string",
@@ -178,7 +178,7 @@ public static class YamlBuiltIns
             List<StashValue> list => ConvertListToYaml(list),
             StashDictionary dict => ConvertDictToYaml(dict),
             StashInstance inst => ConvertInstanceToYaml(inst),
-            _ => throw new RuntimeError($"yaml.stringify: cannot serialize value of type {value.GetType().Name}.", errorType: "TypeError")
+            _ => throw new RuntimeError($"yaml.stringify: cannot serialize value of type {value.GetType().Name}.", errorType: StashErrorTypes.TypeError)
         };
     }
 

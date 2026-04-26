@@ -71,7 +71,7 @@ public static class ProcessBuiltIns
         {
             if (ctx.EmbeddedMode)
             {
-                throw new RuntimeError("'process.exec' is not available in embedded mode.", errorType: "NotSupportedError");
+                throw new RuntimeError("'process.exec' is not available in embedded mode.", errorType: StashErrorTypes.NotSupportedError);
             }
 
             var command = SvArgs.String(args, 0, "process.exec");
@@ -100,7 +100,7 @@ public static class ProcessBuiltIns
                 try
                 {
                     using var child = System.Diagnostics.Process.Start(psi)
-                        ?? throw new RuntimeError("Failed to start process.", errorType: "IOError");
+                        ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
                     try
                     {
                         child.WaitForExitAsync(ctx.CancellationToken).GetAwaiter().GetResult();
@@ -115,7 +115,7 @@ public static class ProcessBuiltIns
                 catch (RuntimeError) { throw; }
                 catch (System.Exception ex)
                 {
-                    throw new RuntimeError($"process.exec failed: {ex.Message}", errorType: "IOError");
+                    throw new RuntimeError($"process.exec failed: {ex.Message}", errorType: StashErrorTypes.IOError);
                 }
             }
             else
@@ -125,7 +125,7 @@ public static class ProcessBuiltIns
 
                 // If we get here, execvp failed
                 int errno = Marshal.GetLastPInvokeError();
-                throw new RuntimeError($"process.exec failed: execvp returned {result} (errno {errno}).", errorType: "IOError");
+                throw new RuntimeError($"process.exec failed: execvp returned {result} (errno {errno}).", errorType: StashErrorTypes.IOError);
             }
 
             return StashValue.Null; // unreachable
@@ -153,7 +153,7 @@ public static class ProcessBuiltIns
                 psi.ArgumentList.Add(arg);
             }
 
-            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", errorType: "IOError");
+            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to start process.", errorType: StashErrorTypes.IOError);
             var fields = new Dictionary<string, StashValue>
             {
                 ["pid"] = StashValue.FromInt((long)osProcess.Id),
@@ -321,7 +321,7 @@ public static class ProcessBuiltIns
 
             if (sig < 1 || sig > 64)
             {
-                throw new RuntimeError($"Signal number must be between 1 and 64, got {sig}.", errorType: "ValueError");
+                throw new RuntimeError($"Signal number must be between 1 and 64, got {sig}.", errorType: StashErrorTypes.ValueError);
             }
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -458,7 +458,7 @@ public static class ProcessBuiltIns
 
             if (callback.MinArity > 1)
             {
-                throw new RuntimeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).", errorType: "TypeError");
+                throw new RuntimeError("Callback for 'process.onExit' must accept at least 1 argument (the CommandResult).", errorType: StashErrorTypes.TypeError);
             }
 
             var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -499,7 +499,7 @@ public static class ProcessBuiltIns
                 psi.ArgumentList.Add(arg);
             }
 
-            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to daemonize process.", errorType: "IOError");
+            var osProcess = System.Diagnostics.Process.Start(psi) ?? throw new RuntimeError("Failed to daemonize process.", errorType: StashErrorTypes.IOError);
 
             var fields = new Dictionary<string, StashValue>
             {
@@ -576,7 +576,7 @@ public static class ProcessBuiltIns
             {
                 if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
                 {
-                    throw new RuntimeError("All elements in 'process.waitAll' array must be Process handles.", errorType: "TypeError");
+                    throw new RuntimeError("All elements in 'process.waitAll' array must be Process handles.", errorType: StashErrorTypes.TypeError);
                 }
 
                 var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -626,7 +626,7 @@ public static class ProcessBuiltIns
 
             if (procs.Count == 0)
             {
-                throw new RuntimeError("'process.waitAny' requires a non-empty array.", errorType: "ValueError");
+                throw new RuntimeError("'process.waitAny' requires a non-empty array.", errorType: StashErrorTypes.ValueError);
             }
 
             // Validate all handles first
@@ -635,7 +635,7 @@ public static class ProcessBuiltIns
             {
                 if (item.ToObject() is not StashInstance handle || handle.TypeName != "Process")
                 {
-                    throw new RuntimeError("All elements in 'process.waitAny' array must be Process handles.", errorType: "TypeError");
+                    throw new RuntimeError("All elements in 'process.waitAny' array must be Process handles.", errorType: StashErrorTypes.TypeError);
                 }
 
                 var entry = ctx.TrackedProcesses.Find(e => ReferenceEquals(e.Handle, handle));
@@ -717,7 +717,7 @@ public static class ProcessBuiltIns
             string resolved = System.IO.Path.GetFullPath(path);
             if (!System.IO.Directory.Exists(resolved))
             {
-                throw new RuntimeError($"process.chdir: directory does not exist: '{resolved}'.", errorType: "IOError");
+                throw new RuntimeError($"process.chdir: directory does not exist: '{resolved}'.", errorType: StashErrorTypes.IOError);
             }
 
             System.Environment.CurrentDirectory = resolved;
@@ -735,7 +735,7 @@ public static class ProcessBuiltIns
             string resolved = System.IO.Path.GetFullPath(path);
             if (!System.IO.Directory.Exists(resolved))
             {
-                throw new RuntimeError($"process.withDir: directory does not exist: '{resolved}'.", errorType: "IOError");
+                throw new RuntimeError($"process.withDir: directory does not exist: '{resolved}'.", errorType: StashErrorTypes.IOError);
             }
 
             string previous = System.Environment.CurrentDirectory;

@@ -48,7 +48,7 @@ public sealed partial class VirtualMachine
             {
                 throw new RuntimeError(
                     $"Command failed with exit code {exitCode}: {command}",
-                    span, "CommandError")
+                    span, StashErrorTypes.CommandError)
                 {
                     Properties = new Dictionary<string, object?>
                     {
@@ -73,7 +73,7 @@ public sealed partial class VirtualMachine
             {
                 throw new RuntimeError(
                     $"Command failed with exit code {exitCode}: {command}",
-                    span, "CommandError")
+                    span, StashErrorTypes.CommandError)
                 {
                     Properties = new Dictionary<string, object?>
                     {
@@ -175,7 +175,7 @@ public sealed partial class VirtualMachine
         {
             throw new RuntimeError(
                 $"Command failed with exit code {lastExitCode}.",
-                span, "CommandError")
+                span, StashErrorTypes.CommandError)
             {
                 Properties = new Dictionary<string, object?>
                 {

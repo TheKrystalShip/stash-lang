@@ -46,7 +46,7 @@ public static class NetBuiltIns
         {
             var ip = SvArgs.IpAddress(args, 0, "net.subnetInfo");
             if (ip.PrefixLength is null)
-                throw new RuntimeError("'net.subnetInfo' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: "TypeError");
+                throw new RuntimeError("'net.subnetInfo' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: StashErrorTypes.TypeError);
 
             var (maskBytes, networkBytes, broadcastBytes, wildcardBytes) = ComputeSubnetComponents(ip);
             long hostCount = ComputeHostCount(ip);
@@ -121,12 +121,12 @@ public static class NetBuiltIns
             {
                 var entry = Dns.GetHostEntry(hostname);
                 if (entry.AddressList.Length == 0)
-                    throw new RuntimeError($"No DNS records found for '{hostname}'.", errorType: "IOError");
+                    throw new RuntimeError($"No DNS records found for '{hostname}'.", errorType: StashErrorTypes.IOError);
                 return StashValue.FromObj(new StashIpAddress(entry.AddressList[0], null));
             }
             catch (SocketException ex)
             {
-                throw new RuntimeError($"DNS resolution failed for '{hostname}': {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"DNS resolution failed for '{hostname}': {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "ip", documentation: "Resolves a hostname to its first IP address via DNS.\n@param hostname The hostname to resolve.\n@return The first resolved IP address.");
 
@@ -141,7 +141,7 @@ public static class NetBuiltIns
             }
             catch (SocketException ex)
             {
-                throw new RuntimeError($"DNS resolution failed for '{hostname}': {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"DNS resolution failed for '{hostname}': {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "array", documentation: "Resolves a hostname to all IP addresses via DNS.\n@param hostname The hostname to resolve.\n@return An array of resolved IP addresses.");
 
@@ -156,7 +156,7 @@ public static class NetBuiltIns
             }
             catch (SocketException ex)
             {
-                throw new RuntimeError($"Reverse DNS lookup failed for '{ip}': {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"Reverse DNS lookup failed for '{ip}': {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "string", documentation: "Performs reverse DNS lookup for an IP address.\n@param ip The IP address to lookup.\n@return The hostname associated with the IP.");
 
@@ -194,7 +194,7 @@ public static class NetBuiltIns
             object? hostArg = args[0].ToObject();
             var port = SvArgs.Long(args, 1, "net.isPortOpen");
             if (port < 1 || port > 65535)
-                throw new RuntimeError("Port must be between 1 and 65535.", errorType: "ValueError");
+                throw new RuntimeError("Port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
             int timeout = args.Length > 2 ? (int)SvArgs.Long(args, 2, "net.isPortOpen") : 3000;
 
             try
@@ -207,7 +207,7 @@ public static class NetBuiltIns
                 else if (hostArg is string hostname)
                     client.ConnectAsync(hostname, (int)port, cts.Token).GetAwaiter().GetResult();
                 else
-                    throw new RuntimeError("First argument to 'net.isPortOpen' must be an IP address or hostname string.", errorType: "TypeError");
+                    throw new RuntimeError("First argument to 'net.isPortOpen' must be an IP address or hostname string.", errorType: StashErrorTypes.TypeError);
                 return StashValue.FromBool(client.Connected);
             }
             catch (RuntimeError) { throw; }
@@ -230,7 +230,7 @@ public static class NetBuiltIns
             var match = NetworkInterface.GetAllNetworkInterfaces()
                 .FirstOrDefault(ni => ni.Name == name);
             if (match is null)
-                throw new RuntimeError($"Network interface '{name}' not found.", errorType: "IOError");
+                throw new RuntimeError($"Network interface '{name}' not found.", errorType: StashErrorTypes.IOError);
             return StashValue.FromObj(BuildInterfaceList([match])[0]);
         }, returnType: "InterfaceInfo", documentation: "Returns information about a specific network interface.\n@param name The interface name (e.g., \"eth0\", \"wlan0\").\n@return An InterfaceInfo struct.");
 
@@ -242,7 +242,7 @@ public static class NetBuiltIns
             var host = SvArgs.String(args, 0, "net.tcpConnect");
             var port = SvArgs.Long(args, 1, "net.tcpConnect");
             if (port < 1 || port > 65535)
-                throw new RuntimeError("net.tcpConnect: port must be between 1 and 65535.", errorType: "ValueError");
+                throw new RuntimeError("net.tcpConnect: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
             int timeout = args.Length > 2 ? (int)SvArgs.Long(args, 2, "net.tcpConnect") : 5000;
 
             try
@@ -265,7 +265,7 @@ public static class NetBuiltIns
             catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.tcpConnect: failed to connect to '{host}:{port}': {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.tcpConnect: failed to connect to '{host}:{port}': {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "TcpConnection", isVariadic: true, documentation: "Creates a TCP connection to a host and port.\n@param host The hostname or IP address.\n@param port The port number (1-65535).\n@param timeout Optional timeout in milliseconds (default 5000).\n@return A TcpConnection struct.");
 
@@ -275,11 +275,11 @@ public static class NetBuiltIns
             if (args.Length != 2)
                 throw new RuntimeError("net.tcpSend: expected 2 arguments.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpSend: first argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpSend: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
             var data = SvArgs.String(args, 1, "net.tcpSend");
 
             if (conn.GetField("_client", null).ToObject() is not TcpClient client)
-                throw new RuntimeError("net.tcpSend: invalid or closed TcpConnection.", errorType: "IOError");
+                throw new RuntimeError("net.tcpSend: invalid or closed TcpConnection.", errorType: StashErrorTypes.IOError);
 
             try
             {
@@ -290,7 +290,7 @@ public static class NetBuiltIns
             }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.tcpSend: send failed: {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.tcpSend: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "int", documentation: "Sends string data over a TCP connection.\n@param conn The TcpConnection to send data on.\n@param data The string data to send.\n@return The number of bytes sent.");
 
@@ -300,11 +300,11 @@ public static class NetBuiltIns
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("net.tcpRecv: expected 1 or 2 arguments.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpRecv: first argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpRecv: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
             int maxBytes = args.Length > 1 ? (int)SvArgs.Long(args, 1, "net.tcpRecv") : 4096;
 
             if (conn.GetField("_client", null).ToObject() is not TcpClient client)
-                throw new RuntimeError("net.tcpRecv: invalid or closed TcpConnection.", errorType: "IOError");
+                throw new RuntimeError("net.tcpRecv: invalid or closed TcpConnection.", errorType: StashErrorTypes.IOError);
 
             try
             {
@@ -315,7 +315,7 @@ public static class NetBuiltIns
             }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.tcpRecv: receive failed: {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.tcpRecv: receive failed: {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "string", isVariadic: true, documentation: "Receives data from a TCP connection.\n@param conn The TcpConnection to receive data from.\n@param maxBytes Optional maximum bytes to read (default 4096).\n@return The received data as a string.");
 
@@ -325,7 +325,7 @@ public static class NetBuiltIns
             if (args.Length != 1)
                 throw new RuntimeError("net.tcpClose: expected 1 argument.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpClose: argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpClose: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
 
             if (conn.GetField("_client", null).ToObject() is TcpClient client)
                 client.Dispose();
@@ -340,7 +340,7 @@ public static class NetBuiltIns
                 throw new RuntimeError("net.tcpListen: expected 2 arguments.");
             var port = SvArgs.Long(args, 0, "net.tcpListen");
             if (port < 1 || port > 65535)
-                throw new RuntimeError("net.tcpListen: port must be between 1 and 65535.", errorType: "ValueError");
+                throw new RuntimeError("net.tcpListen: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
             var handler = SvArgs.Callable(args, 1, "net.tcpListen");
 
             var listener = new TcpListener(IPAddress.Any, (int)port);
@@ -364,7 +364,7 @@ public static class NetBuiltIns
             catch (RuntimeError) { throw; }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.tcpListen: failed on port {port}: {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.tcpListen: failed on port {port}: {ex.Message}", errorType: StashErrorTypes.IOError);
             }
             finally
             {
@@ -381,7 +381,7 @@ public static class NetBuiltIns
             var host = SvArgs.String(args, 0, "net.udpSend");
             var port = SvArgs.Long(args, 1, "net.udpSend");
             if (port < 1 || port > 65535)
-                throw new RuntimeError("net.udpSend: port must be between 1 and 65535.", errorType: "ValueError");
+                throw new RuntimeError("net.udpSend: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
             var data = SvArgs.String(args, 2, "net.udpSend");
 
             try
@@ -393,7 +393,7 @@ public static class NetBuiltIns
             }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.udpSend: send failed: {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.udpSend: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "int", documentation: "Sends a UDP datagram to a host and port.\n@param host The destination hostname or IP address.\n@param port The destination port (1-65535).\n@param data The string data to send.\n@return The number of bytes sent.");
 
@@ -404,7 +404,7 @@ public static class NetBuiltIns
                 throw new RuntimeError("net.udpRecv: expected 1 or 2 arguments.");
             var port = SvArgs.Long(args, 0, "net.udpRecv");
             if (port < 1 || port > 65535)
-                throw new RuntimeError("net.udpRecv: port must be between 1 and 65535.", errorType: "ValueError");
+                throw new RuntimeError("net.udpRecv: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
             int timeout = args.Length > 1 ? (int)SvArgs.Long(args, 1, "net.udpRecv") : 5000;
 
             try
@@ -427,7 +427,7 @@ public static class NetBuiltIns
             catch (OperationCanceledException) when (ctx.CancellationToken.IsCancellationRequested) { throw; }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.udpRecv: receive failed: {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.udpRecv: receive failed: {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "UdpMessage", isVariadic: true, documentation: "Listens on a UDP port and receives one datagram.\n@param port The port to listen on (1-65535).\n@param timeout Optional timeout in milliseconds (default 5000).\n@return A UdpMessage struct with data, host, and port fields.");
 
@@ -452,7 +452,7 @@ public static class NetBuiltIns
             catch (RuntimeError) { throw; }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.resolveMx: DNS query failed for '{domain}': {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.resolveMx: DNS query failed for '{domain}': {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "array", documentation: "Resolves MX records for a domain.\n@param domain The domain to query.\n@return An array of MxRecord structs with priority and exchange fields.");
 
@@ -469,7 +469,7 @@ public static class NetBuiltIns
             catch (RuntimeError) { throw; }
             catch (Exception ex)
             {
-                throw new RuntimeError($"net.resolveTxt: DNS query failed for '{domain}': {ex.Message}", errorType: "IOError");
+                throw new RuntimeError($"net.resolveTxt: DNS query failed for '{domain}': {ex.Message}", errorType: StashErrorTypes.IOError);
             }
         }, returnType: "array", documentation: "Resolves TXT records for a domain.\n@param domain The domain to query.\n@return An array of strings containing the TXT record values.");
 
@@ -480,7 +480,7 @@ public static class NetBuiltIns
                 throw new RuntimeError("net.wsConnect: expected 1 or 2 arguments.");
             var url = SvArgs.String(args, 0, "net.wsConnect");
             if (!url.StartsWith("ws://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("wss://", StringComparison.OrdinalIgnoreCase))
-                throw new RuntimeError("net.wsConnect: url must start with 'ws://' or 'wss://'.", errorType: "ValueError");
+                throw new RuntimeError("net.wsConnect: url must start with 'ws://' or 'wss://'.", errorType: StashErrorTypes.ValueError);
 
             StashDictionary? options = args.Length > 1 ? SvArgs.Dict(args, 1, "net.wsConnect") : null;
 
@@ -569,7 +569,7 @@ public static class NetBuiltIns
             }
             catch (FormatException)
             {
-                throw new RuntimeError("net.wsSendBinary: invalid base64 data", errorType: "ParseError");
+                throw new RuntimeError("net.wsSendBinary: invalid base64 data", errorType: StashErrorTypes.ParseError);
             }
 
             var capturedBytes = bytes;
@@ -619,7 +619,7 @@ public static class NetBuiltIns
                         }
                         ms.Write(buffer, 0, result.Count);
                         if (ms.Length > 16 * 1024 * 1024)
-                            throw new RuntimeError("net.wsRecv: message exceeds maximum size of 16MB.", errorType: "ValueError");
+                            throw new RuntimeError("net.wsRecv: message exceeds maximum size of 16MB.", errorType: StashErrorTypes.ValueError);
                     } while (!result.EndOfMessage);
 
                     string msgType;
@@ -658,7 +658,7 @@ public static class NetBuiltIns
             var client = GetWsClient(args[0].ToObject(), "net.wsClose");
             long code = args.Length > 1 ? SvArgs.Long(args, 1, "net.wsClose") : 1000;
             if (code < 1000 || code > 4999)
-                throw new RuntimeError("net.wsClose: close code must be between 1000 and 4999.", errorType: "ValueError");
+                throw new RuntimeError("net.wsClose: close code must be between 1000 and 4999.", errorType: StashErrorTypes.ValueError);
             string reason = args.Length > 2 ? SvArgs.String(args, 2, "net.wsClose") : "";
 
             var capturedReason = reason;
@@ -715,7 +715,7 @@ public static class NetBuiltIns
             var host = SvArgs.String(args, 0, "net.tcpConnectAsync");
             var port = SvArgs.Long(args, 1, "net.tcpConnectAsync");
             if (port < 1 || port > 65535)
-                throw new RuntimeError("net.tcpConnectAsync: port must be between 1 and 65535.", errorType: "ValueError");
+                throw new RuntimeError("net.tcpConnectAsync: port must be between 1 and 65535.", errorType: StashErrorTypes.ValueError);
 
             int timeout = 5000;
             bool noDelay = false;
@@ -753,17 +753,17 @@ public static class NetBuiltIns
                 catch (OperationCanceledException) when (timeoutCts.IsCancellationRequested && !cts.Token.IsCancellationRequested)
                 {
                     client.Dispose();
-                    throw new RuntimeError($"net.tcpConnectAsync: connection timed out after {capturedTimeout}ms.", errorType: "TimeoutError");
+                    throw new RuntimeError($"net.tcpConnectAsync: connection timed out after {capturedTimeout}ms.", errorType: StashErrorTypes.TimeoutError);
                 }
                 catch (OperationCanceledException)
                 {
                     client.Dispose();
-                    throw new RuntimeError("net.tcpConnectAsync: connection was cancelled.", errorType: "IOError");
+                    throw new RuntimeError("net.tcpConnectAsync: connection was cancelled.", errorType: StashErrorTypes.IOError);
                 }
                 catch (Exception ex)
                 {
                     client.Dispose();
-                    throw new RuntimeError($"net.tcpConnectAsync: failed to connect to '{capturedHost}:{capturedPort}': {ex.Message}", errorType: "IOError");
+                    throw new RuntimeError($"net.tcpConnectAsync: failed to connect to '{capturedHost}:{capturedPort}': {ex.Message}", errorType: StashErrorTypes.IOError);
                 }
                 SslStream? sslStream = null;
                 if (tls)
@@ -785,15 +785,15 @@ public static class NetBuiltIns
                     {
                         sslStream.Dispose();
                         client.Dispose();
-                        throw new RuntimeError($"net.tcpConnectAsync: TLS handshake failed — {ex.Message}.", errorType: "IOError");
+                        throw new RuntimeError($"net.tcpConnectAsync: TLS handshake failed — {ex.Message}.", errorType: StashErrorTypes.IOError);
                     }
                     catch (IOException ex) when (ex.InnerException is AuthenticationException innerEx)
                     {
                         sslStream.Dispose();
                         client.Dispose();
                         if (tlsVerify)
-                            throw new RuntimeError($"net.tcpConnectAsync: TLS certificate validation failed — {innerEx.Message}. Set tlsVerify: false to skip validation (insecure).", errorType: "IOError");
-                        throw new RuntimeError($"net.tcpConnectAsync: TLS handshake failed — {ex.Message}.", errorType: "IOError");
+                            throw new RuntimeError($"net.tcpConnectAsync: TLS certificate validation failed — {innerEx.Message}. Set tlsVerify: false to skip validation (insecure).", errorType: StashErrorTypes.IOError);
+                        throw new RuntimeError($"net.tcpConnectAsync: TLS handshake failed — {ex.Message}.", errorType: StashErrorTypes.IOError);
                     }
                 }
                 int localPort = ((IPEndPoint)client.Client.LocalEndPoint!).Port;
@@ -817,7 +817,7 @@ public static class NetBuiltIns
             if (args.Length != 2)
                 throw new RuntimeError("net.tcpSendAsync: expected 2 arguments.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpSendAsync: first argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpSendAsync: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
             var data = SvArgs.String(args, 1, "net.tcpSendAsync");
 
             TcpClient client = GetTcpClient(conn, "net.tcpSendAsync");
@@ -836,7 +836,7 @@ public static class NetBuiltIns
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"net.tcpSendAsync: send failed: {ex.Message}", errorType: "IOError");
+                    throw new RuntimeError($"net.tcpSendAsync: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
                 }
             });
             return StashValue.FromObj(new StashFuture(dotnetTask, cts));
@@ -848,9 +848,9 @@ public static class NetBuiltIns
             if (args.Length != 2)
                 throw new RuntimeError("net.tcpSendBytesAsync: expected 2 arguments.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpSendBytesAsync: first argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpSendBytesAsync: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
             if (args[1].ToObject() is not StashByteArray byteArr)
-                throw new RuntimeError("net.tcpSendBytesAsync: second argument must be a byte[].", errorType: "TypeError");
+                throw new RuntimeError("net.tcpSendBytesAsync: second argument must be a byte[].", errorType: StashErrorTypes.TypeError);
 
             TcpClient client = GetTcpClient(conn, "net.tcpSendBytesAsync");
             byte[] data = byteArr.AsSpan().ToArray();
@@ -867,7 +867,7 @@ public static class NetBuiltIns
                 catch (OperationCanceledException) { throw; }
                 catch (Exception ex)
                 {
-                    throw new RuntimeError($"net.tcpSendBytesAsync: send failed: {ex.Message}", errorType: "IOError");
+                    throw new RuntimeError($"net.tcpSendBytesAsync: send failed: {ex.Message}", errorType: StashErrorTypes.IOError);
                 }
             });
             return StashValue.FromObj(new StashFuture(dotnetTask, cts));
@@ -879,7 +879,7 @@ public static class NetBuiltIns
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("net.tcpRecvAsync: expected 1 or 2 arguments.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpRecvAsync: first argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpRecvAsync: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
 
             int maxBytes = 4096;
             int timeout = 30000;
@@ -918,7 +918,7 @@ public static class NetBuiltIns
             if (args.Length < 1 || args.Length > 2)
                 throw new RuntimeError("net.tcpRecvBytesAsync: expected 1 or 2 arguments.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpRecvBytesAsync: first argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpRecvBytesAsync: first argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
 
             int maxBytes = 4096;
             int timeout = 30000;
@@ -958,7 +958,7 @@ public static class NetBuiltIns
             if (args.Length != 1)
                 throw new RuntimeError("net.tcpCloseAsync: expected 1 argument.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpCloseAsync: argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpCloseAsync: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
 
             if (_sslStreams.TryGetValue(conn, out SslStream? ssl))
             {
@@ -993,7 +993,7 @@ public static class NetBuiltIns
             if (args.Length != 1)
                 throw new RuntimeError("net.tcpIsOpen: expected 1 argument.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpIsOpen: argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpIsOpen: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
 
             try
             {
@@ -1012,7 +1012,7 @@ public static class NetBuiltIns
             if (args.Length != 1)
                 throw new RuntimeError("net.tcpState: expected 1 argument.");
             if (args[0].ToObject() is not StashInstance conn)
-                throw new RuntimeError("net.tcpState: argument must be a TcpConnection.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpState: argument must be a TcpConnection.", errorType: StashErrorTypes.TypeError);
 
             try
             {
@@ -1034,7 +1034,7 @@ public static class NetBuiltIns
                 throw new RuntimeError("net.tcpListenAsync: expected 2 arguments.");
             var port = SvArgs.Long(args, 0, "net.tcpListenAsync");
             if (port < 0 || port > 65535)
-                throw new RuntimeError("net.tcpListenAsync: port must be between 0 and 65535.", errorType: "ValueError");
+                throw new RuntimeError("net.tcpListenAsync: port must be between 0 and 65535.", errorType: StashErrorTypes.ValueError);
             var handler = SvArgs.Callable(args, 1, "net.tcpListenAsync");
 
             var listener = new TcpListener(IPAddress.Any, (int)port);
@@ -1105,7 +1105,7 @@ public static class NetBuiltIns
             if (args.Length != 1)
                 throw new RuntimeError("net.tcpServerClose: expected 1 argument.");
             if (args[0].ToObject() is not StashInstance server || server.TypeName != "TcpServer")
-                throw new RuntimeError("net.tcpServerClose: argument must be a TcpServer.", errorType: "TypeError");
+                throw new RuntimeError("net.tcpServerClose: argument must be a TcpServer.", errorType: StashErrorTypes.TypeError);
 
             if (_tcpServers.TryGetValue(server, out TcpListener? listener))
             {
@@ -1202,7 +1202,7 @@ public static class NetBuiltIns
     private static (byte[] MaskBytes, byte[] NetworkBytes, byte[] BroadcastBytes, byte[] WildcardBytes) ComputeSubnetComponents(StashIpAddress ip, string funcName = "net.subnetInfo")
     {
         if (ip.PrefixLength is null)
-            throw new RuntimeError($"'{funcName}' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: "TypeError");
+            throw new RuntimeError($"'{funcName}' requires a CIDR IP address (e.g., @192.168.1.0/24).", errorType: StashErrorTypes.TypeError);
 
         int prefix = ip.PrefixLength.Value;
         byte[] addrBytes = ip.GetBytes();
@@ -1233,9 +1233,9 @@ public static class NetBuiltIns
     private static ClientWebSocket GetWsClient(object? arg, string funcName)
     {
         if (arg is not StashInstance inst || inst.TypeName != "WsConnection")
-            throw new RuntimeError($"First argument to '{funcName}' must be a WsConnection.", errorType: "TypeError");
+            throw new RuntimeError($"First argument to '{funcName}' must be a WsConnection.", errorType: StashErrorTypes.TypeError);
         if (!_wsClients.TryGetValue(inst, out ClientWebSocket? ws))
-            throw new RuntimeError($"{funcName}: connection is invalid or closed.", errorType: "IOError");
+            throw new RuntimeError($"{funcName}: connection is invalid or closed.", errorType: StashErrorTypes.IOError);
         return ws;
     }
 
@@ -1261,7 +1261,7 @@ public static class NetBuiltIns
         }
         catch { }
 
-        throw new RuntimeError($"{funcName}: invalid or closed TcpConnection.", errorType: "IOError");
+        throw new RuntimeError($"{funcName}: invalid or closed TcpConnection.", errorType: StashErrorTypes.IOError);
     }
 
     private static string MapWsState(WebSocketState state) => state switch

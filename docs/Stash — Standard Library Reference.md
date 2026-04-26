@@ -52,6 +52,51 @@
 
 ---
 
+## Built-in Error Types
+
+Stash defines a set of built-in named error types. These types are available globally — no import needed. They can be thrown with struct literal syntax and caught with typed `catch` clauses.
+
+| Type                | Fields                                                                                    | When thrown                                         |
+| ------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| `ValueError`        | `message: string`                                                                         | Invalid value (out-of-range, empty string, etc.)    |
+| `TypeError`         | `message: string`                                                                         | Wrong type for an operation or function argument    |
+| `ParseError`        | `message: string`                                                                         | Parsing failure (JSON, INI, TOML, CSV, number conv) |
+| `IndexError`        | `message: string`                                                                         | Array or string index out of bounds                 |
+| `IOError`           | `message: string`                                                                         | File or network I/O failure                         |
+| `NotSupportedError` | `message: string`                                                                         | Feature not available on this platform              |
+| `TimeoutError`      | `message: string`                                                                         | Operation timed out                                 |
+| `CommandError`      | `message: string`, `exitCode: int`, `stderr: string`, `stdout: string`, `command: string` | Strict command (`$!(...)`) exited non-zero          |
+
+### Usage
+
+```stash
+// Throw
+throw ValueError { message: "port must be between 1 and 65535" };
+throw IOError { message: "file not found" };
+
+// Catch
+try {
+    let data = fs.readFile("/tmp/input.json");
+    let parsed = json.parse(data);
+} catch (IOError e) {
+    io.eprintln($"Read failed: {e.message}");
+} catch (ParseError e) {
+    io.eprintln($"Parse failed: {e.message}");
+}
+
+// CommandError structured fields
+try {
+    $!(npm test)
+} catch (CommandError e) {
+    io.eprintln($"Tests failed (exit {e.exitCode})");
+    io.eprintln(e.stderr);
+}
+```
+
+All caught errors also expose `.type` (string) and `.stack` (array of strings) from the base `Error` struct.
+
+---
+
 ## Overview
 
 Stash organizes built-in functions into **namespaces** accessed via dot notation (e.g., `fs.readFile(path)`). A small set of fundamental functions remain global (`typeof`, `nameof`, `len`, `lastError`); everything else lives in a namespace.

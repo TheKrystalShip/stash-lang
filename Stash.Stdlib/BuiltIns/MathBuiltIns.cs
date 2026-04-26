@@ -28,7 +28,7 @@ public static class MathBuiltIns
             StashValue n = args[0];
             if (n.IsInt) return StashValue.FromInt(Math.Abs(n.AsInt));
             if (n.IsFloat) return StashValue.FromFloat(Math.Abs(n.AsFloat));
-            throw new RuntimeError("First argument to 'math.abs' must be a number.", errorType: "TypeError");
+            throw new RuntimeError("First argument to 'math.abs' must be a number.", errorType: StashErrorTypes.TypeError);
         },
             returnType: "number",
             documentation: "Returns the absolute value of a number.\n@param n The number\n@return The absolute value");
@@ -258,7 +258,7 @@ public static class MathBuiltIns
             StashValue n = args[0];
             if (n.IsInt) return StashValue.FromInt((long)Math.Sign(n.AsInt));
             if (n.IsFloat) return StashValue.FromInt((long)Math.Sign(n.AsFloat));
-            throw new RuntimeError("First argument to 'math.sign' must be a number.", errorType: "TypeError");
+            throw new RuntimeError("First argument to 'math.sign' must be a number.", errorType: StashErrorTypes.TypeError);
         },
             returnType: "int",
             documentation: "Returns the sign of a number: -1 for negative, 0 for zero, 1 for positive.\n@param n The number\n@return -1, 0, or 1");
