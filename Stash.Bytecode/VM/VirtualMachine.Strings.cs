@@ -142,11 +142,11 @@ public sealed partial class VirtualMachine
         // 2. Assemble stage descriptors from the parts register block
         var stages = new List<PipeStage>(stageCount);
         int regOffset = 0;
+        Span<char> stackBuf = stackalloc char[256];
         for (int i = 0; i < stageCount; i++)
         {
             var (partCount, flags) = stageMetas[i];
 
-            Span<char> stackBuf = stackalloc char[256];
             var vsb = new ValueStringBuilder(stackBuf);
             for (int p = 0; p < partCount; p++)
                 vsb.Append(RuntimeOps.Stringify(_stack[@base + partsBase + regOffset + p]));

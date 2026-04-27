@@ -23,7 +23,6 @@ public sealed partial class VirtualMachine
         public int StackLevel;
         public int FrameIndex;
         public byte ErrorReg;  // register that receives the caught error value
-        public RuntimeError? OriginalError;  // cached for bare rethrow (Rethrow opcode)
     }
 
     // ------------------------------------------------------------------

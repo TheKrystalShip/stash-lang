@@ -996,10 +996,12 @@ let result = info.hostCount;
         try
         {
             using var client = new System.Net.Sockets.TcpClient();
+#pragma warning disable VSTHRD002
             if (!client.ConnectAsync(host, port).Wait(3000)) return false;
             using var ssl = new System.Net.Security.SslStream(client.GetStream(), leaveInnerStreamOpen: false);
             var task = ssl.AuthenticateAsClientAsync(host);
             return task.Wait(5000) && !task.IsFaulted;
+#pragma warning restore VSTHRD002
         }
         catch
         {
