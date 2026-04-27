@@ -78,7 +78,7 @@ public static partial class StdlibRegistry
         "let", "const", "fn", "struct", "enum", "interface", "extend", "if", "else",
         "for", "in", "is", "while", "do", "return", "break", "continue",
         "true", "false", "null", "try", "catch", "finally", "throw", "defer",
-        "import", "from", "as", "switch", "elevate", "retry", "timeout",
+        "import", "from", "as", "switch", "elevate", "lock", "retry", "timeout",
         "and", "or", "args", "async", "await"
     ];
 
