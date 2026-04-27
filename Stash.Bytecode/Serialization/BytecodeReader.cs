@@ -337,6 +337,7 @@ public static class BytecodeReader
             14 => StashValue.FromObj(ReadRetryMetadata(reader)),
             15 => StashValue.FromObj(ReadStructInitMetadata(reader)),
             16 => StashValue.FromByte(reader.ReadByte()),
+            17 => StashValue.FromObj(ReadLockMetadata(reader)),
             _ => throw new InvalidDataException($"Unknown constant tag {tag} in .stashc constant pool.")
         };
     }
@@ -489,6 +490,14 @@ public static class BytecodeReader
         bool hasTypeReg = reader.ReadByte() != 0;
         string[] fieldNames = ReadStringArray(reader);
         return new StructInitMetadata(typeName, hasTypeReg, fieldNames);
+    }
+
+    private static LockMetadata ReadLockMetadata(BinaryReader reader)
+    {
+        int optionCount = reader.ReadInt32();
+        bool hasWait    = reader.ReadByte() != 0;
+        bool hasStale   = reader.ReadByte() != 0;
+        return new LockMetadata(optionCount, hasWait, hasStale);
     }
 
     private static StdlibManifest ReadStdlibManifest(BinaryReader reader)

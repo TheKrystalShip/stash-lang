@@ -357,6 +357,13 @@ public static class BytecodeWriter
                     writer.Write((byte)(structInitMeta.HasTypeReg ? 1 : 0));
                     WriteStringArray(writer, structInitMeta.FieldNames);
                 }
+                else if (obj is LockMetadata lockMeta)
+                {
+                    writer.Write((byte)17);
+                    writer.Write((int)lockMeta.OptionCount);
+                    writer.Write((byte)(lockMeta.HasWait ? 1 : 0));
+                    writer.Write((byte)(lockMeta.HasStale ? 1 : 0));
+                }
                 else
                 {
                     throw new InvalidOperationException(

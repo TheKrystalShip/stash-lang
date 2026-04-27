@@ -50,3 +50,6 @@ public sealed record StructInitMetadata(
     string TypeName,
     bool HasTypeReg,
     string[] FieldNames);
+
+/// <summary>Metadata for OP_LOCKBEGIN. Stored in the constant pool.</summary>
+public sealed record LockMetadata(int OptionCount, bool HasWait, bool HasStale);

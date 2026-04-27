@@ -412,6 +412,10 @@ public sealed partial class VirtualMachine
                 case OpCode.ElevateBegin: ExecuteElevateBegin(ref frame, inst); break;
                 case OpCode.ElevateEnd: ExecuteElevateEnd(ref frame, inst); break;
 
+                // ==================== File Locks ====================
+                case OpCode.LockBegin: ExecuteLockBegin(ref frame, inst); break;
+                case OpCode.LockEnd:   ExecuteLockEnd(ref frame, inst);   break;
+
                 // ==================== Retry ====================
                 case OpCode.Retry: ExecuteRetry(ref frame, inst); break;
 

@@ -136,6 +136,97 @@ public sealed partial class VirtualMachine
         _context.ElevationCommand = null;
     }
 
+    // ══════════════════════════ File Locks ══════════════════════════
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private void ExecuteLockBegin(ref CallFrame frame, uint inst)
+    {
+        // Sandbox check — lock is not supported in embedded/playground mode
+        if (_context.EmbeddedMode)
+            throw new RuntimeError(
+                "Lock blocks are not supported in embedded mode.",
+                GetCurrentSpan(ref frame));
+
+        byte errReg  = Instruction.GetA(inst);
+        byte pathReg = Instruction.GetB(inst);
+
+        // Read path from R(B)
+        StashValue pathVal = _stack[frame.BaseSlot + pathReg];
+        string rawPath = RuntimeOps.Stringify(pathVal);
+        string path    = System.IO.Path.GetFullPath(rawPath);
+
+        // Read wait from R(B+1) — null = wait forever
+        StashValue waitVal = _stack[frame.BaseSlot + pathReg + 1];
+        long? waitMs = null;
+        if (waitVal.Tag != StashValueTag.Null)
+        {
+            if (waitVal.AsObj is StashDuration waitDur)
+                waitMs = waitDur.TotalMilliseconds;
+            else
+                waitMs = 0L; // non-null, non-duration → treat as non-blocking
+        }
+
+        // Read stale from R(B+2) — null = no stale detection
+        StashValue staleVal = _stack[frame.BaseSlot + pathReg + 2];
+        long? staleMs = null;
+        if (staleVal.Tag != StashValueTag.Null)
+        {
+            if (staleVal.AsObj is StashDuration staleDur)
+                staleMs = staleDur.TotalMilliseconds;
+        }
+
+        // Deadlock detection: reject if this VM already holds a lock on the same path
+        foreach (FileLockHandle activeLock in _context.ActiveLocks)
+        {
+            if (string.Equals(activeLock.NormalizedPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                throw new RuntimeError(
+                    $"Attempted to acquire lock on already-locked path (would deadlock): {path}",
+                    GetCurrentSpan(ref frame),
+                    StashErrorTypes.LockError)
+                {
+                    Properties = new Dictionary<string, object?>
+                    {
+                        ["path"] = path,
+                    },
+                };
+            }
+        }
+
+        // Register cleanup handlers on first acquisition
+        _context.EnsureLockCleanupRegistered();
+
+        // Acquire the lock — throws LockAcquisitionException on failure
+        FileLockHandle handle;
+        try
+        {
+            // TODO: dry mode — skip actual acquisition
+            handle = FileLockHandle.Acquire(path, waitMs, staleMs, _ct);
+        }
+        catch (LockAcquisitionException ex)
+        {
+            throw new RuntimeError(ex.Message, GetCurrentSpan(ref frame), StashErrorTypes.LockError)
+            {
+                Properties = new Dictionary<string, object?>
+                {
+                    ["path"] = path,
+                },
+            };
+        }
+
+        _context.ActiveLocks.Push(handle);
+    }
+
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private void ExecuteLockEnd(ref CallFrame frame, uint inst)
+    {
+        // Defensive — handle the case where LockBegin failed before pushing to stack
+        if (_context.ActiveLocks.TryPop(out FileLockHandle? handle))
+        {
+            handle?.Release();
+        }
+    }
+
     // ══════════════════════════ Retry ══════════════════════════
 
     [MethodImpl(MethodImplOptions.NoInlining)]

@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using Stash.Common;
 using Stash.Runtime;
@@ -59,6 +60,45 @@ internal sealed class VMContext : IInterpreterContext
     // --- Elevation Context ---
     public bool ElevationActive { get; set; }
     public string? ElevationCommand { get; set; }
+
+    // --- Lock Context ---
+    /// <summary>Stack of active file lock handles held by this VM instance. LIFO; LockEnd pops the top.</summary>
+    public Stack<FileLockHandle> ActiveLocks { get; } = new();
+
+    private bool _lockCleanupRegistered;
+
+    // Keep references to prevent GC of signal registrations
+    private PosixSignalRegistration? _sigtermReg;
+    private PosixSignalRegistration? _sighupReg;
+
+    /// <summary>
+    /// Register process exit and signal handlers on the first lock acquisition.
+    /// Idempotent — safe to call multiple times.
+    /// </summary>
+    public void EnsureLockCleanupRegistered()
+    {
+        if (_lockCleanupRegistered) return;
+        _lockCleanupRegistered = true;
+
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => ReleaseAllLocks();
+        AppDomain.CurrentDomain.UnhandledException += (_, _) => ReleaseAllLocks();
+        Console.CancelKeyPress += (_, _) => ReleaseAllLocks();
+
+        if (!OperatingSystem.IsWindows())
+        {
+            _sigtermReg = PosixSignalRegistration.Create(PosixSignal.SIGTERM, _ => ReleaseAllLocks());
+            _sighupReg  = PosixSignalRegistration.Create(PosixSignal.SIGHUP,  _ => ReleaseAllLocks());
+        }
+    }
+
+    private void ReleaseAllLocks()
+    {
+        while (ActiveLocks.TryPop(out FileLockHandle? handle))
+        {
+            try { handle?.Release(); }
+            catch { /* best effort — never throw from exit handlers */ }
+        }
+    }
 
     public void EmitExit(int code)
     {

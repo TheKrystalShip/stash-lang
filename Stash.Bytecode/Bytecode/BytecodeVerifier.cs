@@ -38,8 +38,8 @@ public sealed class BytecodeVerifier
             uint word = chunk.Code[i];
             var op = Instruction.GetOp(word);
 
-            // 1. Validate opcode range (0–95); keep upper bound in sync with OpCode enum (Rethrow = 95)
-            if ((byte)op > 95)
+            // 1. Validate opcode range (0–97); keep upper bound in sync with OpCode enum (LockEnd = 97)
+            if ((byte)op > 97)
             {
                 AddError(errors, instrIdx, prefix, $"Invalid opcode {(byte)op}.");
                 lastInstrIdx = instrIdx;
@@ -52,7 +52,7 @@ public sealed class BytecodeVerifier
             byte c = Instruction.GetC(word);
             ushort bx = Instruction.GetBx(word);
 
-            // 2. A is always a register except for Ax-format opcodes (TryEnd, ElevateEnd)
+            // 2. A is always a register except for Ax-format opcodes (TryEnd, ElevateEnd, LockEnd)
             if (fmt != OpCodeFormat.Ax && a >= chunk.MaxRegs)
                 AddError(errors, instrIdx, prefix, $"Opcode {op}: register A={a} out of bounds (MaxRegs={chunk.MaxRegs}).");
 
@@ -320,6 +320,18 @@ public sealed class BytecodeVerifier
                 case OpCode.Rethrow:
                     // A (catch register) already validated by the general A-register check above.
                     break;
+
+                // ── LockBegin: ABC — A=errReg, B=pathReg, C=constIdx; R(B+1), R(B+2) also used ──
+
+                case OpCode.LockBegin:
+                {
+                    if (b + 2 >= chunk.MaxRegs) AddError(errors, instrIdx, prefix, $"LockBegin: registers {b},{b + 1},{b + 2} out of bounds (max {chunk.MaxRegs}).");
+                    if (c >= chunk.Constants.Length) AddError(errors, instrIdx, prefix, $"LockBegin: constant index {c} out of bounds.");
+                    break;
+                }
+
+                case OpCode.LockEnd:
+                    break; // No operands to validate
             }
 
             lastInstrIdx = instrIdx;

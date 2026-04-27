@@ -245,6 +245,13 @@ public enum OpCode : byte
     CatchMatch = 94,
     /// <summary>A: Re-throw the original RuntimeError that was caught into R(A)'s handler register.</summary>
     Rethrow = 95,
+
+    // === File-Based Mutual Exclusion (Lock) ===
+    /// <summary>ABC: Acquire exclusive file lock. A=errReg (scratch), B=pathReg, C=constIdx for LockMetadata. R(B+1)=waitOption, R(B+2)=staleOption.</summary>
+    LockBegin = 96,
+
+    /// <summary>Ax: Release the top lock from VMContext.ActiveLocks. No operands (A=0).</summary>
+    LockEnd = 97,
 }
 
 /// <summary>Instruction format types for the 32-bit encoding.</summary>
@@ -278,7 +285,7 @@ public static class OpCodeInfo
             => OpCodeFormat.ABx,
 
         // Ax format: 24-bit payload
-        OpCode.TryEnd or OpCode.ElevateEnd
+        OpCode.TryEnd or OpCode.ElevateEnd or OpCode.LockEnd
             => OpCodeFormat.Ax,
 
         // Everything else is ABC
