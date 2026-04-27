@@ -167,4 +167,45 @@ public class ErrorTypeTests : Stash.Tests.Interpreting.StashTestBase
         Assert.Equal("NoMsg", ex.ErrorType);
         Assert.False(string.IsNullOrEmpty(ex.Message));
     }
+
+    // =========================================================================
+    // LockError — registration and behavior
+    // =========================================================================
+
+    [Fact]
+    public void LockError_IsCatchableByType()
+    {
+        var source = @"
+            let result = ""not caught"";
+            try {
+                throw LockError { message: ""lock timeout"", path: ""/var/run/test.lock"" };
+            } catch (LockError e) {
+                result = ""caught"";
+            }
+        ";
+        Assert.Equal("caught", Run(source));
+    }
+
+    [Fact]
+    public void LockError_HasPathField()
+    {
+        var source = @"
+            let result = """";
+            try {
+                throw LockError { message: ""lock timeout"", path: ""/var/run/test.lock"" };
+            } catch (LockError e) {
+                result = e.path;
+            }
+        ";
+        Assert.Equal("/var/run/test.lock", Run(source));
+    }
+
+    [Fact]
+    public void LockError_IsThrowableAsStruct_TypePreserved()
+    {
+        var ex = RunCapturingError(@"
+            throw LockError { message: ""lock failed"", path: ""/tmp/test.lock"" };
+        ");
+        Assert.Equal(StashErrorTypes.LockError, ex.ErrorType);
+    }
 }
