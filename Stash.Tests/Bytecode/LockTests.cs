@@ -297,4 +297,69 @@ public class LockTests : Stash.Tests.Interpreting.StashTestBase
         }
         finally { File.Delete(lockPath); }
     }
+
+    // =========================================================================
+    // 10. Outer lock stays held after catching an inner lock's LockError
+    //     Regression for: TryBegin before LockBegin caused inner error path to
+    //     pop the outer lock from ActiveLocks before the outer body finished.
+    // =========================================================================
+
+    [Fact]
+    public void Lock_OuterLockHeldAfterCatchingInnerLockError()
+    {
+        string lockPath = TempLockPath();
+        try
+        {
+            // The outer lock is on lockPath. Inside its body, a second acquisition
+            // on the same path fires the deadlock-detection LockError. The user
+            // catches that error. The outer lock must still be active after the catch.
+            //
+            // We verify this by attempting a third acquisition after the catch:
+            // if the outer lock is still held, deadlock detection fires again → "blocked".
+            // If the outer lock was erroneously released, the acquisition succeeds → "re-acquired".
+            string output = RunCapturingOutput($$"""
+                lock "{{lockPath}}" {
+                    try {
+                        lock "{{lockPath}}" {
+                            io.println("unreachable");
+                        }
+                    } catch (LockError e) {
+                        io.println("caught");
+                    }
+                    // A re-acquisition attempt inside the outer block must still fail.
+                    try {
+                        lock "{{lockPath}}" {
+                            io.println("re-acquired");
+                        }
+                    } catch (LockError e) {
+                        io.println("blocked");
+                    }
+                }
+                """);
+            Assert.Contains("caught", output);
+            Assert.DoesNotContain("re-acquired", output);
+            Assert.Contains("blocked", output);
+        }
+        finally { File.Delete(lockPath); }
+    }
+
+    // =========================================================================
+    // 11. Lock with options parses correctly (wait/stale named options)
+    // =========================================================================
+
+    [Fact]
+    public void Lock_WithWaitOption_ParsesAndExecutes()
+    {
+        string lockPath = TempLockPath();
+        try
+        {
+            string output = RunCapturingOutput($$"""
+                lock "{{lockPath}}" (wait: 0s) {
+                    io.println("acquired");
+                }
+                """);
+            Assert.Contains("acquired", output);
+        }
+        finally { File.Delete(lockPath); }
+    }
 }

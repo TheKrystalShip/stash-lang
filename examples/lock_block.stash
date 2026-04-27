@@ -1,0 +1,242 @@
+#!/usr/bin/env stash
+
+// ============================================================================
+// lock — File-Based Mutual Exclusion
+//
+// The lock block acquires an exclusive OS file lock for the duration of its
+// body. Lock release is guaranteed on all exit paths: normal completion,
+// return, throw, and process termination signals (SIGINT, SIGTERM, exit).
+//
+// Use lock when multiple processes or cron jobs must not run a critical
+// section concurrently — deployments, backups, database migrations, etc.
+//
+// NOTE: This example uses paths under /tmp for portability. In production,
+// prefer /var/run/ on Linux/macOS or %TEMP% on Windows.
+// ============================================================================
+
+// ---------------------------------------------------------------------------
+// 1. Minimal lock — block until acquired (default: wait forever)
+//    One process runs at a time; all others queue behind it.
+// ---------------------------------------------------------------------------
+
+fn minimalLock() {
+  io.println("  acquiring lock...");
+  lock "/tmp/demo.lock" {
+    io.println("  lock acquired — doing exclusive work");
+    // Simulate work
+    let result = str.repeat("*", 20);
+    io.println("  work done: " + result);
+  }
+  io.println("  lock released");
+}
+
+io.println("=== 1. Minimal lock ===");
+minimalLock();
+io.println();
+
+// ---------------------------------------------------------------------------
+// 2. Non-blocking lock (wait: 0s) — fail immediately if already locked
+//    Use this when you want to skip work if another instance is running,
+//    rather than queue behind it.
+// ---------------------------------------------------------------------------
+
+fn nonBlocking() {
+  try {
+    lock "/tmp/demo.lock" (wait: 0s) {
+      io.println("  lock acquired — doing exclusive work");
+    }
+  } catch (LockError e) {
+    io.println("  lock is busy — skipping this run");
+    io.println("  locked path: " + e.path);
+  }
+}
+
+io.println("=== 2. Non-blocking lock (wait: 0s) ===");
+nonBlocking();
+io.println();
+
+// ---------------------------------------------------------------------------
+// 3. Timed wait — wait up to N seconds before giving up
+//    Use this for jobs where waiting a short time is acceptable, but
+//    waiting indefinitely is not.
+// ---------------------------------------------------------------------------
+
+fn timedWait() {
+  try {
+    lock "/tmp/deploy.lock" (wait: 30s) {
+      io.println("  lock acquired within 30s — deploying");
+    }
+  } catch (LockError e) {
+    io.println("  timed out waiting for lock after 30s");
+  }
+}
+
+io.println("=== 3. Timed wait (wait: 30s) ===");
+timedWait();
+io.println();
+
+// ---------------------------------------------------------------------------
+// 4. Stale lock recovery (stale: duration)
+//    If the process that holds the lock has died and the lock file is older
+//    than the stale duration, the lock is automatically stolen.
+//    This handles the SIGKILL / crash case that cannot be caught.
+// ---------------------------------------------------------------------------
+
+fn withStaleRecovery() {
+  lock "/tmp/nightly.lock" (stale: 1h) {
+    io.println("  lock acquired (stealing stale lock if holder is dead)");
+    io.println("  running nightly maintenance...");
+  }
+}
+
+io.println("=== 4. Stale lock recovery (stale: 1h) ===");
+withStaleRecovery();
+io.println();
+
+// ---------------------------------------------------------------------------
+// 5. Combined options — wait + stale
+//    Wait up to 10s for the lock; if the holder is dead and the file is
+//    older than 2h, steal immediately rather than waiting.
+// ---------------------------------------------------------------------------
+
+fn combinedOptions() {
+  lock "/tmp/sync.lock" (wait: 10s, stale: 2h) {
+    io.println("  lock acquired — syncing data");
+  }
+}
+
+io.println("=== 5. Combined options (wait: 10s, stale: 2h) ===");
+combinedOptions();
+io.println();
+
+// ---------------------------------------------------------------------------
+// 6. Capturing a value from a critical section
+//    lock is a statement — it produces no value. Declare the variable
+//    outside and assign inside. This pattern also communicates that the
+//    variable is shared-mutable state being protected by the lock.
+// ---------------------------------------------------------------------------
+
+io.println("=== 6. Capturing a value from a critical section ===");
+
+let previousVersion = null;
+lock "/tmp/version.lock" {
+  // Read current version atomically, then update
+  previousVersion = "1.0.0";  // normally: str.trim(fs.readFile("version.txt"))
+  // fs.writeFile("version.txt", "2.0.0")
+  io.println("  version updated inside the lock");
+}
+io.println("  previous version was: " + previousVersion);
+io.println();
+
+// ---------------------------------------------------------------------------
+// 7. Lock with defer inside
+//    defer inside a lock body runs BEFORE the lock is released.
+//    This guarantees that cleanup happens while the lock is still held —
+//    correct for operations that must complete before another process proceeds.
+// ---------------------------------------------------------------------------
+
+fn deployWithCleanup(version: string, tmpDir: string) {
+  lock "/tmp/deploy.lock" {
+    defer io.println("  [defer] cleaned up temp dir: " + tmpDir);
+    defer io.println("  [defer] removed staging symlink");
+
+    io.println("  deploying version " + version + " from " + tmpDir);
+    // ... deployment work ...
+    io.println("  deploy complete — defers will run before lock releases");
+  }
+  // lock is released AFTER both defers have run
+}
+
+io.println("=== 7. Defer inside lock ===");
+deployWithCleanup("v2.0.0", "/tmp/staging-v2");
+io.println();
+
+// ---------------------------------------------------------------------------
+// 8. Nested locks on different paths
+//    Multiple locks on different paths are fine. Acquisition follows
+//    declaration order; release is LIFO (innermost first).
+// ---------------------------------------------------------------------------
+
+fn nestedLocks() {
+  lock "/tmp/outer.lock" {
+    io.println("  outer lock held");
+    lock "/tmp/inner.lock" {
+      io.println("  both outer and inner locks held");
+    }
+    io.println("  inner lock released — outer still held");
+  }
+  io.println("  outer lock released");
+}
+
+io.println("=== 8. Nested locks on different paths ===");
+nestedLocks();
+io.println();
+
+// ---------------------------------------------------------------------------
+// 9. Composition: retry + lock
+//    Use retry with (wait: 0s) to poll for the lock with a delay.
+//    retry controls the retry logic; the lock controls exclusivity.
+//    This is cleaner than a manual polling loop.
+// ---------------------------------------------------------------------------
+
+fn reliableDeploy(version: string) {
+  retry (5, delay: 15s) {
+    lock "/tmp/deploy.lock" (wait: 0s) {
+      io.println("  lock acquired — deploying " + version);
+      // deploy(version)
+    }
+  }
+}
+
+io.println("=== 9. Composition: retry + lock ===");
+reliableDeploy("v3.0.0");
+io.println();
+
+// ---------------------------------------------------------------------------
+// 10. Composition: timeout + lock
+//     Cap the total time for lock acquisition AND body execution.
+//     timeout wraps both; wait controls only the acquisition phase.
+// ---------------------------------------------------------------------------
+
+fn deployWithHardDeadline(version: string) {
+  try {
+    timeout 60s {
+      lock "/tmp/deploy.lock" (wait: 30s) {
+        io.println("  lock acquired — deploying " + version);
+        // Long-running work — if it exceeds 60s total, TimeoutError fires
+      }
+    }
+  } catch (TimeoutError e) {
+    io.println("  deploy timed out after 60s: " + e.message);
+  } catch (LockError e) {
+    io.println("  could not acquire deploy lock within 30s: " + e.message);
+  }
+}
+
+io.println("=== 10. Composition: timeout + lock ===");
+deployWithHardDeadline("v3.0.0");
+io.println();
+
+// ---------------------------------------------------------------------------
+// 11. Error handling — LockError fields
+//     LockError carries both message and path, so you can log the exact
+//     file that was contended, useful for debugging parallel job queues.
+// ---------------------------------------------------------------------------
+
+fn auditedLock(lockPath: string) {
+  try {
+    lock lockPath (wait: 0s) {
+      io.println("  acquired: " + lockPath);
+    }
+  } catch (LockError e) {
+    io.println("  failed to acquire lock");
+    io.println("    message: " + e.message);
+    io.println("    path:    " + e.path);
+  }
+}
+
+io.println("=== 11. LockError fields ===");
+auditedLock("/tmp/audit-demo.lock");
+io.println();
+
+io.println("All examples complete.");

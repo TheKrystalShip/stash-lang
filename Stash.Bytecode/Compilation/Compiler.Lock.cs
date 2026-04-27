@@ -55,11 +55,12 @@ public sealed partial class Compiler
         byte metaIdx = (byte)_builder.AddConstant(StashValue.FromObj(
             new LockMetadata(optionCount, stmt.WaitOption != null, stmt.StaleOption != null)));
 
-        // TryBegin — error handler before LockBegin so any acquisition error is caught
-        int errorJump = _builder.EmitJump(OpCode.TryBegin, errReg);
-
-        // Emit LockBegin: A=errReg, B=pathReg, C=metaConstIdx
+        // Emit LockBegin first — if acquisition fails the error propagates directly without
+        // running LockEnd, which would otherwise pop an outer lock from the stack.
         _builder.EmitABC(OpCode.LockBegin, errReg, pathReg, metaIdx);
+
+        // TryBegin protects only the body (lock is already held at this point)
+        int errorJump = _builder.EmitJump(OpCode.TryBegin, errReg);
 
         // Compile the lock body
         CompileStmt(stmt.Body);

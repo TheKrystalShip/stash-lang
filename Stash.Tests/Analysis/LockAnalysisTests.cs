@@ -1,3 +1,4 @@
+using System.Linq;
 using Stash.Analysis;
 
 namespace Stash.Tests.Analysis;
@@ -77,5 +78,26 @@ public class LockAnalysisTests : AnalysisTestBase
             """);
 
         Assert.DoesNotContain(diagnostics, d => d.Code == "SA0812");
+    }
+
+    [Fact]
+    public void SA0812_MultipleSequentialInnerLocksOnSamePath_AllEmitError()
+    {
+        // Two inner locks on the same path, both nested inside an outer lock —
+        // both must emit SA0812 (regression for HashSet nesting-depth bug where
+        // the first inner lock's Remove cleared the outer's entry).
+        var diagnostics = Validate("""
+            lock "/var/run/test.lock" {
+                lock "/var/run/test.lock" {
+                    let x = 1;
+                }
+                lock "/var/run/test.lock" {
+                    let y = 2;
+                }
+            }
+            """);
+
+        var sa0812 = diagnostics.Where(d => d.Code == "SA0812").ToList();
+        Assert.Equal(2, sa0812.Count);
     }
 }

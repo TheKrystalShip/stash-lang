@@ -217,7 +217,7 @@ public sealed partial class VirtualMachine
         _context.ActiveLocks.Push(handle);
     }
 
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteLockEnd(ref CallFrame frame, uint inst)
     {
         // Defensive — handle the case where LockBegin failed before pushing to stack

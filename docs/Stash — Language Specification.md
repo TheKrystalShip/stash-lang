@@ -3761,6 +3761,191 @@ fn deploy() {
 
 ---
 
+## 7h. Lock Block
+
+The `lock` block acquires an **exclusive, OS-level advisory file lock** on a specified path for the duration of its body. Lock release is guaranteed on all exit paths — normal completion, `return`, `throw`, or unhandled exception. `lock` is a statement keyword; it does not produce a value.
+
+Use `lock` when multiple processes or script instances must not run a critical section concurrently — for example, deployment scripts, cron jobs, or maintenance tasks.
+
+### Syntax
+
+```stash
+lock <path> [(<options>)] {
+    <body>
+}
+```
+
+Options (all optional):
+
+| Option  | Type       | Default | Description                                                                                       |
+| ------- | ---------- | ------- | ------------------------------------------------------------------------------------------------- |
+| `wait`  | `duration` | forever | Maximum time to wait for lock acquisition. `0s` means non-blocking (throw immediately if locked). |
+| `stale` | `duration` | none    | Steal the lock if the holder process is dead and the lock file is older than this duration.       |
+
+### Examples
+
+```stash
+// Minimal — block until the lock is acquired (no timeout):
+lock "/var/run/deploy.lock" {
+    deploy(version);
+}
+
+// Non-blocking — throw LockError immediately if already held:
+lock "/var/run/backup.lock" (wait: 0s) {
+    backup();
+}
+
+// Wait up to 30 seconds before giving up:
+lock "/var/run/job.lock" (wait: 30s) {
+    runJob();
+}
+
+// Stale lock recovery — steal if holder is dead and file is older than 1 hour:
+lock "/var/run/nightly.lock" (stale: 1h) {
+    nightlyMaintenance();
+}
+
+// Combined — wait up to 10s, steal stale locks older than 2 hours:
+lock "/var/run/sync.lock" (wait: 10s, stale: 2h) {
+    syncData();
+}
+```
+
+### Semantics
+
+**Acquisition:** `lock` opens the file at `<path>` (creating it if absent) and acquires an exclusive OS file lock. On Linux/macOS this is `flock(2)` (`LOCK_EX`); on Windows this is `LockFileEx`. The lock file is **never deleted** on release — deleting and recreating lock files introduces TOCTOU races. The file persists as a marker; only the OS lock is released.
+
+**Wait behavior:**
+
+- No `wait` option → block indefinitely until the lock is acquired (matches `flock(2)` default).
+- `wait: 0s` → attempt once; throw `LockError` immediately if locked.
+- `wait: Xs` → poll every 50 ms for up to `Xs`; throw `LockError` on timeout.
+
+**Stale detection:** When the lock cannot be acquired, if `stale` is set, the VM inspects the PID written in the lock file. If the process is dead **and** the file's mtime is older than the stale duration, the lock is stolen and the current process takes ownership.
+
+**Lock file contents:** The VM writes `<PID>\n` (current process ID, ASCII decimal) into the lock file on acquisition. This enables stale detection by subsequent processes.
+
+**Guaranteed release:** The OS lock is released in all cases:
+
+1. Normal block exit → `LockEnd` opcode.
+2. Exception inside block → compiler-generated try/finally ensures `LockEnd` runs before the exception propagates.
+3. Normal process exit → `AppDomain.ProcessExit` handler releases all active locks.
+4. SIGINT / SIGTERM / SIGHUP (Unix) → `PosixSignalRegistration` handler releases all active locks.
+5. Unhandled exception → `AppDomain.UnhandledException` handler.
+
+> **SIGKILL / TerminateProcess:** Cannot be caught. The lock file remains but contains a dead PID. The `stale` option exists for recovery in this case.
+
+**Path normalization:** The path is passed through `Path.GetFullPath()` before use, so `"./deploy.lock"` and `"/cwd/deploy.lock"` are treated as the same path for deadlock detection.
+
+### No Return Value
+
+`lock` is a statement — it cannot appear in expression position. `let x = lock ... { }` is a parse error.
+
+To extract a value from a critical section, declare the variable outside and assign inside. This pattern also makes shared-mutable state intent explicit:
+
+```stash
+let previousVersion = null;
+lock "/var/run/version.lock" {
+    previousVersion = str.trim(fs.readFile("current_version.txt"));
+    fs.writeFile("current_version.txt", "v2.0.0");
+}
+io.println("Previous version: ${previousVersion}");
+```
+
+### Nested Locks
+
+Multiple `lock` blocks may be nested on **different paths**:
+
+```stash
+lock "/var/run/outer.lock" {
+    lock "/var/run/inner.lock" {
+        // both locks held here
+    }
+}
+```
+
+Nesting on the **same path** deadlocks and is rejected at both static analysis time (SA0812) and runtime (throws `LockError`).
+
+### Errors
+
+Throws `LockError` when:
+
+- The lock cannot be acquired within the `wait` window.
+- Non-blocking mode (`wait: 0s`) finds the lock already held.
+- The same path is already locked by the current process (would deadlock).
+- Running in the Playground sandbox (file I/O unavailable).
+
+`LockError` has two fields: `message` (string) and `path` (string — the normalized lock file path).
+
+File system errors (permission denied, path not found, disk full) throw `IOError` as usual.
+
+```stash
+try {
+    lock "/var/run/job.lock" (wait: 0s) {
+        runJob();
+    }
+} catch (LockError e) {
+    io.println("Job already running at: " + e.path);
+}
+```
+
+### Composition
+
+`lock` composes cleanly with other control flow:
+
+```stash
+// retry + lock — poll for the lock using retry's delay
+retry (5, delay: 10s) {
+    lock "/var/run/deploy.lock" (wait: 0s) {
+        deploy(version);
+    }
+}
+
+// timeout + lock — cap total wait including body execution
+timeout 60s {
+    lock "/var/run/job.lock" (wait: 30s) {
+        runLongJob();
+    }
+}
+
+// defer inside lock — deferred cleanup runs while the lock is still held
+lock "/var/run/deploy.lock" {
+    defer cleanup(tmpDir);    // runs before LockEnd — lock is still active
+    doDeployWork(tmpDir);
+}
+```
+
+> **Note:** `lock`'s `wait` option is independent of an enclosing `timeout` — the outer `timeout` cancels the entire operation (lock wait + body), while `wait` caps only the acquisition phase.
+
+### Embedded Mode
+
+`lock` is unavailable in embedded mode (when Stash runs as a library inside another process). Acquiring process-level file locks from an embedded VM could conflict with the host process's file handles. `lock` in embedded mode throws `NotSupportedError` at runtime.
+
+### Dry Mode
+
+When `sys.isDry()` is `true`, the lock block prints `DRY: Would acquire lock: <path>` and executes the body **without** acquiring the OS file lock. This allows dry-running deployment scripts that contain `lock` blocks.
+
+### Static Analysis
+
+| Code   | Severity | Condition                                                                                                                         |
+| ------ | -------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| SA0810 | Warning  | `lock` path expression is not a string literal and cannot be statically validated.                                                |
+| SA0811 | Warning  | `lock` body is empty — the lock serves no purpose.                                                                                |
+| SA0812 | Error    | A `lock` block on the same path is nested inside another `lock` on that path — will deadlock at runtime.                          |
+| SA0813 | Info     | A `lock` without a `wait` option is not enclosed in a `timeout` block — will wait indefinitely if another process holds the lock. |
+| SA0814 | Warning  | A `lock` with `wait: 0s` is not enclosed in a `try` block — `LockError` will be unhandled if the lock is already held.            |
+
+### Cross-Platform Notes
+
+| Aspect            | Linux / macOS                      | Windows                             |
+| ----------------- | ---------------------------------- | ----------------------------------- |
+| Lock primitive    | `flock(2)` — advisory              | `LockFileEx` — mandatory            |
+| Signal cleanup    | SIGINT, SIGTERM, SIGHUP registered | `Console.CancelKeyPress`            |
+| Lock semantics    | Only Stash processes coordinated   | OS enforces against all processes   |
+| Recommended paths | `/var/run/` or `/tmp/`             | `%TEMP%` or well-known app data dir |
+
+---
+
 ## 8. Functions
 
 ### Declaration

@@ -838,11 +838,13 @@ public class Parser
     {
         Token lockKeyword = Previous();
 
-        // Parse path expression (any expression evaluating to a string path)
-        Expr path = Expression();
+        // Parse path expression using a disambiguation-aware parser.
+        // Standard Expression()/Call() would greedily consume '(' as a function call,
+        // preventing the lock options list from being recognized. ParseLockPath()
+        // stops before '(' when the look-ahead matches 'IDENTIFIER :' (named options).
+        Expr path = ParseLockPath();
 
         // Parse optional named options: (wait: duration, stale: duration)
-        // Disambiguate: '(' followed by 'IDENTIFIER :' is named options, otherwise not options.
         Expr? waitOption = null;
         Expr? staleOption = null;
 
@@ -876,6 +878,51 @@ public class Parser
         BlockStmt body = ParseBlock();
         return new LockStmt(lockKeyword, path, waitOption, staleOption, body, MakeSpan(lockKeyword.Span, body.Span));
     }
+
+    /// <summary>
+    /// Parses the path expression for a <c>lock</c> statement using Call()-level
+    /// precedence, but stops before consuming <c>(</c> when the lookahead is
+    /// <c>IDENTIFIER ':'</c> (indicating the start of the named-options list rather
+    /// than a function call argument list).
+    /// </summary>
+    private Expr ParseLockPath()
+    {
+        Expr expr = Primary();
+        while (true)
+        {
+            // If '(' is followed by 'IDENTIFIER :' it is a lock named-options list — stop.
+            if (Check(TokenType.LeftParen)
+                && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Identifier
+                && _current + 2 < _tokens.Count && _tokens[_current + 2].Type == TokenType.Colon)
+            {
+                break;
+            }
+
+            if (Match(TokenType.LeftParen))
+            {
+                expr = FinishCall(expr);
+            }
+            else if (Match(TokenType.LeftBracket))
+            {
+                Token bracket = Previous();
+                Expr index = Expression();
+                Token close = Consume(TokenType.RightBracket, "Expected ']' after index.");
+                expr = new IndexExpr(expr, index, bracket.Span, MakeSpan(expr.Span, close.Span));
+            }
+            else if (Match(TokenType.Dot) || Match(TokenType.QuestionDot))
+            {
+                bool isOptional = Previous().Type == TokenType.QuestionDot;
+                Token name = ConsumePropertyName();
+                expr = new DotExpr(expr, name, MakeSpan(expr.Span, name.Span), isOptional);
+            }
+            else
+            {
+                break;
+            }
+        }
+        return expr;
+    }
+
     /// <returns>A <see cref="DoWhileStmt"/>.</returns>
     private Stmt DoWhileStatement()
     {

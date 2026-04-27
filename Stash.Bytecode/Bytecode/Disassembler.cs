@@ -139,6 +139,10 @@ public static class Disassembler
         [OpCode.GeK]            = "ge.k",
         [OpCode.TypedWrap]      = "typed.wrap",
         [OpCode.Defer]          = "defer",
+        [OpCode.CatchMatch]     = "catch.match",
+        [OpCode.Rethrow]        = "rethrow",
+        [OpCode.LockBegin]      = "lock.begin",
+        [OpCode.LockEnd]        = "lock.end"
     };
 
     // ─── Instruction Format Classification ───────────────────────────────────
@@ -152,7 +156,7 @@ public static class Disassembler
             or OpCode.Closure or OpCode.StructDecl or OpCode.EnumDecl or OpCode.IfaceDecl
             or OpCode.Extend or OpCode.Import or OpCode.ImportAs or OpCode.Switch
             or OpCode.Destructure or OpCode.Retry or OpCode.Timeout or OpCode.TryBegin
-            or OpCode.TypedWrap => InstrFmt.ABx,
+            or OpCode.TypedWrap or OpCode.CatchMatch => InstrFmt.ABx,
 
         // AsBx (signed offset)
         OpCode.AddI or OpCode.Jmp or OpCode.JmpFalse or OpCode.JmpTrue or OpCode.Loop
@@ -160,7 +164,7 @@ public static class Disassembler
             or OpCode.IterPrep or OpCode.IterLoop => InstrFmt.AsBx,
 
         // Ax
-        OpCode.TryEnd or OpCode.ElevateEnd => InstrFmt.Ax,
+        OpCode.TryEnd or OpCode.ElevateEnd or OpCode.LockEnd => InstrFmt.Ax,
 
         // ABC (everything else)
         _ => InstrFmt.ABC,
@@ -239,6 +243,7 @@ public static class Disassembler
             EmitConstSection(chunk, options, sb);
             EmitGlobalsSection(chunk, options, sb);
             EmitConstGlobalInitsSection(chunk, options, sb);
+            // EmitLocalsSection(chunk, options, sb);
         }
 
         var labels = CollectLabels(chunk);
@@ -364,6 +369,38 @@ public static class Disassembler
                 ? FormatConstant(chunk.Constants[constIdx])
                 : $"k{constIdx}";
             sb.AppendLine($"  [g{slot}] = [{constIdx}]  ; {gname} = {constVal}");
+        }
+        sb.AppendLine();
+    }
+
+    private static void EmitLocalsSection(Chunk chunk, DisassemblerOptions options, StringBuilder sb)
+    {
+        if (chunk.LocalNames is not { Length: > 0 })
+            return;
+
+        sb.AppendLine(Col(options, ".locals:", Ansi.BoldMagenta));
+
+        // Parameters occupy registers 0..Arity-1
+        int arity = chunk.Arity;
+        bool hasUpvalues = chunk.Upvalues.Length > 0;
+
+        for (int i = 0; i < chunk.LocalNames.Length; i++)
+        {
+            string name = chunk.LocalNames[i];
+            bool isConst = chunk.LocalIsConst != null && i < chunk.LocalIsConst.Length && chunk.LocalIsConst[i];
+
+            // Classify the register role
+            string role;
+            if (i < arity)
+                role = "param";
+            else if (name.StartsWith('<') && name.EndsWith('>'))
+                role = "internal";   // compiler-managed: <for_counter>, <lock_err>, etc.
+            else
+                role = isConst ? "const" : "local";
+
+            string regStr  = Col(options, $"[r{i}]", Ansi.Cyan);
+            string nameStr = Col(options, name, Ansi.Cyan);
+            sb.AppendLine($"  {regStr} {nameStr,-24} ; {role}");
         }
         sb.AppendLine();
     }
@@ -507,6 +544,8 @@ public static class Disassembler
             OpCode.TryEnd      => ("", null),
             OpCode.Throw       => ($"r{a}", null),
             OpCode.TryExpr     => ($"r{a}, r{b}", null),
+            OpCode.CatchMatch  => ($"r{a}, k{bx}", FormatCatchTypes(chunk, bx)),
+            OpCode.Rethrow     => ($"r{a}", null),
 
             // Type decls
             OpCode.StructDecl  => ($"r{a}, k{bx}", null),
@@ -533,6 +572,10 @@ public static class Disassembler
             OpCode.Timeout     => ($"r{a}, r{(byte)(a+1)}", null),
             OpCode.Await       => ($"r{a}, r{b}", null),
             OpCode.TypedWrap   => ($"r{a}, k{bx}", FormatConstant(bx < chunk.Constants.Length ? chunk.Constants[bx] : default)),
+
+            // Lock
+            OpCode.LockBegin   => ($"r{a}, r{b}, k{c}", FormatLockMeta(chunk, c)),
+            OpCode.LockEnd     => ("", null),
 
             _ => (fmt switch
             {
@@ -614,12 +657,23 @@ public static class Disassembler
         StashValueTag.Float => value.AsFloat.ToString("G"),
         StashValueTag.Obj   => value.AsObj switch
         {
-            string s   => $"\"{EscapeString(s)}\"",
-            Chunk fn   => $"<fn:{fn.Name ?? "?"}({fn.Arity}p)>",
-            _          => value.AsObj?.GetType().Name ?? "obj",
+            string s       => $"\"{ EscapeString(s)}\"",
+            Chunk fn       => $"<fn:{fn.Name ?? "?"}({fn.Arity}p)>",
+            string[] types => types.Length == 0
+                ? "string[0] <catch-all>"
+                : $"string[] {{{string.Join(", ", types)}}}",
+            LockMetadata m => FormatLockMetaConst(m),
+            _              => value.AsObj?.GetType().Name ?? "obj",
         },
         _ => "?"
     };
+
+    private static string FormatLockMetaConst(LockMetadata m)
+    {
+        if (!m.HasWait && !m.HasStale) return "LockMetadata()";
+        if (m.HasWait && m.HasStale)   return "LockMetadata(wait,stale)";
+        return m.HasWait ? "LockMetadata(wait)" : "LockMetadata(stale)";
+    }
 
     private static string EscapeString(string s)
     {
@@ -638,6 +692,24 @@ public static class Disassembler
             return $"  ; {line}: {src}";
         }
         return $"  ; line {line}";
+    }
+
+    private static string FormatCatchTypes(Chunk chunk, ushort idx)
+    {
+        if (idx < chunk.Constants.Length && chunk.Constants[idx].AsObj is string[] types)
+            return types.Length == 0 ? "catch-all" : string.Join(" | ", types);
+        return $"k{idx}";
+    }
+
+    private static string FormatLockMeta(Chunk chunk, byte idx)
+    {
+        if (idx < chunk.Constants.Length && chunk.Constants[idx].AsObj is LockMetadata meta)
+        {
+            if (!meta.HasWait && !meta.HasStale) return "no opts";
+            if (meta.HasWait && meta.HasStale)   return "opts=[wait,stale]";
+            return meta.HasWait ? "opts=[wait]" : "opts=[stale]";
+        }
+        return $"k{idx}";
     }
 
     private static string Col(DisassemblerOptions options, string text, string ansiCode)
