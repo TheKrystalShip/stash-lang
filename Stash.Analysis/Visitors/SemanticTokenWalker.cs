@@ -402,6 +402,15 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
         return 0;
     }
 
+    public int VisitLockStmt(LockStmt stmt)
+    {
+        stmt.Path.Accept(this);
+        stmt.WaitOption?.Accept(this);
+        stmt.StaleOption?.Accept(this);
+        stmt.Body.Accept(this);
+        return 0;
+    }
+
     public int VisitStructDeclStmt(StructDeclStmt stmt)
     {
         EmitFromToken(stmt.Name, TokenTypeStruct, ModifierDeclaration);

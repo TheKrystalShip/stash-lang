@@ -15,4 +15,5 @@ public static class StashErrorTypes
     public const string NotSupportedError = "NotSupportedError";
     public const string TimeoutError      = "TimeoutError";
     public const string CommandError      = "CommandError";
+    public const string LockError         = "LockError";
 }

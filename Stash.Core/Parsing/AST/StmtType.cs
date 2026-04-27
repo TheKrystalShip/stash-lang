@@ -30,4 +30,5 @@ public enum StmtType : byte
     TryCatch,
     Switch,
     Defer,
+    Lock,
 }

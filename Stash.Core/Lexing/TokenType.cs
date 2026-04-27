@@ -327,6 +327,9 @@ public enum TokenType
     /// <summary>The <c>defer</c> keyword. Registers cleanup code to execute at function exit.</summary>
     Defer,
 
+    /// <summary>The <c>lock</c> keyword. Begins a file-based mutual exclusion block.</summary>
+    Lock,
+
     // ── Special ──────────────────────────────────────────────────────
 
     /// <summary>A user-defined identifier (variable name, function name, type name, etc.).</summary>

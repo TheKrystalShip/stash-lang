@@ -109,6 +109,7 @@ public class Lexer
             ["async"] = TokenType.Async,
             ["await"] = TokenType.Await,
             ["defer"] = TokenType.Defer,
+            ["lock"] = TokenType.Lock,
             ["elevate"] = TokenType.Elevate,
             ["extend"] = TokenType.Extend,
             ["retry"] = TokenType.Retry,

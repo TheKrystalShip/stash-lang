@@ -716,6 +716,9 @@ public class Parser
             case TokenType.Defer:
                 Advance();
                 return DeferStatement();
+            case TokenType.Lock:
+                Advance();
+                return LockStatement();
             case TokenType.Try:
                 if (_tokens[_current + 1].Type == TokenType.LeftBrace)
                 {
@@ -827,9 +830,52 @@ public class Parser
     }
 
     /// <summary>
-    /// Parses a do-while statement: <c>do { ... } while (condition);</c>.
-    /// The <c>do</c> token has already been consumed.
+    /// Parses a lock statement: <c>lock path { ... }</c> or <c>lock path (wait: duration, stale: duration) { ... }</c>.
+    /// The <c>lock</c> token has already been consumed.
     /// </summary>
+    /// <returns>A <see cref="LockStmt"/>.</returns>
+    private Stmt LockStatement()
+    {
+        Token lockKeyword = Previous();
+
+        // Parse path expression (any expression evaluating to a string path)
+        Expr path = Expression();
+
+        // Parse optional named options: (wait: duration, stale: duration)
+        // Disambiguate: '(' followed by 'IDENTIFIER :' is named options, otherwise not options.
+        Expr? waitOption = null;
+        Expr? staleOption = null;
+
+        if (Check(TokenType.LeftParen)
+            && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Identifier
+            && _current + 2 < _tokens.Count && _tokens[_current + 2].Type == TokenType.Colon)
+        {
+            Advance(); // consume '('
+            do
+            {
+                Token optionName = Consume(TokenType.Identifier, "Expected option name in lock options.");
+                Consume(TokenType.Colon, "Expected ':' after option name.");
+                Expr optionValue = Assignment();
+
+                string name = optionName.Lexeme;
+                if (name == "wait")
+                    waitOption = optionValue;
+                else if (name == "stale")
+                    staleOption = optionValue;
+                else
+                    throw Error(optionName, $"Unknown lock option '{name}'. Expected 'wait' or 'stale'.");
+
+            } while (Match(TokenType.Comma)
+                  && Check(TokenType.Identifier)
+                  && _current + 1 < _tokens.Count
+                  && _tokens[_current + 1].Type == TokenType.Colon);
+
+            Consume(TokenType.RightParen, "Expected ')' after lock options.");
+        }
+
+        BlockStmt body = ParseBlock();
+        return new LockStmt(lockKeyword, path, waitOption, staleOption, body, MakeSpan(lockKeyword.Span, body.Span));
+    }
     /// <returns>A <see cref="DoWhileStmt"/>.</returns>
     private Stmt DoWhileStatement()
     {

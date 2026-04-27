@@ -884,6 +884,17 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    /// <summary>Walks the lock body for nested declarations.</summary>
+    /// <returns>Always <see langword="null"/>.</returns>
+    public object? VisitLockStmt(LockStmt stmt)
+    {
+        stmt.Path.Accept(this);
+        stmt.WaitOption?.Accept(this);
+        stmt.StaleOption?.Accept(this);
+        stmt.Body.Accept(this);
+        return null;
+    }
+
     /// <summary>
     /// Registers a placeholder <see cref="SymbolKind.Variable"/> symbol for each imported name.
     /// These placeholder symbols are later replaced by fully-resolved <see cref="SymbolInfo"/>

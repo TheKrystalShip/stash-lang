@@ -137,4 +137,9 @@ public interface IStmtVisitor<T>
     /// Visits a <see cref="DeferStmt"/> node (<c>defer stmt</c> or <c>defer { block }</c>).
     /// </summary>
     T VisitDeferStmt(DeferStmt stmt);
+
+    /// <summary>
+    /// Visits a <see cref="LockStmt"/> node (<c>lock path { block }</c>).
+    /// </summary>
+    T VisitLockStmt(LockStmt stmt);
 }

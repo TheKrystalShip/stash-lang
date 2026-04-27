@@ -481,6 +481,15 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
         return null;
     }
 
+    public object? VisitLockStmt(LockStmt stmt)
+    {
+        stmt.Path.Accept(this);
+        stmt.WaitOption?.Accept(this);
+        stmt.StaleOption?.Accept(this);
+        stmt.Body.Accept(this);
+        return null;
+    }
+
     public object? VisitExprStmt(ExprStmt stmt)
     {
         stmt.Expression.Accept(this);
