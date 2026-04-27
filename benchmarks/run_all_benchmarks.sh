@@ -9,6 +9,82 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 RUNS=3
 
+# =============================================================================
+# CPU Performance Governor
+# =============================================================================
+# Saves the current scaling governor for every CPU, switches to "performance"
+# mode (disables P-state frequency scaling, gives maximum and deterministic
+# clock speed), and restores the original governors on EXIT — even if the
+# script is interrupted with Ctrl-C or killed.
+#
+# Requires cpupower (linux-cpupower package).  If cpupower is unavailable, or
+# if elevating to root fails, the script continues with a warning so CI/CD
+# pipelines are not broken.
+# =============================================================================
+
+_CPU_GOVERNORS_SAVED=()  # parallel array: index = cpu number, value = governor name
+_GOVERNOR_APPLIED=0
+
+_save_and_set_performance_governor() {
+    if [[ "$(uname)" != "Linux" ]]; then
+        echo "  [perf] CPU governor control is Linux-only — skipping."
+        return
+    fi
+
+    if ! command -v cpupower &>/dev/null; then
+        echo "  [perf] cpupower not found. Install it:"
+        echo "         Debian/Ubuntu: sudo apt install linux-tools-common linux-tools-\$(uname -r)"
+        echo "         Fedora/RHEL:   sudo dnf install kernel-tools"
+        echo "         Arch:          sudo pacman -S cpupower"
+        echo "         Running without governor lock."
+        echo "         WARNING: CPU frequency scaling may cause non-reproducible results."
+        return
+    fi
+
+    # Collect current governor for every online CPU so we can restore later.
+    local cpu_count
+    cpu_count=$(nproc)
+    for ((cpu=0; cpu<cpu_count; cpu++)); do
+        local gov_file="/sys/devices/system/cpu/cpu${cpu}/cpufreq/scaling_governor"
+        if [[ -r "$gov_file" ]]; then
+            _CPU_GOVERNORS_SAVED[$cpu]=$(< "$gov_file")
+        else
+            _CPU_GOVERNORS_SAVED[$cpu]="unknown"
+        fi
+    done
+
+    # Attempt to switch to performance governor.
+    local cpupower_cmd="cpupower frequency-set -g performance"
+    if cpupower frequency-set -g performance &>/dev/null; then
+        _GOVERNOR_APPLIED=1
+        echo "  [perf] CPU governor → performance (was: ${_CPU_GOVERNORS_SAVED[0]})"
+    elif sudo -n cpupower frequency-set -g performance &>/dev/null 2>&1; then
+        _GOVERNOR_APPLIED=2  # elevated via passwordless sudo
+        echo "  [perf] CPU governor → performance via sudo (was: ${_CPU_GOVERNORS_SAVED[0]})"
+    else
+        echo "  [perf] Could not set performance governor (need root or passwordless sudo)."
+        echo "         WARNING: CPU frequency scaling may cause non-reproducible results."
+        echo "         To fix: run as root, or add 'cpupower' to sudoers NOPASSWD."
+    fi
+}
+
+_restore_governors() {
+    if [[ $_GOVERNOR_APPLIED -eq 0 ]]; then return; fi
+
+    local orig="${_CPU_GOVERNORS_SAVED[0]:-powersave}"
+    local restore_cmd="cpupower frequency-set -g $orig"
+
+    if [[ $_GOVERNOR_APPLIED -eq 1 ]]; then
+        $restore_cmd &>/dev/null || true
+    else
+        sudo -n $restore_cmd &>/dev/null 2>&1 || true
+    fi
+    echo "  [perf] CPU governor restored → $orig"
+}
+
+# Register cleanup so the governor is always restored.
+trap '_restore_governors' EXIT
+
 # --- Language filter (optional first argument) ---
 LANG_FILTER=""
 if [[ $# -gt 0 ]]; then
@@ -28,6 +104,10 @@ if [[ $# -gt 0 ]]; then
     esac
 fi
 should_run() { [[ -z "$LANG_FILTER" || "$1" == "$LANG_FILTER" ]]; }
+
+# Switch CPU to maximum-performance mode before building or running anything.
+echo "Configuring CPU governor..."
+_save_and_set_performance_governor
 
 # Ensure dotnet project is built
 echo "Building Stash (AOT)..."
