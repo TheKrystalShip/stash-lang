@@ -235,6 +235,44 @@ internal static class ControlFlowPrinter
         ctx.PopScope();
     }
 
+    internal static void PrintLock(LockStmt stmt, FormatContext ctx, Action<Stmt> formatStmt, Action<Expr> formatExpr)
+    {
+        ctx.EmitToken(); // lock
+        ctx.Space();
+        formatExpr(stmt.Path);
+        if (stmt.WaitOption != null || stmt.StaleOption != null)
+        {
+            ctx.Space();
+            ctx.EmitToken(); // (
+            bool first = true;
+            if (stmt.WaitOption != null)
+            {
+                ctx.EmitToken(); // wait
+                ctx.EmitToken(); // :
+                ctx.Space();
+                formatExpr(stmt.WaitOption);
+                first = false;
+            }
+            if (stmt.StaleOption != null)
+            {
+                if (!first)
+                {
+                    ctx.EmitToken(); // ,
+                    ctx.Space();
+                }
+                ctx.EmitToken(); // stale
+                ctx.EmitToken(); // :
+                ctx.Space();
+                formatExpr(stmt.StaleOption);
+            }
+            ctx.EmitToken(); // )
+        }
+        BraceRules.BeforeOpenBrace(ctx);
+        ctx.PushScope(ScopeKind.ControlFlowBody);
+        formatStmt(stmt.Body);
+        ctx.PopScope();
+    }
+
     internal static void PrintReturn(ReturnStmt stmt, FormatContext ctx, Action<Expr> formatExpr)
     {
         ctx.EmitToken(); // return

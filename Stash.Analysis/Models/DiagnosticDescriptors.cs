@@ -85,6 +85,13 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0802 = new("SA0802", "Unused import", DiagnosticLevel.Warning, "Imports", "Import '{0}' is never used.", FixApplicability.Safe);
     public static readonly DiagnosticDescriptor SA0804 = new("SA0804", "Import statements not in canonical order", DiagnosticLevel.Information, "Imports", "Import statements are not in canonical order.", FixApplicability.Safe);
 
+    // ── SA081x — Locks ────────────────────────────────────────────────
+    public static readonly DiagnosticDescriptor SA0810 = new("SA0810", "Lock path not a string", DiagnosticLevel.Warning, "Locks", "The 'lock' path expression does not evaluate to a string. The path must be a string value.");
+    public static readonly DiagnosticDescriptor SA0811 = new("SA0811", "Lock body is empty", DiagnosticLevel.Warning, "Locks", "The 'lock' block body is empty. An empty lock block serves no purpose.");
+    public static readonly DiagnosticDescriptor SA0812 = new("SA0812", "Nested lock on same path", DiagnosticLevel.Error, "Locks", "A 'lock' block on the same path '{0}' is nested inside another 'lock' on that path. This will deadlock at runtime.");
+    public static readonly DiagnosticDescriptor SA0813 = new("SA0813", "Unbounded lock wait", DiagnosticLevel.Information, "Locks", "This 'lock' block has no 'wait' option and is not enclosed in a 'timeout' block. It will wait indefinitely if another process holds the lock.");
+    public static readonly DiagnosticDescriptor SA0814 = new("SA0814", "Non-blocking lock without try", DiagnosticLevel.Warning, "Locks", "This 'lock' block uses 'wait: 0s' but is not enclosed in 'try'. A LockError will be unhandled if the lock is already held.");
+
     // ── SA09xx — Style ───────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
 
@@ -178,6 +185,11 @@ public static class DiagnosticDescriptors
         dict[SA0801.Code] = SA0801;
         dict[SA0802.Code] = SA0802;
         dict[SA0804.Code] = SA0804;
+        dict[SA0810.Code] = SA0810;
+        dict[SA0811.Code] = SA0811;
+        dict[SA0812.Code] = SA0812;
+        dict[SA0813.Code] = SA0813;
+        dict[SA0814.Code] = SA0814;
         dict[SA0901.Code] = SA0901;
         dict[SA1002.Code] = SA1002;
         dict[SA1102.Code] = SA1102;

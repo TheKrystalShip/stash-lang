@@ -31,6 +31,10 @@ public static partial class StdlibRegistry
             new BuiltInField("stdout",   "string"),
             new BuiltInField("command",  "string"),
         ]),
+        new BuiltInStruct("LockError", [
+            new BuiltInField("message", "string"),
+            new BuiltInField("path",    "string"),
+        ]),
         new BuiltInStruct("RetryOptions", [
             new BuiltInField("delay", "duration"),
             new BuiltInField("backoff", "Backoff"),

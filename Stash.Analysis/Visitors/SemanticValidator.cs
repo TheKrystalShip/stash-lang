@@ -21,6 +21,8 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
     private int _elevateDepth;
     private int _asyncDepth;
     private int _catchDepth;
+    private int _lockDepth;
+    private readonly HashSet<string> _activeLockPaths = new();
 
     private static readonly IReadOnlySet<string> _builtInNames = StdlibRegistry.KnownNames;
     private static readonly IReadOnlySet<string> _validBuiltInTypes = StdlibRegistry.ValidTypes;
@@ -483,10 +485,35 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitLockStmt(LockStmt stmt)
     {
+        DispatchNodeRules(stmt);
+
+        // SA0810: lock path is a non-string, non-null literal
+        if (stmt.Path is LiteralExpr pathLit && pathLit.Value is not string && pathLit.Value is not null)
+            _diagnostics.Add(DiagnosticDescriptors.SA0810.CreateDiagnostic(stmt.Path.Span));
+
+        // SA0811: empty lock body
+        if (stmt.Body.Statements.Count == 0)
+            _diagnostics.Add(DiagnosticDescriptors.SA0811.CreateDiagnostic(stmt.Body.Span));
+
+        // SA0812: nested lock on same literal path
+        string? literalPath = stmt.Path is LiteralExpr strLit && strLit.Value is string s ? s : null;
+        if (literalPath != null && _activeLockPaths.Contains(literalPath))
+            _diagnostics.Add(DiagnosticDescriptors.SA0812.CreateDiagnostic(stmt.LockKeyword.Span, literalPath));
+
         stmt.Path.Accept(this);
         stmt.WaitOption?.Accept(this);
         stmt.StaleOption?.Accept(this);
+
+        if (literalPath != null)
+            _activeLockPaths.Add(literalPath);
+
+        _lockDepth++;
         stmt.Body.Accept(this);
+        _lockDepth--;
+
+        if (literalPath != null)
+            _activeLockPaths.Remove(literalPath);
+
         return null;
     }
 

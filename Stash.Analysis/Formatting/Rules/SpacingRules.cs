@@ -41,7 +41,7 @@ internal static class SpacingRules
         StructDeclStmt or EnumDeclStmt or InterfaceDeclStmt => StmtCategory.TypeDecl,
         ExtendStmt => StmtCategory.ExtendDecl,
         IfStmt or WhileStmt or DoWhileStmt or ForStmt or ForInStmt
-            or SwitchStmt or TryCatchStmt or ElevateStmt => StmtCategory.ControlFlow,
+            or SwitchStmt or TryCatchStmt or ElevateStmt or LockStmt => StmtCategory.ControlFlow,
         BlockStmt => StmtCategory.Block,
         _ => StmtCategory.SimpleStatement,
     };

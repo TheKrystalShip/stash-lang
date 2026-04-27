@@ -275,10 +275,12 @@ public class SemanticResolver : IExprVisitor<object?>, IStmtVisitor<object?>
 
     public object? VisitLockStmt(LockStmt stmt)
     {
-        stmt.Path.Accept(this);
-        stmt.WaitOption?.Accept(this);
-        stmt.StaleOption?.Accept(this);
-        stmt.Body.Accept(this);
+        ResolveExpr(stmt.Path);
+        if (stmt.WaitOption is not null)
+            ResolveExpr(stmt.WaitOption);
+        if (stmt.StaleOption is not null)
+            ResolveExpr(stmt.StaleOption);
+        ResolveStmt(stmt.Body);
         return null;
     }
 

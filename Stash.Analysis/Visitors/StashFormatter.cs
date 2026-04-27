@@ -383,8 +383,7 @@ public class StashFormatter : IStmtVisitor<int>, IExprVisitor<int>
 
     public int VisitLockStmt(LockStmt stmt)
     {
-        // TODO: Phase 4 — implement proper formatting
-        stmt.Body.Accept(this);
+        ControlFlowPrinter.PrintLock(stmt, _ctx, FormatStmt, FormatExpr);
         return 0;
     }
 

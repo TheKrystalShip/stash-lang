@@ -231,6 +231,7 @@ public static class GlobalBuiltIns
             new("stdout",   "string"),
             new("command",  "string"),
         ]);
+        b.Struct(StashErrorTypes.LockError, [new("message", "string"), new("path", "string")]);
 
         // Struct definitions
         b.Struct("RetryOptions", [
