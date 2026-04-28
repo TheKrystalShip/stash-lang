@@ -525,6 +525,7 @@ public class SemanticValidator : IStmtVisitor<object?>, IExprVisitor<object?>
 
     public object? VisitExprStmt(ExprStmt stmt)
     {
+        DispatchNodeRules(stmt);
         stmt.Expression.Accept(this);
         return null;
     }

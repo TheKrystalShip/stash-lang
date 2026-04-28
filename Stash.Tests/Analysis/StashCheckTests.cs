@@ -518,7 +518,7 @@ public class StashCheckTests
     [Fact]
     public void Program_CleanFile_ReturnsZero()
     {
-        string file = CreateTempStashFile("fn test() { return 1; }");
+        string file = CreateTempStashFile("fn compute() { return 1; }");
         try
         {
             int exitCode = Stash.Check.Program.Main(new[] { "--output", "/dev/null", file });

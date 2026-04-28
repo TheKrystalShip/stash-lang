@@ -137,7 +137,14 @@ public static partial class SuppressionDirectiveParser
             }
             else
             {
-                // Not a code — could be a reason/comment after codes, or malformed
+                // Check for quoted reason string (e.g. "kept for side-effect")
+                if (text[pos] == '"')
+                {
+                    // Quoted reason — stop parsing codes here, it's valid
+                    break;
+                }
+
+                // Read the non-SA token
                 int start = pos;
                 while (pos < text.Length && text[pos] != ' ' && text[pos] != ',' && text[pos] != '\t')
                     pos++;

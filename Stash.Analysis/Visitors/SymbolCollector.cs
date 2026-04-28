@@ -252,7 +252,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
         foreach (var pt in stmt.ParameterTypes) RecordTypeReference(pt);
 
         // Function name goes into the parent (current) scope
-        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: paramTypes, isVariadic: stmt.HasRestParam));
+        _currentScope.AddSymbol(new SymbolInfo(stmt.Name.Lexeme, SymbolKind.Function, stmt.Name.Span, stmt.Span, detail, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: paramTypes, isVariadic: stmt.HasRestParam, isAsync: stmt.IsAsync));
 
         // Visit default value expressions for reference collection
         foreach (var defaultVal in stmt.DefaultValues)
@@ -374,7 +374,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             foreach (var pt in method.ParameterTypes) RecordTypeReference(pt);
 
             _currentScope.AddSymbol(new SymbolInfo(method.Name.Lexeme, SymbolKind.Method, method.Name.Span, method.Span, methodDetail,
-                parentName: stmt.Name.Lexeme, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: methodParamTypes));
+                parentName: stmt.Name.Lexeme, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: methodParamTypes, isAsync: method.IsAsync));
 
             // Visit default value expressions for reference collection
             foreach (var defaultVal in method.DefaultValues)
@@ -445,7 +445,7 @@ public class SymbolCollector : IStmtVisitor<object?>, IExprVisitor<object?>
             foreach (var pt in method.ParameterTypes) RecordTypeReference(pt);
 
             _currentScope.AddSymbol(new SymbolInfo(method.Name.Lexeme, SymbolKind.Method, method.Name.Span, method.Span, methodDetail,
-                parentName: typeName, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: methodParamTypes));
+                parentName: typeName, typeHint: returnTypeStr, parameterNames: paramNames, requiredParameterCount: requiredCount, parameterTypes: methodParamTypes, isAsync: method.IsAsync));
 
             foreach (var defaultVal in method.DefaultValues)
             {

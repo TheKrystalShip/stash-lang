@@ -202,7 +202,7 @@ public class SemanticValidatorTests : AnalysisTestBase
             struct Config { name: string, value }
             let cfg: Config = null;
             const MAX: int = 100;
-            fn process(item: string, count) -> bool {
+            fn runProcess(item: string, count) -> bool {
                 io.println(item);
                 io.println(count);
                 return true;

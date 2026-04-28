@@ -41,6 +41,8 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0208 = new("SA0208", "Dead store", DiagnosticLevel.Information, "Declarations", "Dead store: value assigned to '{0}' is overwritten before being read.");
     public static readonly DiagnosticDescriptor SA0209 = new("SA0209", "Naming convention violation", DiagnosticLevel.Information, "Declarations", "Name '{0}' does not follow {1} convention.");
     public static readonly DiagnosticDescriptor SA0210 = new("SA0210", "Variable used before assignment on all paths", DiagnosticLevel.Warning, "Declarations", "Variable '{0}' may be used before it is assigned on all code paths.");
+    public static readonly DiagnosticDescriptor SA0211 = new("SA0211", "Function defined inside loop body", DiagnosticLevel.Information, "Declarations", "Function '{0}' is defined inside a loop body. It will be recreated on every iteration — consider moving it outside the loop.");
+    public static readonly DiagnosticDescriptor SA0212 = new("SA0212", "Declaration shadows built-in namespace", DiagnosticLevel.Warning, "Declarations", "'{0}' shadows the built-in namespace '{0}'. All '{0}.*' functions will be inaccessible in this scope.");
 
     // ── SA03xx — Type Safety ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0301 = new("SA0301", "Variable type mismatch", DiagnosticLevel.Warning, "Type safety", "Variable '{0}' is declared as '{1}' but initialized with '{2}'.");
@@ -52,6 +54,8 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0308 = new("SA0308", "Possible null access", DiagnosticLevel.Warning, "Type safety", "Possible null access: '{0}' may be null.");
     public static readonly DiagnosticDescriptor SA0309 = new("SA0309", "Null access on unguarded path", DiagnosticLevel.Warning, "Type safety", "'{0}' may be null at this point. Assign a value or add a null check before accessing it.");
     public static readonly DiagnosticDescriptor SA0310 = new("SA0310", "Non-exhaustive switch on enum", DiagnosticLevel.Warning, "Type safety", "Switch on enum '{0}' does not cover all variants. Missing: {1}.");
+    public static readonly DiagnosticDescriptor SA0311 = new("SA0311", "Invalid regex pattern", DiagnosticLevel.Error, "Type safety", "Invalid regex pattern '{0}': {1}");
+    public static readonly DiagnosticDescriptor SA0312 = new("SA0312", "Regex pattern with potentially catastrophic backtracking", DiagnosticLevel.Warning, "Type safety", "Regex pattern may have catastrophic backtracking. Nested quantifier at position {0}: '{1}'. Use atomic groups or possessive quantifiers, or restructure the pattern.");
 
     // ── SA04xx — Functions & Calls ───────────────────────────────────
     public static readonly DiagnosticDescriptor SA0401 = new("SA0401", "User function arity mismatch", DiagnosticLevel.Error, "Functions & calls", "Expected {0} arguments but got {1}.");
@@ -59,6 +63,9 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA0403 = new("SA0403", "Argument type mismatch", DiagnosticLevel.Warning, "Functions & calls", "Argument '{0}' expects type '{1}' but got '{2}'.");
     public static readonly DiagnosticDescriptor SA0404 = new("SA0404", "Missing return", DiagnosticLevel.Warning, "Functions & calls", "Not all code paths return a value in function '{0}'.");
     public static readonly DiagnosticDescriptor SA0405 = new("SA0405", "Too many parameters", DiagnosticLevel.Information, "Functions & calls", "Function '{0}' has {1} parameters, exceeds threshold of {2}.");
+    public static readonly DiagnosticDescriptor SA0406 = new("SA0406", "Async call result not awaited", DiagnosticLevel.Warning, "Functions & calls", "Return value of async function '{0}' is not awaited. The operation will run in the background — use 'await' to wait for completion or explicitly discard with 'let _ = await {0}(...)'.");
+    public static readonly DiagnosticDescriptor SA0407 = new("SA0407", "Async function without await", DiagnosticLevel.Warning, "Functions & calls", "Async function '{0}' has no 'await' expressions. The 'async' modifier is unnecessary unless the function is part of an interface contract.");
+    public static readonly DiagnosticDescriptor SA0408 = new("SA0408", "Async lambda without await", DiagnosticLevel.Warning, "Functions & calls", "Async lambda has no 'await' expressions. The 'async' modifier is unnecessary.");
 
     // ── SA05xx — Spread / Rest ───────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0501 = new("SA0501", "Spread type mismatch (array context)", DiagnosticLevel.Warning, "Spread / Rest", "Spread argument has type '{0}', expected 'array'.");
@@ -94,6 +101,7 @@ public static class DiagnosticDescriptors
 
     // ── SA09xx — Style ───────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA0901 = new("SA0901", "Unnecessary else after return", DiagnosticLevel.Information, "Style", "Unnecessary 'else' after '{0}' in then-branch. The else body can be unindented.");
+    public static readonly DiagnosticDescriptor SA0902 = new("SA0902", "Function body too long", DiagnosticLevel.Information, "Style", "Function '{0}' is {1} lines long, exceeding the threshold of {2}. Consider breaking it into smaller functions.");
 
     // ── SA10xx — Complexity ──────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA1002 = new("SA1002", "Nesting depth too high", DiagnosticLevel.Information, "Complexity", "Nesting depth of {0} exceeds threshold of {1} in function '{2}'.");
@@ -105,17 +113,23 @@ public static class DiagnosticDescriptors
     public static readonly DiagnosticDescriptor SA1106 = new("SA1106", "Self-comparison", DiagnosticLevel.Warning, "Best Practices", "Self-comparison: '{0}' is compared to itself. This is always {1}.");
     public static readonly DiagnosticDescriptor SA1107 = new("SA1107", "Constant condition", DiagnosticLevel.Warning, "Best Practices", "Constant condition: this {0} condition is always {1}.");
     public static readonly DiagnosticDescriptor SA1108 = new("SA1108", "Unreachable loop", DiagnosticLevel.Warning, "Best Practices", "Loop body always exits on first iteration. This loop will execute at most once.");
+    public static readonly DiagnosticDescriptor SA1109 = new("SA1109", "Assignment used as condition", DiagnosticLevel.Warning, "Best Practices", "Assignment used as condition. Did you mean '==' instead of '='? If the assignment is intentional, suppress this warning with a comment.");
+    public static readonly DiagnosticDescriptor SA1110 = new("SA1110", "Magic number", DiagnosticLevel.Information, "Best Practices", "Magic number {0} appears {1} times. Consider extracting it as a named constant for clarity and maintainability.");
 
     // ── SA12xx — Performance ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA1201 = new("SA1201", "Accumulating spread in loop", DiagnosticLevel.Warning, "Performance", "Spreading '{0}' into itself inside a loop creates a copy each iteration (O(n²)). Use arr.push() or dict.set() instead.");
+    public static readonly DiagnosticDescriptor SA1202 = new("SA1202", "String concatenation in loop", DiagnosticLevel.Warning, "Performance", "String concatenation in a loop creates a new string object on each iteration (O(n²) allocations). Build an array of parts and join them: use 'arr.push()' then 'arr.join(\"\")' outside the loop.");
+    public static readonly DiagnosticDescriptor SA1203 = new("SA1203", "Repeated function call in loop condition", DiagnosticLevel.Information, "Performance", "'{0}.{1}()' is called on every loop iteration in the condition. If '{0}' does not change inside the loop, cache the result before the loop: 'let n = {0}.{1}()'");
 
     // ── SA13xx — Security ────────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA1301 = new("SA1301", "Hardcoded credentials", DiagnosticLevel.Warning, "Security", "Variable '{0}' appears to contain hardcoded credentials. Use environment variables or a secrets manager instead.");
     public static readonly DiagnosticDescriptor SA1302 = new("SA1302", "Unsafe command interpolation", DiagnosticLevel.Warning, "Security", "String interpolation in shell command may allow command injection. Validate or escape '{0}' before use.");
+    public static readonly DiagnosticDescriptor SA1303 = new("SA1303", "Catastrophic regex backtracking on external input", DiagnosticLevel.Warning, "Security", "Regex pattern with potential catastrophic backtracking is applied to externally-sourced input '{0}'. An attacker could craft input to cause a denial-of-service. Restructure the pattern or use atomic groups.");
 
     // ── SA14xx — Suggestions ─────────────────────────────────────────
     public static readonly DiagnosticDescriptor SA1401 = new("SA1401", "Use optional chaining", DiagnosticLevel.Information, "Suggestions", "Use optional chaining: '{0}?.{1}' instead of null check with member access.", FixApplicability.Unsafe);
     public static readonly DiagnosticDescriptor SA1402 = new("SA1402", "Use null coalescing", DiagnosticLevel.Information, "Suggestions", "Use null coalescing: '{0} ?? {1}' instead of null check with ternary.", FixApplicability.Unsafe);
+    public static readonly DiagnosticDescriptor SA1403 = new("SA1403", "Prefer string interpolation over concatenation", DiagnosticLevel.Information, "Suggestions", "String concatenation can be simplified using string interpolation.");
     /// <summary>
     /// Lookup table from code string to descriptor for suppression validation.
     /// </summary>
@@ -198,11 +212,25 @@ public static class DiagnosticDescriptors
         dict[SA1106.Code] = SA1106;
         dict[SA1107.Code] = SA1107;
         dict[SA1108.Code] = SA1108;
+        dict[SA1109.Code] = SA1109;
+        dict[SA1110.Code] = SA1110;
         dict[SA1201.Code] = SA1201;
+        dict[SA1202.Code] = SA1202;
+        dict[SA1203.Code] = SA1203;
         dict[SA1301.Code] = SA1301;
         dict[SA1302.Code] = SA1302;
+        dict[SA1303.Code] = SA1303;
         dict[SA1401.Code] = SA1401;
         dict[SA1402.Code] = SA1402;
+        dict[SA1403.Code] = SA1403;
+        dict[SA0211.Code] = SA0211;
+        dict[SA0212.Code] = SA0212;
+        dict[SA0311.Code] = SA0311;
+        dict[SA0312.Code] = SA0312;
+        dict[SA0406.Code] = SA0406;
+        dict[SA0407.Code] = SA0407;
+        dict[SA0408.Code] = SA0408;
+        dict[SA0902.Code] = SA0902;
         return dict.ToFrozenDictionary();
     }
 }

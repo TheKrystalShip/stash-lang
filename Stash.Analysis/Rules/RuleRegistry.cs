@@ -38,6 +38,8 @@ public static class RuleRegistry
             new DeadStoreRule(),
             new DefiniteAssignmentRule(),
             new NamingConventionRule(),
+            new FunctionInLoopRule(),
+            new ShadowsBuiltinNamespaceRule(),
 
             // Type Safety (SA03xx)
             new VariableTypeMismatchRule(),
@@ -48,6 +50,7 @@ public static class RuleRegistry
             new PossibleNullAccessRule(),
             new NullFlowRule(),
             new ExhaustiveMatchRule(),
+            new InvalidRegexPatternRule(),
 
             // Functions & Calls (SA04xx)
             new UserFunctionArityRule(),
@@ -55,6 +58,8 @@ public static class RuleRegistry
             new ArgumentTypeMismatchRule(),
             new MissingReturnRule(),
             new TooManyParametersRule(),
+            new AsyncCallNotAwaitedRule(),
+            new AsyncFunctionWithoutAwaitRule(),
 
             // Spread / Rest (SA05xx)
             new SpreadDiagnosticsRule(),
@@ -69,6 +74,7 @@ public static class RuleRegistry
 
             // Style (SA09xx)
             new NoUnnecessaryElseRule(),
+            new FunctionBodyTooLongRule(),
 
             // Complexity (SA10xx)
             new MaxDepthRule(),
@@ -80,17 +86,23 @@ public static class RuleRegistry
             new NoSelfCompareRule(),
             new NoConstantConditionRule(),
             new NoUnreachableLoopRule(),
+            new AssignmentInConditionRule(),
+            new MagicNumberRule(),
 
             // Performance (SA12xx)
             new NoAccumulatingSpreadRule(),
+            new StringConcatInLoopRule(),
+            new RepeatedCallInLoopConditionRule(),
 
             // Security (SA13xx)
             new NoHardcodedCredentialsRule(),
             new NoUnsafeCommandInterpolationRule(),
+            new CatastrophicBacktrackingTaintRule(),
 
             // Suggestions (SA14xx)
             new UseOptionalChainingRule(),
             new UseNullCoalescingRule(),
+            new PreferStringInterpolationRule(),
         ];
     }
 }

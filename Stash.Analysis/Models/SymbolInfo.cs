@@ -138,6 +138,12 @@ public class SymbolInfo
     public bool IsVariadic { get; }
 
     /// <summary>
+    /// Gets whether this is an async function or method, declared with the <c>async</c> keyword.
+    /// Always <see langword="false"/> for non-callable symbols.
+    /// </summary>
+    public bool IsAsync { get; }
+
+    /// <summary>
     /// Gets or sets the documentation text extracted from a preceding <c>///</c> or
     /// <c>/** */</c> comment by <see cref="DocCommentResolver"/>.
     /// Shown in hover tooltips and completion item documentation.
@@ -160,7 +166,8 @@ public class SymbolInfo
     /// <param name="parameterTypes">Per-parameter type annotations, or <see langword="null"/>.</param>
     /// <param name="isExplicitTypeHint"><see langword="true"/> if <paramref name="typeHint"/> was written explicitly in source.</param>
     /// <param name="isVariadic"><see langword="true"/> if this callable accepts unlimited arguments via a rest parameter.</param>
-    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false, bool isVariadic = false)
+    /// <param name="isAsync"><see langword="true"/> if this function or method was declared with the <c>async</c> keyword.</param>
+    public SymbolInfo(string name, SymbolKind kind, SourceSpan span, SourceSpan? fullSpan = null, string? detail = null, string? parentName = null, string? typeHint = null, Uri? sourceUri = null, string[]? parameterNames = null, int? requiredParameterCount = null, string?[]? parameterTypes = null, bool isExplicitTypeHint = false, bool isVariadic = false, bool isAsync = false)
     {
         Name = name;
         Kind = kind;
@@ -175,5 +182,6 @@ public class SymbolInfo
         ParameterTypes = parameterTypes;
         IsExplicitTypeHint = isExplicitTypeHint;
         IsVariadic = isVariadic;
+        IsAsync = isAsync;
     }
 }
