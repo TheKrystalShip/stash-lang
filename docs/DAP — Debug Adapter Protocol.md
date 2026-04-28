@@ -642,10 +642,22 @@ The `Initialize` response declares the following capabilities:
 
 | Limitation             | Notes                                                                                                                                                                         |
 | ---------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Launch only**        | `attach` mode is not supported; the DAP server always launches a new interpreter process                                                                                      |
+| **Launch only**        | `attach` mode is not supported; see [Why Attach Is Not Supported](#why-attach-is-not-supported) below                                                                         |
 | **Parallel ops**       | `arr.parMap`, `arr.parFilter`, and `arr.parForEach` callbacks run without debugger attachment — breakpoints inside them are not hit during debugging                              |
 | **`uncaught` = `all`** | Currently both exception filters behave identically; distinguishing caught vs. uncaught exceptions requires restructuring the interpreter's error model                       |
 | **No source maps**     | `import` statements load other `.stash` files; breakpoints in imported modules use the imported file's absolute path correctly, but there is no higher-level source-map layer |
+
+### Why Attach Is Not Supported
+
+Attaching a debugger to an already-running Stash script is not supported, and this is an intentional design constraint rather than an oversight.
+
+**The VM dispatch mode is fixed at startup.** The Stash bytecode VM uses a C# generic type parameter — `RunInner<DebugOff>` vs. `RunInner<DebugOn>` — that is resolved once when `Execute()` is called. In `DebugOff` mode, all debug checks are compiled out by the JIT; they don't exist in the hot loop at runtime. There is no mechanism to flip a switch and "enable" debugging on a running VM — doing so would require stopping execution, reinitializing the debug dispatch path, and resuming from exactly the right instruction with all transient state (registers, call stack, upvalues) intact. This is equivalent to implementing a live process migration, which is far beyond the scope of a debugger feature.
+
+**The CLI is compiled to a native AOT binary.** The DAP server (`stash-dap`) relies on OmniSharp, which requires reflection and cannot be compiled with Native AOT. Running scripts are executed by the AOT CLI binary. There is no way to embed the DAP protocol server inside the running script process without pulling OmniSharp into an AOT binary — which is architecturally prohibited.
+
+**The complexity cost is not justified.** Supporting attach correctly would require a new in-process TCP debug server (implementing a custom wire protocol), changes to the VM's hot dispatch loop, a safe-point restart mechanism, process discovery infrastructure, and authentication. This is a substantial parallel implementation that duplicates the existing DAP server logic — for a use case that is already handled by starting the script with the debugger from the beginning.
+
+**The right approach is to start with the debugger.** All scenarios where attach would be useful — long-running services, retry loops, background processes — are better handled by launching the script under the debugger from the start using VS Code's launch configuration. If you don't know in advance whether you'll need to debug, that is a signal to run the script under the debugger preemptively. The overhead is negligible for sysadmin workloads.
 
 ### Potential Future Work
 

@@ -43,6 +43,8 @@ const testing_1 = require("./testing");
 const resolveBinary_1 = require("./resolveBinary");
 const bytecodeViewer_1 = require("./bytecodeViewer");
 const inlineValues_1 = require("./inlineValues");
+const tasks_1 = require("./tasks");
+const debugConfigProvider_1 = require("./debugConfigProvider");
 let client;
 let debugOutput;
 let lspTrace;
@@ -95,6 +97,14 @@ function activate(context) {
     const factory = new StashDebugAdapterFactory(debugOutput);
     const registration = vscode.debug.registerDebugAdapterDescriptorFactory("stash", factory);
     context.subscriptions.push(registration);
+    // ── Debug Configuration Provider ──────────────────────────────────────────
+    const debugConfigProvider = new debugConfigProvider_1.StashDebugConfigurationProvider();
+    // Initial: generates launch.json contents when user clicks "create a launch.json file"
+    context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider("stash", debugConfigProvider, vscode.DebugConfigurationProviderTriggerKind.Initial));
+    // Dynamic: fills in missing fields (e.g. program) at every launch
+    context.subscriptions.push(vscode.debug.registerDebugConfigurationProvider("stash", debugConfigProvider, vscode.DebugConfigurationProviderTriggerKind.Dynamic));
+    // ── Task Provider ─────────────────────────────────────────────────────────
+    context.subscriptions.push(vscode.tasks.registerTaskProvider(tasks_1.StashTaskProvider.taskType, new tasks_1.StashTaskProvider()));
     // ── Bytecode Viewer ────────────────────────────────────────────────────────
     const bytecodeViewerProvider = new bytecodeViewer_1.StashBytecodeViewerProvider();
     context.subscriptions.push(vscode.window.registerCustomEditorProvider(bytecodeViewer_1.StashBytecodeViewerProvider.viewType, bytecodeViewerProvider, { supportsMultipleEditorsPerDocument: false }));

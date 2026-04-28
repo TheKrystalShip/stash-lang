@@ -11,6 +11,8 @@ import { activateTesting } from "./testing";
 import { resolveBinary } from "./resolveBinary";
 import { StashBytecodeViewerProvider } from "./bytecodeViewer";
 import { StashInlineValuesProvider } from "./inlineValues";
+import { StashTaskProvider } from "./tasks";
+import { StashDebugConfigurationProvider } from "./debugConfigProvider";
 
 let client: LanguageClient | undefined;
 let debugOutput: vscode.OutputChannel | undefined;
@@ -94,6 +96,35 @@ export function activate(context: vscode.ExtensionContext) {
   const factory = new StashDebugAdapterFactory(debugOutput);
   const registration = vscode.debug.registerDebugAdapterDescriptorFactory("stash", factory);
   context.subscriptions.push(registration);
+
+  // ── Debug Configuration Provider ──────────────────────────────────────────
+
+  const debugConfigProvider = new StashDebugConfigurationProvider();
+  // Initial: generates launch.json contents when user clicks "create a launch.json file"
+  context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider(
+      "stash",
+      debugConfigProvider,
+      vscode.DebugConfigurationProviderTriggerKind.Initial,
+    )
+  );
+  // Dynamic: fills in missing fields (e.g. program) at every launch
+  context.subscriptions.push(
+    vscode.debug.registerDebugConfigurationProvider(
+      "stash",
+      debugConfigProvider,
+      vscode.DebugConfigurationProviderTriggerKind.Dynamic,
+    )
+  );
+
+  // ── Task Provider ─────────────────────────────────────────────────────────
+
+  context.subscriptions.push(
+    vscode.tasks.registerTaskProvider(
+      StashTaskProvider.taskType,
+      new StashTaskProvider(),
+    )
+  );
 
   // ── Bytecode Viewer ────────────────────────────────────────────────────────
 

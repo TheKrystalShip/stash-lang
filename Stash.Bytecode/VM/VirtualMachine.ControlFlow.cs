@@ -691,6 +691,14 @@ public sealed partial class VirtualMachine
 
     // ══════════════════════════ Exception Type Matching ══════════════════════════
 
+    /// <summary>
+    /// Handles the CatchMatch opcode — tests the error in register A against the type names
+    /// at constant pool index Bx. Advances IP to skip the following Jmp on match.
+    /// </summary>
+    /// <remarks>
+    /// <c>catch (Error e)</c> is a catch-all and never reaches this method — the compiler emits
+    /// an empty <c>typeNames</c> array for catch-alls and the length-0 guard handles it above.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.NoInlining)]
     private void ExecuteCatchMatch(ref CallFrame frame, uint inst)
     {
@@ -709,11 +717,10 @@ public sealed partial class VirtualMachine
         }
 
         object? errObj = _stack[frame.BaseSlot + a].ToObject();
-        string errorType = errObj is StashError se ? se.Type : "RuntimeError";
 
         foreach (string typeName in typeNames)
         {
-            if (typeName == errorType)
+            if (errObj is StashError se && ErrorTypeRegistry.Matches(se.Type, typeName))
             {
                 frame.IP++; // matched — skip the following Jmp
                 return;

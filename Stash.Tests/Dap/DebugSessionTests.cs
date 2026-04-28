@@ -731,6 +731,65 @@ public class DebugSessionTests
         }
     }
 
+    // ── 16. IsBuiltInBinding Tests ────────────────────────────────────────────
+
+    private static bool InvokeIsBuiltInBinding(object? value)
+    {
+        var method = typeof(DebugSession).GetMethod("IsBuiltInBinding",
+            BindingFlags.NonPublic | BindingFlags.Static)!;
+        return (bool)method.Invoke(null, [value])!;
+    }
+
+    [Fact]
+    public void IsBuiltInBinding_BuiltInFunction_ReturnsTrue()
+    {
+        var fn = new Stash.Runtime.BuiltInFunction("test", 0, (_, _) => StashValue.Null);
+        Assert.True(InvokeIsBuiltInBinding(fn));
+    }
+
+    [Fact]
+    public void IsBuiltInBinding_StashNamespace_ReturnsTrue()
+    {
+        var ns = new StashNamespace("arr");
+        Assert.True(InvokeIsBuiltInBinding(ns));
+    }
+
+    [Fact]
+    public void IsBuiltInBinding_BuiltInStruct_ReturnsTrue()
+    {
+        var s = new StashStruct("ValueError", ["message"], new()) { IsBuiltIn = true };
+        Assert.True(InvokeIsBuiltInBinding(s));
+    }
+
+    [Fact]
+    public void IsBuiltInBinding_UserDefinedStruct_ReturnsFalse()
+    {
+        var s = new StashStruct("MyPoint", ["x", "y"], new()); // IsBuiltIn defaults false
+        Assert.False(InvokeIsBuiltInBinding(s));
+    }
+
+    [Fact]
+    public void IsBuiltInBinding_BuiltInEnum_ReturnsTrue()
+    {
+        var e = new StashEnum("Backoff", ["Fixed", "Linear"]) { IsBuiltIn = true };
+        Assert.True(InvokeIsBuiltInBinding(e));
+    }
+
+    [Fact]
+    public void IsBuiltInBinding_UserDefinedEnum_ReturnsFalse()
+    {
+        var e = new StashEnum("Color", ["Red", "Green", "Blue"]); // IsBuiltIn defaults false
+        Assert.False(InvokeIsBuiltInBinding(e));
+    }
+
+    [Fact]
+    public void IsBuiltInBinding_PlainObject_ReturnsFalse()
+    {
+        Assert.False(InvokeIsBuiltInBinding("hello"));
+        Assert.False(InvokeIsBuiltInBinding(42L));
+        Assert.False(InvokeIsBuiltInBinding(null));
+    }
+
     private class TestDebugScope : IDebugScope
     {
         private readonly Dictionary<string, object?> _vars = new();

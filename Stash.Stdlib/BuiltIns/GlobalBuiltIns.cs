@@ -215,7 +215,7 @@ public static class GlobalBuiltIns
         // Enums
         b.Enum("Backoff", ["Fixed", "Linear", "Exponential"]);
 
-        // Error type structs — must be defined here so the VM can instantiate them via
+        // Typed error structs — registered here so the VM can instantiate them via
         // struct-init literals (e.g. `throw ValueError { message: "x" }`).
         b.Struct(StashErrorTypes.ValueError,        [new("message", "string")]);
         b.Struct(StashErrorTypes.TypeError,         [new("message", "string")]);
@@ -233,14 +233,23 @@ public static class GlobalBuiltIns
         ]);
         b.Struct(StashErrorTypes.LockError, [new("message", "string"), new("path", "string")]);
 
-        // Struct definitions
+        // Retry-related struct and context types
         b.Struct("RetryOptions", [
-            new ("delay", "duration"),
-            new ("backoff", "Backoff"),
-            new ("maxDelay", "duration"),
-            new ("jitter", "duration"),
-            new ("timeout", "duration"),
-            new ("on", "Error"),
+            new("delay",    "duration"),
+            new("backoff",  "Backoff"),
+            new("maxDelay", "duration"),
+            new("jitter",   "bool"),
+            new("timeout",  "duration"),
+            new("on",       "array"),
+        ]);
+        // RetryContext is metadata-only — the runtime `attempt` variable is a dict, but
+        // registering the struct here gives the LSP field info for hover/completion.
+        b.Struct("RetryContext", [
+            new("current",   "int"),
+            new("max",       "int"),
+            new("remaining", "int"),
+            new("elapsed",   "duration"),
+            new("errors",    "array"),
         ]);
 
         return b.Build();

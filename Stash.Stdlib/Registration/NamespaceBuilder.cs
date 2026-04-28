@@ -79,7 +79,7 @@ public class NamespaceBuilder
             throw new ArgumentException($"Struct '{name}' is already registered in namespace '{_name}'.", nameof(name));
         _structs.Add(new BuiltInStruct(name, fields));
         var fieldNames = fields.Select(f => f.Name).ToList();
-        _namespace.Define(name, new StashStruct(name, fieldNames, new Dictionary<string, IStashCallable>()));
+        _namespace.Define(name, new StashStruct(name, fieldNames, new Dictionary<string, IStashCallable>()) { IsBuiltIn = true });
         return this;
     }
 
@@ -93,7 +93,7 @@ public class NamespaceBuilder
         if (_enums.Any(e => e.Name == name))
             throw new ArgumentException($"Enum '{name}' is already registered in namespace '{_name}'.", nameof(name));
         _enums.Add(new BuiltInEnum(name, members, _name));
-        _namespace.Define(name, new StashEnum(name, members.ToList()));
+        _namespace.Define(name, new StashEnum(name, members.ToList()) { IsBuiltIn = true });
         return this;
     }
 

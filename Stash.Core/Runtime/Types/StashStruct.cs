@@ -16,6 +16,9 @@ public class StashStruct : IVMTyped, IVMFieldAccessible, IVMStringifiable
     public List<StashInterface> Interfaces { get; }
     public HashSet<string> OriginalMethodNames { get; }
 
+    /// <summary>True when this struct was registered by the standard library, not defined in user script.</summary>
+    public bool IsBuiltIn { get; init; }
+
     public StashStruct(string name, List<string> fields, Dictionary<string, IStashCallable> methods)
     {
         Name = name;

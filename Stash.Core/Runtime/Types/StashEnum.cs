@@ -13,6 +13,9 @@ public class StashEnum : IVMTyped, IVMFieldAccessible, IVMIterable, IVMStringifi
     public List<string> Members { get; }
     private readonly Dictionary<string, StashEnumValue> _values;
 
+    /// <summary>True when this enum was registered by the standard library, not defined in user script.</summary>
+    public bool IsBuiltIn { get; init; }
+
     public StashEnum(string name, List<string> members)
     {
         Name = name;

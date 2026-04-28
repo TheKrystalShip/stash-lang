@@ -35,9 +35,29 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
     public RuntimeError? OriginalException { get; set; }
 
     /// <summary>
-    /// Creates a <see cref="StashError"/> from a caught <see cref="RuntimeError"/> and an optional call stack.
+    /// Creates a <see cref="StashError"/> from a caught <see cref="RuntimeError"/> and pre-formatted
+    /// stack lines and suppressed errors. This overload is used by the VM dispatch loop which builds
+    /// its own stack-line strings from <c>StackFrame</c> values.
     /// </summary>
-    public static StashError FromRuntimeError(RuntimeError error, IReadOnlyList<(string FunctionName, SourceSpan CallSite)>? callStack)
+    public static StashError FromRuntimeError(RuntimeError error, List<string>? stackLines, List<StashError>? suppressed = null)
+    {
+        string type = error.ErrorType ?? "RuntimeError";
+        var stashError = new StashError(error.Message, type, stackLines, error.Properties);
+        stashError.OriginalException = error;
+        if (suppressed is { Count: > 0 })
+            stashError.Suppressed = suppressed;
+        else if (error.SuppressedErrors is { Count: > 0 })
+            stashError.Suppressed = error.SuppressedErrors;
+        return stashError;
+    }
+
+    /// <summary>
+    /// Creates a <see cref="StashError"/> from a caught <see cref="RuntimeError"/>, an optional call stack,
+    /// and an optional list of suppressed errors collected during frame unwinding.
+    /// When <paramref name="suppressed"/> is provided it takes precedence over
+    /// <see cref="RuntimeError.SuppressedErrors"/> (the caller is responsible for merging them).
+    /// </summary>
+    public static StashError FromRuntimeError(RuntimeError error, IReadOnlyList<(string FunctionName, SourceSpan CallSite)>? callStack, List<StashError>? suppressed = null)
     {
         List<string>? stack = null;
         if (callStack is { Count: > 0 })
@@ -52,8 +72,15 @@ public class StashError : IVMTyped, IVMFieldAccessible, IVMTruthiness, IVMString
 
         string type = error.ErrorType ?? "RuntimeError";
         var stashError = new StashError(error.Message, type, stack, error.Properties);
-        if (error.SuppressedErrors != null)
+        stashError.OriginalException = error;
+
+        // When the caller provides an explicit suppressed list (already merged with error.SuppressedErrors),
+        // use it. Otherwise fall back to the error's own suppressed errors.
+        if (suppressed is { Count: > 0 })
+            stashError.Suppressed = suppressed;
+        else if (error.SuppressedErrors is { Count: > 0 })
             stashError.Suppressed = error.SuppressedErrors;
+
         return stashError;
     }
 

@@ -3,6 +3,7 @@ namespace Stash.Parsing.AST;
 using System.Collections.Generic;
 using Stash.Common;
 using Stash.Lexing;
+using Stash.Runtime;
 
 /// <summary>
 /// A single catch clause in a try/catch statement.
@@ -46,5 +47,5 @@ public sealed class CatchClause
     /// Gets whether this clause is a catch-all (matches any error type).
     /// True when TypeTokens is empty or contains only the reserved <c>Error</c> identifier.
     /// </summary>
-    public bool IsCatchAll => TypeTokens.Count == 0 || (TypeTokens.Count == 1 && TypeTokens[0].Lexeme == "Error");
+    public bool IsCatchAll => TypeTokens.Count == 0 || (TypeTokens.Count == 1 && ErrorTypeRegistry.IsBaseType(TypeTokens[0].Lexeme));
 }

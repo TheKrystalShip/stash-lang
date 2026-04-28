@@ -1863,7 +1863,9 @@ public class DebugSession : IDebugger
     /// Returns true if the value is a language built-in (function or namespace).
     /// Used to separate built-ins from user-defined bindings in the debug panel.
     /// </summary>
-    private static bool IsBuiltInBinding(object? value) => value is BuiltInFunction or StashNamespace;
+    private static bool IsBuiltInBinding(object? value) => value is BuiltInFunction or StashNamespace
+        or StashStruct { IsBuiltIn: true }
+        or StashEnum { IsBuiltIn: true };
 
     /// <summary>
     /// Determines whether the current step mode requires pausing at this point.

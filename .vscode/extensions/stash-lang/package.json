@@ -259,6 +259,30 @@
         }
       }
     },
+    "taskDefinitions": [
+      {
+        "type": "stash",
+        "required": ["command"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "enum": ["test", "check", "format", "compile"],
+            "enumDescriptions": [
+              "Run a Stash test file through the TAP harness (stash <file> --test)",
+              "Save all documents and open the Problems panel (diagnostics from the Stash LSP)",
+              "Format the active document via the Stash LSP (editor.action.formatDocument)",
+              "Compile a script to .stashc bytecode (stash --compile <file>)"
+            ],
+            "description": "The Stash toolchain command to run."
+          },
+          "file": {
+            "type": "string",
+            "description": "Path to the target .stash file. Accepts VS Code variables (e.g. ${file}). Defaults to the active editor file when omitted.",
+            "default": "${file}"
+          }
+        }
+      }
+    ],
     "breakpoints": [
       {
         "language": "stash"
@@ -348,6 +372,18 @@
               "name": "Debug ${1:script}",
               "program": "^\"\\${file}\"",
               "stopOnEntry": false,
+              "cwd": "^\"\\${workspaceFolder}\""
+            }
+          },
+          {
+            "label": "Stash: Launch with Stop on Entry",
+            "description": "Launch a Stash script and pause at the very first statement",
+            "body": {
+              "type": "stash",
+              "request": "launch",
+              "name": "Debug ${1:script} (stop on entry)",
+              "program": "^\"\\${file}\"",
+              "stopOnEntry": true,
               "cwd": "^\"\\${workspaceFolder}\""
             }
           }

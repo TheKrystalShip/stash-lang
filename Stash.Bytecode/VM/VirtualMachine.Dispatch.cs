@@ -70,7 +70,7 @@ public sealed partial class VirtualMachine
                 var callStack = CaptureCallStack();
                 ex.CallStack = callStack;
 
-                // Construct the StashError with the call stack and store in the designated error register
+                // Construct the StashError via the canonical factory
                 List<string>? stackLines = null;
                 if (callStack is { Count: > 0 })
                 {
@@ -78,10 +78,7 @@ public sealed partial class VirtualMachine
                     foreach (var sf in callStack)
                         stackLines.Add($"  at {sf.FunctionName} ({sf.Span})");
                 }
-                var stashError = new StashError(ex.Message, ex.ErrorType ?? "RuntimeError", stackLines, ex.Properties);
-                if (suppressed != null)
-                    stashError.Suppressed = suppressed;
-                stashError.OriginalException = ex;
+                var stashError = StashError.FromRuntimeError(ex, stackLines, suppressed);
                 _context.LastError = stashError;
                 ref CallFrame handlerFrame = ref _frames[_frameCount - 1];
                 _stack[handlerFrame.BaseSlot + handler.ErrorReg] = StashValue.FromObj(stashError);

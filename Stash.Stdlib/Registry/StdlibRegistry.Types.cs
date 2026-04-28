@@ -4,68 +4,33 @@ using System;
 using System.Collections.Frozen;
 using System.Collections.Generic;
 using System.Linq;
+using Stash.Runtime;
 using Stash.Stdlib.Models;
 
 public static partial class StdlibRegistry
 {
-    // ── Language-level struct types not tied to any namespace ──
+    // ── Built-in Structs: global types (from GlobalBuiltIns) + namespace types ──
+    // GlobalBuiltIns is the single source of truth for all globally-scoped struct/enum definitions.
 
-    private static readonly BuiltInStruct[] _globalStructs =
+    private static readonly BuiltInStruct _errorStruct = new("Error",
     [
-        new BuiltInStruct("Error", [
-            new BuiltInField("message", "string"),
-            new BuiltInField("type", "string"),
-            new BuiltInField("stack", "array"),
-        ]),
-        new BuiltInStruct("ValueError",        [new BuiltInField("message", "string")]),
-        new BuiltInStruct("TypeError",         [new BuiltInField("message", "string")]),
-        new BuiltInStruct("ParseError",        [new BuiltInField("message", "string")]),
-        new BuiltInStruct("IndexError",        [new BuiltInField("message", "string")]),
-        new BuiltInStruct("IOError",           [new BuiltInField("message", "string")]),
-        new BuiltInStruct("NotSupportedError", [new BuiltInField("message", "string")]),
-        new BuiltInStruct("TimeoutError",      [new BuiltInField("message", "string")]),
-        new BuiltInStruct("CommandError", [
-            new BuiltInField("message",  "string"),
-            new BuiltInField("exitCode", "int"),
-            new BuiltInField("stderr",   "string"),
-            new BuiltInField("stdout",   "string"),
-            new BuiltInField("command",  "string"),
-        ]),
-        new BuiltInStruct("LockError", [
-            new BuiltInField("message", "string"),
-            new BuiltInField("path",    "string"),
-        ]),
-        new BuiltInStruct("RetryOptions", [
-            new BuiltInField("delay", "duration"),
-            new BuiltInField("backoff", "Backoff"),
-            new BuiltInField("maxDelay", "duration"),
-            new BuiltInField("jitter", "bool"),
-            new BuiltInField("timeout", "duration"),
-            new BuiltInField("on", "array"),
-        ]),
-        new BuiltInStruct("RetryContext", [
-            new BuiltInField("current", "int"),
-            new BuiltInField("max", "int"),
-            new BuiltInField("remaining", "int"),
-            new BuiltInField("elapsed", "duration"),
-            new BuiltInField("errors", "array"),
-        ]),
-    ];
-
-    // ── Built-in Structs (derived from namespace definitions + global types) ──
+        new("message", "string"),
+        new("type",    "string"),
+        new("stack",   "array"),
+    ]);
 
     public static readonly IReadOnlyList<BuiltInStruct> Structs =
-        _globalStructs.Concat(StdlibDefinitions.Structs).ToArray();
+        new[] { _errorStruct }
+            .Concat(StdlibDefinitions.GetGlobalNamespace(StashCapabilities.All).Structs)
+            .Concat(StdlibDefinitions.Structs)
+            .ToArray();
 
-    // ── Built-in Enums (derived from namespace definitions + global types) ──
-
-    private static readonly BuiltInEnum[] _globalEnums =
-    [
-        new BuiltInEnum("Backoff", ["Fixed", "Linear", "Exponential"]),
-    ];
+    // ── Built-in Enums: global types (from GlobalBuiltIns) + namespace types ──
 
     public static readonly IReadOnlyList<BuiltInEnum> Enums =
-        _globalEnums.Concat(StdlibDefinitions.Enums).ToArray();
+        StdlibDefinitions.GetGlobalNamespace(StashCapabilities.All).Enums
+            .Concat(StdlibDefinitions.Enums)
+            .ToArray();
 
     // ── Built-in Interfaces ──
 
