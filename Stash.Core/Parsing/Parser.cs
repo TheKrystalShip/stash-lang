@@ -677,6 +677,15 @@ public class Parser
     /// <returns>The parsed <see cref="Stmt"/>.</returns>
     private Stmt Statement()
     {
+        // Soft keyword: 'timeout' is no longer a hard keyword — handle it here with an optional semicolon
+        // (block-ending expressions like retry/timeout don't require a trailing ';')
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "timeout" && IsTimeoutKeyword())
+        {
+            Expr expr = Expression();
+            Match(TokenType.Semicolon);
+            return new ExprStmt(expr, expr.Span);
+        }
+
         switch (Peek().Type)
         {
             case TokenType.If:
@@ -2289,6 +2298,14 @@ public class Parser
             _current = savedPosition;
         }
 
+        // Soft keyword: 'timeout' — recognized as TimeoutExpr only when followed by a duration expression.
+        // Must be checked BEFORE Match(Identifier) to intercept the token before it is consumed.
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "timeout" && IsTimeoutKeyword())
+        {
+            Advance(); // consume 'timeout'
+            return ParseTimeoutExpr();
+        }
+
         if (Match(TokenType.Identifier))
         {
             Token name = Previous();
@@ -2350,11 +2367,6 @@ public class Parser
         if (Match(TokenType.Retry))
         {
             return ParseRetryExpr();
-        }
-
-        if (Match(TokenType.Timeout))
-        {
-            return ParseTimeoutExpr();
         }
 
         if (Match(TokenType.Async))
@@ -2493,6 +2505,105 @@ public class Parser
         {
             _current = saved;
         }
+    }
+
+    /// <summary>
+    /// Determines whether the current 'timeout' identifier token should be parsed
+    /// as a TimeoutExpr keyword rather than a plain identifier reference.
+    /// Called only when Peek().Lexeme == "timeout".
+    /// </summary>
+    private bool IsTimeoutKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        TokenType peek = _tokens[_current + 1].Type;
+
+        // ── Clear identifier continuations (cannot start a duration expression) ──
+        switch (peek)
+        {
+            case TokenType.Eof:
+            case TokenType.Semicolon:
+            case TokenType.Comma:
+            case TokenType.RightParen:
+            case TokenType.RightBracket:
+            case TokenType.Colon:
+            case TokenType.Equal:
+            case TokenType.PlusEqual:
+            case TokenType.MinusEqual:
+            case TokenType.StarEqual:
+            case TokenType.SlashEqual:
+            case TokenType.PercentEqual:
+            case TokenType.QuestionQuestionEqual:
+            case TokenType.Plus:
+            case TokenType.Minus:
+            case TokenType.Star:
+            case TokenType.Slash:
+            case TokenType.Percent:
+            case TokenType.Pipe:
+            case TokenType.Ampersand:
+            case TokenType.Caret:
+            case TokenType.Tilde:
+            case TokenType.PipePipe:
+            case TokenType.AmpersandAmpersand:
+            case TokenType.Bang:
+            case TokenType.EqualEqual:
+            case TokenType.BangEqual:
+            case TokenType.Less:
+            case TokenType.Greater:
+            case TokenType.LessEqual:
+            case TokenType.GreaterEqual:
+            case TokenType.Dot:
+            case TokenType.LeftBracket:
+            case TokenType.QuestionMark:
+            case TokenType.QuestionQuestion:
+            case TokenType.In:
+            case TokenType.Is:
+            case TokenType.As:
+                return false;
+        }
+
+        // ── Clear TimeoutExpr starters ──
+        switch (peek)
+        {
+            case TokenType.IntegerLiteral:
+            case TokenType.FloatLiteral:
+            case TokenType.DurationLiteral:
+            case TokenType.ByteSizeLiteral:
+            case TokenType.StringLiteral:
+            case TokenType.Identifier:
+                return true;
+        }
+
+        // ── Ambiguous: '(' — scan forward to see if '{' follows the balanced parens ──
+        if (peek == TokenType.LeftParen)
+            return IsFollowedByBlockAfterParens(_current + 1);
+
+        // Conservative fallback — treat as identifier
+        return false;
+    }
+
+    /// <summary>
+    /// Scans forward from <paramref name="parenIndex"/> (the index of a '(' token)
+    /// to find the matching ')'. Returns true if the token immediately after the
+    /// closing ')' is '{', indicating a TimeoutExpr with a grouped duration.
+    /// </summary>
+    private bool IsFollowedByBlockAfterParens(int parenIndex)
+    {
+        int depth = 0;
+        int pos = parenIndex;
+        while (pos < _tokens.Count)
+        {
+            TokenType t = _tokens[pos].Type;
+            if (t == TokenType.LeftParen) depth++;
+            else if (t == TokenType.RightParen)
+            {
+                depth--;
+                if (depth == 0)
+                    return pos + 1 < _tokens.Count && _tokens[pos + 1].Type == TokenType.LeftBrace;
+            }
+            else if (t == TokenType.Eof) break;
+            pos++;
+        }
+        return false;
     }
 
     /// <summary>

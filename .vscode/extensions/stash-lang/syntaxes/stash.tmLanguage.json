@@ -337,7 +337,7 @@
         },
         {
           "name": "keyword.control.stash",
-          "match": "\\b(defer|as|elevate|lock|retry|onRetry|until|timeout)\\b"
+          "match": "\\b(defer|as|elevate|lock|retry|onRetry|until)\\b"
         }
       ]
     },

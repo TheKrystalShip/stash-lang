@@ -70,7 +70,8 @@ public class SemanticTokensHandler : SemanticTokensHandlerBase
                     SemanticTokenType.Parameter,      // 7
                     SemanticTokenType.Variable,       // 8
                     SemanticTokenType.Property,       // 9
-                    SemanticTokenType.EnumMember      // 10
+                    SemanticTokenType.EnumMember,     // 10
+                    SemanticTokenType.Keyword          // 11
                 ),
                 TokenModifiers = new Container<SemanticTokenModifier>(
                     SemanticTokenModifier.Declaration,    // bit 0

@@ -14,6 +14,7 @@ public static class SemanticTokenConstants
     public const int TokenTypeVariable = 8;
     public const int TokenTypeProperty = 9;
     public const int TokenTypeEnumMember = 10;
+    public const int TokenTypeKeyword      = 11;
 
     // Token modifier bit flags
     public const int ModifierDeclaration = 1 << 0;

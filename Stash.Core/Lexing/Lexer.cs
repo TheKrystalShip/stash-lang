@@ -113,7 +113,6 @@ public class Lexer
             ["elevate"] = TokenType.Elevate,
             ["extend"] = TokenType.Extend,
             ["retry"] = TokenType.Retry,
-            ["timeout"] = TokenType.Timeout,
             ["and"] = TokenType.AmpersandAmpersand,
             ["or"] = TokenType.PipePipe,
         }.ToFrozenDictionary();

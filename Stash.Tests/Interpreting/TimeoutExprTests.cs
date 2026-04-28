@@ -4,6 +4,7 @@ using Stash.Lexing;
 using Stash.Parsing;
 using Stash.Parsing.AST;
 using Stash.Analysis;
+using Stash.Runtime.Types;
 
 public class TimeoutExprTests : StashTestBase
 {
@@ -25,7 +26,7 @@ public class TimeoutExprTests : StashTestBase
     {
         var tokens = Scan("timeout");
         var token = tokens.First(t => t.Type != TokenType.Eof);
-        Assert.Equal(TokenType.Timeout, token.Type);
+        Assert.Equal(TokenType.Identifier, token.Type);
         Assert.Equal("timeout", token.Lexeme);
     }
 
@@ -287,4 +288,124 @@ public class TimeoutExprTests : StashTestBase
             """);
         Assert.Equal(15L, result);
     }
+
+    #region Soft Keyword — Identifier Uses
+
+    [Fact]
+    public void Timeout_VariableDeclaration_ParsesAsLetStmt()
+    {
+        var result = Run("let timeout = 30s; let result = timeout;");
+        var dur = Assert.IsType<StashDuration>(result);
+        Assert.Equal(30_000L, dur.TotalMilliseconds);
+    }
+
+    [Fact]
+    public void Timeout_VariableAssignment_Works()
+    {
+        var result = Run("let timeout = 5s; timeout = 10s; let result = timeout;");
+        var dur = Assert.IsType<StashDuration>(result);
+        Assert.Equal(10_000L, dur.TotalMilliseconds);
+    }
+
+    [Fact]
+    public void Timeout_AsParameterName_Works()
+    {
+        var result = Run("fn f(timeout) { return timeout; } let result = f(99);");
+        Assert.Equal(99L, result);
+    }
+
+    [Fact]
+    public void Timeout_InForLoopVariable_Works()
+    {
+        var result = Run("let arr = [1, 2, 3]; let result = 0; for (let timeout in arr) { result = result + timeout; }");
+        Assert.Equal(6L, result);
+    }
+
+    [Fact]
+    public void Timeout_PropertyAccess_Works()
+    {
+        var result = Run("let obj = { timeout: 42 }; let result = obj.timeout;");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Timeout_DictKey_Works()
+    {
+        var result = Run("let cfg = { timeout: 30 }; let result = cfg[\"timeout\"];");
+        Assert.Equal(30L, result);
+    }
+
+    [Fact]
+    public void Timeout_InArithmeticExpression_Works()
+    {
+        var result = Run("let timeout = 10; let result = timeout + 5;");
+        Assert.Equal(15L, result);
+    }
+
+    [Fact]
+    public void Timeout_InReturnStatement_Works()
+    {
+        var result = Run("fn f() { let timeout = 77; return timeout; } let result = f();");
+        Assert.Equal(77L, result);
+    }
+
+    [Fact]
+    public void Timeout_ClosureCapture_AsVariable_Works()
+    {
+        var result = Run("let timeout = 5; fn f() { return timeout; } let result = f();");
+        Assert.Equal(5L, result);
+    }
+
+    [Fact]
+    public void Timeout_SelfReferencing_OuterIsKeyword_InnerIsVariable()
+    {
+        // timeout timeout { } — outer is TimeoutExpr keyword, inner is the duration variable
+        var result = Run("let timeout = 100ms; let result = timeout timeout { 42; };");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Timeout_KeywordExpressionStillWorks()
+    {
+        var result = Run("let result = timeout 30s { 42; };");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Timeout_GroupedDuration_Works()
+    {
+        var result = Run("let result = timeout (5s + 5s) { 99; };");
+        Assert.Equal(99L, result);
+    }
+
+    [Fact]
+    public void Timeout_FunctionCallDuration_ViaNamedFunction_Works()
+    {
+        var result = Run("fn getDuration() { return 100ms; } let result = timeout getDuration() { 55; };");
+        Assert.Equal(55L, result);
+    }
+
+    [Fact]
+    public void Timeout_AmbiguousParenCall_ParsesAsCall()
+    {
+        // timeout(x) — timeout as callable identifier, not TimeoutExpr
+        var result = Run("fn timeout(x) { return x * 2; } let result = timeout(21);");
+        Assert.Equal(42L, result);
+    }
+
+    [Fact]
+    public void Timeout_IsCheckOnVariable_Works()
+    {
+        var result = Run("let timeout = 5; let result = timeout is int;");
+        Assert.Equal(true, result);
+    }
+
+    [Fact]
+    public void Timeout_StructFieldNamed_Works()
+    {
+        var result = Run("struct Config { timeout: int } let c = Config { timeout: 30 }; let result = c.timeout;");
+        Assert.Equal(30L, result);
+    }
+
+    #endregion
 }

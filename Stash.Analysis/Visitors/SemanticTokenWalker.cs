@@ -751,6 +751,7 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitTimeoutExpr(TimeoutExpr expr)
     {
+        EmitFromToken(expr.TimeoutKeyword, TokenTypeKeyword, 0);
         expr.Duration.Accept(this);
         foreach (var stmt in expr.Body.Statements)
             stmt.Accept(this);
