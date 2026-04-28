@@ -145,6 +145,16 @@ public class Parser
     {
         try
         {
+            // Soft keyword: 'async fn' — recognized when 'async' identifier precedes 'fn'
+            if (Check(TokenType.Identifier) && Peek().Lexeme == "async"
+                && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Fn)
+            {
+                Advance(); // consume 'async'
+                Token asyncToken = Previous();
+                Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
+                return FnDeclaration(isAsync: true, asyncToken: asyncToken);
+            }
+
             switch (Peek().Type)
             {
                 case TokenType.Let:
@@ -153,13 +163,6 @@ public class Parser
                 case TokenType.Const:
                     Advance();
                     return ConstDeclaration();
-                case TokenType.Async:
-                {
-                    Advance();
-                    Token asyncToken = Previous();
-                    Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
-                    return FnDeclaration(isAsync: true, asyncToken: asyncToken);
-                }
                 case TokenType.Fn:
                     Advance();
                     return FnDeclaration();
@@ -441,11 +444,11 @@ public class Parser
         List<FnDeclStmt> methods = new();
 
         // Parse fields (comma-separated, stop when we hit fn, async, or })
-        if (!Check(TokenType.RightBrace) && !Check(TokenType.Fn) && !Check(TokenType.Async))
+        if (!Check(TokenType.RightBrace) && !Check(TokenType.Fn) && !(Check(TokenType.Identifier) && Peek().Lexeme == "async"))
         {
             do
             {
-                if (Check(TokenType.Fn) || Check(TokenType.Async))
+                if (Check(TokenType.Fn) || (Check(TokenType.Identifier) && Peek().Lexeme == "async"))
                 {
                     break;
                 }
@@ -463,8 +466,10 @@ public class Parser
         // Parse methods (including async methods)
         while (true)
         {
-            if (Match(TokenType.Async))
+            if (Check(TokenType.Identifier) && Peek().Lexeme == "async"
+                && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Fn)
             {
+                Advance(); // consume 'async'
                 Token asyncToken = Previous();
                 Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
                 methods.Add((FnDeclStmt)FnDeclaration(isAsync: true, asyncToken: asyncToken));
@@ -603,8 +608,10 @@ public class Parser
 
         while (!Check(TokenType.RightBrace) && !IsAtEnd)
         {
-            if (Match(TokenType.Async))
+            if (Check(TokenType.Identifier) && Peek().Lexeme == "async"
+                && _current + 1 < _tokens.Count && _tokens[_current + 1].Type == TokenType.Fn)
             {
+                Advance(); // consume 'async'
                 Token asyncToken = Previous();
                 Consume(TokenType.Fn, "Expected 'fn' after 'async'.");
                 methods.Add((FnDeclStmt)FnDeclaration(isAsync: true, asyncToken: asyncToken));
@@ -677,13 +684,43 @@ public class Parser
     /// <returns>The parsed <see cref="Stmt"/>.</returns>
     private Stmt Statement()
     {
-        // Soft keyword: 'timeout' is no longer a hard keyword — handle it here with an optional semicolon
-        // (block-ending expressions like retry/timeout don't require a trailing ';')
-        if (Check(TokenType.Identifier) && Peek().Lexeme == "timeout" && IsTimeoutKeyword())
+        // Soft keyword dispatch: handled before the hard-keyword switch
+        if (Check(TokenType.Identifier))
         {
-            Expr expr = Expression();
-            Match(TokenType.Semicolon);
-            return new ExprStmt(expr, expr.Span);
+            string lexeme = Peek().Lexeme;
+
+            if (lexeme == "timeout" && IsTimeoutKeyword())
+            {
+                Expr expr = Expression();
+                Match(TokenType.Semicolon);
+                return new ExprStmt(expr, expr.Span);
+            }
+
+            if (lexeme == "defer" && IsDeferKeyword())
+            {
+                Advance(); // consume 'defer'
+                return DeferStatement();
+            }
+
+            if (lexeme == "lock" && IsLockKeyword())
+            {
+                Advance(); // consume 'lock'
+                return LockStatement();
+            }
+
+            if (lexeme == "elevate" && IsElevateKeyword())
+            {
+                Advance(); // consume 'elevate'
+                return ElevateStatement();
+            }
+
+            // retry: expression-level block — optional trailing semicolon (no ';' after closing '}')
+            if (lexeme == "retry" && IsRetryKeyword())
+            {
+                Expr expr = Expression();
+                Match(TokenType.Semicolon);
+                return new ExprStmt(expr, expr.Span);
+            }
         }
 
         switch (Peek().Type)
@@ -712,9 +749,6 @@ public class Parser
             case TokenType.Continue:
                 Advance();
                 return ContinueStatement();
-            case TokenType.Elevate:
-                Advance();
-                return ElevateStatement();
             case TokenType.Switch:
                 if (_tokens[_current + 1].Type == TokenType.LeftParen)
                 {
@@ -722,12 +756,6 @@ public class Parser
                     return SwitchStatement();
                 }
                 return ExpressionStatement();
-            case TokenType.Defer:
-                Advance();
-                return DeferStatement();
-            case TokenType.Lock:
-                Advance();
-                return LockStatement();
             case TokenType.Try:
                 if (_tokens[_current + 1].Type == TokenType.LeftBrace)
                 {
@@ -737,18 +765,6 @@ public class Parser
                 return ExpressionStatement();
             case TokenType.LeftBrace:
                 return ParseBlock();
-            case TokenType.Retry:
-            {
-                Expr expr = Expression();
-                Match(TokenType.Semicolon);
-                return new ExprStmt(expr, expr.Span);
-            }
-            case TokenType.Timeout:
-            {
-                Expr expr = Expression();
-                Match(TokenType.Semicolon);
-                return new ExprStmt(expr, expr.Span);
-            }
             default:
                 return ExpressionStatement();
         }
@@ -835,7 +851,7 @@ public class Parser
         }
 
         BlockStmt body = ParseBlock();
-        return new ElevateStmt(elevator, body, MakeSpan(elevateToken.Span, body.Span));
+        return new ElevateStmt(elevator, body, MakeSpan(elevateToken.Span, body.Span), elevateToken);
     }
 
     /// <summary>
@@ -1127,7 +1143,8 @@ public class Parser
         }
 
         // Check for await: defer await expr
-        bool hasAwait = Match(TokenType.Await);
+        bool hasAwait = Check(TokenType.Identifier) && Peek().Lexeme == "await" && IsAwaitKeyword();
+        if (hasAwait) Advance(); // consume 'await'
 
         // Single-statement defer: defer expr; or defer await expr;
         Stmt body = ExpressionStatement();
@@ -1870,8 +1887,9 @@ public class Parser
             return new TryExpr(expression, MakeSpan(tryToken.Span, expression.Span));
         }
 
-        if (Match(TokenType.Await))
+        if (Check(TokenType.Identifier) && Peek().Lexeme == "await" && IsAwaitKeyword())
         {
+            Advance(); // consume 'await'
             Token awaitToken = Previous();
             Expr expression = Unary();
             return new AwaitExpr(awaitToken, expression, MakeSpan(awaitToken.Span, expression.Span));
@@ -2298,12 +2316,28 @@ public class Parser
             _current = savedPosition;
         }
 
-        // Soft keyword: 'timeout' — recognized as TimeoutExpr only when followed by a duration expression.
-        // Must be checked BEFORE Match(Identifier) to intercept the token before it is consumed.
-        if (Check(TokenType.Identifier) && Peek().Lexeme == "timeout" && IsTimeoutKeyword())
+        // Soft keywords: must be checked BEFORE Match(Identifier) to intercept the token before it is consumed.
+        if (Check(TokenType.Identifier))
         {
-            Advance(); // consume 'timeout'
-            return ParseTimeoutExpr();
+            string skLexeme = Peek().Lexeme;
+            if (skLexeme == "timeout" && IsTimeoutKeyword())
+            {
+                Advance(); // consume 'timeout'
+                return ParseTimeoutExpr();
+            }
+            if (skLexeme == "retry" && IsRetryKeyword())
+            {
+                Advance(); // consume 'retry'
+                return ParseRetryExpr();
+            }
+            if (skLexeme == "async" && IsAsyncLambdaKeyword())
+            {
+                Advance(); // consume 'async'
+                Token asyncToken = Previous();
+                Consume(TokenType.LeftParen, "Expected '(' after 'async'.");
+                Token open = Previous();
+                return ParseLambda(open, isAsync: true, asyncToken: asyncToken);
+            }
         }
 
         if (Match(TokenType.Identifier))
@@ -2362,19 +2396,6 @@ public class Parser
             }
 
             return new IdentifierExpr(name, name.Span);
-        }
-
-        if (Match(TokenType.Retry))
-        {
-            return ParseRetryExpr();
-        }
-
-        if (Match(TokenType.Async))
-        {
-            Token asyncToken = Previous();
-            Consume(TokenType.LeftParen, "Expected '(' after 'async'.");
-            Token open = Previous();
-            return ParseLambda(open, isAsync: true, asyncToken: asyncToken);
         }
 
         if (Match(TokenType.LeftParen))
@@ -2599,6 +2620,153 @@ public class Parser
                 depth--;
                 if (depth == 0)
                     return pos + 1 < _tokens.Count && _tokens[pos + 1].Type == TokenType.LeftBrace;
+            }
+            else if (t == TokenType.Eof) break;
+            pos++;
+        }
+        return false;
+    }
+
+    /// <summary>Returns true if 'defer' at current position is used as a keyword (not an identifier).</summary>
+    private bool IsDeferKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        TokenType peek = _tokens[_current + 1].Type;
+        return peek switch
+        {
+            TokenType.LeftBrace => true,       // defer { block }
+            TokenType.Identifier => true,      // defer someCall() or defer await expr
+            TokenType.IntegerLiteral or TokenType.FloatLiteral or TokenType.StringLiteral
+                or TokenType.DurationLiteral or TokenType.ByteSizeLiteral
+                or TokenType.True or TokenType.False or TokenType.Null => true,
+            _ => false  // defer(...) = function call; defer = x; etc.
+        };
+    }
+
+    /// <summary>Returns true if 'lock' at current position is used as a keyword (not an identifier).</summary>
+    private bool IsLockKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        TokenType peek = _tokens[_current + 1].Type;
+        if (peek == TokenType.Identifier) return true;                // lock myPath { }
+        if (IsNonOperatorLiteralType(peek)) return true;              // lock "path/file" { }
+        if (peek == TokenType.LeftParen)
+            return IsFollowedByLockOptionsOrBlockAfterParens(_current + 1);
+        return false;
+    }
+
+    /// <summary>Returns true if 'elevate' at current position is used as a keyword (not an identifier).</summary>
+    private bool IsElevateKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        TokenType peek = _tokens[_current + 1].Type;
+        if (peek == TokenType.LeftBrace) return true;                 // elevate { block }
+        if (peek == TokenType.LeftParen)
+            return IsFollowedByBlockAfterParens(_current + 1);        // elevate(expr) { block }
+        return false;
+    }
+
+    /// <summary>Returns true if 'retry' at current position is used as a keyword expression (not a function call on a variable).</summary>
+    private bool IsRetryKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        if (_tokens[_current + 1].Type != TokenType.LeftParen) return false;
+        return IsFollowedByRetryClauseAfterParens(_current + 1);
+    }
+
+    /// <summary>Returns true if 'await' at current position is used as a keyword (prefix operator).</summary>
+    private bool IsAwaitKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        return IsExpressionStarter(_tokens[_current + 1].Type);
+    }
+
+    /// <summary>Returns true if 'async' at current position precedes a lambda parameter list '(' ... ') =>'.</summary>
+    private bool IsAsyncLambdaKeyword()
+    {
+        if (_current + 1 >= _tokens.Count) return false;
+        if (_tokens[_current + 1].Type != TokenType.LeftParen) return false;
+        int saved = _current;
+        _current += 2; // point to first token inside '(' (past 'async' and '(')
+        bool result = IsLambdaStart();
+        _current = saved;
+        return result;
+    }
+
+    /// <summary>Returns true if the token type can start an expression (used for await keyword disambiguation).</summary>
+    private static bool IsExpressionStarter(TokenType t) =>
+        t is TokenType.Identifier
+            or TokenType.IntegerLiteral or TokenType.FloatLiteral or TokenType.StringLiteral
+            or TokenType.DurationLiteral or TokenType.ByteSizeLiteral
+            or TokenType.True or TokenType.False or TokenType.Null
+            or TokenType.LeftParen or TokenType.LeftBracket or TokenType.LeftBrace
+            or TokenType.Bang or TokenType.Tilde or TokenType.Minus
+            or TokenType.PlusPlus or TokenType.MinusMinus;
+
+    /// <summary>Returns true if the token type is a non-operator literal (can start a primary expression but cannot continue a binary expression after an identifier).</summary>
+    private static bool IsNonOperatorLiteralType(TokenType type) =>
+        type is TokenType.IntegerLiteral or TokenType.FloatLiteral or TokenType.StringLiteral
+             or TokenType.DurationLiteral or TokenType.ByteSizeLiteral
+             or TokenType.True or TokenType.False or TokenType.Null;
+
+    /// <summary>
+    /// Like <see cref="IsFollowedByBlockAfterParens"/> but also returns true when the matching ')'
+    /// is followed by a retry clause token: 'onRetry', 'until', or '{'.
+    /// </summary>
+    private bool IsFollowedByRetryClauseAfterParens(int parenIndex)
+    {
+        int depth = 0;
+        int pos = parenIndex;
+        while (pos < _tokens.Count)
+        {
+            TokenType t = _tokens[pos].Type;
+            if (t == TokenType.LeftParen) depth++;
+            else if (t == TokenType.RightParen)
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    if (pos + 1 >= _tokens.Count) return false;
+                    Token next = _tokens[pos + 1];
+                    if (next.Type == TokenType.LeftBrace) return true;
+                    if (next.Type == TokenType.Identifier
+                        && (next.Lexeme == "onRetry" || next.Lexeme == "until")) return true;
+                    return false;
+                }
+            }
+            else if (t == TokenType.Eof) break;
+            pos++;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Like <see cref="IsFollowedByBlockAfterParens"/> but also returns true when the matching ')'
+    /// is followed by a lock body '{' or a lock options list '(' IDENTIFIER ':'.
+    /// </summary>
+    private bool IsFollowedByLockOptionsOrBlockAfterParens(int parenIndex)
+    {
+        int depth = 0;
+        int pos = parenIndex;
+        while (pos < _tokens.Count)
+        {
+            TokenType t = _tokens[pos].Type;
+            if (t == TokenType.LeftParen) depth++;
+            else if (t == TokenType.RightParen)
+            {
+                depth--;
+                if (depth == 0)
+                {
+                    if (pos + 1 >= _tokens.Count) return false;
+                    TokenType nextType = _tokens[pos + 1].Type;
+                    if (nextType == TokenType.LeftBrace) return true;
+                    // lock (path) (wait: ...) { } \u2014 options list follows path
+                    if (nextType == TokenType.LeftParen
+                        && pos + 2 < _tokens.Count && _tokens[pos + 2].Type == TokenType.Identifier
+                        && pos + 3 < _tokens.Count && _tokens[pos + 3].Type == TokenType.Colon)
+                        return true;
+                    return false;
+                }
             }
             else if (t == TokenType.Eof) break;
             pos++;
@@ -2960,10 +3128,7 @@ public class Parser
         if (Check(TokenType.Identifier) ||
             Check(TokenType.True) ||
             Check(TokenType.False) ||
-            Check(TokenType.Null) ||
-            Check(TokenType.Async) ||
-            Check(TokenType.Await) ||
-            Check(TokenType.Timeout))
+            Check(TokenType.Null))
         {
             return Advance();
         }
@@ -3071,7 +3236,6 @@ public class Parser
                 case TokenType.Let:
                 case TokenType.Const:
                 case TokenType.Fn:
-                case TokenType.Async:
                 case TokenType.Struct:
                 case TokenType.Enum:
                 case TokenType.Interface:

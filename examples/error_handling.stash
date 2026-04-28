@@ -133,18 +133,18 @@ fn loadConfig(path) {
   if (port < 1 || port > 65535) {
     throw { type: "ConfigError", message: $"port out of range: {port}" };
   }
-  let _timeout = try conv.toInt(cfg["timeout"] ?? "30");
-  if (_timeout is Error) {
+  let timeout = try conv.toInt(cfg["timeout"] ?? "30");
+  if (timeout is Error) {
     throw { type: "ConfigError", message: $"invalid timeout: {cfg["timeout"]}" };
   }
-  if (_timeout < 1) {
+  if (timeout < 1) {
     throw {
       type: "ConfigError",
-      message: $"timeout must be positive: {_timeout}"
+      message: $"timeout must be positive: {timeout}"
     };
   }
   cfg["port"] = port;
-  cfg["timeout"] = _timeout;
+  cfg["timeout"] = timeout;
   return cfg;
 }
 

@@ -155,6 +155,9 @@
           ],
           "namespace.defaultLibrary": [
             "support.type.stash"
+          ],
+          "keyword": [
+            "keyword.control.stash"
           ]
         }
       }

@@ -25,9 +25,10 @@ public class RetryExprTests : StashTestBase
     [Fact]
     public void Lexer_Retry_ProducesKeywordToken()
     {
+        // 'retry' is a soft keyword — lexer emits Identifier; parser disambiguates from context
         var tokens = Scan("retry");
         var token = tokens.First(t => t.Type != TokenType.Eof);
-        Assert.Equal(TokenType.Retry, token.Type);
+        Assert.Equal(TokenType.Identifier, token.Type);
         Assert.Equal("retry", token.Lexeme);
     }
 

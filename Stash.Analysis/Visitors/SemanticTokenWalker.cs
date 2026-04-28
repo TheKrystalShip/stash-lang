@@ -269,6 +269,8 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
     /// <inheritdoc />
     public int VisitElevateStmt(ElevateStmt stmt)
     {
+        if (stmt.ElevateKeyword is not null)
+            EmitFromToken(stmt.ElevateKeyword, TokenTypeKeyword, 0);
         stmt.Elevator?.Accept(this);
         stmt.Body.Accept(this);
         return 0;
@@ -323,6 +325,8 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitFnDeclStmt(FnDeclStmt stmt)
     {
+        if (stmt.IsAsync && stmt.AsyncKeyword is not null)
+            EmitFromToken(stmt.AsyncKeyword, TokenTypeKeyword, 0);
         int fnModifiers = ModifierDeclaration;
         if (stmt.AsyncKeyword is not null)
         {
@@ -398,12 +402,14 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitDeferStmt(DeferStmt stmt)
     {
+        EmitFromToken(stmt.DeferKeyword, TokenTypeKeyword, 0);
         stmt.Body.Accept(this);
         return 0;
     }
 
     public int VisitLockStmt(LockStmt stmt)
     {
+        EmitFromToken(stmt.LockKeyword, TokenTypeKeyword, 0);
         stmt.Path.Accept(this);
         stmt.WaitOption?.Accept(this);
         stmt.StaleOption?.Accept(this);
@@ -711,12 +717,14 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitAwaitExpr(AwaitExpr expr)
     {
+        EmitFromToken(expr.Keyword, TokenTypeKeyword, 0);
         expr.Expression.Accept(this);
         return 0;
     }
 
     public int VisitRetryExpr(RetryExpr expr)
     {
+        EmitFromToken(expr.RetryKeyword, TokenTypeKeyword, 0);
         expr.MaxAttempts.Accept(this);
         expr.OptionsExpr?.Accept(this);
         if (expr.NamedOptions is not null)
@@ -779,6 +787,8 @@ public class SemanticTokenWalker : IExprVisitor<int>, IStmtVisitor<int>
 
     public int VisitLambdaExpr(LambdaExpr expr)
     {
+        if (expr.IsAsync && expr.AsyncKeyword is not null)
+            EmitFromToken(expr.AsyncKeyword, TokenTypeKeyword, 0);
         for (int i = 0; i < expr.Parameters.Count; i++)
         {
             EmitFromToken(expr.Parameters[i], TokenTypeParameter, ModifierDeclaration);

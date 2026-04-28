@@ -9,9 +9,9 @@ function registerStashLanguage() {
     monaco.languages.setMonarchTokensProvider('stash', {
         keywords: [
             'let', 'const', 'fn', 'struct', 'enum', 'interface', 'extend', 'if', 'else', 'while', 'do',
-            'for', 'in', 'return', 'break', 'continue', 'try', 'catch', 'finally', 'defer', 'lock', 'retry', 'onRetry', 'until',
+            'for', 'in', 'return', 'break', 'continue', 'try', 'catch', 'finally', 'onRetry', 'until',
             'throw', 'switch', 'case', 'default', 'as', 'import', 'from', 'and', 'or', 'is',
-            'async', 'await', 'spawn', 'typeof', 'delete', 'match'
+            'spawn', 'typeof', 'delete', 'match'
         ],
 
         builtinConstants: ['true', 'false', 'null'],

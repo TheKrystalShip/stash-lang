@@ -337,7 +337,7 @@
         },
         {
           "name": "keyword.control.stash",
-          "match": "\\b(defer|as|elevate|lock|retry|onRetry|until)\\b"
+          "match": "\\b(as|onRetry|until)\\b"
         }
       ]
     },
@@ -794,16 +794,7 @@
     },
 
     "async-await": {
-      "patterns": [
-        {
-          "name": "storage.modifier.async.stash",
-          "match": "\\basync\\b"
-        },
-        {
-          "name": "keyword.control.flow.stash",
-          "match": "\\bawait\\b"
-        }
-      ]
+      "patterns": []
     },
 
     "lambda-expression": {

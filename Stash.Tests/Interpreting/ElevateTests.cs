@@ -41,9 +41,10 @@ public class ElevateTests : StashTestBase
     [Fact]
     public void Lexer_Elevate_ProducesKeywordToken()
     {
+        // 'elevate' is a soft keyword — lexer emits Identifier; parser disambiguates from context
         var tokens = Scan("elevate");
         var elevateToken = tokens.First(t => t.Type != TokenType.Eof);
-        Assert.Equal(TokenType.Elevate, elevateToken.Type);
+        Assert.Equal(TokenType.Identifier, elevateToken.Type);
         Assert.Equal("elevate", elevateToken.Lexeme);
     }
 
