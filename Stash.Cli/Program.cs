@@ -46,6 +46,8 @@ public class Program
     private static bool _shellEnabled = false;
     private static bool _shellExplicitlyDisabled = false;
     private const string Version = "0.5.0";
+    /// <summary>Exact stderr message emitted when shell mode is requested on Windows (v1 not yet supported).</summary>
+    internal const string WindowsNoShellMessage = "shell mode not yet supported on Windows";
     /// <summary>Parses CLI arguments and dispatches to the appropriate execution mode.</summary>
     /// <param name="args">Command-line arguments passed to the program.</param>
     public static void Main(string[] args)
@@ -822,8 +824,7 @@ public class Program
         // Shell mode is not supported on Windows in v1.
         if (shellModeEnabled && OperatingSystem.IsWindows())
         {
-            Console.Error.WriteLine(
-                "Warning: shell mode not yet supported on Windows; continuing in Stash-only mode.");
+            Console.Error.WriteLine(WindowsNoShellMessage);
             shellModeEnabled = false;
         }
 

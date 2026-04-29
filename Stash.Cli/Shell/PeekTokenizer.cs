@@ -150,7 +150,17 @@ internal static class PeekTokenizer
             // (e.g. "foo/bar" → PathLike because of the embedded slash).
             if (i < len && line[i] == '/')
             {
-                // The identifier continues into a path component.
+                // The identifier continues into a POSIX path component.
+                while (i < len && !IsAsciiWhitespace(line[i]))
+                    i++;
+                firstKind = PeekKind.PathLike;
+                firstToken = line[start..i];
+            }
+            else if (ident.Length == 1 && char.IsAsciiLetter(ident[0])
+                     && i < len && line[i] == ':'
+                     && i + 1 < len && line[i + 1] == '\\')
+            {
+                // Windows absolute drive path: C:\foo.exe  D:\bar etc.
                 while (i < len && !IsAsciiWhitespace(line[i]))
                     i++;
                 firstKind = PeekKind.PathLike;

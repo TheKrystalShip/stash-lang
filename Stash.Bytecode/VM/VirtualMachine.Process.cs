@@ -253,10 +253,14 @@ public sealed partial class VirtualMachine
     {
         byte[] buf = new byte[8192];
         int bytesRead;
-        while ((bytesRead = await source.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
+        try
         {
-            await target.WriteAsync(buf.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+            while ((bytesRead = await source.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
+            {
+                await target.WriteAsync(buf.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+            }
         }
+        catch (IOException) { } // broken pipe / closed target — treat as graceful EOF
     }
 
     /// <summary>
@@ -269,18 +273,22 @@ public sealed partial class VirtualMachine
     {
         byte[] buf = new byte[8192];
         int bytesRead;
-        while ((bytesRead = await source.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
+        try
         {
-            await writeLock.WaitAsync(ct).ConfigureAwait(false);
-            try
+            while ((bytesRead = await source.ReadAsync(buf, ct).ConfigureAwait(false)) > 0)
             {
-                await target.WriteAsync(buf.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
-            }
-            finally
-            {
-                writeLock.Release();
+                await writeLock.WaitAsync(ct).ConfigureAwait(false);
+                try
+                {
+                    await target.WriteAsync(buf.AsMemory(0, bytesRead), ct).ConfigureAwait(false);
+                }
+                finally
+                {
+                    writeLock.Release();
+                }
             }
         }
+        catch (IOException) { } // broken pipe / closed target — treat as graceful EOF
     }
 
     // ────────────────────────────────────────────────────────────────────────

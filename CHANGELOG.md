@@ -10,6 +10,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Shell mode cross-platform polish (§14)** — Shell mode is fully supported on Linux and macOS (v1). Windows is gate-blocked with the message `"shell mode not yet supported on Windows"` and falls back to Stash-only mode transparently. Windows-aware code paths are in place for a mechanical re-enable: PATHEXT extension-stripped name lookup, `C:\`-style drive-path classifier, `OrdinalIgnoreCase` PATH cache, `%USERPROFILE%` tilde expansion, and `cd` (no-args) home-dir sugar all have Windows branches.
+
+### Added
 - **`archive` namespace** — ZIP, TAR, and GZIP support for sysadmin scripts
   - `archive.zip` / `archive.unzip` — Create and extract ZIP archives
   - `archive.tar` / `archive.untar` — Create and extract TAR archives (with optional gzip)

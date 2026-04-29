@@ -12,7 +12,8 @@ namespace Stash.Cli.Shell;
 /// </summary>
 internal sealed class PathExecutableCache
 {
-    private readonly Dictionary<string, bool> _cache = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, bool> _cache =
+        new(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     private DateTime _lastRefresh = DateTime.MinValue;
     private readonly TimeSpan _ttl = TimeSpan.FromSeconds(60);
     private readonly object _lock = new();
@@ -84,7 +85,17 @@ internal sealed class PathExecutableCache
                     if (_cache.ContainsKey(fileName)) continue; // first PATH dir wins
 
                     if (IsFileExecutable(filePath))
+                    {
                         _cache[fileName] = true;
+                        // On Windows, also register the extension-stripped name so that typing
+                        // 'notepad' resolves even though the file is 'notepad.exe' on PATH.
+                        if (OperatingSystem.IsWindows())
+                        {
+                            string nameNoExt = Path.GetFileNameWithoutExtension(filePath);
+                            if (!string.IsNullOrEmpty(nameNoExt) && !_cache.ContainsKey(nameNoExt))
+                                _cache[nameNoExt] = true;
+                        }
+                    }
                 }
             }
             catch (UnauthorizedAccessException) { }
